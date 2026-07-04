@@ -526,7 +526,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                     <div className="h-10"></div>
                 </div>
 
-                <div className="p-5 md:px-10 md:py-6 border-t border-gray-100 flex items-center justify-between bg-white w-full sticky bottom-0 z-20">
+                <div className="p-5 md:px-10 md:py-6 pb-safe border-t border-gray-100 flex items-center justify-between bg-white w-full sticky bottom-0 z-20">
                     <button onClick={clearAdvancedFilters} className="text-base font-bold underline text-gray-900 hover:text-gray-600 transition-colors p-2">Clear all</button>
                     <button onClick={applyAdvancedFilters} className="bg-gray-900 text-white px-10 py-3.5 md:py-4 rounded-xl font-bold text-base hover:bg-black transition-all shadow-xl shadow-gray-200 active:scale-95">Show places</button>
                 </div>

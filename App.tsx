@@ -32,6 +32,8 @@ const AdminDashboard = lazy(() => import('./components/AdminDashboard'));
 const InboxPage = lazy(() => import('./components/InboxPage'));
 const ExperiencesPage = lazy(() => import('./components/ExperiencesPage').then(module => ({ default: module.ExperiencesPage })));
 const ExperienceDetails = lazy(() => import('./components/ExperienceDetails').then(module => ({ default: module.ExperienceDetails })));
+import { BottomNav } from './components/BottomNav';
+import { MobileProfileSheet } from './components/MobileProfileSheet';
 
 // Ensure type imports if needed
 import { Experience } from './types';
@@ -89,6 +91,7 @@ interface ToastMessage {
 import { useToast } from './components/ToastContext';
 
 function App() {
+  const [showProfileSheet, setShowProfileSheet] = useState(false);
   const [city, setCity] = useState('');
   const { addToast } = useToast();
 
@@ -1081,13 +1084,13 @@ function App() {
                )}
 
               {loading ? (
-                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-x-6 gap-y-10">
+                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-8 md:gap-y-10">
                       {[1, 2, 3, 4, 5, 6].map((n) => (
                           <ListingCardSkeleton key={n} />
                       ))}
                    </div>
               ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-x-6 gap-y-10">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-8 md:gap-y-10">
                   {displayListings.map((listing, index) => (
                       <ListingCard 
                           key={listing.id} 
@@ -1145,8 +1148,33 @@ function App() {
           {renderView()}
         </Suspense>
       </AnimatePresence>
+      {currentView !== 'DETAILS' && currentView !== 'EXPERIENCE_DETAILS' && (
+        <BottomNav 
+          currentView={currentView}
+          appMode={appMode}
+          onNavigate={setCurrentView}
+          onProfileClick={() => setShowProfileSheet(true)}
+        />
+      )}
+      <MobileProfileSheet 
+        isOpen={showProfileSheet}
+        onClose={() => setShowProfileSheet(false)}
+        onLoginClick={() => setShowAuthModal(true)}
+        onHostClick={() => {
+          if (user) {
+            setAppMode('host');
+            setCurrentView('HOST_DASHBOARD');
+          } else {
+            setShowAuthModal(true);
+          }
+        }}
+        onNavigateToAdmin={() => {
+          window.location.hash = '#admin';
+        }}
+      />
     </>
   );
 }
 
 export default App;
+

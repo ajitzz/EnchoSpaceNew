@@ -251,7 +251,7 @@ const Header: React.FC<HeaderProps> = ({
               setInputValue('');
               onSearch('Berlin'); // Reset to default/home
           }}
-          className="flex flex-col justify-center leading-none cursor-pointer group shrink-0 select-none md:min-w-[120px]"
+          className="hidden md:flex flex-col justify-center leading-none cursor-pointer group shrink-0 select-none md:min-w-[120px]"
         >
              <div className="flex items-center gap-1.5">
                  <img src="/logo.svg" alt="Encho Space Logo" className="w-6 h-6 md:w-8 md:h-8" />
@@ -506,7 +506,7 @@ const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          <CurrencySelector />
+          <div className="hidden md:block"><CurrencySelector /></div>
 
           {/* Mode Switch Button */}
           {user && appMode === 'travel' && (
@@ -574,22 +574,6 @@ const Header: React.FC<HeaderProps> = ({
               </button>
           )}
 
-          {/* Mobile Menu Icon - Trigger for Side Drawer */}
-          <button 
-            onClick={() => setIsMobileMenuOpen(true)}
-            className={`
-                md:hidden relative p-2 rounded-full transition-all duration-500
-                ${(highlightReserves || highlightWishlist) ? 'bg-pink-50 text-[#0284C7] scale-110 shadow-md' : 'text-gray-900 hover:bg-gray-100'}
-            `}
-          >
-              <MenuIcon className={`w-6 h-6 transition-transform duration-500 ${(highlightReserves || highlightWishlist) ? 'rotate-12' : ''}`} />
-              {(reservesCount + wishlistCount) > 0 && appMode === 'travel' && (
-                   <span className="absolute top-1.5 right-1.5 bg-[#0284C7] text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white">
-                      {reservesCount + wishlistCount}
-                   </span>
-              )}
-          </button>
-
           {/* Desktop Account Dropdown */}
           <div ref={desktopMenuRef} className="relative hidden md:block">
             <div 
@@ -654,157 +638,7 @@ const Header: React.FC<HeaderProps> = ({
 
       </header>
 
-      {/* MOBILE SIDE DRAWER (Advanced UI) */}
-      {isMobileMenuOpen && (
-          <div className="fixed inset-0 z-[250] md:hidden">
-              {/* Backdrop */}
-              <div 
-                className="absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity"
-                onClick={() => setIsMobileMenuOpen(false)}
-              ></div>
-              
-              {/* Drawer Panel */}
-              <div className="absolute right-0 top-0 bottom-0 w-[85%] max-w-[360px] bg-white shadow-2xl animate-slide-in-right flex flex-col">
-                  
-                  {/* Drawer Header */}
-                  <div className="flex items-center justify-between p-6 border-b border-gray-100">
-                      <div className="flex flex-col justify-center leading-none select-none">
-                        <div className="flex items-center gap-1.5">
-                            <img src="/logo.svg" alt="Encho Space Logo" className="w-6 h-6" />
-                            <div className="flex flex-col">
-                                <span className="font-black text-xl tracking-tighter text-gray-900 leading-none">ENCHO</span>
-                                <span className="text-[8px] font-bold tracking-[0.35em] text-gray-400 uppercase ml-0.5">Space</span>
-                            </div>
-                        </div>
-                     </div>
-                     <button 
-                        onClick={() => setIsMobileMenuOpen(false)}
-                        className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
-                     >
-                         <XIcon className="w-5 h-5 text-gray-600" />
-                     </button>
-                  </div>
-
-                  {/* Drawer Body - Scrollable */}
-                  <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-8">
-                      
-                      {/* Account Actions */}
-                      <div className="grid grid-cols-2 gap-3">
-                        {isInstallable && (
-                           <button onClick={() => { setIsMobileMenuOpen(false); promptInstall(); }} className="flex flex-col items-center justify-center p-4 rounded-2xl bg-gray-50 border border-gray-100 active:scale-95 transition-transform col-span-2">
-                               <DownloadIcon className="w-6 h-6 text-gray-700 mb-2" />
-                               <span className="font-bold text-gray-900 text-sm">Install App</span>
-                           </button>
-                        )}
-                        {user ? (
-                           <>
-                            <button onClick={() => { setIsMobileMenuOpen(false); logout(); }} className="flex flex-col items-center justify-center p-4 rounded-2xl bg-gray-50 border border-gray-100 active:scale-95 transition-transform col-span-2">
-                                <span className="font-bold text-gray-900 text-sm">Log out ({user.name})</span>
-                            </button>
-                            {user.role === 'admin' && (
-                                <button onClick={() => { setIsMobileMenuOpen(false); window.location.hash = '#admin'; }} className="flex flex-col items-center justify-center p-4 rounded-2xl bg-[#0284C7] text-white active:scale-95 transition-transform col-span-2 shadow-md">
-                                    <span className="font-bold text-sm">Admin Dashboard</span>
-                                </button>
-                            )}
-                           </>
-                        ) : (
-                           <>
-                            <button onClick={() => { setIsMobileMenuOpen(false); onLoginClick(); }} className="flex flex-col items-center justify-center p-4 rounded-2xl bg-gray-50 border border-gray-100 active:scale-95 transition-transform">
-                                <LogInIcon className="w-6 h-6 text-gray-700 mb-2" />
-                                <span className="font-bold text-gray-900 text-sm">Log in</span>
-                            </button>
-                            <button onClick={() => { setIsMobileMenuOpen(false); onLoginClick(); }} className="flex flex-col items-center justify-center p-4 rounded-2xl bg-gray-900 text-white active:scale-95 transition-transform shadow-md">
-                                <UserIcon className="w-6 h-6 mb-2" />
-                                <span className="font-bold text-sm">Sign up</span>
-                            </button>
-                           </>
-                        )}
-                      </div>
-
-                      {/* Hero: Become a Host */}
-                      <div onClick={() => { setIsMobileMenuOpen(false); onHostClick(); }} className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#0284C7] to-orange-500 text-white p-6 shadow-lg active:scale-[0.98] transition-transform cursor-pointer">
-                          <div className="relative z-10">
-                              <h3 className="font-bold text-xl mb-1">Become a Host</h3>
-                              <p className="text-white/90 text-sm font-medium mb-3">Earn extra income by renting out your space.</p>
-                              <div className="bg-white/20 backdrop-blur-md self-start inline-block px-3 py-1.5 rounded-lg text-xs font-bold">List your space</div>
-                          </div>
-                          <HouseIcon className="absolute -bottom-4 -right-4 w-24 h-24 text-white/10" />
-                      </div>
-
-                      {/* Navigation Links */}
-                      <div className="space-y-1">
-                          <div 
-                             onClick={() => { setIsMobileMenuOpen(false); onReservesClick(); }}
-                             className="flex items-center gap-4 p-3 rounded-xl hover:bg-gray-50 active:bg-gray-100 cursor-pointer"
-                          >
-                              <div className="w-10 h-10 bg-pink-50 rounded-full flex items-center justify-center text-[#0284C7]">
-                                  <CalendarIcon className="w-5 h-5" />
-                              </div>
-                              <span className="font-semibold text-gray-700">Reservations</span>
-                          </div>
-                          
-                          {user && onInboxClick && (
-                              <div 
-                                 onClick={() => { setIsMobileMenuOpen(false); onInboxClick(); }}
-                                 className="flex items-center gap-4 p-3 rounded-xl hover:bg-gray-50 active:bg-gray-100 cursor-pointer"
-                              >
-                                  <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-700 relative">
-                                      <MessageCircleIcon className="w-5 h-5" />
-                                      {unreadCount > 0 && (
-                                          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
-                                              {unreadCount}
-                                          </span>
-                                      )}
-                                  </div>
-                                  <span className="font-semibold text-gray-700">Messages</span>
-                              </div>
-                          )}
-
-                          <div 
-                             onClick={() => { setIsMobileMenuOpen(false); onWishlistClick(); }}
-                             className="flex items-center gap-4 p-3 rounded-xl hover:bg-gray-50 active:bg-gray-100 cursor-pointer"
-                          >
-                              <div className="w-10 h-10 bg-pink-50 rounded-full flex items-center justify-center text-[#0284C7]">
-                                  <HeartIcon className="w-5 h-5" />
-                              </div>
-                              <span className="font-semibold text-gray-700">Wishlist</span>
-                          </div>
-                      </div>
-
-                      {/* Contact Section */}
-                      <div className="mt-auto pt-6 border-t border-gray-100">
-                          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Contact & Support</h4>
-                          <div className="space-y-3">
-                              {whatsappConfig?.enabled && whatsappConfig?.number && (
-                                <button onClick={() => window.open(`https://wa.me/${whatsappConfig.number}`, '_blank')} className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 transition-colors">
-                                    <MessageCircleIcon className="w-5 h-5" />
-                                    <div className="flex flex-col items-start">
-                                        <span className="text-xs font-semibold opacity-70">WhatsApp</span>
-                                        <span className="font-bold">Message Us</span>
-                                    </div>
-                                </button>
-                              )}
-                              <div className="grid grid-cols-2 gap-3">
-                                  {callConfig?.enabled && callConfig?.number && (
-                                    <button onClick={() => window.open(`tel:${callConfig.number}`, '_self')} className="flex items-center justify-center gap-2 p-3.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-700 transition-colors">
-                                        <PhoneIcon className="w-4 h-4" />
-                                        <span className="font-semibold text-sm">Call</span>
-                                    </button>
-                                  )}
-                                  <button className={`flex items-center justify-center gap-2 p-3.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-700 transition-colors ${!(callConfig?.enabled && callConfig?.number) ? 'col-span-2' : ''}`}>
-                                      <MailIcon className="w-4 h-4" />
-                                      <span className="font-semibold text-sm">Email</span>
-                                  </button>
-                              </div>
-                          </div>
-                      </div>
-
-                  </div>
-              </div>
-          </div>
-      )}
-
-    </>
+      </>
   );
 };
 

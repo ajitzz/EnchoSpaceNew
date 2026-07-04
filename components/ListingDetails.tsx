@@ -652,36 +652,57 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
       </header>
 
       {/* Main Content Container - Added pt-20 to compensate for fixed header */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-20">
+      <div className="max-w-7xl mx-auto md:px-6 md:pt-20">
         
         {/* Gallery Grid & Mobile Swipe */}
-        <div className="mb-8 relative group rounded-2xl overflow-hidden">
+        <div className="md:mb-8 relative group md:rounded-2xl overflow-hidden">
             
-            {/* Mobile Carousel (Swipable) */}
-            <div className="md:hidden flex overflow-x-auto snap-x snap-mandatory scrollbar-hide h-[320px] w-full" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                {images.map((img, i) => (
-                    <div key={i} className="w-full h-full flex-shrink-0 snap-center relative">
-                        <OptimizedImage 
-                            src={img} 
-                            priority={i === 0}
-                            
-                            className="w-full h-full object-cover cursor-pointer" 
-                            alt={`Mobile Image ${i + 1}`}
-                        />
-                        {listing.isVerified && i === 0 && (
-                            <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1.5 pointer-events-none">
-                                <ShieldCheck className="w-4 h-4 text-blue-600" />
-                                <span className="text-xs font-bold tracking-wide text-gray-900 uppercase">Verified Plus</span>
-                            </div>
-                        )}
-                        <div onClick={() => openGallery(i)} className="absolute bottom-4 right-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-md text-white text-xs font-medium cursor-pointer">
-                            {i + 1} / {images.length} Photos
-                        </div>
-                    </div>
-                ))}
+            
+        {/* Mobile Header Buttons (Absolute over image) */}
+        <div className="md:hidden absolute top-0 inset-x-0 z-[70] flex items-center justify-between p-4 pt-safe mt-2 pointer-events-none">
+            <button 
+                onClick={(e) => { e.stopPropagation(); uiAudio.playClick(); onBack(); }}
+                className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-md flex items-center justify-center shadow-lg pointer-events-auto active:scale-95 transition-transform"
+            >
+                <ChevronLeft className="w-5 h-5 text-gray-900 pr-0.5" />
+            </button>
+            <div className="flex gap-2">
+                <button className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-md flex items-center justify-center shadow-lg pointer-events-auto active:scale-95 transition-transform">
+                    <svg viewBox="0 0 32 32" className="w-4 h-4 text-gray-900" aria-hidden="true" role="presentation" focusable="false" style={{display: 'block', fill: 'none', stroke: 'currentcolor', strokeWidth: 2.5, overflow: 'visible'}}><g fill="none"><path d="M27 18v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-9"></path><path d="M16 3v23V3z"></path><path d="M6 13l9.293-9.293a1 1 0 0 1 1.414 0L26 13"></path></g></svg>
+                </button>
+                <button 
+                    onClick={(e) => { e.stopPropagation(); uiAudio.playPop(); onToggleFavorite(listing); }}
+                    className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-md flex items-center justify-center shadow-lg pointer-events-auto active:scale-95 transition-transform"
+                >
+                    <HeartIcon className={`w-5 h-5 ${isFavorite ? 'fill-[#e51d53] text-[#e51d53]' : 'text-gray-900'}`} filled={isFavorite} />
+                </button>
             </div>
-
-            {/* Desktop Grid (Airbnb/Zumper style) */}
+        </div>
+        
+        {/* Mobile Carousel (Swipable) */}
+        <div className="md:hidden flex overflow-x-auto snap-x snap-mandatory scrollbar-hide aspect-[4/3] w-full" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            {images.map((img, i) => (
+                <div key={i} className="w-full h-full flex-shrink-0 snap-center relative">
+                    <OptimizedImage 
+                        src={img} 
+                        priority={i === 0}
+                        className="w-full h-full object-cover cursor-pointer" 
+                        alt={`Mobile Image ${i + 1}`}
+                        onClick={() => openGallery(i)}
+                    />
+                    {listing.isVerified && i === 0 && (
+                        <div className="absolute top-16 left-4 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1.5 pointer-events-none">
+                            <ShieldCheck className="w-4 h-4 text-blue-600" />
+                            <span className="text-xs font-bold tracking-wide text-gray-900 uppercase">Verified Plus</span>
+                        </div>
+                    )}
+                    <div className="absolute bottom-4 right-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-md text-white text-xs font-medium cursor-pointer pointer-events-none">
+                        {i + 1} / {images.length}
+                    </div>
+                </div>
+            ))}
+        </div>
+    {/* Desktop Grid (Airbnb/Zumper style) */}
             <div className="hidden md:grid grid-cols-4 grid-rows-2 gap-2 h-[450px]">
                 <div className="col-span-2 row-span-2 relative h-full">
                     <OptimizedImage 
@@ -733,7 +754,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                     <div className="flex flex-wrap items-center gap-3 text-gray-600 mb-4 text-sm md:text-base">
                         <div className="flex items-center gap-2">
                             <div className="bg-[#003B95] text-white text-sm font-bold px-1.5 py-0.5 rounded-t-md rounded-br-md shadow-sm">
-                                {formatRating(listing.rating)}
+                                <StarIcon className="w-3.5 h-3.5 fill-current" /> {formatRating(listing.rating)}
                             </div>
                             {listing.rating && listing.rating > 0 && (
                                 <span className="font-semibold text-gray-900">
@@ -1147,7 +1168,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                     <button 
                         onClick={handleBookingAction}
                         disabled={dayInfo?.status === 'blocked'}
-                        className={`w-full text-white font-bold text-lg py-4 rounded-xl transition-all active:scale-[0.98] mb-4 shadow-lg hover:shadow-xl relative overflow-hidden group ${dayInfo?.status === 'blocked' ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#0284C7] hover:bg-[#D01755]'}`}
+                        className={`w-full text-white font-bold text-lg py-4 rounded-xl transition-all active:scale-[0.98] mb-4 shadow-lg hover:shadow-xl relative overflow-hidden group ${dayInfo?.status === 'blocked' ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#e51d53] hover:bg-[#d01749]'}`}
                     >
                         <span className="relative z-10 transition-transform duration-300">
                             {dayInfo?.status === 'blocked' ? 'Sold Out' : bookingStep === 'AVAILABILITY' ? 'Check availability' : 'Reserve'}
@@ -1269,18 +1290,18 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
       </div>
 
       {/* Mobile Fixed Bottom Action Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 pb-8 z-50 flex items-center gap-3 lg:hidden shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] safe-pb">
-          <button className="flex-shrink-0 w-12 h-12 flex items-center justify-center border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-colors">
-              <PhoneIcon className="w-5 h-5" />
-          </button>
-          <button className="flex-shrink-0 w-12 h-12 flex items-center justify-center border border-gray-300 rounded-xl text-green-600 hover:bg-gray-50 transition-colors">
-               <MessageCircleIcon className="w-5 h-5" />
-          </button>
+      <div className="fixed bottom-0 left-0 right-0 bg-white/85 backdrop-blur-2xl saturate-150 border-t border-gray-200/50 p-4 pb-safe z-50 flex items-center justify-between gap-4 lg:hidden shadow-[0_-4px_20px_-1px_rgba(0,0,0,0.08)]">
+          <div className="flex flex-col">
+              <span className="text-[16px] font-bold text-gray-900">{formatPrice(listing.displayPrice ?? listing.price, listing.currency)} <span className="font-normal text-sm text-gray-500">/{listing.period}</span></span>
+              {listing.rating && listing.rating > 0 && (
+                  <span className="text-xs font-semibold text-gray-900 underline mt-0.5">{getRatingWord(listing.rating)}</span>
+              )}
+          </div>
           <button 
             onClick={() => setShowMobileBooking(true)}
-            className="flex-1 h-12 bg-[#0284C7] text-white font-bold rounded-xl text-base hover:bg-[#D01755] transition-colors shadow-sm"
+            className="px-6 h-12 bg-[#e51d53] text-white font-bold rounded-xl text-[16px] hover:bg-[#d01749] transition-colors shadow-md active:scale-95"
           >
-              Check availability
+              Reserve
           </button>
       </div>
 
@@ -1438,7 +1459,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                     <button 
                         onClick={handleMobileReserve}
                         disabled={dayInfo?.status === 'blocked'}
-                        className={`w-full text-white font-bold text-lg py-4 rounded-xl shadow-lg active:scale-[0.98] transition-transform mt-2 ${dayInfo?.status === 'blocked' ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#0284C7]'}`}
+                        className={`w-full text-white font-bold text-[16px] py-3.5 rounded-xl shadow-lg active:scale-[0.98] transition-transform mt-4 ${dayInfo?.status === 'blocked' ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#e51d53]'}`}
                     >
                         {dayInfo?.status === 'blocked' ? 'Dates completely sold out' : (!user ? 'Check availability' : 'Reserve')}
                     </button>

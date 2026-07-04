@@ -77,7 +77,7 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
         onClick={handleClick}
     >
       {/* Image Container */}
-      <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-gray-100 isolate cursor-grab active:cursor-grabbing group">
+      <div className="relative aspect-square rounded-[24px] overflow-hidden bg-gray-100 isolate cursor-grab active:cursor-grabbing group">
         <motion.div
             key={currentImageIndex}
             initial={{ opacity: 0, x: 50 }}
@@ -113,7 +113,8 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
         {/* Favorite Button */}
         <motion.button 
             whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
+            whileTap={{ scale: 0.8 }}
+            animate={isFavorite ? { scale: [1, 1.3, 1], transition: { duration: 0.3, type: "spring", stiffness: 400 } } : {}}
             onPointerDown={(e) => { e.stopPropagation(); }}
             onClick={(e) => { 
                 e.stopPropagation();
@@ -122,7 +123,7 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
             }}
             className="absolute top-3 right-3 p-2 rounded-full bg-black/10 hover:bg-white/20 backdrop-blur-md transition-colors z-20 group/heart"
         >
-            <HeartIcon className={`w-5 h-5 transition-colors ${isFavorite ? 'text-[#0284C7] fill-[#0284C7]' : 'text-white'}`} filled={isFavorite} />
+            <HeartIcon className={`w-5 h-5 transition-colors ${isFavorite ? 'text-[#e51d53] fill-[#e51d53]' : 'text-white'}`} filled={isFavorite} />
         </motion.button>
 
 
@@ -173,9 +174,9 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
       </div>
 
       {/* Content */}
-      <div className="pt-4 px-1 pb-2 flex flex-col gap-1.5">
+      <div className="pt-4 px-1 pb-2 flex flex-col gap-0.5">
         <div className="flex justify-between items-start">
-            <h3 className="font-bold text-gray-900 truncate text-lg pr-2 leading-tight group-hover:text-[#0284C7] transition-colors">
+            <h3 className="font-bold text-gray-900 truncate text-[16px] leading-tight group-hover:text-[#e51d53] transition-colors">
                 {listing.displayTitle || listing.title}
             </h3>
             <div className="flex flex-col items-end gap-0.5">
@@ -185,8 +186,8 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
                             {getRatingWord(listing.rating)}
                         </span>
                     )}
-                    <div className="bg-[#003B95] text-white text-xs font-bold px-1.5 py-0.5 rounded-t-md rounded-br-md shadow-sm">
-                        {formatRating(listing.rating)}
+                    <div className="flex items-center gap-1 font-semibold text-[14px]">
+                        <StarIcon className="w-3.5 h-3.5 fill-current" /> {formatRating(listing.rating)}
                     </div>
                 </div>
             </div>
@@ -199,7 +200,7 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
         </div>
 
         <div className="mt-2 flex items-baseline gap-1.5">
-            <span className="font-bold text-gray-900 text-xl">
+            <span className="font-bold text-gray-900 text-[16px]">
                 {formatPrice(listing.displayPrice ?? listing.price, listing.currency)}
             </span>
             <span className="text-gray-500 text-sm font-medium">
