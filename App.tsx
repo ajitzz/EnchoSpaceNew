@@ -10,6 +10,8 @@ import { MapIcon, ListIcon } from './components/Icons';
 import { Listing } from './types';
 import { useAuth } from './components/AuthContext';
 import { AuthModal } from './components/AuthModal';
+import { NetworkStatus } from './components/NetworkStatus';
+import { InstallPrompt } from './components/InstallPrompt';
 import { useAppBadge, useNativeNotification } from './components/usePWA';
 import { io } from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -43,6 +45,14 @@ function useNetworkState() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
+    // Hide splash screen
+    const splash = document.getElementById('native-splash');
+    if (splash) {
+        setTimeout(() => {
+            splash.classList.add('hidden');
+            setTimeout(() => splash.remove(), 600);
+        }, 100);
+    }
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
 
@@ -1127,6 +1137,8 @@ function App() {
   return (
     <>
       <SEO />
+      <NetworkStatus />
+      <InstallPrompt />
       <AnimatePresence mode="wait">
         <Suspense fallback={
            <motion.div key="suspense-fallback" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>

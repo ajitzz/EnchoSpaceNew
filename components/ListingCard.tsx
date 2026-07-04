@@ -114,6 +114,7 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
         <motion.button 
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.8 }}
+                            transition={{ type: "spring", stiffness: 400, damping: 17 }}
             animate={isFavorite ? { scale: [1, 1.3, 1], transition: { duration: 0.3, type: "spring", stiffness: 400 } } : {}}
             onPointerDown={(e) => { e.stopPropagation(); }}
             onClick={(e) => { 

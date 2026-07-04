@@ -59,7 +59,8 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({
       } else if (e.key === 'ArrowLeft') {
         if (currentIndex > 0) setCurrentIndex((prev) => prev - 1);
       } else if (e.key === 'Escape') {
-        onClose();
+        if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) window.navigator.vibrate([15, 30, 15]);
+    onClose();
       }
     };
 
@@ -73,9 +74,9 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          initial={{ opacity: 0, y: "100%" }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: "100%" }}
+          initial={{ opacity: 0, scale: 0.98, filter: "blur(10px)" }}
+          animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+          exit={{ opacity: 0, scale: 0.98, filter: "blur(10px)" }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
           className="fixed inset-0 z-[300] bg-black bg-opacity-95 text-white flex flex-col w-full h-full"
         >

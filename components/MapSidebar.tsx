@@ -75,10 +75,10 @@ const MarkerWithInfoWindow = ({ listing, isActive, setActiveMarkerId, setMarkerR
           onMouseLeave={() => setActiveMarkerId(null)}
           className={`
               relative flex items-center justify-center rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.15)] 
-              transition-all duration-300 ring-1 ring-black/5
+              transition-all duration-500 ring-1 ring-black/5 ease-[cubic-bezier(0.34,1.56,0.64,1)]
               ${(isActive || open) 
-                  ? 'bg-[#0284C7] text-white px-5 py-2.5 scale-110 z-50' 
-                  : 'bg-white text-gray-900 px-3.5 py-1.5 hover:scale-110 hover:shadow-xl'}
+                  ? 'bg-gray-900 text-white px-5 py-2.5 scale-125 z-50 shadow-[0_20px_40px_rgba(0,0,0,0.4)] -translate-y-2 ring-2 ring-white/50' 
+                  : 'bg-white text-gray-900 px-3.5 py-1.5 hover:scale-110 hover:shadow-xl z-10'}
           `}
         >
             <span className={`font-bold whitespace-nowrap ${(isActive || open) ? 'text-sm' : 'text-xs'}`}>
@@ -244,17 +244,17 @@ const MapInner = ({ listings, highlightedId, onBoundsChanged, setActiveMarkerId,
           <div className="absolute top-6 left-1/2 -translate-x-1/2 z-30 w-full flex justify-center gap-3 px-4 pointer-events-none">
             <label className="pointer-events-auto flex items-center gap-3 bg-white/90 backdrop-blur-xl px-5 py-2.5 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/50 cursor-pointer hover:scale-105 transition-all active:scale-95 group select-none">
                <div className="relative flex items-center justify-center">
-                 <input type="checkbox" checked={searchAsIMove} onChange={(e) => { uiAudio.playClick(); setSearchAsIMove(e.target.checked); }} className="peer w-5 h-5 appearance-none border-2 border-gray-300 rounded-md checked:bg-[#0284C7] checked:border-[#0284C7] transition-all cursor-pointer" />
+                 <input type="checkbox" checked={searchAsIMove} onChange={(e) => { uiAudio.playClick(); setSearchAsIMove(e.target.checked); }} className="peer w-5 h-5 appearance-none border-2 border-gray-300 rounded-md checked:bg-gray-900 checked:border-gray-900 transition-all cursor-pointer" />
                  <svg className="absolute w-3.5 h-3.5 text-white pointer-events-none opacity-0 peer-checked:opacity-100 transition-all scale-50 peer-checked:scale-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                </div>
                <span className="text-sm font-bold text-gray-700 group-hover:text-gray-900">Search as I move</span>
             </label>
             <button
                onClick={fitBounds}
-               className="pointer-events-auto flex items-center justify-center bg-white/90 backdrop-blur-xl p-3 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/50 cursor-pointer hover:scale-105 hover:text-[#0284C7] transition-all active:scale-95 group"
+               className="pointer-events-auto flex items-center justify-center bg-white/90 backdrop-blur-xl p-3 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/50 cursor-pointer hover:scale-105 hover:text-gray-900 transition-all active:scale-95 group"
                title="Focus on listings"
             >
-               <svg className="w-5 h-5 text-gray-700 group-hover:text-[#0284C7]" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+               <svg className="w-5 h-5 text-gray-700 group-hover:text-gray-900" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
                    <circle cx="12" cy="12" r="3"></circle>
                    <path d="M19 12h2"></path>
                    <path d="M3 12h2"></path>
