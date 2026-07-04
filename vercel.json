@@ -43,7 +43,7 @@
   "crons": [
     {
       "path": "/api/cron/rewarm",
-      "schedule": "0 * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
