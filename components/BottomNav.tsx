@@ -1,6 +1,6 @@
 import React from 'react';
-import { motion } from 'framer-motion';
-import { SearchIcon, HeartIcon, CalendarIcon, MessageCircleIcon, UserIcon } from './Icons';
+import { motion, AnimatePresence } from 'framer-motion';
+import { SearchIcon, HeartIcon, MessageCircleIcon } from './Icons';
 import { useAuth } from './AuthContext';
 import { uiAudio } from './audio';
 import { useToast } from './ToastContext';
@@ -10,10 +10,16 @@ interface BottomNavProps {
   appMode: 'travel' | 'host';
   onNavigate: (view: string) => void;
   onProfileClick: () => void;
-  unreadCount?: number;
+  isVisible?: boolean;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({ currentView, appMode, onNavigate, onProfileClick }) => {
+export const BottomNav: React.FC<BottomNavProps> = ({ 
+  currentView, 
+  appMode, 
+  onNavigate, 
+  onProfileClick,
+  isVisible = true 
+}) => {
   const { user } = useAuth();
   const { addToast } = useToast();
   const [unreadCount, setUnreadCount] = React.useState(0);
@@ -40,14 +46,13 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentView, appMode, onNa
      }
   }, [user]);
 
-  if (appMode === 'host') return null; // Host might have its own bottom nav or not. For now, keep it simple.
+  if (appMode === 'host') return null;
 
+  // Exact 3 tabs requested by the user: Wishlist, Explore, Inbox
   const tabs = [
+    { id: 'WISHLIST', label: 'Wishlist', icon: HeartIcon },
     { id: 'SEARCH', label: 'Explore', icon: SearchIcon },
-    { id: 'WISHLIST', label: 'Wishlists', icon: HeartIcon },
-    { id: 'RESERVATIONS', label: 'Trips', icon: CalendarIcon },
     { id: 'MESSAGES', label: 'Inbox', icon: MessageCircleIcon, badge: unreadCount },
-    { id: 'PROFILE', label: 'Profile', icon: UserIcon },
   ];
 
   const isActive = (id: string) => {
@@ -57,52 +62,76 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentView, appMode, onNa
   };
 
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/85 backdrop-blur-2xl saturate-150 border-t border-gray-100/50 pb-safe z-[200]">
-      <div className="flex items-center justify-around h-16 px-2">
-        {tabs.map(tab => {
-          const active = isActive(tab.id);
-          const Icon = tab.icon;
-          return (
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              transition={{ type: "spring", stiffness: 400, damping: 17 }}
-              key={tab.id}
-              onClick={() => {
-                uiAudio.playClick();
-                if (navigator.vibrate) navigator.vibrate(10);
-                if (tab.id === 'PROFILE') {
-                  onProfileClick();
-                } else {
-                  if (tab.id === 'MESSAGES' && !user) {
-                     addToast("Login Required", "Please login to view messages", "info");
-                     onProfileClick();
-                     return;
-                  }
-                  if (tab.id === 'RESERVATIONS' && !user) {
-                     addToast("Login Required", "Please login to view trips", "info");
-                     onProfileClick();
-                     return;
-                  }
-                  onNavigate(tab.id);
-                }
-              }}
-              className="flex flex-col items-center justify-center w-full h-full gap-1 active:scale-95 transition-transform relative"
-            >
-              <div className={`transition-colors duration-300 ${active ? 'text-[#e51d53]' : 'text-gray-400'}`}>
-                <Icon className={`w-6 h-6 ${active && tab.id === 'WISHLIST' ? 'fill-current' : ''}`} />
-                {tab.badge && tab.badge > 0 && (
-                   <span className="absolute top-2 right-1/4 translate-x-1/2 -translate-y-1/2 bg-[#e51d53] text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white">
-                      {tab.badge}
-                   </span>
-                )}
-              </div>
-              <span className={`text-[10px] font-medium transition-colors duration-300 ${active ? 'text-[#e51d53]' : 'text-gray-500'}`}>
-                {tab.label}
-              </span>
-            </motion.button>
-          );
-        })}
-      </div>
-    </div>
+    <AnimatePresence>
+      {isVisible && (
+        <motion.div 
+          initial={{ y: 80, x: "-50%", opacity: 0 }}
+          animate={{ y: 0, x: "-50%", opacity: 1 }}
+          exit={{ y: 80, x: "-50%", opacity: 0 }}
+          transition={{ type: "spring", stiffness: 350, damping: 30 }}
+          style={{ left: "50%" }}
+          className="md:hidden fixed bottom-6 w-[88%] max-w-[340px] bg-white/45 dark:bg-zinc-950/45 backdrop-blur-3xl saturate-[160%] border border-white/30 dark:border-white/10 rounded-full shadow-[0_16px_40px_rgba(0,0,0,0.12)] z-[200] p-1.5"
+        >
+          <div className="flex items-center justify-between gap-1.5 w-full">
+            {tabs.map(tab => {
+              const active = isActive(tab.id);
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    uiAudio.playClick();
+                    if (navigator.vibrate) navigator.vibrate(12);
+                    if (tab.id === 'MESSAGES' && !user) {
+                       addToast("Login Required", "Please login to view messages", "info");
+                       onProfileClick();
+                       return;
+                    }
+                    onNavigate(tab.id);
+                  }}
+                  className={`relative flex items-center justify-center transition-all duration-300 rounded-full select-none ${
+                    active 
+                      ? 'bg-[#EBE7D9] text-[#1c1917] px-5 py-2.5 font-black text-xs shadow-[0_4px_12px_rgba(0,0,0,0.08)]' 
+                      : 'text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white px-4 py-3'
+                  }`}
+                  style={{ flexGrow: active ? 1.5 : 1 }}
+                >
+                  <div className="flex items-center gap-2">
+                    <Icon className={`w-5 h-5 ${active && tab.id === 'WISHLIST' ? 'fill-current' : ''}`} />
+                    
+                    {/* Active Label */}
+                    <AnimatePresence initial={false}>
+                      {active && (
+                        <motion.span
+                          initial={{ opacity: 0, width: 0 }}
+                          animate={{ opacity: 1, width: "auto" }}
+                          exit={{ opacity: 0, width: 0 }}
+                          transition={{ type: "spring", stiffness: 350, damping: 28 }}
+                          className="overflow-hidden whitespace-nowrap tracking-tight font-black"
+                        >
+                          {tab.label}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Badge */}
+                  {tab.badge && tab.badge > 0 && !active && (
+                    <span className="absolute top-1.5 right-3 bg-[#e51d53] text-white text-[8px] font-bold h-3.5 min-w-[14px] px-0.5 rounded-full flex items-center justify-center border border-[#1a1a1a]">
+                       {tab.badge}
+                    </span>
+                  )}
+                  {tab.badge && tab.badge > 0 && active && (
+                    <span className="ml-1.5 bg-[#e51d53] text-white text-[8px] font-extrabold h-4 min-w-[16px] px-1 rounded-full flex items-center justify-center">
+                       {tab.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };

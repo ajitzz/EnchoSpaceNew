@@ -14,7 +14,7 @@ import { NetworkStatus } from './components/NetworkStatus';
 import { InstallPrompt } from './components/InstallPrompt';
 import { useAppBadge, useNativeNotification } from './components/usePWA';
 import { io } from 'socket.io-client';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useScroll, useMotionValueEvent } from 'framer-motion';
 import { fetchWithCache, queueMutation } from './lib/syncService';
 import { initSyncHandlers } from './lib/syncHandlers';
 
@@ -103,6 +103,20 @@ import { useToast } from './components/ToastContext';
 function App() {
   const [showProfileSheet, setShowProfileSheet] = useState(false);
   const [city, setCity] = useState('');
+  
+  const [isBottomNavVisible, setIsBottomNavVisible] = useState(true);
+  const { scrollY } = useScroll();
+  const lastY = useRef(0);
+
+  useMotionValueEvent(scrollY, "change", (latest) => {
+    if (latest < 0) return; // iOS bounce effect
+    if (latest > lastY.current + 15) {
+      setIsBottomNavVisible(false); // scrolling down
+    } else if (latest < lastY.current - 15 || latest < 50) {
+      setIsBottomNavVisible(true); // scrolling up
+    }
+    lastY.current = latest;
+  });
   const { addToast } = useToast();
 
   const [listings, setListings] = useState<Listing[]>([]);
@@ -656,15 +670,17 @@ function App() {
   }, [currentView, selectedListing, selectedExperience]);
 
   const pageVariants = {
-    initial: { opacity: 0, y: 20 },
-    in: { opacity: 1, y: 0 },
-    out: { opacity: 0, y: -20 }
+    initial: { opacity: 0, x: 50 },
+    in: { opacity: 1, x: 0 },
+    out: { opacity: 0, x: -50 }
   };
 
   const pageTransition = {
-    type: "tween",
-    ease: "easeInOut",
-    duration: 0.3
+    type: 'spring',
+    damping: 28,
+    stiffness: 280,
+    mass: 0.9,
+    restDelta: 0.001
   };
 
   const renderView = () => {
@@ -1061,6 +1077,7 @@ function App() {
           activeTab={currentView === 'EXPERIENCES' || currentView === 'EXPERIENCE_DETAILS' ? 'experiences' : 'stays'}
           onExperiencesClick={() => setCurrentView('EXPERIENCES')}
           onStaysClick={() => setCurrentView('SEARCH')}
+          onProfileClick={() => setShowProfileSheet(true)}
         />
         <FilterBar currentFilters={filters} onFilterChange={setFilters} />
         
@@ -1071,18 +1088,27 @@ function App() {
         )}
 
         <main className="max-w-[1920px] mx-auto pt-6 px-4 md:px-6 relative">
-          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[80] xl:hidden">
+          <motion.div 
+            initial={{ y: 0, x: "-50%" }}
+            animate={{ y: isBottomNavVisible ? 0 : 80 }}
+            transition={{ type: "spring", stiffness: 350, damping: 28 }}
+            className="fixed bottom-[96px] left-1/2 -translate-x-1/2 z-[80] xl:hidden"
+          >
               <button 
-                  onClick={() => setShowMap(!showMap)}
-                  className="bg-[#111111] hover:bg-black text-white px-6 py-3.5 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.25)] flex items-center gap-2.5 font-bold tracking-wide transition-all duration-300 hover:scale-105 active:scale-95 border border-white/20"
+                  onClick={() => {
+                      uiAudio.playClick();
+                      if (navigator.vibrate) navigator.vibrate(10);
+                      setShowMap(!showMap);
+                  }}
+                  className="bg-[#1c1917]/95 dark:bg-black/90 backdrop-blur-xl text-[#F5F5F4] px-4.5 py-2.5 rounded-full shadow-[0_12px_32px_rgba(0,0,0,0.35)] flex items-center gap-2 text-[10px] uppercase font-black tracking-widest transition-all duration-300 hover:scale-105 active:scale-95 border border-white/10 dark:border-zinc-800/80"
               >
                   {showMap ? (
-                      <><span>Show list</span><ListIcon className="w-4 h-4" /></>
+                      <><span>List view</span><ListIcon className="w-3.5 h-3.5 stroke-[2.5]" /></>
                   ) : (
-                      <><span>Map</span><MapIcon className="w-4 h-4" /></>
+                      <><span>Show map</span><MapIcon className="w-3.5 h-3.5 stroke-[2.5]" /></>
                   )}
               </button>
-          </div>
+          </motion.div>
 
           <div className="flex gap-8 items-start pb-24 xl:pb-20">
             <div className={`flex-1 min-w-0 transition-opacity duration-300 ${showMap ? 'hidden opacity-0 xl:block xl:opacity-100' : 'block opacity-100'}`}>
@@ -1166,6 +1192,7 @@ function App() {
           appMode={appMode}
           onNavigate={setCurrentView}
           onProfileClick={() => setShowProfileSheet(true)}
+          isVisible={isBottomNavVisible}
         />
       )}
       <MobileProfileSheet 

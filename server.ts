@@ -107,6 +107,7 @@ const s3 = new S3Client({
 });
 
 export const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.NODE_ENV === 'test' ? 0 : 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key_12345';
 

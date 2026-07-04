@@ -144,6 +144,8 @@ body {
   min-height: 100dvh;
 }
 
+
+
 input, textarea, [contenteditable="true"] {
   -webkit-user-select: auto;
   user-select: auto;
@@ -165,3 +167,5 @@ input, textarea, [contenteditable="true"] {
     -webkit-tap-highlight-color: transparent;
   }
 }
+
+

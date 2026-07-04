@@ -29,6 +29,7 @@ interface HeaderProps {
   activeTab?: 'stays' | 'experiences';
   onExperiencesClick?: () => void;
   onStaysClick?: () => void;
+  onProfileClick?: () => void;
 }
 
 const POPULAR_CITIES = ['Berlin', 'London', 'Paris', 'New York', 'Tokyo', 'Barcelona', 'Amsterdam', 'Munich'];
@@ -55,7 +56,8 @@ const Header: React.FC<HeaderProps> = ({
     isOnline = true,
     activeTab = 'stays',
     onExperiencesClick,
-    onStaysClick
+    onStaysClick,
+    onProfileClick
 }) => {
   const { user, logout } = useAuth();
   const { addToast } = useToast();
@@ -243,41 +245,141 @@ const Header: React.FC<HeaderProps> = ({
             : 'bg-white border-b border-transparent'}
         `}
       >
-        <div className="max-w-[1920px] mx-auto px-4 md:px-8 h-20 flex items-center justify-between gap-3 md:gap-4 relative">
-        
-        {/* 1. Brand: ENCHO Space */}
-        <div 
-          onClick={() => {
-              setInputValue('');
-              onSearch('Berlin'); // Reset to default/home
-          }}
-          className="hidden md:flex flex-col justify-center leading-none cursor-pointer group shrink-0 select-none md:min-w-[120px]"
-        >
-             <div className="flex items-center gap-1.5">
-                 <img src="/logo.svg" alt="Encho Space Logo" className="w-6 h-6 md:w-8 md:h-8" />
-                 <div className="flex flex-col">
-                     <span className="font-black text-xl md:text-2xl tracking-tighter text-gray-900 group-hover:text-[#0284C7] transition-colors leading-none">ENCHO</span>
-                     <span className="text-[8px] md:text-[9px] font-bold tracking-[0.35em] text-gray-400 uppercase ml-0.5 group-hover:text-gray-600 transition-colors">Space</span>
-                 </div>
-             </div>
-        </div>
+        <div className="max-w-[1920px] mx-auto px-4 md:px-8 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4 relative py-3 md:py-0 md:h-20">
+          
+          {/* Mobile-only brand, tabs, and menu button top row (unified compact layout) */}
+          <div className="grid grid-cols-3 items-center md:hidden w-full mb-3.5 px-1 mt-1.5 select-none">
+            {/* Logo - text only without image, optimized for exact screenshot design */}
+       <div 
+  onClick={() => {
+      setInputValue('');
+      onSearch('Berlin'); // Reset to default/home
+  }}
+  className="flex flex-col cursor-pointer group shrink-0 select-none justify-self-start"
+>
+  {/* Top Row: ENCHO (Deep Navy-Black) + Blue Dot */}
+  <div className="flex items-baseline font-black leading-none transition-colors duration-300">
+    <span className="text-base md:text-lg font-black tracking-tight text-[#0F172A] group-hover:text-[#0284C7] transition-colors duration-300">ENCHO</span>
+    <span className="w-1.5 h-1.5 rounded-full bg-[#0284C7] ml-[3px] transition-transform duration-300 group-hover:scale-125" />
+  </div>
+  
+  {/* Bottom Row: SPACE (Reduced Gap) */}
+  <span className="text-[7px] md:text-[8px] font-black tracking-[0.4em] text-[#8e8e93] uppercase leading-none mt-0.5 group-hover:text-[#5e687a] transition-colors duration-300">
+    SPACE
+  </span>
+</div>
 
-        {/* 2. Center Content - Varies by Mode */}
-        {appMode === 'travel' ? (
-          <div className="flex-1 flex flex-col justify-center items-center max-w-2xl relative">
-             <div className="flex bg-gray-100/80 backdrop-blur-md p-1 rounded-full mb-3 md:mb-4">
+            {/* Stays / Experiences Pills perfectly centered matching the screenshot design */}
+            <div className="justify-self-center flex bg-[#F4F4F6] p-0.5 rounded-full border border-gray-200/5 relative">
+              <button 
+                  type="button"
+                  className={`relative z-10 px-3.5 py-1.5 rounded-full text-[11px] font-extrabold tracking-tight transition-colors duration-300 ${activeTab === 'stays' ? 'text-[#18181b]' : 'text-[#5e687a] hover:text-[#18181b]'}`}
+                  onClick={() => {
+                      uiAudio.playClick();
+                      if (navigator.vibrate) navigator.vibrate(10);
+                      onStaysClick?.();
+                  }}
+              >
+                  {activeTab === 'stays' && (
+                    <motion.div
+                      layoutId="activeMobileHeaderPill"
+                      className="absolute inset-0 bg-white rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.08)] -z-10"
+                      transition={{ type: "spring", stiffness: 380, damping: 25 }}
+                    />
+                  )}
+                  Stays
+              </button>
+              <button 
+                  type="button"
+                  className={`relative z-10 px-3.5 py-1.5 rounded-full text-[11px] font-extrabold tracking-tight transition-colors duration-300 ${activeTab === 'experiences' ? 'text-[#18181b]' : 'text-[#5e687a] hover:text-[#18181b]'}`}
+                  onClick={() => {
+                      uiAudio.playClick();
+                      if (navigator.vibrate) navigator.vibrate(10);
+                      onExperiencesClick?.();
+                  }}
+              >
+                  {activeTab === 'experiences' && (
+                    <motion.div
+                      layoutId="activeMobileHeaderPill"
+                      className="absolute inset-0 bg-white rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.08)] -z-10"
+                      transition={{ type: "spring", stiffness: 380, damping: 25 }}
+                    />
+                  )}
+                  Experiences
+              </button>
+            </div>
+
+            {/* Menu trigger using the 3-line MenuIcon in top right, styled matching Stays/Experiences */}
+            <button
+              onClick={() => {
+                  uiAudio.playClick();
+                  if (navigator.vibrate) navigator.vibrate(10);
+                  onProfileClick?.();
+              }}
+              className="w-9 h-9 rounded-full bg-[#F4F4F6] hover:bg-[#E9EBED] active:scale-95 transition-all flex items-center justify-center relative justify-self-end border border-gray-200/5 shadow-sm"
+            >
+              <MenuIcon className="w-4.5 h-4.5 text-[#5e687a] stroke-[2.5]" />
+              {unreadCount > 0 && (
+                <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-[#e51d53] border border-white animate-pulse" />
+              )}
+            </button>
+          </div>
+        
+          {/* 1. Brand: ENCHO Space (Desktop only) */}
+          <div 
+            onClick={() => {
+                setInputValue('');
+                onSearch('Berlin'); // Reset to default/home
+            }}
+            className="hidden md:flex flex-col justify-center leading-none cursor-pointer group shrink-0 select-none md:min-w-[120px]"
+          >
+            <div className="flex items-baseline font-black leading-none transition-colors">
+              <span className="text-xl md:text-2xl font-black tracking-tight text-[#0F172A] group-hover:text-[#0284C7] transition-colors duration-300">ENCHO</span>
+              <span className="w-2.5 h-2.5 rounded-full bg-[#0284C7] ml-0.5 transition-transform duration-300 group-hover:scale-125" />
+            </div>
+            <span className="text-[8px] md:text-[9.5px] font-black tracking-[0.45em] text-[#8e8e93] uppercase leading-none mt-1.5 group-hover:text-[#5e687a] transition-colors">
+              SPACE
+            </span>
+          </div>
+
+         {/* 2. Center Content - Varies by Mode */}
+         {appMode === 'travel' ? (
+           <div className="flex-1 flex flex-col justify-center items-center max-w-2xl relative w-full">
+             <div className="hidden md:flex bg-[#F4F4F6] p-0.5 rounded-full mb-3 md:mb-4 relative border border-gray-200/10">
                  <button 
                      type="button"
-                     className={`px-5 py-2 rounded-full text-sm md:text-base font-semibold transition-all duration-300 ${activeTab === 'stays' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
-                     onClick={onStaysClick}
+                     className={`relative z-10 px-5.5 py-2.5 rounded-full text-xs md:text-sm font-extrabold tracking-tight transition-colors duration-300 ${activeTab === 'stays' ? 'text-[#18181b]' : 'text-[#5e687a] hover:text-[#18181b]'}`}
+                     onClick={() => {
+                         uiAudio.playClick();
+                         if (navigator.vibrate) navigator.vibrate(10);
+                         onStaysClick?.();
+                     }}
                  >
+                     {activeTab === 'stays' && (
+                       <motion.div
+                         layoutId="activeDesktopHeaderPill"
+                         className="absolute inset-0 bg-white rounded-full shadow-[0_2px_10px_rgba(0,0,0,0.06)] -z-10"
+                         transition={{ type: "spring", stiffness: 380, damping: 25 }}
+                       />
+                     )}
                      Stays
                  </button>
                  <button 
                      type="button"
-                     className={`px-5 py-2 rounded-full text-sm md:text-base font-semibold transition-all duration-300 ${activeTab === 'experiences' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
-                     onClick={onExperiencesClick}
+                     className={`relative z-10 px-5.5 py-2.5 rounded-full text-xs md:text-sm font-extrabold tracking-tight transition-colors duration-300 ${activeTab === 'experiences' ? 'text-[#18181b]' : 'text-[#5e687a] hover:text-[#18181b]'}`}
+                     onClick={() => {
+                         uiAudio.playClick();
+                         if (navigator.vibrate) navigator.vibrate(10);
+                         onExperiencesClick?.();
+                     }}
                  >
+                     {activeTab === 'experiences' && (
+                       <motion.div
+                         layoutId="activeDesktopHeaderPill"
+                         className="absolute inset-0 bg-white rounded-full shadow-[0_2px_10px_rgba(0,0,0,0.06)] -z-10"
+                         transition={{ type: "spring", stiffness: 380, damping: 25 }}
+                       />
+                     )}
                      Experiences
                  </button>
              </div>
@@ -286,7 +388,7 @@ const Header: React.FC<HeaderProps> = ({
                ref={searchRef}
                onSubmit={handleSubmit} 
                className={`
-                 relative w-full flex items-center bg-white border rounded-full transition-all duration-300 group z-50
+                 relative w-full flex items-center bg-white border border-gray-200 rounded-full transition-all duration-300 group z-50
                  ${isFocused 
                    ? 'h-14 shadow-lg border-gray-300 ring-4 ring-[#0284C7]/10 scale-[1.02]' 
                    : 'h-12 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border-gray-200 hover:shadow-md hover:border-gray-300'}

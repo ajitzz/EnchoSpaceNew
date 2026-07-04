@@ -1,91 +1,95 @@
 const fs = require('fs');
 let code = fs.readFileSync('components/ImageGallery.tsx', 'utf8');
 
-// I'll rewrite the motion.div for the image viewer to support vertical swipe-to-dismiss and scale-down
-const oldMainImage = `          {/* Main Image Viewer */}
-          <div className="flex-1 relative flex items-center justify-center overflow-hidden w-full h-full group" onClick={onClose}>
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={currentIndex}
-                initial={{ opacity: 0, x: 100 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -100 }}
-                transition={{ type: "spring", damping: 30, stiffness: 300 }}
-                drag="x"
-                dragConstraints={{ left: 0, right: 0 }}
-                dragElastic={0.2}
-                onDragEnd={(e, { offset }) => {
-                  const swipe = offset.x;
-                  if (swipe < -50 && currentIndex < images.length - 1) {
-                    setCurrentIndex((prev) => prev + 1);
-                  } else if (swipe > 50 && currentIndex > 0) {
-                    setCurrentIndex((prev) => prev - 1);
-                  }
-                }}
-                className="w-full h-full flex items-center justify-center p-4 md:p-12 cursor-grab active:cursor-grabbing"
-                onClick={(e) => e.stopPropagation()} // Prevent close on clicking image
-              >
-                <OptimizedImage
-                  src={images[currentIndex]}
-                  alt={\`Gallery image \${currentIndex + 1}\`}
-                  className="max-w-full max-h-full object-contain select-none shadow-2xl rounded-sm pointer-events-none"
-                />
-              </motion.div>
-            </AnimatePresence>`;
+// Replace the main modal content to use drag
+const renderContentRegex = /return \(\s*<AnimatePresence>([\s\S]*?)<\/AnimatePresence>\s*\);/;
 
-const newMainImage = `          {/* Main Image Viewer */}
-          <div className="flex-1 relative flex items-center justify-center overflow-hidden w-full h-full group" onClick={onClose}>
-            <AnimatePresence mode="popLayout" initial={false}>
-              <motion.div
+const newRenderContent = `return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-[300] bg-black text-white flex items-center justify-center touch-none"
+          onClick={onClose}
+        >
+          <div className="absolute top-0 left-0 right-0 p-4 pt-safe flex justify-between items-center z-10 bg-gradient-to-b from-black/50 to-transparent">
+            <button
+              onClick={(e) => { e.stopPropagation(); onClose(); }}
+              className="p-2 bg-black/40 backdrop-blur-md rounded-full text-white hover:bg-black/60 transition"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <div className="font-semibold text-sm bg-black/40 backdrop-blur-md px-3 py-1 rounded-full">
+              {currentIndex + 1} / {images.length}
+            </div>
+          </div>
+
+          <motion.div
+            className="relative w-full h-full flex items-center justify-center"
+            drag="y"
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={0.8}
+            onDragEnd={(e, { offset, velocity }) => {
+              if (offset.y > 100 || velocity.y > 500) {
+                onClose();
+              }
+            }}
+          >
+            <motion.div
                 key={currentIndex}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ type: "spring", damping: 35, stiffness: 350, mass: 0.8 }}
-                drag
-                dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                className="w-full h-full flex items-center justify-center absolute inset-0"
+                drag="x"
+                dragConstraints={{ left: 0, right: 0 }}
                 dragElastic={1}
-                whileDrag={{ scale: 0.9 }}
                 onDragEnd={(e, { offset, velocity }) => {
-                  const swipeX = offset.x;
-                  const swipeY = offset.y;
-                  
-                  // Vertical swipe to dismiss
-                  if (Math.abs(swipeY) > 100 || Math.abs(velocity.y) > 500) {
-                    onClose();
-                    return;
-                  }
-                  
-                  // Horizontal swipe
-                  if (swipeX < -50 && currentIndex < images.length - 1) {
-                    setCurrentIndex((prev) => prev + 1);
-                    if(window.navigator && window.navigator.vibrate) window.navigator.vibrate(10);
-                  } else if (swipeX > 50 && currentIndex > 0) {
-                    setCurrentIndex((prev) => prev - 1);
-                    if(window.navigator && window.navigator.vibrate) window.navigator.vibrate(10);
-                  }
+                    const swipeThreshold = 50;
+                    if (offset.x < -swipeThreshold || velocity.x < -500) {
+                        handleNext();
+                    } else if (offset.x > swipeThreshold || velocity.x > 500) {
+                        handlePrev();
+                    }
                 }}
-                className="w-full h-full flex items-center justify-center p-4 md:p-12 cursor-grab active:cursor-grabbing"
-                onClick={(e) => e.stopPropagation()} // Prevent close on clicking image
-              >
-                <OptimizedImage
-                  src={images[currentIndex]}
-                  alt={\`Gallery image \${currentIndex + 1}\`}
-                  className="max-w-full max-h-full object-contain select-none shadow-2xl rounded-[20px] pointer-events-none bg-black/50"
-                />
-              </motion.div>
-            </AnimatePresence>`;
+            >
+                <div className="w-full h-full flex items-center justify-center p-4">
+                  <OptimizedImage
+                    src={images[currentIndex]}
+                    alt={\`Gallery image \${currentIndex + 1}\`}
+                    className="max-w-full max-h-full object-contain pointer-events-none"
+                    style={{ maxHeight: '85vh' }}
+                  />
+                </div>
+            </motion.div>
+          </motion.div>
 
-code = code.replace(oldMainImage, newMainImage);
+          {/* Desktop Controls (Hidden on small screens) */}
+          {currentIndex > 0 && (
+            <button
+              onClick={(e) => { handlePrev(); e.stopPropagation(); }}
+              className="hidden md:flex absolute left-4 p-3 bg-black/40 backdrop-blur-md rounded-full text-white hover:bg-black/60 transition z-10"
+            >
+              <ChevronLeft className="w-8 h-8" />
+            </button>
+          )}
+          {currentIndex < images.length - 1 && (
+            <button
+              onClick={(e) => { handleNext(); e.stopPropagation(); }}
+              className="hidden md:flex absolute right-4 p-3 bg-black/40 backdrop-blur-md rounded-full text-white hover:bg-black/60 transition z-10"
+            >
+              <ChevronRight className="w-8 h-8" />
+            </button>
+          )}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );`;
 
-// Also change the initial mount animation
-code = code.replace(
-    `initial={{ opacity: 0, y: "100%" }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: "100%" }}`,
-    `initial={{ opacity: 0, scale: 0.98, filter: "blur(10px)" }}
-          animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
-          exit={{ opacity: 0, scale: 0.98, filter: "blur(10px)" }}`
-);
+code = code.replace(renderContentRegex, newRenderContent);
 
 fs.writeFileSync('components/ImageGallery.tsx', code);
