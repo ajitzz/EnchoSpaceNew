@@ -1,0 +1,150 @@
+
+/app/applet/App.tsx
+   97:42  warning  Unexpected any. Specify a different type                                                                                      @typescript-eslint/no-explicit-any
+  101:6   warning  React Hook useEffect has missing dependencies: 'city' and 'handleSearch'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  129:66  warning  Unexpected any. Specify a different type                                                                                      @typescript-eslint/no-explicit-any
+  129:96  warning  Unexpected any. Specify a different type                                                                                      @typescript-eslint/no-explicit-any
+
+/app/applet/components/AdminDashboard.tsx
+    3:30  warning  'MoreHorizontalIcon' is defined but never used                                                                @typescript-eslint/no-unused-vars
+   13:66  warning  'onEditListing' is defined but never used. Allowed unused args must match /^_/u                               @typescript-eslint/no-unused-vars
+   17:40  warning  Unexpected any. Specify a different type                                                                      @typescript-eslint/no-explicit-any
+   18:42  warning  Unexpected any. Specify a different type                                                                      @typescript-eslint/no-explicit-any
+   25:18  warning  'logout' is assigned a value but never used                                                                   @typescript-eslint/no-unused-vars
+   29:6   warning  React Hook useEffect has a missing dependency: 'fetchData'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  310:99  warning  Unexpected any. Specify a different type                                                                      @typescript-eslint/no-explicit-any
+
+/app/applet/components/AdminInbox.tsx
+   34:13  warning  'user' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  169:65  warning  'e' is defined but never used              @typescript-eslint/no-unused-vars
+  169:68  error    Empty block statement                      no-empty
+  186:65  warning  'e' is defined but never used              @typescript-eslint/no-unused-vars
+  186:68  error    Empty block statement                      no-empty
+
+/app/applet/components/AuthContext.tsx
+  25:14  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+/app/applet/components/AuthModal.tsx
+  41:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  67:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  74:58  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  80:22  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  96:19  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/applet/components/CheckoutModal.tsx
+  40:17  warning  'e' is defined but never used  @typescript-eslint/no-unused-vars
+
+/app/applet/components/FilterBar.tsx
+  21:47  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  23:30  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/applet/components/HostCalendar.tsx
+   8:17  warning  Unexpected any. Specify a different type                                        @typescript-eslint/no-explicit-any
+  13:50  warning  'reservations' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+  18:56  warning  Unexpected any. Specify a different type                                        @typescript-eslint/no-explicit-any
+
+/app/applet/components/HostDashboard.tsx
+    2:8   warning  'HostForm' is defined but never used                                                                              @typescript-eslint/no-unused-vars
+    9:9   warning  Unexpected any. Specify a different type                                                                          @typescript-eslint/no-explicit-any
+   16:52  warning  Unexpected any. Specify a different type                                                                          @typescript-eslint/no-explicit-any
+   19:10  warning  'messages' is assigned a value but never used                                                                     @typescript-eslint/no-unused-vars
+   19:44  warning  Unexpected any. Specify a different type                                                                          @typescript-eslint/no-explicit-any
+   45:6   warning  React Hook useEffect has a missing dependency: 'selectedResId'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+   68:15  warning  'e' is defined but never used                                                                                     @typescript-eslint/no-unused-vars
+   73:9   warning  'sendMessage' is assigned a value but never used                                                                  @typescript-eslint/no-unused-vars
+  133:35  warning  Unexpected any. Specify a different type                                                                          @typescript-eslint/no-explicit-any
+  133:40  warning  'idx' is defined but never used. Allowed unused args must match /^_/u                                             @typescript-eslint/no-unused-vars
+  154:36  warning  Unexpected any. Specify a different type                                                                          @typescript-eslint/no-explicit-any
+  154:41  warning  'idx' is defined but never used. Allowed unused args must match /^_/u                                             @typescript-eslint/no-unused-vars
+  176:96  warning  Unexpected any. Specify a different type                                                                          @typescript-eslint/no-explicit-any
+
+/app/applet/components/HostForm.tsx
+   14:21  warning  Unexpected any. Specify a different type     @typescript-eslint/no-explicit-any
+   43:45  warning  Unexpected any. Specify a different type     @typescript-eslint/no-explicit-any
+   96:66  warning  Unexpected any. Specify a different type     @typescript-eslint/no-explicit-any
+  152:19  warning  'photos' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/app/applet/components/InboxPage.tsx
+  60:8  warning  React Hook useEffect has a missing dependency: 'role'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+/app/applet/components/ListingCard.tsx
+   1:27  warning  'useRef' is defined but never used                 @typescript-eslint/no-unused-vars
+  18:9   warning  'baseImageUrl' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/app/applet/components/ListingDetails.tsx
+   75:11  warning  'ConfigOption' is defined but never used           @typescript-eslint/no-unused-vars
+   81:70  warning  Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  192:56  warning  Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  193:42  warning  Unexpected any. Specify a different type           @typescript-eslint/no-explicit-any
+  317:9   warning  'baseImageUrl' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+/app/applet/components/MapSidebar.tsx
+   9:19   warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  10:18   warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  90:100  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+/app/applet/server.ts
+    43:38  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+   111:40  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+   111:50  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+   111:61  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+   117:39  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+   117:50  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+   154:15  warning  'phone_number_id' is assigned a value but never used  @typescript-eslint/no-unused-vars
+   166:61  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+   659:56  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+   684:62  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+   696:12  warning  'error' is defined but never used                     @typescript-eslint/no-unused-vars
+   701:69  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+   720:12  warning  'error' is defined but never used                     @typescript-eslint/no-unused-vars
+   730:12  warning  'error' is defined but never used                     @typescript-eslint/no-unused-vars
+   735:62  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+   745:12  warning  'error' is defined but never used                     @typescript-eslint/no-unused-vars
+   750:68  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+   756:12  warning  'error' is defined but never used                     @typescript-eslint/no-unused-vars
+   773:12  warning  'error' is defined but never used                     @typescript-eslint/no-unused-vars
+   778:71  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+   803:60  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+   809:12  warning  'error' is defined but never used                     @typescript-eslint/no-unused-vars
+   814:67  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+   820:12  warning  'error' is defined but never used                     @typescript-eslint/no-unused-vars
+   996:58  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  1021:59  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  1030:12  warning  'error' is defined but never used                     @typescript-eslint/no-unused-vars
+  1035:72  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  1043:12  warning  'error' is defined but never used                     @typescript-eslint/no-unused-vars
+  1049:72  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  1066:12  warning  'error' is defined but never used                     @typescript-eslint/no-unused-vars
+  1083:12  warning  'error' is defined but never used                     @typescript-eslint/no-unused-vars
+  1088:70  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  1108:12  warning  'error' is defined but never used                     @typescript-eslint/no-unused-vars
+  1149:28  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  1213:19  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  1249:40  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  1257:16  warning  'e' is defined but never used                         @typescript-eslint/no-unused-vars
+  1368:56  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  1416:12  warning  'error' is defined but never used                     @typescript-eslint/no-unused-vars
+  1421:57  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  1450:27  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  1463:19  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  1469:69  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  1497:12  warning  'error' is defined but never used                     @typescript-eslint/no-unused-vars
+  1502:70  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  1526:12  warning  'error' is defined but never used                     @typescript-eslint/no-unused-vars
+  1531:62  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  1546:12  warning  'error' is defined but never used                     @typescript-eslint/no-unused-vars
+  1647:11  warning  'e' is defined but never used                         @typescript-eslint/no-unused-vars
+  1652:62  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  1668:12  warning  'err' is defined but never used                       @typescript-eslint/no-unused-vars
+  1673:70  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  1679:12  warning  'err' is defined but never used                       @typescript-eslint/no-unused-vars
+  1684:75  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  1696:12  warning  'err' is defined but never used                       @typescript-eslint/no-unused-vars
+  1803:32  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+  1953:19  warning  Unexpected any. Specify a different type              @typescript-eslint/no-explicit-any
+
+/app/applet/test-wishlists-query.ts
+  16:14  warning  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+✖ 115 problems (2 errors, 113 warnings)
+

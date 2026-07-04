@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="g1" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#024bba" />
+      <stop offset="100%" stop-color="#00c8b6" />
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="120%" height="120%">
+      <feDropShadow dx="15" dy="15" stdDeviation="15" flood-color="#004CB2" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" fill="#ffffff" rx="200"/>
+  <g transform="translate(100, 100)" filter="url(#shadow)">
+    <!-- House Roof -->
+    <path d="M340 420 L 540 240 L 780 440" fill="none" stroke="url(#g1)" stroke-width="90" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Chimney -->
+    <path d="M680 350 L 680 180" fill="none" stroke="url(#g1)" stroke-width="90" stroke-linecap="round"/>
+    
+    <!-- E shape swirling into bottom -->
+    <path d="M 330 250 C 100 200, 50 450, 250 500 C 50 580, 50 820, 300 820 L 650 820" fill="none" stroke="url(#g1)" stroke-width="90" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Middle bar of E -->
+    <!-- House wall/door -->
+    <path d="M 650 820 L 650 630 A 70 70 0 0 0 510 630 L 510 820" fill="none" stroke="url(#g1)" stroke-width="90" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

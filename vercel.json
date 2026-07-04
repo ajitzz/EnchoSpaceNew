@@ -1,0 +1,49 @@
+{
+  "version": 2,
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "images": {
+    "sizes": [
+      320,
+      640,
+      768,
+      1024,
+      1536,
+      2048
+    ],
+    "domains": [
+      "s3.amazonaws.com",
+      "images.unsplash.com"
+    ],
+    "remotePatterns": [
+      {
+        "protocol": "https",
+        "hostname": "**"
+      }
+    ]
+  },
+  "rewrites": [
+    {
+      "source": "/listing/:id",
+      "destination": "/api/seo?type=listing&id=$id"
+    },
+    {
+      "source": "/experience/:id",
+      "destination": "/api/seo?type=experience&id=$id"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/rewarm",
+      "schedule": "0 * * * *"
+    }
+  ]
+}
