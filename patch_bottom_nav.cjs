@@ -1,36 +1,65 @@
 const fs = require('fs');
-const code = fs.readFileSync('components/BottomNav.tsx', 'utf8');
+let code = fs.readFileSync('components/BottomNav.tsx', 'utf8');
 
-const updated = code.replace(
-`export const BottomNav: React.FC<BottomNavProps> = ({ currentView, appMode, onNavigate, onProfileClick, unreadCount = 0 }) => {
-  const { user } = useAuth();
-  const { addToast } = useToast();`,
-`export const BottomNav: React.FC<BottomNavProps> = ({ currentView, appMode, onNavigate, onProfileClick }) => {
-  const { user } = useAuth();
-  const { addToast } = useToast();
-  const [unreadCount, setUnreadCount] = React.useState(0);
+if (!code.includes('import { motion } from')) {
+    code = code.replace(`import React from 'react';`, `import React from 'react';\nimport { motion } from 'framer-motion';`);
+}
 
-  React.useEffect(() => {
-     if (user) {
-         fetch('/api/unread-counts', {
-             headers: { 'Authorization': \`Bearer \${localStorage.getItem('token')}\` }
-         })
-         .then(res => res.json())
-         .then(data => setUnreadCount(data.unread || 0))
-         .catch(console.error);
-         
-         const interval = setInterval(() => {
-             fetch('/api/unread-counts', {
-                 headers: { 'Authorization': \`Bearer \${localStorage.getItem('token')}\` }
-             })
-             .then(res => res.json())
-             .then(data => setUnreadCount(data.unread || 0));
-         }, 30000);
-         return () => clearInterval(interval);
-     } else {
-         setUnreadCount(0);
-     }
-  }, [user]);`
+// Replace nav buttons with motion.button
+code = code.replace(
+    /<button\s+onClick=\{\(\) => handleNav\('SEARCH'\)\}\s+className=\{`flex flex-col items-center gap-1 w-16 \$\{currentView === 'SEARCH' \? 'text-pink-600' : 'text-gray-500'}`\}>/g,
+    `<motion.button 
+        whileTap={{ scale: 0.85 }} 
+        transition={{ type: "spring", stiffness: 400, damping: 17 }}
+        onClick={() => handleNav('SEARCH')} 
+        className={\`flex flex-col items-center gap-1 w-16 \${currentView === 'SEARCH' ? 'text-pink-600' : 'text-gray-500'}\`}>`
+);
+code = code.replace(
+    /<button\s+onClick=\{\(\) => handleNav\('WISHLIST'\)\}\s+className=\{`flex flex-col items-center gap-1 w-16 \$\{currentView === 'WISHLIST' \? 'text-pink-600' : 'text-gray-500'}`\}>/g,
+    `<motion.button 
+        whileTap={{ scale: 0.85 }} 
+        transition={{ type: "spring", stiffness: 400, damping: 17 }}
+        onClick={() => handleNav('WISHLIST')} 
+        className={\`flex flex-col items-center gap-1 w-16 \${currentView === 'WISHLIST' ? 'text-pink-600' : 'text-gray-500'}\`}>`
+);
+code = code.replace(
+    /<button\s+onClick=\{\(\) => handleNav\('RESERVATIONS'\)\}\s+className=\{`flex flex-col items-center gap-1 w-16 \$\{currentView === 'RESERVATIONS' \? 'text-pink-600' : 'text-gray-500'}`\}>/g,
+    `<motion.button 
+        whileTap={{ scale: 0.85 }} 
+        transition={{ type: "spring", stiffness: 400, damping: 17 }}
+        onClick={() => handleNav('RESERVATIONS')} 
+        className={\`flex flex-col items-center gap-1 w-16 \${currentView === 'RESERVATIONS' ? 'text-pink-600' : 'text-gray-500'}\`}>`
+);
+code = code.replace(
+    /<button\s+onClick=\{\(\) => handleNav\('MESSAGES'\)\}\s+className=\{`flex flex-col items-center gap-1 w-16 relative \$\{currentView === 'MESSAGES' \? 'text-pink-600' : 'text-gray-500'}`\}>/g,
+    `<motion.button 
+        whileTap={{ scale: 0.85 }} 
+        transition={{ type: "spring", stiffness: 400, damping: 17 }}
+        onClick={() => handleNav('MESSAGES')} 
+        className={\`flex flex-col items-center gap-1 w-16 relative \${currentView === 'MESSAGES' ? 'text-pink-600' : 'text-gray-500'}\`}>`
+);
+code = code.replace(
+    /<button\s+onClick=\{\(\) => \{ if \(navigator\.vibrate\) navigator\.vibrate\(10\); onProfileClick\(\); \}\}\s+className="flex flex-col items-center gap-1 w-16 text-gray-500">/g,
+    `<motion.button 
+        whileTap={{ scale: 0.85 }} 
+        transition={{ type: "spring", stiffness: 400, damping: 17 }}
+        onClick={() => { if (navigator.vibrate) navigator.vibrate(10); onProfileClick(); }} 
+        className="flex flex-col items-center gap-1 w-16 text-gray-500">`
 );
 
-fs.writeFileSync('components/BottomNav.tsx', updated);
+// We need to replace the closing `</button>` for these
+code = code.replace(/<\/button>/g, `</motion.button>`);
+
+// Haptics on tab switch
+const navHandlerOld = `const handleNav = (view: string) => {
+    onNavigate(view);
+  };`;
+const navHandlerNew = `const handleNav = (view: string) => {
+    if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+        window.navigator.vibrate(15);
+    }
+    onNavigate(view);
+  };`;
+code = code.replace(navHandlerOld, navHandlerNew);
+
+fs.writeFileSync('components/BottomNav.tsx', code);

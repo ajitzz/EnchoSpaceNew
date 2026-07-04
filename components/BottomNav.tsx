@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import { SearchIcon, HeartIcon, CalendarIcon, MessageCircleIcon, UserIcon } from './Icons';
 import { useAuth } from './AuthContext';
 import { uiAudio } from './audio';
@@ -62,10 +63,13 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentView, appMode, onNa
           const active = isActive(tab.id);
           const Icon = tab.icon;
           return (
-            <button
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
               key={tab.id}
               onClick={() => {
                 uiAudio.playClick();
+                if (navigator.vibrate) navigator.vibrate(10);
                 if (tab.id === 'PROFILE') {
                   onProfileClick();
                 } else {
@@ -95,7 +99,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentView, appMode, onNa
               <span className={`text-[10px] font-medium transition-colors duration-300 ${active ? 'text-[#e51d53]' : 'text-gray-500'}`}>
                 {tab.label}
               </span>
-            </button>
+            </motion.button>
           );
         })}
       </div>
