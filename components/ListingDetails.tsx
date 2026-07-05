@@ -813,30 +813,32 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                     </div>
                 )}
 
-                {/* Rooms Section (Private Rooms) */}
+                {/* Inventory Selection Menu (Complex Listings / Rooms) */}
                 {listing.rooms && listing.rooms.length > 0 && (
                     <div className="mb-10 py-8 border-t border-gray-200">
-                        <h2 className="text-xl font-bold text-gray-900 mb-6">Choose Configuration</h2>
-                        <p className="text-gray-600 mb-6">Select a room or the entire apartment below to view its availability and price.</p>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <h2 className="text-2xl font-bold text-gray-900 mb-2">Inventory Selection Menu</h2>
+                        <p className="text-gray-600 mb-8 text-lg">Compare available accommodation types and pricing tiers for your dates.</p>
+                        <div className="flex flex-col gap-6">
                             
                             {/* Entire Apartment Smart Option */}
                             {listing.rental_mode !== 'private_rooms' && (
                                 <div 
-                                    className={`rounded-2xl border transition-all cursor-pointer flex flex-col justify-between overflow-hidden p-6 ${isEntirePlace ? 'border-black ring-1 ring-black bg-gray-50 shadow-md' : 'border-gray-200 bg-white hover:shadow-md hover:border-gray-300'}`}
+                                    className={`rounded-2xl border transition-all cursor-pointer flex flex-col justify-between overflow-hidden p-6 md:p-8 ${isEntirePlace ? 'border-black ring-1 ring-black bg-gray-50 shadow-md' : 'border-gray-200 bg-white hover:shadow-md hover:border-gray-300'}`}
                                     onClick={() => {
                                         toggleConfigSelection('entire_place', listing.rooms?.map(r => r.id) || []);
                                         document.getElementById('booking-card')?.scrollIntoView({ behavior: 'smooth' });
                                     }}
                                 >
-                                    <div>
-                                        <div className="flex items-start justify-between mb-2">
-                                            <h3 className="font-bold text-lg text-gray-900">Entire Apartment/Place</h3>
-                                            <span className="font-bold text-lg text-[#0284C7]">{formatPrice(listing.price, listing.currency)}<span className="text-sm font-normal text-gray-500"> /mo</span></span>
+                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                                        <div>
+                                            <h3 className="font-bold text-xl text-gray-900">Entire {listing.type || 'Property'}</h3>
+                                            <p className="text-base text-gray-500 mt-2">Book the entire place for your stay. Complete privacy and full access.</p>
                                         </div>
-                                        <p className="text-sm text-gray-500 mt-2">Book the entire place for your stay. You get access to all rooms.</p>
+                                        <div className="text-left md:text-right">
+                                            <span className="font-bold text-2xl text-[#0284C7] block">{formatPrice(listing.price, listing.currency)}<span className="text-sm font-normal text-gray-500"> /night</span></span>
+                                        </div>
                                     </div>
-                                    <div className={`w-full mt-6 py-3 rounded-xl font-bold transition-all flex justify-center items-center gap-2 ${isEntirePlace ? 'bg-black text-white' : 'border border-gray-900 text-gray-900 hover:bg-gray-50'}`}>
+                                    <div className={`w-full mt-6 py-4 rounded-xl font-bold transition-all flex justify-center items-center gap-2 ${isEntirePlace ? 'bg-black text-white' : 'border border-gray-900 text-gray-900 hover:bg-gray-50'}`}>
                                         {isEntirePlace ? (
                                             <><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg> Entire Place Selected</>
                                         ) : 'Select Entire Place'}
@@ -849,45 +851,112 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                 return (
                                 <div 
                                     key={room.id || idx} 
-                                    className={`rounded-2xl border transition-all cursor-pointer flex flex-col overflow-hidden ${isRoomSelected ? 'border-black ring-1 ring-black bg-gray-50 shadow-md' : 'border-gray-200 bg-white hover:shadow-md hover:border-gray-300'}`}
-                                    onClick={() => {
-                                        toggleConfigSelection(room.id, listing.rooms?.map(r => r.id) || []);
-                                        document.getElementById('booking-card')?.scrollIntoView({ behavior: 'smooth' });
-                                    }}
+                                    role="region"
+                                    aria-label={`Inventory unit: ${room.name}`}
+                                    className={`rounded-3xl border transition-all flex flex-col md:flex-row overflow-hidden ${isRoomSelected ? 'border-black ring-1 ring-black bg-gray-50 shadow-md' : 'border-gray-200 bg-white hover:shadow-md hover:border-gray-300'}`}
                                 >
                                     {room.imageUrls && room.imageUrls.length > 0 && (
-                                        <div className="w-full h-48 bg-gray-100 flex-shrink-0 border-b border-gray-100">
-                                            <OptimizedImage src={room.imageUrls[0]} alt={room.name} className="w-full h-full object-cover" />
+                                        <div className="w-full md:w-[300px] h-48 md:h-auto bg-gray-100 flex-shrink-0 border-b md:border-b-0 md:border-r border-gray-100 relative">
+                                            <OptimizedImage src={room.imageUrls[0]} alt={`Photo of ${room.name}`} className="w-full h-full object-cover absolute inset-0" />
                                         </div>
                                     )}
-                                    <div className="p-5 flex flex-col justify-between flex-1">
-                                        <div>
-                                            <div className="flex items-start justify-between mb-2">
-                                                <h3 className="font-bold text-lg text-gray-900">{room.name}</h3>
-                                                <span className="font-bold text-lg text-[#0284C7]">{formatPrice(room.price, listing.currency)}<span className="text-sm font-normal text-gray-500"> /mo</span></span>
+                                    <div className="p-6 md:p-8 flex flex-col justify-between flex-1">
+                                        <div className="flex flex-col gap-4">
+                                            <div className="flex flex-col md:flex-row items-start justify-between gap-4">
+                                                <div>
+                                                    <h3 className="font-bold text-xl text-gray-900 flex items-center gap-2">
+                                                        {room.name}
+                                                        {room.inventory_count !== undefined && (
+                                                            <span className={`text-xs font-bold px-2 py-1 rounded-full ${room.inventory_count > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`} aria-live="polite">
+                                                                {room.inventory_count > 0 ? `${room.inventory_count} left` : 'Sold Out'}
+                                                            </span>
+                                                        )}
+                                                    </h3>
+                                                    
+                                                    <div className="flex flex-wrap gap-2 mt-3" aria-label={`Amenities for ${room.name}`}>
+                                                        {room.hasAttachedBathroom && (
+                                                            <span className="bg-blue-50 text-blue-700 text-xs font-semibold px-2 py-1 rounded-full">
+                                                                🛁 Attached Bath
+                                                            </span>
+                                                        )}
+                                                        {room.hasAc && (
+                                                            <span className="bg-teal-50 text-teal-700 text-xs font-semibold px-2 py-1 rounded-full">
+                                                                ❄️ AC
+                                                            </span>
+                                                        )}
+                                                        {room.amenities && room.amenities.map(am => (
+                                                            <span key={am} className="bg-gray-100 text-gray-700 text-xs font-semibold px-2 py-1 rounded-full">
+                                                                {getAmenityIcon(am)} {am}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <div className="text-left md:text-right">
+                                                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wide block mb-1">Starts From</span>
+                                                    <span className="font-bold text-2xl text-[#0284C7] block" aria-label={`Starts from ${room.price} ${listing.currency} per night`}>{formatPrice(room.price, listing.currency)}<span className="text-sm font-normal text-gray-500"> /night</span></span>
+                                                </div>
                                             </div>
-                                            <div className="flex flex-wrap gap-2 mt-3">
-                                                {room.hasAttachedBathroom && (
-                                                    <span className="bg-blue-50 text-blue-700 text-xs font-semibold px-2 py-1 rounded-full flex items-center gap-1">
-                                                        🛁 Attached Bath
-                                                    </span>
-                                                )}
-                                                {room.hasAc && (
-                                                    <span className="bg-teal-50 text-teal-700 text-xs font-semibold px-2 py-1 rounded-full flex items-center gap-1">
-                                                        ❄️ AC
-                                                    </span>
-                                                )}
-                                                {room.amenities && room.amenities.map(am => (
-                                                    <span key={am} className="bg-gray-100 text-gray-700 text-xs font-semibold px-2 py-1 rounded-full flex items-center gap-1">
-                                                        {getAmenityIcon(am)} {am}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        <div className={`w-full mt-6 py-3 border rounded-xl font-bold flex justify-center items-center gap-2 transition-all ${isRoomSelected ? 'bg-black border-black text-white' : 'border-gray-900 text-gray-900 hover:bg-gray-50'}`}>
-                                            {isRoomSelected ? (
-                                                <><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg> Selected</>
-                                            ) : 'Select Room'}
+
+                                            {/* Pricing Tiers Section */}
+                                            {room.tiers && room.tiers.length > 0 ? (
+                                                <div className="mt-4 border-t border-gray-100 pt-6">
+                                                    <h4 className="text-sm font-bold text-gray-900 mb-3 uppercase tracking-wider">Select Package Tier</h4>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="radiogroup" aria-label={`Select tier for ${room.name}`}>
+                                                        {room.tiers.map((tier, tIdx) => (
+                                                            <div key={tIdx} 
+                                                                 role="radio"
+                                                                 aria-checked={isRoomSelected}
+                                                                 tabIndex={0}
+                                                                 onKeyDown={(e) => {
+                                                                     if (e.key === 'Enter' || e.key === ' ') {
+                                                                         if (room.inventory_count !== 0) {
+                                                                             toggleConfigSelection(room.id, listing.rooms?.map(r => r.id) || []);
+                                                                             document.getElementById('booking-card')?.scrollIntoView({ behavior: 'smooth' });
+                                                                         }
+                                                                     }
+                                                                 }}
+                                                                 onClick={() => {
+                                                                    if (room.inventory_count !== 0) {
+                                                                        toggleConfigSelection(room.id, listing.rooms?.map(r => r.id) || []);
+                                                                        document.getElementById('booking-card')?.scrollIntoView({ behavior: 'smooth' });
+                                                                    }
+                                                                 }}
+                                                                 className={`p-4 rounded-xl border cursor-pointer transition-colors focus:ring-2 focus:outline-none ${room.inventory_count === 0 ? 'opacity-50 cursor-not-allowed bg-gray-50 border-gray-100' : 'bg-white border-gray-200 hover:border-black'}`}>
+                                                                <div className="flex justify-between items-start mb-2">
+                                                                    <span className="font-bold text-gray-900">{tier.name}</span>
+                                                                    <span className="font-bold text-[#0284C7]">{formatPrice(tier.price, listing.currency)}</span>
+                                                                </div>
+                                                                <ul className="space-y-1" aria-label={`Amenities for tier ${tier.name}`}>
+                                                                    {tier.amenities.map((tam, i) => (
+                                                                        <li key={i} className="text-xs text-gray-600 flex items-center gap-1.5">
+                                                                            <svg className="w-3 h-3 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                                                            {tam}
+                                                                        </li>
+                                                                    ))}
+                                                                </ul>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="mt-4 pt-4 border-t border-gray-100 flex justify-end">
+                                                    <button 
+                                                        disabled={room.inventory_count === 0}
+                                                        aria-label={`Select ${room.name}`}
+                                                        onClick={() => {
+                                                            if (room.inventory_count !== 0) {
+                                                                toggleConfigSelection(room.id, listing.rooms?.map(r => r.id) || []);
+                                                                document.getElementById('booking-card')?.scrollIntoView({ behavior: 'smooth' });
+                                                            }
+                                                        }}
+                                                        className={`px-8 py-3 rounded-xl font-bold transition-all flex items-center gap-2 focus:ring-2 focus:ring-offset-2 focus:outline-none ${room.inventory_count === 0 ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : (isRoomSelected ? 'bg-black text-white' : 'border border-gray-900 text-gray-900 hover:bg-gray-50')}`}
+                                                    >
+                                                        {isRoomSelected ? (
+                                                            <><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg> Selected</>
+                                                        ) : 'Select Unit'}
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

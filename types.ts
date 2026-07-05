@@ -1,4 +1,11 @@
 
+export interface RoomTier {
+  id: string;
+  name: string; // e.g., "Standard", "Premium", "Room Only", "Breakfast + Cancel"
+  price: number; // Tier price
+  amenities: string[]; // Explicit amenities for this tier
+}
+
 export interface Room {
   id: string;
   name: string;
@@ -8,6 +15,8 @@ export interface Room {
   hasAc?: boolean;
   amenities?: string[];
   imageUrls?: string[];
+  inventory_count?: number; // Number of available units for this specific room type
+  tiers?: RoomTier[]; // Pricing tiers
 }
 
 export interface Offer {

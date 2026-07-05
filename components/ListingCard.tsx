@@ -182,11 +182,11 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
             </h3>
             <div className="flex flex-col items-end gap-0.5">
                 <div className="flex items-center gap-1.5">
-                    {listing.rating && listing.rating > 0 && (
+                    {listing.rating && listing.rating > 0 ? (
                         <span className="text-xs font-semibold text-gray-700 hidden sm:inline-block">
                             {getRatingWord(listing.rating)}
                         </span>
-                    )}
+                    ) : null}
                     <div className="flex items-center gap-1 font-semibold text-[14px]">
                         <StarIcon className="w-3.5 h-3.5 fill-current" /> {formatRating(listing.rating)}
                     </div>
@@ -197,12 +197,23 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
         <div className="text-gray-500 text-sm truncate flex items-center gap-2">
             <span>{listing.type}</span>
             <span className="w-0.5 h-0.5 bg-gray-400 rounded-full"></span>
-            <span>{listing.amenities?.slice(0, 2).join(", ")}</span>
+            {listing.rooms && listing.rooms.length > 0 ? (
+                <span className="truncate text-gray-600 font-medium">
+                    {Array.from(new Set(listing.rooms.map(r => r.name))).join(', ')} available
+                </span>
+            ) : (
+                <span>{listing.amenities?.slice(0, 2).join(", ")}</span>
+            )}
         </div>
 
         <div className="mt-2 flex items-baseline gap-1.5">
+            {listing.rooms && listing.rooms.length > 0 && (
+                <span className="text-gray-500 text-sm font-medium mr-1 tracking-wide">
+                    Starts from
+                </span>
+            )}
             <span className="font-bold text-gray-900 text-[16px]">
-                {formatPrice(listing.displayPrice ?? listing.price, listing.currency)}
+                {formatPrice(listing.displayPrice ?? (listing.rooms && listing.rooms.length > 0 ? Math.min(...listing.rooms.map(r => r.price)) : listing.price), listing.currency)}
             </span>
             <span className="text-gray-500 text-sm font-medium">
                 /{listing.period}

@@ -328,28 +328,39 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
             {(formData.rentalMode === 'private_rooms' || formData.rentalMode === 'hybrid') && (
               <div className="mt-8 space-y-6">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xl font-bold text-gray-900">Add Rooms</h3>
+                  <div>
+                      <h3 className="text-xl font-bold text-gray-900">Inventory Units</h3>
+                      <p className="text-sm text-gray-500 mt-1">Add cottages, rooms, or specific villas inside this property.</p>
+                  </div>
                   <button type="button" onClick={handleAddRoom} className="px-4 py-2 bg-gray-900 text-white rounded-lg font-semibold text-sm hover:bg-gray-800 transition-colors">
-                    + Add Room
+                    + Add Unit
                   </button>
                 </div>
                 {formData.rooms.length === 0 && (
-                  <p className="text-gray-500 text-sm italic">No rooms added. Please add at least one bookable room.</p>
+                  <p className="text-gray-500 text-sm italic">No inventory units added. Please add at least one bookable unit.</p>
                 )}
                 {formData.rooms.map((room, index) => (
                   <div key={room.id} className="p-6 border-2 rounded-2xl border-gray-100 bg-gray-50 space-y-6 relative">
                     <button type="button" onClick={() => handleRemoveRoom(index)} className="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition-colors bg-white rounded-full p-1 border shadow-sm z-10">
                       <X className="w-4 h-4" />
                     </button>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="space-y-2">
-                        <label className="text-xs font-bold text-gray-700 uppercase">Room Name</label>
-                        <input value={room.name} required onChange={e => handleUpdateRoom(index, 'name', e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none bg-white" placeholder="e.g. Master Bedroom" />
+                        <label className="text-xs font-bold text-gray-700 uppercase">Unit Name / Type</label>
+                        <input value={room.name} required onChange={e => handleUpdateRoom(index, 'name', e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none bg-white" placeholder="e.g. Ocean View Cottage" />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-xs font-bold text-gray-700 uppercase">Nightly Price (₹)</label>
-                        <input value={room.price} required type="number" min="0" onChange={e => handleUpdateRoom(index, 'price', parseFloat(e.target.value) || 0)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none bg-white" placeholder="e.g. 50" />
+                        <label className="text-xs font-bold text-gray-700 uppercase">Base Price (₹)</label>
+                        <input value={room.price} required type="number" min="0" onChange={e => handleUpdateRoom(index, 'price', parseFloat(e.target.value) || 0)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none bg-white" placeholder="e.g. 5000" />
                       </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-gray-700 uppercase">Total Inventory Count</label>
+                        <input value={room.inventory_count ?? 1} required type="number" min="1" onChange={e => handleUpdateRoom(index, 'inventory_count', parseInt(e.target.value) || 1)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none bg-white" placeholder="e.g. 5" />
+                        <p className="text-[10px] text-gray-500 mt-1 leading-tight">How many identical physical units of this type exist here?</p>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200">
                       <div className="space-y-2 flex items-center justify-between p-3 border border-gray-200 rounded-xl bg-white">
                         <label className="text-sm font-semibold text-gray-700">Attached Bathroom</label>
                         <input type="checkbox" checked={room.hasAttachedBathroom} onChange={e => handleUpdateRoom(index, 'hasAttachedBathroom', e.target.checked)} className="w-5 h-5 accent-[#0284C7]" />
@@ -359,14 +370,62 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                         <input type="checkbox" checked={room.hasAc} onChange={e => handleUpdateRoom(index, 'hasAc', e.target.checked)} className="w-5 h-5 accent-[#0284C7]" />
                       </div>
                     </div>
+
+                    <div className="space-y-4 pt-4 border-t border-gray-200">
+                        <div className="flex items-center justify-between">
+                            <label className="text-sm font-bold text-gray-900">Pricing Tiers / Packages</label>
+                            <button type="button" onClick={() => {
+                                const tiers = room.tiers || [];
+                                handleUpdateRoom(index, 'tiers', [...tiers, { id: Date.now().toString(), name: 'New Tier', price: room.price, amenities: [] }]);
+                            }} className="text-xs font-bold text-[#0284C7] hover:underline">+ Add Tier</button>
+                        </div>
+                        {(!room.tiers || room.tiers.length === 0) && (
+                            <p className="text-xs text-gray-500 italic">No packages added. (Defaults to Base Price Room Only)</p>
+                        )}
+                        {room.tiers && room.tiers.map((tier: any, tIndex: number) => (
+                            <div key={tier.id} className="p-4 bg-white border border-gray-200 rounded-xl relative">
+                                <button type="button" onClick={() => {
+                                    handleUpdateRoom(index, 'tiers', room.tiers.filter((_: any, i: number) => i !== tIndex));
+                                }} className="absolute top-2 right-2 text-gray-400 hover:text-red-500">
+                                    <X className="w-3 h-3" />
+                                </button>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase">Package Name</label>
+                                        <input value={tier.name} onChange={e => {
+                                            const newTiers = [...room.tiers];
+                                            newTiers[tIndex].name = e.target.value;
+                                            handleUpdateRoom(index, 'tiers', newTiers);
+                                        }} className="w-full p-2 text-sm border rounded-lg focus:ring-1 outline-none" placeholder="e.g. Breakfast + Free Cancel" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase">Package Price (₹)</label>
+                                        <input value={tier.price} type="number" onChange={e => {
+                                            const newTiers = [...room.tiers];
+                                            newTiers[tIndex].price = parseFloat(e.target.value) || 0;
+                                            handleUpdateRoom(index, 'tiers', newTiers);
+                                        }} className="w-full p-2 text-sm border rounded-lg focus:ring-1 outline-none" placeholder="e.g. 6000" />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase">Included Amenities (comma separated)</label>
+                                        <input value={tier.amenities.join(', ')} onChange={e => {
+                                            const newTiers = [...room.tiers];
+                                            newTiers[tIndex].amenities = e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean);
+                                            handleUpdateRoom(index, 'tiers', newTiers);
+                                        }} className="w-full p-2 text-sm border rounded-lg focus:ring-1 outline-none" placeholder="e.g. Breakfast, Free WiFi, No Cancellation Fee" />
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                     
-                    <div className="space-y-2 pt-2 border-t border-gray-200">
-                      <label className="text-sm font-bold text-gray-900">Room Amenities</label>
+                    <div className="space-y-2 pt-4 border-t border-gray-200">
+                      <label className="text-sm font-bold text-gray-900">Unit Amenities</label>
                       <AmenitiesPicker selected={room.amenities || []} onChange={sel => handleUpdateRoom(index, 'amenities', sel)} />
                     </div>
 
-                    <div className="space-y-2 pt-2 border-t border-gray-200">
-                      <label className="text-sm font-bold text-gray-900">Room Photos</label>
+                    <div className="space-y-2 pt-4 border-t border-gray-200">
+                      <label className="text-sm font-bold text-gray-900">Unit Photos</label>
                       <PhotoUpload photos={room.photos || []} setPhotos={p => handleUpdateRoom(index, 'photos', p)} isCompressing={isCompressing} setIsCompressing={setIsCompressing} />
                     </div>
                   </div>
