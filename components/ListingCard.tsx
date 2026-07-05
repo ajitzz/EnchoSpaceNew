@@ -201,6 +201,9 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
         </div>
 
         <div className="mt-2 flex items-baseline gap-1.5">
+            {listing.type?.toLowerCase() === 'resort' && (
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider mr-0.5">Starts from</span>
+            )}
             <span className="font-bold text-gray-900 text-[16px]">
                 {formatPrice(listing.displayPrice ?? listing.price, listing.currency)}
             </span>

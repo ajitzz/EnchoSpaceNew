@@ -173,7 +173,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
     );
   };
 
-  const propertyTypes = ['Apartment', 'House', 'Barn', 'Bed & breakfast', 'Boat', 'Cabin', 'Campervan', 'Castle'];
+  const propertyTypes = ['Resort', 'Apartment', 'House', 'Barn', 'Bed & breakfast', 'Boat', 'Cabin', 'Campervan', 'Castle'];
   const allAmenities = ['Wifi', 'Kitchen', 'Washing machine', 'Air conditioning', 'Pool', 'Hot tub', 'Fire pit', 'BBQ grill', 'Free parking', 'First aid kit', 'TV', 'Gym'];
   const sortOptions = [
     { label: 'Recommended', value: '' },
