@@ -198,8 +198,8 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
             <span>{listing.type}</span>
             <span className="w-0.5 h-0.5 bg-gray-400 rounded-full"></span>
             {listing.rooms && listing.rooms.length > 0 ? (
-                <span className="truncate text-gray-600 font-medium">
-                    {Array.from(new Set(listing.rooms.map(r => r.name))).join(', ')} available
+                <span className="truncate text-gray-700 font-medium bg-gray-100 px-2 py-0.5 rounded-full text-xs" aria-label={`Available units: ${Array.from(new Set(listing.rooms.map(r => r.name))).join(', ')}`}>
+                    {Array.from(new Set(listing.rooms.map(r => r.name.split(' ')[0]))).join(', ')} available
                 </span>
             ) : (
                 <span>{listing.amenities?.slice(0, 2).join(", ")}</span>
@@ -207,17 +207,22 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
         </div>
 
         <div className="mt-2 flex items-baseline gap-1.5">
-            {listing.rooms && listing.rooms.length > 0 && (
-                <span className="text-gray-500 text-sm font-medium mr-1 tracking-wide">
-                    Starts from
-                </span>
+            {listing.rooms && listing.rooms.length > 0 ? (
+                <div className="flex items-center gap-1.5 bg-[#0284C7]/10 px-2 py-1 rounded-lg border border-[#0284C7]/20">
+                    <span className="text-[#0369A1] text-xs font-bold uppercase tracking-wider">Starts from</span>
+                    <span className="font-bold text-[#0369A1] text-[16px]">
+                        {formatPrice(listing.displayPrice ?? Math.min(...listing.rooms.map(r => r.price)), listing.currency)}
+                    </span>
+                    <span className="text-[#0369A1]/70 text-xs font-medium">/{listing.period}</span>
+                </div>
+            ) : (
+                <>
+                    <span className="font-bold text-gray-900 text-[16px]">
+                        {formatPrice(listing.displayPrice ?? listing.price, listing.currency)}
+                    </span>
+                    <span className="text-gray-500 text-sm font-medium">/{listing.period}</span>
+                </>
             )}
-            <span className="font-bold text-gray-900 text-[16px]">
-                {formatPrice(listing.displayPrice ?? (listing.rooms && listing.rooms.length > 0 ? Math.min(...listing.rooms.map(r => r.price)) : listing.price), listing.currency)}
-            </span>
-            <span className="text-gray-500 text-sm font-medium">
-                /{listing.period}
-            </span>
         </div>
 
         {/* CTA Bottom Bar - Appears on Hover (Desktop Only) */}
