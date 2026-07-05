@@ -6,6 +6,7 @@ import { OptimizedImage } from './OptimizedImage';
 import { CalendarIcon, MapIcon, ChevronRight } from './Icons';
 import { Compass, Sparkles, Briefcase, GraduationCap, ShieldCheck, Heart, Search, MapPin, ChevronDown, Clock, IndianRupee } from 'lucide-react';
 import { format } from 'date-fns';
+import { uiAudio } from './audio';
 
 interface ExperiencesPageProps {
   onExperienceClick: (experience: Experience) => void;
@@ -326,128 +327,120 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 md:gap-8">
           {filteredExperiences.map((exp, index) => {
             const isFav = isFavoriteExperience ? isFavoriteExperience(exp.id) : false;
+            
+            // Generate elegant destination title with pin emoji if not present
+            const hasEmoji = (str: string) => /[\uD800-\uDFFF\u2600-\u27BF]/.test(str);
+            const displayDest = exp.destination + (hasEmoji(exp.destination) ? '' : ' 📍');
+
             return (
             <motion.div 
                 key={exp.id} 
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 30 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-                onClick={() => onExperienceClick(exp)}
-                whileHover={{ y: -8 }}
-                className="group cursor-pointer flex flex-col gap-4 relative"
+                transition={{ 
+                    type: "spring",
+                    stiffness: 240,
+                    damping: 24,
+                    delay: index * 0.05 
+                }}
+                whileHover={{ 
+                    y: -10, 
+                    scale: 1.015,
+                    transition: { type: "spring", stiffness: 300, damping: 20 }
+                }}
+                whileTap={{ 
+                    scale: 0.955,
+                    transition: { type: "spring", stiffness: 450, damping: 15 }
+                }}
+                onClick={() => {
+                    uiAudio.playClick();
+                    onExperienceClick(exp);
+                }}
+                className="relative aspect-[3/4] w-full overflow-hidden rounded-[2.5rem] bg-zinc-950 shadow-[0_20px_50px_rgba(0,0,0,0.12)] border border-gray-100/10 group cursor-pointer select-none"
             >
-                {/* Image */}
-                <div className="relative aspect-[3/4] overflow-hidden rounded-[2rem] bg-gray-100 shadow-lg shadow-gray-200/50">
+                {/* Full-bleed background image */}
+                <div className="absolute inset-0 z-0">
                     <OptimizedImage 
                         src={exp.image_urls?.[0] || 'https://images.unsplash.com/photo-1542314831-c6a4d14d8c81?auto=format&fit=crop&q=80&w=800'}
                         alt={exp.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000 ease-out"
                     />
-                    
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                </div>
+                
+                {/* Delicate top-to-bottom dark gradient overlay ensuring crisp readability */}
+                <div className="absolute inset-0 bg-gradient-to-b from-black/65 via-black/15 to-black/85 z-10 pointer-events-none" />
 
-                    {/* Wishlist Button */}
-                    <button
-                        onClick={(e) => handleToggleFavorite(e, exp)}
-                        className="absolute top-4 right-4 p-2.5 transition-transform hover:scale-110 active:scale-95 z-20 bg-white/20 hover:bg-white/40 backdrop-blur-md rounded-full border border-white/30 shadow-lg"
-                    >
-                        <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="presentation" focusable="false" style={{ display: 'block', fill: isFav ? '#ef4444' : 'rgba(0, 0, 0, 0.5)', height: '20px', width: '20px', stroke: 'white', strokeWidth: 2, overflow: 'visible' }}>
-                            <path d="M16 28c7-4.73 14-10 14-17a6.98 6.98 0 0 0-7-7c-1.8 0-3.58.68-4.95 2.05L16 8.1l-2.05-2.05a6.98 6.98 0 0 0-9.9 0A6.98 6.98 0 0 0 2 11c0 7 7 12.27 14 17z" />
-                        </svg>
-                    </button>
+                {/* Top-Left: Bold Location and Subtitle (Matches the screenshot layout) */}
+                <div className="absolute top-8 left-8 z-20 max-w-[65%] flex flex-col items-start pointer-events-none">
+                    <h3 className="font-extrabold text-2xl md:text-3xl tracking-tight text-white drop-shadow-md leading-tight">
+                        {displayDest}
+                    </h3>
+                    <p className="font-semibold text-sm text-zinc-100/85 mt-1.5 drop-shadow-sm line-clamp-1">
+                        {exp.title}
+                    </p>
 
-                    {/* Status / Scarcity Badge */}
-                    <div className="absolute top-5 left-5 z-10 flex flex-col gap-2 pointer-events-none">
+                    {/* Integrated mini-badges inside card */}
+                    <div className="flex flex-wrap gap-1.5 mt-3">
                         {exp.status === 'sold_out' ? (
-                            <div className="bg-black/60 backdrop-blur-xl border border-white/20 text-white px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest shadow-xl">
+                            <span className="px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-[9px] font-extrabold uppercase tracking-widest text-white shadow-sm">
                                 Sold Out
-                            </div>
+                            </span>
                         ) : exp.available_spots <= 5 ? (
-                            <div className="bg-red-500/80 backdrop-blur-xl border border-red-400/50 text-white px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest shadow-xl animate-pulse">
-                                Only {exp.available_spots} left
-                            </div>
-                        ) : (
-                            <div className="bg-white/80 backdrop-blur-xl border border-white/50 text-gray-900 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest shadow-xl">
-                                Available
-                            </div>
-                        )}
-                        {exp.target_audience === 'students' && (
-                            <div className="bg-emerald-500/80 backdrop-blur-xl border border-emerald-400/50 text-white px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest shadow-xl">
-                                Students Only
-                            </div>
-                        )}
-                        {exp.target_audience === 'women_only' && (
-                            <div className="bg-pink-500/80 backdrop-blur-xl border border-pink-400/50 text-white px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest shadow-xl">
-                                Women Only
-                            </div>
-                        )}
-                        {exp.target_audience === 'corporate' && (
-                            <div className="bg-blue-500/80 backdrop-blur-xl border border-blue-400/50 text-white px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest shadow-xl">
-                                Tech & IT
-                            </div>
-                        )}
-                        {exp.target_audience === 'couples' && (
-                            <div className="bg-purple-500/80 backdrop-blur-xl border border-purple-400/50 text-white px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest shadow-xl">
-                                Couples
-                            </div>
-                        )}
-                        {exp.target_audience === 'solo' && (
-                            <div className="bg-amber-500/80 backdrop-blur-xl border border-amber-400/50 text-white px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest shadow-xl">
-                                Solo Travelers
-                            </div>
-                        )}
-                        {exp.target_audience === 'family' && (
-                            <div className="bg-sky-500/80 backdrop-blur-xl border border-sky-400/50 text-white px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest shadow-xl">
-                                Family Friendly
-                            </div>
+                            <span className="px-2.5 py-1 rounded-full bg-rose-500/80 backdrop-blur-md border border-rose-400/30 text-[9px] font-extrabold uppercase tracking-widest text-white shadow-sm animate-pulse">
+                                Only {exp.available_spots} Left
+                            </span>
+                        ) : null}
+                        {exp.target_audience && exp.target_audience !== 'all' && (
+                            <span className="px-2.5 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/10 text-[9px] font-extrabold uppercase tracking-widest text-zinc-100 shadow-sm">
+                                {exp.target_audience.replace('_', ' ')}
+                            </span>
                         )}
                     </div>
                 </div>
 
-                {/* Content */}
-                <div className="flex flex-col gap-1.5 px-2 mt-2">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center text-gray-500 text-xs font-bold tracking-wider uppercase gap-1.5">
-                            <MapIcon className="w-3.5 h-3.5" />
-                            <span>{exp.destination}</span>
+                {/* Top-Right: Dark circular action button with a diagonal arrow (Sleek hover glassmorphism) */}
+                <div className="absolute top-7 right-7 z-20 w-11 h-11 md:w-12 md:h-12 rounded-full bg-zinc-950/80 backdrop-blur-md border border-white/10 flex items-center justify-center text-white transition-all duration-300 group-hover:bg-white/15 group-hover:backdrop-blur-xl group-hover:border-white/20 group-hover:scale-105 group-hover:shadow-lg">
+                    <svg className="w-5 h-5 text-white transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform duration-300" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" />
+                    </svg>
+                </div>
+
+                {/* Bottom Floating Glassmorphism Overlay Panel containing Price and Date */}
+                <div className="absolute bottom-6 inset-x-6 z-20 p-4 rounded-[1.75rem] bg-zinc-950/40 backdrop-blur-md border border-white/10 text-white flex items-center justify-between shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] hover:bg-zinc-950/50 hover:border-white/15 transition-all duration-300">
+                    <div className="flex flex-col">
+                        <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest leading-none">Price per person</span>
+                        <div className="flex items-baseline gap-1 mt-1.5">
+                            <span className="text-lg md:text-xl font-black text-white leading-none">₹{Number(exp.price).toLocaleString()}</span>
+                            <span className="text-xs text-zinc-300 font-medium">/trip</span>
                         </div>
                     </div>
                     
-                    <h3 className="text-xl font-black text-gray-900 leading-tight group-hover:text-[#0284C7] transition-colors line-clamp-2">
-                        {exp.title}
-                    </h3>
-                    
-                    <div className="flex items-center text-gray-500 text-sm font-medium gap-1.5 mt-1">
-                        <CalendarIcon className="w-4 h-4" />
-                        <span>{format(new Date(exp.start_date), 'MMM d')} - {format(new Date(exp.end_date), 'MMM d, yyyy')}</span>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 mt-2">
-                        {exp.target_audience && exp.target_audience !== 'all' && (
-                            <span className="px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-100 text-[10px] font-bold text-indigo-600 uppercase tracking-wider">
-                                {exp.target_audience.replace('_', ' ')}
+                    <div className="flex items-center gap-3">
+                        <div className="flex flex-col items-end">
+                            <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest leading-none">Date</span>
+                            <span className="text-xs font-extrabold text-white mt-1.5 leading-none">
+                                {format(new Date(exp.start_date), 'MMM d')} - {format(new Date(exp.end_date), 'd')}
                             </span>
-                        )}
-                        {exp.language && (
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-100 text-[10px] font-bold text-emerald-600 uppercase tracking-wider">
-                                {exp.language}
-                            </span>
-                        )}
-                        {exp.available_spots <= 10 && exp.available_spots > 0 && (
-                            <span className="px-2 py-0.5 rounded-full bg-orange-50 border border-orange-100 text-[10px] font-bold text-orange-600 uppercase tracking-wider">
-                                {exp.available_spots} Spots Left
-                            </span>
-                        )}
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-between">
-                        <div>
-                            <span className="font-black text-gray-900 text-xl tracking-tight">₹{Number(exp.price).toLocaleString()}</span>
-                            <span className="text-gray-500 text-sm font-medium"> / person</span>
                         </div>
-                        <div className="w-10 h-10 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center group-hover:bg-[#0284C7] group-hover:text-white transition-all group-hover:border-[#0284C7] group-hover:shadow-lg group-hover:shadow-blue-500/30 group-hover:scale-110">
-                            <ChevronRight className="w-5 h-5" />
-                        </div>
+                        
+                        {/* Interactive glass heart button integrated in bottom panel */}
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                uiAudio.playPop();
+                                handleToggleFavorite(e, exp);
+                            }}
+                            className={`p-2.5 rounded-full backdrop-blur-md border transition-all duration-300 hover:scale-110 active:scale-95 pointer-events-auto ${
+                                isFav 
+                                    ? 'bg-rose-500/20 border-rose-500/35 text-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.3)]' 
+                                    : 'bg-white/10 border-white/10 text-white/80 hover:text-white hover:bg-white/20'
+                            }`}
+                            title={isFav ? "Saved to wishlist" : "Add to wishlist"}
+                        >
+                            <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="presentation" focusable="false" className={`w-4 h-4 transition-transform duration-300 ${isFav ? 'fill-rose-500 scale-110' : 'fill-transparent'}`} style={{ stroke: 'currentColor', strokeWidth: 2.5, overflow: 'visible' }}>
+                                <path d="M16 28c7-4.73 14-10 14-17a6.98 6.98 0 0 0-7-7c-1.8 0-3.58.68-4.95 2.05L16 8.1l-2.05-2.05a6.98 6.98 0 0 0-9.9 0A6.98 6.98 0 0 0 2 11c0 7 7 12.27 14 17z" />
+                            </svg>
+                        </button>
                     </div>
                 </div>
             </motion.div>
