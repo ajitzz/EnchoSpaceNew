@@ -161,6 +161,24 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
         title="Extraordinary Experiences"
         description="Discover exclusive curated experiences around the globe. From cultural tours to adventure trips, book your next unforgettable journey."
       />
+      {/* Premium organic wavy/scalloped top curve clip path */}
+      <svg className="absolute w-0 h-0" aria-hidden="true" focusable="false">
+        <defs>
+          <clipPath id="scalloped-top-clip" clipPathUnits="objectBoundingBox">
+            <path d="M 0,1 
+                     L 0,0.13 
+                     C 0,0.06 0.08,0.02 0.18,0.04 
+                     C 0.35,0.08 0.40,0.12 0.50,0.12 
+                     C 0.60,0.12 0.65,0.08 0.82,0.04 
+                     C 0.92,0.02 1,0.06 1,0.13 
+                     L 1,0.85 
+                     C 1,0.93 0.93,1 0.85,1 
+                     L 0.15,1 
+                     C 0.07,1 0,0.93 0,0.85 
+                     Z" />
+          </clipPath>
+        </defs>
+      </svg>
     <div className="max-w-[1920px] mx-auto px-4 md:px-8 py-8 md:py-12 pb-24">
       {/* Hero Section */}
       <div className="mb-12 md:mb-16 rounded-[2.5rem] overflow-hidden relative group isolate shadow-2xl bg-[#0f172a] h-[450px] md:h-[600px]">
@@ -333,118 +351,126 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
             const displayDest = exp.destination + (hasEmoji(exp.destination) ? '' : ' 📍');
 
             return (
-            <motion.div 
-                key={exp.id} 
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ 
-                    type: "spring",
-                    stiffness: 240,
-                    damping: 24,
-                    delay: index * 0.05 
-                }}
-                whileHover={{ 
-                    y: -10, 
-                    scale: 1.015,
-                    transition: { type: "spring", stiffness: 300, damping: 20 }
-                }}
-                whileTap={{ 
-                    scale: 0.955,
-                    transition: { type: "spring", stiffness: 450, damping: 15 }
-                }}
-                onClick={() => {
-                    uiAudio.playClick();
-                    onExperienceClick(exp);
-                }}
-                className="relative aspect-[3/4] w-full overflow-hidden rounded-[2.5rem] bg-zinc-950 shadow-[0_20px_50px_rgba(0,0,0,0.12)] border border-gray-100/10 group cursor-pointer select-none"
-            >
-                {/* Full-bleed background image */}
-                <div className="absolute inset-0 z-0">
-                    <OptimizedImage 
-                        src={exp.image_urls?.[0] || 'https://images.unsplash.com/photo-1542314831-c6a4d14d8c81?auto=format&fit=crop&q=80&w=800'}
-                        alt={exp.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000 ease-out"
-                    />
-                </div>
-                
-                {/* Delicate top-to-bottom dark gradient overlay ensuring crisp readability */}
-                <div className="absolute inset-0 bg-gradient-to-b from-black/65 via-black/15 to-black/85 z-10 pointer-events-none" />
+             <motion.div 
+                 key={exp.id} 
+                 initial={{ opacity: 0, y: 30 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 transition={{ 
+                     type: "spring",
+                     stiffness: 240,
+                     damping: 24,
+                     delay: index * 0.05 
+                 }}
+                 whileHover={{ 
+                     y: -10, 
+                     scale: 1.015,
+                     transition: { type: "spring", stiffness: 300, damping: 20 }
+                 }}
+                 whileTap={{ 
+                     scale: 0.955,
+                     transition: { type: "spring", stiffness: 450, damping: 15 }
+                 }}
+                 onClick={() => {
+                     uiAudio.playClick();
+                     onExperienceClick(exp);
+                 }}
+                 className="relative aspect-[3/4] w-full group cursor-pointer select-none filter drop-shadow-[0_25px_45px_rgba(0,0,0,0.32)]"
+             >
+                 <div 
+                     className="absolute inset-0 w-full h-full bg-zinc-950 overflow-hidden"
+                     style={{ 
+                         clipPath: 'url(#scalloped-top-clip)', 
+                         WebkitClipPath: 'url(#scalloped-top-clip)'
+                     }}
+                 >
+                     {/* Full-bleed background image */}
+                     <div className="absolute inset-0 z-0">
+                         <OptimizedImage 
+                             src={exp.image_urls?.[0] || 'https://images.unsplash.com/photo-1542314831-c6a4d14d8c81?auto=format&fit=crop&q=80&w=800'}
+                             alt={exp.title}
+                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000 ease-out"
+                         />
+                     </div>
+                     
+                     {/* Delicate top-to-bottom dark gradient overlay ensuring crisp readability */}
+                     <div className="absolute inset-0 bg-gradient-to-b from-black/75 via-black/20 to-black/90 z-10 pointer-events-none" />
 
-                {/* Top-Left: Bold Location and Subtitle (Matches the screenshot layout) */}
-                <div className="absolute top-8 left-8 z-20 max-w-[65%] flex flex-col items-start pointer-events-none">
-                    <h3 className="font-extrabold text-2xl md:text-3xl tracking-tight text-white drop-shadow-md leading-tight">
-                        {displayDest}
-                    </h3>
-                    <p className="font-semibold text-sm text-zinc-100/85 mt-1.5 drop-shadow-sm line-clamp-1">
-                        {exp.title}
-                    </p>
+                     {/* Top-Left: Bold Location and Subtitle (Matches the screenshot layout) */}
+                     <div className="absolute top-8 left-8 z-20 max-w-[65%] flex flex-col items-start pointer-events-none">
+                         <h3 className="font-extrabold text-2xl md:text-3xl tracking-tight text-white drop-shadow-md leading-tight">
+                             {displayDest}
+                         </h3>
+                         <p className="font-semibold text-sm text-zinc-100/85 mt-1.5 drop-shadow-sm line-clamp-1">
+                             {exp.title}
+                         </p>
 
-                    {/* Integrated mini-badges inside card */}
-                    <div className="flex flex-wrap gap-1.5 mt-3">
-                        {exp.status === 'sold_out' ? (
-                            <span className="px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-[9px] font-extrabold uppercase tracking-widest text-white shadow-sm">
-                                Sold Out
-                            </span>
-                        ) : exp.available_spots <= 5 ? (
-                            <span className="px-2.5 py-1 rounded-full bg-rose-500/80 backdrop-blur-md border border-rose-400/30 text-[9px] font-extrabold uppercase tracking-widest text-white shadow-sm animate-pulse">
-                                Only {exp.available_spots} Left
-                            </span>
-                        ) : null}
-                        {exp.target_audience && exp.target_audience !== 'all' && (
-                            <span className="px-2.5 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/10 text-[9px] font-extrabold uppercase tracking-widest text-zinc-100 shadow-sm">
-                                {exp.target_audience.replace('_', ' ')}
-                            </span>
-                        )}
-                    </div>
-                </div>
+                         {/* Integrated mini-badges inside card */}
+                         <div className="flex flex-wrap gap-1.5 mt-3">
+                             {exp.status === 'sold_out' ? (
+                                 <span className="px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-[9px] font-extrabold uppercase tracking-widest text-white shadow-sm">
+                                     Sold Out
+                                 </span>
+                             ) : exp.available_spots <= 5 ? (
+                                 <span className="px-2.5 py-1 rounded-full bg-rose-500/80 backdrop-blur-md border border-rose-400/30 text-[9px] font-extrabold uppercase tracking-widest text-white shadow-sm animate-pulse">
+                                     Only {exp.available_spots} Left
+                                 </span>
+                             ) : null}
+                             {exp.target_audience && exp.target_audience !== 'all' && (
+                                 <span className="px-2.5 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/10 text-[9px] font-extrabold uppercase tracking-widest text-zinc-100 shadow-sm">
+                                     {exp.target_audience.replace('_', ' ')}
+                                 </span>
+                             )}
+                         </div>
+                     </div>
 
-                {/* Top-Right: Dark circular action button with a diagonal arrow (Sleek hover glassmorphism) */}
-                <div className="absolute top-7 right-7 z-20 w-11 h-11 md:w-12 md:h-12 rounded-full bg-zinc-950/80 backdrop-blur-md border border-white/10 flex items-center justify-center text-white transition-all duration-300 group-hover:bg-white/15 group-hover:backdrop-blur-xl group-hover:border-white/20 group-hover:scale-105 group-hover:shadow-lg">
-                    <svg className="w-5 h-5 text-white transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform duration-300" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" />
-                    </svg>
-                </div>
+                     {/* Top-Right: Dark circular action button with a diagonal arrow (Sleek hover glassmorphism) */}
+                     <div className="absolute top-7 right-7 z-20 w-11 h-11 md:w-12 md:h-12 rounded-full bg-zinc-950/80 backdrop-blur-md border border-white/10 flex items-center justify-center text-white transition-all duration-300 group-hover:bg-white/15 group-hover:backdrop-blur-xl group-hover:border-white/20 group-hover:scale-105 group-hover:shadow-lg">
+                         <svg className="w-5 h-5 text-white transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform duration-300" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                             <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" />
+                         </svg>
+                     </div>
 
-                {/* Bottom Floating Glassmorphism Overlay Panel containing Price and Date */}
-                <div className="absolute bottom-6 inset-x-6 z-20 p-4 rounded-[1.75rem] bg-zinc-950/40 backdrop-blur-md border border-white/10 text-white flex items-center justify-between shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] hover:bg-zinc-950/50 hover:border-white/15 transition-all duration-300">
-                    <div className="flex flex-col">
-                        <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest leading-none">Price per person</span>
-                        <div className="flex items-baseline gap-1 mt-1.5">
-                            <span className="text-lg md:text-xl font-black text-white leading-none">₹{Number(exp.price).toLocaleString()}</span>
-                            <span className="text-xs text-zinc-300 font-medium">/trip</span>
-                        </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-3">
-                        <div className="flex flex-col items-end">
-                            <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest leading-none">Date</span>
-                            <span className="text-xs font-extrabold text-white mt-1.5 leading-none">
-                                {format(new Date(exp.start_date), 'MMM d')} - {format(new Date(exp.end_date), 'd')}
-                            </span>
-                        </div>
-                        
-                        {/* Interactive glass heart button integrated in bottom panel */}
-                        <button
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                uiAudio.playPop();
-                                handleToggleFavorite(e, exp);
-                            }}
-                            className={`p-2.5 rounded-full backdrop-blur-md border transition-all duration-300 hover:scale-110 active:scale-95 pointer-events-auto ${
-                                isFav 
-                                    ? 'bg-rose-500/20 border-rose-500/35 text-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.3)]' 
-                                    : 'bg-white/10 border-white/10 text-white/80 hover:text-white hover:bg-white/20'
-                            }`}
-                            title={isFav ? "Saved to wishlist" : "Add to wishlist"}
-                        >
-                            <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="presentation" focusable="false" className={`w-4 h-4 transition-transform duration-300 ${isFav ? 'fill-rose-500 scale-110' : 'fill-transparent'}`} style={{ stroke: 'currentColor', strokeWidth: 2.5, overflow: 'visible' }}>
-                                <path d="M16 28c7-4.73 14-10 14-17a6.98 6.98 0 0 0-7-7c-1.8 0-3.58.68-4.95 2.05L16 8.1l-2.05-2.05a6.98 6.98 0 0 0-9.9 0A6.98 6.98 0 0 0 2 11c0 7 7 12.27 14 17z" />
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-            </motion.div>
-          )})}
+                     {/* Bottom Floating Glassmorphism Overlay Panel containing Price and Date */}
+                     <div className="absolute bottom-6 inset-x-6 z-20 p-4 rounded-[1.75rem] bg-zinc-950/40 backdrop-blur-md border border-white/10 text-white flex items-center justify-between shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] hover:bg-zinc-950/50 hover:border-white/15 transition-all duration-300">
+                         <div className="flex flex-col">
+                             <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest leading-none">Price per person</span>
+                             <div className="flex items-baseline gap-1 mt-1.5">
+                                 <span className="text-lg md:text-xl font-black text-white leading-none">₹{Number(exp.price).toLocaleString()}</span>
+                                 <span className="text-xs text-zinc-300 font-medium">/trip</span>
+                             </div>
+                         </div>
+                         
+                         <div className="flex items-center gap-3">
+                             <div className="flex flex-col items-end">
+                                 <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest leading-none">Date</span>
+                                 <span className="text-xs font-extrabold text-white mt-1.5 leading-none">
+                                     {format(new Date(exp.start_date), 'MMM d')} - {format(new Date(exp.end_date), 'd')}
+                                 </span>
+                             </div>
+                             
+                             {/* Interactive glass heart button integrated in bottom panel */}
+                             <button
+                                 onClick={(e) => {
+                                     e.stopPropagation();
+                                     uiAudio.playPop();
+                                     handleToggleFavorite(e, exp);
+                                 }}
+                                 className={`p-2.5 rounded-full backdrop-blur-md border transition-all duration-300 hover:scale-110 active:scale-95 pointer-events-auto ${
+                                     isFav 
+                                         ? 'bg-rose-500/20 border-rose-500/35 text-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.3)]' 
+                                         : 'bg-white/10 border-white/10 text-white/80 hover:text-white hover:bg-white/20'
+                                 }`}
+                                 title={isFav ? "Saved to wishlist" : "Add to wishlist"}
+                             >
+                                 <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="presentation" focusable="false" className={`w-4 h-4 transition-transform duration-300 ${isFav ? 'fill-rose-500 scale-110' : 'fill-transparent'}`} style={{ stroke: 'currentColor', strokeWidth: 2.5, overflow: 'visible' }}>
+                                     <path d="M16 28c7-4.73 14-10 14-17a6.98 6.98 0 0 0-7-7c-1.8 0-3.58.68-4.95 2.05L16 8.1l-2.05-2.05a6.98 6.98 0 0 0-9.9 0A6.98 6.98 0 0 0 2 11c0 7 7 12.27 14 17z" />
+                                 </svg>
+                             </button>
+                         </div>
+                     </div>
+                 </div>
+             </motion.div>
+           )})}
         </div>
       )}
     </div>
