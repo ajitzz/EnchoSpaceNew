@@ -6,9 +6,11 @@ import { PhotoUpload, PhotoData } from './PhotoUpload';
 import { AmenitiesPicker } from './AmenitiesPicker';
 import { useAuth } from './AuthContext';
 import { 
-  Building2, Home, Tractor, Coffee, Ship, Tent, Caravan, Castle, Mountain, Box, Circle, Leaf, X
+  Building2, Home, Tractor, Coffee, Ship, Tent, Caravan, Castle, Mountain, Box, Circle, Leaf, X, Eye
 } from 'lucide-react';
 import { useToast } from './ToastContext';
+import ListingDetails from './ListingDetails';
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { queueCustomMutation } from '../lib/syncService';
 
@@ -78,6 +80,65 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
       previewUrl: url
     }));
   });
+
+  const [showMobilePreview, setShowMobilePreview] = useState(false);
+
+  const mockListing: Listing = {
+    id: existingListing?.id || 'preview-id',
+    host_id: user?.id || 'host-id',
+    title: formData.title || 'Your property title',
+    description: formData.description || 'Description will appear here...',
+    price: parseFloat(formData.price) || 0,
+    currency: 'USD',
+    city: formData.city || 'City',
+    address: formData.address || 'Address',
+    lat: formData.lat || 52.52,
+    lng: formData.lng || 13.40,
+    imageUrls: photos.map(p => p.previewUrl),
+    imageUrl: photos.length > 0 ? photos[0].previewUrl : '',
+    imageCount: photos.length,
+    type: formData.type || 'Apartment',
+    maxGuests: formData.maxGuests,
+    bedrooms: formData.bedrooms,
+    beds: formData.beds,
+    bathrooms: formData.bathrooms,
+    amenities: formData.amenities,
+    rating: existingListing?.rating || 0,
+    reviewCount: existingListing?.reviewCount || 0,
+    isVerified: existingListing?.isVerified || false,
+    rental_mode: formData.rentalMode as any,
+    rooms: formData.rooms as any,
+    video_url: formData.videoUrl,
+    created_at: existingListing?.created_at || new Date().toISOString(),
+    updated_at: existingListing?.updated_at || new Date().toISOString(),
+    seo_title: formData.seo_title,
+    seo_description: formData.seo_description,
+    seo_keywords: formData.seo_keywords,
+    seo_image_url: formData.seo_image_url,
+    dynamicPricing: formData.dynamicPricing,
+  };
+
+  const handleFocus = (sectionName: string) => {
+      const previewContainer = document.getElementById('preview-container');
+      if (!previewContainer) return;
+
+      if (sectionName === 'Photos' || sectionName === 'Basics') {
+          previewContainer.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+      }
+
+      let searchStr = sectionName.toLowerCase();
+      if (sectionName === 'Amenities') searchStr = 'what this place offers';
+      if (sectionName === 'Location') searchStr = 'where you';
+      if (sectionName === 'Configuration') searchStr = 'choose configuration';
+
+      const headings = Array.from(previewContainer.querySelectorAll('h2, h3'));
+      const target = headings.find(el => el.textContent?.toLowerCase().includes(searchStr));
+
+      if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+  };
 
   const existingImageUrls = (existingListing?.imageUrls && existingListing.imageUrls.length > 0)
       ? existingListing.imageUrls
@@ -209,11 +270,12 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 pt-8 md:pt-12">
-        <form id="host-form" onSubmit={handleSubmit} className="space-y-12 pb-12">
+      <main className="max-w-[1600px] mx-auto px-4 pt-8 md:pt-12 flex gap-8 pb-20">
+        <div className="flex-1 max-w-3xl">
+          <form id="host-form" onSubmit={handleSubmit} className="space-y-12 pb-12">
           
           {/* Section 1: Property Type */}
-          <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100">
+          <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100" onClick={() => handleFocus('Basics')}>
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Which of these best describes your place?</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {PROPERTY_TYPES.map(type => {
@@ -237,7 +299,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
           </section>
 
           {/* Section 1.5: Rental Mode */}
-          <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100">
+          <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100" onClick={() => handleFocus('Configuration')}>
             <h2 className="text-2xl font-bold text-gray-900 mb-6">How will guests book your place?</h2>
             <div className="flex flex-col gap-4">
               <label className={`cursor-pointer border-2 rounded-xl p-4 flex items-center gap-4 transition-all hover:bg-gray-50 ${formData.rentalMode === 'entire_place' ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200'}`}>
@@ -314,7 +376,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
           </section>
 
           {/* Section 2: Basics */}
-          <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100">
+          <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100" onFocusCapture={() => handleFocus('Basics')} onClick={() => handleFocus('Basics')}>
             <h2 className="text-2xl font-bold text-gray-900 mb-6">The Basics</h2>
             <div className="space-y-6">
               <div className="space-y-4">
@@ -392,7 +454,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
           </section>
 
           {/* Section: Video Tour */}
-          <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100">
+          <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100" onFocusCapture={() => handleFocus('Video Tour')} onClick={() => handleFocus('Video Tour')}>
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Video Tour</h2>
             <div className="space-y-4">
               <div className="space-y-2">
@@ -413,7 +475,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
           </section>
 
           {/* Section 3: Location */}
-          <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100">
+          <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100" onFocusCapture={() => handleFocus('Location')} onClick={() => handleFocus('Location')}>
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Location</h2>
             <LocationPicker 
               address={formData.address} 
@@ -491,13 +553,13 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
           </section>
 
           {/* Section 5: Amenities */}
-          <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100">
+          <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100" onClick={() => handleFocus('Amenities')} onFocusCapture={() => handleFocus('Amenities')}>
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Amenities</h2>
             <AmenitiesPicker selected={formData.amenities} onChange={handleAmenitiesChange} />
           </section>
 
           {/* Section 6: Photos */}
-          <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100">
+          <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100" onClick={() => handleFocus('Photos')}>
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Photos</h2>
             <PhotoUpload photos={photos} setPhotos={setPhotos} isCompressing={isCompressing} setIsCompressing={setIsCompressing} />
             {photos.length === 0 && <p className="text-red-500 text-sm mt-2">At least one photo is required.</p>}
@@ -526,6 +588,16 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
             </div>
           </section>
 
+          <div className="md:hidden fixed bottom-24 right-4 z-[60]">
+            <button 
+              type="button" 
+              onClick={() => setShowMobilePreview(true)}
+              className="bg-black/80 backdrop-blur-md text-white p-4 rounded-full shadow-2xl border border-white/10 active:scale-95 transition-transform"
+            >
+              <Eye className="w-6 h-6" />
+            </button>
+          </div>
+
           {/* Mobile Footer Action */}
           <div className="md:hidden fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 z-50">
             <button 
@@ -537,6 +609,64 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
             </button>
           </div>
         </form>
+        </div>
+
+        {/* Desktop Live Preview Pane */}
+        <div 
+          id="preview-container"
+          className="hidden lg:block w-[45%] xl:w-[50%] sticky top-24 h-[calc(100vh-120px)] overflow-y-auto rounded-3xl border border-gray-200 shadow-xl bg-white no-scrollbar pb-10"
+        >
+           <div className="sticky top-0 bg-white/90 backdrop-blur-md z-10 border-b border-gray-100 px-6 py-4 flex items-center justify-between pointer-events-none">
+             <div className="flex items-center gap-2">
+                <Eye className="w-5 h-5 text-blue-600" />
+                <h3 className="font-bold text-gray-900">Live Customer Preview</h3>
+             </div>
+             <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded-full uppercase tracking-wider">0ms Latency Sync</span>
+           </div>
+           <div className="pointer-events-none p-4">
+              <ListingDetails 
+                listing={mockListing} 
+                onBack={() => {}} 
+                similarListings={[]} 
+                onListingClick={() => {}} 
+                isFavorite={false} 
+                onToggleFavorite={() => {}} 
+              />
+           </div>
+        </div>
+
+        {/* Mobile Swipe Up Preview */}
+        <AnimatePresence>
+          {showMobilePreview && (
+            <motion.div 
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
+              className="fixed inset-0 z-[100] bg-white overflow-y-auto"
+            >
+               <div className="sticky top-0 bg-white/90 backdrop-blur-md z-10 border-b border-gray-100 px-4 py-4 flex items-center justify-between shadow-sm">
+                 <div className="flex items-center gap-2">
+                    <Eye className="w-5 h-5 text-blue-600" />
+                    <h3 className="font-bold text-gray-900">Live Preview</h3>
+                 </div>
+                 <button onClick={() => setShowMobilePreview(false)} className="p-2 bg-gray-100 rounded-full">
+                    <X className="w-5 h-5" />
+                 </button>
+               </div>
+               <div className="pb-20 pointer-events-none">
+                  <ListingDetails 
+                    listing={mockListing} 
+                    onBack={() => {}} 
+                    similarListings={[]} 
+                    onListingClick={() => {}} 
+                    isFavorite={false} 
+                    onToggleFavorite={() => {}} 
+                  />
+               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
     </div>
   );
