@@ -2,7 +2,6 @@
   "name": "Nestpick Clone",
   "description": "A rental property finder application replicating the Nestpick UI with real-time search results.",
   "requestFramePermissions": [
-    "geolocation",
-    "identity-credentials-get"
+    "geolocation"
   ]
 }

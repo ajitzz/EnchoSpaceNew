@@ -646,11 +646,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                   </td>
                                   <td className="px-6 py-4 text-gray-600 truncate max-w-[150px]">{listing.city}</td>
                                   <td className="px-6 py-4">
-                                      {listing.type?.toLowerCase() === 'resort' ? (
-                                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-50 text-emerald-700">
-                                              Resort {listing.rooms?.length ? `(${listing.rooms.length} Units)` : ''}
-                                          </span>
-                                      ) : listing.rental_mode === 'private_rooms' ? (
+                                      {listing.rental_mode === 'private_rooms' ? (
                                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-purple-50 text-purple-700">
                                               Private Rooms {listing.rooms?.length ? `(${listing.rooms.length})` : ''}
                                           </span>

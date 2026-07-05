@@ -24,7 +24,6 @@ initSyncHandlers();
 
 const MapSidebar = lazy(() => import('./components/MapSidebar'));
 const ListingDetails = lazy(() => import('./components/ListingDetails'));
-const ResortDetails = lazy(() => import('./components/ResortDetails').then(module => ({ default: module.ResortDetails })));
 const WishlistPage = lazy(() => import('./components/WishlistPage'));
 const BookingPage = lazy(() => import('./components/BookingPage'));
 const ReservationsPage = lazy(() => import('./components/ReservationsPage'));
@@ -812,60 +811,46 @@ function App() {
     }
 
     if (currentView === 'DETAILS' && selectedListing) {
-        const isResort = selectedListing.type?.toLowerCase() === 'resort';
         return (
            <motion.div key="details" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition}>
            {flyAnimation && (
               <FlyToAnimation listing={flyAnimation.listing} target={flyAnimation.target} onComplete={handleAnimationComplete} />
            )}
-           {isResort ? (
-             <ResortDetails
-                listing={selectedListing}
-                onBack={() => setCurrentView('SEARCH')}
-                similarListings={listings.filter(l => l.id !== selectedListing.id)}
-                onListingClick={handleListingClick}
-                isFavorite={isFavorite(selectedListing.id)}
-                onToggleFavorite={toggleFavorite}
-                onBook={handleBooking}
-                onRequestAuth={() => setShowAuthModal(true)}
-             />
-           ) : (
-             <ListingDetails 
-                listing={selectedListing} 
-                onBack={() => setCurrentView('SEARCH')}
-                similarListings={listings.filter(l => l.id !== selectedListing.id)}
-                onListingClick={handleListingClick}
-                isFavorite={isFavorite(selectedListing.id)}
-                onToggleFavorite={toggleFavorite}
-                onBook={handleBooking}
-                onRequestAuth={() => setShowAuthModal(true)}
-                onContactHost={async () => {
-                    if (!user) {
-                        setShowAuthModal(true);
-                        return;
-                    }
-                    try {
-                        const res = await fetch('/api/threads', {
-                            method: 'POST',
-                            headers: { 
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${localStorage.getItem('token')}` 
-                           },
-                           body: JSON.stringify({ listingId: selectedListing.originalId || selectedListing.id, hostId: selectedListing.user_id })
-                        });
-                        if (!res.ok) {
-                            const errData = await res.json().catch(() => ({}));
-                            console.error('Failed to create thread:', errData);
-                            alert('Could not start conversation. Listing might be unavailable.');
-                            return;
-                        }
-                        setCurrentView('MESSAGES');
-                    } catch (err) {
-                        console.error(err);
-                    }
-                }}
-             />
-           )}
+           <ListingDetails 
+              listing={selectedListing} 
+              onBack={() => setCurrentView('SEARCH')}
+              similarListings={listings.filter(l => l.id !== selectedListing.id)}
+              onListingClick={handleListingClick}
+              isFavorite={isFavorite(selectedListing.id)}
+              onToggleFavorite={toggleFavorite}
+              onBook={handleBooking}
+              onRequestAuth={() => setShowAuthModal(true)}
+              onContactHost={async () => {
+                  if (!user) {
+                      setShowAuthModal(true);
+                      return;
+                  }
+                  try {
+                      const res = await fetch('/api/threads', {
+                          method: 'POST',
+                          headers: { 
+                              'Content-Type': 'application/json',
+                              'Authorization': `Bearer ${localStorage.getItem('token')}` 
+                          },
+                          body: JSON.stringify({ listingId: selectedListing.originalId || selectedListing.id, hostId: selectedListing.user_id })
+                      });
+                      if (!res.ok) {
+                          const errData = await res.json().catch(() => ({}));
+                          console.error('Failed to create thread:', errData);
+                          alert('Could not start conversation. Listing might be unavailable.');
+                          return;
+                      }
+                      setCurrentView('MESSAGES');
+                  } catch (err) {
+                      console.error(err);
+                  }
+              }}
+           />
            {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
            </motion.div>
         );

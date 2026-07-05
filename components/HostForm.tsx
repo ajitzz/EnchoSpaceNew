@@ -6,7 +6,7 @@ import { PhotoUpload, PhotoData } from './PhotoUpload';
 import { AmenitiesPicker } from './AmenitiesPicker';
 import { useAuth } from './AuthContext';
 import { 
-  Building2, Home, Tractor, Coffee, Ship, Tent, Caravan, Castle, Mountain, Box, Circle, Leaf, X, Palmtree
+  Building2, Home, Tractor, Coffee, Ship, Tent, Caravan, Castle, Mountain, Box, Circle, Leaf, X
 } from 'lucide-react';
 import { useToast } from './ToastContext';
 
@@ -19,7 +19,6 @@ interface HostFormProps {
 }
 
 const PROPERTY_TYPES = [
-  { id: 'Resort', label: 'Resort', icon: Palmtree },
   { id: 'Apartment', label: 'Flat/apartment', icon: Building2 },
   { id: 'House', label: 'House', icon: Home },
   { id: 'Barn', label: 'Barn', icon: Tractor },
@@ -237,212 +236,82 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
             </div>
           </section>
 
-          {/* Section 1.5: Rental Mode / Resort Sub-Units */}
-          {formData.type === 'Resort' ? (
-            <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">Resort Accommodations & Event Spaces</h2>
-                  <p className="text-gray-500 text-sm mt-1">
-                    Configure the cottages, villas, suites, deluxe rooms, or event banquet spaces available at your resort.
-                  </p>
+          {/* Section 1.5: Rental Mode */}
+          <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">How will guests book your place?</h2>
+            <div className="flex flex-col gap-4">
+              <label className={`cursor-pointer border-2 rounded-xl p-4 flex items-center gap-4 transition-all hover:bg-gray-50 ${formData.rentalMode === 'entire_place' ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200'}`}>
+                <input type="radio" name="rentalMode" value="entire_place" checked={formData.rentalMode === 'entire_place'} onChange={() => setFormData({...formData, rentalMode: 'entire_place'})} className="sr-only" />
+                <div className="flex-1">
+                  <span className="font-semibold text-gray-900 block text-lg">Entire Place</span>
+                  <span className="text-gray-500 text-sm">Guests have the whole place to themselves.</span>
                 </div>
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    setFormData(prev => ({
-                      ...prev,
-                      rooms: [...prev.rooms, { 
-                        id: Math.random().toString(36).substr(2, 9), 
-                        name: `Cottage ${prev.rooms.length + 1}`, 
-                        type: 'Cottage', // Cottage, Villa, Apartment, Suite, Room, Event Space
-                        price: 5000, 
-                        capacity: 4, 
-                        hasAttachedBathroom: true, 
-                        hasAc: true, 
-                        amenities: ['Wifi', 'Air conditioning'], 
-                        photos: [] 
-                      }]
-                    }));
-                  }} 
-                  className="px-5 py-2.5 bg-[#0284C7] hover:bg-[#0369A1] text-white rounded-xl font-bold text-sm transition-all shadow-md shrink-0 self-start md:self-center"
-                >
-                  + Add Accommodation / Space
-                </button>
-              </div>
-
-              {formData.rooms.length === 0 && (
-                <div className="text-center py-12 border-2 border-dashed border-gray-100 rounded-3xl bg-gray-50/50">
-                  <Palmtree className="w-12 h-12 text-gray-300 mx-auto mb-3" strokeWidth={1.5} />
-                  <p className="text-gray-500 text-sm font-medium">No accommodations or event spaces added yet.</p>
-                  <p className="text-gray-400 text-xs mt-1">Add cottages, villas, or banquet halls to let guests book them.</p>
+              </label>
+              <label className={`cursor-pointer border-2 rounded-xl p-4 flex items-center gap-4 transition-all hover:bg-gray-50 ${formData.rentalMode === 'private_rooms' ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200'}`}>
+                <input type="radio" name="rentalMode" value="private_rooms" checked={formData.rentalMode === 'private_rooms'} onChange={() => setFormData({...formData, rentalMode: 'private_rooms'})} className="sr-only" />
+                <div className="flex-1">
+                  <span className="font-semibold text-gray-900 block text-lg">Private Rooms</span>
+                  <span className="text-gray-500 text-sm">Guests book individual rooms and share common areas.</span>
                 </div>
-              )}
-
-              <div className="space-y-8 mt-6">
+              </label>
+              <label className={`cursor-pointer border-2 rounded-xl p-4 flex items-center gap-4 transition-all hover:bg-gray-50 ${formData.rentalMode === 'hybrid' ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200'}`}>
+                <input type="radio" name="rentalMode" value="hybrid" checked={formData.rentalMode === 'hybrid'} onChange={() => setFormData({...formData, rentalMode: 'hybrid'})} className="sr-only" />
+                <div className="flex-1">
+                  <span className="font-semibold text-gray-900 block text-lg">Both (Entire Place & Private Rooms)</span>
+                  <span className="text-gray-500 text-sm">Guests can book the entire place OR individual rooms.</span>
+                </div>
+              </label>
+            </div>
+            
+            {(formData.rentalMode === 'private_rooms' || formData.rentalMode === 'hybrid') && (
+              <div className="mt-8 space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-bold text-gray-900">Add Rooms</h3>
+                  <button type="button" onClick={handleAddRoom} className="px-4 py-2 bg-gray-900 text-white rounded-lg font-semibold text-sm hover:bg-gray-800 transition-colors">
+                    + Add Room
+                  </button>
+                </div>
+                {formData.rooms.length === 0 && (
+                  <p className="text-gray-500 text-sm italic">No rooms added. Please add at least one bookable room.</p>
+                )}
                 {formData.rooms.map((room, index) => (
-                  <div key={room.id} className="p-6 border-2 rounded-2xl border-gray-100 bg-gray-50/30 space-y-6 relative hover:border-gray-200 transition-all shadow-sm">
-                    <button type="button" onClick={() => handleRemoveRoom(index)} className="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition-colors bg-white rounded-full p-1.5 border shadow-sm z-10">
+                  <div key={room.id} className="p-6 border-2 rounded-2xl border-gray-100 bg-gray-50 space-y-6 relative">
+                    <button type="button" onClick={() => handleRemoveRoom(index)} className="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition-colors bg-white rounded-full p-1 border shadow-sm z-10">
                       <X className="w-4 h-4" />
                     </button>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <label className="text-xs font-bold text-gray-700 uppercase tracking-wide">Category / Type</label>
-                        <select 
-                          value={room.type || 'Cottage'} 
-                          onChange={e => handleUpdateRoom(index, 'type', e.target.value)} 
-                          className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none bg-white font-medium text-sm"
-                        >
-                          <option value="Cottage">Cottage</option>
-                          <option value="Villa">Villa</option>
-                          <option value="Apartment">Apartment</option>
-                          <option value="Suite">Suite</option>
-                          <option value="Room">Deluxe Room</option>
-                          <option value="Event Space">Event Space / Banquet Lawn</option>
-                        </select>
+                        <label className="text-xs font-bold text-gray-700 uppercase">Room Name</label>
+                        <input value={room.name} required onChange={e => handleUpdateRoom(index, 'name', e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none bg-white" placeholder="e.g. Master Bedroom" />
                       </div>
-
                       <div className="space-y-2">
-                        <label className="text-xs font-bold text-gray-700 uppercase tracking-wide">Accommodation Name</label>
-                        <input 
-                          value={room.name} 
-                          required 
-                          onChange={e => handleUpdateRoom(index, 'name', e.target.value)} 
-                          className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none bg-white text-sm" 
-                          placeholder="e.g. Luxury Ocean View Cottage" 
-                        />
+                        <label className="text-xs font-bold text-gray-700 uppercase">Nightly Price (₹)</label>
+                        <input value={room.price} required type="number" min="0" onChange={e => handleUpdateRoom(index, 'price', parseFloat(e.target.value) || 0)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none bg-white" placeholder="e.g. 50" />
                       </div>
-
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-gray-700 uppercase tracking-wide">Nightly / Event Price (₹)</label>
-                        <input 
-                          value={room.price} 
-                          required 
-                          type="number" 
-                          min="0" 
-                          onChange={e => handleUpdateRoom(index, 'price', parseFloat(e.target.value) || 0)} 
-                          className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none bg-white text-sm" 
-                          placeholder="e.g. 7500" 
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-gray-700 uppercase tracking-wide">Capacity (Accommodates Max Guests)</label>
-                        <input 
-                          value={room.capacity || 2} 
-                          required 
-                          type="number" 
-                          min="1" 
-                          onChange={e => handleUpdateRoom(index, 'capacity', parseInt(e.target.value) || 1)} 
-                          className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none bg-white text-sm" 
-                          placeholder="e.g. 4 (or 80 for banquet halls)" 
-                        />
-                      </div>
-
-                      <div className="space-y-2 flex items-center justify-between p-3 border border-gray-200 rounded-xl bg-white md:mt-6">
+                      <div className="space-y-2 flex items-center justify-between p-3 border border-gray-200 rounded-xl bg-white">
                         <label className="text-sm font-semibold text-gray-700">Attached Bathroom</label>
-                        <input type="checkbox" checked={room.hasAttachedBathroom ?? true} onChange={e => handleUpdateRoom(index, 'hasAttachedBathroom', e.target.checked)} className="w-5 h-5 accent-[#0284C7]" />
+                        <input type="checkbox" checked={room.hasAttachedBathroom} onChange={e => handleUpdateRoom(index, 'hasAttachedBathroom', e.target.checked)} className="w-5 h-5 accent-[#0284C7]" />
                       </div>
-
-                      <div className="space-y-2 flex items-center justify-between p-3 border border-gray-200 rounded-xl bg-white md:mt-6">
+                      <div className="space-y-2 flex items-center justify-between p-3 border border-gray-200 rounded-xl bg-white">
                         <label className="text-sm font-semibold text-gray-700">Air Conditioning (AC)</label>
-                        <input type="checkbox" checked={room.hasAc ?? true} onChange={e => handleUpdateRoom(index, 'hasAc', e.target.checked)} className="w-5 h-5 accent-[#0284C7]" />
+                        <input type="checkbox" checked={room.hasAc} onChange={e => handleUpdateRoom(index, 'hasAc', e.target.checked)} className="w-5 h-5 accent-[#0284C7]" />
                       </div>
                     </div>
-
+                    
                     <div className="space-y-2 pt-2 border-t border-gray-200">
-                      <label className="text-xs font-bold text-gray-700 uppercase tracking-wide">Amenities specific to this accommodation</label>
+                      <label className="text-sm font-bold text-gray-900">Room Amenities</label>
                       <AmenitiesPicker selected={room.amenities || []} onChange={sel => handleUpdateRoom(index, 'amenities', sel)} />
                     </div>
 
                     <div className="space-y-2 pt-2 border-t border-gray-200">
-                      <label className="text-xs font-bold text-gray-700 uppercase tracking-wide">Accommodation Photos</label>
+                      <label className="text-sm font-bold text-gray-900">Room Photos</label>
                       <PhotoUpload photos={room.photos || []} setPhotos={p => handleUpdateRoom(index, 'photos', p)} isCompressing={isCompressing} setIsCompressing={setIsCompressing} />
                     </div>
                   </div>
                 ))}
               </div>
-            </section>
-          ) : (
-            <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">How will guests book your place?</h2>
-              <div className="flex flex-col gap-4">
-                <label className={`cursor-pointer border-2 rounded-xl p-4 flex items-center gap-4 transition-all hover:bg-gray-50 ${formData.rentalMode === 'entire_place' ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200'}`}>
-                  <input type="radio" name="rentalMode" value="entire_place" checked={formData.rentalMode === 'entire_place'} onChange={() => setFormData({...formData, rentalMode: 'entire_place'})} className="sr-only" />
-                  <div className="flex-1">
-                    <span className="font-semibold text-gray-900 block text-lg">Entire Place</span>
-                    <span className="text-gray-500 text-sm">Guests have the whole place to themselves.</span>
-                  </div>
-                </label>
-                <label className={`cursor-pointer border-2 rounded-xl p-4 flex items-center gap-4 transition-all hover:bg-gray-50 ${formData.rentalMode === 'private_rooms' ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200'}`}>
-                  <input type="radio" name="rentalMode" value="private_rooms" checked={formData.rentalMode === 'private_rooms'} onChange={() => setFormData({...formData, rentalMode: 'private_rooms'})} className="sr-only" />
-                  <div className="flex-1">
-                    <span className="font-semibold text-gray-900 block text-lg">Private Rooms</span>
-                    <span className="text-gray-500 text-sm">Guests book individual rooms and share common areas.</span>
-                  </div>
-                </label>
-                <label className={`cursor-pointer border-2 rounded-xl p-4 flex items-center gap-4 transition-all hover:bg-gray-50 ${formData.rentalMode === 'hybrid' ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200'}`}>
-                  <input type="radio" name="rentalMode" value="hybrid" checked={formData.rentalMode === 'hybrid'} onChange={() => setFormData({...formData, rentalMode: 'hybrid'})} className="sr-only" />
-                  <div className="flex-1">
-                    <span className="font-semibold text-gray-900 block text-lg">Both (Entire Place & Private Rooms)</span>
-                    <span className="text-gray-500 text-sm">Guests can book the entire place OR individual rooms.</span>
-                  </div>
-                </label>
-              </div>
-              
-              {(formData.rentalMode === 'private_rooms' || formData.rentalMode === 'hybrid') && (
-                <div className="mt-8 space-y-6">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xl font-bold text-gray-900">Add Rooms</h3>
-                    <button type="button" onClick={handleAddRoom} className="px-4 py-2 bg-gray-900 text-white rounded-lg font-semibold text-sm hover:bg-gray-800 transition-colors">
-                      + Add Room
-                    </button>
-                  </div>
-                  {formData.rooms.length === 0 && (
-                    <p className="text-gray-500 text-sm italic">No rooms added. Please add at least one bookable room.</p>
-                  )}
-                  {formData.rooms.map((room, index) => (
-                    <div key={room.id} className="p-6 border-2 rounded-2xl border-gray-100 bg-gray-50 space-y-6 relative">
-                      <button type="button" onClick={() => handleRemoveRoom(index)} className="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition-colors bg-white rounded-full p-1 border shadow-sm z-10">
-                        <X className="w-4 h-4" />
-                      </button>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <label className="text-xs font-bold text-gray-700 uppercase">Room Name</label>
-                          <input value={room.name} required onChange={e => handleUpdateRoom(index, 'name', e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none bg-white" placeholder="e.g. Master Bedroom" />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-xs font-bold text-gray-700 uppercase">Nightly Price (₹)</label>
-                          <input value={room.price} required type="number" min="0" onChange={e => handleUpdateRoom(index, 'price', parseFloat(e.target.value) || 0)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none bg-white" placeholder="e.g. 50" />
-                        </div>
-                        <div className="space-y-2 flex items-center justify-between p-3 border border-gray-200 rounded-xl bg-white">
-                          <label className="text-sm font-semibold text-gray-700">Attached Bathroom</label>
-                          <input type="checkbox" checked={room.hasAttachedBathroom} onChange={e => handleUpdateRoom(index, 'hasAttachedBathroom', e.target.checked)} className="w-5 h-5 accent-[#0284C7]" />
-                        </div>
-                        <div className="space-y-2 flex items-center justify-between p-3 border border-gray-200 rounded-xl bg-white">
-                          <label className="text-sm font-semibold text-gray-700">Air Conditioning (AC)</label>
-                          <input type="checkbox" checked={room.hasAc} onChange={e => handleUpdateRoom(index, 'hasAc', e.target.checked)} className="w-5 h-5 accent-[#0284C7]" />
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-2 pt-2 border-t border-gray-200">
-                        <label className="text-sm font-bold text-gray-900">Room Amenities</label>
-                        <AmenitiesPicker selected={room.amenities || []} onChange={sel => handleUpdateRoom(index, 'amenities', sel)} />
-                      </div>
-
-                      <div className="space-y-2 pt-2 border-t border-gray-200">
-                        <label className="text-sm font-bold text-gray-900">Room Photos</label>
-                        <PhotoUpload photos={room.photos || []} setPhotos={p => handleUpdateRoom(index, 'photos', p)} isCompressing={isCompressing} setIsCompressing={setIsCompressing} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
+            )}
+          </section>
 
           {/* Section 2: Basics */}
           <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100">
@@ -492,12 +361,10 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                 </div>
               </div>
               
-              {(formData.type === 'Resort' || formData.rentalMode === 'entire_place' || formData.rentalMode === 'hybrid') && (
+              {(formData.rentalMode === 'entire_place' || formData.rentalMode === 'hybrid') && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">
-                      {formData.type === 'Resort' ? 'Starts from Price (₹/Night)' : 'Monthly Rent (₹)'}
-                    </label>
+                    <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Monthly Rent (₹)</label>
                     <input 
                       required 
                       type="number" 
@@ -505,7 +372,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                       value={formData.price} 
                       onChange={e => setFormData({...formData, price: e.target.value})} 
                       className="w-full p-4 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none" 
-                      placeholder={formData.type === 'Resort' ? '5000' : '1200'} 
+                      placeholder="1200" 
                     />
                   </div>
                 </div>
