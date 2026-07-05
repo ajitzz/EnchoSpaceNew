@@ -95,12 +95,50 @@ const Header: React.FC<HeaderProps> = ({
   }, [placesLibrary]);
 
   useEffect(() => {
-    if (!inputValue || inputValue.trim() === '' || inputValue.length < 2 || !placesLibrary) {
-       
+    const LOCAL_CITIES_DATABASE = [
+      'Berlin, Germany', 'London, United Kingdom', 'Paris, France', 'New York, United States',
+      'Tokyo, Japan', 'Barcelona, Spain', 'Amsterdam, Netherlands', 'Munich, Germany',
+      'Yogyakarta, Indonesia', 'Jogja, Indonesia',
+      'Bengaluru, India', 'Bangalore, India',
+      'Bali, Indonesia', 'Jakarta, Indonesia', 'Bandung, Indonesia', 'Surabaya, Indonesia',
+      'Singapore', 'Sydney, Australia', 'Rome, Italy', 'Milan, Italy', 'Toronto, Canada', 'Vancouver, Canada'
+    ];
+
+    function fallbackToLocal() {
+      const query = inputValue.toLowerCase().trim();
+      const matches = LOCAL_CITIES_DATABASE.filter(city => city.toLowerCase().includes(query));
+      const formatted: google.maps.places.AutocompletePrediction[] = matches.map((city, idx) => {
+        const parts = city.split(',');
+        const main = parts[0].trim();
+        const secondary = parts[1] ? parts[1].trim() : 'Popular Destination';
+        return {
+          place_id: `local-city-${idx}-${main}`,
+          description: city,
+          distance_meters: 0,
+          matched_substrings: [],
+          place_types: ['locality', 'political'],
+          reference: `local-city-${idx}-${main}`,
+          structured_formatting: {
+            main_text: main,
+            main_text_matched_substrings: [],
+            secondary_text: secondary,
+          },
+          types: ['locality', 'political']
+        };
+      });
+      setPredictions(formatted);
+    }
+
+    if (!inputValue || inputValue.trim() === '' || inputValue.length < 2) {
        setPredictions([]);
        return;
     }
     
+    if (!placesLibrary) {
+       fallbackToLocal();
+       return;
+    }
+
     // Try the new Places API (AutocompleteSuggestion) first, recommended for new customers
     if ((placesLibrary as any).AutocompleteSuggestion) {
        (placesLibrary as any).AutocompleteSuggestion.fetchAutocompleteSuggestions({
@@ -122,10 +160,10 @@ const Header: React.FC<HeaderProps> = ({
                });
                setPredictions(mapped as any);
            } else {
-       setPredictions([]);
+               fallbackToLocal();
            }
        }).catch((err: any) => {
-           console.warn('AutocompleteSuggestion failed, trying legacy:', err);
+           console.warn('AutocompleteSuggestion failed, trying legacy or local:', err);
            fallbackToLegacy();
        });
     } else {
@@ -133,16 +171,19 @@ const Header: React.FC<HeaderProps> = ({
     }
 
     function fallbackToLegacy() {
-      if (!autocompleteService) return;
+      if (!autocompleteService) {
+        fallbackToLocal();
+        return;
+      }
       autocompleteService.getPlacePredictions({
          input: inputValue,
          sessionToken,
          types: ['(cities)']
       }, (results, status) => {
-         if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+         if (status === google.maps.places.PlacesServiceStatus.OK && results && results.length > 0) {
              setPredictions(results);
          } else {
-       setPredictions([]);
+             fallbackToLocal();
          }
       });
     }

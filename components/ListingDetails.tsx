@@ -616,65 +616,49 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
       />
     <div className="bg-white min-h-screen animate-fade-in pb-32">
       
-      {/* Floating Scroll-Aware Header */}
-      <header 
-        className={`
-            fixed top-0 left-0 right-0 z-[60] bg-white/90 backdrop-blur-md border-b border-gray-100 
-            px-4 md:px-8 h-16 flex items-center justify-between 
-            transition-transform duration-300 shadow-sm
-            ${showNav ? 'translate-y-0' : '-translate-y-full'}
-        `}
-      >
-         <button 
-            onClick={() => { uiAudio.playClick(); onBack(); }} 
-            className="flex items-center gap-2 text-gray-600 hover:text-black hover:bg-gray-100/50 px-3 py-1.5 rounded-full transition-all group"
-         >
-            <div className="p-1.5 rounded-full bg-gray-100 group-hover:bg-gray-200 transition-colors">
-                <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-            </div>
-            <span className="font-medium text-sm hidden sm:inline">Back to search</span>
-         </button>
-
-         <div className="flex gap-2 sm:gap-3">
-             <button className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-100/50 rounded-full text-sm font-medium transition-colors text-gray-700">
-                <div className="w-4 h-4"><svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="presentation" focusable="false" style={{display: 'block', fill: 'none', height: '16px', width: '16px', stroke: 'currentcolor', strokeWidth: 2, overflow: 'visible'}}><g fill="none"><path d="M27 18v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-9"></path><path d="M16 3v23V3z"></path><path d="M6 13l9.293-9.293a1 1 0 0 1 1.414 0L26 13"></path></g></svg></div>
-                <span className="hidden sm:inline">Share</span>
-             </button>
-             <button 
-                onClick={() => { uiAudio.playPop(); onToggleFavorite(listing); }}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors 
-                    ${isFavorite ? 'bg-pink-50 text-[#0284C7]' : 'hover:bg-gray-100/50 text-gray-700'}`}
-             >
-                <HeartIcon className="w-4 h-4" filled={isFavorite} />
-                <span className="hidden sm:inline">{isFavorite ? 'Saved' : 'Save'}</span>
-             </button>
-         </div>
-      </header>
-
-      {/* Main Content Container - Added pt-20 to compensate for fixed header */}
-      <div className="max-w-7xl mx-auto md:px-6 md:pt-20">
+      {/* Main Content Container - Spaced elegantly from top on desktop and flush on mobile */}
+      <div className="max-w-7xl mx-auto md:px-6 pt-0 md:pt-8">
         
         {/* Gallery Grid & Mobile Swipe */}
-        <div className="md:mb-8 relative group md:rounded-2xl overflow-hidden">
+        <div className="md:mb-8 relative group md:rounded-2xl overflow-hidden shadow-sm">
             
             
-        {/* Mobile Header Buttons (Absolute over image) */}
-        <div className="md:hidden absolute top-0 inset-x-0 z-[70] flex items-center justify-between p-4 pt-safe mt-2 pointer-events-none">
+        {/* Unified Top Header Buttons Overlay (Absolute over image/grid) */}
+        <div className="absolute top-0 inset-x-0 z-[40] flex items-center justify-between p-4 md:p-6 mt-2 pointer-events-none">
             <button 
                 onClick={(e) => { e.stopPropagation(); uiAudio.playClick(); onBack(); }}
-                className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-md flex items-center justify-center shadow-lg pointer-events-auto active:scale-95 transition-transform"
+                className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-white/95 backdrop-blur-md flex items-center justify-center shadow-lg pointer-events-auto active:scale-95 transition-transform hover:scale-105 border border-gray-100"
+                title="Back to search"
             >
-                <ChevronLeft className="w-5 h-5 text-gray-900 pr-0.5" />
+                <ChevronLeft className="w-5 h-5 md:w-6 md:h-6 text-gray-900 pr-0.5" />
             </button>
-            <div className="flex gap-2">
-                <button className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-md flex items-center justify-center shadow-lg pointer-events-auto active:scale-95 transition-transform">
-                    <svg viewBox="0 0 32 32" className="w-4 h-4 text-gray-900" aria-hidden="true" role="presentation" focusable="false" style={{display: 'block', fill: 'none', stroke: 'currentcolor', strokeWidth: 2.5, overflow: 'visible'}}><g fill="none"><path d="M27 18v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-9"></path><path d="M16 3v23V3z"></path><path d="M6 13l9.293-9.293a1 1 0 0 1 1.414 0L26 13"></path></g></svg>
+            <div className="flex gap-2.5 md:gap-3 pointer-events-auto">
+                <button 
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        uiAudio.playClick();
+                        if (navigator.share) {
+                            navigator.share({
+                                title: listing.title,
+                                text: listing.description,
+                                url: window.location.href
+                            }).catch(err => console.log(err));
+                        } else {
+                            navigator.clipboard.writeText(window.location.href);
+                            addToast("Link Copied", "Listing link copied to clipboard!", "success");
+                        }
+                    }}
+                    className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-white/95 backdrop-blur-md flex items-center justify-center shadow-lg active:scale-95 transition-transform hover:scale-105 border border-gray-100"
+                    title="Share listing"
+                >
+                    <svg viewBox="0 0 32 32" className="w-4 h-4 md:w-4.5 md:h-4.5 text-gray-900" aria-hidden="true" role="presentation" focusable="false" style={{display: 'block', fill: 'none', stroke: 'currentcolor', strokeWidth: 2.5, overflow: 'visible'}}><g fill="none"><path d="M27 18v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-9"></path><path d="M16 3v23V3z"></path><path d="M6 13l9.293-9.293a1 1 0 0 1 1.414 0L26 13"></path></g></svg>
                 </button>
                 <button 
                     onClick={(e) => { e.stopPropagation(); uiAudio.playPop(); onToggleFavorite(listing); }}
-                    className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-md flex items-center justify-center shadow-lg pointer-events-auto active:scale-95 transition-transform"
+                    className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-white/95 backdrop-blur-md flex items-center justify-center shadow-lg active:scale-95 transition-transform hover:scale-105 border border-gray-100"
+                    title={isFavorite ? "Remove from wishlist" : "Add to wishlist"}
                 >
-                    <HeartIcon className={`w-5 h-5 ${isFavorite ? 'fill-[#e51d53] text-[#e51d53]' : 'text-gray-900'}`} filled={isFavorite} />
+                    <HeartIcon className={`w-5 h-5 md:w-5.5 md:h-5.5 ${isFavorite ? 'fill-[#e51d53] text-[#e51d53]' : 'text-gray-900'}`} filled={isFavorite} />
                 </button>
             </div>
         </div>

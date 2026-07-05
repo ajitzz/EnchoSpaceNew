@@ -1149,8 +1149,21 @@ function App() {
               )}
             </div>
 
-            <div className={`xl:block xl:sticky xl:top-[160px] xl:w-[45%] xl:h-[calc(100vh-180px)] xl:rounded-2xl xl:overflow-hidden xl:z-0 xl:shadow-2xl ${showMap ? 'fixed inset-0 top-[130px] z-30 block w-full h-[calc(100vh-130px)] bg-gray-50' : 'hidden'}`}>
-               <MapSidebar listings={listings} highlightedId={hoveredListingId ? hoveredListingId.split('_')[0] : null} onBoundsChanged={(bounds) => handleSearch(city, filters, bounds)} className="w-full h-full" />
+            <div className={`xl:block xl:sticky xl:top-[160px] xl:w-[45%] xl:h-[calc(100vh-180px)] xl:rounded-2xl xl:overflow-hidden xl:z-0 xl:shadow-2xl ${showMap ? 'fixed inset-0 z-[150] block w-full h-[100dvh] bg-gray-50' : 'hidden'}`}>
+               <MapSidebar 
+                 listings={listings} 
+                 highlightedId={hoveredListingId ? hoveredListingId.split('_')[0] : null} 
+                 onBoundsChanged={(bounds) => handleSearch(city, filters, bounds)} 
+                 onClose={() => setShowMap(false)}
+                 city={city}
+                 onSearch={(newCity) => handleSearch(newCity, filters)}
+                 onToggleFavorite={toggleFavorite}
+                 isFavorite={isFavorite}
+                 onSelectListing={handleListingClick}
+                 onNavigate={setCurrentView}
+                 currentView={currentView}
+                 className="w-full h-full" 
+               />
             </div>
           </div>
         </main>
