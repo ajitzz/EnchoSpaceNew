@@ -33,6 +33,7 @@ import { useToast } from './ToastContext';
 import { OptimizedImage, getOptimizedUrl } from './OptimizedImage';
 import { useCurrency } from './CurrencyContext';
 import { ImageGallery } from './ImageGallery';
+import PremiumInventoryUnitCard from './PremiumInventoryUnitCard';
 import { getRatingWord, formatRating } from '../lib/ratingUtils';
 import { io } from 'socket.io-client';
 
