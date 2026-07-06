@@ -233,6 +233,22 @@ function App() {
   const [filters, setFilters] = useState<any>({});
   
   const { setBadge, clearBadge } = useAppBadge();
+
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'hostPreviewListing' && window.location.hash.toUpperCase() === '#PREVIEW_HOST') {
+        if (e.newValue) {
+          try {
+            setSelectedListing(JSON.parse(e.newValue));
+          } catch(err) {
+            console.error('Preview sync parse error:', err);
+          }
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
   const { requestPermission, showNotification } = useNativeNotification();
   const prevUnreadCount = useRef(0);
   const isOnline = useNetworkState();
