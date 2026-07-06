@@ -1,0 +1,120 @@
+                                const isRoomSelected = selectedConfigIds.includes(room.id);
+                                return (
+                                <div 
+                                    key={room.id || idx} 
+                                    role="region"
+                                    aria-label={`Inventory unit: ${room.name}`}
+                                    className={`rounded-3xl border transition-all flex flex-col md:flex-row overflow-hidden ${isRoomSelected ? 'border-black ring-1 ring-black bg-gray-50 shadow-md' : 'border-gray-200 bg-white hover:shadow-md hover:border-gray-300'}`}
+                                >
+                                    {room.imageUrls && room.imageUrls.length > 0 && (
+                                        <div className="w-full md:w-[300px] h-48 md:h-auto bg-gray-100 flex-shrink-0 border-b md:border-b-0 md:border-r border-gray-100 relative">
+                                            <OptimizedImage src={room.imageUrls[0]} alt={`Photo of ${room.name}`} className="w-full h-full object-cover absolute inset-0" />
+                                        </div>
+                                    )}
+                                    <div className="p-6 md:p-8 flex flex-col justify-between flex-1">
+                                        <div className="flex flex-col gap-4">
+                                            <div className="flex flex-col md:flex-row items-start justify-between gap-4">
+                                                <div>
+                                                    <h3 className="font-bold text-xl text-gray-900 flex items-center gap-2">
+                                                        {room.name}
+                                                        {room.inventory_count !== undefined && (
+                                                            <span className={`text-xs font-bold px-2 py-1 rounded-full ${room.inventory_count > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`} aria-live="polite">
+                                                                {room.inventory_count > 0 ? `${room.inventory_count} left` : 'Sold Out'}
+                                                            </span>
+                                                        )}
+                                                    </h3>
+                                                    
+                                                    <div className="flex flex-wrap gap-2 mt-3" aria-label={`Amenities for ${room.name}`}>
+                                                        {room.hasAttachedBathroom && (
+                                                            <span className="bg-blue-50 text-blue-700 text-xs font-semibold px-2 py-1 rounded-full">
+                                                                🛁 Attached Bath
+                                                            </span>
+                                                        )}
+                                                        {room.hasAc && (
+                                                            <span className="bg-teal-50 text-teal-700 text-xs font-semibold px-2 py-1 rounded-full">
+                                                                ❄️ AC
+                                                            </span>
+                                                        )}
+                                                        {room.amenities && room.amenities.map(am => (
+                                                            <span key={am} className="bg-gray-100 text-gray-700 text-xs font-semibold px-2 py-1 rounded-full">
+                                                                {getAmenityIcon(am)} {am}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <div className="text-left md:text-right">
+                                                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wide block mb-1">Starts From</span>
+                                                    <span className="font-bold text-2xl text-[#0284C7] block" aria-label={`Starts from ${room.price} ${listing.currency} per night`}>{formatPrice(room.price, listing.currency)}<span className="text-sm font-normal text-gray-500"> /night</span></span>
+                                                </div>
+                                            </div>
+
+                                            {/* Pricing Tiers Section */}
+                                            {room.tiers && room.tiers.length > 0 ? (
+                                                <div className="mt-4 border-t border-gray-100 pt-6">
+                                                    <h4 className="text-sm font-bold text-gray-900 mb-3 uppercase tracking-wider">Select Package Tier</h4>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="radiogroup" aria-label={`Select tier for ${room.name}`}>
+                                                        {room.tiers.map((tier, tIdx) => (
+                                                            <div key={tIdx} 
+                                                                 role="radio"
+                                                                 aria-checked={isRoomSelected}
+                                                                 tabIndex={0}
+                                                                 onKeyDown={(e) => {
+                                                                     if (e.key === 'Enter' || e.key === ' ') {
+                                                                         if (room.inventory_count !== 0) {
+                                                                             toggleConfigSelection(room.id, listing.rooms?.map(r => r.id) || []);
+                                                                             document.getElementById('booking-card')?.scrollIntoView({ behavior: 'smooth' });
+                                                                         }
+                                                                     }
+                                                                 }}
+                                                                 onClick={() => {
+                                                                    if (room.inventory_count !== 0) {
+                                                                        toggleConfigSelection(room.id, listing.rooms?.map(r => r.id) || []);
+                                                                        document.getElementById('booking-card')?.scrollIntoView({ behavior: 'smooth' });
+                                                                    }
+                                                                 }}
+                                                                 className={`p-4 rounded-xl border cursor-pointer transition-colors focus:ring-2 focus:outline-none ${room.inventory_count === 0 ? 'opacity-50 cursor-not-allowed bg-gray-50 border-gray-100' : 'bg-white border-gray-200 hover:border-black'}`}>
+                                                                <div className="flex justify-between items-start mb-2">
+                                                                    <span className="font-bold text-gray-900">{tier.name}</span>
+                                                                    <span className="font-bold text-[#0284C7]">{formatPrice(tier.price, listing.currency)}</span>
+                                                                </div>
+                                                                <ul className="space-y-1" aria-label={`Amenities for tier ${tier.name}`}>
+                                                                    {tier.amenities.map((tam, i) => (
+                                                                        <li key={i} className="text-xs text-gray-600 flex items-center gap-1.5">
+                                                                            <svg className="w-3 h-3 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                                                            {tam}
+                                                                        </li>
+                                                                    ))}
+                                                                </ul>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="mt-4 pt-4 border-t border-gray-100 flex justify-end">
+                                                    <button 
+                                                        disabled={room.inventory_count === 0}
+                                                        aria-label={`Select ${room.name}`}
+                                                        onClick={() => {
+                                                            if (room.inventory_count !== 0) {
+                                                                toggleConfigSelection(room.id, listing.rooms?.map(r => r.id) || []);
+                                                                document.getElementById('booking-card')?.scrollIntoView({ behavior: 'smooth' });
+                                                            }
+                                                        }}
+                                                        className={`px-8 py-3 rounded-xl font-bold transition-all flex items-center gap-2 focus:ring-2 focus:ring-offset-2 focus:outline-none ${room.inventory_count === 0 ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : (isRoomSelected ? 'bg-black text-white' : 'border border-gray-900 text-gray-900 hover:bg-gray-50')}`}
+                                                    >
+                                                        {isRoomSelected ? (
+                                                            <><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg> Selected</>
+                                                        ) : 'Select Unit'}
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )})}
+                        </div>
+                    </div>
+                )}
+
+                {/* Redesigned Amenities Section */}
+                <div className="mb-10 py-8 border-t border-gray-200">

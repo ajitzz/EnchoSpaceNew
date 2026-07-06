@@ -17,6 +17,8 @@ export interface Room {
   hasAc?: boolean;
   amenities?: string[];
   imageUrls?: string[];
+  video_url?: string;
+  description?: string;
   inventory_count?: number; // Number of available units for this specific room type
   tiers?: RoomTier[]; // Pricing tiers
 }
