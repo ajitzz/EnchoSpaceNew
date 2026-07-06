@@ -351,40 +351,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="md:col-span-2">
-                            
-                                <div className="flex items-center justify-between mb-2">
-                                    <label className="block text-sm font-bold text-gray-700">Experience Title</label>
-                                    <button 
-                                        type="button" 
-                                        onClick={async () => {
-                                            try {
-                                                const token = localStorage.getItem('token');
-                                                const res = await fetch('/api/ai/suggest-experience', {
-                                                    method: 'POST',
-                                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                                    body: JSON.stringify({
-                                                        category: formData.category,
-                                                        city: formData.destination,
-                                                        languages: formData.languages,
-                                                        difficulty: formData.difficulty
-                                                    })
-                                                });
-                                                if (res.ok) {
-                                                    const data = await res.json();
-                                                    if (data.title) setFormData(prev => ({...prev, title: data.title}));
-                                                    if (data.description) setFormData(prev => ({...prev, description: data.description}));
-                                                    if (data.what_to_expect) setWhatToExpect(data.what_to_expect);
-                                                }
-                                            } catch(e) {
-                                                console.error('Exp AI Suggestion failed', e);
-                                            }
-                                        }}
-                                        className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 px-3 py-1.5 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors shadow-sm"
-                                    >
-                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                                        Auto-write Details
-                                    </button>
-                                </div>
+                            <label className="block text-sm font-bold text-gray-700 mb-2">Experience Title</label>
                             <input required type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full p-4 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-lg font-medium" placeholder="e.g. Neon Lights Cyberpunk Tokyo Tour" />
                         </div>
                         <div>
