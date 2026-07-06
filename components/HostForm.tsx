@@ -119,6 +119,48 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
     dynamicPricing: formData.dynamicPricing,
   };
 
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [isDrafting, setIsDrafting] = useState(false);
+
+  const handleAiDraft = async () => {
+    if (!aiPrompt.trim()) return;
+    setIsDrafting(true);
+    try {
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/ai/draft-property', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ prompt: aiPrompt })
+        });
+        if (res.ok) {
+            const data = await res.json();
+            setFormData(prev => ({
+                ...prev,
+                title: data.title || prev.title,
+                description: data.description || prev.description,
+                type: data.type || prev.type,
+                city: data.city || prev.city,
+                rentalMode: data.rentalMode || prev.rentalMode,
+                price: data.price ? String(data.price) : prev.price,
+                maxGuests: data.maxGuests || prev.maxGuests,
+                bedrooms: data.bedrooms || prev.bedrooms,
+                beds: data.beds || prev.beds,
+                bathrooms: data.bathrooms || prev.bathrooms,
+                amenities: data.amenities?.length ? Array.from(new Set([...prev.amenities, ...data.amenities])) : prev.amenities
+            }));
+            addToast("Draft Generated", "Your property details have been auto-filled.", "success");
+            setAiPrompt('');
+        } else {
+            addToast("Generation Failed", "Could not generate draft. Please try again.", "error");
+        }
+    } catch(e) {
+        console.error('Draft AI failed', e);
+        addToast("Error", "Failed to connect to AI service.", "error");
+    } finally {
+        setIsDrafting(false);
+    }
+  };
+
   const handleFocus = (sectionName: string) => {
       const previewContainer = document.getElementById('preview-container');
       if (!previewContainer) return;
@@ -270,184 +312,58 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
             </button>
         </div>
       </header>
-
       <main className="max-w-[1600px] mx-auto px-4 pt-8 md:pt-12 flex gap-8 pb-20">
         <div className="flex-1 max-w-3xl">
-          <form id="host-form" onSubmit={handleSubmit} className="space-y-12 pb-12">
           
-          {/* Section 1: Property Type */}
-          <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100" onClick={() => handleFocus('Basics')}>
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Which of these best describes your place?</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              {PROPERTY_TYPES.map(type => {
-                const isSelected = formData.type === type.id;
-                const Icon = type.icon;
-                return (
-                  <div 
-                    key={type.id}
-                    onClick={() => setFormData({...formData, type: type.id})}
-                    className={`
-                      cursor-pointer border-2 rounded-xl p-4 flex flex-col items-start gap-4 transition-all hover:bg-gray-50 
-                      ${isSelected ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200'}
-                    `}
-                  >
-                    <Icon className="w-8 h-8 text-gray-800" strokeWidth={1.5} />
-                    <span className="font-semibold text-gray-900 leading-tight">{type.label}</span>
+          {/* AI Magic Drafter */}
+          <section className="bg-gradient-to-br from-indigo-900 to-black rounded-3xl p-6 md:p-8 shadow-xl mb-8 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+              <div className="relative z-10">
+                  <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2.5 bg-white/10 rounded-xl backdrop-blur-sm border border-white/20">
+                          <svg className="w-5 h-5 text-indigo-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                      </div>
+                      <div>
+                          <h3 className="text-xl font-bold text-white">AI Property Drafter</h3>
+                          <p className="text-indigo-200 text-sm">Describe your space, and let AI build your perfect listing.</p>
+                      </div>
                   </div>
-                )
-              })}
-            </div>
+                  <div className="flex flex-col md:flex-row gap-3">
+                      <input 
+                          type="text" 
+                          value={aiPrompt}
+                          onChange={(e) => setAiPrompt(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && !isDrafting && handleAiDraft()}
+                          placeholder="e.g. A cozy 2-bedroom wooden cabin in Manali with a fireplace..." 
+                          className="flex-1 px-5 py-3.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-indigo-300/50 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white/20 transition-all"
+                      />
+                      <button 
+                          type="button" 
+                          onClick={handleAiDraft}
+                          disabled={isDrafting || !aiPrompt.trim()}
+                          className="px-6 py-3.5 bg-white text-black font-bold rounded-xl hover:bg-gray-100 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 min-w-[140px]"
+                      >
+                          {isDrafting ? (
+                              <><svg className="animate-spin w-4 h-4 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Drafting...</>
+                          ) : (
+                              'Generate Draft'
+                          )}
+                      </button>
+                  </div>
+              </div>
           </section>
 
-          {/* Section 1.5: Rental Mode */}
-          <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100" onClick={() => handleFocus('Configuration')}>
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">How will guests book your place?</h2>
-            <div className="flex flex-col gap-4">
-              <label className={`cursor-pointer border-2 rounded-xl p-4 flex items-center gap-4 transition-all hover:bg-gray-50 ${formData.rentalMode === 'entire_place' ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200'}`}>
-                <input type="radio" name="rentalMode" value="entire_place" checked={formData.rentalMode === 'entire_place'} onChange={() => setFormData({...formData, rentalMode: 'entire_place'})} className="sr-only" />
-                <div className="flex-1">
-                  <span className="font-semibold text-gray-900 block text-lg">Entire Place</span>
-                  <span className="text-gray-500 text-sm">Guests have the whole place to themselves.</span>
+          <form id="host-form" onSubmit={handleSubmit} className="space-y-8">
+
+          {/* Section 1: Photos */}
+          <section className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-gray-100" onFocusCapture={() => handleFocus('Photos')} onClick={() => handleFocus('Photos')}>
+            <div className="flex items-center justify-between mb-6">
+                <div>
+                    <h2 className="text-2xl font-bold text-gray-900">Photos</h2>
+                    <p className="text-gray-500 mt-1">Add at least one photo of your space.</p>
                 </div>
-              </label>
-              <label className={`cursor-pointer border-2 rounded-xl p-4 flex items-center gap-4 transition-all hover:bg-gray-50 ${formData.rentalMode === 'private_rooms' ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200'}`}>
-                <input type="radio" name="rentalMode" value="private_rooms" checked={formData.rentalMode === 'private_rooms'} onChange={() => setFormData({...formData, rentalMode: 'private_rooms'})} className="sr-only" />
-                <div className="flex-1">
-                  <span className="font-semibold text-gray-900 block text-lg">Private Rooms</span>
-                  <span className="text-gray-500 text-sm">Guests book individual rooms and share common areas.</span>
-                </div>
-              </label>
-              <label className={`cursor-pointer border-2 rounded-xl p-4 flex items-center gap-4 transition-all hover:bg-gray-50 ${formData.rentalMode === 'hybrid' ? 'border-black bg-gray-50 ring-1 ring-black' : 'border-gray-200'}`}>
-                <input type="radio" name="rentalMode" value="hybrid" checked={formData.rentalMode === 'hybrid'} onChange={() => setFormData({...formData, rentalMode: 'hybrid'})} className="sr-only" />
-                <div className="flex-1">
-                  <span className="font-semibold text-gray-900 block text-lg">Both (Entire Place & Private Rooms)</span>
-                  <span className="text-gray-500 text-sm">Guests can book the entire place OR individual rooms.</span>
-                </div>
-              </label>
             </div>
-            
-            {(formData.rentalMode === 'private_rooms' || formData.rentalMode === 'hybrid') && (
-              <div className="mt-8 space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                      <h3 className="text-xl font-bold text-gray-900">Inventory Units</h3>
-                      <p className="text-sm text-gray-500 mt-1">Add cottages, rooms, or specific villas inside this property.</p>
-                  </div>
-                  <button type="button" onClick={handleAddRoom} className="px-4 py-2 bg-gray-900 text-white rounded-lg font-semibold text-sm hover:bg-gray-800 transition-colors">
-                    + Add Unit
-                  </button>
-                </div>
-                {formData.rooms.length === 0 && (
-                  <p className="text-gray-500 text-sm italic">No inventory units added. Please add at least one bookable unit.</p>
-                )}
-                {formData.rooms.map((room, index) => (
-                  <div key={room.id} className="p-6 border-2 rounded-2xl border-gray-100 bg-gray-50 space-y-6 relative">
-                    <button type="button" onClick={() => handleRemoveRoom(index)} className="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition-colors bg-white rounded-full p-1 border shadow-sm z-10">
-                      <X className="w-4 h-4" />
-                    </button>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="space-y-4 md:col-span-3">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <label className="text-xs font-bold text-gray-700 uppercase">Unit Description</label>
-                                <textarea value={room.description || ''} onChange={e => handleUpdateRoom(index, 'description', e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none bg-white min-h-[80px]" placeholder="Astonishing details about this unit..." />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-xs font-bold text-gray-700 uppercase">Promo Video URL</label>
-                                <input type="url" value={room.video_url || ''} onChange={e => handleUpdateRoom(index, 'video_url', e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none bg-white" placeholder="e.g. https://example.com/video.mp4" />
-                            </div>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-gray-700 uppercase">Unit Name / Type</label>
-                        <input value={room.name} required onChange={e => handleUpdateRoom(index, 'name', e.target.value)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none bg-white" placeholder="e.g. Ocean View Cottage" />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-gray-700 uppercase">Base Price (₹)</label>
-                        <input value={room.price} required type="number" min="0" onChange={e => handleUpdateRoom(index, 'price', parseFloat(e.target.value) || 0)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none bg-white" placeholder="e.g. 5000" />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-gray-700 uppercase">Inventory Count</label>
-                        <input value={room.inventory_count ?? 1} required type="number" min="1" onChange={e => handleUpdateRoom(index, 'inventory_count', parseInt(e.target.value) || 1)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none bg-white" placeholder="e.g. 5" />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-gray-700 uppercase">Bedrooms (BHK)</label>
-                        <input value={room.bedrooms ?? ''} type="number" min="0" onChange={e => handleUpdateRoom(index, 'bedrooms', parseInt(e.target.value) || 0)} className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none bg-white" placeholder="e.g. 2 for 2BHK" />
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-200">
-                      <div className="space-y-2 flex items-center justify-between p-3 border border-gray-200 rounded-xl bg-white">
-                        <label className="text-sm font-semibold text-gray-700">Attached Bathroom</label>
-                        <input type="checkbox" checked={room.hasAttachedBathroom} onChange={e => handleUpdateRoom(index, 'hasAttachedBathroom', e.target.checked)} className="w-5 h-5 accent-[#0284C7]" />
-                      </div>
-                      <div className="space-y-2 flex items-center justify-between p-3 border border-gray-200 rounded-xl bg-white">
-                        <label className="text-sm font-semibold text-gray-700">Air Conditioning (AC)</label>
-                        <input type="checkbox" checked={room.hasAc} onChange={e => handleUpdateRoom(index, 'hasAc', e.target.checked)} className="w-5 h-5 accent-[#0284C7]" />
-                      </div>
-                    </div>
-
-                    <div className="space-y-4 pt-4 border-t border-gray-200">
-                        <div className="flex items-center justify-between">
-                            <label className="text-sm font-bold text-gray-900">Pricing Tiers / Packages</label>
-                            <button type="button" onClick={() => {
-                                const tiers = room.tiers || [];
-                                handleUpdateRoom(index, 'tiers', [...tiers, { id: Date.now().toString(), name: 'New Tier', price: room.price, amenities: [] }]);
-                            }} className="text-xs font-bold text-[#0284C7] hover:underline">+ Add Tier</button>
-                        </div>
-                        {(!room.tiers || room.tiers.length === 0) && (
-                            <p className="text-xs text-gray-500 italic">No packages added. (Defaults to Base Price Room Only)</p>
-                        )}
-                        {room.tiers && room.tiers.map((tier: any, tIndex: number) => (
-                            <div key={tier.id} className="p-4 bg-white border border-gray-200 rounded-xl relative">
-                                <button type="button" onClick={() => {
-                                    handleUpdateRoom(index, 'tiers', room.tiers.filter((_: any, i: number) => i !== tIndex));
-                                }} className="absolute top-2 right-2 text-gray-400 hover:text-red-500">
-                                    <X className="w-3 h-3" />
-                                </button>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="text-[10px] font-bold text-gray-500 uppercase">Package Name</label>
-                                        <input value={tier.name} onChange={e => {
-                                            const newTiers = [...room.tiers];
-                                            newTiers[tIndex].name = e.target.value;
-                                            handleUpdateRoom(index, 'tiers', newTiers);
-                                        }} className="w-full p-2 text-sm border rounded-lg focus:ring-1 outline-none" placeholder="e.g. Breakfast + Free Cancel" />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-bold text-gray-500 uppercase">Package Price (₹)</label>
-                                        <input value={tier.price} type="number" onChange={e => {
-                                            const newTiers = [...room.tiers];
-                                            newTiers[tIndex].price = parseFloat(e.target.value) || 0;
-                                            handleUpdateRoom(index, 'tiers', newTiers);
-                                        }} className="w-full p-2 text-sm border rounded-lg focus:ring-1 outline-none" placeholder="e.g. 6000" />
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="text-[10px] font-bold text-gray-500 uppercase">Included Amenities (comma separated)</label>
-                                        <input value={tier.amenities.join(', ')} onChange={e => {
-                                            const newTiers = [...room.tiers];
-                                            newTiers[tIndex].amenities = e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean);
-                                            handleUpdateRoom(index, 'tiers', newTiers);
-                                        }} className="w-full p-2 text-sm border rounded-lg focus:ring-1 outline-none" placeholder="e.g. Breakfast, Free WiFi, No Cancellation Fee" />
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                    
-                    <div className="space-y-2 pt-4 border-t border-gray-200">
-                      <label className="text-sm font-bold text-gray-900">Unit Amenities</label>
-                      <AmenitiesPicker selected={room.amenities || []} onChange={sel => handleUpdateRoom(index, 'amenities', sel)} />
-                    </div>
-
-                    <div className="space-y-2 pt-4 border-t border-gray-200">
-                      <label className="text-sm font-bold text-gray-900">Unit Photos</label>
-                      <PhotoUpload photos={room.photos || []} setPhotos={p => handleUpdateRoom(index, 'photos', p)} isCompressing={isCompressing} setIsCompressing={setIsCompressing} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <PhotoUpload photos={photos} setPhotos={setPhotos} isCompressing={isCompressing} setIsCompressing={setIsCompressing} />
           </section>
 
           {/* Section 2: Basics */}
@@ -455,37 +371,6 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
             <h2 className="text-2xl font-bold text-gray-900 mb-6">The Basics</h2>
             <div className="space-y-6">
               <div className="space-y-4">
-                <div className="flex items-center justify-between mb-4">
-                    <button 
-                        type="button" 
-                        className="text-sm font-semibold flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors shadow-sm ml-auto"
-                        onClick={async () => {
-                            try {
-                                const token = localStorage.getItem('token');
-                                const res = await fetch('/api/ai/suggest-listing', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                    body: JSON.stringify({
-                                        type: formData.type,
-                                        city: formData.city,
-                                        amenities: formData.amenities,
-                                        rooms: formData.rooms,
-                                        rentalMode: formData.rentalMode
-                                    })
-                                });
-                                if (res.ok) {
-                                    const data = await res.json();
-                                    if (data.title) setFormData(prev => ({...prev, title: data.title}));
-                                    if (data.description) setFormData(prev => ({...prev, description: data.description}));
-                                }
-                            } catch(e) {
-                                console.error('AI Suggestion failed', e);
-                            }
-                        }}
-                    >
-                        <span>✨ Auto-write with AI</span>
-                    </button>
-                </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Property Title</label>
                   <input 
