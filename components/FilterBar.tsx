@@ -173,7 +173,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
     );
   };
 
-  const propertyTypes = ['Apartment', 'House', 'Barn', 'Bed & breakfast', 'Boat', 'Cabin', 'Campervan', 'Castle'];
+  const propertyTypes = ['Resort', 'Apartment', 'House', 'Barn', 'Bed & breakfast', 'Boat', 'Cabin', 'Campervan', 'Castle'];
   const allAmenities = ['Wifi', 'Kitchen', 'Washing machine', 'Air conditioning', 'Pool', 'Hot tub', 'Fire pit', 'BBQ grill', 'Free parking', 'First aid kit', 'TV', 'Gym'];
   const sortOptions = [
     { label: 'Recommended', value: '' },
@@ -459,7 +459,8 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                                         {type === 'Apartment' && <BriefcaseIcon className="w-5 h-5" />}
                                         {type === 'House' && <HomeIcon className="w-5 h-5" />}
                                         {type === 'Cabin' && <TreeIcon className="w-5 h-5" />}
-                                        {type !== 'Apartment' && type !== 'House' && type !== 'Cabin' && <HomeIcon className="w-5 h-5" />}
+                                        {type === 'Resort' && <TreeIcon className="w-5 h-5" />}
+                                        {type !== 'Apartment' && type !== 'House' && type !== 'Cabin' && type !== 'Resort' && <HomeIcon className="w-5 h-5" />}
                                     </div>
                                     <span className={`font-bold text-base ${localType === type ? 'text-gray-900' : 'text-gray-800'}`}>{type}</span>
                                 </button>

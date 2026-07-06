@@ -21,6 +21,7 @@ interface HostFormProps {
 }
 
 const PROPERTY_TYPES = [
+  { id: 'Resort', label: 'Resort', icon: Trees },
   { id: 'Apartment', label: 'Flat/apartment', icon: Building2 },
   { id: 'House', label: 'House', icon: Home },
   { id: 'Barn', label: 'Barn', icon: Tractor },
