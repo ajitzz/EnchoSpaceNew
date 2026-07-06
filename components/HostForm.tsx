@@ -6,7 +6,7 @@ import { PhotoUpload, PhotoData } from './PhotoUpload';
 import { AmenitiesPicker } from './AmenitiesPicker';
 import { useAuth } from './AuthContext';
 import { 
-  Building2, Home, Trees, Tractor, Coffee, Ship, Tent, Caravan, Castle, Mountain, Box, Circle, Leaf, X, Eye
+  Building2, Home, Trees, Tractor, Coffee, Ship, Tent, Caravan, Castle, Mountain, Box, Circle, Leaf, X, Eye, Maximize2
 } from 'lucide-react';
 import { useToast } from './ToastContext';
 import ListingDetails from './ListingDetails';
@@ -679,12 +679,25 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
           id="preview-container"
           className="hidden lg:block w-[45%] xl:w-[50%] sticky top-24 h-[calc(100vh-120px)] overflow-y-auto rounded-3xl border border-gray-200 shadow-xl bg-white no-scrollbar pb-10"
         >
-           <div className="sticky top-0 bg-white/90 backdrop-blur-md z-10 border-b border-gray-100 px-6 py-4 flex items-center justify-between pointer-events-none">
-             <div className="flex items-center gap-2">
+           <div className="sticky top-0 bg-white/90 backdrop-blur-md z-10 border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+             <div className="flex items-center gap-2 pointer-events-none">
                 <Eye className="w-5 h-5 text-blue-600" />
                 <h3 className="font-bold text-gray-900">Live Customer Preview</h3>
              </div>
-             <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded-full uppercase tracking-wider">0ms Latency Sync</span>
+             <div className="flex items-center gap-3">
+               <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded-full uppercase tracking-wider pointer-events-none">0ms Latency Sync</span>
+               <button 
+                 type="button"
+                 onClick={() => {
+                   localStorage.setItem('hostPreviewListing', JSON.stringify(mockListing));
+                   window.open(window.location.origin + '#PREVIEW_HOST', '_blank');
+                 }}
+                 className="p-2 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors text-gray-700 pointer-events-auto"
+                 title="Maximize preview in new tab"
+               >
+                 <Maximize2 className="w-4 h-4" />
+               </button>
+             </div>
            </div>
            <div className="pointer-events-none p-4">
               <ListingDetails 

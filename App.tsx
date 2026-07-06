@@ -578,7 +578,7 @@ function App() {
     const handlePopState = async () => {
       const path = window.location.pathname;
       const hash = window.location.hash.replace('#', '').toUpperCase();
-      const validViews = ['SEARCH', 'DETAILS', 'EXPERIENCE_DETAILS', 'BOOKING', 'WISHLIST', 'RESERVATIONS', 'MESSAGES', 'HOSTING', 'HOST_DASHBOARD', 'ADMIN'];
+      const validViews = ['SEARCH', 'DETAILS', 'EXPERIENCE_DETAILS', 'BOOKING', 'WISHLIST', 'RESERVATIONS', 'MESSAGES', 'HOSTING', 'HOST_DASHBOARD', 'ADMIN', 'PREVIEW_HOST'];
       
       if (path.startsWith('/listing/')) {
         const id = path.split('/')[2];
@@ -588,7 +588,13 @@ function App() {
              const res = await fetch(`/api/listings`);
              if (res.ok) {
                 const allListings = await res.json();
-                const found = allListings.find((l: any) => String(l.id) === String(id));
+                let found = allListings.find((l: any) => String(l.id) === String(id));
+                if (!found && id === 'preview-id') {
+                    const previewStr = localStorage.getItem('hostPreviewListing');
+                    if (previewStr) {
+                        try { found = JSON.parse(previewStr); } catch(e) { console.error('Preview parse error:', e); }
+                    }
+                }
                 if (found) {
                    setSelectedListing(found);
                    setCurrentView('DETAILS');
@@ -625,6 +631,18 @@ function App() {
       } else {
         if (!hash) {
           setCurrentView('SEARCH');
+        } else if (hash === 'PREVIEW_HOST') {
+            const previewStr = localStorage.getItem('hostPreviewListing');
+            if (previewStr) {
+                try {
+                    setSelectedListing(JSON.parse(previewStr));
+                    setCurrentView('DETAILS');
+                } catch(e) {
+                    setCurrentView('SEARCH');
+                }
+            } else {
+                setCurrentView('SEARCH');
+            }
         } else if (validViews.includes(hash)) {
           if ((hash === 'DETAILS' || hash === 'BOOKING') && !selectedListing) {
               setCurrentView('SEARCH');
