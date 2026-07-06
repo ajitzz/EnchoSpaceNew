@@ -34,6 +34,7 @@ import { OptimizedImage, getOptimizedUrl } from './OptimizedImage';
 import { useCurrency } from './CurrencyContext';
 import { ImageGallery } from './ImageGallery';
 import PremiumInventoryUnitCard from './PremiumInventoryUnitCard';
+import { Sparkles, Home, Shield, Eye, Lock, Users, Bed, ArrowRight, CheckCircle2, HelpCircle } from 'lucide-react';
 import { getRatingWord, formatRating } from '../lib/ratingUtils';
 import { io } from 'socket.io-client';
 
@@ -817,33 +818,157 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
 
                 {/* Inventory Selection Menu (Complex Listings / Rooms) */}
                 {listing.rooms && listing.rooms.length > 0 && (
-                    <div className="mb-10 py-8 border-t border-gray-200">
-                        <h2 className="text-2xl font-bold text-gray-900 mb-2">Inventory Selection Menu</h2>
-                        <p className="text-gray-600 mb-8 text-lg">Compare available accommodation types and pricing tiers for your dates.</p>
+                    <div className="mb-10 py-10 border-t border-zinc-200 dark:border-zinc-800">
+                        <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
+                            <div>
+                                <span className="text-xs font-bold text-amber-500 dark:text-amber-400 uppercase tracking-widest block mb-2">Configurations</span>
+                                <h2 className="text-3xl font-extrabold text-zinc-900 dark:text-white tracking-tight">Available Accommodations</h2>
+                                <p className="text-zinc-500 dark:text-zinc-400 mt-2 text-base max-w-2xl font-normal leading-relaxed">
+                                    Choose the perfect configuration for your stay. Secure exclusive booking of the entire residence or select individual luxury suites.
+                                </p>
+                            </div>
+                        </div>
                         <div className="flex flex-col gap-6">
                             
                             {/* Entire Apartment Smart Option */}
                             {listing.rental_mode !== 'private_rooms' && (
                                 <div 
-                                    className={`rounded-2xl border transition-all cursor-pointer flex flex-col justify-between overflow-hidden p-6 md:p-8 ${isEntirePlace ? 'border-black ring-1 ring-black bg-gray-50 shadow-md' : 'border-gray-200 bg-white hover:shadow-md hover:border-gray-300'}`}
+                                    className={`relative overflow-hidden transition-all duration-500 ease-in-out font-sans ${
+                                        isEntirePlace 
+                                            ? 'rounded-3xl border-2 border-amber-500/80 shadow-[0_12px_40px_rgba(245,158,11,0.08)] bg-gradient-to-br from-[#FCFBF7] via-white to-amber-50/10 dark:from-zinc-900/40 dark:via-zinc-950 dark:to-zinc-900/30 my-2' 
+                                            : 'rounded-3xl border border-zinc-200/80 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-lg bg-white dark:bg-zinc-900 my-2'
+                                    }`}
                                     onClick={() => {
                                         toggleConfigSelection('entire_place', listing.rooms?.map(r => r.id) || []);
                                         document.getElementById('booking-card')?.scrollIntoView({ behavior: 'smooth' });
                                     }}
                                 >
-                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                                        <div>
-                                            <h3 className="font-bold text-xl text-gray-900">Entire {listing.type || 'Property'}</h3>
-                                            <p className="text-base text-gray-500 mt-2">Book the entire place for your stay. Complete privacy and full access.</p>
+                                    {isEntirePlace && (
+                                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 z-20" />
+                                    )}
+
+                                    <div className="flex flex-col md:flex-row w-full overflow-hidden cursor-pointer">
+                                        {/* Left Media Pane */}
+                                        <div className="relative w-full md:w-[38%] h-56 md:h-64 overflow-hidden bg-zinc-900 flex-shrink-0 group">
+                                            <img 
+                                                src={listing.imageUrl} 
+                                                alt={`Entire ${listing.type || 'Property'}`}
+                                                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+                                            />
+                                            <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors duration-300" />
+                                            
+                                            {/* Badge overlays */}
+                                            <div className="absolute top-4 left-4 flex flex-col gap-1.5 z-10">
+                                                {isEntirePlace ? (
+                                                    <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500 text-black text-[10px] font-bold uppercase tracking-wider shadow-md">
+                                                        <Sparkles className="w-3 h-3" />
+                                                        Selected Configuration
+                                                    </span>
+                                                ) : (
+                                                    <span className="px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-sm text-white text-[10px] font-semibold uppercase tracking-wider border border-white/10">
+                                                        Entire Property
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
-                                        <div className="text-left md:text-right">
-                                            <span className="font-bold text-2xl text-[#0284C7] block">{formatPrice(listing.price, listing.currency)}<span className="text-sm font-normal text-gray-500"> /night</span></span>
+
+                                        {/* Right Details Deck */}
+                                        <div className="flex-1 p-6 md:p-8 flex flex-col justify-between relative bg-white dark:bg-zinc-900">
+                                            <div>
+                                                {/* Top Row: Category and Nightly Price */}
+                                                <div className="flex justify-between items-start gap-4 mb-2">
+                                                    <div>
+                                                        <span className="text-[10px] font-bold tracking-widest text-zinc-400 dark:text-zinc-500 uppercase block mb-1">
+                                                            Grand Residence Booking
+                                                        </span>
+                                                        <h3 className="text-xl md:text-2xl font-bold text-zinc-950 dark:text-white tracking-tight">
+                                                            Entire {listing.type || 'Property'}
+                                                        </h3>
+                                                    </div>
+                                                    <div className="text-right flex-shrink-0">
+                                                        <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-1">Nightly Price</span>
+                                                        <span className="font-extrabold text-xl md:text-2xl text-zinc-900 dark:text-white">
+                                                            {formatPrice(listing.price, listing.currency)}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Capacity badges */}
+                                                <div className="flex flex-wrap gap-2 mb-4">
+                                                    <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700/60 px-2.5 py-1 rounded-md flex items-center gap-1">
+                                                        <Users className="w-3 h-3 text-amber-500" />
+                                                        Exclusive Group Access
+                                                    </span>
+                                                    <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700/60 px-2.5 py-1 rounded-md flex items-center gap-1">
+                                                        <Shield className="w-3 h-3 text-amber-500" />
+                                                        100% Private Seclusion
+                                                    </span>
+                                                </div>
+
+                                                {/* Short description */}
+                                                <p className="text-zinc-500 dark:text-zinc-400 text-sm leading-relaxed mb-4">
+                                                    Secure full exclusive possession of this grand {listing.type || 'Property'}. Access all bedrooms, bathrooms, and living spaces with zero shared elements.
+                                                </p>
+
+                                                {/* SELECTED PERK SECTION */}
+                                                {isEntirePlace && (
+                                                    <div className="p-4 rounded-xl bg-amber-50/40 dark:bg-amber-950/10 border border-amber-200/50 dark:border-amber-900/30 space-y-3">
+                                                        <div className="flex items-start gap-2.5">
+                                                            <Sparkles className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                                                            <div>
+                                                                <h4 className="text-[11px] font-bold text-amber-800 dark:text-amber-400 uppercase tracking-wider">
+                                                                    PREMIUM PROPERTY ACCESS ACTIVATED ✨
+                                                                </h4>
+                                                                <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed mt-0.5">
+                                                                    Your stay configures the entire estate for your arrival. Enjoy dedicated concierge assistance, zero interruptions, and bespoke preparation of all residential wings.
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Action Row */}
+                                            <div className={`flex items-center justify-between gap-4 mt-6 pt-4 border-t ${isEntirePlace ? 'border-amber-100 dark:border-zinc-800' : 'border-zinc-100 dark:border-zinc-800'}`}>
+                                                <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                                                    Includes all {listing.rooms?.length || 0} suites
+                                                </span>
+
+                                                <div className="flex items-center gap-2">
+                                                    {isEntirePlace ? (
+                                                        <button 
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                const bookingCard = document.getElementById('booking-card');
+                                                                if (bookingCard) {
+                                                                    bookingCard.scrollIntoView({ behavior: 'smooth' });
+                                                                }
+                                                            }}
+                                                            className="px-5 py-2.5 bg-zinc-950 text-white dark:bg-white dark:text-black rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-300 shadow-sm hover:bg-zinc-800 dark:hover:bg-zinc-100 hover:scale-[1.02] flex items-center gap-1.5"
+                                                        >
+                                                            Book Property
+                                                            <ArrowRight className="w-3.5 h-3.5 stroke-[2]" />
+                                                        </button>
+                                                    ) : (
+                                                        <button 
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                toggleConfigSelection('entire_place', listing.rooms?.map(r => r.id) || []);
+                                                                setTimeout(() => {
+                                                                    const bookingCard = document.getElementById('booking-card');
+                                                                    if (bookingCard) {
+                                                                        bookingCard.scrollIntoView({ behavior: 'smooth' });
+                                                                    }
+                                                                }, 300);
+                                                            }}
+                                                            className="px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-300 border bg-white text-zinc-900 border-zinc-300 hover:border-zinc-900 dark:bg-zinc-900 dark:text-white dark:border-zinc-700 dark:hover:border-zinc-400 hover:bg-zinc-50/50"
+                                                        >
+                                                            Select Entire Place
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className={`w-full mt-6 py-4 rounded-xl font-bold transition-all flex justify-center items-center gap-2 ${isEntirePlace ? 'bg-black text-white' : 'border border-gray-900 text-gray-900 hover:bg-gray-50'}`}>
-                                        {isEntirePlace ? (
-                                            <><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg> Entire Place Selected</>
-                                        ) : 'Select Entire Place'}
                                     </div>
                                 </div>
                             )}
