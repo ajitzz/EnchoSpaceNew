@@ -11,6 +11,8 @@ export interface Room {
   name: string;
   price: number;
   capacity?: number;
+  bedrooms?: number; // Added for deep search
+  beds?: number; // Added for deep search
   hasAttachedBathroom?: boolean;
   hasAc?: boolean;
   amenities?: string[];
