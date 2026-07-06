@@ -371,6 +371,37 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
             <h2 className="text-2xl font-bold text-gray-900 mb-6">The Basics</h2>
             <div className="space-y-6">
               <div className="space-y-4">
+                <div className="flex items-center justify-between mb-4">
+                    <button 
+                        type="button" 
+                        className="text-sm font-semibold flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors shadow-sm ml-auto"
+                        onClick={async () => {
+                            try {
+                                const token = localStorage.getItem('token');
+                                const res = await fetch('/api/ai/suggest-listing', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                    body: JSON.stringify({
+                                        type: formData.type,
+                                        city: formData.city,
+                                        amenities: formData.amenities,
+                                        rooms: formData.rooms,
+                                        rentalMode: formData.rentalMode
+                                    })
+                                });
+                                if (res.ok) {
+                                    const data = await res.json();
+                                    if (data.title) setFormData(prev => ({...prev, title: data.title}));
+                                    if (data.description) setFormData(prev => ({...prev, description: data.description}));
+                                }
+                            } catch(e) {
+                                console.error('AI Suggestion failed', e);
+                            }
+                        }}
+                    >
+                        <span>✨ Auto-write with AI</span>
+                    </button>
+                </div>
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Property Title</label>
                   <input 

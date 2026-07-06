@@ -242,7 +242,7 @@ ${listingsContext}
 Answer the user's question accurately. If they ask about something not listed, politely inform them to check the ENCHO Space website.`;
 
            const response = await ai.models.generateContent({
-              model: "gemini-3.5-flash",
+              model: "gemini-1.5-flash",
               contents: msg_body,
               config: {
                  systemInstruction,
@@ -2503,7 +2503,7 @@ Consider weekends and general seasonality. Output ONLY a valid JSON object in th
 Do NOT wrap it in markdown block.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-1.5-flash",
       contents: "Suggest optimal price in JSON.",
       config: {
         systemInstruction,
@@ -2534,7 +2534,7 @@ ${history}
 Draft a polite, helpful, and concise response. Do not include quotes, placeholders, empty messages, '[Admin]', '[Host]', or any 'Replace this sample message' tags in the response text. The response must be a fully complete, ready-to-send message. Do not leave any blanks for the user to fill in.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-1.5-flash",
       contents: "Draft a reply to the guest based on the conversation.",
       config: {
         systemInstruction,
@@ -2571,7 +2571,7 @@ Return ONLY a valid JSON object in this exact format, with no markdown code bloc
 Do NOT include any empty placeholders. Make the description 2-3 sentences long, evoking exclusivity and wanderlust.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-1.5-flash",
       contents: "Generate a name and description for a new unit.",
       config: {
         systemInstruction,
@@ -2606,7 +2606,7 @@ Return ONLY a valid JSON object in this exact format, with no markdown code bloc
 Do NOT include any empty placeholders.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-1.5-flash",
       contents: "Generate experience details.",
       config: {
         systemInstruction,
@@ -2648,7 +2648,7 @@ Return ONLY a valid JSON object matching this structure (with no markdown blocks
 If a detail is not mentioned, make a smart default or leave it empty, but provide a great title and description.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-1.5-flash",
       contents: prompt,
       config: {
         systemInstruction,
@@ -2684,7 +2684,7 @@ Return ONLY a valid JSON object in this exact format, with no markdown code bloc
 Do NOT include any empty placeholders, brackets like [Insert City], or generic tags. The output must be fully formed and ready to publish without requiring any edits.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-1.5-flash",
       contents: "Generate title and description based on the details.",
       config: {
         systemInstruction,
