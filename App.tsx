@@ -78,6 +78,7 @@ interface BookingData {
     name: string;
     phone: string;
     totalRent: number;
+    roomIds?: string[];
 }
 
 interface Reservation extends BookingData {
@@ -527,7 +528,7 @@ function App() {
       try {
         const payload = {
             listingId: selectedListing.originalId || selectedListing.id,
-            roomId: selectedListing.selectedConfigId || (selectedListing.originalId ? selectedListing.id : undefined),
+            roomId: data.roomIds ? data.roomIds.join(',') : (selectedListing.selectedConfigId || (selectedListing.originalId ? selectedListing.id : undefined)),
             moveInDate: data.moveInDate,
             configuration: data.configuration,
             name: data.name,

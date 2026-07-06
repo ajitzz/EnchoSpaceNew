@@ -3,7 +3,7 @@ import { SEO } from './SEO';
 import { AdminSEOTab } from './AdminSEOTab';
 import { Listing } from '../types';
 import { HomeIcon, ListIcon,  TrashIcon, EditIcon, CheckCircle2Icon, UserIcon } from './Icons';
-import { Map, Compass, MoreHorizontal } from 'lucide-react';
+import { Map, Compass, MoreHorizontal, Edit3 } from 'lucide-react';
 import { useAuth, User } from './AuthContext';
 import AdminInbox from './AdminInbox';
 import { AdminExperiences } from './AdminExperiences';
@@ -18,6 +18,34 @@ interface AdminDashboardProps {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }) => {
   const [adminMode, setAdminMode] = useState<'stays' | 'experiences'>('stays');
   const [activeTab, setActiveTab] = useState<'analytics' | 'listings' | 'users' | 'settings' | 'offers' | 'reviews' | 'messages' | 'seo'>('analytics');
+  const [editingRoomsListing, setEditingRoomsListing] = useState<Listing | null>(null);
+  const [editingRoomsData, setEditingRoomsData] = useState<any[]>([]);
+
+  const openRoomsEditor = (listing: Listing, e: React.MouseEvent) => {
+      e.stopPropagation();
+      setEditingRoomsListing(listing);
+      setEditingRoomsData(listing.rooms ? JSON.parse(JSON.stringify(listing.rooms)) : []);
+  };
+
+  const saveRoomsData = async () => {
+      if (!editingRoomsListing) return;
+      try {
+          const res = await fetch(`/api/listings/${editingRoomsListing.id}/rooms`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({ rooms: editingRoomsData })
+          });
+          if (res.ok) {
+              setListings(prev => prev.map(l => l.id === editingRoomsListing.id ? { ...l, rooms: editingRoomsData } : l));
+              setEditingRoomsListing(null);
+          } else {
+              alert("Failed to update inventory rooms.");
+          }
+      } catch (err) {
+          console.error(err);
+          alert("Error saving rooms.");
+      }
+  };
   const [listings, setListings] = useState<Listing[]>([]);
   const [experiences, setExperiences] = useState<any[]>([]);
   const [experienceBookings, setExperienceBookings] = useState<any[]>([]);

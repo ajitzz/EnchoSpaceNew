@@ -1,28 +1,45 @@
 const fs = require('fs');
-let code = fs.readFileSync('server.ts', 'utf8');
+let code = fs.readFileSync('server.ts', 'utf-8');
+const searchStr = `    try {
+      const listingRes = await pool.query('SELECT title, user_id FROM listings WHERE id = $1', [listingId]);
+      if (listingRes.rows.length > 0) {
+          listingTitle = listingRes.rows[0].title;
+          hostId = listingRes.rows[0].user_id;
+      }
+    } catch(e) { console.error(e); }`;
 
-// Add imports
-if (!code.includes("import { logger }")) {
-  code = code.replace(
-    "import helmet from 'helmet';",
-    "import helmet from 'helmet';\nimport pinoHttp from 'pino-http';\nimport { logger } from './src/lib/logger/index.js';\nimport { globalErrorHandler } from './src/lib/middleware/errorHandler.js';"
-  );
+const replaceStr = `    try {
+      const listingRes = await pool.query('SELECT title, user_id, rooms FROM listings WHERE id = $1', [listingId]);
+      if (listingRes.rows.length > 0) {
+          listingTitle = listingRes.rows[0].title;
+          hostId = listingRes.rows[0].user_id;
+
+          // Resort Plus: Inventory Deduction Logic
+          let rooms = listingRes.rows[0].rooms;
+          let isUpdated = false;
+          
+          if (roomId && rooms && Array.isArray(rooms)) {
+             rooms = rooms.map((room: any) => {
+                if (room.id === roomId && room.inventory_count !== undefined) {
+                   if (room.inventory_count > 0) {
+                       room.inventory_count -= 1;
+                       isUpdated = true;
+                   }
+                }
+                return room;
+             });
+          }
+
+          if (isUpdated) {
+             await pool.query('UPDATE listings SET rooms = $1::jsonb WHERE id = $2', [JSON.stringify(rooms), listingId]);
+          }
+      }
+    } catch(e) { console.error(e); }`;
+
+if (code.includes(searchStr)) {
+    code = code.replace(searchStr, replaceStr);
+    fs.writeFileSync('server.ts', code);
+    console.log('Successfully patched server.ts!');
+} else {
+    console.log('Could not find target string in server.ts.');
 }
-
-// Replace morgan with pino-http
-if (code.includes("app.use(morgan('combined', {")) {
-  code = code.replace(
-    /app\.use\(morgan\('combined', \{[\s\S]*?\}\)\);/g,
-    "app.use(pinoHttp({ logger }));"
-  );
-}
-
-// Replace global error handler
-if (code.includes("app.use((err: Error, req: Request, res: Response, next: NextFunction) => {")) {
-  code = code.replace(
-    /app\.use\(\(err: Error, req: Request, res: Response, next: NextFunction\) => \{[\s\S]*?\}\);/g,
-    "app.use(globalErrorHandler);"
-  );
-}
-
-fs.writeFileSync('server.ts', code);

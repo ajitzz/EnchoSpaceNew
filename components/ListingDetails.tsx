@@ -535,7 +535,8 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
               configuration: activeConfig.label,
               name: guestName,
               phone: guestPhone,
-              totalRent: currentDayPrice + maintenanceFee
+              totalRent: currentDayPrice + maintenanceFee,
+              roomIds: selectedConfigIds.filter(id => id !== 'entire_place')
           });
       }
   };

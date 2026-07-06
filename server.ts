@@ -2726,10 +2726,31 @@ app.post('/api/bookings', authenticateToken, async (req: AuthRequest, res) => {
     let listingTitle = 'a property';
     let hostId = null;
     try {
-      const listingRes = await pool.query('SELECT title, user_id FROM listings WHERE id = $1', [listingId]);
+      const listingRes = await pool.query('SELECT title, user_id, rooms FROM listings WHERE id = $1', [listingId]);
       if (listingRes.rows.length > 0) {
           listingTitle = listingRes.rows[0].title;
           hostId = listingRes.rows[0].user_id;
+
+          // Resort Plus: Inventory Deduction Logic
+          let rooms = listingRes.rows[0].rooms;
+          let isUpdated = false;
+          
+          if (roomId && rooms && Array.isArray(rooms)) {
+             const selectedIds = String(roomId).split(',');
+             rooms = rooms.map((room: any) => {
+                if (selectedIds.includes(room.id) && room.inventory_count !== undefined) {
+                   if (room.inventory_count > 0) {
+                       room.inventory_count -= 1;
+                       isUpdated = true;
+                   }
+                }
+                return room;
+             });
+          }
+
+          if (isUpdated) {
+             await pool.query('UPDATE listings SET rooms = $1::jsonb WHERE id = $2', [JSON.stringify(rooms), listingId]);
+          }
       }
     } catch(e) { console.error(e); }
 
