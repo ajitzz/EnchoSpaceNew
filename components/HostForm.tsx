@@ -6,7 +6,7 @@ import { PhotoUpload, PhotoData } from './PhotoUpload';
 import { AmenitiesPicker } from './AmenitiesPicker';
 import { useAuth } from './AuthContext';
 import { 
-  Building2, Home, Tractor, Coffee, Ship, Tent, Caravan, Castle, Mountain, Box, Circle, Leaf, X, Eye
+  Building2, Home, Trees, Tractor, Coffee, Ship, Tent, Caravan, Castle, Mountain, Box, Circle, Leaf, X, Eye
 } from 'lucide-react';
 import { useToast } from './ToastContext';
 import ListingDetails from './ListingDetails';
