@@ -25,7 +25,9 @@ import {
   Maximize2,
   Minimize2,
   Info,
-  X
+  X,
+  Shield,
+  Eye
 } from 'lucide-react';
 
 interface RoomType {
@@ -49,12 +51,137 @@ interface ListingType {
 }
 
 interface PremiumInventoryUnitCardProps {
+  key?: string | number;
   room: RoomType;
   listing: ListingType;
   isSelected: boolean;
   toggleSelection: () => void;
   formatPrice: (price: number, currency: string) => string;
 }
+
+interface PrivacyDetails {
+  score: number;
+  label: string;
+  description: string;
+  privateAmenities: string[];
+  sharedAmenities: string[];
+  macroContext: string;
+  microContext: string;
+  acousticRating: number;
+  acousticLabel: string;
+  acousticDesc: string;
+  crowdingRating: number;
+  crowdingLabel: string;
+  crowdingDesc: string;
+}
+
+export const getPrivacyDetails = (roomName: string, listingTitle: string): PrivacyDetails => {
+  const name = roomName.toLowerCase();
+  
+  if (
+    name.includes('cottage') || 
+    name.includes('villa') || 
+    name.includes('bungalow') || 
+    name.includes('house') || 
+    name.includes('bhk') || 
+    name.includes('chalet') || 
+    name.includes('cabin') || 
+    name.includes('penthouse')
+  ) {
+    return {
+      score: 95,
+      label: "Standalone Luxury",
+      description: "A detached standalone unit with dedicated entrance and zero shared physical walls.",
+      privateAmenities: [
+        "Private Entrance & Keypad",
+        "Ensuite Master Bathroom",
+        "Private Kitchenette & Dining",
+        "Dedicated Balcony / Garden Patio",
+        "In-unit Washer & Dryer",
+        "Individually Controlled AC & Heat"
+      ],
+      sharedAmenities: [
+        "Resort Pool, Spa & Wellness Gym",
+        "Clubhouse Lounge & Fine Dining",
+        "Valet Parking & Car charging",
+        "Central Estate Gardens & Concierge"
+      ],
+      macroContext: "Standalone Cottage",
+      microContext: "No Shared Walls",
+      acousticRating: 100,
+      acousticLabel: "Whisper-Quiet: 100% Standalone Air-Gap",
+      acousticDesc: "Zero structural contact with any adjoining suites. Double-paned acoustic glass secures absolute quiet.",
+      crowdingRating: 100,
+      crowdingLabel: "Grounds Density: Peak Seclusion (0 Co-Guests)",
+      crowdingDesc: "Complete lockout of the unit area. Dedicated private grounds access with zero shared thoroughfares."
+    };
+  }
+  
+  if (
+    name.includes('suite') || 
+    name.includes('apartment') || 
+    name.includes('deluxe') || 
+    name.includes('wing') || 
+    name.includes('studio') || 
+    name.includes('loft')
+  ) {
+    return {
+      score: 80,
+      label: "Elite Seclusion",
+      description: "An exclusive self-contained suite or apartment situated in a premium wing of the main villa.",
+      privateAmenities: [
+        "Keyless Access Suite Door",
+        "Ensuite Luxury Marble Bath",
+        "Private Lounge & Media Space",
+        "Dedicated Executive Workspace",
+        "Mini bar & Espresso station"
+      ],
+      sharedAmenities: [
+        "Shared Villa Foyer & Entrance",
+        "Grand Courtyard & Fire Pit",
+        "Main Resort Swimming Pool",
+        "Private Dining Salon",
+        "Complimentary Shuttle Service"
+      ],
+      macroContext: "Exclusive Residence Wing",
+      microContext: "Dedicated Guest Suite",
+      acousticRating: 85,
+      acousticLabel: "High Seclusion: 45dB Double Masonry Core",
+      acousticDesc: "Double cavity brickwork and acoustic sound dampening sheets inside drywall keep surrounding sounds fully locked out.",
+      crowdingRating: 80,
+      crowdingLabel: "Grounds Density: Diluted Luxury (Boutique Footprint)",
+      crowdingDesc: "Very low shared foot traffic. Shared resort pool and foyers maintain generous visual dilution."
+    };
+  }
+  
+  // Default - Private room or cozy room
+  return {
+    score: 65,
+    label: "Ensuite Private Room",
+    description: "A secure private bedroom with dedicated ensuite bathroom, situated inside a gorgeous shared estate.",
+    privateAmenities: [
+      "Lockable Soundproof Door",
+      "Private Ensuite Bathroom",
+      "Dedicated Laptop Desk & Safe",
+      "In-room Wardrobe & Smart TV"
+    ],
+    sharedAmenities: [
+      "Shared Gourmet Chef's Kitchen",
+      "Villa Living Room & Fireplace",
+      "Main Patio & Sun Loungers",
+      "Spa, Gym & Tennis Courts",
+      "Shared Laundry Facility"
+    ],
+    macroContext: "Luxury Lodge Room",
+    microContext: "Shared Estate Living",
+    acousticRating: 72,
+    acousticLabel: "Standard Comfort: 35dB Sound Barrier",
+    acousticDesc: "Solid-core wooden entry door with thermal seal blocks general corridor noise for an optimal night's sleep.",
+    crowdingRating: 65,
+    crowdingLabel: "Grounds Density: Intimate Co-living (4-8 Residents)",
+    crowdingDesc: "Co-living configuration. High-end shared spaces bring together a tight-knit circle of verified professionals."
+  };
+};
 
 const PremiumInventoryUnitCard = ({ 
   room, 
@@ -68,6 +195,8 @@ const PremiumInventoryUnitCard = ({
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [videoError, setVideoError] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  const privacy = getPrivacyDetails(room.name, listing.title);
 
   // Auto-play list of images as an elegant slow slideshow when selected
   useEffect(() => {
@@ -176,12 +305,22 @@ const PremiumInventoryUnitCard = ({
             {/* Top Row: Category and Nightly Price */}
             <div className="flex justify-between items-start gap-4 mb-2">
               <div>
-                <span className="text-[10px] font-bold tracking-widest text-zinc-400 dark:text-zinc-500 uppercase block mb-1">
-                  Resort Accommodation
+                <span className="text-[10px] font-bold tracking-widest text-zinc-400 dark:text-zinc-500 uppercase block mb-1 font-mono">
+                  {privacy.macroContext}
                 </span>
-                <h3 className="text-xl md:text-2xl font-bold text-zinc-950 dark:text-white tracking-tight">
+                <h3 className="text-xl md:text-2xl font-bold text-zinc-950 dark:text-white tracking-tight flex items-center gap-2">
                   {room.name}
                 </h3>
+                
+                {/* Macro-Micro Context Pills */}
+                <div className="flex flex-wrap gap-1.5 mt-1.5 mb-3">
+                  <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 border border-amber-500/20">
+                    {privacy.macroContext}
+                  </span>
+                  <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+                    {privacy.microContext}
+                  </span>
+                </div>
               </div>
               <div className="text-right flex-shrink-0">
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-1">Nightly Price</span>
@@ -214,45 +353,11 @@ const PremiumInventoryUnitCard = ({
               )}
             </div>
 
+
             {/* Short description */}
             <p className="text-zinc-500 dark:text-zinc-400 text-sm line-clamp-2 leading-relaxed">
               {room.description || `Bespoke accommodation in ${listing.title}. Features luxury bedding, private access, and signature amenities.`}
             </p>
-
-            {/* SELECTED PERK SECTION: Clean, spacious, and perfectly aligned */}
-            {isSelected && (
-              <div className="mt-4 p-4 rounded-xl bg-amber-50/40 dark:bg-amber-950/10 border border-amber-200/50 dark:border-amber-900/30 space-y-3">
-                <div className="flex items-start gap-2.5">
-                  <Sparkles className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
-                  <div>
-                    <h4 className="text-[11px] font-bold text-amber-800 dark:text-amber-400 uppercase tracking-wider">
-                      STAY ARCHITECTURE ENHANCED ✨
-                    </h4>
-                    <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed mt-0.5">
-                      Adding this private residence unlocks full resort integration: butler services, priority restaurant reservations, and wellness lounge access.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Reservation Timeline Block */}
-                <div className="pt-2.5 border-t border-amber-100 dark:border-zinc-800 flex items-center justify-between text-[10px] font-medium text-zinc-500">
-                  <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-                    <span className="w-3.5 h-3.5 rounded-full bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center font-bold text-[9px]">✓</span>
-                    <span>Resort Stay Selected</span>
-                  </div>
-                  <span className="text-zinc-300 dark:text-zinc-700">➔</span>
-                  <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
-                    <span className="w-3.5 h-3.5 rounded-full bg-amber-100 dark:bg-amber-950 flex items-center justify-center font-bold text-[9px] animate-pulse">2</span>
-                    <span>{room.name} Added</span>
-                  </div>
-                  <span className="text-zinc-300 dark:text-zinc-700">➔</span>
-                  <div className="flex items-center gap-1 opacity-60">
-                    <Lock className="w-3 h-3" />
-                    <span>Checkout</span>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Action Row */}
@@ -328,10 +433,10 @@ const PremiumInventoryUnitCard = ({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
               transition={{ type: "spring", duration: 0.5 }}
-              className="relative bg-white dark:bg-zinc-900 w-full max-w-5xl rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row h-auto max-h-[90vh] md:h-[600px] border border-zinc-100 dark:border-zinc-800 z-10"
+              className="relative bg-white dark:bg-zinc-900 w-full max-w-5xl rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row h-auto max-h-[90vh] md:h-[650px] border border-zinc-100 dark:border-zinc-800 z-10"
             >
-              {/* Media Column (60% width) */}
-              <div className="relative w-full md:w-[60%] h-[260px] md:h-full bg-black shrink-0 overflow-hidden">
+              {/* Media Column (50% width on md+) */}
+              <div className="relative w-full md:w-[50%] h-[260px] md:h-full bg-black shrink-0 overflow-hidden">
                 {room.video_url && !videoError ? (
                   <div className="w-full h-full relative">
                     <video 
@@ -415,7 +520,7 @@ const PremiumInventoryUnitCard = ({
                 </div>
               </div>
 
-              {/* Information Column (40% width) */}
+              {/* Information Column (50% width on md+, fully scrollable) */}
               <div className="flex-1 p-6 md:p-8 flex flex-col justify-between overflow-y-auto h-full bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">
                 
                 {/* Scrollable details container */}
@@ -423,7 +528,7 @@ const PremiumInventoryUnitCard = ({
                   {/* Close button & Category */}
                   <div className="flex justify-between items-start">
                     <div>
-                      <span className="text-[10px] font-bold tracking-wider text-zinc-400 uppercase font-mono">Premium Suite</span>
+                      <span className="text-[10px] font-bold tracking-wider text-zinc-400 uppercase font-mono">{privacy.macroContext}</span>
                       <h3 className="text-2xl font-bold mt-1 tracking-tight text-zinc-950 dark:text-white">{room.name}</h3>
                     </div>
                     <button 
@@ -437,7 +542,7 @@ const PremiumInventoryUnitCard = ({
                   {/* Pricing and Available units */}
                   <div className="flex justify-between items-baseline py-3 border-y border-zinc-100 dark:border-zinc-800">
                     <div>
-                      <span className="text-[10px] font-bold text-zinc-400 uppercase block mb-0.5">Rate per night</span>
+                      <span className="text-[10px] font-bold text-zinc-400 uppercase block mb-0.5 font-mono">Rate per night</span>
                       <span className="text-3xl font-extrabold text-zinc-950 dark:text-white">
                         {formatPrice(room.price, listing.currency)}
                       </span>
@@ -451,6 +556,75 @@ const PremiumInventoryUnitCard = ({
                         {room.inventory_count} remaining
                       </span>
                     )}
+                  </div>
+
+                  {/* Privacy, Acoustic, & Crowding Density Spectrum Gauges */}
+                  <div className="p-4 rounded-2xl bg-zinc-50/60 dark:bg-zinc-800/25 border border-zinc-100 dark:border-zinc-800/80 space-y-4">
+                    {/* Metric 1: General Privacy */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5 font-sans">
+                          <Shield className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                          Spatial Privacy Index
+                        </span>
+                        <span className="text-[11px] font-mono font-extrabold text-amber-600 dark:text-amber-400">
+                          {privacy.score}% — {privacy.label}
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-amber-500 transition-all duration-1000 ease-out" 
+                          style={{ width: `${privacy.score}%` }} 
+                        />
+                      </div>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed font-light">
+                        {privacy.description}
+                      </p>
+                    </div>
+
+                    {/* Metric 2: Acoustic Seclusion */}
+                    <div className="space-y-1 pt-2 border-t border-zinc-100/60 dark:border-zinc-800/50">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5 font-sans">
+                          <Volume2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                          Acoustic Isolation Index
+                        </span>
+                        <span className="text-[11px] font-mono font-extrabold text-emerald-600 dark:text-emerald-400">
+                          {privacy.acousticRating}% Seclusion
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-emerald-500 transition-all duration-1000 ease-out" 
+                          style={{ width: `${privacy.acousticRating}%` }} 
+                        />
+                      </div>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed font-light">
+                        <strong>{privacy.acousticLabel}:</strong> {privacy.acousticDesc}
+                      </p>
+                    </div>
+
+                    {/* Metric 3: Crowding Density */}
+                    <div className="space-y-1 pt-2 border-t border-zinc-100/60 dark:border-zinc-800/50">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5 font-sans">
+                          <Users className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                          Social Crowding Density
+                        </span>
+                        <span className="text-[11px] font-mono font-extrabold text-blue-600 dark:text-blue-400">
+                          {privacy.crowdingRating}% Dilution
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-blue-500 transition-all duration-1000 ease-out" 
+                          style={{ width: `${privacy.crowdingRating}%` }} 
+                        />
+                      </div>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed font-light">
+                        <strong>{privacy.crowdingLabel}:</strong> {privacy.crowdingDesc}
+                      </p>
+                    </div>
                   </div>
 
                   {/* Room Description */}
@@ -467,7 +641,7 @@ const PremiumInventoryUnitCard = ({
                       <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-100 dark:border-zinc-800 flex items-center gap-2.5">
                         <Users className="w-4 h-4 text-amber-500" />
                         <div>
-                          <span className="text-[9px] text-zinc-400 dark:text-zinc-500 uppercase font-bold block">Capacity</span>
+                          <span className="text-[9px] text-zinc-400 dark:text-zinc-500 uppercase font-bold block font-mono">Capacity</span>
                           <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">{room.capacity} VIP Guests</span>
                         </div>
                       </div>
@@ -476,16 +650,60 @@ const PremiumInventoryUnitCard = ({
                       <div className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-100 dark:border-zinc-800 flex items-center gap-2.5">
                         <Bed className="w-4 h-4 text-amber-500" />
                         <div>
-                          <span className="text-[9px] text-zinc-400 dark:text-zinc-500 uppercase font-bold block">Accommodations</span>
+                          <span className="text-[9px] text-zinc-400 dark:text-zinc-500 uppercase font-bold block font-mono">Accommodations</span>
                           <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">{room.bedrooms} Bedroom</span>
                         </div>
                       </div>
                     )}
                   </div>
 
-                  {/* Signature Inclusions (Aesthetic layout with NO overlapping) */}
+                  {/* Dynamic Interactive Matrix: My Space vs. Shared Space */}
+                  <div className="space-y-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      <h4 className="text-xs font-bold tracking-tight text-zinc-900 dark:text-white uppercase font-mono">
+                        Spatial Matrix: My Space vs. Shared Space
+                      </h4>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4">
+                      {/* My Private Sanctuary Column */}
+                      <div className="p-4 rounded-2xl bg-amber-50/20 dark:bg-amber-950/5 border border-amber-200/50 dark:border-amber-900/10">
+                        <div className="flex items-center gap-1.5 mb-3 text-amber-800 dark:text-amber-400">
+                          <CheckCircle className="w-4 h-4 text-amber-500 shrink-0" />
+                          <span className="text-xs font-bold uppercase tracking-wider font-mono">My Sanctuary (100% Exclusive)</span>
+                        </div>
+                        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {privacy.privateAmenities.map((item, idx) => (
+                            <li key={idx} className="flex items-start gap-2 text-xs text-zinc-600 dark:text-zinc-300">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
+                              <span className="leading-tight">{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Shared Resort Amenities Column */}
+                      <div className="p-4 rounded-2xl bg-zinc-50/80 dark:bg-zinc-800/10 border border-zinc-100 dark:border-zinc-800">
+                        <div className="flex items-center gap-1.5 mb-3 text-zinc-600 dark:text-zinc-400">
+                          <Eye className="w-4 h-4 text-zinc-400 shrink-0" />
+                          <span className="text-xs font-bold uppercase tracking-wider font-mono">Shared Resort Amenities</span>
+                        </div>
+                        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {privacy.sharedAmenities.map((item, idx) => (
+                            <li key={idx} className="flex items-start gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                              <span className="w-1.5 h-1.5 rounded-full bg-zinc-300 dark:bg-zinc-700 mt-1.5 shrink-0" />
+                              <span className="leading-tight">{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Signature Inclusions */}
                   {room.amenities && room.amenities.length > 0 && (
-                    <div>
+                    <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800">
                       <h4 className="text-[11px] font-bold tracking-wider text-zinc-400 dark:text-zinc-500 uppercase font-mono mb-3">Signature Inclusions</h4>
                       <div className="grid grid-cols-2 gap-2.5">
                         {room.amenities.map((am) => (

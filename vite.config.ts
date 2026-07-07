@@ -101,17 +101,7 @@ export default defineConfig(() => {
               {
                 urlPattern: /\/api\/.*/i,
                 method: 'GET',
-                handler: 'StaleWhileRevalidate',
-                options: {
-                  cacheName: 'api-cache',
-                  expiration: {
-                    maxEntries: 100,
-                    maxAgeSeconds: 60 * 60 * 24 // 1 Day
-                  },
-                  cacheableResponse: {
-                    statuses: [0, 200]
-                  }
-                }
+                handler: 'NetworkOnly'
               }
             ]
           }

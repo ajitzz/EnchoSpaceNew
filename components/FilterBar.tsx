@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { uiAudio } from './audio';
 import { ChevronDown, FilterIcon, XIcon, HomeIcon, BriefcaseIcon, TreeIcon } from './Icons';
 import { BarChart, Bar, ResponsiveContainer, Cell } from 'recharts';
+import { Volume2, Shield, Sparkles, Check, Flame } from 'lucide-react';
 
 interface FilterState {
     minPrice?: string;
@@ -13,6 +14,11 @@ interface FilterState {
     bathrooms?: number;
     maxGuests?: number;
     sort?: string;
+    rentalMode?: string;
+    minAcousticRating?: number;
+    minCrowdingRating?: number;
+    mustHaveAc?: boolean;
+    mustHaveAttachedBathroom?: boolean;
 }
 
 interface FilterBarProps {
@@ -78,6 +84,11 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
   const [localBeds, setLocalBeds] = useState(currentFilters.beds || 0);
   const [localBathrooms, setLocalBathrooms] = useState(currentFilters.bathrooms || 0);
   const [localSort, setLocalSort] = useState(currentFilters.sort || '');
+  const [localRentalMode, setLocalRentalMode] = useState(currentFilters.rentalMode || '');
+  const [localMinAcousticRating, setLocalMinAcousticRating] = useState(currentFilters.minAcousticRating || 0);
+  const [localMinCrowdingRating, setLocalMinCrowdingRating] = useState(currentFilters.minCrowdingRating || 0);
+  const [localMustHaveAc, setLocalMustHaveAc] = useState(currentFilters.mustHaveAc || false);
+  const [localMustHaveAttachedBathroom, setLocalMustHaveAttachedBathroom] = useState(currentFilters.mustHaveAttachedBathroom || false);
 
   const openMoreFilters = () => {
     setLocalMin(currentFilters.minPrice || '');
@@ -88,6 +99,11 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
     setLocalBeds(currentFilters.beds || 0);
     setLocalBathrooms(currentFilters.bathrooms || 0);
     setLocalSort(currentFilters.sort || '');
+    setLocalRentalMode(currentFilters.rentalMode || '');
+    setLocalMinAcousticRating(currentFilters.minAcousticRating || 0);
+    setLocalMinCrowdingRating(currentFilters.minCrowdingRating || 0);
+    setLocalMustHaveAc(currentFilters.mustHaveAc || false);
+    setLocalMustHaveAttachedBathroom(currentFilters.mustHaveAttachedBathroom || false);
     setShowMoreFilters(true);
   };
 
@@ -111,6 +127,11 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
         beds: localBeds > 0 ? localBeds : undefined,
         bathrooms: localBathrooms > 0 ? localBathrooms : undefined,
         sort: localSort || undefined,
+        rentalMode: localRentalMode || undefined,
+        minAcousticRating: localMinAcousticRating > 0 ? localMinAcousticRating : undefined,
+        minCrowdingRating: localMinCrowdingRating > 0 ? localMinCrowdingRating : undefined,
+        mustHaveAc: localMustHaveAc || undefined,
+        mustHaveAttachedBathroom: localMustHaveAttachedBathroom || undefined,
     });
     setShowMoreFilters(false);
   };
@@ -124,6 +145,11 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
     setLocalBeds(0);
     setLocalBathrooms(0);
     setLocalSort('');
+    setLocalRentalMode('');
+    setLocalMinAcousticRating(0);
+    setLocalMinCrowdingRating(0);
+    setLocalMustHaveAc(false);
+    setLocalMustHaveAttachedBathroom(false);
     onFilterChange({
         minPrice: undefined,
         maxPrice: undefined,
@@ -133,7 +159,35 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
         beds: undefined,
         bathrooms: undefined,
         sort: undefined,
+        rentalMode: undefined,
+        minAcousticRating: undefined,
+        minCrowdingRating: undefined,
+        mustHaveAc: undefined,
+        mustHaveAttachedBathroom: undefined,
     });
+  };
+
+  const applyPrivacy = () => {
+    onFilterChange({
+        ...currentFilters,
+        rentalMode: localRentalMode || undefined,
+        minAcousticRating: localMinAcousticRating > 0 ? localMinAcousticRating : undefined,
+        minCrowdingRating: localMinCrowdingRating > 0 ? localMinCrowdingRating : undefined,
+    });
+    setActivePopover(null);
+  };
+
+  const clearPrivacy = () => {
+    setLocalRentalMode('');
+    setLocalMinAcousticRating(0);
+    setLocalMinCrowdingRating(0);
+    onFilterChange({
+        ...currentFilters,
+        rentalMode: undefined,
+        minAcousticRating: undefined,
+        minCrowdingRating: undefined,
+    });
+    setActivePopover(null);
   };
 
   // Inline Handlers for Desktop Popovers
@@ -320,6 +374,111 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                         </div>
                          <div className="mt-6 pt-5 border-t border-gray-100 text-center">
                             <button onClick={openMoreFilters} className="text-sm font-semibold underline text-gray-900 hover:text-gray-600 transition-colors">View all amenities</button>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            <div className="relative" ref={activePopover === 'privacy' ? popoverRef : null}>
+                <FilterChip 
+                    label={
+                        currentFilters.rentalMode || currentFilters.minAcousticRating || currentFilters.minCrowdingRating
+                        ? 'Privacy Active'
+                        : 'Privacy & Seclusion'
+                    } 
+                    hasDropdown 
+                    active={!!currentFilters.rentalMode || !!currentFilters.minAcousticRating || !!currentFilters.minCrowdingRating}
+                    onClick={() => handleChipClick('privacy')}
+                />
+                
+                {activePopover === 'privacy' && (
+                    <div className="absolute top-[calc(100%+0.5rem)] left-0 bg-white rounded-[2rem] shadow-[0_12px_48px_rgba(0,0,0,0.12)] border border-gray-100 p-6 md:p-8 w-[90vw] max-w-[360px] z-50 animate-scale-in font-sans">
+                        <h4 className="font-extrabold text-gray-900 mb-1 text-lg flex items-center gap-2">
+                            <Shield className="w-5 h-5 text-amber-500" />
+                            Privacy & Seclusion
+                        </h4>
+                        <p className="text-xs text-gray-500 mb-5 leading-relaxed">Select acoustic levels, crowding limits, and space layout preferences.</p>
+                        
+                        {/* Rental Mode Selection */}
+                        <div className="mb-5">
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Space Mode</label>
+                            <div className="flex gap-2">
+                                <button 
+                                    onClick={() => setLocalRentalMode(localRentalMode === 'entire_place' ? '' : 'entire_place')}
+                                    className={`flex-1 py-2 px-3 rounded-xl border text-xs font-extrabold transition-all ${localRentalMode === 'entire_place' ? 'bg-gray-900 border-gray-900 text-white shadow-md' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`}
+                                >
+                                    Entire Space
+                                </button>
+                                <button 
+                                    onClick={() => setLocalRentalMode(localRentalMode === 'private_rooms' ? '' : 'private_rooms')}
+                                    className={`flex-1 py-2 px-3 rounded-xl border text-xs font-extrabold transition-all ${localRentalMode === 'private_rooms' ? 'bg-gray-900 border-gray-900 text-white shadow-md' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`}
+                                >
+                                    Private Room
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Acoustic Seclusion Rating */}
+                        <div className="mb-5">
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                <Volume2 className="w-3.5 h-3.5 text-emerald-500" />
+                                Decibel Shielding
+                            </label>
+                            <div className="flex flex-col gap-1.5">
+                                {[
+                                    { value: 100, label: "Whisper-Quiet (100%)", desc: "No shared walls" },
+                                    { value: 85, label: "High Isolation (85%+)", desc: "Sound cavity insulation" },
+                                    { value: 70, label: "Comfort (70%+)", desc: "Standard residential" }
+                                ].map((item) => (
+                                    <button 
+                                        key={item.value}
+                                        onClick={() => setLocalMinAcousticRating(localMinAcousticRating === item.value ? 0 : item.value)}
+                                        className={`flex items-center justify-between p-2.5 rounded-xl border text-left transition-all ${localMinAcousticRating === item.value ? 'bg-emerald-50/50 border-emerald-500 text-emerald-950 shadow-sm' : 'bg-white border-gray-100 text-gray-600 hover:bg-gray-50'}`}
+                                    >
+                                        <div>
+                                            <p className="text-xs font-bold">{item.label}</p>
+                                            <p className="text-[10px] text-gray-400 font-medium">{item.desc}</p>
+                                        </div>
+                                        {localMinAcousticRating === item.value && (
+                                            <Check className="w-4 h-4 text-emerald-500" />
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Social Crowding Dilution */}
+                        <div className="mb-6">
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                                Social Density Dilution
+                            </label>
+                            <div className="flex flex-col gap-1.5">
+                                {[
+                                    { value: 100, label: "Peak Seclusion (100%)", desc: "Zero guest overlap" },
+                                    { value: 80, label: "Diluted Luxury (80%+)", desc: "Generous visual buffer" },
+                                    { value: 65, label: "Co-living (65%+)", desc: "Premium verified community" }
+                                ].map((item) => (
+                                    <button 
+                                        key={item.value}
+                                        onClick={() => setLocalMinCrowdingRating(localMinCrowdingRating === item.value ? 0 : item.value)}
+                                        className={`flex items-center justify-between p-2.5 rounded-xl border text-left transition-all ${localMinCrowdingRating === item.value ? 'bg-amber-50/50 border-amber-500 text-amber-950 shadow-sm' : 'bg-white border-gray-100 text-gray-600 hover:bg-gray-50'}`}
+                                    >
+                                        <div>
+                                            <p className="text-xs font-bold">{item.label}</p>
+                                            <p className="text-[10px] text-gray-400 font-medium">{item.desc}</p>
+                                        </div>
+                                        {localMinCrowdingRating === item.value && (
+                                            <Check className="w-4 h-4 text-amber-500" />
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="flex justify-between items-center pt-4 border-t border-gray-100">
+                            <button onClick={clearPrivacy} className="text-xs font-bold underline text-gray-500 hover:text-gray-900 transition-colors">Clear</button>
+                            <button onClick={applyPrivacy} className="bg-gray-900 text-white px-6 py-2.5 rounded-xl font-bold text-xs hover:bg-black transition-all shadow-md active:scale-95">Apply</button>
                         </div>
                     </div>
                 )}
@@ -522,6 +681,122 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                                     </div>
                                 </div>
                             ))}
+                        </div>
+                    </section>
+
+                    <div className="w-full h-px bg-gray-100"></div>
+
+                    {/* Premium Seclusion & Comfort Options */}
+                    <section>
+                        <h3 className="text-2xl font-bold text-gray-900 mb-2 tracking-tight flex items-center gap-2">
+                            <Shield className="w-6 h-6 text-amber-500" />
+                            Premium Seclusion & Comfort
+                        </h3>
+                        <p className="text-gray-500 text-base mb-8">Refine your search by privacy indices, acoustic decibel shields, and spatial configs.</p>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl">
+                            {/* Rental Mode */}
+                            <div>
+                                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Space Configuration</label>
+                                <div className="flex gap-2">
+                                    {[
+                                        { value: 'entire_place', label: 'Entire Place Only' },
+                                        { value: 'private_rooms', label: 'Private Room Only' },
+                                        { value: '', label: 'Any Configuration' }
+                                    ].map((opt) => (
+                                        <button 
+                                            key={opt.value}
+                                            type="button"
+                                            onClick={() => setLocalRentalMode(opt.value)}
+                                            className={`flex-1 py-3 px-2 rounded-xl border text-xs font-bold transition-all text-center ${localRentalMode === opt.value ? 'bg-gray-900 border-gray-900 text-white shadow-md' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Acoustic Seclusion Slider/Group */}
+                            <div>
+                                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1">
+                                    <Volume2 className="w-4 h-4 text-emerald-500" />
+                                    Decibel Shielding level
+                                </label>
+                                <div className="flex gap-2">
+                                    {[
+                                        { value: 0, label: 'Any' },
+                                        { value: 70, label: 'Comfort (70%+)' },
+                                        { value: 85, label: 'High (85%+)' },
+                                        { value: 100, label: 'Silent (100%)' }
+                                    ].map((opt) => (
+                                        <button 
+                                            key={opt.value}
+                                            type="button"
+                                            onClick={() => setLocalMinAcousticRating(opt.value)}
+                                            className={`flex-1 py-3 px-1 rounded-xl border text-xs font-bold transition-all text-center ${localMinAcousticRating === opt.value ? 'bg-emerald-500 border-emerald-500 text-white shadow-md' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Social Density Dilution */}
+                            <div>
+                                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1">
+                                    <Sparkles className="w-4 h-4 text-amber-500" />
+                                    Crowding Density Dilution
+                                </label>
+                                <div className="flex gap-2">
+                                    {[
+                                        { value: 0, label: 'Any' },
+                                        { value: 65, label: 'Co-living (65%+)' },
+                                        { value: 80, label: 'Diluted (80%+)' },
+                                        { value: 100, label: 'Peak (100%)' }
+                                    ].map((opt) => (
+                                        <button 
+                                            key={opt.value}
+                                            type="button"
+                                            onClick={() => setLocalMinCrowdingRating(opt.value)}
+                                            className={`flex-1 py-3 px-1 rounded-xl border text-xs font-bold transition-all text-center ${localMinCrowdingRating === opt.value ? 'bg-amber-500 border-amber-500 text-white shadow-md' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Specific Room Attributes */}
+                            <div>
+                                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Room comfort & features</label>
+                                <div className="flex flex-col gap-3">
+                                    <label className="flex items-center justify-between p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors group">
+                                        <div className="flex flex-col">
+                                            <span className="text-sm font-bold text-gray-800">Must have AC (Air Conditioning)</span>
+                                            <span className="text-xs text-gray-400">Guaranteed climatized private room</span>
+                                        </div>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={localMustHaveAc}
+                                            onChange={() => setLocalMustHaveAc(!localMustHaveAc)}
+                                            className="w-5 h-5 accent-gray-900 border-gray-300 rounded cursor-pointer" 
+                                        />
+                                    </label>
+
+                                    <label className="flex items-center justify-between p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors group">
+                                        <div className="flex flex-col">
+                                            <span className="text-sm font-bold text-gray-800">Must have Attached Ensuite Bathroom</span>
+                                            <span className="text-xs text-gray-400">Guaranteed private connected bathroom</span>
+                                        </div>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={localMustHaveAttachedBathroom}
+                                            onChange={() => setLocalMustHaveAttachedBathroom(!localMustHaveAttachedBathroom)}
+                                            className="w-5 h-5 accent-gray-900 border-gray-300 rounded cursor-pointer" 
+                                        />
+                                    </label>
+                                </div>
+                            </div>
                         </div>
                     </section>
                     <div className="h-10"></div>

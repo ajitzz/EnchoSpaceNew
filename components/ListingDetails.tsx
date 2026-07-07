@@ -34,8 +34,9 @@ import { OptimizedImage, getOptimizedUrl } from './OptimizedImage';
 import { useCurrency } from './CurrencyContext';
 import { ImageGallery } from './ImageGallery';
 import PremiumInventoryUnitCard from './PremiumInventoryUnitCard';
-import { Sparkles, Home, Shield, Eye, Lock, Users, Bed, ArrowRight, CheckCircle2, HelpCircle } from 'lucide-react';
+import { Sparkles, Home, Shield, Eye, Lock, Users, Bed, ArrowRight, CheckCircle2, HelpCircle, Layers, Volume2 } from 'lucide-react';
 import { getRatingWord, formatRating } from '../lib/ratingUtils';
+import { getTaxonomyDetails } from './ListingCard';
 import { io } from 'socket.io-client';
 
 let socket: any = null;
@@ -121,58 +122,318 @@ const NearbyCategorySection = ({ type, points }: { type: string; points: NearbyP
     else if (type === 'GYM') Icon = GymIcon;
 
     return (
-        <div className="border-b border-gray-100 last:border-0 py-4">
+        <div className="border-b border-zinc-100 last:border-0 py-5">
             <div 
                 className={`flex items-start gap-4 ${hasMore ? 'cursor-pointer group' : ''}`}
                 onClick={() => hasMore && setExpanded(!expanded)}
             >
                 {/* Icon */}
-                <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-700 flex-shrink-0 group-hover:bg-gray-100 transition-colors">
-                    <Icon className="w-5 h-5" />
+                <div className="w-10 h-10 rounded-xl bg-zinc-50 border border-zinc-100/50 flex items-center justify-center text-zinc-700 flex-shrink-0 group-hover:bg-zinc-150 group-hover:border-zinc-200 transition-all duration-300">
+                    <Icon className="w-4.5 h-4.5" />
                 </div>
                 
                 {/* Main Content */}
                 <div className="flex-1 min-w-0 pt-0.5">
                     <div className="flex justify-between items-center mb-1">
-                        <span className="font-semibold text-gray-900 truncate pr-2">{topPoint.name}</span>
-                        <span className="text-sm font-medium text-gray-900 whitespace-nowrap">{topPoint.distance}</span>
+                        <span className="font-bold text-zinc-900 text-sm sm:text-base tracking-tight truncate pr-2 group-hover:text-blue-600 transition-colors">{topPoint.name}</span>
+                        <span className="text-xs font-bold text-zinc-500 whitespace-nowrap bg-zinc-50 border border-zinc-100 px-2.5 py-0.5 rounded-md font-mono">{topPoint.distance}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                         <span className="text-xs text-gray-500 font-medium tracking-wide uppercase">{type}</span>
+                         <span className="text-[9px] font-extrabold text-zinc-400 tracking-widest uppercase">{type}</span>
                          {hasMore && !expanded && (
-                             <span className="text-xs text-gray-400 font-medium">+ {otherPoints.length} more</span>
+                             <span className="text-[9px] font-extrabold text-blue-600 bg-blue-50/50 border border-blue-100/20 px-2 py-0.5 rounded uppercase tracking-wider">+ {otherPoints.length} more</span>
                          )}
                     </div>
                 </div>
 
                 {/* Right Arrow */}
                 {hasMore && (
-                    <div className="pt-1 pl-2 text-gray-400 group-hover:text-black transition-colors">
-                        <ChevronDown className={`w-5 h-5 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
+                    <div className="pt-1 pl-2 text-zinc-400 group-hover:text-zinc-900 transition-colors">
+                        <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
                     </div>
                 )}
             </div>
 
-            {/* Expandable Section */}
-            {hasMore && expanded && (
-                <div className="pl-[3.5rem] mt-3 space-y-3 animate-fade-in">
+            {/* Expandable Section with motion */}
+            <motion.div
+                initial={false}
+                animate={{ 
+                    height: expanded ? "auto" : 0,
+                    opacity: expanded ? 1 : 0
+                }}
+                transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                className="overflow-hidden"
+            >
+                <div className="pl-14 mt-4 space-y-3.5 pr-4 border-l border-zinc-100 ml-5 pt-1">
                     {otherPoints.map((point, idx) => (
-                        <div key={idx} className="flex justify-between items-center text-sm pl-0">
-                            <span className="text-gray-600 truncate pr-2">{point.name}</span>
-                            <span className="text-gray-500 whitespace-nowrap">{point.distance}</span>
+                        <div key={idx} className="flex justify-between items-center text-sm">
+                            <span className="text-zinc-600 font-sans font-medium text-xs sm:text-sm truncate pr-2">{point.name}</span>
+                            <span className="text-xs text-zinc-400 font-bold whitespace-nowrap font-mono">{point.distance}</span>
                         </div>
                     ))}
                     <button 
-                        onClick={() => setExpanded(false)}
-                        className="text-xs font-bold text-gray-400 hover:text-gray-600 mt-2 uppercase tracking-wide"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setExpanded(false);
+                        }}
+                        className="text-[9px] font-extrabold text-zinc-400 hover:text-zinc-900 mt-2 uppercase tracking-widest block underline decoration-zinc-200 hover:decoration-zinc-900"
                     >
-                        Close
+                        Minimize list
                     </button>
                 </div>
-            )}
+            </motion.div>
         </div>
     );
 };
+
+interface SelfClosingDropdownProps {
+  title: React.ReactNode;
+  badge?: React.ReactNode;
+  icon?: React.ReactNode;
+  className?: string;
+  children: React.ReactNode;
+}
+
+const SelfClosingDropdown: React.FC<SelfClosingDropdownProps> = ({ title, badge, icon, className = "", children }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) {
+          setIsOpen(false);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [isOpen]);
+
+  return (
+    <div 
+      ref={containerRef} 
+      className={`rounded-2xl border transition-all duration-300 ease-out overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.01)] ${
+        isOpen 
+          ? 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900/90 shadow-[0_4px_20px_rgba(0,0,0,0.05)] ring-1 ring-zinc-100 dark:ring-zinc-850/50' 
+          : 'border-zinc-150/80 dark:border-zinc-800/60 bg-zinc-50/30 dark:bg-zinc-900/10 hover:border-zinc-250 dark:hover:border-zinc-700 hover:bg-zinc-50/80 dark:hover:bg-zinc-900/30'
+      } ${className}`}
+    >
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsOpen(!isOpen);
+        }}
+        className="w-full flex items-center justify-between p-3.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#003B95] dark:focus-visible:ring-blue-500 transition-colors cursor-pointer group"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 flex-1 min-w-0 pr-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {icon && (
+              <span className={`p-1.5 rounded-lg transition-colors ${
+                isOpen ? 'bg-zinc-100 dark:bg-zinc-800 text-[#003B95] dark:text-blue-400' : 'bg-transparent text-zinc-500 group-hover:text-[#003B95] dark:group-hover:text-blue-400 group-hover:bg-zinc-100/50 dark:group-hover:bg-zinc-800/30'
+              }`}>
+                {icon}
+              </span>
+            )}
+            <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 tracking-tight font-sans truncate">
+              {title}
+            </span>
+          </div>
+          {badge && (
+            <div className="flex items-center self-start sm:self-center">
+              {badge}
+            </div>
+          )}
+        </div>
+        <div className="shrink-0 pl-1">
+          <motion.div 
+            animate={{ rotate: isOpen ? 180 : 0 }}
+            transition={{ duration: 0.25, ease: "easeInOut" }}
+            className={`p-1 rounded-full transition-colors ${
+              isOpen ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-850 dark:text-zinc-150' : 'text-zinc-400 group-hover:text-zinc-650 dark:group-hover:text-zinc-300'
+            }`}
+          >
+            <ChevronDown className="w-4 h-4" />
+          </motion.div>
+        </div>
+      </button>
+
+      <motion.div
+        initial={false}
+        animate={{ 
+          height: isOpen ? "auto" : 0,
+          opacity: isOpen ? 1 : 0
+        }}
+        transition={{ duration: 0.25, ease: [0.04, 0.62, 0.23, 0.98] }}
+        className="overflow-hidden"
+      >
+        <div className="px-5 pb-5 pt-2 border-t border-zinc-100/50 dark:border-zinc-800/40 text-xs sm:text-[13px] text-zinc-600 dark:text-zinc-400 leading-relaxed font-normal">
+          {children}
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+interface PrivacySpectrumCardProps {
+  listing: Listing;
+}
+
+const PrivacySpectrumCard: React.FC<PrivacySpectrumCardProps> = ({ listing }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const m = listing.rental_mode || 'entire_place';
+  const tl = (listing.title || '').toLowerCase();
+  const ty = (listing.type || '').toLowerCase();
+
+  let pTitle = "Exclusive Seclusion";
+  let privIndex = 100;
+  let pDesc = "Exclusive Sanctuary: Enjoy complete private occupancy of the entire residence. All bedrooms, living quarters, and premium amenities are reserved solely for your group's comfort, ensuring a pristine and undisturbed stay.";
+
+  if (m === 'private_rooms') {
+    if (tl.includes('resort') || ty.includes('resort') || tl.includes('retreat')) {
+      pTitle = "Resort Suite Seclusion";
+      privIndex = 85;
+      pDesc = "Refined Resort Suite: Relax in your own fully private boutique suite with an en-suite bathroom, paired with seamless access to high-end shared retreat spaces.";
+    } else if (tl.includes('apartment') || ty.includes('apartment') || tl.includes('flat') || tl.includes('shared')) {
+      pTitle = "Co-Living Privacy";
+      privIndex = 60;
+      pDesc = "Bespoke Co-Living: Enjoy a secure, fully private bedroom and personal bathroom, with access to sophisticated shared culinary and social lounges.";
+    } else {
+      pTitle = "Ensuite Privacy";
+      privIndex = 70;
+      pDesc = "Bespoke Private Suite: Your private room includes an en-suite bathroom for your personal use, with common areas providing refined opportunities to socialize.";
+    }
+  } else if (m === 'hybrid') {
+    pTitle = "Privacy Profile";
+    privIndex = 90;
+    pDesc = "Tailored Privacy Profile: A modern, versatile living arrangement designed to offer a perfect balance. Enjoy dedicated quiet spaces alongside access to beautifully designed, curated common areas.";
+  }
+
+  // Adjust entire place to 75% privacy to match the screenshot's design
+  if (m === 'entire_place') {
+    privIndex = 75;
+  }
+
+  // Auto-close when scrolled out of view
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) {
+          setIsOpen(false);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [isOpen]);
+
+  const displayTitle = m === 'entire_place' 
+    ? `ENTIRE ${(listing.type || 'APARTMENT').toUpperCase()} & ROOMS` 
+    : m === 'hybrid'
+    ? `PRIVACY PROFILE`
+    : `${pTitle.toUpperCase()}`;
+
+  const summaryText = m === 'entire_place'
+    ? `Book the full ${listing.type || 'Apartment'} or individual premium rooms: Rooms`
+    : `Book comfortable accommodations with direct access to curated common areas`;
+
+  // Hide 90% privacy badge for hybrid mode as requested
+  const showPrivacyBadge = m !== 'hybrid';
+
+  return (
+    <div 
+      id="privacy-dropdown-container"
+      ref={containerRef}
+      onClick={() => setIsOpen(!isOpen)}
+      className={`rounded-xl border border-zinc-200 bg-white transition-all duration-300 ease-out select-none cursor-pointer p-2.5 mb-5 mt-1 text-zinc-900 hover:shadow-[0_4px_12px_rgba(0,0,0,0.015)] ${
+        isOpen 
+          ? 'shadow-[0_6px_20px_rgba(0,0,0,0.02)] border-zinc-300' 
+          : 'shadow-[0_2px_4px_rgba(0,0,0,0.005)]'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2.5 w-full">
+        {/* Left icon & title */}
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-7 h-7 rounded-lg bg-blue-50/60 flex items-center justify-center text-[#003B95] border border-blue-100/20 shrink-0">
+            <Home className="w-3.5 h-3.5 stroke-[1.8]" />
+          </div>
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap min-w-0">
+            <span className="text-[11px] font-bold text-zinc-800 tracking-wide uppercase font-sans truncate">
+              {displayTitle}
+            </span>
+            {showPrivacyBadge && (
+              <span className="bg-blue-50/70 text-[#003B95] border border-blue-100/20 rounded-full px-1.5 py-0.1 text-[9px] font-bold whitespace-nowrap shrink-0">
+                {privIndex}% Privacy
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Chevron arrow indicator on the right */}
+        <div className="shrink-0 pl-1">
+          <div className={`text-zinc-400 transition-transform duration-250 ${isOpen ? 'rotate-180 text-zinc-750' : ''}`}>
+            <ChevronDown className="w-4 h-4 stroke-[1.8]" />
+          </div>
+        </div>
+      </div>
+
+      {/* Sleek, full-width thin Blue Progress Bar right below the header row */}
+      <div className="w-full h-1 bg-zinc-100 rounded-full overflow-hidden mt-2.5">
+        <div 
+          className="h-full bg-[#003B95] rounded-full transition-all duration-500 ease-out" 
+          style={{ width: `${privIndex}%` }} 
+        />
+      </div>
+
+      {/* Collapsible Deeper Description */}
+      <motion.div
+        initial={false}
+        animate={{ 
+          height: isOpen ? "auto" : 0,
+          opacity: isOpen ? 1 : 0
+        }}
+        transition={{ duration: 0.22, ease: [0.04, 0.62, 0.23, 0.98] }}
+        className="overflow-hidden"
+      >
+        <div className="pt-2.5 mt-2.5 border-t border-zinc-100 text-[11px] sm:text-xs text-zinc-600 leading-relaxed space-y-2 bg-zinc-50/40 p-2.5 rounded-lg">
+          <div className="flex items-center gap-1.5 font-bold text-zinc-800">
+            <Shield className="w-3.5 h-3.5 text-[#003B95] shrink-0" />
+            <span>Privacy Profile Details {showPrivacyBadge ? `(${privIndex}% Secure)` : ''}</span>
+          </div>
+          
+          <div className="font-normal text-zinc-600 leading-relaxed">
+            {pDesc}
+          </div>
+
+          <div className="text-[10px] sm:text-[11px] text-zinc-450 italic border-l border-zinc-200 pl-1.5">
+            {summaryText}
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
 
 const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, similarListings, onListingClick, isFavorite, onToggleFavorite, onBook, onContactHost, onRequestAuth }) => {
   const { user } = useAuth();
@@ -180,6 +441,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
   const { formatPrice } = useCurrency();
   const [showNav, setShowNav] = useState(true);
   const lastScrollY = useRef(0);
+  const taxonomyDetails = getTaxonomyDetails(listing);
   
   // Booking State
   const [bookingStep, setBookingStep] = useState<'AVAILABILITY' | 'CONTACT'>('AVAILABILITY');
@@ -191,6 +453,19 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
       if (listing.rental_mode === 'private_rooms' && listing.rooms?.[0]?.id) return [listing.rooms[0].id];
       return ['entire_place'];
   });
+
+  const [hingeTab, setHingeTab] = useState<'entire' | 'units'>(() => {
+      if (listing.rental_mode === 'private_rooms') return 'units';
+      return selectedConfigIds.includes('entire_place') ? 'entire' : 'units';
+  });
+
+  useEffect(() => {
+      if (selectedConfigIds.includes('entire_place')) {
+          setHingeTab('entire');
+      } else {
+          setHingeTab('units');
+      }
+  }, [selectedConfigIds]);
   
   const [minDate] = useState(getFutureDate(0));
 
@@ -619,11 +894,11 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
       />
     <div className="bg-white min-h-screen animate-fade-in pb-32">
       
-      {/* Main Content Container - Spaced elegantly from top on desktop and flush on mobile */}
-      <div className="max-w-7xl mx-auto md:px-6 pt-0 md:pt-8">
+      {/* Main Content Container - Spaced elegantly on all viewports */}
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
         
         {/* Gallery Grid & Mobile Swipe */}
-        <div className="md:mb-8 relative group md:rounded-2xl overflow-hidden shadow-sm">
+        <div className="mb-6 md:mb-8 relative group rounded-2xl md:rounded-3xl overflow-hidden shadow-md">
             
             
         {/* Unified Top Header Buttons Overlay (Absolute over image/grid) */}
@@ -667,7 +942,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
         </div>
         
         {/* Mobile Carousel (Swipable) */}
-        <div className="md:hidden flex overflow-x-auto snap-x snap-mandatory scrollbar-hide aspect-[4/3] w-full" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        <div className="md:hidden flex overflow-x-auto snap-x snap-mandatory scrollbar-hide aspect-[4/3] sm:aspect-[16/9] w-full" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {images.map((img, i) => (
                 <div key={i} className="w-full h-full flex-shrink-0 snap-center relative">
                     <OptimizedImage 
@@ -678,7 +953,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                         onClick={() => openGallery(i)}
                     />
                     {listing.isVerified && i === 0 && (
-                        <div className="absolute top-16 left-4 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1.5 pointer-events-none">
+                        <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1.5 pointer-events-none">
                             <ShieldCheck className="w-4 h-4 text-blue-600" />
                             <span className="text-xs font-bold tracking-wide text-gray-900 uppercase">Verified Plus</span>
                         </div>
@@ -689,38 +964,38 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                 </div>
             ))}
         </div>
-    {/* Desktop Grid (Airbnb/Zumper style) */}
-            <div className="hidden md:grid grid-cols-4 grid-rows-2 gap-2 h-[450px]">
-                <div className="col-span-2 row-span-2 relative h-full">
+    {/* Desktop Grid (Boutique Swiss Modernist Grid Frame) */}
+            <div className="hidden md:grid grid-cols-4 grid-rows-2 gap-2.5 h-[480px] rounded-2xl overflow-hidden border border-zinc-200 bg-zinc-50 shadow-none">
+                <div className="col-span-2 row-span-2 relative h-full overflow-hidden">
                     <OptimizedImage 
                         src={images[0]} 
                         priority={true}
-                        
-                        className="w-full h-full object-cover hover:brightness-95 transition-all cursor-pointer" 
+                        className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" 
                         alt="Main"
+                        onClick={() => openGallery(0)}
                     />
                     {listing.isVerified && (
-                        <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1.5 pointer-events-none">
+                        <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-md px-3.5 py-1.5 rounded-md shadow-sm border border-zinc-200/40 flex items-center gap-1.5 pointer-events-none">
                             <ShieldCheck className="w-4 h-4 text-blue-600" />
-                            <span className="text-xs font-bold tracking-wide text-gray-900 uppercase">Verified Plus</span>
+                            <span className="text-[10px] font-bold tracking-wider text-zinc-900 uppercase">Verified Plus</span>
                         </div>
                     )}
                 </div>
-                {images.length > 1 && <div><OptimizedImage src={images[1]}  className="w-full h-full object-cover hover:brightness-95 transition-all cursor-pointer" alt="Detail 1" /></div>}
-                {images.length > 2 ? <div><OptimizedImage src={images[2]}  className="w-full h-full object-cover hover:brightness-95 transition-all cursor-pointer" alt="Detail 2" /></div> : <div className="bg-gray-100" />}
-                {images.length > 3 ? <div><OptimizedImage src={images[3]}  className="w-full h-full object-cover hover:brightness-95 transition-all cursor-pointer" alt="Detail 3" /></div> : <div className="bg-gray-100" />}
+                {images.length > 1 && <div className="overflow-hidden h-full"><OptimizedImage src={images[1]}  className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" alt="Detail 1" onClick={() => openGallery(1)} /></div>}
+                {images.length > 2 ? <div className="overflow-hidden h-full"><OptimizedImage src={images[2]}  className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" alt="Detail 2" onClick={() => openGallery(2)} /></div> : <div className="bg-zinc-100" />}
+                {images.length > 3 ? <div className="overflow-hidden h-full"><OptimizedImage src={images[3]}  className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" alt="Detail 3" onClick={() => openGallery(3)} /></div> : <div className="bg-zinc-100" />}
                 {images.length > 4 ? (
-                  <div className="relative">
-                      <OptimizedImage src={images[4]}  className="w-full h-full object-cover hover:brightness-95 transition-all cursor-pointer" alt="Detail 4" />
-                      <button onClick={() => openGallery(0)} className="absolute bottom-4 right-4 bg-white px-4 py-2 rounded-lg text-sm font-semibold shadow-md hover:bg-gray-50 transition-transform active:scale-95">
-                          Show all photos
+                  <div className="relative overflow-hidden h-full">
+                      <OptimizedImage src={images[4]} className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" alt="Detail 4" onClick={() => openGallery(4)} />
+                      <button onClick={() => openGallery(0)} className="absolute bottom-4 right-4 bg-white/95 hover:bg-white border border-zinc-200 text-zinc-900 px-4 py-2.5 rounded-lg text-[10px] font-extrabold uppercase tracking-widest shadow-md hover:scale-[1.02] transition-transform active:scale-95">
+                          View Gallery
                       </button>
                   </div>
                 ) : (
-                    <div className="bg-gray-100 relative">
+                    <div className="bg-zinc-100 relative overflow-hidden h-full">
                        {images.length <= 4 && (
-                          <button onClick={() => openGallery(0)} className="absolute bottom-4 right-4 bg-white px-4 py-2 rounded-lg text-sm font-semibold shadow-md hover:bg-gray-50 transition-transform active:scale-95">
-                              Show all photos
+                          <button onClick={() => openGallery(0)} className="absolute bottom-4 right-4 bg-white/95 hover:bg-white border border-zinc-200 text-zinc-900 px-4 py-2.5 rounded-lg text-[10px] font-extrabold uppercase tracking-widest shadow-md hover:scale-[1.02] transition-transform active:scale-95">
+                              View Gallery
                           </button>
                        )}
                     </div>
@@ -728,59 +1003,92 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
             </div>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 relative">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 lg:gap-12 relative">
             
             {/* Left Column: Details */}
-            <div className="flex-1 min-w-0">
+            <div className="md:col-span-7 lg:col-span-8 min-w-0">
                 
                 {/* Header Info */}
-                <div className="border-b border-gray-200 pb-6 mb-8">
-                    <div className="flex justify-between items-start mb-2">
-                        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 leading-tight">{listing.title}</h1>
+                <motion.div 
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, ease: "easeOut" }}
+                    className="border-b border-zinc-100 pb-8 mb-8"
+                >
+                    <div className="flex justify-between items-start mb-3">
+                        <h1 className="text-3xl md:text-4xl font-extrabold text-zinc-900 tracking-tighter leading-none">{listing.title}</h1>
                     </div>
-                    <div className="flex flex-wrap items-center gap-3 text-gray-600 mb-4 text-sm md:text-base">
-                        <div className="flex items-center gap-2">
-                            <div className="bg-[#003B95] text-white text-sm font-bold px-1.5 py-0.5 rounded-t-md rounded-br-md shadow-sm">
-                                <StarIcon className="w-3.5 h-3.5 fill-current" /> {formatRating(listing.rating)}
-                            </div>
+                    {/* Dynamic Taxonomy Option Tag */}
+                    <div className="mb-4 flex flex-wrap items-center gap-2">
+                        <span className="text-[10px] font-bold tracking-widest uppercase text-[#003B95] bg-blue-50/70 border border-blue-100/30 px-3 py-1 rounded-md shadow-none">
+                            {taxonomyDetails.labelText}
+                        </span>
+                    </div>
+                    
+                    {/* Rating and Reviews Row with clean high-contrast elements */}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-zinc-500 mb-6 text-sm">
+                        <div className="flex items-center gap-1.5 bg-zinc-50 border border-zinc-100 px-2 py-1 rounded-md">
+                            <span className="font-bold text-zinc-900 flex items-center gap-1">
+                                <StarIcon className="w-3.5 h-3.5 fill-[#003B95] text-[#003B95]" />
+                                {formatRating(listing.rating)}
+                            </span>
                             {listing.rating && listing.rating > 0 && (
-                                <span className="font-semibold text-gray-900">
+                                <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
                                     {getRatingWord(listing.rating)}
                                 </span>
                             )}
                         </div>
-                        <span>·</span>
-                        <span className="underline cursor-pointer hover:text-black">{listing.reviewCount} reviews</span>
-                        <span>·</span>
-                        <span className="underline cursor-pointer hover:text-black">{listing.address || "Berlin, Germany"}</span>
+                        <span className="text-zinc-200">|</span>
+                        <span className="underline decoration-zinc-300 hover:decoration-zinc-900 cursor-pointer text-zinc-800 transition-colors">{listing.reviewCount} reviews</span>
+                        <span className="text-zinc-200">|</span>
+                        <span className="underline decoration-zinc-300 hover:decoration-zinc-900 cursor-pointer text-zinc-800 transition-colors">{listing.address || "Berlin, Germany"}</span>
                         {liveViewers > 1 && (
                             <>
-                                <span>·</span>
-                                <span className="flex items-center gap-1.5 text-[#0284C7] font-medium bg-[#0284C7]/10 px-2.5 py-0.5 rounded-full">
-                                    <div className="w-1.5 h-1.5 bg-[#0284C7] rounded-full animate-pulse" />
-                                    {liveViewers} viewing right now
+                                <span className="text-zinc-200">|</span>
+                                <span className="flex items-center gap-1.5 text-blue-600 font-bold bg-blue-50/50 border border-blue-100/30 px-3 py-1 rounded-md text-xs">
+                                    <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-pulse" />
+                                    {liveViewers} people looking now
                                 </span>
                             </>
                         )}
                     </div>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-gray-700 font-medium">
-                        <span>{listing.maxGuests} guests</span>
-                        <span className="text-gray-300">·</span>
-                        <span>{listing.bedrooms || 1} bedroom</span>
-                        <span className="text-gray-300">·</span>
-                        <span>{listing.beds || 1} bed</span>
-                        <span className="text-gray-300">·</span>
-                        <span>{listing.bathrooms || 1} bathroom</span>
+
+                    {/* Specifications Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-zinc-50/50 border border-zinc-100 p-4 rounded-xl">
+                        <div className="flex flex-col">
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-0.5">Capacity</span>
+                            <span className="text-sm font-semibold text-zinc-900">{listing.maxGuests} guests</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-0.5">Bedrooms</span>
+                            <span className="text-sm font-semibold text-zinc-900">{listing.bedrooms || 1} private</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-0.5">Beds</span>
+                            <span className="text-sm font-semibold text-zinc-900">{listing.beds || 1} comfortable</span>
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-0.5">Bathrooms</span>
+                            <span className="text-sm font-semibold text-zinc-900">{listing.bathrooms || 1} clean</span>
+                        </div>
                     </div>
-                </div>
+                </motion.div>
+
+                {/* Minimal Privacy Index Badge & Meter */}
+                <PrivacySpectrumCard listing={listing} />
 
                 {/* About Section */}
-                <div className="mb-10">
-                    <h2 className="text-xl font-bold text-gray-900 mb-4">About this home</h2>
-                    <p className="text-gray-600 leading-relaxed text-base md:text-lg">
-                        {listing.description || "Experience the best of city living in this beautifully furnished apartment. Located in a vibrant neighborhood, you'll have easy access to local cafes, restaurants, and public transport. The space features modern amenities, high-speed Wi-Fi, and a fully equipped kitchen, making it perfect for both short and long-term stays."}
-                    </p>
-                    <button className="mt-4 font-semibold underline text-gray-900 hover:text-gray-700">Show more</button>
+                <div className="mb-12 py-2">
+                    <h2 className="text-xl font-extrabold text-zinc-900 mb-4 tracking-tighter uppercase text-[15px] tracking-wider text-zinc-400">About this residence</h2>
+                    <div className="text-zinc-600 leading-relaxed text-base space-y-4 font-normal">
+                        <p className="font-sans">
+                            {listing.description || "Experience the best of city living in this beautifully furnished apartment. Located in a vibrant neighborhood, you'll have easy access to local cafes, restaurants, and public transport. The space features modern amenities, high-speed Wi-Fi, and a fully equipped kitchen, making it perfect for both short and long-term stays."}
+                        </p>
+                        <p className="hidden md:block text-zinc-500 font-sans font-light">
+                            Architecturally conceived to maximize natural light and layout fluidity, this residence harmonizes contemporary Swiss modernist elements with local cultural context. Every design element—from custom hand-selected furniture to the meticulously planned spatial flow—is engineered to deliver an atmosphere of serene, refined living.
+                        </p>
+                    </div>
+                    <button className="mt-5 text-xs font-bold uppercase tracking-wider text-zinc-900 hover:text-zinc-600 transition-colors underline decoration-zinc-300 hover:decoration-zinc-900">Show more</button>
                 </div>
 
                 {/* Video Tour Section */}
@@ -818,150 +1126,295 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
 
                 {/* Inventory Selection Menu (Complex Listings / Rooms) */}
                 {listing.rooms && listing.rooms.length > 0 && (
-                    <div className="mb-10 py-10 border-t border-zinc-200 dark:border-zinc-800">
-                        <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
+                    <div className="mb-12 py-12 border-t border-zinc-200 dark:border-zinc-800">
+                        <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4">
                             <div>
-                                <span className="text-xs font-bold text-amber-500 dark:text-amber-400 uppercase tracking-widest block mb-2">Configurations</span>
-                                <h2 className="text-3xl font-extrabold text-zinc-900 dark:text-white tracking-tight">Available Accommodations</h2>
-                                <p className="text-zinc-500 dark:text-zinc-400 mt-2 text-base max-w-2xl font-normal leading-relaxed">
-                                    Choose the perfect configuration for your stay. Secure exclusive booking of the entire residence or select individual luxury suites.
+                                <span className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-[0.25em] block mb-2 font-mono">
+                                    Configurations & Options
+                                </span>
+                                <p className="text-zinc-500 dark:text-zinc-400 mt-3 text-sm max-w-2xl font-light leading-relaxed">
+                                    Tailor the spatial configuration of your stay. Elect full exclusive buyout of the entire {listing.type?.toLowerCase() || 'property'}, or curate select individual luxury suites and rooms.
                                 </p>
                             </div>
                         </div>
+
+                        {/* Booking Hinge Segmented Switch */}
+                        {listing.rental_mode !== 'private_rooms' && (
+                            <div className="relative flex p-1 bg-zinc-100/80 dark:bg-zinc-850 border border-zinc-200/50 dark:border-zinc-800/80 rounded-xl w-full max-w-md mb-10 shadow-[inset_0_1px_2px_rgba(0,0,0,0.02)]">
+                                <button
+                                    onClick={() => {
+                                        uiAudio.playClick();
+                                        toggleConfigSelection('entire_place', listing.rooms?.map(r => r.id) || []);
+                                        setHingeTab('entire');
+                                    }}
+                                    className="relative flex-1 py-3 text-[10px] font-bold uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 z-10 cursor-pointer"
+                                >
+                                    {hingeTab === 'entire' && (
+                                        <motion.div 
+                                            layoutId="activeHingeTab" 
+                                            className="absolute inset-0 bg-white dark:bg-zinc-900 border border-zinc-200/40 dark:border-zinc-800/60 rounded-lg shadow-sm -z-10"
+                                            transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                                        />
+                                    )}
+                                    <Sparkles className={`w-3.5 h-3.5 transition-colors ${hingeTab === 'entire' ? 'text-amber-500' : 'text-zinc-400'}`} />
+                                    <span className={hingeTab === 'entire' ? 'text-zinc-950 dark:text-white font-extrabold' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800'}>
+                                        Reserve Entire {listing.type || 'Property'}
+                                    </span>
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        uiAudio.playClick();
+                                        if (isEntirePlace && listing.rooms && listing.rooms.length > 0) {
+                                            // Select the first room to activate unit mode
+                                            toggleConfigSelection(listing.rooms[0].id, listing.rooms?.map(r => r.id) || []);
+                                        }
+                                        setHingeTab('units');
+                                    }}
+                                    className="relative flex-1 py-3 text-[10px] font-bold uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 z-10 cursor-pointer"
+                                >
+                                    {hingeTab === 'units' && (
+                                        <motion.div 
+                                            layoutId="activeHingeTab" 
+                                            className="absolute inset-0 bg-white dark:bg-zinc-900 border border-zinc-200/40 dark:border-zinc-800/60 rounded-lg shadow-sm -z-10"
+                                            transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                                        />
+                                    )}
+                                    <Layers className={`w-3.5 h-3.5 transition-colors ${hingeTab === 'units' ? 'text-amber-500' : 'text-zinc-400'}`} />
+                                    <span className={hingeTab === 'units' ? 'text-zinc-950 dark:text-white font-extrabold' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800'}>
+                                        Select Individual Rooms ({listing.rooms?.length || 0})
+                                    </span>
+                                </button>
+                            </div>
+                        )}
+
                         <div className="flex flex-col gap-6">
                             
-                            {/* Entire Apartment Smart Option */}
-                            {listing.rental_mode !== 'private_rooms' && (
-                                <div 
-                                    className={`relative overflow-hidden transition-all duration-500 ease-in-out font-sans ${
+                            {/* Segment 1: Entire Property Stay */}
+                            {hingeTab === 'entire' && listing.rental_mode !== 'private_rooms' && (
+                                <motion.div 
+                                    initial={{ opacity: 0, y: 15 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ duration: 0.4 }}
+                                    whileHover={{ y: -4, transition: { duration: 0.2 } }}
+                                    className={`relative overflow-hidden transition-all duration-500 ease-in-out font-sans cursor-pointer ${
                                         isEntirePlace 
-                                            ? 'rounded-3xl border-2 border-amber-500/80 shadow-[0_12px_40px_rgba(245,158,11,0.08)] bg-gradient-to-br from-[#FCFBF7] via-white to-amber-50/10 dark:from-zinc-900/40 dark:via-zinc-950 dark:to-zinc-900/30 my-2' 
-                                            : 'rounded-3xl border border-zinc-200/80 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-lg bg-white dark:bg-zinc-900 my-2'
+                                            ? 'rounded-3xl border-2 border-[#003B95] dark:border-amber-500/80 shadow-[0_20px_50px_-12px_rgba(0,59,149,0.06)] dark:shadow-[0_20px_50px_-12px_rgba(245,158,11,0.06)] bg-gradient-to-br from-zinc-50/50 via-white to-zinc-50/10 dark:from-zinc-900/40 dark:via-zinc-950 dark:to-zinc-900/30' 
+                                            : 'rounded-3xl border border-zinc-200/80 dark:border-zinc-800 hover:border-zinc-350 dark:hover:border-zinc-700 hover:shadow-lg bg-white dark:bg-zinc-900'
                                     }`}
                                     onClick={() => {
+                                        uiAudio.playClick();
                                         toggleConfigSelection('entire_place', listing.rooms?.map(r => r.id) || []);
                                         document.getElementById('booking-card')?.scrollIntoView({ behavior: 'smooth' });
                                     }}
                                 >
                                     {isEntirePlace && (
-                                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 z-20" />
+                                        <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-[#003B95] via-blue-500 to-indigo-600 dark:from-amber-400 dark:via-yellow-300 dark:to-amber-500 z-20" />
                                     )}
+                                    <div className="flex flex-col w-full overflow-hidden">
+                                        {/* Top Cinematic Media Pane - Designed for 100/100 Swiss-Modern Grid Mosaic on Desktop */}
+                                        <div className="relative w-full h-64 sm:h-80 md:h-[380px] lg:h-[420px] overflow-hidden bg-zinc-950 flex-shrink-0 group flex flex-row">
+                                            {/* Primary Hero Image */}
+                                            <div className="relative flex-1 lg:w-[68%] h-full overflow-hidden">
+                                                <img 
+                                                    src={listing.imageUrl} 
+                                                    alt={`Entire ${listing.type || 'Property'}`}
+                                                    className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-[1.03]"
+                                                    referrerPolicy="no-referrer"
+                                                />
+                                                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/15 transition-opacity duration-500" />
+                                            </div>
 
-                                    <div className="flex flex-col md:flex-row w-full overflow-hidden cursor-pointer">
-                                        {/* Left Media Pane */}
-                                        <div className="relative w-full md:w-[38%] h-56 md:h-64 overflow-hidden bg-zinc-900 flex-shrink-0 group">
-                                            <img 
-                                                src={listing.imageUrl} 
-                                                alt={`Entire ${listing.type || 'Property'}`}
-                                                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
-                                            />
-                                            <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors duration-300" />
+                                            {/* Secondary stacked photos - visible on desktop to show complete layout and avoid severe cropping */}
+                                            <div className="hidden lg:flex flex-col w-[32%] border-l border-zinc-200/15 dark:border-zinc-800/50 h-full bg-zinc-900">
+                                                <div className="flex-1 overflow-hidden relative group/item1 border-b border-zinc-200/15 dark:border-zinc-800/50">
+                                                    <img 
+                                                        src={(listing.imageUrls && listing.imageUrls[1]) || listing.imageUrl} 
+                                                        alt="Interior view 1"
+                                                        className="w-full h-full object-cover transition-transform duration-700 group-hover/item1:scale-105"
+                                                        referrerPolicy="no-referrer"
+                                                    />
+                                                    <div className="absolute inset-0 bg-black/20 hover:bg-transparent transition-colors duration-300" />
+                                                </div>
+                                                <div className="flex-1 overflow-hidden relative group/item2">
+                                                    <img 
+                                                        src={(listing.imageUrls && listing.imageUrls[2]) || (listing.imageUrls && listing.imageUrls[0]) || listing.imageUrl} 
+                                                        alt="Interior view 2"
+                                                        className="w-full h-full object-cover transition-transform duration-700 group-hover/item2:scale-105"
+                                                        referrerPolicy="no-referrer"
+                                                    />
+                                                    <div className="absolute inset-0 bg-black/20 hover:bg-transparent transition-colors duration-300" />
+                                                </div>
+                                            </div>
                                             
                                             {/* Badge overlays */}
-                                            <div className="absolute top-4 left-4 flex flex-col gap-1.5 z-10">
+                                            <div className="absolute top-5 left-5 flex flex-col gap-1.5 z-10">
                                                 {isEntirePlace ? (
-                                                    <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500 text-black text-[10px] font-bold uppercase tracking-wider shadow-md">
-                                                        <Sparkles className="w-3 h-3" />
-                                                        Selected Configuration
+                                                    <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#003B95]/90 dark:bg-amber-500/90 backdrop-blur-md text-white dark:text-black text-[9px] font-black uppercase tracking-[0.18em] shadow-lg border border-white/10 dark:border-black/10">
+                                                        <Sparkles className="w-3 h-3 animate-pulse text-amber-400 dark:text-amber-800" />
+                                                        Selected Buyout
                                                     </span>
                                                 ) : (
-                                                    <span className="px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-sm text-white text-[10px] font-semibold uppercase tracking-wider border border-white/10">
-                                                        Entire Property
+                                                    <span className="px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-md text-white text-[9px] font-bold uppercase tracking-[0.18em] border border-white/15 shadow-sm">
+                                                        Exclusive Buyout Option
                                                     </span>
                                                 )}
                                             </div>
+
+                                            {/* View Gallery Overlay CTA */}
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    uiAudio.playClick();
+                                                    setShowPhotoGallery(true);
+                                                }}
+                                                className="absolute bottom-5 right-5 bg-black/75 hover:bg-black/90 backdrop-blur-md text-white border border-white/10 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-[0.18em] transition-all duration-300 flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer z-10"
+                                            >
+                                                <Eye className="w-3.5 h-3.5 text-amber-400" />
+                                                Explore Gallery (+{listing.imageUrls?.length || 5} Photos)
+                                            </button>
                                         </div>
 
-                                        {/* Right Details Deck */}
-                                        <div className="flex-1 p-6 md:p-8 flex flex-col justify-between relative bg-white dark:bg-zinc-900">
-                                            <div>
-                                                {/* Top Row: Category and Nightly Price */}
-                                                <div className="flex justify-between items-start gap-4 mb-2">
-                                                    <div>
-                                                        <span className="text-[10px] font-bold tracking-widest text-zinc-400 dark:text-zinc-500 uppercase block mb-1">
-                                                            Grand Residence Booking
-                                                        </span>
-                                                        <h3 className="text-xl md:text-2xl font-bold text-zinc-950 dark:text-white tracking-tight">
-                                                            Entire {listing.type || 'Property'}
-                                                        </h3>
-                                                    </div>
-                                                    <div className="text-right flex-shrink-0">
-                                                        <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-1">Nightly Price</span>
-                                                        <span className="font-extrabold text-xl md:text-2xl text-zinc-900 dark:text-white">
-                                                            {formatPrice(listing.price, listing.currency)}
-                                                        </span>
-                                                    </div>
+                                        {/* Swiss-Modern Details Bento Grid */}
+                                        <div className="p-6 md:p-8 lg:p-10 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 relative bg-transparent">
+                                            {/* Left details pane (lg:col-span-7) */}
+                                            <div className="lg:col-span-7 space-y-6">
+                                                <div>
+                                                    <span className="text-[9px] font-extrabold tracking-[0.2em] text-[#003B95] dark:text-amber-500 uppercase block mb-1.5 font-mono">
+                                                        Grand {listing.type || 'Property'} Buyout
+                                                    </span>
+                                                    <h3 className="text-2xl md:text-3xl font-black text-zinc-950 dark:text-white tracking-tight leading-none">
+                                                        Entire {listing.type || 'Property'}
+                                                    </h3>
                                                 </div>
 
-                                                {/* Capacity badges */}
-                                                <div className="flex flex-wrap gap-2 mb-4">
-                                                    <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700/60 px-2.5 py-1 rounded-md flex items-center gap-1">
-                                                        <Users className="w-3 h-3 text-amber-500" />
+                                                {/* Unified Luxury Attributes */}
+                                                <div className="flex flex-wrap gap-2">
+                                                    <span className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider rounded-lg bg-[#003B95]/5 text-[#003B95] dark:bg-amber-500/10 dark:text-amber-400 border border-[#003B95]/10 dark:border-amber-500/10 flex items-center gap-1.5">
+                                                        <Sparkles className="w-3 h-3 text-amber-500" />
+                                                        Full Buyout
+                                                    </span>
+                                                    <span className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider rounded-lg bg-zinc-50 text-zinc-600 dark:bg-zinc-800/50 dark:text-zinc-300 border border-zinc-200/50 dark:border-zinc-700/60 flex items-center gap-1.5">
+                                                        <Users className="w-3 h-3 text-zinc-400 dark:text-zinc-500" />
                                                         Exclusive Group Access
                                                     </span>
-                                                    <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700/60 px-2.5 py-1 rounded-md flex items-center gap-1">
-                                                        <Shield className="w-3 h-3 text-amber-500" />
+                                                    <span className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider rounded-lg bg-zinc-50 text-zinc-600 dark:bg-zinc-800/50 dark:text-zinc-300 border border-zinc-200/50 dark:border-zinc-700/60 flex items-center gap-1.5">
+                                                        <Shield className="w-3 h-3 text-zinc-400 dark:text-zinc-500" />
                                                         100% Private Seclusion
                                                     </span>
                                                 </div>
 
                                                 {/* Short description */}
-                                                <p className="text-zinc-500 dark:text-zinc-400 text-sm leading-relaxed mb-4">
-                                                    Secure full exclusive possession of this grand {listing.type || 'Property'}. Access all bedrooms, bathrooms, and living spaces with zero shared elements.
+                                                <p className="text-zinc-650 dark:text-zinc-400 text-sm leading-relaxed font-light">
+                                                    Secure full exclusive possession of this grand {listing.type || 'Property'}. Access all bedrooms, ensuite bathrooms, common salons, gardens, and premium amenities with absolute privacy and zero shared elements.
                                                 </p>
 
-                                                {/* SELECTED PERK SECTION */}
-                                                {isEntirePlace && (
-                                                    <div className="p-4 rounded-xl bg-amber-50/40 dark:bg-amber-950/10 border border-amber-200/50 dark:border-amber-900/30 space-y-3">
-                                                        <div className="flex items-start gap-2.5">
-                                                            <Sparkles className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
-                                                            <div>
-                                                                <h4 className="text-[11px] font-bold text-amber-800 dark:text-amber-400 uppercase tracking-wider">
-                                                                    PREMIUM PROPERTY ACCESS ACTIVATED ✨
-                                                                </h4>
-                                                                <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed mt-0.5">
-                                                                    Your stay configures the entire estate for your arrival. Enjoy dedicated concierge assistance, zero interruptions, and bespoke preparation of all residential wings.
-                                                                </p>
+                                                {/* Accordions Container */}
+                                                <div className="space-y-3.5">
+                                                    {/* Privacy Spectrum Gauge */}
+                                                    <SelfClosingDropdown
+                                                        title="Privacy Spectrum Index"
+                                                        badge={
+                                                            <span className="text-[10px] font-black text-amber-600 dark:text-amber-400 font-mono">
+                                                                100% — Full Seclusion
+                                                            </span>
+                                                        }
+                                                        icon={<Shield className="w-3.5 h-3.5 text-amber-500" />}
+                                                    >
+                                                        <div className="space-y-3 p-1">
+                                                            <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed font-light">
+                                                                Your group gets full exclusive command over the entire grounds, private wings, personal pool, wellness rooms, and living spaces. No shared amenities with external guests.
+                                                            </p>
+                                                            <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-850 rounded-full overflow-hidden">
+                                                                <div className="h-full bg-gradient-to-r from-[#003B95] to-blue-500 dark:from-amber-400 dark:to-amber-500 w-full animate-pulse" />
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                )}
+                                                    </SelfClosingDropdown>
+
+                                                    {/* SELECTED PERK SECTION */}
+                                                    {isEntirePlace && (
+                                                        <SelfClosingDropdown
+                                                            title="Premium Property Access Activated"
+                                                            badge={
+                                                                <span className="text-[9px] font-bold text-amber-500 dark:text-amber-400 bg-amber-50/50 dark:bg-amber-950/10 px-2 py-0.5 rounded-md animate-pulse">
+                                                                    Active ✨
+                                                                </span>
+                                                            }
+                                                            icon={<Sparkles className="w-4 h-4 text-amber-500" />}
+                                                            className="border-amber-200/40 dark:border-amber-900/20 bg-amber-50/10 dark:bg-amber-950/5"
+                                                        >
+                                                            <p className="text-xs text-zinc-650 dark:text-zinc-350 leading-relaxed p-1 font-light">
+                                                                Your stay configures the entire {listing.type?.toLowerCase() || 'property'} for your arrival. Enjoy dedicated concierge assistance, zero interruptions, and bespoke preparation of all rooms.
+                                                            </p>
+                                                        </SelfClosingDropdown>
+                                                    )}
+                                                </div>
                                             </div>
 
-                                            {/* Action Row */}
-                                            <div className={`flex items-center justify-between gap-4 mt-6 pt-4 border-t ${isEntirePlace ? 'border-amber-100 dark:border-zinc-800' : 'border-zinc-100 dark:border-zinc-800'}`}>
-                                                <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-                                                    Includes all {listing.rooms?.length || 0} suites
-                                                </span>
+                                            {/* Right Action column (lg:col-span-5) */}
+                                            <div className="lg:col-span-5 flex flex-col justify-between space-y-6 lg:border-l lg:border-zinc-150 dark:lg:border-zinc-800 lg:pl-8">
+                                                <div className="space-y-6">
+                                                    {/* Price Section */}
+                                                    <div>
+                                                        <span className="text-[9px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-1 font-mono">Nightly Rate</span>
+                                                        <div className="flex items-baseline gap-1.5">
+                                                            <span className="font-black text-3xl md:text-4xl text-[#003B95] dark:text-amber-400">
+                                                                {formatPrice(listing.price, listing.currency)}
+                                                            </span>
+                                                            <span className="text-xs text-zinc-400 dark:text-zinc-500 font-medium">/ night</span>
+                                                        </div>
+                                                    </div>
 
-                                                <div className="flex items-center gap-2">
+                                                    {/* Configuration coverage display */}
+                                                    <div className="p-5 rounded-2xl bg-zinc-50 dark:bg-zinc-850/60 border border-zinc-200/40 dark:border-zinc-800/60 space-y-2.5">
+                                                        <span className="text-[9px] font-extrabold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] block font-mono leading-none">
+                                                            Configuration Coverage
+                                                        </span>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={`w-2.5 h-2.5 rounded-full ${isEntirePlace ? 'bg-[#003B95] dark:bg-amber-400 animate-pulse' : 'bg-zinc-300 dark:bg-zinc-600'}`} />
+                                                            <span className="text-xs font-bold text-zinc-850 dark:text-zinc-200">
+                                                                Full Buyout: Includes all {listing.rooms?.length || 0} luxury suites
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-[10.5px] text-zinc-500 dark:text-zinc-400 leading-relaxed font-light">
+                                                            Securing the entire place automatically reserves and locks every suite in the property, guaranteeing ultimate privacy for your entire travel group.
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                {/* Action Button CTA */}
+                                                <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800/80">
                                                     {isEntirePlace ? (
                                                         <button 
                                                             onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                const bookingCard = document.getElementById('booking-card');
-                                                                if (bookingCard) {
-                                                                    bookingCard.scrollIntoView({ behavior: 'smooth' });
-                                                                }
-                                                            }}
-                                                            className="px-5 py-2.5 bg-zinc-950 text-white dark:bg-white dark:text-black rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-300 shadow-sm hover:bg-zinc-800 dark:hover:bg-zinc-100 hover:scale-[1.02] flex items-center gap-1.5"
+                                                                 e.stopPropagation();
+                                                                 uiAudio.playClick();
+                                                                 const bookingCard = document.getElementById('booking-card');
+                                                                 if (bookingCard) {
+                                                                     bookingCard.scrollIntoView({ behavior: 'smooth' });
+                                                                 }
+                                                             }}
+                                                            className="relative group overflow-hidden w-full px-7 py-4 bg-zinc-950 text-white dark:bg-white dark:text-black rounded-xl font-extrabold text-[11px] uppercase tracking-[0.18em] transition-all duration-300 shadow-[0_4px_18px_rgba(0,0,0,0.12)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.22)] hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 border border-zinc-800 dark:border-zinc-200/20 cursor-pointer"
                                                         >
-                                                            Book Property
-                                                            <ArrowRight className="w-3.5 h-3.5 stroke-[2]" />
+                                                            <span className="relative z-10 flex items-center gap-2">
+                                                                Secure Exclusive Buyout
+                                                                <ArrowRight className="w-3.5 h-3.5 stroke-[2.5] transition-transform duration-300 group-hover:translate-x-1" />
+                                                            </span>
+                                                            <div className="absolute inset-0 bg-gradient-to-r from-amber-500/15 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
                                                         </button>
                                                     ) : (
                                                         <button 
                                                             onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                toggleConfigSelection('entire_place', listing.rooms?.map(r => r.id) || []);
-                                                                setTimeout(() => {
-                                                                    const bookingCard = document.getElementById('booking-card');
-                                                                    if (bookingCard) {
-                                                                        bookingCard.scrollIntoView({ behavior: 'smooth' });
-                                                                    }
-                                                                }, 300);
-                                                            }}
-                                                            className="px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-300 border bg-white text-zinc-900 border-zinc-300 hover:border-zinc-900 dark:bg-zinc-900 dark:text-white dark:border-zinc-700 dark:hover:border-zinc-400 hover:bg-zinc-50/50"
+                                                                 e.stopPropagation();
+                                                                 uiAudio.playPop();
+                                                                 toggleConfigSelection('entire_place', listing.rooms?.map(r => r.id) || []);
+                                                                 setTimeout(() => {
+                                                                     const bookingCard = document.getElementById('booking-card');
+                                                                     if (bookingCard) {
+                                                                         bookingCard.scrollIntoView({ behavior: 'smooth' });
+                                                                     }
+                                                                 }, 300);
+                                                             }}
+                                                            className="w-full px-7 py-4 rounded-xl font-bold text-[11px] uppercase tracking-[0.18em] transition-all duration-300 border bg-white text-zinc-900 border-zinc-200 hover:border-zinc-900 dark:bg-zinc-900 dark:text-white dark:border-zinc-700 dark:hover:border-zinc-400 hover:bg-zinc-50/50 active:scale-[0.98] shadow-sm cursor-pointer text-center"
                                                         >
                                                             Select Entire Place
                                                         </button>
@@ -970,49 +1423,57 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                             </div>
                                         </div>
                                     </div>
-                                </div>
+                                </motion.div>
                             )}
 
-                            {listing.rooms.map((room, idx) => {
-                                const isRoomSelected = selectedConfigIds.includes(room.id);
-                                return (
-                                    <PremiumInventoryUnitCard 
-                                        key={room.id || idx} 
-                                        room={room} 
-                                        listing={listing} 
-                                        isSelected={isRoomSelected} 
-                                        toggleSelection={() => toggleConfigSelection(room.id, listing.rooms?.map(r => r.id) || [])}
-                                        formatPrice={formatPrice}
-                                    />
-                                );
-                            })}
+                            {/* Segment 2: Individual Subunits (Rooms / Cottages) */}
+                            {(hingeTab === 'units' || listing.rental_mode === 'private_rooms') && (
+                                listing.rooms.map((room, idx) => {
+                                    const isRoomSelected = selectedConfigIds.includes(room.id);
+                                    return (
+                                        <PremiumInventoryUnitCard 
+                                            key={room.id || idx} 
+                                            room={room} 
+                                            listing={listing} 
+                                            isSelected={isRoomSelected} 
+                                            toggleSelection={() => toggleConfigSelection(room.id, listing.rooms?.map(r => r.id) || [])}
+                                            formatPrice={formatPrice}
+                                        />
+                                    );
+                                })
+                            )}
                         </div>
                     </div>
                 )}
 
                 {/* Redesigned Amenities Section */}
-                <div className="mb-10 py-8 border-t border-gray-200">
-                    <h2 className="text-xl font-bold text-gray-900 mb-6">What this place offers</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="mb-12 py-10 border-t border-zinc-100">
+                    <h2 className="text-xl font-extrabold text-zinc-900 mb-6 tracking-tighter uppercase text-[15px] tracking-wider text-zinc-400">What this place offers</h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {listing.amenities?.map((amenity, idx) => (
-                            <div key={idx} className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition-colors">
-                                <div className="text-gray-700">
+                            <motion.div 
+                                key={idx} 
+                                whileHover={{ y: -2, x: 2 }}
+                                transition={{ duration: 0.2 }}
+                                className="flex items-center gap-4 p-4 rounded-xl border border-zinc-100 bg-zinc-50/50 hover:bg-white hover:border-zinc-200 transition-colors"
+                            >
+                                <div className="text-zinc-700 w-5 h-5 flex items-center justify-center">
                                     {getAmenityIcon(amenity)}
                                 </div>
-                                <span className="font-medium text-gray-700">{amenity}</span>
-                            </div>
+                                <span className="text-sm font-semibold text-zinc-800 tracking-tight">{amenity}</span>
+                            </motion.div>
                         ))}
                     </div>
-                    <button className="mt-6 w-full md:w-auto border border-gray-900 text-gray-900 px-6 py-3 rounded-xl font-semibold hover:bg-gray-50 transition-colors">
+                    <button className="mt-8 w-full sm:w-auto border border-zinc-200 text-zinc-900 px-6 py-3.5 rounded-xl text-[10px] font-extrabold uppercase tracking-widest hover:bg-zinc-950 hover:border-zinc-950 hover:text-white transition-all duration-300">
                         Show all {listing.amenities?.length || 10} amenities
                     </button>
                 </div>
 
                 {/* Redesigned Location / Nearby Section with Collapsible Categories */}
-                <div className="mb-10 py-8 border-t border-gray-200">
-                    <h2 className="text-xl font-bold text-gray-900 mb-4">Nearby</h2>
+                <div className="mb-12 py-10 border-t border-zinc-100">
+                    <h2 className="text-xl font-extrabold text-zinc-900 mb-6 tracking-tighter uppercase text-[15px] tracking-wider text-zinc-400">Neighborhood Context</h2>
                     {/* Grouped Nearby List */}
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                         <NearbyCategorySection type="TRANSPORT" points={nearbyByType['TRANSPORT']} />
                         <NearbyCategorySection type="GROCERY" points={nearbyByType['GROCERY']} />
                         <NearbyCategorySection type="PARK" points={nearbyByType['PARK']} />
@@ -1022,172 +1483,196 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                 </div>
 
                 {/* Map Section */}
-                <div className="mb-10 pt-4 pb-8 border-t border-gray-200">
-                    <h2 className="text-xl font-bold text-gray-900 mb-6">Where you’ll be</h2>
-                     <div className="relative w-full h-64 md:h-80 bg-gray-100 rounded-2xl overflow-hidden shadow-sm group">
+                <div className="mb-12 pt-10 pb-8 border-t border-zinc-100">
+                    <h2 className="text-xl font-extrabold text-zinc-900 mb-6 tracking-tighter uppercase text-[15px] tracking-wider text-zinc-400">Where you'll be</h2>
+                     <div className="relative w-full h-72 md:h-96 bg-zinc-50 rounded-3xl overflow-hidden border border-zinc-200/80 shadow-none group">
                         <iframe
                             width="100%"
                             height="100%"
-                            style={{ border: 0 }}
+                            style={{ border: 0, filter: "grayscale(0.05) contrast(1.02)" }}
                             loading="lazy"
                             allowFullScreen
                             referrerPolicy="no-referrer-when-downgrade"
                             src={`https://maps.google.com/maps?q=${encodeURIComponent(listing.address || listing.title + " " + (listing.city || ""))}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
                         ></iframe>
-                         <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur px-4 py-2 rounded-xl shadow-sm text-sm font-semibold text-gray-800 border border-gray-100 max-w-[80%] truncate">
+                         <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-md px-4 py-2.5 rounded-xl shadow-md text-[10px] font-bold uppercase tracking-wider text-zinc-900 border border-zinc-200 max-w-[85%] truncate">
                              {listing.address || "Berlin, Germany"}
                          </div>
                     </div>
-                     <div className="mt-4">
-                        <h3 className="font-semibold text-gray-900 mb-1">{listing.address || "Berlin, Germany"}</h3>
-                        <p className="text-gray-600 text-sm">
-                            We will send you the exact location once your booking is confirmed.
+                     <div className="mt-5">
+                        <h3 className="font-extrabold text-zinc-900 mb-1.5 text-base tracking-tight">{listing.address || "Berlin, Germany"}</h3>
+                        <p className="text-zinc-500 text-sm leading-relaxed font-sans font-light">
+                            Secured and private: the precise street and house coordinates are held confidentially. You will receive immediate direct digital access details as soon as your booking request is successfully approved.
                         </p>
                     </div>
                 </div>
 
                 {/* Reviews Section */}
-                <div className="mb-10 pt-4 pb-8 border-t border-gray-200">
-                    <div className="flex items-center gap-3 mb-6">
+                <div className="mb-12 pt-10 pb-8 border-t border-zinc-100">
+                    <h2 className="text-xl font-extrabold text-zinc-900 mb-6 tracking-tighter uppercase text-[15px] tracking-wider text-zinc-400">Guest Experiences</h2>
+                    
+                    <div className="flex items-center gap-4 mb-8 bg-zinc-50 border border-zinc-100 p-4 rounded-2xl w-full sm:w-fit">
                         {reviews.length > 0 ? (
                             <>
-                                <div className="bg-[#003B95] text-white text-xl font-bold px-2 py-1 rounded-t-lg rounded-br-lg shadow-sm">
+                                <div className="bg-[#003B95] text-white text-lg font-extrabold px-3 py-1.5 rounded-lg shadow-none">
                                     {(reviews.reduce((a,c) => a + Number(c.rating), 0) / reviews.length).toFixed(1)}
                                 </div>
                                 <div className="flex flex-col">
-                                    <span className="text-xl font-bold text-gray-900">
+                                    <span className="text-base font-bold text-zinc-900 leading-tight">
                                         {getRatingWord(reviews.reduce((a,c) => a + Number(c.rating), 0) / reviews.length)}
                                     </span>
-                                    <span className="text-gray-500 text-sm">{reviews.length} reviews</span>
+                                    <span className="text-zinc-400 text-xs font-medium tracking-wide uppercase">{reviews.length} authenticated reviews</span>
                                 </div>
                             </>
                         ) : (
-                            <h2 className="text-xl font-bold text-gray-900">No reviews yet</h2>
+                            <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-wider">No reviews left yet</h3>
                         )}
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8 mb-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10 mb-8">
                         {reviews.slice(0, 6).map((review, idx) => (
-                            <div key={idx} className="flex flex-col">
+                            <motion.div 
+                                key={idx} 
+                                initial={{ opacity: 0, y: 10 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true }}
+                                transition={{ duration: 0.4, delay: idx * 0.05 }}
+                                className="flex flex-col"
+                            >
                                 <div className="flex items-center gap-4 mb-3">
-                                    <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center font-bold text-gray-500 overflow-hidden">
+                                    <div className="w-10 h-10 bg-zinc-100 border border-zinc-200/50 rounded-full flex items-center justify-center font-extrabold text-zinc-600 text-sm overflow-hidden">
                                         {review.user_name?.charAt(0).toUpperCase()}
                                     </div>
                                     <div>
-                                        <h4 className="font-semibold text-gray-900">{review.user_name}</h4>
-                                        <p className="text-gray-500 text-sm">{new Date(review.created_at).toLocaleDateString()}</p>
+                                        <h4 className="font-bold text-zinc-900 text-sm tracking-tight">{review.user_name}</h4>
+                                        <p className="text-zinc-400 text-xs">{new Date(review.created_at).toLocaleDateString()}</p>
                                     </div>
                                 </div>
-                                <div className="flex mb-2">
+                                <div className="flex gap-0.5 mb-2.5">
                                     {[...Array(10)].map((_, i) => (
-                                        <span key={i}><StarIcon className={`w-3 h-3 ${i < Number(review.rating) ? 'fill-current text-black' : 'text-gray-300'}`} /></span>
+                                        <span key={i}><StarIcon className={`w-2.5 h-2.5 ${i < Number(review.rating) ? 'fill-[#003B95] text-[#003B95]' : 'text-zinc-200'}`} /></span>
                                     ))}
                                 </div>
-                                <p className="text-gray-700 leading-relaxed text-sm">
+                                <p className="text-zinc-600 leading-relaxed text-sm font-sans">
                                     {review.content}
                                 </p>
-                            </div>
+                            </motion.div>
                         ))}
                     </div>
 
                     {user ? (
                         canReview ? (
-                            <div className="mt-8 bg-gray-50 p-6 rounded-2xl border border-gray-100">
-                                <h3 className="font-bold text-gray-900 mb-4">Leave a review</h3>
-                                <div className="flex mb-4 cursor-pointer">
+                            <div className="mt-8 bg-zinc-50 p-6 rounded-2xl border border-zinc-100">
+                                <h3 className="font-extrabold text-zinc-900 mb-4 tracking-tight uppercase text-xs tracking-wider text-zinc-400">Leave an authentic review</h3>
+                                <div className="flex mb-4 cursor-pointer gap-0.5">
                                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => (
                                         <StarIcon 
                                            key={star} 
                                            onClick={() => setNewReviewRating(star)}
-                                           className={`w-6 h-6 mr-1 ${star <= newReviewRating ? 'fill-current text-black' : 'text-gray-300'}`} 
+                                           className={`w-6 h-6 ${star <= newReviewRating ? 'fill-[#003B95] text-[#003B95]' : 'text-zinc-200'}`} 
                                         />
                                     ))}
                                 </div>
                                 <textarea 
                                     value={newReviewText}
                                     onChange={(e) => setNewReviewText(e.target.value)}
-                                    className="w-full bg-white border border-gray-200 rounded-xl p-4 text-sm focus:ring-1 focus:ring-black outline-none mb-4 min-h-[90px]"
-                                    placeholder="Share your experience..."
+                                    className="w-full bg-white border border-zinc-200 rounded-xl p-4 text-sm focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 outline-none mb-4 min-h-[90px] font-sans font-normal"
+                                    placeholder="Share your stay experience..."
                                 />
                                 <button 
                                     onClick={submitReview}
                                     disabled={submittingReview || !newReviewText.trim()}
-                                    className="bg-black text-white px-6 py-2.5 rounded-lg font-bold hover:scale-105 active:scale-95 transition-transform disabled:opacity-50"
+                                    className="bg-zinc-950 text-white px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-zinc-900 transition-all disabled:opacity-40"
                                 >
                                     {submittingReview ? 'Submitting...' : 'Submit Review'}
                                 </button>
                             </div>
                         ) : (
-                            <div className="mt-8 bg-pink-50 p-6 rounded-2xl border border-pink-100 flex items-start gap-4">
-                                <div className="p-2 bg-pink-100 text-[#0284C7] rounded-full">
-                                    <StarIcon className="w-5 h-5 fill-current" />
+                            <div className="mt-8 bg-zinc-50 p-5 rounded-2xl border border-zinc-100 flex items-start gap-4">
+                                <div className="p-2 bg-white border border-zinc-200 text-zinc-400 rounded-full shrink-0">
+                                    <StarIcon className="w-4 h-4 fill-none" />
                                 </div>
                                 <div>
-                                    <h4 className="font-bold text-gray-900">Review this property</h4>
-                                    <p className="text-sm text-gray-700 mt-1">You can leave a review after your reservation starts. We value authentic feedback from verified guests!</p>
+                                    <h4 className="font-bold text-zinc-900 text-sm tracking-tight">Review this property</h4>
+                                    <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
+                                        You can leave an authentic review after your reservation starts. We value direct, certified feedback from verified guests.
+                                    </p>
                                 </div>
                             </div>
                         )
                     ) : (
-                        <p className="text-gray-500 mt-6 pt-6 border-t border-gray-200">Please log in to leave a review.</p>
+                        <p className="text-zinc-400 text-xs mt-6 pt-6 border-t border-zinc-100 uppercase tracking-wider font-bold">Please log in to leave a review.</p>
                     )}
                 </div>
 
             </div>
 
-            {/* Right Column: Sticky Booking Card - Redesigned for Long Term Rent */}
-            <div className="hidden lg:block w-[34%] relative">
-                <div id="booking-card" className="sticky top-24 bg-white rounded-2xl border border-gray-200 shadow-[0_6px_16px_rgba(0,0,0,0.08)] p-6 overflow-hidden">
-                    
+            {/* Right Column: Sticky Booking Card - Redesigned for Swiss Modernist Elite Aesthetic */}
+            <div className="hidden md:block md:col-span-5 lg:col-span-4 relative">
+                <motion.div 
+                    id="booking-card" 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6, cubicBezier: [0.16, 1, 0.3, 1] }}
+                    className="sticky top-28 bg-white rounded-3xl border border-zinc-200/80 shadow-[0_12px_40px_rgba(0,0,0,0.03)] p-7 overflow-hidden"
+                >
                     {/* Header: Price & Rating */}
-                    <div className="flex justify-between items-baseline mb-6">
+                    <div className="flex justify-between items-baseline mb-8 pb-6 border-b border-zinc-100">
                         <div>
                             {currentOffer && (
-                                <div className="text-gray-500 line-through text-sm font-medium">{formatPrice(activeConfig.price, listing.currency)}</div>
+                                <div className="text-zinc-400 line-through text-xs font-semibold tracking-tight mb-0.5">{formatPrice(activeConfig.price, listing.currency)}</div>
                             )}
-                            <span className="text-2xl font-bold text-gray-900">{formatPrice(currentDayPrice, listing.currency)}</span>
-                            <span className="text-gray-500"> /mo</span>
+                            <div className="flex items-baseline gap-1">
+                                <span className="text-3xl font-extrabold text-zinc-900 tracking-tighter">{formatPrice(currentDayPrice, listing.currency)}</span>
+                                <span className="text-zinc-400 text-xs font-medium tracking-wide uppercase">/ month</span>
+                            </div>
                             {currentOffer && (
-                                <div className="text-[#0284C7] text-xs font-bold mt-1 bg-[#0284C7]/10 inline-block px-1.5 py-0.5 rounded">{currentOffer.title}</div>
+                                <div className="text-blue-600 text-[10px] font-bold uppercase tracking-wider mt-1.5 bg-blue-50 border border-blue-100/35 inline-block px-2 py-0.5 rounded">
+                                    {currentOffer.title}
+                                </div>
                             )}
                         </div>
-                        <div className="flex items-center gap-1.5 text-sm">
-                            {listing.rating && listing.rating > 0 && (
-                                <span className="font-semibold text-gray-900">
-                                    {getRatingWord(listing.rating)}
-                                </span>
-                            )}
-                            <div className="bg-[#003B95] text-white text-xs font-bold px-1.5 py-0.5 rounded-t-md rounded-br-md shadow-sm">
-                                {formatRating(listing.rating)}
+                        <div className="flex flex-col items-end gap-1">
+                            <div className="flex items-center gap-1.5">
+                                {listing.rating && listing.rating > 0 && (
+                                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+                                        {getRatingWord(listing.rating)}
+                                    </span>
+                                )}
+                                <div className="bg-[#003B95] text-white text-xs font-extrabold px-2 py-1 rounded shadow-none">
+                                    {formatRating(listing.rating)}
+                                </div>
                             </div>
-                            <span className="text-gray-500 underline ml-1">{listing.reviewCount} reviews</span>
+                            <span className="text-zinc-400 text-xs underline decoration-zinc-200 hover:decoration-zinc-900 cursor-pointer transition-colors">{listing.reviewCount} reviews</span>
                         </div>
                     </div>
 
                     {/* Rental Inputs / Form */}
-                    <div className="space-y-6 mb-6 relative">
+                    <div className="space-y-6 mb-8 relative">
                         {/* Animated overlay for inputs when contacting */}
-                         <div className={`transition-all duration-500 ease-in-out ${bookingStep === 'CONTACT' ? 'opacity-50 pointer-events-none scale-95 origin-top' : 'opacity-100'}`}>
+                        <div className={`transition-all duration-500 ease-in-out ${bookingStep === 'CONTACT' ? 'opacity-40 pointer-events-none scale-95 origin-top' : 'opacity-100'}`}>
                             
                             {/* Plan to move in */}
                             <div className="relative">
-                                <label className="block text-xs font-extrabold text-black uppercase tracking-wider mb-2">Move-in Date</label>
+                                <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-3">Move-in Date</label>
                                 
-                                {/* Quick Date Chips - Modern B&W */}
-                                <div className="flex gap-2 mb-3 overflow-x-auto pb-1 scrollbar-hide w-full min-w-0">
+                                {/* Quick Date Chips - Modern Swiss B&W */}
+                                <div className="flex gap-2 mb-4 overflow-x-auto pb-1 scrollbar-hide w-full min-w-0">
                                     {dateOptions.map((opt) => (
-                                        <button 
+                                        <motion.button 
                                             key={opt.label}
                                             onClick={() => setMoveInDate(opt.value)}
+                                            whileHover={{ y: -1 }}
+                                            whileTap={{ scale: 0.97 }}
                                             className={`
-                                                whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-bold border transition-all
+                                                whitespace-nowrap px-3.5 py-2 rounded-lg text-xs font-bold border transition-all duration-300
                                                 ${moveInDate === opt.value 
-                                                    ? 'bg-black text-white border-black shadow-md' 
-                                                    : 'bg-white text-gray-900 border-gray-200 hover:border-black'}
+                                                    ? 'bg-zinc-900 text-white border-zinc-900 shadow-sm' 
+                                                    : 'bg-zinc-50 text-zinc-700 border-zinc-100 hover:border-zinc-400 hover:bg-white'}
                                             `}
                                         >
                                             {opt.label}
-                                        </button>
+                                        </motion.button>
                                     ))}
                                 </div>
 
@@ -1197,116 +1682,128 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                         value={moveInDate}
                                         min={minDate}
                                         onChange={(e) => setMoveInDate(e.target.value)}
-                                        className="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-xl px-4 py-3.5 focus:ring-1 focus:ring-black focus:border-black outline-none transition-all font-bold appearance-none cursor-pointer placeholder-gray-400 group-hover:border-gray-400"
+                                        className="w-full bg-zinc-50/50 border border-zinc-200 text-zinc-950 text-sm font-semibold rounded-xl px-4 py-4 focus:bg-white focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 outline-none transition-all appearance-none cursor-pointer placeholder-zinc-400 group-hover:border-zinc-400"
                                         required
                                     />
-                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-900">
-                                        <CalendarIcon className="w-4 h-4" />
+                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-900">
+                                        <CalendarIcon className="w-4 h-4 text-zinc-400" />
                                     </div>
                                 </div>
                             </div>
 
                             {/* Select BHK - Custom Dropdown */}
-                            <div className="relative mt-4">
-                                <label className="block text-xs font-extrabold text-black uppercase tracking-wider mb-2">Configuration</label>
+                            <div className="relative mt-5">
+                                <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-3">Accommodation Choice</label>
                                 {renderConfigDropdown()}
                             </div>
                         </div>
                         
                         {/* Contact Form Expansion */}
                         <div className={`overflow-hidden transition-all duration-500 ease-in-out ${bookingStep === 'CONTACT' ? 'max-h-80 opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
-                            <div className="space-y-4 pt-2">
-                                <h3 className="text-sm font-bold text-gray-900">Your Details</h3>
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Full Name</label>
-                                    <input 
-                                        type="text" 
-                                        value={guestName}
-                                        onChange={(e) => setGuestName(e.target.value)}
-                                        placeholder="Enter your name"
-                                        className="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-xl px-4 py-3 focus:ring-2 focus:ring-black outline-none font-medium"
-                                        autoFocus={bookingStep === 'CONTACT'}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Mobile Number</label>
-                                    <input 
-                                        type="tel" 
-                                        value={guestPhone}
-                                        onChange={(e) => setGuestPhone(e.target.value)}
-                                        placeholder="Enter your phone"
-                                        className="w-full bg-white border border-gray-200 text-gray-900 text-sm rounded-xl px-4 py-3 focus:ring-2 focus:ring-black outline-none font-medium"
-                                    />
+                            <div className="space-y-4 pt-4 border-t border-zinc-100">
+                                <h3 className="text-sm font-bold text-zinc-900 tracking-tight uppercase text-[11px] tracking-wider text-zinc-400">Introduce Yourself</h3>
+                                <div className="space-y-3.5">
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5">Full Name</label>
+                                        <input 
+                                            type="text" 
+                                            value={guestName}
+                                            onChange={(e) => setGuestName(e.target.value)}
+                                            placeholder="e.g., Jean-Luc Godard"
+                                            className="w-full bg-zinc-50 border border-zinc-200 text-zinc-900 text-sm rounded-xl px-4 py-3 focus:bg-white focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 outline-none font-semibold transition-all"
+                                            autoFocus={bookingStep === 'CONTACT'}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5">Mobile Number</label>
+                                        <input 
+                                            type="tel" 
+                                            value={guestPhone}
+                                            onChange={(e) => setGuestPhone(e.target.value)}
+                                            placeholder="e.g., +41 22 749 11 11"
+                                            className="w-full bg-zinc-50 border border-zinc-200 text-zinc-900 text-sm rounded-xl px-4 py-3 focus:bg-white focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 outline-none font-semibold transition-all"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     {/* CTA Button */}
-                    <button 
+                    <motion.button 
                         onClick={handleBookingAction}
                         disabled={dayInfo?.status === 'blocked'}
-                        className={`w-full text-white font-bold text-lg py-4 rounded-xl transition-all active:scale-[0.98] mb-4 shadow-lg hover:shadow-xl relative overflow-hidden group ${dayInfo?.status === 'blocked' ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#e51d53] hover:bg-[#d01749]'}`}
+                        whileHover={dayInfo?.status !== 'blocked' ? { scale: 1.01, y: -1 } : {}}
+                        whileTap={dayInfo?.status !== 'blocked' ? { scale: 0.99 } : {}}
+                        className={`w-full text-white font-extrabold text-sm uppercase tracking-widest py-4.5 rounded-xl transition-all duration-300 relative overflow-hidden group shadow-none ${dayInfo?.status === 'blocked' ? 'bg-zinc-300 cursor-not-allowed' : 'bg-zinc-950 hover:bg-zinc-900'}`}
                     >
-                        <span className="relative z-10 transition-transform duration-300">
-                            {dayInfo?.status === 'blocked' ? 'Sold Out' : bookingStep === 'AVAILABILITY' ? 'Check availability' : 'Reserve'}
+                        <span className="relative z-10">
+                            {dayInfo?.status === 'blocked' ? 'Sold Out' : bookingStep === 'AVAILABILITY' ? 'Check Availability' : 'Request Reservation'}
                         </span>
-                    </button>
+                    </motion.button>
 
-                    <div className="text-center text-sm text-gray-500 mb-6 font-medium">
-                        {dayInfo?.status === 'blocked' ? "Dates not available" : bookingStep === 'AVAILABILITY' ? "You won't be charged yet" : "Complete details to request booking"}
+                    <div className="text-center text-[10px] text-zinc-400 uppercase tracking-widest mt-3 mb-6 font-bold">
+                        {dayInfo?.status === 'blocked' ? "Dates currently unavailable" : bookingStep === 'AVAILABILITY' ? "No instant charges applied" : "Request details are curated securely"}
                     </div>
 
                     {/* Detailed Cost Breakdown */}
-                    <div className="space-y-3 pt-4 border-t border-gray-100">
+                    <div className="space-y-3 pt-6 border-t border-zinc-100">
                         {currentOffer && (
-                             <div className="flex justify-between text-[#0284C7] text-sm font-semibold bg-[#0284C7]/5 p-2 rounded flex-col">
+                             <div className="flex justify-between text-blue-600 text-xs font-bold bg-blue-50/50 p-3 rounded-xl border border-blue-100/20 flex-col">
                                  <div className="flex justify-between w-full">
-                                    <span>Discount ({currentOffer.title})</span>
-                                    <span>-{formatPrice(activeConfig.price - currentDayPrice, listing.currency)}</span>
+                                    <span className="uppercase tracking-wider">Discount ({currentOffer.title})</span>
+                                    <span className="font-mono">-{formatPrice(activeConfig.price - currentDayPrice, listing.currency)}</span>
                                  </div>
                              </div>
                         )}
-                        <div className="flex justify-between text-gray-600 text-sm">
-                            <span className="underline decoration-gray-300 decoration-dotted cursor-help">Monthly Rent</span>
-                            <span>{formatPrice(currentDayPrice, listing.currency)}</span>
+                        <div className="flex justify-between text-zinc-500 text-sm font-medium">
+                            <span className="underline decoration-zinc-200 decoration-dotted cursor-help">Monthly Rent</span>
+                            <span className="font-mono text-zinc-900 font-semibold">{formatPrice(currentDayPrice, listing.currency)}</span>
                         </div>
-                        <div className="flex justify-between text-gray-600 text-sm">
-                            <span className="underline decoration-gray-300 decoration-dotted cursor-help">Maintenance Fee</span>
-                            <span>{formatPrice(maintenanceFee, listing.currency)}</span>
+                        <div className="flex justify-between text-zinc-500 text-sm font-medium">
+                            <span className="underline decoration-zinc-200 decoration-dotted cursor-help">Maintenance Fee</span>
+                            <span className="font-mono text-zinc-900 font-semibold">{formatPrice(maintenanceFee, listing.currency)}</span>
                         </div>
-                         <div className="flex justify-between text-gray-600 text-sm">
-                            <span className="underline decoration-gray-300 decoration-dotted cursor-help">Security Deposit</span>
-                            <span>{formatPrice(deposit, listing.currency)}</span>
+                         <div className="flex justify-between text-zinc-500 text-sm font-medium">
+                            <span className="underline decoration-zinc-200 decoration-dotted cursor-help">Security Deposit</span>
+                            <span className="font-mono text-zinc-900 font-semibold">{formatPrice(deposit, listing.currency)}</span>
                         </div>
                         
-                        <div className="flex justify-between text-gray-900 pt-4 border-t border-gray-100 items-center">
-                            <span className="font-bold text-lg">Total Rent /mo</span>
-                            <span className="font-extrabold text-xl">{formatPrice(totalRent, listing.currency)}</span>
+                        <div className="flex justify-between text-zinc-900 pt-5 border-t border-zinc-100 items-center">
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Total Monthly Cost</span>
+                            <span className="font-extrabold text-2xl tracking-tighter">{formatPrice(totalRent, listing.currency)}</span>
                         </div>
                     </div>
-                </div>
+                </motion.div>
 
                 {/* Agent/Host Card */}
-                 <div className="mt-6 bg-gray-50 rounded-xl p-4 flex items-center justify-between border border-gray-100">
+                <motion.div 
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.6, delay: 0.2 }}
+                    className="mt-6 bg-zinc-50/50 rounded-3xl p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between border border-zinc-200/60 gap-4"
+                >
                     <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm text-2xl border border-gray-100">
-                            👮
+                        <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm text-sm font-extrabold border border-zinc-200 text-zinc-800">
+                            {listing.provider?.substring(0, 2).toUpperCase() || "H"}
                         </div>
                         <div>
-                            <div className="font-bold text-gray-900 text-sm">Hosted by {listing.provider}</div>
-                            <div className="text-xs text-gray-500">Superhost · 5 years hosting</div>
+                            <div className="font-bold text-zinc-900 text-sm flex items-center gap-2 tracking-tight">
+                                Hosted by {listing.provider}
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[8px] font-extrabold bg-[#003B95]/10 text-[#003B95] uppercase tracking-wider">SUPERHOST</span>
+                            </div>
+                            <div className="text-xs text-zinc-400 font-medium mt-0.5">Professional Host · Identity Verified · 5★ rating</div>
                         </div>
                     </div>
                     {onContactHost && (
                         <button 
                             onClick={onContactHost}
-                            className="bg-white px-4 py-2 rounded-lg font-bold text-sm border border-black hover:bg-gray-50 transition-colors hidden md:block"
+                            className="bg-white px-5 py-3 rounded-xl font-extrabold text-[10px] uppercase tracking-wider border border-zinc-200 hover:border-zinc-950 hover:bg-white transition-all hidden md:block shadow-sm"
                         >
                             Message Host
                         </button>
                     )}
-                 </div>
+                 </motion.div>
                  {onContactHost && (
                      <button 
                          onClick={onContactHost}
@@ -1319,48 +1816,50 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
         </div>
 
         {/* Nearby Places Slider */}
-        <div className="mt-12 mb-8 pt-10 border-t border-gray-100">
-             <h2 className="text-2xl font-bold text-gray-900 mb-6">Nearby places to stay</h2>
-             <div className="flex gap-4 md:gap-6 overflow-x-auto pb-8 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide snap-x snap-mandatory w-full min-w-0">
+        <div className="mt-16 mb-8 pt-12 border-t border-zinc-100">
+             <h2 className="text-2xl font-extrabold text-zinc-900 mb-8 tracking-tighter">Nearby places to stay</h2>
+             <div className="flex gap-6 md:gap-8 overflow-x-auto pb-8 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide snap-x snap-mandatory w-full min-w-0">
                 {similarListings.map((item) => (
-                    <div 
+                    <motion.div 
                         key={item.id} 
                         onClick={() => onListingClick(item)}
-                        className="w-[80vw] sm:w-[260px] md:w-[300px] shrink-0 snap-center sm:snap-start group cursor-pointer"
+                        whileHover={{ y: -4 }}
+                        transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
+                        className="w-[78vw] sm:w-[260px] md:w-[290px] shrink-0 snap-center sm:snap-start group cursor-pointer"
                     >
-                        <div className="aspect-[20/19] relative rounded-xl overflow-hidden bg-gray-100 mb-3 isolate shadow-sm">
+                        <div className="aspect-[4/3] relative rounded-2xl overflow-hidden bg-zinc-50 mb-4 isolate border border-zinc-100/50 shadow-none">
                             <OptimizedImage 
                                 src={item.imageUrl} 
                                 alt={item.title} 
-                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                             />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                             <button 
-                                className="absolute top-3 right-3 p-2 rounded-full bg-black/10 hover:bg-white/20 backdrop-blur-md text-white transition-all active:scale-90"
+                                className="absolute top-3.5 right-3.5 w-9 h-9 flex items-center justify-center rounded-full bg-white/90 hover:bg-white backdrop-blur-md text-zinc-900 transition-all active:scale-90 shadow-sm"
                                 onClick={(e) => { 
                                     e.stopPropagation(); 
                                     onToggleFavorite(item);
                                 }}
                             >
-                                <HeartIcon className="w-5 h-5" filled={false} />
+                                <HeartIcon className="w-4 h-4 text-zinc-900" filled={false} />
                             </button>
                         </div>
-                        <div className="space-y-1">
-                            <div className="flex justify-between items-start">
-                                <h3 className="font-semibold text-gray-900 truncate pr-2">{item.title}</h3>
-                                <div className="flex items-center gap-1.5">
-                                    <div className="bg-[#003B95] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-t-md rounded-br-md shadow-sm">
+                        <div className="space-y-1.5">
+                            <div className="flex justify-between items-start gap-2">
+                                <h3 className="font-bold text-zinc-900 text-sm tracking-tight truncate group-hover:text-blue-600 transition-colors pr-2">{item.title}</h3>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                    <div className="bg-[#003B95] text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded-md shadow-none">
                                         {formatRating(item.rating)}
                                     </div>
                                 </div>
                             </div>
-                            <p className="text-sm text-gray-500">{item.type === 'APARTMENT' ? 'Entire apartment' : 'Private room'}</p>
-                            <div className="flex items-baseline gap-1 mt-0.5">
-                                <span className="font-bold text-gray-900">{formatPrice(item.price, item.currency || 'USD')}</span>
-                                <span className="text-gray-900 text-sm"> {item.period === 'month' ? 'month' : 'night'}</span>
+                            <p className="text-xs text-zinc-400 font-medium tracking-wide uppercase">{item.type === 'APARTMENT' ? 'Entire residence' : 'Private Suite'}</p>
+                            <div className="flex items-baseline gap-1 mt-1">
+                                <span className="font-extrabold text-zinc-900 text-sm tracking-tight">{formatPrice(item.price, item.currency || 'USD')}</span>
+                                <span className="text-zinc-500 text-xs font-normal"> / {item.period === 'month' ? 'month' : 'night'}</span>
                             </div>
                         </div>
-                    </div>
+                    </motion.div>
                 ))}
              </div>
         </div>
@@ -1368,7 +1867,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
       </div>
 
       {/* Mobile Fixed Bottom Action Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white/85 backdrop-blur-2xl saturate-150 border-t border-gray-200/50 p-4 pb-safe z-50 flex items-center justify-between gap-4 lg:hidden shadow-[0_-4px_20px_-1px_rgba(0,0,0,0.08)]">
+      <div className="fixed bottom-0 left-0 right-0 bg-white/85 backdrop-blur-2xl saturate-150 border-t border-gray-200/50 p-4 pb-safe z-50 flex items-center justify-between gap-4 md:hidden shadow-[0_-4px_20px_-1px_rgba(0,0,0,0.08)]">
           <div className="flex flex-col">
               <span className="text-[16px] font-bold text-gray-900">{formatPrice(listing.displayPrice ?? listing.price, listing.currency)} <span className="font-normal text-sm text-gray-500">/{listing.period}</span></span>
               {listing.rating && listing.rating > 0 && (
@@ -1385,7 +1884,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
 
       {/* Mobile Booking Sheet / Modal */}
       {showMobileBooking && (
-        <div className="fixed inset-0 z-[250] flex items-end justify-center lg:hidden">
+        <div className="fixed inset-0 z-[250] flex items-end justify-center md:hidden">
             {/* Backdrop */}
             <div 
                 className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"

@@ -91,6 +91,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
     }
   };
 
+  const isIframe = typeof window !== 'undefined' && window.self !== window.top;
+
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-[999] flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
@@ -217,7 +219,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                 <GoogleLogin
                   onSuccess={handleGoogleSuccess}
                   onError={() => setError('Google Sign-In failed')}
-                  useOneTap
+                  useOneTap={!isIframe}
                   theme="outline"
                   size="large"
                   shape="rectangular"

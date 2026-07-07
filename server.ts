@@ -77,7 +77,7 @@ const dbUrl = envDbUrl;
 
 const pool = new Pool({
   connectionString: isDbConfigured ? dbUrl : undefined,
-  
+  ssl: isDbConfigured ? { rejectUnauthorized: false } : undefined
 });
 
 let dbConnectionError: string | null = null;
@@ -391,6 +391,64 @@ const ensureListingsTable = async () => {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS experiences (
+      id SERIAL PRIMARY KEY,
+      title VARCHAR(255) NOT NULL,
+      description TEXT NOT NULL,
+      destination VARCHAR(255) NOT NULL,
+      departure_location VARCHAR(255) NOT NULL,
+      start_date TIMESTAMP NOT NULL,
+      end_date TIMESTAMP NOT NULL,
+      price DECIMAL NOT NULL,
+      total_spots INT NOT NULL,
+      available_spots INT NOT NULL,
+      itinerary JSONB DEFAULT '[]'::jsonb,
+      includes JSONB DEFAULT '[]'::jsonb,
+      image_urls JSONB DEFAULT '[]'::jsonb,
+      target_audience VARCHAR(50) DEFAULT 'all',
+      host_id INT REFERENCES users(id) ON DELETE SET NULL,
+      status VARCHAR(50) DEFAULT 'upcoming',
+      places_to_visit JSONB DEFAULT '[]'::jsonb,
+      included_stay JSONB,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  try {
+      await pool.query(`ALTER TABLE experiences ALTER COLUMN includes DROP DEFAULT`);
+      await pool.query(`ALTER TABLE experiences ALTER COLUMN includes TYPE JSONB USING array_to_json(includes)::jsonb`);
+      await pool.query(`ALTER TABLE experiences ALTER COLUMN includes SET DEFAULT '[]'::jsonb`);
+  } catch { /* ignore */ }
+
+  try {
+      await pool.query(`ALTER TABLE experiences ALTER COLUMN image_urls DROP DEFAULT`);
+      await pool.query(`ALTER TABLE experiences ALTER COLUMN image_urls TYPE JSONB USING array_to_json(image_urls)::jsonb`);
+      await pool.query(`ALTER TABLE experiences ALTER COLUMN image_urls SET DEFAULT '[]'::jsonb`);
+  } catch { /* ignore */ }
+
+  try {
+      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS target_audience VARCHAR(50) DEFAULT 'all'`);
+      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS highlights JSONB DEFAULT '[]'::jsonb`);
+      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS things_to_carry JSONB DEFAULT '[]'::jsonb`);
+      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS important_notes TEXT`);
+      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS video_urls JSONB DEFAULT '[]'::jsonb`);
+      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS excludes JSONB DEFAULT '[]'::jsonb`);
+      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS start_time VARCHAR(100)`);
+      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS end_time VARCHAR(100)`);
+      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS language VARCHAR(100) DEFAULT 'English'`);
+      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS cancellation_policy TEXT`);
+      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS map_link TEXT`);
+      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS places_to_visit JSONB DEFAULT '[]'::jsonb`);
+      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS included_stay JSONB`);
+      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS seo_title VARCHAR(255)`);
+      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS seo_description TEXT`);
+      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS seo_keywords TEXT`);
+      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS seo_image_url TEXT`);
+  } catch (e) {
+      console.warn("Minor schema issue during experiences update:", e);
+  }
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS threads (
       id SERIAL PRIMARY KEY,
       listing_id INT REFERENCES listings(id) ON DELETE CASCADE,
@@ -482,42 +540,6 @@ const ensureListingsTable = async () => {
     );
   `);
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS experiences (
-      id SERIAL PRIMARY KEY,
-      title VARCHAR(255) NOT NULL,
-      description TEXT NOT NULL,
-      destination VARCHAR(255) NOT NULL,
-      departure_location VARCHAR(255) NOT NULL,
-      start_date TIMESTAMP NOT NULL,
-      end_date TIMESTAMP NOT NULL,
-      price DECIMAL NOT NULL,
-      total_spots INT NOT NULL,
-      available_spots INT NOT NULL,
-      itinerary JSONB DEFAULT '[]'::jsonb,
-      includes JSONB DEFAULT '[]'::jsonb,
-      image_urls JSONB DEFAULT '[]'::jsonb,
-      target_audience VARCHAR(50) DEFAULT 'all',
-      host_id INT REFERENCES users(id) ON DELETE SET NULL,
-      status VARCHAR(50) DEFAULT 'upcoming',
-      places_to_visit JSONB DEFAULT '[]'::jsonb,
-      included_stay JSONB,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  try {
-      await pool.query(`ALTER TABLE experiences ALTER COLUMN includes DROP DEFAULT`);
-      await pool.query(`ALTER TABLE experiences ALTER COLUMN includes TYPE JSONB USING array_to_json(includes)::jsonb`);
-      await pool.query(`ALTER TABLE experiences ALTER COLUMN includes SET DEFAULT '[]'::jsonb`);
-  } catch { /* ignore */ }
-
-  try {
-      await pool.query(`ALTER TABLE experiences ALTER COLUMN image_urls DROP DEFAULT`);
-      await pool.query(`ALTER TABLE experiences ALTER COLUMN image_urls TYPE JSONB USING array_to_json(image_urls)::jsonb`);
-      await pool.query(`ALTER TABLE experiences ALTER COLUMN image_urls SET DEFAULT '[]'::jsonb`);
-  } catch { /* ignore */ }
-
   try {
       await pool.query(`ALTER TABLE listings ALTER COLUMN image_urls DROP DEFAULT`);
       await pool.query(`ALTER TABLE listings ALTER COLUMN image_urls TYPE JSONB USING array_to_json(image_urls)::jsonb`);
@@ -529,28 +551,6 @@ const ensureListingsTable = async () => {
       await pool.query(`ALTER TABLE listings ALTER COLUMN amenities TYPE JSONB USING array_to_json(amenities)::jsonb`);
       await pool.query(`ALTER TABLE listings ALTER COLUMN amenities SET DEFAULT '[]'::jsonb`);
   } catch { /* ignore */ }
-
-  try {
-      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS target_audience VARCHAR(50) DEFAULT 'all'`);
-      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS highlights JSONB DEFAULT '[]'::jsonb`);
-      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS things_to_carry JSONB DEFAULT '[]'::jsonb`);
-      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS important_notes TEXT`);
-      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS video_urls JSONB DEFAULT '[]'::jsonb`);
-      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS excludes JSONB DEFAULT '[]'::jsonb`);
-      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS start_time VARCHAR(100)`);
-      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS end_time VARCHAR(100)`);
-      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS language VARCHAR(100) DEFAULT 'English'`);
-      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS cancellation_policy TEXT`);
-      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS map_link TEXT`);
-      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS places_to_visit JSONB DEFAULT '[]'::jsonb`);
-      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS included_stay JSONB`);
-      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS seo_title VARCHAR(255)`);
-      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS seo_description TEXT`);
-      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS seo_keywords TEXT`);
-      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS seo_image_url TEXT`);
-  } catch (e) {
-      console.warn("Minor schema issue during experiences update:", e);
-  }
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS experience_bookings (

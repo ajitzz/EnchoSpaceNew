@@ -123,6 +123,7 @@ const MarkerWithInfoWindow = ({
   isMobile,
   onMarkerClick
 }: { 
+  key?: string | number,
   listing: Listing, 
   isActive: boolean, 
   setActiveMarkerId: (id: string | null) => void, 
@@ -464,6 +465,21 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
   const { formatPrice } = useCurrency();
 
   const [mapMode, setMapMode] = useState<'vector' | 'google'>('vector');
+  const [googleMapsError, setGoogleMapsError] = useState(false);
+
+  useEffect(() => {
+    const originalAuthFailure = (window as any).gm_authFailure;
+    (window as any).gm_authFailure = () => {
+      console.warn("Google Maps failed to load due to authentication/billing restrictions. Switched to Custom Vector Map.");
+      setGoogleMapsError(true);
+      setMapMode('vector');
+      if (originalAuthFailure) originalAuthFailure();
+    };
+    return () => {
+      (window as any).gm_authFailure = originalAuthFailure || null;
+    };
+  }, []);
+
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1.1);
   const [isDragging, setIsDragging] = useState(false);
@@ -726,7 +742,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
              </div>
 
              {/* Row 3: Map Mode Selector (Only shown if key is valid) */}
-             {hasValidKey && (
+             {hasValidKey && !googleMapsError && (
                <div className="pointer-events-auto self-center flex p-1 bg-white/95 backdrop-blur-md rounded-full shadow-lg border border-gray-100/50">
                  <button 
                    type="button"
@@ -751,7 +767,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
         {!isMobile && (
           <div className="absolute top-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 px-4 pointer-events-none">
              {/* Map Mode Selector */}
-             {hasValidKey && (
+             {hasValidKey && !googleMapsError && (
                <div className="pointer-events-auto flex p-1 bg-white/95 backdrop-blur-md rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/50">
                  <button 
                    type="button"

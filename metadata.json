@@ -3,5 +3,8 @@
   "description": "A rental property finder application replicating the Nestpick UI with real-time search results.",
   "requestFramePermissions": [
     "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]
 }

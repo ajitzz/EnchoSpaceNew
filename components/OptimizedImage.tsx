@@ -8,6 +8,8 @@ interface OptimizedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> 
   className?: string;
   blurClassName?: string;
   priority?: boolean;
+  onClick?: (e: React.MouseEvent<HTMLImageElement>) => void;
+  style?: React.CSSProperties;
 }
 
 export const getOptimizedUrl = (url: string, width?: number) => {

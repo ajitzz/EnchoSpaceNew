@@ -124,7 +124,7 @@ const Header: React.FC<HeaderProps> = ({
             secondary_text: secondary,
           },
           types: ['locality', 'political']
-        };
+        } as any;
       });
       setPredictions(formatted);
     }

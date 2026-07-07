@@ -116,12 +116,12 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                   </div>
 
                   {/* Badge */}
-                  {tab.badge && tab.badge > 0 && !active && (
+                  {typeof tab.badge === 'number' && tab.badge > 0 && !active && (
                     <span className="absolute top-1.5 right-3 bg-[#e51d53] text-white text-[8px] font-bold h-3.5 min-w-[14px] px-0.5 rounded-full flex items-center justify-center border border-[#1a1a1a]">
                        {tab.badge}
                     </span>
                   )}
-                  {tab.badge && tab.badge > 0 && active && (
+                  {typeof tab.badge === 'number' && tab.badge > 0 && active && (
                     <span className="ml-1.5 bg-[#e51d53] text-white text-[8px] font-extrabold h-4 min-w-[16px] px-1 rounded-full flex items-center justify-center">
                        {tab.badge}
                     </span>

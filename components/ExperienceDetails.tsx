@@ -3,7 +3,7 @@ import { SEO } from './SEO';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Experience } from '../types';
 import { OptimizedImage } from './OptimizedImage';
-import { Settings, Trash2, MapPin, Calendar, Clock, Info, Sparkles, Star, ArrowRight, ChevronLeft, Heart, Check, Crown, ChevronRight, CheckCircle2, XCircle, Map, Users, Activity, Languages, ShieldCheck, Navigation, Play, Volume2, VolumeX, Plus, Upload, Video, Eye, Compass, Send, Camera, X, Briefcase, AlertCircle } from 'lucide-react';
+import { Settings, Trash2, MapPin, Calendar, Clock, Info, Sparkles, Star, ArrowRight, ChevronLeft, Heart, Check, Crown, ChevronRight, CheckCircle2, XCircle, Map, Users, Activity, Languages, ShieldCheck, Navigation, Play, Volume2, VolumeX, Plus, Minus, ChevronDown, Upload, Video, Eye, Compass, Send, Camera, X, Briefcase, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from './AuthContext';
 import { CheckoutModal } from './CheckoutModal';
@@ -228,6 +228,16 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
   const [showCheckout, setShowCheckout] = useState(false);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [bookingStatus, setBookingStatus] = useState<'idle' | 'loading' | 'success'>('idle');
+  const [showMobileBooking, setShowMobileBooking] = useState(false);
+  const [guestName, setGuestName] = useState(user?.name || '');
+  const [guestPhone, setGuestPhone] = useState(user?.phone || '');
+
+  useEffect(() => {
+    if (user) {
+      setGuestName(user.name || '');
+      setGuestPhone(user.phone || '');
+    }
+  }, [user]);
 
   const [reviews, setReviews] = useState<any[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(true);
@@ -491,8 +501,8 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                 experience_id: experience.id,
                 num_tickets: numTickets,
                 total_price: experience.price * numTickets,
-                name: user?.name || '',
-                phone: user?.phone || '',
+                name: guestName.trim() || user?.name || '',
+                phone: guestPhone.trim() || user?.phone || '',
                 user_id: user?.id,
                 payment_intent: paymentIntentId
             })
@@ -2072,7 +2082,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
         </div>
 
         {/* Right Column: Sticky Booking Card */}
-        <div className="relative">
+        <div className="hidden lg:block relative">
             <motion.div 
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -2301,15 +2311,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
               <button 
                 disabled={experience.status === 'sold_out' || bookingStatus === 'loading'}
                 onClick={() => {
-                    if (user) {
-                        if (experience.target_audience === 'students' || experience.target_audience === 'women_only') {
-                            setShowVerificationModal(true);
-                        } else {
-                            setShowCheckout(true);
-                        }
-                    } else {
-                        document.dispatchEvent(new CustomEvent('open-auth-modal', { detail: { reason: 'booking' } }));
-                    }
+                    setShowMobileBooking(true);
                 }}
                 className="flex-1 h-12 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-base transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
               >
@@ -2325,6 +2327,212 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
               </button>
           </div>
       </div>
+
+      {/* Mobile Plan Your Trip Sheet */}
+      <AnimatePresence>
+        {showMobileBooking && (
+          <div className="fixed inset-0 z-[250] flex items-end justify-center lg:hidden">
+              {/* Backdrop */}
+              <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity"
+                  onClick={() => setShowMobileBooking(false)}
+              />
+              
+              {/* Sheet Content */}
+              <motion.div 
+                  initial={{ y: "100%" }}
+                  animate={{ y: 0 }}
+                  exit={{ y: "100%" }}
+                  transition={{ type: "spring", damping: 25, stiffness: 220 }}
+                  className="relative w-full bg-[#111] border-t border-white/10 rounded-t-[32px] shadow-2xl p-6 pb-12 z-10 max-h-[92vh] overflow-y-auto"
+              >
+                  {/* Drag Handle */}
+                  <div className="w-12 h-1.5 bg-zinc-700 rounded-full mx-auto mb-6"></div>
+                  
+                  <div className="flex justify-between items-center mb-6">
+                      <div className="flex flex-col">
+                          <span className="text-xs font-black text-blue-400 uppercase tracking-widest mb-1">Interactive Booking</span>
+                          <h2 className="text-2xl font-black text-white tracking-tight">Plan your move</h2>
+                      </div>
+                      <button 
+                          onClick={() => setShowMobileBooking(false)} 
+                          className="p-2.5 bg-white/5 border border-white/10 rounded-full text-gray-300 hover:text-white transition-all active:scale-90"
+                      >
+                          <X className="w-5 h-5" />
+                      </button>
+                  </div>
+
+                  <div className="space-y-6">
+                      {/* Scheduled Dates & Departure Info Block */}
+                      <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 flex flex-col gap-3">
+                          <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+                                  <Calendar className="w-5 h-5" />
+                              </div>
+                              <div className="flex flex-col">
+                                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Scheduled Date</span>
+                                  <span className="text-sm font-extrabold text-white">
+                                      {format(new Date(experience.start_date), 'MMM dd, yyyy')} - {format(new Date(experience.end_date), 'MMM dd, yyyy')}
+                                  </span>
+                              </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                                  <MapPin className="w-5 h-5" />
+                              </div>
+                              <div className="flex flex-col">
+                                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Departure Point</span>
+                                  <span className="text-sm font-extrabold text-white">
+                                      {experience.departure_location || 'Main Hub'}
+                                  </span>
+                              </div>
+                          </div>
+                      </div>
+
+                      {/* Traveler Count Selection */}
+                      <div>
+                          <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-2.5">Travelers Selection</label>
+                          <div className="flex items-center justify-between p-4 bg-white/[0.02] border border-white/10 rounded-2xl">
+                              <div className="flex flex-col">
+                                  <span className="font-bold text-white text-sm">Number of Tickets</span>
+                                  <span className="text-xs text-gray-400 font-medium">Max {experience.available_spots || 10} spots left</span>
+                              </div>
+                              <div className="flex items-center gap-4">
+                                  <button 
+                                      onClick={() => setNumTickets(Math.max(1, numTickets - 1))}
+                                      disabled={numTickets <= 1}
+                                      className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white disabled:opacity-20 active:scale-95 transition-all"
+                                  >
+                                      <Minus className="w-4 h-4" />
+                                  </button>
+                                  <span className="font-black text-white text-xl min-w-[20px] text-center">{numTickets}</span>
+                                  <button 
+                                      onClick={() => setNumTickets(Math.min(experience.available_spots || 10, numTickets + 1))}
+                                      disabled={numTickets >= (experience.available_spots || 10)}
+                                      className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white disabled:opacity-20 active:scale-95 transition-all"
+                                  >
+                                      <Plus className="w-4 h-4" />
+                                  </button>
+                              </div>
+                          </div>
+                      </div>
+
+                      {/* User Details Form */}
+                      {user && (
+                          <div className="pt-2 border-t border-white/5">
+                              <h3 className="text-sm font-bold text-white mb-4">Your Details</h3>
+                              <div className="space-y-4">
+                                  <div>
+                                      <label className="block text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-1.5">Full Name</label>
+                                      <input 
+                                          type="text" 
+                                          value={guestName}
+                                          onChange={(e) => setGuestName(e.target.value)}
+                                          placeholder="Full Name"
+                                          className="w-full bg-[#1c1c1e] border border-white/10 text-white text-base rounded-xl px-4 py-3.5 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 outline-none font-bold"
+                                      />
+                                  </div>
+                                  <div>
+                                       <label className="block text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-1.5">Mobile Number</label>
+                                       <input 
+                                          type="tel" 
+                                          value={guestPhone}
+                                          onChange={(e) => setGuestPhone(e.target.value)}
+                                          placeholder="Phone Number"
+                                          className="w-full bg-[#1c1c1e] border border-white/10 text-white text-base rounded-xl px-4 py-3.5 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 outline-none font-bold"
+                                      />
+                                  </div>
+                              </div>
+                          </div>
+                      )}
+
+                      {/* Verification Warning for student/women audience */}
+                      {(experience.target_audience === 'students' || experience.target_audience === 'women_only') && (
+                          <div className="flex gap-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-amber-300">
+                              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                              <div className="flex flex-col gap-1">
+                                  <span className="text-xs font-bold uppercase tracking-wider">Verification Required</span>
+                                  <p className="text-[11px] text-amber-200/80 leading-relaxed font-medium">
+                                      {experience.target_audience === 'students' 
+                                          ? 'Since this is a subsidized student-exclusive getaway, College ID verification is required in the next step to secure your spot.'
+                                          : 'For optimal safety and comfort, this trip is women-only. Verification of Govt ID will be requested in the next step.'}
+                                  </p>
+                              </div>
+                          </div>
+                      )}
+
+                      {/* Total Calculation Display */}
+                      <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 flex flex-col gap-2 mt-2">
+                          <div className="flex justify-between text-xs text-gray-400 font-bold">
+                              <span>Ticket Price x {numTickets}</span>
+                              <span>₹{Number(experience.price).toLocaleString()} x {numTickets}</span>
+                          </div>
+                          <div className="flex justify-between text-xs text-gray-400 font-bold">
+                              <span>Taxes & Service Fees</span>
+                              <span className="text-emerald-400">Included</span>
+                          </div>
+                          <div className="h-[1px] bg-white/5 my-2"></div>
+                          <div className="flex justify-between items-center">
+                              <span className="font-bold text-gray-300 text-sm">Total Price</span>
+                              <span className="font-black text-white text-2xl">₹{(experience.price * numTickets).toLocaleString()}</span>
+                          </div>
+                      </div>
+
+                      {/* Confirm Reserve Button */}
+                      <button 
+                          disabled={experience.status === 'sold_out' || (experience.available_spots !== undefined && experience.available_spots <= 0)}
+                          onClick={() => {
+                              if (experience.status === 'sold_out' || (experience.available_spots !== undefined && experience.available_spots <= 0)) {
+                                  addToast("Sold Out", "This experience has no available spots left.", "error");
+                                  return;
+                              }
+                              if (numTickets > (experience.available_spots || 10)) {
+                                  addToast("Not Enough Spots", `Only ${experience.available_spots} spots left for this experience.`, "warning");
+                                  return;
+                              }
+                              if (!user) {
+                                  addToast("Login Required", "Please log in to complete your booking.", "info");
+                                  onRequestAuth();
+                                  return;
+                              }
+                              if (!guestName || guestName.trim().length < 2) {
+                                  addToast("Validation Error", "Please provide your full name (at least 2 characters).", "warning");
+                                  return;
+                              }
+                              if (!guestPhone || guestPhone.replace(/\D/g, '').length < 6) {
+                                  addToast("Validation Error", "Please provide a valid phone number (at least 6 digits).", "warning");
+                                  return;
+                              }
+                              
+                              setShowMobileBooking(false);
+                              if (experience.target_audience === 'students' || experience.target_audience === 'women_only') {
+                                  setShowVerificationModal(true);
+                              } else {
+                                  setShowCheckout(true);
+                              }
+                          }}
+                          className={`w-full text-white font-extrabold text-[16px] py-4 rounded-xl active:scale-[0.98] transition-all shadow-lg flex items-center justify-center gap-2 ${
+                              (experience.status === 'sold_out' || (experience.available_spots !== undefined && experience.available_spots <= 0))
+                              ? 'bg-zinc-700 cursor-not-allowed opacity-50' 
+                              : 'bg-blue-600 hover:bg-blue-500'
+                          }`}
+                      >
+                          <span>
+                              {(experience.status === 'sold_out' || (experience.available_spots !== undefined && experience.available_spots <= 0)) 
+                                  ? 'Dates completely sold out' 
+                                  : (!user ? 'Check availability' : 'Confirm Reservation')}
+                          </span>
+                          <ArrowRight className="w-5 h-5" />
+                      </button>
+                  </div>
+              </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {showVerificationModal && (

@@ -4,7 +4,7 @@ import { SEO } from './components/SEO';
 import { uiAudio } from './components/audio';
 import Header from './components/Header';
 import FilterBar from './components/FilterBar';
-import ListingCard from './components/ListingCard';
+import ListingCard, { getStayStructure } from './components/ListingCard';
 import FlyToAnimation from './components/FlyToAnimation';
 import { MapIcon, ListIcon } from './components/Icons';
 import { Listing } from './types';
@@ -135,6 +135,9 @@ function App() {
                       ...listing,
                       id: `${listing.id}_${room.id}`,
                       originalId: listing.id,
+                      parentType: listing.type,
+                      parentTitle: listing.title,
+                      isChild: true,
                       title: listing.title, // keep the property title
                       displayTitle: `${listing.title} - ${room.name}`,
                       price: room.price,
@@ -187,40 +190,68 @@ function App() {
   });
   const [loadingExperiences, setLoadingExperiences] = useState(true);
 
-  const fetchGlobalExperiences = React.useCallback(async () => {
+  const fetchGlobalExperiences = React.useCallback(async (retryCount = 0) => {
       try {
-        const [expRes, settingsRes] = await Promise.all([
-          fetch(`/api/experiences?_t=${Date.now()}`),
-          fetch(`/api/settings/experiences_page?_t=${Date.now()}`)
-        ]);
-        
-        if (settingsRes.ok) {
-            const data = await settingsRes.json();
-            if (data && data.hero_title) {
-                setGlobalExperiencesSettings(data);
-                if (data.hero_image_urls) {
-                    data.hero_image_urls.forEach((url: string) => {
-                        const img = new Image();
-                        img.src = url;
-                    });
-                }
+        let expData: Experience[] | null = null;
+        let settingsData: any = null;
+
+        // Try to fetch experiences
+        try {
+          const expRes = await fetch(`/api/experiences?_t=${Date.now()}`);
+          if (expRes.ok) {
+            const expType = expRes.headers.get("content-type");
+            if (expType && expType.includes("application/json")) {
+              expData = await expRes.json();
             }
+          }
+        } catch (e) {
+          console.warn("Failed to fetch experiences:", e);
         }
 
-        if (expRes.ok) {
-          const data = await expRes.json();
-          if (data && data.length > 0) {
-            setGlobalExperiences(data);
-            data.forEach((exp: Experience) => {
-                if (exp.image_urls?.[0]) {
-                    const img = new Image();
-                    img.src = exp.image_urls[0];
-                }
+        // Try to fetch settings
+        try {
+          const settingsRes = await fetch(`/api/settings/experiences_page?_t=${Date.now()}`);
+          if (settingsRes.ok) {
+            const settingsType = settingsRes.headers.get("content-type");
+            if (settingsType && settingsType.includes("application/json")) {
+              settingsData = await settingsRes.json();
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to fetch settings:", e);
+        }
+
+        // If both failed and we have retries left, wait and retry (e.g. server restarting during dev)
+        if (!expData && !settingsData && retryCount < 3) {
+          setTimeout(() => {
+            fetchGlobalExperiences(retryCount + 1);
+          }, 1500);
+          return;
+        }
+
+        // Apply settings if retrieved successfully
+        if (settingsData && settingsData.hero_title) {
+          setGlobalExperiencesSettings(settingsData);
+          if (settingsData.hero_image_urls) {
+            settingsData.hero_image_urls.forEach((url: string) => {
+              const img = new Image();
+              img.src = url;
             });
           }
         }
+
+        // Apply experiences if retrieved successfully
+        if (expData && expData.length > 0) {
+          setGlobalExperiences(expData);
+          expData.forEach((exp: Experience) => {
+            if (exp.image_urls?.[0]) {
+              const img = new Image();
+              img.src = exp.image_urls[0];
+            }
+          });
+        }
       } catch (error) {
-        console.error("Failed to load experiences globally", error);
+        console.warn("Handled loading experiences globally gracefully:", error);
       } finally {
         setLoadingExperiences(false);
       }
@@ -417,7 +448,56 @@ function App() {
             url += `&minLat=${customBounds.minLat}&maxLat=${customBounds.maxLat}&minLng=${customBounds.minLng}&maxLng=${customBounds.maxLng}`;
         }
 
-        const apiListings: Listing[] = await fetchWithCache(url, `listings_${url}`) || [];
+        let apiListings: Listing[] = await fetchWithCache(url, `listings_${url}`) || [];
+
+        // Apply advanced dynamic filters on client side
+        if (activeFilters.rentalMode) {
+            apiListings = apiListings.filter(l => l.rental_mode === activeFilters.rentalMode);
+        }
+
+        if (activeFilters.minAcousticRating) {
+            apiListings = apiListings.filter(l => {
+                const stayStructure = getStayStructure(l);
+                const privIndex = stayStructure.privacyPercent;
+                let acousticRating = 72;
+                if (privIndex === 100) acousticRating = 100;
+                else if (privIndex === 90) acousticRating = 90;
+                else if (privIndex === 85) acousticRating = 85;
+                else if (privIndex === 70) acousticRating = 70;
+                else if (privIndex === 60) acousticRating = 60;
+                return acousticRating >= activeFilters.minAcousticRating;
+            });
+        }
+
+        if (activeFilters.minCrowdingRating) {
+            apiListings = apiListings.filter(l => {
+                const stayStructure = getStayStructure(l);
+                const privIndex = stayStructure.privacyPercent;
+                let crowdingRating = 65;
+                if (privIndex === 100) crowdingRating = 100;
+                else if (privIndex === 90) crowdingRating = 80;
+                else if (privIndex === 85) crowdingRating = 80;
+                else if (privIndex === 70) crowdingRating = 65;
+                else if (privIndex === 60) crowdingRating = 65;
+                return crowdingRating >= activeFilters.minCrowdingRating;
+            });
+        }
+
+        if (activeFilters.mustHaveAc) {
+            apiListings = apiListings.filter(l => {
+                const hasAc = l.amenities?.some(a => a.toLowerCase().includes('air conditioning') || a.toLowerCase().includes('ac') || a.toLowerCase().includes('aircon')) ||
+                              l.rooms?.some(r => r.hasAc || r.amenities?.some(a => a.toLowerCase().includes('air conditioning') || a.toLowerCase().includes('ac') || a.toLowerCase().includes('aircon')));
+                return !!hasAc;
+            });
+        }
+
+        if (activeFilters.mustHaveAttachedBathroom) {
+            apiListings = apiListings.filter(l => {
+                const hasAttached = l.rooms?.some(r => r.hasAttachedBathroom) || 
+                                    l.amenities?.some(a => a.toLowerCase().includes('bathroom') && (a.toLowerCase().includes('private') || a.toLowerCase().includes('attached') || a.toLowerCase().includes('ensuite')));
+                return !!hasAttached;
+            });
+        }
 
         setListings(apiListings);
         fetchGlobalExperiences();
@@ -603,19 +683,30 @@ function App() {
              setLoading(true);
              const res = await fetch(`/api/listings`);
              if (res.ok) {
-                const allListings = await res.json();
-                let found = allListings.find((l: any) => String(l.id) === String(id));
-                if (!found && id === 'preview-id') {
-                    const previewStr = localStorage.getItem('hostPreviewListing');
-                    if (previewStr) {
-                        try { found = JSON.parse(previewStr); } catch(e) { console.error('Preview parse error:', e); }
+                const contentType = res.headers.get("content-type");
+                if (contentType && contentType.includes("application/json")) {
+                    try {
+                        const allListings = await res.json();
+                        let found = allListings.find((l: any) => String(l.id) === String(id));
+                        if (!found && id === 'preview-id') {
+                            const previewStr = localStorage.getItem('hostPreviewListing');
+                            if (previewStr) {
+                                try { found = JSON.parse(previewStr); } catch(e) { console.error('Preview parse error:', e); }
+                            }
+                        }
+                        if (found) {
+                           setSelectedListing(found);
+                           setCurrentView('DETAILS');
+                        } else {
+                           setCurrentView('SEARCH');
+                        }
+                    } catch (jsonErr) {
+                        console.error('Error parsing listings JSON:', jsonErr);
+                        setCurrentView('SEARCH');
                     }
-                }
-                if (found) {
-                   setSelectedListing(found);
-                   setCurrentView('DETAILS');
                 } else {
-                   setCurrentView('SEARCH');
+                    console.warn('Expected JSON response for listings, but got:', contentType);
+                    setCurrentView('SEARCH');
                 }
              }
           } catch(e) { console.error(e); setCurrentView('SEARCH'); }
@@ -630,13 +721,24 @@ function App() {
              setLoading(true);
              const res = await fetch(`/api/experiences`);
              if (res.ok) {
-                const allExps = await res.json();
-                const found = allExps.find((e: any) => String(e.id) === String(id));
-                if (found) {
-                   setSelectedExperience(found);
-                   setCurrentView('EXPERIENCE_DETAILS');
+                const contentType = res.headers.get("content-type");
+                if (contentType && contentType.includes("application/json")) {
+                    try {
+                        const allExps = await res.json();
+                        const found = allExps.find((e: any) => String(e.id) === String(id));
+                        if (found) {
+                           setSelectedExperience(found);
+                           setCurrentView('EXPERIENCE_DETAILS');
+                        } else {
+                           setCurrentView('SEARCH');
+                        }
+                    } catch (jsonErr) {
+                        console.error('Error parsing experiences JSON:', jsonErr);
+                        setCurrentView('SEARCH');
+                    }
                 } else {
-                   setCurrentView('SEARCH');
+                    console.warn('Expected JSON response for experiences, but got:', contentType);
+                    setCurrentView('SEARCH');
                 }
              }
           } catch(e) { console.error(e); setCurrentView('SEARCH'); }

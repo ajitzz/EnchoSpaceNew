@@ -49,6 +49,7 @@ export interface NearbyPoint {
 export interface Listing {
   id: string;
   user_id?: number | string;
+  host_id?: number | string;
   title: string;
   price: number;
   currency: string;
@@ -76,6 +77,9 @@ export interface Listing {
     customDates?: Record<string, number>;
   };
   originalId?: string;
+  parentType?: string;
+  parentTitle?: string;
+  isChild?: boolean;
   rating?: number;
   reviewCount?: number;
   amenities?: string[];
