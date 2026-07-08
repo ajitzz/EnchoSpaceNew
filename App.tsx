@@ -1257,13 +1257,13 @@ function App() {
                )}
 
               {loading ? (
-                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-8 md:gap-y-10">
+                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3 gap-x-6 gap-y-8 md:gap-y-10">
                       {[1, 2, 3, 4, 5, 6].map((n) => (
                           <ListingCardSkeleton key={n} />
                       ))}
                    </div>
               ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-8 md:gap-y-10">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3 gap-x-6 gap-y-8 md:gap-y-10">
                   {displayListings.map((listing, index) => (
                       <ListingCard 
                           key={listing.id} 
