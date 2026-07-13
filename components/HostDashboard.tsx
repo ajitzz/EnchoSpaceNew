@@ -6,6 +6,7 @@ import InboxPage from './InboxPage';
 import { Listing, Experience } from '../types';
 import { DashboardListingSkeleton, ReservationSkeleton } from './Skeletons';
 import { MapPin, Users, Calendar as CalendarIcon, DollarSign, Activity, Settings, Video } from 'lucide-react';
+import { useCurrency } from './CurrencyContext';
 
 interface HostDashboardProps {
   view: 'today' | 'calendar' | 'listings' | 'messages' | 'analytics';
@@ -18,6 +19,7 @@ interface HostDashboardProps {
 }
 
 export default function HostDashboard({ view, user, onNavigateToHostForm, onEditListing, onNavigateToExperienceForm, onEditExperience, refreshTrigger = 0 }: HostDashboardProps) {
+  const { formatPrice } = useCurrency();
   const [listings, setListings] = useState<Listing[]>([]);
   const [experiences, setExperiences] = useState<Experience[]>([]);
   const [listingType, setListingType] = useState<'stays' | 'experiences'>('stays');
@@ -360,7 +362,7 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
                             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                         </div>
                         <p className="text-gray-500 font-bold text-sm tracking-wider uppercase mb-2">Total Earnings</p>
-                        <h2 className="text-4xl font-extrabold text-gray-900">₹{totalEarnings.toLocaleString()}</h2>
+                        <h2 className="text-4xl font-extrabold text-gray-900">{formatPrice(totalEarnings, 'INR')}</h2>
                     </div>
                     
                     <div className="bg-white p-6 md:p-8 rounded-3xl border border-gray-100 shadow-sm flex flex-col justify-center items-center text-center">

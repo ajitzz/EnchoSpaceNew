@@ -26,9 +26,10 @@ const MapSidebar = lazy(() => import('./components/MapSidebar'));
 const ListingDetails = lazy(() => import('./components/ListingDetails'));
 const WishlistPage = lazy(() => import('./components/WishlistPage'));
 const BookingPage = lazy(() => import('./components/BookingPage'));
+const CheckoutPage = lazy(() => import('./components/CheckoutPage').then(module => ({ default: module.CheckoutPage })));
 const ReservationsPage = lazy(() => import('./components/ReservationsPage'));
 const HostForm = lazy(() => import('./components/HostForm'));
-const HostExperienceForm = lazy(() => import('./components/HostExperienceForm'));
+const HostExperienceForm = lazy(() => import('./components/HostExperienceForm').then(module => ({ default: module.HostExperienceForm })));
 const HostDashboard = lazy(() => import('./components/HostDashboard'));
 const AdminDashboard = lazy(() => import('./components/AdminDashboard'));
 const InboxPage = lazy(() => import('./components/InboxPage'));
@@ -68,7 +69,7 @@ function useNetworkState() {
   return isOnline;
 }
 
-type ViewState = 'SEARCH' | 'DETAILS' | 'WISHLIST' | 'BOOKING' | 'RESERVATIONS' | 'HOSTING' | 'HOSTING_EXPERIENCE' | 'ADMIN' | 'MESSAGES' | 'EXPERIENCES' | 'EXPERIENCE_DETAILS';
+type ViewState = 'SEARCH' | 'DETAILS' | 'WISHLIST' | 'BOOKING' | 'CHECKOUT' | 'RESERVATIONS' | 'HOSTING' | 'HOSTING_EXPERIENCE' | 'ADMIN' | 'MESSAGES' | 'EXPERIENCES' | 'EXPERIENCE_DETAILS';
 
 let socket: any = null;
 
@@ -79,6 +80,7 @@ interface BookingData {
     phone: string;
     totalRent: number;
     roomIds?: string[];
+    isStartCheckout?: boolean;
 }
 
 interface Reservation extends BookingData {
@@ -176,7 +178,14 @@ function App() {
   const [highlightWishlist, setHighlightWishlist] = useState(false);
   
   const [lastBooking, setLastBooking] = useState<BookingData | null>(null);
+  const [lastExperienceBooking, setLastExperienceBooking] = useState<{
+      experience: Experience;
+      numTickets: number;
+      name: string;
+      phone: string;
+  } | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [experienceBookings, setExperienceBookings] = useState<any[]>([]);
   const [favorites, setFavorites] = useState<Listing[]>([]);
   const [favoriteExperiences, setFavoriteExperiences] = useState<Experience[]>([]);
 
@@ -322,6 +331,16 @@ function App() {
         })
         .catch(console.error);
 
+        fetchWithCache(`/api/experience-bookings`, `experience_bookings_${user.id}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+        .then(data => {
+            if (Array.isArray(data)) {
+                setExperienceBookings(data);
+            }
+        })
+        .catch(console.error);
+
         // Fetch initial unread count
         const fetchInitialCounts = () => {
              const roleQuery = appMode === 'host' ? '?role=host' : '?role=guest';
@@ -405,6 +424,7 @@ function App() {
     } else {
         setFavorites([]);
         setReservations([]);
+        setExperienceBookings([]);
         clearBadge();
     }
   }, [user, appMode, setBadge, clearBadge, showNotification]);
@@ -590,6 +610,26 @@ function App() {
       }
   }, [user]);
 
+  const handleCancelExperienceBooking = React.useCallback(async (id: string | number) => {
+      if (!user) return;
+      if (!confirm('Are you sure you want to cancel this experience booking?')) return;
+      try {
+          // Optimistically update
+          setExperienceBookings(prev => prev.map(b => String(b.id) === String(id) ? { ...b, status: 'cancelled' } : b));
+          
+          const token = localStorage.getItem('token');
+          await fetch(`/api/user/experience-bookings/${id}/cancel`, {
+              method: 'PUT',
+              headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+              }
+          });
+      } catch (e) {
+          console.error(e);
+      }
+  }, [user]);
+
   const handleListingClick = React.useCallback((listing: Listing) => {
     const sourceListing = listing.originalId ? listings.find(l => l.id === listing.originalId) || listing : listing;
 
@@ -620,6 +660,13 @@ function App() {
 
   const handleBooking = React.useCallback(async (data: BookingData) => {
       if (!selectedListing) return;
+      
+      if (data.isStartCheckout) {
+          setLastBooking(data);
+          setCurrentView('CHECKOUT');
+          window.scrollTo(0, 0);
+          return;
+      }
       
       try {
         const payload = {
@@ -656,6 +703,67 @@ function App() {
       }
   }, [selectedListing, user]);
 
+  const handleExperienceBooking = React.useCallback(async (data: any) => {
+      if (!selectedExperience) return;
+      
+      if (data.isStartCheckout) {
+          setLastExperienceBooking({
+              experience: selectedExperience,
+              numTickets: data.numTickets,
+              name: data.name,
+              phone: data.phone,
+          });
+          setCurrentView('CHECKOUT');
+          window.scrollTo(0, 0);
+          return;
+      }
+      
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/experience-bookings', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json', 
+                'Authorization': `Bearer ${token}` 
+            },
+            body: JSON.stringify({
+                experience_id: selectedExperience.id,
+                num_tickets: lastExperienceBooking?.numTickets || data.numTickets || 1,
+                total_price: data.totalRent,
+                name: data.name,
+                phone: data.phone,
+                user_id: user?.id,
+            })
+        });
+        
+        if (!res.ok) {
+            throw new Error('Booking failed');
+        }
+
+        // Fetch updated experience bookings list
+        fetch(`/api/experience-bookings`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (Array.isArray(data)) {
+                setExperienceBookings(data);
+            }
+        })
+        .catch(console.error);
+        
+        addToast("Booking Confirmed", "Your experience is booked successfully!", "success");
+        // Clear active experience booking state
+        setLastExperienceBooking(null);
+        // Redirect to reservations tab or home
+        setCurrentView('RESERVATIONS');
+        window.scrollTo(0, 0);
+      } catch (err) {
+        console.error('Failed to book experience', err);
+        addToast("Error", "Failed to book experience. Please try again.", "error");
+      }
+  }, [selectedExperience, lastExperienceBooking, user]);
+
   const handleAnimationComplete = React.useCallback(() => {
       const target = flyAnimation?.target;
       setFlyAnimation(null);
@@ -674,7 +782,7 @@ function App() {
     const handlePopState = async () => {
       const path = window.location.pathname;
       const hash = window.location.hash.replace('#', '').toUpperCase();
-      const validViews = ['SEARCH', 'DETAILS', 'EXPERIENCE_DETAILS', 'BOOKING', 'WISHLIST', 'RESERVATIONS', 'MESSAGES', 'HOSTING', 'HOST_DASHBOARD', 'ADMIN', 'PREVIEW_HOST'];
+      const validViews = ['SEARCH', 'DETAILS', 'EXPERIENCE_DETAILS', 'BOOKING', 'CHECKOUT', 'WISHLIST', 'RESERVATIONS', 'MESSAGES', 'HOSTING', 'HOST_DASHBOARD', 'ADMIN', 'PREVIEW_HOST'];
       
       if (path.startsWith('/listing/')) {
         const id = path.split('/')[2];
@@ -762,7 +870,7 @@ function App() {
                 setCurrentView('SEARCH');
             }
         } else if (validViews.includes(hash)) {
-          if ((hash === 'DETAILS' || hash === 'BOOKING') && !selectedListing) {
+          if ((hash === 'DETAILS' || hash === 'BOOKING' || hash === 'CHECKOUT') && !selectedListing) {
               setCurrentView('SEARCH');
               window.history.replaceState(null, '', '/');
           } else if (hash === 'EXPERIENCE_DETAILS' && !selectedExperience) {
@@ -1096,6 +1204,7 @@ function App() {
                             }
                         }
                     }}
+                    onBook={handleExperienceBooking}
                 />
                 {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
             </motion.div>
@@ -1127,10 +1236,31 @@ function App() {
             <motion.div key="reservations" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition}>
             <ReservationsPage 
               reservations={reservations}
+              experienceBookings={experienceBookings}
               isOnline={isOnline}
               onBack={() => setCurrentView('SEARCH')}
               onListingClick={handleListingClick}
               onCancelBooking={handleCancelBooking}
+              onCancelExperienceBooking={handleCancelExperienceBooking}
+              onExperienceClick={async (experienceId) => {
+                  try {
+                      setLoading(true);
+                      const res = await fetch(`/api/experiences`);
+                      if (res.ok) {
+                          const allExps = await res.json();
+                          const found = allExps.find((e: any) => String(e.id) === String(experienceId));
+                          if (found) {
+                              setSelectedExperience(found);
+                              setCurrentView('EXPERIENCE_DETAILS');
+                              window.scrollTo(0, 0);
+                          }
+                      }
+                  } catch (err) {
+                      console.error(err);
+                  } finally {
+                      setLoading(false);
+                  }
+              }}
               onContactHost={async (listing) => {
                   if (!user) {
                       setShowAuthModal(true);
@@ -1159,6 +1289,51 @@ function App() {
             />
             </motion.div>
         );
+    }
+
+    if (currentView === 'CHECKOUT') {
+        if (selectedExperience && lastExperienceBooking) {
+            return (
+                <motion.div key="checkout-experience" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition}>
+                  <CheckoutPage 
+                    experience={selectedExperience}
+                    numTickets={lastExperienceBooking.numTickets}
+                    initialData={{
+                      moveInDate: selectedExperience.start_date,
+                      configuration: `${lastExperienceBooking.numTickets} Tickets`,
+                      name: lastExperienceBooking.name || user?.name || '',
+                      phone: lastExperienceBooking.phone || '',
+                    }}
+                    onSuccess={(finalData) => {
+                      handleExperienceBooking(finalData);
+                    }}
+                    onCancel={() => {
+                      setCurrentView('EXPERIENCE_DETAILS');
+                    }}
+                  />
+                </motion.div>
+            );
+        } else if (selectedListing) {
+            return (
+                <motion.div key="checkout" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition}>
+                  <CheckoutPage 
+                    listing={selectedListing}
+                    initialData={{
+                      moveInDate: lastBooking?.moveInDate || new Date().toISOString().split('T')[0],
+                      configuration: lastBooking?.configuration || 'Entire Place',
+                      name: lastBooking?.name || user?.name || '',
+                      phone: lastBooking?.phone || '',
+                    }}
+                    onSuccess={(finalData) => {
+                      handleBooking(finalData);
+                    }}
+                    onCancel={() => {
+                      setCurrentView('DETAILS');
+                    }}
+                  />
+                </motion.div>
+            );
+        }
     }
 
     if (currentView === 'BOOKING' && selectedListing && lastBooking) {

@@ -23,9 +23,9 @@ const SYMBOLS: Record<CurrencyCode, string> = {
 };
 
 const CurrencyContext = createContext<CurrencyContextType>({
-  currency: 'USD',
+  currency: 'INR',
   setCurrency: () => {},
-  formatPrice: (amount) => `$${amount}`
+  formatPrice: (amount) => `₹${amount}`
 });
 
 export const CurrencyProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
@@ -38,7 +38,7 @@ export const CurrencyProvider: React.FC<{children: React.ReactNode}> = ({ childr
     } catch (e) {
       console.error('Error reading currency from localStorage:', e);
     }
-    return 'USD';
+    return 'INR';
   });
 
   const setCurrency = (c: CurrencyCode) => {

@@ -11,6 +11,7 @@ import {
   Smartphone, Laptop, ExternalLink, Video, Compass, AlertCircle, Info, DollarSign
 } from 'lucide-react';
 import { useToast } from './ToastContext';
+import { useCurrency } from './CurrencyContext';
 import ListingDetails from './ListingDetails';
 import { motion, AnimatePresence } from 'framer-motion';
 import { queueCustomMutation } from '../lib/syncService';
@@ -49,6 +50,7 @@ const STEPS = [
 const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing }) => {
   const { user } = useAuth();
   const { addToast } = useToast();
+  const { formatPrice } = useCurrency();
   const [loading, setLoading] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -126,7 +128,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
     title: formData.title || 'Your property title',
     description: formData.description || 'Description will appear here...',
     price: parseFloat(formData.price) || 0,
-    currency: 'USD',
+    currency: 'INR',
     city: formData.city || 'City',
     address: formData.address || 'Address',
     lat: formData.lat || 52.52,
@@ -785,7 +787,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                                     <div>
                                       <h4 className="font-extrabold text-sm text-zinc-900 dark:text-white leading-snug">{room.name || `Unit ${index + 1}`}</h4>
                                       <p className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mt-0.5">
-                                        ₹{(room.price || 0).toLocaleString()} / Month • {room.capacity || 1} Max Guests {room.bedrooms ? `• ${room.bedrooms} BHK` : ''}
+                                        {formatPrice(room.price || 0, 'INR')} / Month • {room.capacity || 1} Max Guests {room.bedrooms ? `• ${room.bedrooms} BHK` : ''}
                                       </p>
                                     </div>
                                   </div>

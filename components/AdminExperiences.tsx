@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Compass, Image as ImageIcon, Settings2, Plus, Trash2, Calendar, MapPin, IndianRupee, Users, CheckCircle2, ChevronLeft, Sparkles } from 'lucide-react';
+import { Compass, Image as ImageIcon, Settings2, Plus, Trash2, Calendar, MapPin, IndianRupee, Users, CheckCircle2, ChevronLeft, Sparkles, Upload } from 'lucide-react';
 import { useToast } from './ToastContext';
+import { useCurrency } from './CurrencyContext';
 import { PhotoUpload } from './PhotoUpload';
 
 interface AdminExperiencesProps {
@@ -12,6 +13,7 @@ export const AdminExperiences: React.FC<AdminExperiencesProps> = ({ token }) => 
   const [experiences, setExperiences] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const { addToast } = useToast();
+  const { formatPrice } = useCurrency();
 
   const [heroSettings, setHeroSettings] = useState({
     hero_title: 'Unforgettable Experiences',
@@ -200,7 +202,7 @@ export const AdminExperiences: React.FC<AdminExperiencesProps> = ({ token }) => 
                         </div>
                         <div>
                           <h4 className="font-bold text-gray-900">{exp.title}</h4>
-                          <p className="text-sm text-gray-500">{exp.destination} • ₹{exp.price}/person</p>
+                          <p className="text-sm text-gray-500">{exp.destination} • {formatPrice(exp.price, 'INR')}/person</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -508,7 +510,52 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
                             <PhotoUpload photos={photos} setPhotos={setPhotos} maxPhotos={10} />
                         </div>
                         <div>
-                            <label className="block text-sm font-bold text-gray-700 mb-2">Video URLs (Optional)</label>
+                            <label className="block text-sm font-bold text-gray-700 mb-2">Video URLs / Local Uploads (Optional)</label>
+                            
+                            {/* Local video uploader for admins */}
+                            <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 flex flex-col items-center justify-center bg-gray-50/50 hover:bg-gray-50 transition-all cursor-pointer relative group mb-4">
+                                <input 
+                                    type="file" 
+                                    accept="video/*" 
+                                    onChange={async (e) => {
+                                        const file = e.target.files?.[0];
+                                        if (!file) return;
+                                        if (file.size > 20 * 1024 * 1024) {
+                                            addToast('Please upload a video file smaller than 20MB', 'error');
+                                            return;
+                                        }
+                                        addToast('Reading video file...', 'info');
+                                        const reader = new FileReader();
+                                        reader.onload = (event) => {
+                                            const base64Data = event.target?.result as string;
+                                            if (base64Data) {
+                                                setVideoUrls([...videoUrls, base64Data]);
+                                                addToast('Video file uploaded successfully!', 'success');
+                                            }
+                                        };
+                                        reader.onerror = () => {
+                                            addToast('Failed to read video file', 'error');
+                                        };
+                                        reader.readAsDataURL(file);
+                                    }}
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                />
+                                <div className="flex flex-col items-center gap-1.5 pointer-events-none">
+                                    <div className="p-2.5 bg-white rounded-full shadow-sm text-gray-400 group-hover:text-purple-600 transition-colors">
+                                        <Upload className="w-5 h-5" />
+                                    </div>
+                                    <span className="text-xs font-bold text-gray-700">Upload a Video Tour File</span>
+                                    <span className="text-[10px] text-gray-400">Drag & drop or click to choose (Max 20MB)</span>
+                                </div>
+                            </div>
+
+                            <div className="relative flex items-center justify-center py-2 mb-2">
+                                <div className="absolute inset-0 flex items-center">
+                                    <div className="w-full border-t border-gray-100" />
+                                </div>
+                                <span className="relative px-3 bg-white text-[10px] font-bold text-gray-400 uppercase tracking-wider">Or paste a link</span>
+                            </div>
+
                             <div className="flex gap-3 mb-4">
                                 <input type="text" id="video_input" className="flex-1 p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500" placeholder="https://youtube.com/..." />
                                 <button type="button" onClick={() => {

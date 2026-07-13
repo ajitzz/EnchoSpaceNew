@@ -96,7 +96,7 @@ const checkAvailability = (id: string, date: string, calendarPrices: any[], list
     if (!date) return { status: 'AVAILABLE', label: 'Check Date' };
     
     // Check calendar DB blocks
-    const dayInfo = calendarPrices.find(cp => cp.date_string === date && (cp.listing_id == listingId || cp.listing_id === undefined));
+    const dayInfo = calendarPrices.find(cp => cp.date_string === date && (cp.listing_id === undefined || (cp.listing_id !== null && String(cp.listing_id) === String(listingId))));
     if (dayInfo && dayInfo.status === 'blocked') {
         return { status: 'SOLD_OUT', label: 'Sold Out' };
     }
@@ -442,6 +442,18 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
   const [showNav, setShowNav] = useState(true);
   const lastScrollY = useRef(0);
   const taxonomyDetails = getTaxonomyDetails(listing);
+  const [paymentRates, setPaymentRates] = useState({ commission_rate: 10, tax_rate: 18, system_fee: 150 });
+
+  useEffect(() => {
+    fetch('/api/settings/payment_rates')
+      .then(res => res.json())
+      .then(data => {
+        if (data && typeof data.commission_rate === 'number') {
+          setPaymentRates(data);
+        }
+      })
+      .catch(err => console.error("Error fetching payment rates:", err));
+  }, []);
   
   // Booking State
   const [bookingStep, setBookingStep] = useState<'AVAILABILITY' | 'CONTACT'>('AVAILABILITY');
@@ -582,7 +594,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
   let currentDayPrice = activeConfig.price;
   let currentOffer = null;
 
-  const dayInfo = calendarPrices.find(cp => cp.date_string === moveInDate && (cp.listing_id == listing.id || cp.listing_id === undefined));
+  const dayInfo = calendarPrices.find(cp => cp.date_string === moveInDate && (cp.listing_id === undefined || (cp.listing_id !== null && String(cp.listing_id) === String(listing.id))));
   let basePrice = activeConfig.price;
   
   if (dayInfo && dayInfo.price) {
@@ -764,9 +776,19 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
               addToast("Validation Error", "Please enter a valid phone number (at least 6 digits).", "warning");
               return;
           }
-          // Open Stripe Checkout
+          // Redirect to checkout page
           uiAudio.playPop();
-          setIsCheckoutOpen(true);
+          if (onBook) {
+              onBook({
+                  moveInDate,
+                  configuration: activeConfig.label,
+                  name: guestName,
+                  phone: guestPhone,
+                  totalRent: totalRent,
+                  roomIds: selectedConfigIds.filter(id => id !== 'entire_place'),
+                  isStartCheckout: true
+              });
+          }
       }
   };
 
@@ -799,29 +821,41 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
         return;
     }
     uiAudio.playPop();
-    // Open Stripe Checkout
-    setIsCheckoutOpen(true);
+    // Redirect to checkout page
+    if (onBook) {
+        onBook({
+            moveInDate,
+            configuration: activeConfig.label,
+            name: guestName,
+            phone: guestPhone,
+            totalRent: totalRent,
+            roomIds: selectedConfigIds.filter(id => id !== 'entire_place'),
+            isStartCheckout: true
+        });
+    }
   };
   
+  // Calculations for rent breakdown
+  const commissionFee = Math.round(currentDayPrice * (paymentRates.commission_rate / 100));
+  const subtotalForTax = currentDayPrice + commissionFee;
+  const taxFee = Math.round(subtotalForTax * (paymentRates.tax_rate / 100));
+  const systemFee = paymentRates.system_fee;
+  const totalRent = currentDayPrice + commissionFee + taxFee + systemFee;
+  const deposit = currentDayPrice * 3; // 3 months deposit
+
   const finishBooking = () => {
       setIsCheckoutOpen(false);
       if (onBook) {
-          const maintenanceFee = Math.round(currentDayPrice * 0.10);
           onBook({
               moveInDate,
               configuration: activeConfig.label,
               name: guestName,
               phone: guestPhone,
-              totalRent: currentDayPrice + maintenanceFee,
+              totalRent: totalRent,
               roomIds: selectedConfigIds.filter(id => id !== 'entire_place')
           });
       }
   };
-
-  // Calculations for rent breakdown
-  const maintenanceFee = Math.round(currentDayPrice * 0.10); // 10% maintenance
-  const totalRent = currentDayPrice + maintenanceFee;
-  const deposit = currentDayPrice * 3; // 3 months deposit
 
   // Render Custom Configuration Dropdown
   const renderConfigDropdown = () => {
@@ -1757,13 +1791,27 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                              </div>
                         )}
                         <div className="flex justify-between text-zinc-500 text-sm font-medium">
-                            <span className="underline decoration-zinc-200 decoration-dotted cursor-help">Monthly Rent</span>
+                            <span className="underline decoration-zinc-200 decoration-dotted cursor-help">Base Rent</span>
                             <span className="font-mono text-zinc-900 font-semibold">{formatPrice(currentDayPrice, listing.currency)}</span>
                         </div>
-                        <div className="flex justify-between text-zinc-500 text-sm font-medium">
-                            <span className="underline decoration-zinc-200 decoration-dotted cursor-help">Maintenance Fee</span>
-                            <span className="font-mono text-zinc-900 font-semibold">{formatPrice(maintenanceFee, listing.currency)}</span>
-                        </div>
+                        {commissionFee > 0 && (
+                            <div className="flex justify-between text-zinc-500 text-sm font-medium">
+                                <span className="underline decoration-zinc-200 decoration-dotted cursor-help">Platform Service Fee ({paymentRates.commission_rate}%)</span>
+                                <span className="font-mono text-zinc-900 font-semibold">{formatPrice(commissionFee, listing.currency)}</span>
+                            </div>
+                        )}
+                        {taxFee > 0 && (
+                            <div className="flex justify-between text-zinc-500 text-sm font-medium">
+                                <span className="underline decoration-zinc-200 decoration-dotted cursor-help">Estimated GST / Taxes ({paymentRates.tax_rate}%)</span>
+                                <span className="font-mono text-zinc-900 font-semibold">{formatPrice(taxFee, listing.currency)}</span>
+                            </div>
+                        )}
+                        {systemFee > 0 && (
+                            <div className="flex justify-between text-zinc-500 text-sm font-medium">
+                                <span className="underline decoration-zinc-200 decoration-dotted cursor-help">Flat System Booking Fee</span>
+                                <span className="font-mono text-zinc-900 font-semibold">{formatPrice(systemFee, listing.currency)}</span>
+                            </div>
+                        )}
                          <div className="flex justify-between text-zinc-500 text-sm font-medium">
                             <span className="underline decoration-zinc-200 decoration-dotted cursor-help">Security Deposit</span>
                             <span className="font-mono text-zinc-900 font-semibold">{formatPrice(deposit, listing.currency)}</span>

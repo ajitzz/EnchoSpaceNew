@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Listing, Offer } from '../types';
 import { ChevronRight, ChevronLeft, ChevronDown, Check } from 'lucide-react';
 import { useAuth } from './AuthContext';
+import { useCurrency } from './CurrencyContext';
 
 interface HostCalendarProps {
   listings: Listing[];
@@ -11,6 +12,7 @@ interface HostCalendarProps {
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export default function HostCalendar({ listings, reservations }: HostCalendarProps) {
+  const { formatPrice, currency } = useCurrency();
   const [selectedListingId, setSelectedListingId] = useState<string | null>(listings.length > 0 ? listings[0].id : null);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDates, setSelectedDates] = useState<number[]>([]);
@@ -165,8 +167,8 @@ export default function HostCalendar({ listings, reservations }: HostCalendarPro
     }
     
     const formattedPrice = displayPrice >= 1000 
-        ? `₹${(displayPrice / 1000).toFixed(1)}K` 
-        : `₹${displayPrice}`;
+        ? `${formatPrice(Number((displayPrice / 1000).toFixed(1)), currency)}K` 
+        : formatPrice(displayPrice, currency);
         
     const isSelected = selectedDates.includes(day);
     const isBlocked = dayInfo && dayInfo.status === 'blocked';
@@ -312,7 +314,7 @@ export default function HostCalendar({ listings, reservations }: HostCalendarPro
                          <div className="w-full">
                             <label className="text-sm text-gray-500 block mb-1">Nightly price</label>
                             <div className="flex items-center">
-                                <span className="font-bold text-gray-900 text-xl mr-1">₹</span>
+                                <span className="font-bold text-gray-900 text-xl mr-1">{currency === 'USD' ? '$' : '₹'}</span>
                                 <input 
                                     type="number" 
                                     className="font-bold text-gray-900 text-xl focus:outline-none w-full bg-transparent"

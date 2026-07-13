@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ChevronLeft, ChevronRight, Plus, Trash2, Check, X, Star, Eye, Sparkles, 
-  AlertCircle, Info, MapPin, Globe, Users, Calendar, Clock, Image, Video, 
+  AlertCircle, Info, MapPin, Globe, Users, Calendar, Clock, Image, Video, Upload,
   Compass, Smartphone, Monitor, ShieldCheck, Heart, ArrowRight, Save, Play, Search
 } from 'lucide-react';
 import { PhotoUpload } from './PhotoUpload';
@@ -830,37 +830,81 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                             <PhotoUpload photos={photos} setPhotos={setPhotos} maxPhotos={10} />
                                         </div>
 
-                                        {/* Video stream URL */}
-                                        <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
-                                            <div>
-                                                <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-500">Segment 1.3</span>
-                                                <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Dynamic Video Tour Reels</h2>
-                                                <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Paste streaming links (Vimeo, YouTube, or raw `.mp4` URLs) to include engaging video overlays.</p>
-                                            </div>
+                                         {/* Video stream URL */}
+                                         <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
+                                             <div>
+                                                 <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-500">Segment 1.3</span>
+                                                 <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Dynamic Video Tour Reels</h2>
+                                                 <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Paste streaming links (Vimeo, YouTube, or raw `.mp4` URLs) or upload a video file to include engaging video overlays.</p>
+                                             </div>
+ 
+                                             <div className="space-y-4">
+                                                 {/* File upload zone for local video files */}
+                                                 <div className="border-2 border-dashed border-zinc-200 dark:border-neutral-800 rounded-2xl p-6 flex flex-col items-center justify-center bg-zinc-50/50 dark:bg-neutral-900/50 hover:bg-zinc-100 dark:hover:bg-neutral-850 transition-all cursor-pointer relative group">
+                                                     <input 
+                                                         type="file" 
+                                                         accept="video/*" 
+                                                         onChange={async (e) => {
+                                                             const file = e.target.files?.[0];
+                                                             if (!file) return;
+                                                             if (file.size > 20 * 1024 * 1024) {
+                                                                 addToast('Please upload a video file smaller than 20MB', 'error');
+                                                                 return;
+                                                             }
+                                                             addToast('Reading video file...', 'info');
+                                                             const reader = new FileReader();
+                                                             reader.onload = (event) => {
+                                                                 const base64Data = event.target?.result as string;
+                                                                 if (base64Data) {
+                                                                     setVideoUrls([...videoUrls, base64Data]);
+                                                                     addToast('Video file uploaded successfully!', 'success');
+                                                                 }
+                                                             };
+                                                             reader.onerror = () => {
+                                                                 addToast('Failed to read video file', 'error');
+                                                             };
+                                                             reader.readAsDataURL(file);
+                                                         }}
+                                                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                                     />
+                                                     <div className="flex flex-col items-center gap-1.5 pointer-events-none">
+                                                         <div className="p-3 bg-white dark:bg-neutral-800 rounded-full shadow-sm text-zinc-400 group-hover:text-emerald-500 transition-colors">
+                                                             <Upload className="w-5 h-5" />
+                                                         </div>
+                                                         <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Upload a Video Tour File</span>
+                                                         <span className="text-[10px] text-zinc-400 dark:text-zinc-500">Drag & drop or click to choose (Max 20MB)</span>
+                                                     </div>
+                                                 </div>
 
-                                            <div className="space-y-3">
-                                                <div className="flex gap-2">
-                                                    <input 
-                                                        type="text" 
-                                                        value={newVideoUrl}
-                                                        onChange={e => setNewVideoUrl(e.target.value)}
-                                                        className="flex-1 p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs font-semibold text-zinc-900 dark:text-white outline-none"
-                                                        placeholder="https://www.youtube.com/watch?v=..."
-                                                    />
-                                                    <button 
-                                                        type="button"
-                                                        onClick={() => {
-                                                            if (newVideoUrl.trim()) {
-                                                                setVideoUrls([...videoUrls, newVideoUrl.trim()]);
-                                                                setNewVideoUrl('');
-                                                                addToast('Video link appended successfully', 'success');
-                                                            }
-                                                        }}
-                                                        className="px-4 py-3 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 rounded-xl font-bold text-xs uppercase"
-                                                    >
-                                                        Add
-                                                    </button>
-                                                </div>
+                                                 <div className="relative flex items-center justify-center py-2">
+                                                     <div className="absolute inset-0 flex items-center">
+                                                         <div className="w-full border-t border-zinc-100 dark:border-neutral-800" />
+                                                     </div>
+                                                     <span className="relative px-3 bg-white dark:bg-neutral-900 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Or paste a link</span>
+                                                 </div>
+
+                                                 <div className="flex gap-2">
+                                                     <input 
+                                                         type="text" 
+                                                         value={newVideoUrl}
+                                                         onChange={e => setNewVideoUrl(e.target.value)}
+                                                         className="flex-1 p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs font-semibold text-zinc-900 dark:text-white outline-none"
+                                                         placeholder="https://www.youtube.com/watch?v=..."
+                                                     />
+                                                     <button 
+                                                         type="button"
+                                                         onClick={() => {
+                                                             if (newVideoUrl.trim()) {
+                                                                 setVideoUrls([...videoUrls, newVideoUrl.trim()]);
+                                                                 setNewVideoUrl('');
+                                                                 addToast('Video link appended successfully', 'success');
+                                                             }
+                                                         }}
+                                                         className="px-4 py-3 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 rounded-xl font-bold text-xs uppercase"
+                                                     >
+                                                         Add
+                                                     </button>
+                                                 </div>
 
                                                 {videoUrls.length > 0 && (
                                                     <div className="space-y-2 pt-2">
@@ -1764,3 +1808,5 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
         </div>
     );
 };
+
+export default HostExperienceForm;

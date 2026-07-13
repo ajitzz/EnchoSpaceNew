@@ -6,8 +6,8 @@ import { OptimizedImage } from './OptimizedImage';
 import { Settings, Trash2, MapPin, Calendar, Clock, Info, Sparkles, Star, ArrowRight, ChevronLeft, Heart, Check, Crown, ChevronRight, CheckCircle2, XCircle, Map, Users, Activity, Languages, ShieldCheck, Navigation, Play, Volume2, VolumeX, Plus, Minus, ChevronDown, Upload, Video, Eye, Compass, Send, Camera, X, Briefcase, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from './AuthContext';
-import { CheckoutModal } from './CheckoutModal';
 import { useToast } from './ToastContext';
+import { useCurrency } from './CurrencyContext';
 import { getRatingWord, formatRating } from '../lib/ratingUtils';
 
 interface ExperienceDetailsProps {
@@ -20,6 +20,7 @@ interface ExperienceDetailsProps {
   onMessageHost?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onBook?: (data: Record<string, any>) => void;
 }
 
 const PACKAGE_DESTINATIONS = [
@@ -220,12 +221,15 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
     onSelectExperience,
     isFavorite,
     onToggleFavorite,
-    onMessageHost
+    onMessageHost,
+    onEdit,
+    onDelete,
+    onBook
 }) => {
   const { user } = useAuth();
   const { addToast } = useToast();
+  const { formatPrice } = useCurrency();
   const [numTickets, setNumTickets] = useState(1);
-  const [showCheckout, setShowCheckout] = useState(false);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [bookingStatus, setBookingStatus] = useState<'idle' | 'loading' | 'success'>('idle');
   const [showMobileBooking, setShowMobileBooking] = useState(false);
@@ -482,50 +486,24 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
     }
   };
 
+  const triggerCheckout = () => {
+    if (onBook) {
+      onBook({
+        experience,
+        numTickets,
+        name: guestName || user?.name || '',
+        phone: guestPhone || user?.phone || '',
+        isStartCheckout: true
+      });
+    }
+  };
+
   const handleBook = () => {
     if (!user) {
       onRequestAuth();
       return;
     }
-    setShowCheckout(true);
-  };
-
-  const processBooking = async (paymentIntentId?: string) => {
-    setBookingStatus('loading');
-    try {
-        const token = localStorage.getItem('token');
-        const res = await fetch('/api/experience-bookings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({
-                experience_id: experience.id,
-                num_tickets: numTickets,
-                total_price: experience.price * numTickets,
-                name: guestName.trim() || user?.name || '',
-                phone: guestPhone.trim() || user?.phone || '',
-                user_id: user?.id,
-                payment_intent: paymentIntentId
-            })
-        });
-        
-        if (!res.ok) {
-            throw new Error('Booking failed');
-        }
-        
-        setBookingStatus('success');
-        addToast("Booking Confirmed", "Your experience is booked successfully!", "success");
-        setTimeout(() => {
-            onBack();
-        }, 2000);
-    } catch(err) {
-        setBookingStatus('idle');
-        addToast("Error", "Failed to book experience. Please try again.", "error");
-    }
-  };
-
-  const handleCheckoutSuccess = (paymentIntentId: string) => {
-      setShowCheckout(false);
-      processBooking(paymentIntentId);
+    triggerCheckout();
   };
 
   const placesToVisit = (experience.places_to_visit && experience.places_to_visit.length > 0) 
@@ -2046,7 +2024,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                                     {/* Price Tag (bottom right inside image) */}
                                     <div className="absolute bottom-4 right-4 z-10">
                                         <div className="bg-black/60 backdrop-blur-md border border-white/10 px-4 py-2 rounded-2xl flex items-center gap-1 shadow-lg">
-                                            <span className="text-white font-black text-lg">₹{Number(exp.price).toLocaleString()}</span>
+                                            <span className="text-white font-black text-lg">{formatPrice(Number(exp.price), 'INR')}</span>
                                             <span className="text-gray-400 text-xs font-medium">/pp</span>
                                         </div>
                                     </div>
@@ -2093,10 +2071,10 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                     <div className="flex flex-col gap-1">
                         <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Package Price</span>
                         <div className="flex items-baseline gap-1.5 sm:gap-2">
-                            <span className="text-3xl sm:text-4xl font-black text-white tracking-tight">₹{Number(experience.price).toLocaleString()}</span>
+                            <span className="text-3xl sm:text-4xl font-black text-white tracking-tight">{formatPrice(Number(experience.price), 'INR')}</span>
                             <span className="text-sm sm:text-base text-gray-500 font-medium">/ person</span>
                         </div>
-                        <p className="text-[10px] text-gray-400 mt-0.5">Or 3 interest-free parts of <strong className="text-white font-bold">₹{Math.ceil(experience.price / 3).toLocaleString()}</strong></p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">Or 3 interest-free parts of <strong className="text-white font-bold">{formatPrice(Math.ceil(experience.price / 3), 'INR')}</strong></p>
                     </div>
                     {experience.available_spots <= 10 && (
                         <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 whitespace-nowrap">
@@ -2207,8 +2185,8 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
 
                 <div className="flex flex-col gap-2 pt-4 border-t border-white/5">
                     <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">₹{Number(experience.price).toLocaleString()} x {numTickets} travelers</span>
-                        <span className="text-white font-medium">₹{(experience.price * numTickets).toLocaleString()}</span>
+                        <span className="text-gray-400">{formatPrice(Number(experience.price), 'INR')} x {numTickets} travelers</span>
+                        <span className="text-white font-medium">{formatPrice(experience.price * numTickets, 'INR')}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                         <span className="text-gray-400">Taxes & Fees</span>
@@ -2216,7 +2194,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                     </div>
                     <div className="flex justify-between py-4 mt-2 border-t border-white/5">
                         <span className="font-bold text-gray-300 text-lg">Total</span>
-                        <span className="font-black text-white text-2xl">₹{(experience.price * numTickets).toLocaleString()}</span>
+                        <span className="font-black text-white text-2xl">{formatPrice(experience.price * numTickets, 'INR')}</span>
                     </div>
                 </div>
 
@@ -2306,7 +2284,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
               </button>
               <div className="flex flex-col flex-shrink-0 min-w-[90px]">
                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Price</span>
-                  <span className="text-xl font-black text-white">₹{(experience.price * numTickets).toLocaleString()}</span>
+                  <span className="text-xl font-black text-white">{formatPrice(experience.price * numTickets, 'INR')}</span>
               </div>
               <button 
                 disabled={experience.status === 'sold_out' || bookingStatus === 'loading'}
@@ -2469,7 +2447,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                       <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 flex flex-col gap-2 mt-2">
                           <div className="flex justify-between text-xs text-gray-400 font-bold">
                               <span>Ticket Price x {numTickets}</span>
-                              <span>₹{Number(experience.price).toLocaleString()} x {numTickets}</span>
+                              <span>{formatPrice(Number(experience.price), 'INR')} x {numTickets}</span>
                           </div>
                           <div className="flex justify-between text-xs text-gray-400 font-bold">
                               <span>Taxes & Service Fees</span>
@@ -2478,7 +2456,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                           <div className="h-[1px] bg-white/5 my-2"></div>
                           <div className="flex justify-between items-center">
                               <span className="font-bold text-gray-300 text-sm">Total Price</span>
-                              <span className="font-black text-white text-2xl">₹{(experience.price * numTickets).toLocaleString()}</span>
+                              <span className="font-black text-white text-2xl">{formatPrice(experience.price * numTickets, 'INR')}</span>
                           </div>
                       </div>
 
@@ -2512,7 +2490,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                               if (experience.target_audience === 'students' || experience.target_audience === 'women_only') {
                                   setShowVerificationModal(true);
                               } else {
-                                  setShowCheckout(true);
+                                  triggerCheckout();
                               }
                           }}
                           className={`w-full text-white font-extrabold text-[16px] py-4 rounded-xl active:scale-[0.98] transition-all shadow-lg flex items-center justify-center gap-2 ${
@@ -2565,7 +2543,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                     <button 
                         onClick={() => {
                             setShowVerificationModal(false);
-                            setShowCheckout(true);
+                            triggerCheckout();
                             addToast("ID Verified Temporarily (Demo)", "success");
                         }}
                         className={`w-full py-3.5 rounded-xl text-sm font-bold transition-transform active:scale-[0.98] ${
@@ -2581,14 +2559,6 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                     </p>
                 </div>
             </div>
-        )}
-        {showCheckout && (
-            <CheckoutModal
-                isOpen={showCheckout}
-                onClose={() => setShowCheckout(false)}
-                amount={experience.price * numTickets}
-                                onSuccess={() => handleCheckoutSuccess("")}
-            />
         )}
         {showLobby && (
           <TravelerLobby 

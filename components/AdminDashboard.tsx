@@ -6,6 +6,7 @@ import { HomeIcon, ListIcon,  TrashIcon, EditIcon, CheckCircle2Icon, UserIcon, X
 import { Map, Compass, MoreHorizontal, Edit3 } from 'lucide-react';
 import { useAuth, User } from './AuthContext';
 import AdminInbox from './AdminInbox';
+import { useCurrency } from './CurrencyContext';
 import { AdminExperiences } from './AdminExperiences';
 import { useToast } from './ToastContext';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
@@ -16,6 +17,7 @@ interface AdminDashboardProps {
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }) => {
+  const { formatPrice } = useCurrency();
   const [adminMode, setAdminMode] = useState<'stays' | 'experiences'>('stays');
   const [activeTab, setActiveTab] = useState<'analytics' | 'listings' | 'users' | 'settings' | 'offers' | 'reviews' | 'messages' | 'seo'>('analytics');
   const [editingRoomsListing, setEditingRoomsListing] = useState<Listing | null>(null);
@@ -59,6 +61,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   const [authorizedExperienceHosts, setAuthorizedExperienceHosts] = useState<string[]>([]);
   const [hostEmailInput, setHostEmailInput] = useState('');
   const [demoSettings, setDemoSettings] = useState({ enabled: false });
+  const [paymentRates, setPaymentRates] = useState({ commission_rate: 10, tax_rate: 18, system_fee: 150 });
   const [savingSettings, setSavingSettings] = useState(false);
   const { token, logout, user } = useAuth();
   const { addToast } = useToast();
@@ -72,7 +75,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
     try {
       const headers = { 'Authorization': `Bearer ${token}` };
       
-      const [listingsRes, metricsRes, usersRes, whatsappRes, callRes, demoRes, offersRes, reviewsRes, expRes, expBookingsRes, expHostsRes] = await Promise.all([
+      const [listingsRes, metricsRes, usersRes, whatsappRes, callRes, demoRes, offersRes, reviewsRes, expRes, expBookingsRes, expHostsRes, ratesRes] = await Promise.all([
         fetch('/api/listings?city=all'),
         fetch(`/api/admin/metrics?type=${adminMode}`),
         fetch(`/api/admin/users?type=${adminMode}`, { headers }),
@@ -83,7 +86,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
         fetch(`/api/admin/reviews?type=${adminMode}`, { headers }),
         fetch('/api/experiences'),
         fetch('/api/admin/experience-bookings', { headers }),
-        fetch('/api/admin/settings/experience-hosts', { headers })
+        fetch('/api/admin/settings/experience-hosts', { headers }),
+        fetch('/api/settings/payment_rates')
       ]);
       
       if (listingsRes.ok) {
@@ -130,6 +134,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
       if (reviewsRes.ok) {
          const data = await reviewsRes.json();
          setReviews(data);
+      }
+      if (ratesRes.ok) {
+         const data = await ratesRes.json();
+         setPaymentRates(data);
       }
     } catch (e) {
       console.error("Failed to fetch admin data", e);
@@ -193,6 +201,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
            body: JSON.stringify({ emails: authorizedExperienceHosts })
          })
       ]);
+      await fetch('/api/settings/payment_rates', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(paymentRates)
+      });
       alert('Settings saved successfully');
     } catch (error) {
       console.error('Failed to save settings:', error);
@@ -688,7 +704,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                           </span>
                                       )}
                                   </td>
-                                  <td className="px-6 py-4 font-medium text-gray-900">₹{listing.price.toLocaleString()}</td>
+                                  <td className="px-6 py-4 font-medium text-gray-900">{formatPrice(listing.price, 'INR')}</td>
                                   <td className="px-6 py-4">
                                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700">
                                          <CheckCircle2Icon className="w-3.5 h-3.5" /> Active
@@ -754,7 +770,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                        <td className="px-6 py-4 font-semibold text-gray-900">{b.name} <br/><span className="text-xs text-gray-500">{b.phone}</span></td>
                                        <td className="px-6 py-4 text-gray-600">{b.title} <br/><span className="text-xs text-gray-500">{new Date(b.start_date).toLocaleDateString()}</span></td>
                                        <td className="px-6 py-4 font-medium text-gray-900">{b.num_tickets}</td>
-                                       <td className="px-6 py-4 font-bold text-emerald-600">₹{Number(b.total_price).toLocaleString()}</td>
+                                       <td className="px-6 py-4 font-bold text-emerald-600">{formatPrice(Number(b.total_price), 'INR')}</td>
                                    </tr>
                                ))
                            )}
@@ -991,7 +1007,63 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                        </div>
                    </section>
 
-                   <div className="pt-4 border-t border-gray-100">
+                   <section className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-6">
+                        <div>
+                            <h2 className="text-xl font-bold text-gray-900">Payment & Commission Settings</h2>
+                            <p className="text-sm text-gray-500 mt-1">Configure global rates for platform commissions, tax, and system fees applied during checkout.</p>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                           <div className="space-y-2">
+                              <label className="block text-sm font-semibold text-gray-900">Platform Commission (%)</label>
+                              <div className="relative">
+                                 <input 
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={paymentRates.commission_rate}
+                                    onChange={e => setPaymentRates(prev => ({ ...prev, commission_rate: Number(e.target.value) }))}
+                                    className="w-full pl-4 pr-10 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#0284C7] focus:outline-none transition-all font-mono font-semibold"
+                                 />
+                                 <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-gray-500 font-bold">%</div>
+                              </div>
+                              <p className="text-xs text-gray-400">Charged on top of base listing/experience price.</p>
+                           </div>
+
+                           <div className="space-y-2">
+                              <label className="block text-sm font-semibold text-gray-900">GST / Tax Rate (%)</label>
+                              <div className="relative">
+                                 <input 
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={paymentRates.tax_rate}
+                                    onChange={e => setPaymentRates(prev => ({ ...prev, tax_rate: Number(e.target.value) }))}
+                                    className="w-full pl-4 pr-10 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#0284C7] focus:outline-none transition-all font-mono font-semibold"
+                                 />
+                                 <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-gray-500 font-bold">%</div>
+                              </div>
+                              <p className="text-xs text-gray-400">Calculated on subtotal (Base + Commission).</p>
+                           </div>
+
+                           <div className="space-y-2">
+                              <label className="block text-sm font-semibold text-gray-900">Flat System Fee (₹)</label>
+                              <div className="relative">
+                                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-500 font-bold">₹</div>
+                                 <input 
+                                    type="number"
+                                    min="0"
+                                    value={paymentRates.system_fee}
+                                    onChange={e => setPaymentRates(prev => ({ ...prev, system_fee: Number(e.target.value) }))}
+                                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#0284C7] focus:outline-none transition-all font-mono font-semibold"
+                                 />
+                              </div>
+                              <p className="text-xs text-gray-400">Flat processing fee added to final checkout total.</p>
+                           </div>
+                        </div>
+                    </section>
+
+                    <div className="pt-4 border-t border-gray-100">
                       <button 
                          onClick={handleSaveSettings}
                          disabled={savingSettings || (whatsappSettings.enabled && !whatsappSettings.number) || (callSettings.enabled && !callSettings.number)}

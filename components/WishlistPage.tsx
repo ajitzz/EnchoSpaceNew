@@ -6,6 +6,7 @@ import ListingCard from './ListingCard';
 import { ChevronLeft, HeartIcon } from './Icons';
 import { MapPin, Map, Calendar, ArrowRight } from 'lucide-react';
 import { useToast } from './ToastContext';
+import { useCurrency } from './CurrencyContext';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { OptimizedImage } from './OptimizedImage';
@@ -30,6 +31,7 @@ const WishlistPage: React.FC<WishlistPageProps> = ({
   onToggleExperienceFavorite
 }) => {
   const { addToast } = useToast();
+  const { formatPrice } = useCurrency();
   const [activeTab, setActiveTab] = useState<'stays' | 'experiences'>('stays');
   
   const handleToggle = (listing: Listing) => {
@@ -150,7 +152,7 @@ const WishlistPage: React.FC<WishlistPageProps> = ({
                                 </button>
                                 
                                 <div className="absolute bottom-3 right-3 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full shadow-lg">
-                                    <span className="text-black font-black text-sm">₹{Number(exp.price).toLocaleString()}</span>
+                                    <span className="text-black font-black text-sm">{formatPrice(Number(exp.price), 'INR')}</span>
                                 </div>
                             </div>
 

@@ -319,7 +319,7 @@ const ensureListingsTable = async () => {
       title VARCHAR(255) NOT NULL,
       description TEXT,
       price DECIMAL NOT NULL,
-      currency VARCHAR(10) DEFAULT 'USD',
+      currency VARCHAR(10) DEFAULT 'INR',
       type VARCHAR(50) NOT NULL,
       address VARCHAR(255) NOT NULL,
       city VARCHAR(100) NOT NULL,
@@ -1146,6 +1146,98 @@ app.delete('/api/admin/users/:id', authenticateToken, async (req: AuthRequest, r
 // Keep-alive endpoint to prevent server from sleeping
 app.get('/api/keep-alive', (req, res) => {
   res.status(200).json({ status: 'alive', timestamp: new Date().toISOString() });
+});
+
+function readIndexHtml(): string {
+  const paths = [
+    path.join(process.cwd(), 'dist', 'index.html'),
+    path.join(process.cwd(), 'index.html'),
+    path.join(__dirname, 'index.html'),
+    path.join(__dirname, 'dist', 'index.html'),
+    path.join(__dirname, '..', 'dist', 'index.html'),
+    './dist/index.html',
+    './index.html'
+  ];
+  for (const p of paths) {
+    if (fs.existsSync(p)) {
+      try {
+        return fs.readFileSync(p, 'utf8');
+      } catch (err) {
+        console.error(`Failed to read index.html at ${p}:`, err);
+      }
+    }
+  }
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>EnchoSpace</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>`;
+}
+
+// SEO routing fallback for Vercel direct reloads on listing and experience pages
+app.get('/api/seo', async (req, res) => {
+  const { type, id } = req.query;
+  let html = readIndexHtml();
+
+  try {
+    let injectedTags = '';
+
+    if (type === 'listing' && id) {
+      if (isDbConfigured) {
+        const result = await pool.query("SELECT * FROM listings WHERE id = $1", [id]);
+        if (result.rows.length > 0) {
+          const listing = result.rows[0];
+          const title = `${listing.title} | EnchoSpace`;
+          const description = listing.description?.substring(0, 160) || `Stay at ${listing.title}`;
+          const image = listing.image_url || (listing.image_urls && listing.image_urls[0]) || '';
+
+          injectedTags = `
+            <title>${title}</title>
+            <meta name="description" content="${description}" />
+            <meta property="og:title" content="${title}" />
+            <meta property="og:description" content="${description}" />
+            <meta property="og:image" content="${image}" />
+            <meta property="og:type" content="website" />
+            <meta name="twitter:card" content="summary_large_image" />
+            <meta name="twitter:title" content="${title}" />
+            <meta name="twitter:description" content="${description}" />
+            <meta name="twitter:image" content="${image}" />
+          `;
+        }
+      }
+    } else if (type === 'experience' && id) {
+      if (isDbConfigured) {
+        const result = await pool.query("SELECT * FROM experiences WHERE id = $1", [id]);
+        if (result.rows.length > 0) {
+          const experience = result.rows[0];
+          const title = `${experience.title} | EnchoSpace`;
+          const description = experience.description?.substring(0, 160) || `Experience ${experience.title}`;
+          const imageUrls = typeof experience.image_urls === 'string' ? JSON.parse(experience.image_urls) : experience.image_urls;
+          const image = imageUrls && imageUrls.length > 0 ? imageUrls[0] : '';
+
+          injectedTags = `
+            <title>${title}</title>
+            <meta name="description" content="${description}" />
+            <meta property="og:title" content="${title}" />
+            <meta property="og:description" content="${description}" />
+            <meta property="og:image" content="${image}" />
+            <meta property="og:type" content="website" />
+            <meta name="twitter:card" content="summary_large_image" />
+            <meta name="twitter:title" content="${title}" />
+            <meta name="twitter:description" content="${description}" />
+            <meta name="twitter:image" content="${image}" />
+          `;
+        }
+      }
+    }
+
+    if (injectedTags) {
+      // Replace existing <title> and simple meta tags if present, or just inject into <head>
+      html = html.replace(/<title>.*?<\/title>/, '');
+      html = html.replace('<head>', '<head>' + injectedTags);
+    }
+  } catch (e) {
+    console.error('SEO Injection Error:', e);
+  }
+
+  res.setHeader('Content-Type', 'text/html');
+  res.send(html);
 });
 
 // Health check
@@ -3679,6 +3771,47 @@ app.get('/api/experience-bookings', authenticateToken, async (req: AuthRequest, 
   }
 });
 
+app.put('/api/user/experience-bookings/:id/cancel', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+
+    const checkRes = await pool.query('SELECT status, experience_id, num_tickets FROM experience_bookings WHERE id = $1 AND user_id = $2', [id, userId]);
+    if (checkRes.rows.length === 0) return res.status(404).json({ error: 'Booking not found' });
+
+    if (checkRes.rows[0].status === 'cancelled') {
+      return res.status(400).json({ error: 'Already cancelled' });
+    }
+
+    const { experience_id, num_tickets } = checkRes.rows[0];
+
+    const result = await pool.query("UPDATE experience_bookings SET status = 'cancelled' WHERE id = $1 RETURNING *", [id]);
+    const booking = result.rows[0];
+
+    // Release spots
+    await pool.query('UPDATE experiences SET available_spots = available_spots + $1 WHERE id = $2', [num_tickets, experience_id]);
+
+    const io = req.app.get('io');
+    if (io) {
+       try {
+           const expRes = await pool.query('SELECT title, host_id FROM experiences WHERE id = $1', [experience_id]);
+           if (expRes.rows.length > 0) {
+               const { title, host_id } = expRes.rows[0];
+               if (host_id) {
+                 io.to(`user_${host_id}`).emit('notification', { type: 'booking_update', booking, message: `An experience booking for "${title}" was cancelled by guest` });
+               }
+               io.to('admin_room').emit('notification', { type: 'booking_update', booking, message: `An experience booking for "${title}" was cancelled by guest` });
+           }
+       } catch(e) { console.error(e); }
+    }
+    res.json({ message: 'Booking cancelled successfully', booking });
+  } catch (error) {
+    console.error('Cancel Experience Booking Error:', error);
+    res.status(500).json({ error: 'Failed to cancel experience booking' });
+  }
+});
+
 app.get('/api/admin/experience-bookings', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
@@ -3694,6 +3827,47 @@ app.get('/api/admin/experience-bookings', authenticateToken, async (req: AuthReq
   } catch (error) {
     console.error('Failed to get all experience bookings:', error);
     res.status(500).json({ error: 'Failed to fetch experience bookings' });
+  }
+});
+
+
+// Payment settings / rates
+app.get('/api/settings/payment_rates', async (req, res) => {
+  if (!isDbConfigured) {
+    return res.json({ commission_rate: 10, tax_rate: 18, system_fee: 150 });
+  }
+  try {
+    const result = await pool.query('SELECT value FROM settings WHERE key = $1', ['payment_rates']);
+    if (result.rows.length > 0) {
+      res.json(result.rows[0].value);
+    } else {
+      res.json({ commission_rate: 10, tax_rate: 18, system_fee: 150 });
+    }
+  } catch (error) {
+    console.error('Failed to get payment settings:', error);
+    res.status(500).json({ error: 'Failed to fetch settings' });
+  }
+});
+
+app.post('/api/settings/payment_rates', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) {
+    return res.status(503).json({ error: 'DB not configured' });
+  }
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+
+  try {
+    const { commission_rate, tax_rate, system_fee } = req.body;
+    await pool.query(`
+      INSERT INTO settings (key, value)
+      VALUES ($1, $2)
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+    `, ['payment_rates', JSON.stringify({ commission_rate: Number(commission_rate), tax_rate: Number(tax_rate), system_fee: Number(system_fee) })]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to update payment settings:', error);
+    res.status(500).json({ error: 'Failed to update settings' });
   }
 });
 
