@@ -3,13 +3,14 @@ import { SEO } from './SEO';
 import HostForm from './HostForm';
 import HostCalendar from './HostCalendar';
 import InboxPage from './InboxPage';
+import HostMarketing from './HostMarketing';
 import { Listing, Experience } from '../types';
 import { DashboardListingSkeleton, ReservationSkeleton } from './Skeletons';
 import { MapPin, Users, Calendar as CalendarIcon, DollarSign, Activity, Settings, Video } from 'lucide-react';
 import { useCurrency } from './CurrencyContext';
 
 interface HostDashboardProps {
-  view: 'today' | 'calendar' | 'listings' | 'messages' | 'analytics';
+  view: 'today' | 'calendar' | 'listings' | 'messages' | 'analytics' | 'marketing';
   user: any;
   onNavigateToHostForm?: () => void;
   onEditListing?: (listing: Listing) => void;
@@ -389,6 +390,14 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
                         <h2 className="text-4xl font-extrabold text-gray-900">{totalWishlists}</h2>
                     </div>
                 </div>
+            </div>
+        );
+    }
+
+    if (view === 'marketing') {
+        return (
+            <div className="w-full">
+                <HostMarketing user={user} listings={listings} />
             </div>
         );
     }

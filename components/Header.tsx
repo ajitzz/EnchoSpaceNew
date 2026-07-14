@@ -22,8 +22,8 @@ interface HeaderProps {
   wishlistCount: number;
   appMode?: 'travel' | 'host';
   onModeSwitch?: (mode: 'travel' | 'host') => void;
-  hostView?: 'today' | 'calendar' | 'listings' | 'messages' | 'analytics';
-  onHostViewChange?: (view: 'today' | 'calendar' | 'listings' | 'messages' | 'analytics') => void;
+  hostView?: 'today' | 'calendar' | 'listings' | 'messages' | 'analytics' | 'marketing';
+  onHostViewChange?: (view: 'today' | 'calendar' | 'listings' | 'messages' | 'analytics' | 'marketing') => void;
   onInboxClick?: () => void;
   isOnline?: boolean;
   activeTab?: 'stays' | 'experiences';
@@ -624,6 +624,13 @@ const Header: React.FC<HeaderProps> = ({
               className={`hover:text-gray-900 transition-colors ${hostView === 'analytics' ? 'text-gray-900 border-b-2 border-gray-900' : ''}`}
             >
               Analytics
+            </button>
+            <button 
+              onClick={() => onHostViewChange?.('marketing')} 
+              className={`hover:text-gray-900 transition-colors flex items-center gap-1.5 ${hostView === 'marketing' ? 'text-gray-900 border-b-2 border-gray-900' : ''}`}
+            >
+              <span>Marketing</span>
+              <span className="bg-blue-500 text-white text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full tracking-widest scale-90">Beta</span>
             </button>
           </div>
         )}

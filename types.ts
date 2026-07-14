@@ -182,3 +182,35 @@ export interface ExperienceBooking {
   image_urls?: string[];
   user_name?: string;
 }
+
+export interface MarketingCampaign {
+  id: number;
+  host_id: number;
+  listing_id: number;
+  title: string;
+  description: string;
+  video_url?: string;
+  media_urls: string[];
+  platforms: string[];
+  budget: number;
+  status: 'draft' | 'pending' | 'active' | 'rejected';
+  admin_feedback?: string;
+  created_at: string;
+  approved_at?: string;
+  subscription_active?: boolean;
+  target_locations?: string;
+  ad_format?: 'post' | 'reel' | 'carousel' | 'story';
+  feed_description?: string;
+  rejected_fields?: Record<string, string>;
+  analytics?: {
+    impressions: number;
+    clicks: number;
+    ctr: number;
+    conversions: number;
+    spent: number;
+  };
+  // joined fields
+  listing_title?: string;
+  listing_image?: string;
+}
+

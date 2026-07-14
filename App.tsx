@@ -166,7 +166,7 @@ function App() {
   const [editingListing, setEditingListing] = useState<Listing | null>(null);
   const [editingExperience, setEditingExperience] = useState<Experience | null>(null);
   const [appMode, setAppMode] = useState<'travel' | 'host'>('travel');
-  const [hostView, setHostView] = useState<'today' | 'calendar' | 'listings' | 'messages' | 'analytics'>('today');
+  const [hostView, setHostView] = useState<'today' | 'calendar' | 'listings' | 'messages' | 'analytics' | 'marketing'>('today');
   
   // Auth state
   const { user } = useAuth();
