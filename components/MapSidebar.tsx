@@ -16,7 +16,12 @@ import {
   MessageCircle, 
   User, 
   X, 
-  ChevronLeft 
+  ChevronLeft,
+  Check,
+  Building,
+  Home,
+  Tent,
+  Hotel
 } from 'lucide-react';
 
 const API_KEY =
@@ -121,7 +126,8 @@ const MarkerWithInfoWindow = ({
   setActiveMarkerId, 
   setMarkerRef,
   isMobile,
-  onMarkerClick
+  onMarkerClick,
+  activePrice
 }: { 
   key?: string | number,
   listing: Listing, 
@@ -129,21 +135,22 @@ const MarkerWithInfoWindow = ({
   setActiveMarkerId: (id: string | null) => void, 
   setMarkerRef?: (key: string, marker: google.maps.marker.AdvancedMarkerElement | null) => void,
   isMobile?: boolean,
-  onMarkerClick?: (listing: Listing) => void
+  onMarkerClick?: (listing: Listing) => void,
+  activePrice?: number
 }) => {
   const [markerRef, marker] = useAdvancedMarkerRef();
-  const [open, setOpen] = useState(false);
   const { formatPrice } = useCurrency();
+  const currentPrice = activePrice !== undefined ? activePrice : listing.price;
 
   useEffect(() => {
     if (marker && setMarkerRef) {
-        markerPrices.set(marker, listing.price);
+        markerPrices.set(marker, currentPrice);
         setMarkerRef(listing.id, marker);
     }
     return () => {
         if (setMarkerRef) setMarkerRef(listing.id, null);
     };
-  }, [marker, listing.id, listing.price, setMarkerRef]);
+  }, [marker, listing.id, currentPrice, setMarkerRef]);
 
   // Generate deterministic lat/lng if not present
   const position = useMemo(() => {
@@ -156,23 +163,15 @@ const MarkerWithInfoWindow = ({
     return { lat: fallBackLat, lng: fallBackLng };
   }, [listing.id, listing.lat, listing.lng]);
 
-  useEffect(() => {
-    if (isActive && !isMobile) {
-        setOpen(true);
-    }
-  }, [isActive, isMobile]);
-
   return (
     <>
       <AdvancedMarker 
         ref={markerRef} 
         position={position} 
         onClick={() => {
-            if (isMobile && onMarkerClick) {
+            uiAudio.playPop();
+            if (onMarkerClick) {
                 onMarkerClick(listing);
-            } else {
-                uiAudio.playPop();
-                setOpen(true);
             }
         }}
       >
@@ -188,52 +187,31 @@ const MarkerWithInfoWindow = ({
             ) : (
                 // Inactive custom white/gray badge with price
                 <div className="bg-white text-gray-900 border border-gray-150 rounded-full px-2.5 py-1 text-[11px] font-black shadow-[0_4px_10px_rgba(0,0,0,0.12)] hover:scale-110 active:scale-95 transition-all">
-                    {formatPrice(listing.price)}
+                    {formatPrice(currentPrice)}
                 </div>
             )
         ) : (
             // Desktop marker
             <div 
               onMouseEnter={() => {
-                  if (!isActive && !open) uiAudio.playClick();
+                  if (!isActive) uiAudio.playClick();
                   setActiveMarkerId(listing.id);
               }}
               onMouseLeave={() => setActiveMarkerId(null)}
               className={`
                   relative flex items-center justify-center rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.15)] 
                   transition-all duration-500 ring-1 ring-black/5 ease-[cubic-bezier(0.34,1.56,0.64,1)]
-                  ${(isActive || open) 
+                  ${isActive 
                       ? 'bg-gray-900 text-white px-5 py-2.5 scale-125 z-50 shadow-[0_20px_40px_rgba(0,0,0,0.4)] -translate-y-2 ring-2 ring-white/50' 
                       : 'bg-white text-gray-900 px-3.5 py-1.5 hover:scale-110 hover:shadow-xl z-10'}
               `}
             >
-                <span className={`font-bold whitespace-nowrap ${(isActive || open) ? 'text-sm' : 'text-xs'}`}>
-                    {formatPrice(listing.price)}
+                <span className={`font-bold whitespace-nowrap ${isActive ? 'text-sm' : 'text-xs'}`}>
+                    {formatPrice(currentPrice)}
                 </span>
             </div>
         )}
       </AdvancedMarker>
-      {open && !isMobile && (
-        <InfoWindow anchor={marker} onCloseClick={() => { uiAudio.playClick(); setOpen(false); }} style={{padding: 0, overflow: 'hidden', borderRadius: '16px'}}>
-           <div className="w-[240px] bg-white overflow-hidden">
-               <div className="aspect-[16/9] relative">
-                    <img src={listing.imageUrl} className="w-full h-full object-cover" alt={listing.title} />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-60"></div>
-                    <div className="absolute bottom-3 left-3 text-white">
-                       <div className="text-xs font-medium opacity-90">{listing.type}</div>
-                       <div className="font-bold text-lg leading-none">{formatPrice(listing.price)}</div>
-                    </div>
-               </div>
-               <div className="p-3 bg-white">
-                    <h4 className="font-bold text-gray-900 text-sm leading-tight mb-1 truncate">{listing.title}</h4>
-                    <div className="flex items-center gap-1 text-xs text-gray-500 font-medium">
-                       <Star className="w-3 h-3 text-orange-400 fill-orange-400" />
-                       {listing.rating} ({listing.reviewCount})
-                    </div>
-               </div>
-           </div>
-        </InfoWindow>
-      )}
     </>
   );
 };
@@ -245,7 +223,8 @@ const MapInner = ({
   setActiveMarkerId, 
   activeMarkerId,
   isMobile,
-  onMarkerClick
+  onMarkerClick,
+  getActivePrice
 }: any) => {
     const map = useMap();
     const { formatPrice } = useCurrency();
@@ -434,6 +413,7 @@ const MapInner = ({
                        setMarkerRef={setMarkerRef}
                        isMobile={isMobile}
                        onMarkerClick={onMarkerClick}
+                       activePrice={getActivePrice ? getActivePrice(listing) : listing.price}
                    />
                );
            })}
@@ -456,6 +436,9 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
   currentView = 'SEARCH'
 }) => {
   const [activeListingId, setActiveListingId] = useState<string | null>(null);
+  const activeListing = useMemo(() => {
+    return listings.find((l: any) => l.id === activeListingId) || null;
+  }, [listings, activeListingId]);
   const [isMobile, setIsMobile] = useState(false);
   const [searchQuery, setSearchQuery] = useState(city);
   const [showLocalFilters, setShowLocalFilters] = useState(false);
@@ -463,6 +446,25 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
   const [localMaxPrice, setLocalMaxPrice] = useState<string>('');
   const [localType, setLocalType] = useState<string>('');
   const { formatPrice } = useCurrency();
+
+  const [selectedRoomIdForListing, setSelectedRoomIdForListing] = useState<{[listingId: string]: string}>({});
+  const [isSearchingArea, setIsSearchingArea] = useState(false);
+
+  const getActivePrice = useCallback((listing: Listing) => {
+    const selRoomId = selectedRoomIdForListing[listing.id];
+    if (selRoomId && listing.rooms) {
+      const room = listing.rooms.find(r => r.id === selRoomId);
+      if (room) return room.price;
+    }
+    return listing.price;
+  }, [selectedRoomIdForListing]);
+
+  // Handle live indicator when listings filter updates
+  useEffect(() => {
+    setIsSearchingArea(true);
+    const timer = setTimeout(() => setIsSearchingArea(false), 800);
+    return () => clearTimeout(timer);
+  }, [localType, localMinPrice, localMaxPrice, city]);
 
   const [mapMode, setMapMode] = useState<'vector' | 'google'>('vector');
   const [googleMapsError, setGoogleMapsError] = useState(false);
@@ -597,9 +599,8 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Filter listings locally on mobile to reflect quick filters instantly
+  // Filter listings locally to reflect quick filters instantly (both desktop and mobile)
   const filteredListings = useMemo(() => {
-    if (!isMobile) return listings;
     return listings.filter((listing) => {
       if (localMinPrice && listing.price < Number(localMinPrice)) return false;
       if (localMaxPrice && listing.price > Number(localMaxPrice)) return false;
@@ -610,7 +611,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
       }
       return true;
     });
-  }, [listings, localMinPrice, localMaxPrice, localType, isMobile]);
+  }, [listings, localMinPrice, localMaxPrice, localType]);
 
   // Initialize active listing ID
   useEffect(() => {
@@ -840,15 +841,40 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                     transition: isDragging ? 'none' : 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
                   }}
                >
-                  {/* Beautiful Cartographic SVG Vector Streets */}
-                  <svg viewBox="0 0 1000 1000" className="w-full h-full pointer-events-none">
-                     {/* Waterbodies (River/Ocean) */}
-                     <path d="M 850,0 Q 750,300 850,600 T 780,1000" fill="none" stroke="#bae6fd" strokeWidth="52" strokeLinecap="round" opacity="0.6" />
-                     <path d="M 850,0 Q 750,300 850,600 T 780,1000" fill="none" stroke="#e0f2fe" strokeWidth="38" strokeLinecap="round" opacity="0.8" />
-                     
-                     {/* Green Central Park */}
-                     <rect x="150" y="320" width="130" height="150" rx="20" fill="#f0fdf4" stroke="#dcfce7" strokeWidth="4" />
-                     <text x="215" y="400" fill="#166534" fontFamily="system-ui" fontSize="10" fontWeight="800" textAnchor="middle" opacity="0.75">KRATON GARDENS</text>
+                   {/* Beautiful Cartographic SVG Vector Streets */}
+                   <svg viewBox="0 0 1000 1000" className="w-full h-full pointer-events-none">
+                      {/* Waterbodies (River/Ocean) */}
+                      <path d="M 850,0 Q 750,300 850,600 T 780,1000" fill="none" stroke="#bae6fd" strokeWidth="52" strokeLinecap="round" opacity="0.6" />
+                      <path d="M 850,0 Q 750,300 850,600 T 780,1000" fill="none" stroke="#e0f2fe" strokeWidth="38" strokeLinecap="round" opacity="0.8" />
+                      
+                      {/* Green Central Park */}
+                      <rect x="150" y="320" width="130" height="150" rx="20" fill="#f0fdf4" stroke="#dcfce7" strokeWidth="4" />
+                      <text x="215" y="400" fill="#166534" fontFamily="system-ui" fontSize="10" fontWeight="800" textAnchor="middle" opacity="0.75">KRATON GARDENS</text>
+
+                      {/* Scenic park details / trees */}
+                      <g fill="#86efac" opacity="0.7">
+                         <circle cx="170" cy="350" r="5" />
+                         <circle cx="200" cy="340" r="6" />
+                         <circle cx="240" cy="360" r="5" />
+                         <circle cx="180" cy="420" r="7" />
+                         <circle cx="220" cy="410" r="5" />
+                         <circle cx="250" cy="430" r="6" />
+                      </g>
+
+                      {/* Mini architectural building shapes */}
+                      <g fill="#e4e4e7" opacity="0.6">
+                         <rect x="400" y="80" width="30" height="40" rx="4" />
+                         <rect x="400" y="140" width="30" height="50" rx="4" />
+                         <rect x="480" y="90" width="40" height="30" rx="4" />
+                         <rect x="480" y="150" width="35" height="40" rx="4" />
+                         <rect x="180" y="540" width="50" height="30" rx="4" />
+                         <rect x="250" y="540" width="40" height="30" rx="4" />
+                         <rect x="310" y="540" width="45" height="30" rx="4" />
+                         <rect x="500" y="470" width="40" height="30" rx="4" />
+                         <rect x="590" y="320" width="30" height="25" rx="4" />
+                         <rect x="590" y="360" width="30" height="30" rx="4" />
+                         <rect x="590" y="400" width="30" height="25" rx="4" />
+                      </g>
 
                      {/* Road Network Outlines */}
                      <g stroke="#e4e4e7" strokeLinecap="round" strokeLinejoin="round" opacity="0.95">
@@ -936,7 +962,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                            ) : (
                              // Cozy, premium badge with price text
                              <div className="bg-white text-gray-900 border border-gray-150 rounded-full px-2.5 py-1.5 text-[11px] font-black shadow-md hover:scale-110 active:scale-95 transition-all select-none whitespace-nowrap">
-                               {formatPrice(listing.price)}
+                               {formatPrice(getActivePrice(listing))}
                              </div>
                            )}
                         </div>
@@ -969,6 +995,25 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                      −
                   </button>
                </div>
+
+               {/* Fixed Compass Rose inside Vector Map container */}
+               <div className="absolute bottom-6 left-6 z-30 pointer-events-none flex flex-col items-start gap-2">
+                  <div className="w-12 h-12 rounded-full bg-white/90 backdrop-blur-md shadow-md border border-gray-100 flex items-center justify-center pointer-events-auto">
+                     <Compass className="w-6 h-6 text-gray-700 animate-spin-slow" />
+                  </div>
+                  
+                  {/* Map Scale Legend Bar */}
+                  <div className="bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-gray-150 shadow-sm flex flex-col gap-0.5 pointer-events-auto">
+                     <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none">Scale</div>
+                     <div className="flex items-center gap-1.5 mt-0.5">
+                        <div className="w-12 h-1 bg-gray-900 relative">
+                           <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-gray-900 -translate-y-1 h-3"></div>
+                           <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-gray-900 -translate-y-1 h-3"></div>
+                        </div>
+                        <span className="text-[9px] font-black text-gray-800 whitespace-nowrap">{zoom > 2 ? '150 m' : zoom > 1.2 ? '300 m' : zoom > 0.8 ? '500 m' : '1.2 km'}</span>
+                     </div>
+                  </div>
+               </div>
             </div>
           ) : (
             /* GOOGLE MAPS CANVAS fallback */
@@ -988,8 +1033,221 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                    activeMarkerId={activeListingId} 
                    isMobile={isMobile}
                    onMarkerClick={handleMarkerClick}
+                   getActivePrice={getActivePrice}
                 />
             </Map>
+          )}
+
+          {/* Dynamic "Searching this area..." live visual toast indicator */}
+          {isSearchingArea && (
+            <div className="absolute top-24 left-1/2 -translate-x-1/2 z-30 pointer-events-none animate-fade-in">
+               <div className="bg-gray-900/90 backdrop-blur-md text-white text-[11px] font-bold px-4 py-2 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.25)] flex items-center gap-2 border border-white/10">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+                  <span className="tracking-wide uppercase text-[9px] font-black">Searching this area...</span>
+               </div>
+            </div>
+          )}
+
+          {/* ADVANCED DESKTOP MAP FILTER DASHBOARD */}
+          {!isMobile && (
+            <div className="absolute top-6 left-6 z-30 max-w-[calc(100%-120px)] pointer-events-auto flex items-center gap-2">
+               {/* Back Button */}
+               <button 
+                  type="button"
+                  onClick={() => {
+                    uiAudio.playClick();
+                    if (onClose) onClose();
+                  }}
+                  className="w-11 h-11 rounded-full bg-white/95 backdrop-blur-md shadow-lg border border-gray-100 flex items-center justify-center text-gray-700 hover:text-gray-900 active:scale-95 transition-all cursor-pointer shrink-0"
+                  title="Go Back"
+               >
+                  <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
+               </button>
+
+               {/* Floating Filter Dashboard Panel */}
+               <div className="bg-white/95 backdrop-blur-md p-1.5 rounded-full shadow-[0_12px_36px_rgba(0,0,0,0.12)] border border-gray-100/50 flex items-center gap-2">
+                  {/* Search Input field inside the bar */}
+                  <div className="flex items-center px-4 py-1.5 border-r border-gray-100 gap-2">
+                     <Search className="w-4 h-4 text-gray-400" />
+                     <form onSubmit={handleSearchSubmit}>
+                        <input 
+                           type="text"
+                           value={searchQuery}
+                           onChange={(e) => setSearchQuery(e.target.value)}
+                           placeholder="Search city..."
+                           className="w-28 bg-transparent border-none text-[11px] font-bold text-gray-800 placeholder-gray-400 focus:ring-0 outline-none p-0"
+                        />
+                     </form>
+                  </div>
+
+                  {/* Type filter button choices */}
+                  <div className="flex items-center gap-1 px-1">
+                     {[
+                       { label: 'All', value: '' },
+                       { label: 'Hotel', value: 'hotel' },
+                       { label: 'Villa', value: 'villa' },
+                       { label: 'Resort', value: 'resort' }
+                     ].map((item) => {
+                        const isSel = localType === item.value;
+                        return (
+                           <button
+                              key={item.label}
+                              type="button"
+                              onClick={() => {
+                                 uiAudio.playClick();
+                                 setLocalType(item.value);
+                              }}
+                              className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all ${
+                                 isSel ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                              }`}
+                           >
+                              {item.label}
+                           </button>
+                        );
+                     })}
+                  </div>
+
+                  {/* Price range inputs inside the bar */}
+                  <div className="flex items-center gap-1.5 px-3 border-l border-gray-100">
+                     <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Price</span>
+                     <div className="flex items-center gap-1 bg-gray-50 rounded-lg px-2 py-1 border border-gray-100">
+                        <span className="text-[10px] font-bold text-gray-400">Min</span>
+                        <input 
+                           type="number"
+                           placeholder="Any"
+                           value={localMinPrice}
+                           onChange={(e) => setLocalMinPrice(e.target.value)}
+                           className="w-12 bg-transparent text-[11px] font-black text-gray-800 focus:ring-0 outline-none p-0 border-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                     </div>
+                     <div className="flex items-center gap-1 bg-gray-50 rounded-lg px-2 py-1 border border-gray-100">
+                        <span className="text-[10px] font-bold text-gray-400">Max</span>
+                        <input 
+                           type="number"
+                           placeholder="Any"
+                           value={localMaxPrice}
+                           onChange={(e) => setLocalMaxPrice(e.target.value)}
+                           className="w-12 bg-transparent text-[11px] font-black text-gray-800 focus:ring-0 outline-none p-0 border-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                     </div>
+                  </div>
+               </div>
+            </div>
+          )}
+
+          {/* DESKTOP UNIFIED FLOATING PREMIUM PREVIEW CARD */}
+          {!isMobile && activeListing && (
+            <div className="absolute bottom-6 left-6 z-30 w-[330px] bg-white rounded-[2rem] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.18)] border border-gray-100/80 flex flex-col pointer-events-auto animate-fade-in">
+               {/* Main Card Media */}
+               <div className="relative h-44 w-full overflow-hidden group">
+                  <img 
+                     src={activeListing.imageUrl} 
+                     alt={activeListing.title} 
+                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent"></div>
+                  
+                  {/* Dismiss X Button */}
+                  <button 
+                     type="button"
+                     onClick={() => {
+                        uiAudio.playClick();
+                        setActiveListingId(null);
+                     }}
+                     className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-all backdrop-blur-xs shadow-md border border-white/10 animate-pulse"
+                  >
+                     <X className="w-4 h-4" />
+                  </button>
+
+                  {/* Rating Badge */}
+                  <div className="absolute bottom-3 left-4 flex items-center gap-1.5 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-black text-gray-800 tracking-tight shadow-md">
+                     <Star className="w-3.5 h-3.5 text-orange-400 fill-orange-400" />
+                     <span>{activeListing.rating || 4.8}</span>
+                     <span className="text-gray-300">•</span>
+                     <span>{activeListing.reviewCount || 12} reviews</span>
+                  </div>
+
+                  {/* Type Pill */}
+                  <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider text-gray-700 shadow-sm border border-gray-100">
+                     {activeListing.type || 'Stay'}
+                  </div>
+               </div>
+
+               {/* Content Details */}
+               <div className="p-4 flex flex-col gap-3">
+                  <div>
+                     <h4 className="font-extrabold text-sm text-gray-900 leading-snug line-clamp-1">{activeListing.title}</h4>
+                     <p className="text-[11px] font-medium text-gray-500 mt-0.5 line-clamp-1">{activeListing.address || 'Central Area'}</p>
+                  </div>
+
+                  {/* ADVANCED Accommodation Choice Selector */}
+                  {activeListing.rooms && activeListing.rooms.length > 0 && (
+                     <div className="flex flex-col gap-1.5 bg-gray-50 p-2.5 rounded-2xl border border-gray-100">
+                        <div className="text-[9px] font-black text-gray-400 uppercase tracking-wider">Accommodation Choices</div>
+                        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide py-0.5 pointer-events-auto">
+                           {activeListing.rooms.map((room) => {
+                              const isSelected = selectedRoomIdForListing[activeListing.id] === room.id || (!selectedRoomIdForListing[activeListing.id] && room.id === activeListing.rooms?.[0].id);
+                              return (
+                                 <button 
+                                    key={room.id}
+                                    type="button"
+                                    onClick={() => {
+                                       uiAudio.playClick();
+                                       setSelectedRoomIdForListing(prev => ({ ...prev, [activeListing.id]: room.id }));
+                                    }}
+                                    className={`px-2.5 py-1 rounded-full text-[9.5px] font-black transition-all whitespace-nowrap border flex items-center gap-1 cursor-pointer ${
+                                       isSelected 
+                                          ? 'bg-gray-900 text-white border-gray-900 scale-102 shadow-sm' 
+                                          : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+                                    }`}
+                                 >
+                                    {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                                    {room.name}
+                                 </button>
+                              );
+                           })}
+                        </div>
+                     </div>
+                  )}
+
+                  {/* Pricing & CTA Row */}
+                  <div className="flex items-center justify-between gap-3 pt-1">
+                     <div className="flex flex-col">
+                        <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Price / stay</span>
+                        <div className="flex items-baseline gap-1 mt-0.5">
+                           <span className="text-base font-black text-gray-900">{formatPrice(getActivePrice(activeListing))}</span>
+                           <span className="text-[10px] font-bold text-gray-500">/ night</span>
+                        </div>
+                     </div>
+
+                     <div className="flex items-center gap-1.5">
+                        {/* Heart Fav Button */}
+                        <button 
+                           type="button"
+                           onClick={() => {
+                              uiAudio.playClick();
+                              if (onToggleFavorite) onToggleFavorite(activeListing);
+                           }}
+                           className="w-10 h-10 rounded-full border border-gray-200 hover:border-gray-300 flex items-center justify-center text-gray-500 hover:text-red-500 transition-all active:scale-90"
+                        >
+                           <Heart className={`w-4 h-4 ${isFavorite && isFavorite(activeListing.id) ? 'text-red-500 fill-red-500' : ''}`} />
+                        </button>
+
+                        {/* View Details Button */}
+                        <button 
+                           type="button"
+                           onClick={() => {
+                              uiAudio.playClick();
+                              if (onSelectListing) onSelectListing(activeListing);
+                           }}
+                           className="px-4 h-10 rounded-full bg-gray-900 hover:bg-gray-800 text-white text-xs font-black tracking-wide transition-all shadow-md active:scale-95 flex items-center justify-center cursor-pointer"
+                        >
+                           View Details
+                        </button>
+                     </div>
+                  </div>
+               </div>
+            </div>
           )}
         </div>
 
@@ -1034,11 +1292,37 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                                      <span>{listing.reviewCount} reviews</span>
                                  </div>
                                  <h4 className="font-extrabold text-xs text-gray-900 leading-tight line-clamp-2">{listing.title}</h4>
+                                 
+                                 {/* Mobile quick room selector chips */}
+                                 {listing.rooms && listing.rooms.length > 0 && (
+                                     <div className="flex items-center gap-1 mt-1 overflow-x-auto scrollbar-hide py-0.5 pointer-events-auto">
+                                         {listing.rooms.map((room) => {
+                                             const isSelected = selectedRoomIdForListing[listing.id] === room.id || (!selectedRoomIdForListing[listing.id] && room.id === listing.rooms?.[0].id);
+                                             return (
+                                                 <span 
+                                                     key={room.id}
+                                                     onClick={(e) => {
+                                                         e.stopPropagation();
+                                                         uiAudio.playClick();
+                                                         setSelectedRoomIdForListing(prev => ({ ...prev, [listing.id]: room.id }));
+                                                     }}
+                                                     className={`px-1.5 py-0.5 rounded-full text-[8px] font-black tracking-tight whitespace-nowrap transition-all border ${
+                                                         isSelected 
+                                                             ? 'bg-gray-900 text-white border-gray-900' 
+                                                             : 'bg-gray-50 text-gray-500 border-gray-200 hover:border-gray-400'
+                                                     }`}
+                                                 >
+                                                     {room.name}
+                                                 </span>
+                                             );
+                                         })}
+                                     </div>
+                                 )}
                              </div>
                              
-                             <div className="flex items-baseline justify-between mt-1">
+                             <div className="flex items-baseline justify-between mt-0.5">
                                  <div>
-                                     <span className="text-sm font-black text-gray-900">{formatPrice(listing.price)}</span>
+                                     <span className="text-sm font-black text-gray-900">{formatPrice(getActivePrice(listing))}</span>
                                      <span className="text-[9px] text-gray-400 font-bold"> / night</span>
                                  </div>
                              </div>

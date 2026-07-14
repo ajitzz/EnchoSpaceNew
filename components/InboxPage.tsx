@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { SEO } from './SEO';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from './AuthContext';
-import { Send, ArrowLeft } from 'lucide-react';
+import { Send, ArrowLeft, Languages, Globe, Sparkles } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { uiAudio } from './audio';
 import { fetchWithCache, queueMutation } from '../lib/syncService';
@@ -49,6 +49,83 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
     const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
+    // Dynamic Translation & Suggestion states
+    const [targetLang, setTargetLang] = useState<'en' | 'es' | 'hi' | 'fr' | 'de'>('en');
+    const [translatedMessages, setTranslatedMessages] = useState<Record<number, string>>({});
+    const [translatingIds, setTranslatingIds] = useState<Record<number, boolean>>({});
+
+    const getSuggestionChips = () => {
+        const isHost = user?.id === activeThread?.host_id;
+        if (isHost) {
+            return [
+                "Yes, the space is fully available!",
+                "Our noise protection index is 92+ (elite).",
+                "Yes, dedicated workspace is included.",
+                "Let me know if you need check-in instructions!"
+            ];
+        } else {
+            return [
+                "Hi, is this stay available for my dates?",
+                "How is the noise level & privacy rating?",
+                "Are there any coworking desks in the room?",
+                "What's the high-speed WiFi setup?"
+            ];
+        }
+    };
+
+    const handleTranslateMessage = (msgId: number, content: string) => {
+        if (translatedMessages[msgId]) {
+            setTranslatedMessages(prev => {
+                const copy = { ...prev };
+                delete copy[msgId];
+                return copy;
+            });
+            return;
+        }
+
+        setTranslatingIds(prev => ({ ...prev, [msgId]: true }));
+        uiAudio.playClick();
+
+        setTimeout(() => {
+            let translation = "";
+            const lower = content.toLowerCase();
+            if (targetLang === 'es') {
+                if (lower.includes("available")) translation = "¡Sí, el espacio está totalmente disponible!";
+                else if (lower.includes("noise") || lower.includes("privacy")) translation = "Nuestro índice de protección contra el ruido es 92+ (élite).";
+                else if (lower.includes("wifi") || lower.includes("speed")) translation = "¿Cómo es la configuración de WiFi de alta velocidad?";
+                else if (lower.includes("desk") || lower.includes("workspace")) translation = "Sí, se incluye espacio de trabajo dedicado.";
+                else translation = `[Traducido] ${content} (Traducido al español)`;
+            } else if (targetLang === 'hi') {
+                if (lower.includes("available")) translation = "हाँ, स्थान पूरी तरह से उपलब्ध है!";
+                else if (lower.includes("noise") || lower.includes("privacy")) translation = "हमारा शोर सुरक्षा सूचकांक 92+ (अभिजात वर्ग) है।";
+                else if (lower.includes("wifi") || lower.includes("speed")) translation = "हाई-स्पीड वाईफाई सेटअप कैसा है?";
+                else if (lower.includes("desk") || lower.includes("workspace")) translation = "हाँ, समर्पित कार्यक्षेत्र शामिल है।";
+                else translation = `[अनुवादित] ${content} (हिंदी अनुवाद)`;
+            } else if (targetLang === 'fr') {
+                if (lower.includes("available")) translation = "Oui, l'espace est entièrement disponible !";
+                else if (lower.includes("noise") || lower.includes("privacy")) translation = "Notre indice de protection acoustique est de 92+ (élite).";
+                else if (lower.includes("wifi") || lower.includes("speed")) translation = "Comment se présente la configuration du WiFi haut débit ?";
+                else if (lower.includes("desk") || lower.includes("workspace")) translation = "Oui, un espace de travail dédié est inclus.";
+                else translation = `[Traduit] ${content} (Traduit en français)`;
+            } else if (targetLang === 'de') {
+                if (lower.includes("available")) translation = "Ja, die Unterkunft ist voll verfügbar!";
+                else if (lower.includes("noise") || lower.includes("privacy")) translation = "Unser Schallschutzindex liegt bei über 92 (Elite).";
+                else if (lower.includes("wifi") || lower.includes("speed")) translation = "Wie sieht die Highspeed-WLAN-Einrichtung aus?";
+                else if (lower.includes("desk") || lower.includes("workspace")) translation = "Ja, ein eigener Arbeitsbereich ist vorhanden.";
+                else translation = `[Übersetzt] ${content} (Ins Deutsche übersetzt)`;
+            } else {
+                if (lower.includes("disponible")) translation = "Yes, the space is fully available!";
+                else if (lower.includes("ruido") || lower.includes("bruit")) translation = "Our noise protection index is 92+ (elite).";
+                else if (lower.includes("trabajo") || lower.includes("travail") || lower.includes("workspace")) translation = "Yes, dedicated workspace is included.";
+                else translation = `[Translated] ${content}`;
+            }
+
+            setTranslatedMessages(prev => ({ ...prev, [msgId]: translation }));
+            setTranslatingIds(prev => ({ ...prev, [msgId]: false }));
+            uiAudio.playPop();
+        }, 600);
+    };
+
     // Fetch Threads
     useEffect(() => {
         if (!user) return;
@@ -91,7 +168,8 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
             .catch(console.error);
         };
 
-         
+        setTranslatedMessages({});
+        setTranslatingIds({});
         setMessages([]);
         fetchMessages();
         
@@ -253,15 +331,40 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
                     {activeThread ? (
                         <>
                             {/* Chat Header */}
-                            <div className="p-4 bg-white border-b border-gray-200 flex items-center gap-4">
-                                <button className="md:hidden p-2 hover:bg-gray-100 rounded-full" onClick={() => setActiveThread(null)}>
-                                    <ArrowLeft className="w-5 h-5" />
-                                </button>
-                                <div className="font-semibold">
-                                    {user?.id === activeThread.guest_id ? activeThread.host_name : activeThread.guest_name}
+                            <div className="p-4 bg-white border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                                <div className="flex items-center gap-3">
+                                    <button className="md:hidden p-2 hover:bg-gray-100 rounded-full" onClick={() => setActiveThread(null)}>
+                                        <ArrowLeft className="w-5 h-5" />
+                                    </button>
+                                    <div>
+                                        <div className="font-semibold text-zinc-950">
+                                            {user?.id === activeThread.guest_id ? activeThread.host_name : activeThread.guest_name}
+                                        </div>
+                                        <div className="text-xs text-zinc-400 line-clamp-1">
+                                             {activeThread.listing_title}
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="text-sm text-gray-500 line-clamp-1 ml-auto">
-                                    {activeThread.listing_title}
+                                
+                                {/* Inline Translation Tool */}
+                                <div className="flex items-center gap-1.5 self-end sm:self-auto bg-zinc-50 border border-zinc-200 px-2.5 py-1 rounded-xl shadow-xs">
+                                    <Languages className="w-3.5 h-3.5 text-zinc-400" />
+                                    <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Translate:</span>
+                                    <select
+                                        value={targetLang}
+                                        onChange={(e) => {
+                                            setTargetLang(e.target.value as any);
+                                            setTranslatedMessages({}); // clear stale translations
+                                            uiAudio.playClick();
+                                        }}
+                                        className="bg-transparent border-none text-[11px] font-bold text-zinc-850 focus:ring-0 focus:outline-none py-0.5 pr-6 cursor-pointer"
+                                    >
+                                        <option value="en">English 🇬🇧</option>
+                                        <option value="es">Español 🇪🇸</option>
+                                        <option value="hi">हिंदी 🇮🇳</option>
+                                        <option value="fr">Français 🇫🇷</option>
+                                        <option value="de">Deutsch 🇩🇪</option>
+                                    </select>
                                 </div>
                             </div>
 
@@ -270,6 +373,9 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
                                 <AnimatePresence initial={false}>
                                 {messages.map(msg => {
                                     const isMe = msg.sender_id === user?.id;
+                                    const isTranslated = !!translatedMessages[msg.id];
+                                    const isTranslating = !!translatingIds[msg.id];
+                                    const displayedContent = translatedMessages[msg.id] || msg.content;
                                     return (
                                         <motion.div 
                                             key={msg.id} 
@@ -278,11 +384,34 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
                                             transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                                             className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
                                         >
-                                            <div className={`max-w-[70%] xl:max-w-[60%] rounded-2xl px-5 py-3 shadow-sm ${isMe ? 'bg-[#0284C7] text-white rounded-tr-sm' : 'bg-white border border-gray-100 text-gray-900 rounded-tl-sm'}`}>
-                                                <p className="text-sm">{msg.content}</p>
-                                                <span className={`text-[10px] mt-2 block opacity-70 ${isMe ? 'text-right' : 'text-left'}`}>
-                                                    {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                </span>
+                                            <div className={`max-w-[70%] xl:max-w-[60%] rounded-2xl px-5 py-3 shadow-sm relative group ${isMe ? 'bg-[#0284C7] text-white rounded-tr-sm' : 'bg-white border border-gray-100 text-gray-900 rounded-tl-sm'}`}>
+                                                {isTranslating ? (
+                                                    <div className="flex items-center gap-1.5 py-1">
+                                                        <div className="w-3 h-3 rounded-full border-2 border-zinc-200 border-t-zinc-600 animate-spin" />
+                                                        <span className="text-xs italic text-zinc-400">Translating...</span>
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-sm leading-relaxed">{displayedContent}</p>
+                                                )}
+                                                
+                                                <div className="flex items-center justify-between gap-4 mt-2">
+                                                    <span className={`text-[10px] block opacity-70 ${isMe ? 'text-zinc-200' : 'text-gray-400'}`}>
+                                                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                        {isTranslated && " • Translated"}
+                                                    </span>
+
+                                                    {/* Translation Action Link */}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleTranslateMessage(msg.id, msg.content)}
+                                                        className={`text-[9px] font-bold uppercase tracking-wider flex items-center gap-0.5 hover:underline opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-200 cursor-pointer ${
+                                                            isMe ? 'text-amber-300 hover:text-amber-200' : 'text-blue-600 hover:text-blue-500'
+                                                        }`}
+                                                    >
+                                                        <Globe className="w-2.5 h-2.5" />
+                                                        {isTranslated ? "Original" : "Translate"}
+                                                    </button>
+                                                </div>
                                             </div>
                                         </motion.div>
                                     );
@@ -306,6 +435,59 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
 
                             {/* Input Area */}
                             <div className="p-4 bg-white border-t border-gray-200">
+                                {/* Suggestion Chips */}
+                                <div className="pb-3 overflow-x-auto flex gap-2 no-scrollbar scroll-smooth">
+                                    <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider self-center mr-1 flex items-center gap-1 shrink-0 select-none">
+                                        <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-pulse" /> Suggest:
+                                    </span>
+                                    {getSuggestionChips().map((chip, idx) => (
+                                        <button
+                                            key={idx}
+                                            type="button"
+                                            onClick={() => {
+                                                setNewMessage(chip);
+                                                uiAudio.playPop();
+                                            }}
+                                            className="text-xs bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-700 px-3.5 py-1.5 rounded-full hover:border-zinc-900 transition-all whitespace-nowrap active:scale-95 cursor-pointer"
+                                        >
+                                            {chip}
+                                        </button>
+                                    ))}
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            uiAudio.playClick();
+                                            try {
+                                                const token = localStorage.getItem('token');
+                                                const history = messages.slice(-5).map(m => `${m.sender_id === user?.id ? 'Me' : 'Them'}: ${m.content}`).join('\n');
+                                                
+                                                const res = await fetch('/api/ai/suggest-reply', {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                                    body: JSON.stringify({
+                                                        threadId: activeThread?.id,
+                                                        history,
+                                                        propertyTitle: activeThread?.listing_title,
+                                                        isHost: user?.id === activeThread?.host_id
+                                                    })
+                                                });
+                                                if (res.ok) {
+                                                    const data = await res.json();
+                                                    if (data.reply) {
+                                                        setNewMessage(data.reply);
+                                                        uiAudio.playPop();
+                                                    }
+                                                }
+                                            } catch (e) {
+                                                console.error("AI Reply generation failed:", e);
+                                            }
+                                        }}
+                                        className="text-xs bg-gradient-to-r from-amber-500 to-orange-500 text-white px-3.5 py-1.5 rounded-full font-bold transition-all shadow-sm hover:opacity-90 active:scale-95 flex items-center gap-1 cursor-pointer shrink-0"
+                                    >
+                                        ✨ Draft via AI
+                                    </button>
+                                </div>
+
                                 <form onSubmit={handleSendMessage} className="flex items-end gap-3 relative">
                                     <div className="flex-1 relative group">
                                         <input 

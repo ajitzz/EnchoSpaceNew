@@ -498,7 +498,7 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
                     className="inline-flex items-center gap-3 px-5 py-2.5 rounded-full bg-black/40 backdrop-blur-xl border border-white/10 w-fit mb-8 shadow-2xl animate-fade-in"
                 >
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.8)]"></span>
-                    <span className="text-[10px] font-extrabold tracking-widest uppercase text-white/90 font-mono">
+                    <span className="text-[10px] font-extrabold tracking-widest uppercase text-white/90 font-sans">
                       {settings.badge_text} • REEL {currentReelIndex + 1}/{activeReels.length}
                     </span>
                 </motion.div>
@@ -508,7 +508,7 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
-                className="text-4xl md:text-7xl lg:text-8xl font-black tracking-tighter mb-4 md:mb-6 leading-[1.05] whitespace-pre-line"
+                className="text-4xl md:text-7xl lg:text-8xl font-black tracking-tighter mb-4 md:mb-6 leading-[1.05] whitespace-pre-line text-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.6)]"
             >
                 {settings.hero_title}
             </motion.h1>
@@ -517,7 +517,7 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
-                className="text-lg md:text-2xl text-slate-300 max-w-2xl font-medium leading-relaxed whitespace-pre-line"
+                className="text-lg md:text-2xl text-slate-100/90 max-w-2xl font-semibold leading-relaxed whitespace-pre-line drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]"
             >
                 {settings.hero_subtitle}
             </motion.p>
@@ -527,19 +527,19 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="mt-8 flex flex-wrap gap-x-8 gap-y-4 pt-6 border-t border-white/15 text-white/70 font-mono text-xs"
+              className="mt-8 flex flex-wrap gap-x-8 gap-y-4 pt-6 border-t border-white/15 text-white/95 font-sans text-xs"
             >
-              <div className="flex flex-col gap-1">
-                <span className="text-[9px] text-zinc-400 uppercase tracking-widest font-bold">Featured Destination</span>
-                <span className="text-white font-extrabold tracking-tight text-sm">{currentReel?.destination}</span>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[10px] text-zinc-300/80 uppercase tracking-widest font-black">Featured Destination</span>
+                <span className="text-white font-black tracking-tight text-base drop-shadow-sm">{currentReel?.destination}</span>
               </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-[9px] text-zinc-400 uppercase tracking-widest font-bold">Current Reel</span>
-                <span className="text-white font-extrabold tracking-tight text-sm line-clamp-1">{currentReel?.title}</span>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[10px] text-zinc-300/80 uppercase tracking-widest font-black">Current Reel</span>
+                <span className="text-white font-black tracking-tight text-base line-clamp-1 drop-shadow-sm">{currentReel?.title}</span>
               </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-[9px] text-zinc-400 uppercase tracking-widest font-bold">Duration</span>
-                <span className="text-white font-extrabold tracking-tight text-sm">{currentReel?.duration}</span>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[10px] text-zinc-300/80 uppercase tracking-widest font-black">Duration</span>
+                <span className="text-white font-black tracking-tight text-base drop-shadow-sm">{currentReel?.duration}</span>
               </div>
               {currentReel?.experience && (
                 <button
@@ -547,10 +547,10 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
                     uiAudio.playClick();
                     onExperienceClick(currentReel.experience);
                   }}
-                  className="ml-auto inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white text-black hover:bg-slate-100 font-extrabold text-xs tracking-wider uppercase transition-all duration-300 transform active:scale-95 shadow-md self-center font-sans cursor-pointer"
+                  className="ml-auto inline-flex items-center gap-2.5 px-6 py-3 rounded-2xl bg-white text-black hover:bg-slate-100 font-extrabold text-xs tracking-wider uppercase transition-all duration-300 transform active:scale-95 shadow-md hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 self-center font-sans cursor-pointer"
                 >
                   <span>Explore Experience</span>
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                   </svg>
                 </button>
@@ -565,8 +565,6 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
             {[
                 { id: 'All', label: 'All Experiences', icon: Sparkles },
                 { id: 'corporate', label: 'Tech & IT (Unplug)', icon: Briefcase },
-                { id: 'students', label: 'College Students (Budget)', icon: GraduationCap },
-                { id: 'women_only', label: 'Women Only (Safe Escapes)', icon: ShieldCheck },
                 { id: 'couples', label: 'Couples (Romantic)', icon: Heart }
             ].map(vibe => {
                 const Icon = vibe.icon;

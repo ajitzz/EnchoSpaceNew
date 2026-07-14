@@ -857,61 +857,92 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
       }
   };
 
-  // Render Custom Configuration Dropdown
+  // Render Custom Configuration Selector - Highly visual & premium card-based selector
   const renderConfigDropdown = () => {
+      const showScroll = configOptions.length > 2;
       return (
-          <div className="relative" ref={configDropdownRef}>
+          <div className="relative">
               <div 
-                  onClick={() => setIsConfigOpen(!isConfigOpen)}
-                  className={`
-                    w-full flex items-center justify-between bg-white text-gray-900 text-sm rounded-xl px-4 py-3.5 
-                    cursor-pointer transition-all border
-                    ${isConfigOpen ? 'border-black ring-1 ring-black' : 'border-gray-200 hover:border-black'}
-                  `}
+                  className={`grid grid-cols-1 gap-2.5 pr-1 select-none transition-all duration-300 ${
+                      showScroll ? 'max-h-[225px] overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-300 scrollbar-track-zinc-50 pb-6' : ''
+                  }`}
               >
-                  <span className="font-bold">{activeConfig.label}</span>
-                  <ChevronDown className={`w-4 h-4 transition-transform ${isConfigOpen ? 'rotate-180' : ''}`} />
-              </div>
-
-              {/* Dropdown Menu */}
-              {isConfigOpen && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden z-50 animate-fade-in-up">
-                      {configOptions.map((opt) => {
-                          const avail = checkAvailability(opt.id, moveInDate, calendarPrices, listing.id);
-                          const isAvailable = avail.status === 'AVAILABLE';
-                          const isSelected = selectedConfigIds.includes(opt.id);
-                          
-                          return (
-                              <div 
-                                  key={opt.id}
-                                  onClick={() => {
-                                      toggleConfigSelection(opt.id, listing.rooms?.map(r => r.id) || []);
-                                  }}
-                                  className={`
-                                      flex items-center justify-between px-4 py-3 border-b border-gray-50 last:border-0 transition-colors cursor-pointer
-                                      ${isSelected ? 'bg-gray-50' : 'hover:bg-gray-50'}
-                                  `}
-                              >
-                                  <div className="flex items-center gap-3">
-                                      <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-black border-black text-white' : 'border-gray-300'}`}>
-                                          {isSelected && <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                  {configOptions.map((opt) => {
+                      const avail = checkAvailability(opt.id, moveInDate, calendarPrices, listing.id);
+                      const isAvailable = avail.status === 'AVAILABLE';
+                      const isSelected = selectedConfigIds.includes(opt.id);
+                      const isEntire = opt.id === 'entire_place';
+                      
+                      return (
+                          <button 
+                              key={opt.id}
+                              type="button"
+                              onClick={() => {
+                                  uiAudio.playClick();
+                                  toggleConfigSelection(opt.id, listing.rooms?.map(r => r.id) || []);
+                              }}
+                              className={`
+                                  w-full flex flex-col p-3.5 rounded-xl text-left transition-all duration-300 border-2 relative overflow-hidden group cursor-pointer
+                                  ${isSelected 
+                                    ? 'border-[#0284C7] bg-[#0284C7]/5 shadow-[0_4px_12px_rgba(2,132,199,0.04)]' 
+                                    : 'border-zinc-150 bg-white hover:border-zinc-300 hover:bg-zinc-50/40'}
+                              `}
+                          >
+                              {/* Selection glow line */}
+                              {isSelected && (
+                                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#0284C7]" />
+                              )}
+                              
+                              <div className="flex items-start justify-between w-full gap-2">
+                                  <div className="flex items-start gap-2.5">
+                                      <div className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all shrink-0 ${
+                                          isSelected ? 'border-[#0284C7] bg-[#0284C7] text-white' : 'border-zinc-300 bg-white group-hover:border-zinc-400'
+                                      }`}>
+                                          {isSelected && <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
                                       </div>
-                                      <span className={`font-medium ${isSelected ? 'text-black' : 'text-gray-600'}`}>
-                                          {opt.label}
+                                      <div>
+                                          <p className={`font-bold text-xs tracking-tight transition-colors leading-tight ${isSelected ? 'text-[#0284C7]' : 'text-zinc-900'}`}>
+                                              {opt.label}
+                                          </p>
+                                          <p className="text-[10px] text-zinc-400 font-medium mt-0.5 leading-none">
+                                              {isEntire ? 'Full premium access' : 'Private bedroom suite'}
+                                          </p>
+                                      </div>
+                                  </div>
+                                  
+                                  <div className="text-right flex-shrink-0">
+                                      <span className="text-xs font-black text-zinc-950 font-mono block leading-none">
+                                          {formatPrice(opt.price, listing.currency)}
+                                      </span>
+                                      <span className="text-[8px] font-bold text-zinc-400 tracking-wider uppercase block mt-0.5 leading-none">
+                                          {isEntire ? 'per month' : 'per night'}
                                       </span>
                                   </div>
-                                  {/* Availability Badge - Modern Black & White */}
-                                  <span className={`
-                                      text-[10px] font-bold px-2 py-0.5 rounded border tracking-wide uppercase
-                                      ${isAvailable 
-                                        ? 'bg-black text-white border-black' 
-                                        : 'bg-white text-gray-500 border-gray-200'}
-                                  `}>
-                                      {avail.label}
+                              </div>
+                              
+                              {/* Lower section with availability status */}
+                              <div className="mt-2 pt-2 border-t border-zinc-100 w-full flex items-center justify-between">
+                                  <div className="flex items-center gap-1">
+                                      <span className={`w-1.5 h-1.5 rounded-full ${isAvailable ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+                                      <span className={`text-[8px] font-bold tracking-wider uppercase ${isAvailable ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                          {avail.label}
+                                      </span>
+                                  </div>
+                                  <span className="text-[8px] text-zinc-400 font-bold tracking-widest uppercase">
+                                      {isEntire ? 'Entire Place' : 'Unit Private'}
                                   </span>
                               </div>
-                          );
-                      })}
+                          </button>
+                      );
+                  })}
+              </div>
+              
+              {/* Fade Overlay for scrolling & scrolling helper badge */}
+              {showScroll && (
+                  <div className="absolute bottom-0 inset-x-0 h-10 bg-gradient-to-t from-white via-white/80 to-transparent pointer-events-none flex items-end justify-center">
+                      <span className="text-[8px] bg-zinc-900 text-white font-bold tracking-widest uppercase px-2 py-0.5 rounded-full mb-1 opacity-80 shadow-xs">
+                          {configOptions.length} Units Available · Scroll to View
+                      </span>
                   </div>
               )}
           </div>
@@ -1462,19 +1493,151 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
 
                             {/* Segment 2: Individual Subunits (Rooms / Cottages) */}
                             {(hingeTab === 'units' || listing.rental_mode === 'private_rooms') && (
-                                listing.rooms.map((room, idx) => {
-                                    const isRoomSelected = selectedConfigIds.includes(room.id);
-                                    return (
-                                        <PremiumInventoryUnitCard 
-                                            key={room.id || idx} 
-                                            room={room} 
-                                            listing={listing} 
-                                            isSelected={isRoomSelected} 
-                                            toggleSelection={() => toggleConfigSelection(room.id, listing.rooms?.map(r => r.id) || [])}
-                                            formatPrice={formatPrice}
-                                        />
-                                    );
-                                })
+                                <>
+                                    {/* Bento Suite Selector Hub */}
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                                        {/* Bento Card 1: Live Selection Summary */}
+                                        <div className="md:col-span-2 bg-gradient-to-br from-zinc-900 via-zinc-950 to-zinc-900 text-white rounded-3xl p-6 relative overflow-hidden border border-zinc-800 flex flex-col justify-between shadow-xl min-h-[160px] group">
+                                            <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none group-hover:scale-110 transition-transform duration-500">
+                                                <Sparkles className="w-24 h-24 text-amber-400" />
+                                            </div>
+                                            <div>
+                                                <span className="text-[9px] font-black tracking-widest text-amber-400 uppercase font-mono bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20 inline-block">
+                                                    Interactive Selection Hub
+                                                </span>
+                                                <h4 className="text-lg font-extrabold tracking-tight mt-2.5">
+                                                    {selectedConfigIds.filter(id => id !== 'entire_place').length > 0 
+                                                        ? `Custom Config: ${selectedConfigIds.filter(id => id !== 'entire_place').length} Suite(s) Selected`
+                                                        : 'Configure Your Private Stay'}
+                                                </h4>
+                                                <p className="text-zinc-400 text-xs mt-1 font-light max-w-md leading-relaxed">
+                                                    Toggle different private room modules below. Build a hybrid co-living experience tailored to your team or guest roster.
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center justify-between mt-4 pt-4 border-t border-zinc-850">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">Subtotal / Night</span>
+                                                    <span className="text-lg font-black text-amber-400 font-mono">
+                                                        {formatPrice(
+                                                            listing.rooms
+                                                                .filter(r => selectedConfigIds.includes(r.id))
+                                                                .reduce((acc, curr) => acc + Number(curr.price), 0),
+                                                            listing.currency
+                                                        )}
+                                                    </span>
+                                                </div>
+                                                {selectedConfigIds.filter(id => id !== 'entire_place').length > 0 ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            uiAudio.playClick();
+                                                            document.getElementById('booking-card')?.scrollIntoView({ behavior: 'smooth' });
+                                                        }}
+                                                        className="bg-amber-400 hover:bg-amber-300 text-black text-[10px] font-black uppercase tracking-wider py-2.5 px-4 rounded-xl transition-all shadow-lg shadow-amber-400/10 hover:scale-[1.02] flex items-center gap-1 cursor-pointer"
+                                                    >
+                                                        Lock In Stay
+                                                        <ArrowRight className="w-3 h-3" />
+                                                    </button>
+                                                ) : (
+                                                    <span className="text-[10px] font-bold text-zinc-500 italic">Select a room below to begin</span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Bento Card 2: Seclusion & Quiet Score */}
+                                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 rounded-3xl p-6 flex flex-col justify-between shadow-sm relative overflow-hidden group">
+                                            <div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[9px] font-black tracking-widest text-zinc-400 dark:text-zinc-500 uppercase font-mono">
+                                                        Privacy Index
+                                                    </span>
+                                                    <Shield className="w-4 h-4 text-emerald-500" />
+                                                </div>
+                                                <div className="mt-3 flex items-baseline gap-1">
+                                                    <span className="text-4xl font-black text-zinc-950 dark:text-white tracking-tighter">92</span>
+                                                    <span className="text-xs font-bold text-emerald-600 uppercase bg-emerald-50 dark:bg-emerald-950/20 px-1.5 py-0.5 rounded border border-emerald-100 dark:border-emerald-900/40">Elite</span>
+                                                </div>
+                                                <p className="text-zinc-500 dark:text-zinc-400 text-[11px] mt-1.5 leading-relaxed font-light">
+                                                    Enhanced sound shielding with solid double brick walls and private ensuite bathrooms in all guest wings.
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                                                <Volume2 className="w-3.5 h-3.5 text-zinc-400" />
+                                                <span className="text-[9px] text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-wider">Acoustic Shield Active</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Bento Card 3: Elite Security & Access Control */}
+                                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 rounded-3xl p-6 flex flex-col justify-between shadow-sm relative overflow-hidden group">
+                                            <div>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[9px] font-black tracking-widest text-zinc-400 dark:text-zinc-500 uppercase font-mono">
+                                                        Keyless Entry
+                                                    </span>
+                                                    <Lock className="w-4 h-4 text-blue-500 animate-pulse" />
+                                                </div>
+                                                <h5 className="text-xs font-black text-zinc-900 dark:text-white mt-3 uppercase tracking-wider">
+                                                    Lockable Private Modules
+                                                </h5>
+                                                <p className="text-zinc-500 dark:text-zinc-400 text-[11px] mt-1 leading-relaxed font-light">
+                                                    Each private guest room has custom physical solid keyless smart keypad locks with dynamic code rotation.
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                                                <CheckCircle2 className="w-3.5 h-3.5 text-blue-500" />
+                                                <span className="text-[9px] text-blue-500 font-bold uppercase tracking-wider">Secure Access Verified</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Bento Card 4: Shared vs Private Amenities Ratio */}
+                                        <div className="md:col-span-2 bg-white dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 rounded-3xl p-6 flex flex-col justify-between shadow-sm relative overflow-hidden group">
+                                            <div className="flex flex-col sm:flex-row justify-between gap-4">
+                                                <div className="max-w-xs">
+                                                    <span className="text-[9px] font-black tracking-widest text-zinc-400 dark:text-zinc-500 uppercase font-mono">
+                                                        Amenity Buyout Advantage
+                                                    </span>
+                                                    <h5 className="text-sm font-black text-zinc-900 dark:text-white mt-1.5 leading-tight">
+                                                        Personal Comfort vs Shared Luxury
+                                                    </h5>
+                                                    <p className="text-zinc-500 dark:text-zinc-400 text-[11px] mt-1.5 leading-relaxed font-light">
+                                                        Enjoy dedicated personal suites while unlocking beautiful grand common areas, curated for high-performing teams and families.
+                                                    </p>
+                                                </div>
+                                                
+                                                {/* Visual Ratio Bar Chart / Infographic (Aesthetic Bento touch) */}
+                                                <div className="flex-1 min-w-[140px] flex flex-col justify-center bg-zinc-50 dark:bg-zinc-850 p-4 rounded-2xl border border-zinc-150/40 dark:border-zinc-800">
+                                                    <div className="flex justify-between text-[9px] font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">
+                                                        <span>Private Comfort</span>
+                                                        <span>Shared Space</span>
+                                                    </div>
+                                                    {/* Interactive stacked bar */}
+                                                    <div className="w-full h-3 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden flex shadow-[inset_0_1px_2px_rgba(0,0,0,0.1)]">
+                                                        <div className="h-full bg-amber-400 w-[60%] transition-all duration-500" title="60% Private Dedicated Comfort" />
+                                                        <div className="h-full bg-blue-500 w-[40%] transition-all duration-500" title="40% Grand Shared Estates" />
+                                                    </div>
+                                                    <div className="flex justify-between items-center text-[10px] mt-2 text-zinc-400 font-bold">
+                                                        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />60% Private Suite</span>
+                                                        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />40% Resort Area</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {listing.rooms.map((room, idx) => {
+                                        const isRoomSelected = selectedConfigIds.includes(room.id);
+                                        return (
+                                            <PremiumInventoryUnitCard 
+                                                key={room.id || idx} 
+                                                room={room} 
+                                                listing={listing} 
+                                                isSelected={isRoomSelected} 
+                                                toggleSelection={() => toggleConfigSelection(room.id, listing.rooms?.map(r => r.id) || [])}
+                                                formatPrice={formatPrice}
+                                            />
+                                        );
+                                    })}
+                                </>
                             )}
                         </div>
                     </div>
@@ -1727,9 +1890,14 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
 
                             {/* Select BHK - Custom Dropdown */}
                             <div className="relative mt-5">
-                                <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-3">Accommodation Choice</label>
+                                <div className="flex justify-between items-center mb-3">
+                                    <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Accommodation Choice</label>
+                                    <span className="text-[9px] bg-zinc-100 text-zinc-600 px-2.5 py-1 rounded-full font-bold select-none border border-zinc-200/50">
+                                        {selectedConfigIds.includes('entire_place') ? 'Entire Place' : `${selectedConfigIds.filter(id => id !== 'entire_place').length} Suite(s)`} Selected
+                                    </span>
+                                </div>
                                 {renderConfigDropdown()}
-                            </div>
+                             </div>
                         </div>
                         
                         {/* Contact Form Expansion */}
@@ -1988,63 +2156,82 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                         </div>
                     </div>
                     <div>
-                        <label className="block text-xs font-extrabold text-black uppercase tracking-wider mb-2">Configuration</label>
+                        <div className="flex justify-between items-center mb-3">
+                            <label className="block text-xs font-extrabold text-black uppercase tracking-wider">Accommodation Choice</label>
+                            <span className="text-[10px] bg-zinc-100 border border-zinc-200/60 text-zinc-600 px-2.5 py-0.5 rounded-full font-bold select-none">
+                                {selectedConfigIds.includes('entire_place') ? 'Entire Place' : `${selectedConfigIds.filter(id => id !== 'entire_place').length} Suite(s)`}
+                            </span>
+                        </div>
                         
-                        {/* Mobile Configuration Dropdown (Collapsible) */}
-                        <div className="border border-gray-200 rounded-xl overflow-hidden">
-                             {/* Header / Trigger */}
-                             <div 
-                                onClick={() => setIsMobileConfigOpen(!isMobileConfigOpen)}
-                                className={`
-                                    flex items-center justify-between p-4 bg-white active:bg-gray-50 transition-colors cursor-pointer
-                                    ${isMobileConfigOpen ? 'border-b border-gray-100' : ''}
-                                `}
-                             >
-                                 <span className="font-bold text-gray-900">{activeConfig.label}</span>
-                                 <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${isMobileConfigOpen ? 'rotate-180' : ''}`} />
-                             </div>
+                        <div className="grid grid-cols-1 gap-2.5 max-h-[240px] overflow-y-auto pr-1 pb-1 scrollbar-thin">
+                            {configOptions.map((opt) => {
+                                const avail = checkAvailability(opt.id, moveInDate, calendarPrices, listing.id);
+                                const isAvailable = avail.status === 'AVAILABLE';
+                                const isSelected = selectedConfigIds.includes(opt.id);
+                                const isEntire = opt.id === 'entire_place';
 
-                             {/* Options List */}
-                             {isMobileConfigOpen && (
-                                 <div className="bg-gray-50 animate-fade-in">
-                                     {configOptions.map((opt) => {
-                                         const avail = checkAvailability(opt.id, moveInDate, calendarPrices, listing.id);
-                                         const isAvailable = avail.status === 'AVAILABLE';
-                                         const isSelected = selectedConfigIds.includes(opt.id);
-
-                                         return (
-                                            <div 
-                                                key={opt.id}
-                                                onClick={() => {
-                                                    toggleConfigSelection(opt.id, listing.rooms?.map(r => r.id) || []);
-                                                }}
-                                                className={`
-                                                    flex items-center justify-between px-4 py-3.5 border-b border-gray-100 last:border-0 transition-all cursor-pointer
-                                                    ${isSelected ? 'bg-white' : ''}
-                                                    ${!isAvailable ? 'opacity-90' : 'active:bg-white'}
-                                                `}
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-black border-black text-white' : 'border-gray-300'}`}>
-                                                        {isSelected && <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
-                                                    </div>
-                                                    <span className={`font-medium ${isSelected ? 'text-black font-bold' : 'text-gray-600'}`}>
-                                                        {opt.label}
-                                                    </span>
+                                return (
+                                    <button 
+                                        key={opt.id}
+                                        type="button"
+                                        onClick={() => {
+                                            uiAudio.playClick();
+                                            toggleConfigSelection(opt.id, listing.rooms?.map(r => r.id) || []);
+                                        }}
+                                        className={`
+                                            w-full flex flex-col p-3 rounded-xl text-left transition-all duration-300 border-2 relative overflow-hidden group active:scale-[0.98] cursor-pointer
+                                            ${isSelected 
+                                              ? 'border-[#0284C7] bg-[#0284C7]/5 shadow-[0_4px_12px_rgba(2,132,199,0.04)]' 
+                                              : 'border-zinc-150 bg-white hover:border-zinc-300'}
+                                        `}
+                                    >
+                                        {/* Selection indicator line */}
+                                        {isSelected && (
+                                            <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#0284C7]" />
+                                        )}
+                                        
+                                        <div className="flex items-center justify-between w-full gap-2">
+                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all shrink-0 ${
+                                                    isSelected ? 'border-[#0284C7] bg-[#0284C7] text-white' : 'border-zinc-300 bg-white'
+                                                }`}>
+                                                    {isSelected && <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
                                                 </div>
-                                                <span className={`
-                                                    text-[10px] font-bold px-2 py-0.5 rounded border tracking-wide uppercase
-                                                    ${isAvailable 
-                                                        ? 'bg-black text-white border-black' 
-                                                        : 'bg-white text-gray-500 border-gray-200'}
-                                                `}>
+                                                <div className="truncate">
+                                                    <p className={`font-bold text-xs tracking-tight transition-colors leading-tight truncate ${isSelected ? 'text-[#0284C7]' : 'text-zinc-900'}`}>
+                                                        {opt.label}
+                                                    </p>
+                                                    <p className="text-[9px] text-zinc-400 font-medium mt-0.5 leading-none">
+                                                        {isEntire ? 'Full access to all areas' : 'Private bedroom suite'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="text-right flex-shrink-0">
+                                                <span className="text-xs font-black text-zinc-950 font-mono block leading-none">
+                                                    {formatPrice(opt.price, listing.currency)}
+                                                </span>
+                                                <span className="text-[8px] font-bold text-zinc-400 tracking-wider uppercase block mt-0.5 leading-none">
+                                                    {isEntire ? 'per month' : 'per night'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Lower status row */}
+                                        <div className="mt-2 pt-2 border-t border-zinc-100 w-full flex items-center justify-between">
+                                            <div className="flex items-center gap-1">
+                                                <span className={`w-1.5 h-1.5 rounded-full ${isAvailable ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+                                                <span className={`text-[8px] font-bold tracking-wider uppercase ${isAvailable ? 'text-emerald-600' : 'text-rose-600'}`}>
                                                     {avail.label}
                                                 </span>
                                             </div>
-                                         )
-                                     })}
-                                 </div>
-                             )}
+                                            <span className="text-[8px] text-zinc-400 font-bold tracking-widest uppercase">
+                                                {isEntire ? 'Entire Place' : 'Unit Private'}
+                                            </span>
+                                        </div>
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
                     

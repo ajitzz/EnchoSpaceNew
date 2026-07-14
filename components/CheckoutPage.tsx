@@ -148,7 +148,8 @@ interface CheckoutPageProps {
 export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience, numTickets = 1, initialData, onSuccess, onCancel }) => {
   const [rates, setRates] = useState({ commission_rate: 10, tax_rate: 18, system_fee: 150 });
   const { formatPrice } = useCurrency();
-  const [activeStep, setActiveStep] = useState<number>(1); // Step 1: Details, Step 2: Payment
+  const [activeStep, setActiveStep] = useState<number>(1); // Step 1: Details, Step 2: Protection, Step 3: Payment
+  const [protectionSelected, setProtectionSelected] = useState<boolean>(true);
   const [gatewayTab, setGatewayTab] = useState<'razorpay' | 'stripe'>('razorpay');
   const [razorpayMethod, setRazorpayMethod] = useState<'upi' | 'emi'>('upi');
   
@@ -173,6 +174,29 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
   const [simulationStep, setSimulationStep] = useState<number>(0);
   const [isSimulating, setIsSimulating] = useState(false);
   const [upiId, setUpiId] = useState('');
+  const [upiMode, setUpiMode] = useState<'vpa' | 'qr'>('vpa');
+  const [qrTimeLeft, setQrTimeLeft] = useState(300); // 5 minutes in seconds
+
+  useEffect(() => {
+    if (upiMode !== 'qr') return;
+    setQrTimeLeft(300); // Reset timer to 5m when switching to QR
+    const interval = setInterval(() => {
+      setQrTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [upiMode]);
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
 
   // Auto-fetch settings from Admin Panel
   useEffect(() => {
@@ -203,7 +227,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
   const subtotal = baseAmount + commissionFee;
   const taxFee = Math.round(subtotal * (rates.tax_rate / 100));
   const systemFee = rates.system_fee;
-  const finalTotal = baseAmount + commissionFee + taxFee + systemFee;
+  const protectionFee = protectionSelected ? 1499 : 0;
+  const finalTotal = baseAmount + commissionFee + taxFee + systemFee + protectionFee;
   const deposit = isExperience ? 0 : baseAmount * 3;
 
   // EMI math helper
@@ -298,11 +323,17 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
       <header className="w-full bg-white border-b border-zinc-100 sticky top-0 z-40">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <button 
-            onClick={activeStep === 2 ? () => setActiveStep(1) : onCancel}
-            className="flex items-center gap-1 text-xs font-bold text-zinc-500 hover:text-zinc-950 transition-colors"
+            onClick={
+              activeStep === 3 
+                ? () => setActiveStep(2) 
+                : activeStep === 2 
+                ? () => setActiveStep(1) 
+                : onCancel
+            }
+            className="flex items-center gap-1 text-xs font-bold text-zinc-500 hover:text-zinc-950 transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
-            {activeStep === 2 ? 'Back to Details' : 'Cancel & Exit'}
+            {activeStep === 3 ? 'Back to Protection' : activeStep === 2 ? 'Back to Details' : 'Cancel & Exit'}
           </button>
 
           <div className="flex items-center gap-1.5 select-none">
@@ -414,6 +445,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                     <span className="font-mono font-bold text-zinc-900">{formatPrice(systemFee, 'INR')}</span>
                   </div>
                 )}
+                {protectionSelected && (
+                  <div className="flex justify-between text-xs font-medium text-zinc-500">
+                    <span>Premium Booking Protection</span>
+                    <span className="font-mono font-bold text-zinc-900">{formatPrice(1499, 'INR')}</span>
+                  </div>
+                )}
                 {!isExperience && (
                   <div className="flex justify-between text-xs font-medium text-zinc-500">
                     <span className="flex items-center gap-1">Security deposit <span className="text-[9px] bg-zinc-100 text-zinc-500 px-1.5 py-0.5 rounded-sm">3 mo</span></span>
@@ -472,12 +509,17 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
             </div>
             <div className="h-px bg-zinc-200 flex-grow"></div>
             <div className="flex items-center gap-2">
-              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${activeStep === 2 ? 'bg-zinc-950 text-white' : 'bg-zinc-100 text-zinc-400'}`}>2</span>
-              <span className={`text-xs font-bold ${activeStep === 2 ? 'text-zinc-950' : 'text-zinc-400'}`}>Payment</span>
+              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${activeStep >= 2 ? 'bg-zinc-950 text-white' : 'bg-zinc-100 text-zinc-400'}`}>2</span>
+              <span className={`text-xs font-bold ${activeStep === 2 ? 'text-zinc-950' : 'text-zinc-400'}`}>Protection</span>
+            </div>
+            <div className="h-px bg-zinc-200 flex-grow"></div>
+            <div className="flex items-center gap-2">
+              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${activeStep === 3 ? 'bg-zinc-950 text-white' : 'bg-zinc-100 text-zinc-400'}`}>3</span>
+              <span className={`text-xs font-bold ${activeStep === 3 ? 'text-zinc-950' : 'text-zinc-400'}`}>Payment</span>
             </div>
           </div>
 
-          {activeStep === 1 ? (
+          {activeStep === 1 && (
             /* Step 1: Booking Information */
             <div className="space-y-6 animate-fade-in">
               <h2 className="text-xl font-black text-zinc-950 tracking-tight">Booking Information</h2>
@@ -530,20 +572,109 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
 
               <button 
                 onClick={validateStep1}
-                className="w-full py-4 bg-zinc-950 hover:bg-zinc-900 text-white font-bold rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 text-sm mt-4 active:scale-95"
+                className="w-full py-4 bg-zinc-950 hover:bg-zinc-900 text-white font-bold rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 text-sm mt-4 active:scale-95 cursor-pointer"
               >
-                Proceed to Secure Payment
+                Proceed to Protection Pack
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
-          ) : (
-            /* Step 2: Secure Payment */
+          )}
+
+          {activeStep === 2 && (
+            /* Step 2: Protection Package */
+            <div className="space-y-6 animate-fade-in">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-black text-zinc-950 tracking-tight">Booking Protection</h2>
+                <button 
+                  onClick={() => setActiveStep(1)}
+                  className="text-xs font-bold text-zinc-400 hover:text-zinc-950 flex items-center gap-1 cursor-pointer"
+                >
+                  <ArrowLeft className="w-3 h-3" /> Back
+                </button>
+              </div>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Secure your investment with our Encho Premium Protection Shield. Cover cancellation fees, medical emergencies, and luggage losses.
+              </p>
+
+              <div className="space-y-4">
+                {/* Option A: Premium Coverage */}
+                <button
+                  type="button"
+                  onClick={() => { setProtectionSelected(true); uiAudio.playClick(); }}
+                  className={`w-full p-5 rounded-2xl text-left transition-all duration-300 border-2 relative overflow-hidden group flex items-start gap-4 cursor-pointer ${
+                    protectionSelected 
+                      ? 'border-[#0284C7] bg-[#0284C7]/5' 
+                      : 'border-zinc-200 bg-white hover:border-zinc-400'
+                  }`}
+                >
+                  <div className={`mt-1 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                    protectionSelected ? 'border-[#0284C7] bg-[#0284C7] text-white' : 'border-zinc-300 bg-white'
+                  }`}>
+                    {protectionSelected && <Check className="w-3.5 h-3.5" />}
+                  </div>
+                  
+                  <div className="flex-1">
+                    <div className="flex justify-between items-baseline">
+                      <h4 className="font-bold text-sm text-zinc-900 group-hover:text-[#0284C7] transition-colors">Encho Care Premium Protection</h4>
+                      <span className="text-xs font-black text-zinc-950 font-mono">{formatPrice(1499, 'INR')}</span>
+                    </div>
+                    <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                      100% full refund on medical issues, trip cancellations, or transport delays. Includes 24/7 dedicated guest support.
+                    </p>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded bg-emerald-50 text-emerald-600 border border-emerald-100">Fully Refundable</span>
+                      <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded bg-zinc-100 text-zinc-600 border border-zinc-200">Luggage Covered</span>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Option B: Standard Stay (No Protection) */}
+                <button
+                  type="button"
+                  onClick={() => { setProtectionSelected(false); uiAudio.playClick(); }}
+                  className={`w-full p-5 rounded-2xl text-left transition-all duration-300 border-2 relative overflow-hidden group flex items-start gap-4 cursor-pointer ${
+                    !protectionSelected 
+                      ? 'border-zinc-950 bg-zinc-50/50' 
+                      : 'border-zinc-200 bg-white hover:border-zinc-400'
+                  }`}
+                >
+                  <div className={`mt-1 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                    !protectionSelected ? 'border-zinc-950 bg-zinc-950 text-white' : 'border-zinc-300 bg-white'
+                  }`}>
+                    {!protectionSelected && <Check className="w-3.5 h-3.5" />}
+                  </div>
+
+                  <div className="flex-1">
+                    <div className="flex justify-between items-baseline">
+                      <h4 className="font-bold text-sm text-zinc-900">Standard Coverage</h4>
+                      <span className="text-xs font-bold text-zinc-400">No extra charge</span>
+                    </div>
+                    <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                      Standard cancellation policy applies. No coverage for dynamic transport delays, damage liability waiver, or extreme weather refunds.
+                    </p>
+                  </div>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => { uiAudio.playClick(); setActiveStep(3); }}
+                className="w-full py-4 bg-zinc-950 hover:bg-zinc-900 text-white font-bold rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 text-sm mt-6 active:scale-95 cursor-pointer"
+              >
+                Continue to Secure Payment
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {activeStep === 3 && (
+            /* Step 3: Secure Payment */
             <div className="space-y-6 animate-fade-in">
               <div className="flex justify-between items-center">
                 <h2 className="text-xl font-black text-zinc-950 tracking-tight">Secure Payment</h2>
                 <button 
-                  onClick={() => setActiveStep(1)}
-                  className="text-xs font-bold text-zinc-400 hover:text-zinc-950 flex items-center gap-1"
+                  onClick={() => setActiveStep(2)}
+                  className="text-xs font-bold text-zinc-400 hover:text-zinc-950 flex items-center gap-1 cursor-pointer"
                 >
                   <ArrowLeft className="w-3 h-3" /> Back
                 </button>
@@ -582,7 +713,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                           totalRent: finalTotal,
                           roomIds: isExperience ? [] : (listing?.rooms?.filter(r => r.name === selectedConfig).map(r => r.id) || [])
                         });
-                      }} onCancel={() => setActiveStep(1)} />
+                      }} onCancel={() => setActiveStep(2)} />
                   </Elements>
                 </div>
               ) : (
@@ -605,35 +736,128 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                   </div>
 
                   {razorpayMethod === 'upi' ? (
-                    <div className="space-y-4 animate-fade-in">
-                      <div className="space-y-1.5">
-                         <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Pay via UPI ID (VPA)</label>
-                         <input 
-                            type="text"
-                            placeholder="e.g. name@okhdfcbank"
-                            value={upiId}
-                            onChange={e => setUpiId(e.target.value)}
-                            className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#0284C7] focus:outline-none transition-all font-mono text-xs text-zinc-850 font-bold"
-                         />
+                    <div className="space-y-5 animate-fade-in">
+                      {/* Sub-tab switcher for UPI Type */}
+                      <div className="flex bg-zinc-50 border border-zinc-200/60 p-1 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={() => { setUpiMode('vpa'); uiAudio.playClick(); }}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition-all ${upiMode === 'vpa' ? 'bg-white text-zinc-950 shadow-xs border border-zinc-200/40' : 'text-zinc-400 hover:text-zinc-950'}`}
+                        >
+                          <Smartphone className="w-3.5 h-3.5" />
+                          UPI ID / VPA
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setUpiMode('qr'); uiAudio.playClick(); }}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition-all ${upiMode === 'qr' ? 'bg-white text-zinc-950 shadow-xs border border-zinc-200/40' : 'text-zinc-400 hover:text-zinc-950'}`}
+                        >
+                          <Wallet className="w-3.5 h-3.5" />
+                          Scan QR Code
+                        </button>
                       </div>
 
-                      <div className="flex items-center gap-3 p-3 bg-zinc-50 rounded-2xl border border-zinc-200/50">
-                         <div className="w-10 h-10 bg-white rounded-xl border border-zinc-200 flex items-center justify-center font-extrabold text-[#0284C7] text-xs shadow-sm">
-                            UPI
-                         </div>
-                         <div>
-                            <p className="text-xs font-bold text-zinc-950">Direct App Redirect</p>
-                            <p className="text-[10px] text-zinc-400">Google Pay, PhonePe, Paytm, BHIM</p>
-                         </div>
-                      </div>
+                      {upiMode === 'vpa' ? (
+                        <div className="space-y-4 animate-fade-in">
+                          <div className="space-y-1.5">
+                             <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Pay via UPI ID (VPA)</label>
+                             <input 
+                                type="text"
+                                placeholder="e.g. name@okhdfcbank"
+                                value={upiId}
+                                onChange={e => setUpiId(e.target.value)}
+                                className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#0284C7] focus:outline-none transition-all font-mono text-xs text-zinc-850 font-bold"
+                             />
+                          </div>
 
-                      <button 
-                         onClick={handleSimulatedPayment}
-                         className="w-full py-4 bg-[#0284C7] hover:bg-[#0369A1] text-white font-bold rounded-2xl transition-all shadow-lg shadow-[#0284C7]/20 flex items-center justify-center gap-2 text-sm mt-4"
-                      >
-                         Pay {formatPrice(finalTotal, 'INR')} Securely
-                         <ChevronRight className="w-4 h-4" />
-                      </button>
+                          <div className="flex items-center gap-3 p-3 bg-zinc-50 rounded-2xl border border-zinc-200/50">
+                             <div className="w-10 h-10 bg-white rounded-xl border border-zinc-200 flex items-center justify-center font-extrabold text-[#0284C7] text-xs shadow-sm">
+                                UPI
+                             </div>
+                             <div>
+                                <p className="text-xs font-bold text-zinc-950">Direct App Redirect</p>
+                                <p className="text-[10px] text-zinc-400">Google Pay, PhonePe, Paytm, BHIM</p>
+                             </div>
+                          </div>
+
+                          <button 
+                             type="button"
+                             onClick={handleSimulatedPayment}
+                             className="w-full py-4 bg-[#0284C7] hover:bg-[#0369A1] text-white font-bold rounded-2xl transition-all shadow-lg shadow-[#0284C7]/20 flex items-center justify-center gap-2 text-sm mt-4"
+                          >
+                             Pay {formatPrice(finalTotal, 'INR')} Securely
+                             <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-4 animate-fade-in flex flex-col items-center">
+                          <p className="text-xs text-zinc-500 text-center max-w-xs leading-relaxed">
+                            Scan this dynamic secure QR code using any UPI App (GPay, PhonePe, Paytm, BHIM) to complete checkout.
+                          </p>
+
+                          {/* Beautiful Interactive QR Code with Simulated Scanning laser line */}
+                          <div className="relative p-4 bg-white border border-zinc-200 rounded-3xl shadow-sm flex flex-col items-center justify-center mt-2 group overflow-hidden">
+                            {/* Scanning Laser Line */}
+                            <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-[#0284C7] to-transparent animate-pulse" style={{
+                              animation: 'scan 2.5s ease-in-out infinite',
+                              top: '10%'
+                            }} />
+
+                            {/* Custom CSS for scan laser animation */}
+                            <style>{`
+                              @keyframes scan {
+                                0% { top: 10%; }
+                                50% { top: 90%; }
+                                100% { top: 10%; }
+                              }
+                            `}</style>
+
+                            {/* Generous visual QR Mock using beautiful vectors */}
+                            <div className="w-44 h-44 bg-zinc-150 rounded-2xl flex items-center justify-center relative border border-zinc-200/60 p-2">
+                              {/* Custom high fidelity QR representation */}
+                              <div className="w-full h-full relative opacity-90 group-hover:scale-102 transition-transform duration-500">
+                                {/* Corner anchors */}
+                                <div className="absolute top-0 left-0 w-8 h-8 border-4 border-zinc-950 rounded-xs" />
+                                <div className="absolute top-0 right-0 w-8 h-8 border-4 border-zinc-950 rounded-xs" />
+                                <div className="absolute bottom-0 left-0 w-8 h-8 border-4 border-zinc-950 rounded-xs" />
+                                {/* Center branding circle */}
+                                <div className="absolute inset-12 bg-white rounded-xl border border-zinc-200 shadow-sm flex items-center justify-center">
+                                  <span className="text-[10px] font-black text-[#0284C7] tracking-tighter">UPI</span>
+                                </div>
+                                {/* Scattered QR pixels */}
+                                <div className="absolute top-2.5 left-10 w-4 h-4 bg-zinc-950 rounded-xs" />
+                                <div className="absolute top-10 left-2.5 w-4 h-4 bg-zinc-950 rounded-xs" />
+                                <div className="absolute bottom-10 left-2.5 w-4 h-4 bg-zinc-950 rounded-xs" />
+                                <div className="absolute top-10 right-2.5 w-4 h-4 bg-zinc-950 rounded-xs" />
+                                <div className="absolute bottom-2.5 right-10 w-4 h-4 bg-zinc-950 rounded-xs" />
+                                <div className="absolute bottom-10 right-2.5 w-4 h-4 bg-zinc-950 rounded-xs" />
+                                
+                                <div className="absolute top-16 left-3 w-4 h-1.5 bg-zinc-950 rounded-xs" />
+                                <div className="absolute top-3 left-16 w-1.5 h-4 bg-zinc-950 rounded-xs" />
+                                <div className="absolute bottom-16 right-3 w-4 h-1.5 bg-zinc-950 rounded-xs" />
+                                <div className="absolute bottom-3 right-16 w-1.5 h-4 bg-zinc-950 rounded-xs" />
+                                <div className="absolute top-16 right-10 w-3 h-3 bg-zinc-950 rounded-xs" />
+                                <div className="absolute bottom-16 left-10 w-3 h-3 bg-zinc-950 rounded-xs" />
+                              </div>
+                            </div>
+
+                            {/* Countdown Timer Badge */}
+                            <div className="mt-4 flex items-center gap-1.5 bg-rose-50 text-rose-700 px-3 py-1 rounded-full border border-rose-100 text-xs font-bold">
+                              <Calendar className="w-3.5 h-3.5 animate-pulse text-rose-600" />
+                              <span>QR Expires in {formatTime(qrTimeLeft)}</span>
+                            </div>
+                          </div>
+
+                          <button 
+                             type="button"
+                             onClick={handleSimulatedPayment}
+                             className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 text-sm mt-4"
+                          >
+                             <CheckCircle2 className="w-4 h-4" />
+                             I have scanned & paid successfully
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     /* Interactive EMI simulator */

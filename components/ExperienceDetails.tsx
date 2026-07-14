@@ -1236,7 +1236,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                         <Clock className="w-6 h-6 text-blue-400" />
                         <div>
                             <h2 className="text-2xl font-bold text-white tracking-tight">The Itinerary</h2>
-                            <p className="text-xs text-gray-400 font-light mt-0.5">Select a day or pin to view station coordinates and travel trail</p>
+                            <p className="text-xs text-gray-400 font-light mt-0.5">Select a day or pin to view the travel trail</p>
                         </div>
                     </div>
                     
@@ -1498,28 +1498,6 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                                     );
                                 })}
                             </svg>
-
-                            {/* Geo Location Label Overlay */}
-                            <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between bg-black/80 backdrop-blur-md border border-white/10 rounded-xl p-3 z-20 shadow-xl">
-                                <div className="flex items-center gap-2">
-                                    <Navigation className="w-4 h-4 text-blue-400 rotate-45 shrink-0" />
-                                    <div>
-                                        <span className="text-[10px] text-gray-400 block font-light">ACTIVE STATION COORDINATES</span>
-                                        <span className="text-[11px] text-white font-mono font-bold">
-                                            {getGeoPointsForExperience(experience)[activeDayIdx]?.lat || '11.5362° N'} , {getGeoPointsForExperience(experience)[activeDayIdx]?.lng || '76.0841° E'}
-                                        </span>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => {
-                                        navigator.clipboard.writeText(`${getGeoPointsForExperience(experience)[activeDayIdx]?.lat || '11.5362° N'}, ${getGeoPointsForExperience(experience)[activeDayIdx]?.lng || '76.0841° E'}`);
-                                        addToast("GPS Copied", "Station coordinates copied to clipboard.", "success");
-                                    }}
-                                    className="px-2.5 py-1 rounded bg-white/5 border border-white/10 hover:bg-white/10 text-[9px] font-bold text-gray-300 uppercase tracking-wider"
-                                >
-                                    Copy
-                                </button>
-                            </div>
                         </div>
 
                         {/* Stations Information Hub Panel */}
@@ -2108,57 +2086,9 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                             </span>
                         </div>
                     </div>
-                    {experience.map_link && (
-                        <>
-                            <div className="h-[1px] w-full bg-white/5" />
-                            <a href={experience.map_link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 sm:gap-4 text-blue-400 hover:text-blue-300 transition-colors">
-                                <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center border border-blue-500/20 shrink-0">
-                                    <MapPin className="w-5 h-5" />
-                                </div>
-                                <div className="flex flex-col min-w-0">
-                                    <span className="text-xs text-blue-400/80 font-bold uppercase tracking-wider">Boarding Point Location</span>
-                                    <span className="text-sm font-medium truncate underline underline-offset-2">View on Google Maps</span>
-                                </div>
-                            </a>
-                        </>
-                    )}
                 </div>
 
-                <div className="flex items-start gap-3 bg-emerald-500/10 border border-emerald-500/20 p-3 sm:p-4 rounded-2xl">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-                    <p className="text-xs sm:text-sm text-emerald-300 font-medium leading-relaxed">
-                        <strong className="text-emerald-400 block mb-1">Zero PTO Required</strong>
-                        Pick-ups available across major IT Hubs (Silk Board, Marathahalli, Electronic City, Manyata).
-                    </p>
-                </div>
 
-                {/* What's Included Quick Visual */}
-                <div className="flex items-center justify-between border-y border-white/5 py-4 my-2">
-                    <div className="flex flex-col items-center gap-1.5 text-center w-1/4">
-                        <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center">
-                            <svg viewBox="0 0 24 24" className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 14.5a3 3 0 0 0 6 0 3 3 0 0 0-6 0Z"/><path d="M14 14.5a3 3 0 0 0 6 0 3 3 0 0 0-6 0Z"/><path d="M14 14.5V8a4 4 0 0 0-8 0v6.5"/><path d="M22 14.5v-3a2 2 0 0 0-2-2h-3"/><path d="M11 6V2"/></svg>
-                        </div>
-                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-tight">AC<br/>Travel</span>
-                    </div>
-                    <div className="flex flex-col items-center gap-1.5 text-center w-1/4">
-                        <div className="w-8 h-8 rounded-full bg-orange-500/10 flex items-center justify-center">
-                            <MapPin className="w-4 h-4 text-orange-400" />
-                        </div>
-                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-tight">Scenic<br/>Stay</span>
-                    </div>
-                    <div className="flex flex-col items-center gap-1.5 text-center w-1/4">
-                        <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center">
-                            <Activity className="w-4 h-4 text-emerald-400" />
-                        </div>
-                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-tight">Expert<br/>Guide</span>
-                    </div>
-                    <div className="flex flex-col items-center gap-1.5 text-center w-1/4">
-                        <div className="w-8 h-8 rounded-full bg-purple-500/10 flex items-center justify-center">
-                            <svg viewBox="0 0 24 24" className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 10h16"/><path d="M4 14h16"/><path d="M12 4v16"/></svg>
-                        </div>
-                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-tight">4<br/>Meals</span>
-                    </div>
-                </div>
 
                 <div className="flex flex-col gap-3">
                     <label className="text-xs font-bold text-gray-500 uppercase tracking-widest">Number of Travelers</label>

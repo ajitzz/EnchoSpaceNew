@@ -28,8 +28,6 @@ const STEPS = [
 
 const AUDIENCE_OPTIONS = [
   { id: 'all', label: 'All Audiences' },
-  { id: 'students', label: 'Students Only' },
-  { id: 'women_only', label: 'Women Only' },
   { id: 'corporate', label: 'Corporate Groups' },
   { id: 'couples', label: 'Couples Only' }
 ];

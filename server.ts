@@ -3085,7 +3085,7 @@ const demoExperiences = [
     total_spots: 30,
     available_spots: 30,
     image_urls: ['https://images.unsplash.com/photo-1590396495147-380d3ec62b08?auto=format&fit=crop&q=80&w=800'],
-    target_audience: 'students',
+    target_audience: 'all',
     status: 'upcoming'
   },
   {
@@ -3100,7 +3100,7 @@ const demoExperiences = [
     total_spots: 15,
     available_spots: 15,
     image_urls: ['https://images.unsplash.com/photo-1610996112117-d04b8ce271ea?auto=format&fit=crop&q=80&w=800'],
-    target_audience: 'women_only',
+    target_audience: 'all',
     status: 'upcoming'
   },
   {
@@ -3261,7 +3261,7 @@ app.get('/api/experiences/seed', async (req: AuthRequest, res) => {
         30,
         30,
         '["https://images.unsplash.com/photo-1590396495147-380d3ec62b08?auto=format&fit=crop&q=80&w=800"]'::jsonb,
-        'students',
+        'all',
         'upcoming',
         '["Trek across 5 beaches", "Beachside Camping", "Sunset View points", "Bonfire & Music", "Stargazing"]'::jsonb,
         '["Comfortable Shoes", "Torch/Headlamp", "Water Bottle", "Jacket", "Powerbank"]'::jsonb
@@ -3282,7 +3282,7 @@ app.get('/api/experiences/seed', async (req: AuthRequest, res) => {
         15,
         15,
         '["https://images.unsplash.com/photo-1610996112117-d04b8ce271ea?auto=format&fit=crop&q=80&w=800"]'::jsonb,
-        'women_only',
+        'all',
         'upcoming'
       )
     `);
