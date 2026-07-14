@@ -40,6 +40,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   // Track layout & alignment options (Scenario 1 advanced design!)
   const [mediaAlignment, setMediaAlignment] = useState<'left' | 'center' | 'right'>('center');
   const [mediaAspect, setMediaAspect] = useState<'1:1' | '9:16' | '16:9'>('1:1');
+  const [previewPlatform, setPreviewPlatform] = useState<'instagram' | 'facebook'>('instagram');
   const [editingCampaignId, setEditingCampaignId] = useState<number | null>(null);
   const [rejectedFieldsMap, setRejectedFieldsMap] = useState<Record<string, string>>({});
   const [newMediaUrl, setNewMediaUrl] = useState('');
@@ -729,7 +730,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-3xl max-w-2xl w-full p-6 md:p-8 max-h-[90vh] overflow-y-auto shadow-2xl text-left"
+              className="bg-white rounded-3xl max-w-5xl w-full p-6 md:p-8 max-h-[95vh] overflow-y-auto shadow-2xl text-left"
             >
               <div className="flex justify-between items-center mb-6">
                 <div>
@@ -756,7 +757,9 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                 </div>
               )}
 
-              <form onSubmit={handleCreateCampaign} className="space-y-6">
+              <form onSubmit={handleCreateCampaign} className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* LEFT COLUMN: Inputs */}
+                <div className="lg:col-span-7 space-y-6">
                 
                 {/* Linked stay */}
                 <div className="space-y-1.5">
@@ -1141,7 +1144,263 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                 >
                   {editingCampaignId ? 'Update & Save Revisions' : 'Save campaign draft'}
                 </button>
-              </form>
+              </div>
+
+              {/* RIGHT COLUMN: Live Social Media Preview */}
+              <div className="lg:col-span-5 lg:sticky lg:top-0 h-fit self-start bg-zinc-50 border border-zinc-150 rounded-3xl p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-zinc-150 pb-3">
+                  <div>
+                    <h4 className="text-[11px] font-black uppercase tracking-wider text-gray-500">Live Feed Preview</h4>
+                    <p className="text-[9px] text-zinc-400 font-light mt-0.5">Customer Feed View (Sponsored)</p>
+                  </div>
+                  {/* Toggle Switch */}
+                  <div className="flex bg-zinc-200/50 p-1 rounded-xl border border-zinc-200">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewPlatform('instagram')}
+                      className={`text-[10px] font-bold px-3 py-1 rounded-lg transition-all ${
+                        previewPlatform === 'instagram'
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-500 hover:text-gray-800'
+                      }`}
+                    >
+                      Instagram
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewPlatform('facebook')}
+                      className={`text-[10px] font-bold px-3 py-1 rounded-lg transition-all ${
+                        previewPlatform === 'facebook'
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-500 hover:text-gray-800'
+                      }`}
+                    >
+                      Facebook
+                    </button>
+                  </div>
+                </div>
+
+                {/* Render Platform Specific Mockup */}
+                {previewPlatform === 'instagram' ? (
+                  /* INSTAGRAM MOCKUP */
+                  <div className="bg-white border border-zinc-150 rounded-2xl overflow-hidden shadow-xs text-xs">
+                    {/* Insta Header */}
+                    <div className="flex items-center justify-between p-3 border-b border-zinc-100">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-yellow-500 via-red-500 to-purple-600 p-[1.5px]">
+                          <div className="w-full h-full rounded-full bg-white flex items-center justify-center p-[1px]">
+                            <img 
+                              src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80'} 
+                              className="w-full h-full rounded-full object-cover"
+                              referrerPolicy="no-referrer"
+                              alt=""
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <span className="font-bold text-gray-900 text-[11px] block">{user?.name || 'LuxuryHost'}</span>
+                          <span className="text-[10px] text-gray-500 leading-none block mt-0.5">Sponsored</span>
+                        </div>
+                      </div>
+                      <span className="text-gray-400 font-bold tracking-widest cursor-pointer hover:text-gray-700 px-1">...</span>
+                    </div>
+
+                    {/* Insta Media Area */}
+                    <div 
+                      className="relative bg-zinc-950 overflow-hidden flex items-center justify-center"
+                      style={{
+                        aspectRatio: mediaAspect === '9:16' ? '9/16' : mediaAspect === '16:9' ? '16/9' : '1/1',
+                        maxHeight: '320px'
+                      }}
+                    >
+                      {formData.media_urls.length > 0 ? (
+                        <img 
+                          src={formData.media_urls[0]} 
+                          alt="Campaign Visual" 
+                          referrerPolicy="no-referrer"
+                          className={`w-full h-full object-cover transition-all ${
+                            mediaAlignment === 'left' ? 'object-left' : mediaAlignment === 'right' ? 'object-right' : 'object-center'
+                          }`}
+                        />
+                      ) : (
+                        <div className="text-zinc-500 text-center p-4">
+                          <span className="block text-2xl mb-1">📸</span>
+                          <span className="text-[10px]">No campaign media assets added yet</span>
+                        </div>
+                      )}
+
+                      {/* Format Indicator Overlays */}
+                      {formData.ad_format === 'reel' && (
+                        <div className="absolute top-3 right-3 bg-black/40 backdrop-blur-xs text-[9px] text-white font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />
+                          <span>Live Reel</span>
+                        </div>
+                      )}
+                      {formData.ad_format === 'carousel' && (
+                        <div className="absolute bottom-3 right-3 bg-black/40 backdrop-blur-xs text-[9px] text-white font-bold px-2 py-0.5 rounded-full">
+                          1 / {formData.media_urls.length || 1}
+                        </div>
+                      )}
+                      {formData.ad_format === 'story' && (
+                        <div className="absolute inset-x-0 top-0 h-1 bg-zinc-800/80">
+                          <div className="w-1/3 bg-white h-full" />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Insta Call To Action Bar */}
+                    <div className="bg-blue-600/5 hover:bg-blue-600/10 transition-all border-b border-zinc-100 p-3 flex justify-between items-center cursor-pointer">
+                      <span className="text-blue-700 font-black text-[11px] uppercase tracking-wider">Book Now</span>
+                      <div className="flex items-center gap-1 text-blue-700">
+                        <span className="text-[10px] font-bold font-mono">nestpick.luxury</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </div>
+                    </div>
+
+                    {/* Insta Interactivity Icons */}
+                    <div className="p-3 pb-2 flex justify-between items-center text-gray-700 text-sm">
+                      <div className="flex items-center gap-3">
+                        <span className="cursor-pointer hover:scale-115 transition-transform">❤️</span>
+                        <span className="cursor-pointer hover:scale-115 transition-transform">💬</span>
+                        <span className="cursor-pointer hover:scale-115 transition-transform">✈️</span>
+                      </div>
+                      <span className="cursor-pointer hover:scale-115 transition-transform">🔖</span>
+                    </div>
+
+                    {/* Insta Content description */}
+                    <div className="px-3 pb-4 space-y-1 text-left">
+                      <div className="font-extrabold text-[11px] text-gray-900 flex items-baseline gap-1.5 flex-wrap">
+                        <span>{user?.name || 'LuxuryHost'}</span>
+                        <span className="font-bold text-blue-600">{formData.title || 'Experience Luxury'}</span>
+                      </div>
+                      <p className="text-gray-700 text-[11px] leading-relaxed font-light line-clamp-3">
+                        {formData.description || 'Describe your resort details, location, and key amenities.'}
+                      </p>
+                      <div className="flex flex-wrap gap-1 text-[10px] text-blue-600 font-bold pt-1">
+                        <span>#NestpickStay</span>
+                        <span>#LuxuryGetaway</span>
+                        {formData.target_locations && (
+                          formData.target_locations.split(',').map((loc, i) => (
+                            <span key={i}>#{loc.trim().replace(/\s+/g, '')}</span>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* FACEBOOK MOCKUP */
+                  <div className="bg-white border border-zinc-150 rounded-2xl overflow-hidden shadow-xs text-xs text-left">
+                    {/* FB Header */}
+                    <div className="p-3.5 flex items-start gap-2.5">
+                      <img 
+                        src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80'} 
+                        className="w-10 h-10 rounded-full border object-cover"
+                        referrerPolicy="no-referrer"
+                        alt=""
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1">
+                          <span className="font-extrabold text-gray-900 text-[12px] hover:underline cursor-pointer">
+                            {user?.name || 'LuxuryHost'}
+                          </span>
+                          <span className="text-[11px] text-blue-500 font-black">✓</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-gray-500 text-[10px] font-medium mt-0.5">
+                          <span>Sponsored</span>
+                          <span>•</span>
+                          <span className="text-[11px]">🌐</span>
+                        </div>
+                      </div>
+                      <span className="text-gray-400 font-bold text-lg cursor-pointer hover:text-gray-700 leading-none">...</span>
+                    </div>
+
+                    {/* FB Text Area (Top in FB) */}
+                    <div className="px-3.5 pb-3">
+                      <p className="text-gray-800 text-[11.5px] leading-relaxed font-light line-clamp-3">
+                        {formData.description || 'Escape to luxury! Book this incredible vacation rental deal right now.'}
+                      </p>
+                    </div>
+
+                    {/* FB Media Area */}
+                    <div 
+                      className="relative bg-zinc-950 overflow-hidden flex items-center justify-center border-t border-b border-zinc-100"
+                      style={{
+                        aspectRatio: mediaAspect === '9:16' ? '9/16' : mediaAspect === '16:9' ? '16/9' : '1.91/1',
+                        maxHeight: '300px'
+                      }}
+                    >
+                      {formData.media_urls.length > 0 ? (
+                        <img 
+                          src={formData.media_urls[0]} 
+                          alt="Campaign FB" 
+                          referrerPolicy="no-referrer"
+                          className={`w-full h-full object-cover transition-all ${
+                            mediaAlignment === 'left' ? 'object-left' : mediaAlignment === 'right' ? 'object-right' : 'object-center'
+                          }`}
+                        />
+                      ) : (
+                        <div className="text-zinc-500 text-center p-4">
+                          <span className="block text-2xl mb-1">📸</span>
+                          <span className="text-[10px]">No campaign media assets added yet</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* FB Meta-Card Action Deck (Sponsored bottom plate) */}
+                    <div className="bg-zinc-50 border-b border-zinc-100 p-3 px-3.5 flex items-center justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <span className="text-[10px] text-gray-500 uppercase tracking-wider block font-mono">NESTPICK.LUXURY</span>
+                        <h5 className="font-extrabold text-[12px] text-gray-900 truncate mt-0.5">
+                          {formData.title || 'Experience Paradise Stays'}
+                        </h5>
+                        <p className="text-[11px] text-gray-500 font-light truncate mt-0.5">
+                          {formData.feed_description || 'Book premium certified properties.'}
+                        </p>
+                      </div>
+                      <button 
+                        type="button"
+                        className="bg-zinc-200 hover:bg-zinc-300 text-gray-800 font-bold px-3 py-1.5 rounded-md text-[11px] shrink-0 border border-zinc-300 transition-all"
+                      >
+                        Book Now
+                      </button>
+                    </div>
+
+                    {/* FB Reaction Panel */}
+                    <div className="px-3.5 py-2.5 flex items-center justify-between text-[11px] text-gray-500 border-b border-zinc-100">
+                      <div className="flex items-center gap-1">
+                        <span className="flex items-center justify-center w-4 h-4 bg-blue-500 text-white rounded-full text-[9px] font-bold">👍</span>
+                        <span className="flex items-center justify-center w-4 h-4 bg-red-500 text-white rounded-full text-[9px] font-bold">❤️</span>
+                        <span className="font-medium ml-1">You and 1.2K others</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <span>45 Comments</span>
+                        <span>•</span>
+                        <span>12 Shares</span>
+                      </div>
+                    </div>
+
+                    {/* FB Action bar */}
+                    <div className="grid grid-cols-3 text-center py-1 text-gray-500 font-bold text-[11.5px]">
+                      <button type="button" className="py-2 hover:bg-zinc-50 transition-all flex items-center justify-center gap-1">
+                        <span>👍</span> <span>Like</span>
+                      </button>
+                      <button type="button" className="py-2 hover:bg-zinc-50 transition-all flex items-center justify-center gap-1">
+                        <span>💬</span> <span>Comment</span>
+                      </button>
+                      <button type="button" className="py-2 hover:bg-zinc-50 transition-all flex items-center justify-center gap-1">
+                        <span>↗️</span> <span>Share</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Realtime Telemetry info sync card */}
+                <div className="bg-blue-50/50 border border-blue-100/30 p-3.5 rounded-2xl text-[11px] text-zinc-600 leading-normal font-light">
+                  <span className="font-extrabold text-blue-700 block mb-0.5 uppercase tracking-wider text-[10px]">🔄 Live Sync Active</span>
+                  Any changes to headlines, copy, media ordering, or format options immediately update this simulation deck. Once published, your actual Meta ads look exactly like this preview.
+                </div>
+              </div>
+            </form>
             </motion.div>
           </div>
         )}
