@@ -3,7 +3,8 @@ import { MarketingCampaign, Listing } from '../types';
 import { 
   Sparkles, CheckCircle, AlertTriangle, Play, Pause, BarChart3, 
   Tv, Eye, MousePointerClick, TrendingUp, DollarSign, Target, Plus, 
-  Trash2, Send, Check, ShieldCheck, HelpCircle, Loader2, CreditCard, ExternalLink
+  Trash2, Send, Check, ShieldCheck, HelpCircle, Loader2, CreditCard, ExternalLink,
+  Heart, MessageSquare, Bookmark, ChevronLeft, ChevronRight, Volume2, Share2, MoreHorizontal
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from './ToastContext';
@@ -41,6 +42,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   const [mediaAlignment, setMediaAlignment] = useState<'left' | 'center' | 'right'>('center');
   const [mediaAspect, setMediaAspect] = useState<'1:1' | '9:16' | '16:9'>('1:1');
   const [previewPlatform, setPreviewPlatform] = useState<'instagram' | 'facebook'>('instagram');
+  const [activeSlideIndex, setActiveSlideIndex] = useState<number>(0);
   const [editingCampaignId, setEditingCampaignId] = useState<number | null>(null);
   const [rejectedFieldsMap, setRejectedFieldsMap] = useState<Record<string, string>>({});
   const [newMediaUrl, setNewMediaUrl] = useState('');
@@ -1146,21 +1148,24 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                 </button>
               </div>
 
-              {/* RIGHT COLUMN: Live Social Media Preview */}
-              <div className="lg:col-span-5 lg:sticky lg:top-0 h-fit self-start bg-zinc-50 border border-zinc-150 rounded-3xl p-5 space-y-4">
+              {/* RIGHT COLUMN: Live Social Media Preview inside realistic idle iPhone Mockup */}
+              <div className="lg:col-span-5 lg:sticky lg:top-0 h-fit self-start bg-zinc-50 border border-zinc-150 rounded-3xl p-5 space-y-5">
                 <div className="flex items-center justify-between border-b border-zinc-150 pb-3">
                   <div>
-                    <h4 className="text-[11px] font-black uppercase tracking-wider text-gray-500">Live Feed Preview</h4>
-                    <p className="text-[9px] text-zinc-400 font-light mt-0.5">Customer Feed View (Sponsored)</p>
+                    <h4 className="text-[11px] font-black uppercase tracking-wider text-gray-500">Live Device Simulation</h4>
+                    <p className="text-[9px] text-zinc-400 font-light mt-0.5">Real-time Ad rendering on iOS</p>
                   </div>
                   {/* Toggle Switch */}
                   <div className="flex bg-zinc-200/50 p-1 rounded-xl border border-zinc-200">
                     <button
                       type="button"
-                      onClick={() => setPreviewPlatform('instagram')}
+                      onClick={() => {
+                        setPreviewPlatform('instagram');
+                        setActiveSlideIndex(0);
+                      }}
                       className={`text-[10px] font-bold px-3 py-1 rounded-lg transition-all ${
                         previewPlatform === 'instagram'
-                          ? 'bg-white text-gray-900 shadow-sm'
+                          ? 'bg-white text-gray-900 shadow-sm font-black'
                           : 'text-gray-500 hover:text-gray-800'
                       }`}
                     >
@@ -1168,10 +1173,13 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setPreviewPlatform('facebook')}
+                      onClick={() => {
+                        setPreviewPlatform('facebook');
+                        setActiveSlideIndex(0);
+                      }}
                       className={`text-[10px] font-bold px-3 py-1 rounded-lg transition-all ${
                         previewPlatform === 'facebook'
-                          ? 'bg-white text-gray-900 shadow-sm'
+                          ? 'bg-white text-gray-900 shadow-sm font-black'
                           : 'text-gray-500 hover:text-gray-800'
                       }`}
                     >
@@ -1180,224 +1188,693 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                   </div>
                 </div>
 
-                {/* Render Platform Specific Mockup */}
-                {previewPlatform === 'instagram' ? (
-                  /* INSTAGRAM MOCKUP */
-                  <div className="bg-white border border-zinc-150 rounded-2xl overflow-hidden shadow-xs text-xs">
-                    {/* Insta Header */}
-                    <div className="flex items-center justify-between p-3 border-b border-zinc-100">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-yellow-500 via-red-500 to-purple-600 p-[1.5px]">
-                          <div className="w-full h-full rounded-full bg-white flex items-center justify-center p-[1px]">
-                            <img 
-                              src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80'} 
-                              className="w-full h-full rounded-full object-cover"
-                              referrerPolicy="no-referrer"
-                              alt=""
-                            />
+                {/* iPhone Frame Container */}
+                <div className="flex justify-center items-center py-2">
+                  <div className="relative w-[295px] h-[610px] bg-black rounded-[48px] p-2.5 shadow-2xl border-[6px] border-zinc-900 ring-4 ring-zinc-200/50 flex flex-col select-none overflow-hidden transition-all">
+                    
+                    {/* Apple Dynamic Island / Notch */}
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 w-24 h-5.5 bg-black rounded-full z-50 flex items-center justify-between px-3.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-zinc-900" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/80 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+                    </div>
+
+                    {/* Apple Speaker Grill */}
+                    <div className="absolute top-2.5 left-1/2 -translate-x-1/2 w-10 h-0.5 bg-zinc-800 rounded-full z-50" />
+
+                    {/* iPhone Display Content */}
+                    <div className="relative w-full h-full rounded-[38px] bg-white overflow-hidden flex flex-col z-30">
+                      
+                      {/* iOS Status Bar */}
+                      <div className={`absolute top-0 inset-x-0 h-10 px-5 flex justify-between items-center z-50 text-[10px] font-semibold tracking-tight transition-colors ${
+                        (formData.ad_format === 'reel' || formData.ad_format === 'story')
+                          ? 'text-white' 
+                          : 'text-gray-900 bg-white/70 backdrop-blur-xs'
+                      }`}>
+                        {/* Time */}
+                        <span className="font-bold">9:41</span>
+                        {/* Notch filler spacer */}
+                        <div className="w-24" />
+                        {/* Status Icons */}
+                        <div className="flex items-center gap-1">
+                          {/* Signal */}
+                          <div className="flex items-end gap-[1px] h-2">
+                            <span className="w-[1.5px] h-0.5 bg-current rounded-3xs" />
+                            <span className="w-[1.5px] h-1 bg-current rounded-3xs" />
+                            <span className="w-[1.5px] h-1.5 bg-current rounded-3xs" />
+                            <span className="w-[1.5px] h-2 bg-current rounded-3xs" />
+                          </div>
+                          <span>5G</span>
+                          {/* Battery indicator */}
+                          <div className="w-4.5 h-2.5 border border-current rounded-sm p-0.5 flex items-center">
+                            <div className="h-full w-[85%] bg-current rounded-3xs" />
                           </div>
                         </div>
-                        <div>
-                          <span className="font-bold text-gray-900 text-[11px] block">{user?.name || 'LuxuryHost'}</span>
-                          <span className="text-[10px] text-gray-500 leading-none block mt-0.5">Sponsored</span>
-                        </div>
                       </div>
-                      <span className="text-gray-400 font-bold tracking-widest cursor-pointer hover:text-gray-700 px-1">...</span>
-                    </div>
 
-                    {/* Insta Media Area */}
-                    <div 
-                      className="relative bg-zinc-950 overflow-hidden flex items-center justify-center"
-                      style={{
-                        aspectRatio: mediaAspect === '9:16' ? '9/16' : mediaAspect === '16:9' ? '16/9' : '1/1',
-                        maxHeight: '320px'
-                      }}
-                    >
-                      {formData.media_urls.length > 0 ? (
-                        <img 
-                          src={formData.media_urls[0]} 
-                          alt="Campaign Visual" 
-                          referrerPolicy="no-referrer"
-                          className={`w-full h-full object-cover transition-all ${
-                            mediaAlignment === 'left' ? 'object-left' : mediaAlignment === 'right' ? 'object-right' : 'object-center'
-                          }`}
-                        />
-                      ) : (
-                        <div className="text-zinc-500 text-center p-4">
-                          <span className="block text-2xl mb-1">📸</span>
-                          <span className="text-[10px]">No campaign media assets added yet</span>
-                        </div>
-                      )}
+                      {/* Resolved Media Array Fallbacks */}
+                      {(() => {
+                        const mediaList = formData.media_urls.length > 0 
+                          ? formData.media_urls 
+                          : ['https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=600&q=80'];
+                        const activeImage = mediaList[activeSlideIndex % mediaList.length] || mediaList[0];
 
-                      {/* Format Indicator Overlays */}
-                      {formData.ad_format === 'reel' && (
-                        <div className="absolute top-3 right-3 bg-black/40 backdrop-blur-xs text-[9px] text-white font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />
-                          <span>Live Reel</span>
-                        </div>
-                      )}
-                      {formData.ad_format === 'carousel' && (
-                        <div className="absolute bottom-3 right-3 bg-black/40 backdrop-blur-xs text-[9px] text-white font-bold px-2 py-0.5 rounded-full">
-                          1 / {formData.media_urls.length || 1}
-                        </div>
-                      )}
-                      {formData.ad_format === 'story' && (
-                        <div className="absolute inset-x-0 top-0 h-1 bg-zinc-800/80">
-                          <div className="w-1/3 bg-white h-full" />
-                        </div>
-                      )}
-                    </div>
+                        const handlePrevSlide = (e: React.MouseEvent) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          setActiveSlideIndex((prev) => (prev - 1 + mediaList.length) % mediaList.length);
+                        };
 
-                    {/* Insta Call To Action Bar */}
-                    <div className="bg-blue-600/5 hover:bg-blue-600/10 transition-all border-b border-zinc-100 p-3 flex justify-between items-center cursor-pointer">
-                      <span className="text-blue-700 font-black text-[11px] uppercase tracking-wider">Book Now</span>
-                      <div className="flex items-center gap-1 text-blue-700">
-                        <span className="text-[10px] font-bold font-mono">nestpick.luxury</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </div>
-                    </div>
+                        const handleNextSlide = (e: React.MouseEvent) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          setActiveSlideIndex((prev) => (prev + 1) % mediaList.length);
+                        };
 
-                    {/* Insta Interactivity Icons */}
-                    <div className="p-3 pb-2 flex justify-between items-center text-gray-700 text-sm">
-                      <div className="flex items-center gap-3">
-                        <span className="cursor-pointer hover:scale-115 transition-transform">❤️</span>
-                        <span className="cursor-pointer hover:scale-115 transition-transform">💬</span>
-                        <span className="cursor-pointer hover:scale-115 transition-transform">✈️</span>
-                      </div>
-                      <span className="cursor-pointer hover:scale-115 transition-transform">🔖</span>
-                    </div>
+                        {/* Rendering Platform Screens */}
+                        if (previewPlatform === 'instagram') {
+                          /* -----------------------------------------------
+                             INSTAGRAM AD DESIGNS
+                             ----------------------------------------------- */
+                          if (formData.ad_format === 'story') {
+                            /* INSTAGRAM STORY AD */
+                            return (
+                              <div className="absolute inset-0 bg-zinc-950 flex flex-col justify-between pt-10 pb-6 text-white text-xs select-none">
+                                {/* Segmented top progress indicators */}
+                                <div className="absolute top-11 inset-x-2.5 flex gap-1 z-40">
+                                  {mediaList.map((_, i) => {
+                                    const currentIdx = activeSlideIndex % mediaList.length;
+                                    const widthPct = i === currentIdx ? '100%' : i < currentIdx ? '100%' : '0%';
+                                    return (
+                                      <div key={i} className="h-[2px] flex-1 bg-white/20 rounded-full overflow-hidden">
+                                        <div className="h-full bg-white transition-all duration-300" style={{ width: widthPct }} />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
 
-                    {/* Insta Content description */}
-                    <div className="px-3 pb-4 space-y-1 text-left">
-                      <div className="font-extrabold text-[11px] text-gray-900 flex items-baseline gap-1.5 flex-wrap">
-                        <span>{user?.name || 'LuxuryHost'}</span>
-                        <span className="font-bold text-blue-600">{formData.title || 'Experience Luxury'}</span>
-                      </div>
-                      <p className="text-gray-700 text-[11px] leading-relaxed font-light line-clamp-3">
-                        {formData.description || 'Describe your resort details, location, and key amenities.'}
-                      </p>
-                      <div className="flex flex-wrap gap-1 text-[10px] text-blue-600 font-bold pt-1">
-                        <span>#NestpickStay</span>
-                        <span>#LuxuryGetaway</span>
-                        {formData.target_locations && (
-                          formData.target_locations.split(',').map((loc, i) => (
-                            <span key={i}>#{loc.trim().replace(/\s+/g, '')}</span>
-                          ))
-                        )}
-                      </div>
+                                {/* Header with Sponsor and User Name */}
+                                <div className="p-3 pt-4 flex items-center justify-between z-30 relative bg-gradient-to-b from-black/50 to-transparent">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-7 h-7 rounded-full p-[1px] bg-gradient-to-tr from-yellow-500 to-pink-500">
+                                      <img 
+                                        src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80'} 
+                                        className="w-full h-full rounded-full object-cover border border-black" 
+                                        referrerPolicy="no-referrer"
+                                        alt="" 
+                                      />
+                                    </div>
+                                    <div className="text-[10px]">
+                                      <span className="font-extrabold text-white block leading-none">{user?.name || 'LuxuryHost'}</span>
+                                      <span className="text-[9px] text-zinc-300 font-light mt-0.5 block">Sponsored</span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2.5 text-zinc-300 text-sm">
+                                    <MoreHorizontal className="w-4 h-4 cursor-pointer" />
+                                    <span className="cursor-pointer font-bold select-none text-[13px] px-1">✕</span>
+                                  </div>
+                                </div>
+
+                                {/* Immersive Interactive Core Media area */}
+                                <div className="flex-1 relative flex items-center justify-center bg-zinc-900 overflow-hidden">
+                                  {/* Blurred Background Plate */}
+                                  <div className="absolute inset-0 bg-cover bg-center blur-2xl opacity-40" style={{ backgroundImage: `url(${activeImage})` }} />
+                                  
+                                  {/* Central Creative Image */}
+                                  <img 
+                                    src={activeImage} 
+                                    className={`relative max-h-full max-w-full object-cover z-20 ${
+                                      mediaAlignment === 'left' ? 'object-left' : mediaAlignment === 'right' ? 'object-right' : 'object-center'
+                                    }`} 
+                                    referrerPolicy="no-referrer"
+                                    alt="Story ad" 
+                                  />
+
+                                  {/* Interactive Story Tapping triggers */}
+                                  <div className="absolute inset-y-0 left-0 w-1/4 z-30 cursor-west-resize" onClick={handlePrevSlide} />
+                                  <div className="absolute inset-y-0 right-0 w-1/4 z-30 cursor-east-resize" onClick={handleNextSlide} />
+
+                                  {/* Dynamic Ad Overlays */}
+                                  <div className="absolute inset-x-4 bottom-14 z-30 bg-black/40 backdrop-blur-md rounded-2xl p-3 border border-white/10 text-left">
+                                    <h5 className="font-black text-[12px] text-white tracking-wide uppercase line-clamp-1">{formData.title || 'Paradise Getaway'}</h5>
+                                    <p className="text-[10px] text-zinc-200 mt-1 font-light line-clamp-2 leading-relaxed">{formData.description || 'Experience verified luxury rentals.'}</p>
+                                  </div>
+                                </div>
+
+                                {/* Story Bottom Call-to-action Deck */}
+                                <div className="absolute bottom-6 inset-x-3 z-40 bg-white/15 backdrop-blur-lg border border-white/20 p-2.5 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-white/25 transition-all text-center">
+                                  <span className="text-[11px] font-black text-white uppercase tracking-widest flex items-center gap-1">
+                                    Book Stay <span>✈️</span>
+                                  </span>
+                                  <span className="text-[9px] text-blue-300 font-bold tracking-wider mt-0.5 font-mono">nestpick.luxury</span>
+                                </div>
+                              </div>
+                            );
+                          } else if (formData.ad_format === 'reel') {
+                            /* INSTAGRAM REEL AD */
+                            return (
+                              <div className="absolute inset-0 bg-zinc-950 flex flex-col justify-between pt-10 pb-6 text-white text-xs select-none">
+                                {/* Reels Header Area */}
+                                <div className="p-3 flex justify-between items-center z-30 bg-gradient-to-b from-black/60 to-transparent">
+                                  <span className="font-bold text-[13px] tracking-wide text-white">Reels</span>
+                                  <Volume2 className="w-4.5 h-4.5 text-white/80 cursor-pointer hover:text-white" />
+                                </div>
+
+                                {/* Full screen Background Reel Asset */}
+                                <div className="absolute inset-0 z-10 bg-zinc-900 flex items-center justify-center overflow-hidden">
+                                  <img 
+                                    src={activeImage} 
+                                    className={`w-full h-full object-cover ${
+                                      mediaAlignment === 'left' ? 'object-left' : mediaAlignment === 'right' ? 'object-right' : 'object-center'
+                                    }`} 
+                                    referrerPolicy="no-referrer"
+                                    alt="Reel ad" 
+                                  />
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-black/40" />
+                                </div>
+
+                                {/* Bouncing Indicator */}
+                                <div className="absolute top-12 left-3 z-30 bg-red-600 backdrop-blur-xs text-[8px] text-white font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-1 shadow-md">
+                                  <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping" />
+                                  <span>REELS AD</span>
+                                </div>
+
+                                {/* RIGHT VERTICAL TOOLBAR: Action items */}
+                                <div className="absolute right-2 bottom-12 z-30 flex flex-col items-center gap-4 text-white">
+                                  <div className="flex flex-col items-center gap-1 cursor-pointer group">
+                                    <div className="w-9 h-9 rounded-full bg-black/45 backdrop-blur-xs flex items-center justify-center border border-white/10 shadow-lg group-active:scale-90 transition-transform">
+                                      <Heart className="w-4.5 h-4.5 text-rose-500 fill-rose-500 animate-pulse" />
+                                    </div>
+                                    <span className="text-[9px] font-bold text-zinc-200">24.5K</span>
+                                  </div>
+
+                                  <div className="flex flex-col items-center gap-1 cursor-pointer">
+                                    <div className="w-9 h-9 rounded-full bg-black/45 backdrop-blur-xs flex items-center justify-center border border-white/10 shadow-lg">
+                                      <MessageSquare className="w-4.5 h-4.5 text-white" />
+                                    </div>
+                                    <span className="text-[9px] font-bold text-zinc-200">128</span>
+                                  </div>
+
+                                  <div className="flex flex-col items-center gap-1 cursor-pointer">
+                                    <div className="w-9 h-9 rounded-full bg-black/45 backdrop-blur-xs flex items-center justify-center border border-white/10 shadow-lg">
+                                      <Share2 className="w-4.5 h-4.5 text-white" />
+                                    </div>
+                                    <span className="text-[9px] font-bold text-zinc-200">Share</span>
+                                  </div>
+
+                                  <div className="cursor-pointer">
+                                    <div className="w-9 h-9 rounded-full bg-black/45 backdrop-blur-xs flex items-center justify-center border border-white/10 shadow-lg text-[13px] font-black">
+                                      •••
+                                    </div>
+                                  </div>
+
+                                  {/* Spinning Audio Album Cover */}
+                                  <div className="w-7 h-7 rounded-full bg-zinc-950 border-2 border-white/30 p-0.5 flex items-center justify-center animate-spin" style={{ animationDuration: '4s' }}>
+                                    <img 
+                                      src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80'} 
+                                      className="w-full h-full rounded-full object-cover" 
+                                      referrerPolicy="no-referrer"
+                                      alt="" 
+                                    />
+                                  </div>
+                                </div>
+
+                                {/* BOTTOM LEFT OVERLAY: Profile & Caption details */}
+                                <div className="absolute left-3 bottom-6 right-14 z-30 text-left space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <img 
+                                      src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80'} 
+                                      className="w-6.5 h-6.5 rounded-full object-cover border border-white/40" 
+                                      referrerPolicy="no-referrer"
+                                      alt="" 
+                                    />
+                                    <div className="leading-none">
+                                      <span className="font-extrabold text-[11px] block">{user?.name || 'LuxuryHost'}</span>
+                                      <span className="text-[8.5px] text-blue-400 font-bold mt-0.5 block uppercase tracking-wider">Sponsored</span>
+                                    </div>
+                                    <span className="text-[9px] font-extrabold bg-blue-600 text-white px-2 py-0.5 rounded-md hover:bg-blue-700 cursor-pointer">Book Now</span>
+                                  </div>
+
+                                  <div className="space-y-1">
+                                    <h4 className="font-extrabold text-white text-[11px] leading-tight">{formData.title || 'Escape with Nestpick'}</h4>
+                                    <p className="text-zinc-200 text-[10px] leading-relaxed font-light line-clamp-2">{formData.description || 'Your private paradise stay is waiting.'}</p>
+                                  </div>
+
+                                  {/* Simulated Audio Track line */}
+                                  <div className="flex items-center gap-1 text-[9px] text-zinc-300 font-medium">
+                                    <span>🎵 Original Audio •</span>
+                                    <span className="text-zinc-400">{user?.name || 'LuxuryHost'}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          } else {
+                            /* INSTAGRAM FEED SINGLE POST & CAROUSEL */
+                            return (
+                              <div className="absolute inset-0 bg-white flex flex-col justify-between pt-10 pb-5 text-gray-900 text-xs select-none">
+                                
+                                {/* Instagram Feed Header app-bar */}
+                                <div className="h-10 border-b border-zinc-100 flex items-center justify-between px-3 bg-white/95 backdrop-blur-xs">
+                                  <span className="font-extrabold tracking-tight text-[13px] font-serif text-gray-900">Instagram</span>
+                                  <div className="flex items-center gap-3.5 text-zinc-700">
+                                    <Plus className="w-4 h-4 cursor-pointer hover:text-zinc-900" />
+                                    <Heart className="w-4 h-4 cursor-pointer hover:text-zinc-900" />
+                                    <MessageSquare className="w-4 h-4 cursor-pointer hover:text-zinc-900" />
+                                  </div>
+                                </div>
+
+                                {/* Feed Content Scroll-area */}
+                                <div className="flex-1 overflow-y-auto no-scrollbar bg-white">
+                                  {/* User Row Info */}
+                                  <div className="p-2.5 flex items-center justify-between border-b border-zinc-50">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-yellow-500 via-red-500 to-purple-600 p-[1.2px]">
+                                        <div className="w-full h-full rounded-full bg-white flex items-center justify-center p-[0.5px]">
+                                          <img 
+                                            src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80'} 
+                                            className="w-full h-full rounded-full object-cover" 
+                                            referrerPolicy="no-referrer"
+                                            alt="" 
+                                          />
+                                        </div>
+                                      </div>
+                                      <div className="text-left leading-none">
+                                        <span className="font-bold text-[10.5px] block text-gray-900">{user?.name || 'LuxuryHost'}</span>
+                                        <span className="text-[8.5px] text-gray-500 mt-0.5 block">Sponsored</span>
+                                      </div>
+                                    </div>
+                                    <MoreHorizontal className="w-4 h-4 text-zinc-400 cursor-pointer hover:text-zinc-700" />
+                                  </div>
+
+                                  {/* Media Block Area */}
+                                  <div 
+                                    className="relative bg-zinc-950 overflow-hidden flex items-center justify-center border-t border-b border-zinc-100"
+                                    style={{
+                                      aspectRatio: mediaAspect === '9:16' ? '9/16' : mediaAspect === '16:9' ? '16/9' : '1/1',
+                                      maxHeight: '260px'
+                                    }}
+                                  >
+                                    <img 
+                                      src={activeImage} 
+                                      alt="Insta Media" 
+                                      referrerPolicy="no-referrer"
+                                      className={`w-full h-full object-cover transition-all duration-300 ${
+                                        mediaAlignment === 'left' ? 'object-left' : mediaAlignment === 'right' ? 'object-right' : 'object-center'
+                                      }`}
+                                    />
+
+                                    {/* Format overlays / Carousel Arrows */}
+                                    {formData.ad_format === 'carousel' && (
+                                      <>
+                                        {/* Left Arrow */}
+                                        <button 
+                                          type="button" 
+                                          onClick={handlePrevSlide}
+                                          className="absolute left-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-black/60 backdrop-blur-xs flex items-center justify-center text-white text-xs hover:bg-black/80 transition-colors z-30"
+                                        >
+                                          <ChevronLeft className="w-4 h-4" />
+                                        </button>
+                                        {/* Right Arrow */}
+                                        <button 
+                                          type="button" 
+                                          onClick={handleNextSlide}
+                                          className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-black/60 backdrop-blur-xs flex items-center justify-center text-white text-xs hover:bg-black/80 transition-colors z-30"
+                                        >
+                                          <ChevronRight className="w-4 h-4" />
+                                        </button>
+                                        {/* Index overlay indicator */}
+                                        <div className="absolute top-2 right-2 bg-black/50 text-[8px] font-mono font-bold text-white px-2 py-0.5 rounded-full">
+                                          {(activeSlideIndex % mediaList.length) + 1} / {mediaList.length}
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+
+                                  {/* Instantly recognisable Instagram Sponsored Action Bar CTA */}
+                                  <div className="bg-blue-600/5 hover:bg-blue-600/10 transition-all border-b border-zinc-100 p-2.5 flex justify-between items-center cursor-pointer">
+                                    <span className="text-blue-700 font-extrabold text-[10px] uppercase tracking-wider">Book Now</span>
+                                    <div className="flex items-center gap-1 text-blue-700">
+                                      <span className="text-[9px] font-bold font-mono">nestpick.luxury</span>
+                                      <ExternalLink className="w-2.5 h-2.5" />
+                                    </div>
+                                  </div>
+
+                                  {/* Interactivity engagement row */}
+                                  <div className="p-2.5 pb-1 flex justify-between items-center text-gray-700 text-[14px]">
+                                    <div className="flex items-center gap-3.5">
+                                      <Heart className="w-4.5 h-4.5 hover:scale-110 transition-transform cursor-pointer" />
+                                      <MessageSquare className="w-4.5 h-4.5 hover:scale-110 transition-transform cursor-pointer" />
+                                      <Send className="w-4 h-4 hover:scale-110 transition-transform cursor-pointer rotate-45" />
+                                    </div>
+
+                                    {/* Carousel dots pagination indicator */}
+                                    {formData.ad_format === 'carousel' && (
+                                      <div className="flex gap-1">
+                                        {mediaList.map((_, idx) => (
+                                          <div 
+                                            key={idx} 
+                                            className={`w-1.5 h-1.5 rounded-full transition-all ${
+                                              (activeSlideIndex % mediaList.length) === idx ? 'bg-blue-500 scale-110' : 'bg-zinc-200'
+                                            }`} 
+                                          />
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    <Bookmark className="w-4.5 h-4.5 hover:scale-110 transition-transform cursor-pointer" />
+                                  </div>
+
+                                  {/* Likes and caption blocks */}
+                                  <div className="px-3 pb-3 text-left space-y-1">
+                                    <div className="font-extrabold text-[10.5px] text-gray-900">
+                                      1,294 likes
+                                    </div>
+                                    <div className="leading-normal text-[10.5px]">
+                                      <span className="font-extrabold text-gray-900 mr-1.5">{user?.name || 'LuxuryHost'}</span>
+                                      <span className="font-bold text-blue-700 mr-1">{formData.title || 'Stay Paradise Resort'}</span>
+                                      <span className="text-gray-700 font-light font-sans">{formData.description || 'Book this amazing private space now.'}</span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-1 text-[9px] text-blue-600 font-semibold pt-1">
+                                      <span>#NestpickLuxury</span>
+                                      <span>#VillaGetaway</span>
+                                      {formData.target_locations && (
+                                        formData.target_locations.split(',').slice(0, 2).map((loc, i) => (
+                                          <span key={i}>#{loc.trim().replace(/\s+/g, '')}</span>
+                                        ))
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
+                        } else {
+                          /* -----------------------------------------------
+                             FACEBOOK AD DESIGNS
+                             ----------------------------------------------- */
+                          if (formData.ad_format === 'story') {
+                            /* FACEBOOK STORY AD */
+                            return (
+                              <div className="absolute inset-0 bg-zinc-950 flex flex-col justify-between pt-10 pb-6 text-white text-xs select-none">
+                                {/* Thin top progress story indicators */}
+                                <div className="absolute top-11 inset-x-2 flex gap-1 z-40">
+                                  {mediaList.map((_, i) => {
+                                    const currentIdx = activeSlideIndex % mediaList.length;
+                                    const widthPct = i === currentIdx ? '100%' : i < currentIdx ? '100%' : '0%';
+                                    return (
+                                      <div key={i} className="h-[2px] flex-1 bg-white/20 rounded-full overflow-hidden">
+                                        <div className="h-full bg-blue-500 transition-all duration-300" style={{ width: widthPct }} />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* FB Story Header Row */}
+                                <div className="p-3 pt-4 flex items-center justify-between z-30 relative bg-gradient-to-b from-black/60 to-transparent">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-7 h-7 rounded-full border-2 border-blue-500 p-[1px]">
+                                      <img 
+                                        src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80'} 
+                                        className="w-full h-full rounded-full object-cover" 
+                                        referrerPolicy="no-referrer"
+                                        alt="" 
+                                      />
+                                    </div>
+                                    <div className="text-left leading-none">
+                                      <span className="font-extrabold text-white block text-[10px]">{user?.name || 'LuxuryHost'}</span>
+                                      <span className="text-[8.5px] text-zinc-300 font-medium block mt-0.5">Sponsored • 🌐</span>
+                                    </div>
+                                  </div>
+                                  <div className="text-zinc-300 text-lg font-bold cursor-pointer">✕</div>
+                                </div>
+
+                                {/* Center Media Section with blurred background */}
+                                <div className="flex-1 relative flex items-center justify-center bg-zinc-900 overflow-hidden">
+                                  <div className="absolute inset-0 bg-cover bg-center blur-2xl opacity-40" style={{ backgroundImage: `url(${activeImage})` }} />
+                                  <img 
+                                    src={activeImage} 
+                                    className={`relative max-h-full max-w-full object-cover z-20 ${
+                                      mediaAlignment === 'left' ? 'object-left' : mediaAlignment === 'right' ? 'object-right' : 'object-center'
+                                    }`} 
+                                    referrerPolicy="no-referrer"
+                                    alt="FB Story" 
+                                  />
+
+                                  {/* Tap handlers for navigation */}
+                                  <div className="absolute inset-y-0 left-0 w-1/4 z-30 cursor-west-resize" onClick={handlePrevSlide} />
+                                  <div className="absolute inset-y-0 right-0 w-1/4 z-30 cursor-east-resize" onClick={handleNextSlide} />
+
+                                  {/* FB Text Plate Overlay */}
+                                  <div className="absolute inset-x-3 bottom-14 z-30 bg-zinc-950/70 backdrop-blur-md rounded-xl p-3 border border-zinc-800 text-left">
+                                    <span className="text-[8.5px] bg-blue-600 font-extrabold px-1.5 py-0.5 rounded-sm uppercase tracking-wide inline-block mb-1">Featured Stay</span>
+                                    <h5 className="font-black text-white text-[11px] leading-tight">{formData.title || 'Ultimate Retreat Booking'}</h5>
+                                    <p className="text-zinc-300 text-[9.5px] font-light mt-0.5 line-clamp-2">{formData.description || 'Verified luxury bookings with premium amenities.'}</p>
+                                  </div>
+                                </div>
+
+                                {/* FB story swipe-up action */}
+                                <div className="absolute bottom-6 inset-x-3 z-40 bg-blue-600 hover:bg-blue-700 border border-blue-500 p-2.5 rounded-xl flex items-center justify-center cursor-pointer transition-all">
+                                  <span className="text-[10px] font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
+                                    <span>Book Stay Now</span> <span>⚡</span>
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          } else if (formData.ad_format === 'reel') {
+                            /* FACEBOOK REEL AD */
+                            return (
+                              <div className="absolute inset-0 bg-zinc-950 flex flex-col justify-between pt-10 pb-6 text-white text-xs select-none">
+                                {/* Reels Header */}
+                                <div className="p-3 flex items-center gap-2 z-30 bg-gradient-to-b from-black/60 to-transparent">
+                                  <span className="text-zinc-300 font-bold text-sm cursor-pointer">←</span>
+                                  <span className="font-bold text-[12.5px] tracking-wide text-white">Facebook Reels</span>
+                                </div>
+
+                                {/* Immersive background visual asset */}
+                                <div className="absolute inset-0 z-10 bg-zinc-900 flex items-center justify-center overflow-hidden">
+                                  <img 
+                                    src={activeImage} 
+                                    className={`w-full h-full object-cover ${
+                                      mediaAlignment === 'left' ? 'object-left' : mediaAlignment === 'right' ? 'object-right' : 'object-center'
+                                    }`} 
+                                    referrerPolicy="no-referrer"
+                                    alt="FB Reel" 
+                                  />
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-black/30" />
+                                </div>
+
+                                {/* Facebook interactive right tools stack */}
+                                <div className="absolute right-2 bottom-12 z-30 flex flex-col items-center gap-4 text-white">
+                                  <div className="flex flex-col items-center gap-1">
+                                    <div className="w-8.5 h-8.5 rounded-full bg-zinc-900/60 backdrop-blur-xs flex items-center justify-center border border-zinc-800">
+                                      <span className="text-sm">👍</span>
+                                    </div>
+                                    <span className="text-[8.5px] font-bold text-zinc-300">1.8K</span>
+                                  </div>
+
+                                  <div className="flex flex-col items-center gap-1">
+                                    <div className="w-8.5 h-8.5 rounded-full bg-zinc-900/60 backdrop-blur-xs flex items-center justify-center border border-zinc-800">
+                                      <span className="text-sm">💬</span>
+                                    </div>
+                                    <span className="text-[8.5px] font-bold text-zinc-300">92</span>
+                                  </div>
+
+                                  <div className="flex flex-col items-center gap-1">
+                                    <div className="w-8.5 h-8.5 rounded-full bg-zinc-900/60 backdrop-blur-xs flex items-center justify-center border border-zinc-800">
+                                      <span className="text-sm">↗️</span>
+                                    </div>
+                                    <span className="text-[8.5px] font-bold text-zinc-300">Share</span>
+                                  </div>
+                                </div>
+
+                                {/* Overlaid stay copy and metadata */}
+                                <div className="absolute left-3 bottom-6 right-12 z-30 text-left space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <img 
+                                      src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80'} 
+                                      className="w-6 h-6 rounded-full object-cover border border-blue-500" 
+                                      referrerPolicy="no-referrer"
+                                      alt="" 
+                                    />
+                                    <div>
+                                      <span className="font-extrabold text-[10.5px] block">{user?.name || 'LuxuryHost'}</span>
+                                      <span className="text-[8px] text-zinc-400 block mt-0.5 font-bold">Sponsored • 🌐</span>
+                                    </div>
+                                  </div>
+
+                                  <div className="bg-black/40 backdrop-blur-md rounded-lg p-2.5 border border-zinc-800/50 space-y-1">
+                                    <h4 className="font-extrabold text-white text-[10.5px] leading-tight">{formData.title || 'Premium Villa Deals'}</h4>
+                                    <p className="text-zinc-200 text-[9.5px] leading-relaxed line-clamp-2 font-light">{formData.description || 'Verified luxury resort listings.'}</p>
+                                    <button type="button" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black text-[9.5px] py-1.5 rounded-md mt-1 uppercase tracking-wider">Book Stay Now</button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          } else {
+                            /* FACEBOOK FEED SINGLE POST & CAROUSEL */
+                            return (
+                              <div className="absolute inset-0 bg-zinc-100 flex flex-col justify-between pt-10 pb-5 text-gray-900 text-xs select-none">
+                                
+                                {/* FB Brand Header bar */}
+                                <div className="h-10 bg-white border-b border-zinc-200 flex items-center justify-between px-3 bg-white/95 backdrop-blur-xs">
+                                  <span className="font-black text-[15px] text-blue-600 tracking-tight">facebook</span>
+                                  <div className="flex gap-2.5 text-zinc-600">
+                                    <span className="w-6 h-6 rounded-full bg-zinc-100 flex items-center justify-center text-xs cursor-pointer">🔍</span>
+                                    <span className="w-6 h-6 rounded-full bg-zinc-100 flex items-center justify-center text-xs cursor-pointer">💬</span>
+                                  </div>
+                                </div>
+
+                                {/* Facebook feed scroll view */}
+                                <div className="flex-1 overflow-y-auto no-scrollbar bg-white">
+                                  {/* User Row Header block */}
+                                  <div className="p-3 flex items-start gap-2.5">
+                                    <img 
+                                      src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80'} 
+                                      className="w-8.5 h-8.5 rounded-full border border-zinc-200 object-cover" 
+                                      referrerPolicy="no-referrer"
+                                      alt="" 
+                                    />
+                                    <div className="flex-1 min-w-0 text-left">
+                                      <div className="flex items-center gap-1">
+                                        <span className="font-extrabold text-gray-900 text-[11px] hover:underline cursor-pointer">
+                                          {user?.name || 'LuxuryHost'}
+                                        </span>
+                                        <span className="text-[10px] text-blue-500 font-extrabold leading-none">✓</span>
+                                      </div>
+                                      <div className="flex items-center gap-1 text-gray-500 text-[9px] font-medium mt-0.5">
+                                        <span>Sponsored</span>
+                                        <span>•</span>
+                                        <span>🌐</span>
+                                      </div>
+                                    </div>
+                                    <span className="text-zinc-400 font-extrabold text-sm cursor-pointer hover:text-zinc-700 px-1 leading-none">•••</span>
+                                  </div>
+
+                                  {/* Primary Copy Area (FB displays text BEFORE media!) */}
+                                  <div className="px-3 pb-2 text-left text-[10.5px] leading-relaxed text-gray-800 font-light font-sans">
+                                    <p className="line-clamp-3">{formData.description || 'Escape to stunning luxury vacation stays at guaranteed prices.'}</p>
+                                  </div>
+
+                                  {/* Media Section block */}
+                                  <div 
+                                    className="relative bg-zinc-950 overflow-hidden flex items-center justify-center border-t border-b border-zinc-100"
+                                    style={{
+                                      aspectRatio: mediaAspect === '9:16' ? '9/16' : mediaAspect === '16:9' ? '16/9' : '1.91/1',
+                                      maxHeight: '220px'
+                                    }}
+                                  >
+                                    <img 
+                                      src={activeImage} 
+                                      alt="FB Media" 
+                                      referrerPolicy="no-referrer"
+                                      className={`w-full h-full object-cover transition-all duration-300 ${
+                                        mediaAlignment === 'left' ? 'object-left' : mediaAlignment === 'right' ? 'object-right' : 'object-center'
+                                      }`}
+                                    />
+
+                                    {/* Format overlays / Carousel Navigation */}
+                                    {formData.ad_format === 'carousel' && (
+                                      <>
+                                        <button 
+                                          type="button" 
+                                          onClick={handlePrevSlide}
+                                          className="absolute left-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-black/60 backdrop-blur-xs flex items-center justify-center text-white text-xs hover:bg-black/80 transition-colors z-30"
+                                        >
+                                          <ChevronLeft className="w-4 h-4" />
+                                        </button>
+                                        <button 
+                                          type="button" 
+                                          onClick={handleNextSlide}
+                                          className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-black/60 backdrop-blur-xs flex items-center justify-center text-white text-xs hover:bg-black/80 transition-colors z-30"
+                                        >
+                                          <ChevronRight className="w-4 h-4" />
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+
+                                  {/* Sponsored Meta-Card description block */}
+                                  <div className="bg-zinc-50 border-b border-zinc-100 p-2.5 px-3 flex items-center justify-between gap-3 text-left">
+                                    <div className="flex-1 min-w-0">
+                                      <span className="text-[8px] text-zinc-400 uppercase tracking-wider block font-mono">NESTPICK.LUXURY</span>
+                                      <h5 className="font-extrabold text-[11px] text-gray-900 truncate mt-0.5">
+                                        {formData.title || 'Experience Certified Paradise'}
+                                      </h5>
+                                      <p className="text-[9.5px] text-gray-500 font-light truncate mt-0.5">
+                                        {formData.feed_description || 'Reserve premium vacation rentals.'}
+                                      </p>
+                                    </div>
+                                    <button 
+                                      type="button"
+                                      className="bg-zinc-200 hover:bg-zinc-300 text-gray-800 font-black px-2.5 py-1 rounded-sm text-[10px] shrink-0 border border-zinc-300 transition-all uppercase tracking-wide"
+                                    >
+                                      Book Now
+                                    </button>
+                                  </div>
+
+                                  {/* Reactions & engagement line */}
+                                  <div className="px-3 py-2 flex items-center justify-between text-[10px] text-gray-500 border-b border-zinc-100">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="flex items-center justify-center w-3.5 h-3.5 bg-blue-500 text-white rounded-full text-[8px] font-bold">👍</span>
+                                      <span className="flex items-center justify-center w-3.5 h-3.5 bg-red-500 text-white rounded-full text-[8px] font-bold">❤️</span>
+                                      <span className="font-medium">You and 1.2K others</span>
+                                    </div>
+                                    <div className="flex gap-1.5 font-light">
+                                      <span>32 Comments</span>
+                                      <span>•</span>
+                                      <span>9 Shares</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Facebook Interactive engagement deck */}
+                                  <div className="grid grid-cols-3 text-center py-0.5 text-gray-500 font-extrabold text-[10.5px] border-b border-zinc-100">
+                                    <button type="button" className="py-2 hover:bg-zinc-50 transition-all flex items-center justify-center gap-1 cursor-pointer">
+                                      <span className="text-zinc-400 text-xs">👍</span> <span>Like</span>
+                                    </button>
+                                    <button type="button" className="py-2 hover:bg-zinc-50 transition-all flex items-center justify-center gap-1 cursor-pointer">
+                                      <span className="text-zinc-400 text-xs">💬</span> <span>Comment</span>
+                                    </button>
+                                    <button type="button" className="py-2 hover:bg-zinc-50 transition-all flex items-center justify-center gap-1 cursor-pointer">
+                                      <span className="text-zinc-400 text-xs">↗️</span> <span>Share</span>
+                                    </button>
+                                  </div>
+
+                                  {/* Carousel Indicator Dots for Feed Carousel */}
+                                  {formData.ad_format === 'carousel' && (
+                                    <div className="flex justify-center gap-1 py-2">
+                                      {mediaList.map((_, idx) => (
+                                        <div 
+                                          key={idx} 
+                                          className={`w-1.5 h-1.5 rounded-full transition-all ${
+                                            (activeSlideIndex % mediaList.length) === idx ? 'bg-blue-600 scale-110' : 'bg-zinc-200'
+                                          }`} 
+                                        />
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          }
+                        }
+                      })()}
+
+                      {/* iPhone Home Indicator bar */}
+                      <div className={`absolute bottom-1.5 left-1/2 -translate-x-1/2 w-28 h-1 rounded-full z-50 transition-colors ${
+                        (formData.ad_format === 'reel' || formData.ad_format === 'story')
+                          ? 'bg-white/80' 
+                          : 'bg-zinc-800'
+                      }`} />
+
                     </div>
                   </div>
-                ) : (
-                  /* FACEBOOK MOCKUP */
-                  <div className="bg-white border border-zinc-150 rounded-2xl overflow-hidden shadow-xs text-xs text-left">
-                    {/* FB Header */}
-                    <div className="p-3.5 flex items-start gap-2.5">
-                      <img 
-                        src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80'} 
-                        className="w-10 h-10 rounded-full border object-cover"
-                        referrerPolicy="no-referrer"
-                        alt=""
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1">
-                          <span className="font-extrabold text-gray-900 text-[12px] hover:underline cursor-pointer">
-                            {user?.name || 'LuxuryHost'}
-                          </span>
-                          <span className="text-[11px] text-blue-500 font-black">✓</span>
-                        </div>
-                        <div className="flex items-center gap-1 text-gray-500 text-[10px] font-medium mt-0.5">
-                          <span>Sponsored</span>
-                          <span>•</span>
-                          <span className="text-[11px]">🌐</span>
-                        </div>
-                      </div>
-                      <span className="text-gray-400 font-bold text-lg cursor-pointer hover:text-gray-700 leading-none">...</span>
-                    </div>
+                </div>
 
-                    {/* FB Text Area (Top in FB) */}
-                    <div className="px-3.5 pb-3">
-                      <p className="text-gray-800 text-[11.5px] leading-relaxed font-light line-clamp-3">
-                        {formData.description || 'Escape to luxury! Book this incredible vacation rental deal right now.'}
-                      </p>
-                    </div>
-
-                    {/* FB Media Area */}
-                    <div 
-                      className="relative bg-zinc-950 overflow-hidden flex items-center justify-center border-t border-b border-zinc-100"
-                      style={{
-                        aspectRatio: mediaAspect === '9:16' ? '9/16' : mediaAspect === '16:9' ? '16/9' : '1.91/1',
-                        maxHeight: '300px'
-                      }}
-                    >
-                      {formData.media_urls.length > 0 ? (
-                        <img 
-                          src={formData.media_urls[0]} 
-                          alt="Campaign FB" 
-                          referrerPolicy="no-referrer"
-                          className={`w-full h-full object-cover transition-all ${
-                            mediaAlignment === 'left' ? 'object-left' : mediaAlignment === 'right' ? 'object-right' : 'object-center'
-                          }`}
-                        />
-                      ) : (
-                        <div className="text-zinc-500 text-center p-4">
-                          <span className="block text-2xl mb-1">📸</span>
-                          <span className="text-[10px]">No campaign media assets added yet</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* FB Meta-Card Action Deck (Sponsored bottom plate) */}
-                    <div className="bg-zinc-50 border-b border-zinc-100 p-3 px-3.5 flex items-center justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <span className="text-[10px] text-gray-500 uppercase tracking-wider block font-mono">NESTPICK.LUXURY</span>
-                        <h5 className="font-extrabold text-[12px] text-gray-900 truncate mt-0.5">
-                          {formData.title || 'Experience Paradise Stays'}
-                        </h5>
-                        <p className="text-[11px] text-gray-500 font-light truncate mt-0.5">
-                          {formData.feed_description || 'Book premium certified properties.'}
-                        </p>
-                      </div>
-                      <button 
-                        type="button"
-                        className="bg-zinc-200 hover:bg-zinc-300 text-gray-800 font-bold px-3 py-1.5 rounded-md text-[11px] shrink-0 border border-zinc-300 transition-all"
-                      >
-                        Book Now
-                      </button>
-                    </div>
-
-                    {/* FB Reaction Panel */}
-                    <div className="px-3.5 py-2.5 flex items-center justify-between text-[11px] text-gray-500 border-b border-zinc-100">
-                      <div className="flex items-center gap-1">
-                        <span className="flex items-center justify-center w-4 h-4 bg-blue-500 text-white rounded-full text-[9px] font-bold">👍</span>
-                        <span className="flex items-center justify-center w-4 h-4 bg-red-500 text-white rounded-full text-[9px] font-bold">❤️</span>
-                        <span className="font-medium ml-1">You and 1.2K others</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <span>45 Comments</span>
-                        <span>•</span>
-                        <span>12 Shares</span>
-                      </div>
-                    </div>
-
-                    {/* FB Action bar */}
-                    <div className="grid grid-cols-3 text-center py-1 text-gray-500 font-bold text-[11.5px]">
-                      <button type="button" className="py-2 hover:bg-zinc-50 transition-all flex items-center justify-center gap-1">
-                        <span>👍</span> <span>Like</span>
-                      </button>
-                      <button type="button" className="py-2 hover:bg-zinc-50 transition-all flex items-center justify-center gap-1">
-                        <span>💬</span> <span>Comment</span>
-                      </button>
-                      <button type="button" className="py-2 hover:bg-zinc-50 transition-all flex items-center justify-center gap-1">
-                        <span>↗️</span> <span>Share</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Realtime Telemetry info sync card */}
-                <div className="bg-blue-50/50 border border-blue-100/30 p-3.5 rounded-2xl text-[11px] text-zinc-600 leading-normal font-light">
-                  <span className="font-extrabold text-blue-700 block mb-0.5 uppercase tracking-wider text-[10px]">🔄 Live Sync Active</span>
-                  Any changes to headlines, copy, media ordering, or format options immediately update this simulation deck. Once published, your actual Meta ads look exactly like this preview.
+                {/* Real-time sync informational metadata card */}
+                <div className="bg-zinc-100/80 border border-zinc-200 p-3 rounded-2xl text-[10.5px] text-zinc-600 leading-relaxed font-light text-left">
+                  <span className="font-extrabold text-zinc-700 block mb-0.5 uppercase tracking-wider text-[9px] flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" /> Live Device Sync Active
+                  </span>
+                  Your media layout alignment is <strong>{mediaAlignment}</strong> and the active ad format is <strong>{formData.ad_format}</strong>. Click inside the phone mockup to test interactive swipe & navigation controls.
                 </div>
               </div>
             </form>
