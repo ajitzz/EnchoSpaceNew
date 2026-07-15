@@ -32,7 +32,7 @@ if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
 
-const clientId = process.env.VITE_GOOGLE_CLIENT_ID || 'dummy-client-id';
+const clientId = process.env.VITE_GOOGLE_CLIENT_ID || (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || '977982063830-0eq4c0i2oassrdmj71aevnktr17hasa7.apps.googleusercontent.com';
 
 // Add this Google Maps API key
 const API_KEY =

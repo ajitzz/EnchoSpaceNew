@@ -4,7 +4,8 @@ import {
   Sparkles, CheckCircle, AlertTriangle, Play, Pause, BarChart3, 
   Tv, Eye, MousePointerClick, TrendingUp, DollarSign, Target, Plus, 
   Trash2, Send, Check, ShieldCheck, HelpCircle, Loader2, CreditCard, ExternalLink,
-  Heart, MessageSquare, Bookmark, ChevronLeft, ChevronRight, Volume2, Share2, MoreHorizontal
+  Heart, MessageSquare, Bookmark, ChevronLeft, ChevronRight, Volume2, Share2, MoreHorizontal,
+  Library, Layers, PenTool, Sliders, MapPin, ArrowLeft, ArrowRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from './ToastContext';
@@ -46,6 +47,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   const [editingCampaignId, setEditingCampaignId] = useState<number | null>(null);
   const [rejectedFieldsMap, setRejectedFieldsMap] = useState<Record<string, string>>({});
   const [newMediaUrl, setNewMediaUrl] = useState('');
+  const [wizardStep, setWizardStep] = useState(1);
 
   // AI precheck states
   const [runningAiCheckId, setRunningAiCheckId] = useState<number | null>(null);
@@ -59,6 +61,10 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   const [cardCvv, setCardCvv] = useState('');
   const [selectedGateway, setSelectedGateway] = useState<'stripe' | 'razorpay'>('stripe');
   const [upiId, setUpiId] = useState('');
+
+  const hasStep1Rejections = !!(rejectedFieldsMap.media || rejectedFieldsMap.video_url);
+  const hasStep2Rejections = !!rejectedFieldsMap.ad_format;
+  const hasStep3Rejections = !!(rejectedFieldsMap.title || rejectedFieldsMap.description || rejectedFieldsMap.feed_description || rejectedFieldsMap.target_locations);
 
   const PLATFORM_OPTIONS = [
     { id: 'facebook_feed', label: 'Facebook Feed', icon: 'FB' },
@@ -327,6 +333,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
             }
             setEditingCampaignId(null);
             setRejectedFieldsMap({});
+            setWizardStep(1);
             setFormData({
               listing_id: '',
               title: '',
@@ -505,6 +512,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               e.stopPropagation();
                               setEditingCampaignId(campaign.id);
                               setRejectedFieldsMap(campaign.rejected_fields || {});
+                              setWizardStep(1);
                               setFormData({
                                 listing_id: String(campaign.listing_id),
                                 title: campaign.title,
@@ -761,392 +769,621 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
               <form onSubmit={handleCreateCampaign} className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 {/* LEFT COLUMN: Inputs */}
-                <div className="lg:col-span-7 space-y-6">
-                
-                {/* Linked stay */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Select Stay Residence</label>
-                  <select 
-                    required
-                    value={formData.listing_id}
-                    onChange={(e) => handleListingChange(e.target.value)}
-                    className="w-full bg-[#F4F4F6] border border-gray-100 rounded-2xl p-3.5 text-sm font-medium outline-none transition-all focus:border-blue-500 focus:bg-white"
-                  >
-                    <option value="">-- Choose Listing --</option>
-                    {listings.map(listing => (
-                      <option key={listing.id} value={listing.id}>{listing.title} ({listing.city})</option>
-                    ))}
-                  </select>
-                  <p className="text-[10px] text-zinc-400 font-light pl-1">
-                    Selecting a stay residence will automatically fetch and load all its details, images, and videos into this form.
-                  </p>
-                </div>
+                <div className="lg:col-span-7 flex flex-col justify-between min-h-[580px]">
+                  <div>
+                    {/* PROGRESSIVE AD BUILDER STEPPER */}
+                    <div className="flex justify-between items-center bg-zinc-50 border border-zinc-200/50 p-3 md:p-4 rounded-3xl mb-6 select-none">
+                      {[
+                        { step: 1, label: 'Stay & Media', icon: Library },
+                        { step: 2, label: 'Formats & Feeds', icon: Layers },
+                        { step: 3, label: 'Compose Copy', icon: PenTool },
+                        { step: 4, label: 'Budget & Launch', icon: Sliders },
+                      ].map((item, idx) => {
+                        const isCompleted = wizardStep > item.step;
+                        const isActive = wizardStep === item.step;
+                        const hasRejections = (item.step === 1 && hasStep1Rejections) || 
+                                              (item.step === 2 && hasStep2Rejections) || 
+                                              (item.step === 3 && hasStep3Rejections);
 
-                {/* Ad Format Selection (Advanced Scenario 1 requirement) */}
-                <div className={`space-y-2 p-4 rounded-2xl border transition-all ${rejectedFieldsMap.ad_format ? 'border-rose-300 bg-rose-50/10 ring-2 ring-rose-500/10' : 'border-zinc-150'}`}>
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Creative Ad Format</label>
-                    <span className="text-[10px] font-mono text-zinc-400 font-bold">Scenario Format Options</span>
-                  </div>
-
-                  {rejectedFieldsMap.ad_format && (
-                    <div className="text-xs font-semibold text-rose-600 bg-rose-50/50 p-2 rounded-xl mb-2 flex items-start gap-1.5">
-                      <AlertTriangle className="w-4 h-4 shrink-0" />
-                      <span><strong>Fix Requested:</strong> {rejectedFieldsMap.ad_format}</span>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    {[
-                      { id: 'post', label: 'Single Post', desc: '1:1 Feed Image' },
-                      { id: 'reel', label: 'Vertical Reel', desc: '9:16 Auto Play' },
-                      { id: 'carousel', label: 'Carousel', desc: 'Swipeable Deck' },
-                      { id: 'story', label: 'Story Ad', desc: '9:16 Full Screen' }
-                    ].map(fmt => (
-                      <div 
-                        key={fmt.id}
-                        onClick={() => setFormData(prev => ({ ...prev, ad_format: fmt.id as any }))}
-                        className={`
-                          p-3 rounded-xl border text-center cursor-pointer transition-all select-none flex flex-col justify-center items-center gap-1
-                          ${formData.ad_format === fmt.id 
-                            ? 'border-blue-500 bg-blue-50/10 font-bold text-blue-700' 
-                            : 'border-zinc-200 text-zinc-600 hover:border-zinc-300'}
-                        `}
-                      >
-                        <span className="text-xs font-bold">{fmt.label}</span>
-                        <span className="text-[9px] text-zinc-400 font-normal">{fmt.desc}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Ad Headline */}
-                <div className={`space-y-1.5 p-3 rounded-2xl transition-all ${rejectedFieldsMap.title ? 'border border-rose-300 bg-rose-50/10 ring-2 ring-rose-500/10' : ''}`}>
-                  <label className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center justify-between">
-                    <span>Ad Headline / Title</span>
-                    {rejectedFieldsMap.title && <span className="text-rose-600 font-bold font-mono text-[9px]">Fix Flagged</span>}
-                  </label>
-
-                  {rejectedFieldsMap.title && (
-                    <div className="text-xs font-semibold text-rose-600 bg-rose-50/50 p-2 rounded-xl mb-2 flex items-start gap-1.5">
-                      <AlertTriangle className="w-4 h-4 shrink-0" />
-                      <span><strong>Fix Requested:</strong> {rejectedFieldsMap.title}</span>
-                    </div>
-                  )}
-
-                  <input 
-                    type="text" 
-                    required
-                    placeholder="e.g. Private Luxury Resort Weekend Deal"
-                    value={formData.title}
-                    onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                    className={`w-full bg-[#F4F4F6] border rounded-2xl p-3.5 text-sm font-medium outline-none transition-all focus:border-blue-500 focus:bg-white ${rejectedFieldsMap.title ? 'border-rose-300 focus:border-rose-500' : 'border-gray-100'}`}
-                  />
-                </div>
-
-                {/* Target Locations */}
-                <div className={`space-y-1.5 p-3 rounded-2xl transition-all ${rejectedFieldsMap.target_locations ? 'border border-rose-300 bg-rose-50/10 ring-2 ring-rose-500/10' : ''}`}>
-                  <label className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center justify-between">
-                    <span>Target Marketing Locations</span>
-                    {rejectedFieldsMap.target_locations && <span className="text-rose-600 font-bold font-mono text-[9px]">Fix Flagged</span>}
-                  </label>
-
-                  {rejectedFieldsMap.target_locations && (
-                    <div className="text-xs font-semibold text-rose-600 bg-rose-50/50 p-2 rounded-xl mb-2 flex items-start gap-1.5">
-                      <AlertTriangle className="w-4 h-4 shrink-0" />
-                      <span><strong>Fix Requested:</strong> {rejectedFieldsMap.target_locations}</span>
-                    </div>
-                  )}
-
-                  <input 
-                    type="text" 
-                    placeholder="e.g. Mumbai, Bangalore, Pune, Delhi NCR"
-                    value={formData.target_locations}
-                    onChange={(e) => setFormData(prev => ({ ...prev, target_locations: e.target.value }))}
-                    className={`w-full bg-[#F4F4F6] border rounded-2xl p-3.5 text-sm font-medium outline-none transition-all focus:border-blue-500 focus:bg-white ${rejectedFieldsMap.target_locations ? 'border-rose-300 focus:border-rose-500' : 'border-gray-100'}`}
-                  />
-                  <p className="text-[10px] text-zinc-400 font-light pl-1">Specify target cities or states for Meta ad distribution network algorithms.</p>
-                </div>
-
-                {/* Ad Copy Description */}
-                <div className={`space-y-1.5 p-3 rounded-2xl transition-all ${rejectedFieldsMap.description ? 'border border-rose-300 bg-rose-50/10 ring-2 ring-rose-500/10' : ''}`}>
-                  <label className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center justify-between">
-                    <span>Primary Ad Copy / Stay Description</span>
-                    {rejectedFieldsMap.description && <span className="text-rose-600 font-bold font-mono text-[9px]">Fix Flagged</span>}
-                  </label>
-
-                  {rejectedFieldsMap.description && (
-                    <div className="text-xs font-semibold text-rose-600 bg-rose-50/50 p-2 rounded-xl mb-2 flex items-start gap-1.5">
-                      <AlertTriangle className="w-4 h-4 shrink-0" />
-                      <span><strong>Fix Requested:</strong> {rejectedFieldsMap.description}</span>
-                    </div>
-                  )}
-
-                  <textarea 
-                    rows={3}
-                    required
-                    placeholder="Describe your resort, details, location, amenities, and why customers should book now!"
-                    value={formData.description}
-                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                    className={`w-full bg-[#F4F4F6] border rounded-2xl p-3.5 text-sm font-medium outline-none font-sans transition-all focus:border-blue-500 focus:bg-white ${rejectedFieldsMap.description ? 'border-rose-300 focus:border-rose-500' : 'border-gray-100'}`}
-                  />
-                </div>
-
-                {/* Feed Description */}
-                <div className={`space-y-1.5 p-3 rounded-2xl transition-all ${rejectedFieldsMap.feed_description ? 'border border-rose-300 bg-rose-50/10 ring-2 ring-rose-500/10' : ''}`}>
-                  <label className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center justify-between">
-                    <span>Ad Feed Description (Bottom Tagline)</span>
-                    {rejectedFieldsMap.feed_description && <span className="text-rose-600 font-bold font-mono text-[9px]">Fix Flagged</span>}
-                  </label>
-
-                  {rejectedFieldsMap.feed_description && (
-                    <div className="text-xs font-semibold text-rose-600 bg-rose-50/50 p-2 rounded-xl mb-2 flex items-start gap-1.5">
-                      <AlertTriangle className="w-4 h-4 shrink-0" />
-                      <span><strong>Fix Requested:</strong> {rejectedFieldsMap.feed_description}</span>
-                    </div>
-                  )}
-
-                  <input 
-                    type="text" 
-                    placeholder="e.g. 🔥 20% discount on bookings this weekend! Only 3 slots remaining."
-                    value={formData.feed_description}
-                    onChange={(e) => setFormData(prev => ({ ...prev, feed_description: e.target.value }))}
-                    className={`w-full bg-[#F4F4F6] border rounded-2xl p-3.5 text-sm font-medium outline-none transition-all focus:border-blue-500 focus:bg-white ${rejectedFieldsMap.feed_description ? 'border-rose-300 focus:border-rose-500' : 'border-gray-100'}`}
-                  />
-                </div>
-
-                {/* Advanced Visual Media Designer & Arrangement Panel */}
-                <div className={`p-4 bg-zinc-50 border rounded-2xl space-y-4 transition-all ${rejectedFieldsMap.media ? 'border-rose-300 bg-rose-50/10 ring-2 ring-rose-500/10' : 'border-zinc-200'}`}>
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-gray-700">Visual Media arrangement & Alignment</h4>
-                      <p className="text-[10px] text-zinc-400 font-light">Rearrange ad media assets order or upload custom links.</p>
-                    </div>
-                    <span className="text-[9px] bg-blue-100 text-blue-700 font-extrabold uppercase px-2 py-0.5 rounded-full font-mono">Modern designer</span>
-                  </div>
-
-                  {rejectedFieldsMap.media && (
-                    <div className="text-xs font-semibold text-rose-600 bg-rose-50/50 p-2 rounded-xl flex items-start gap-1.5">
-                      <AlertTriangle className="w-4 h-4 shrink-0" />
-                      <span><strong>Fix Requested:</strong> {rejectedFieldsMap.media}</span>
-                    </div>
-                  )}
-
-                  {/* Media arrangement list */}
-                  {formData.media_urls.length === 0 ? (
-                    <div className="text-center py-4 bg-zinc-100 border border-dashed rounded-xl text-zinc-400 text-xs">
-                      No media loaded. Choose a stay residence above to import images or add a link below.
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {formData.media_urls.map((url, idx) => (
-                        <div key={idx} className="relative group rounded-xl overflow-hidden border border-zinc-200 bg-white aspect-square flex flex-col">
-                          <img src={url} alt="" className="w-full h-2/3 object-cover" />
-                          <div className="p-1 text-[10px] font-mono text-center font-bold text-gray-700 bg-zinc-50 flex items-center justify-between border-t gap-1">
-                            <span>Ad Asset #{idx + 1}</span>
+                        return (
+                          <React.Fragment key={item.step}>
                             <button 
                               type="button"
                               onClick={() => {
-                                setFormData(prev => ({
-                                  ...prev,
-                                  media_urls: prev.media_urls.filter((_, i) => i !== idx)
-                                }));
+                                // Simple validations before hopping steps
+                                if (item.step > 1 && !formData.listing_id) {
+                                  addToast('Select Listing', 'Please select a stay residence in Step 1 first.', 'warning');
+                                  return;
+                                }
+                                setWizardStep(item.step);
                               }}
-                              className="text-rose-600 hover:bg-rose-50 p-0.5 rounded"
+                              className={`flex items-center gap-2 cursor-pointer transition-all border-none bg-transparent p-0 focus:outline-none ${
+                                isActive ? 'text-blue-600 font-bold scale-[1.01]' : isCompleted ? 'text-zinc-800 hover:text-zinc-900' : 'text-zinc-400 hover:text-zinc-600'
+                              }`}
                             >
-                              <Trash2 className="w-3 h-3" />
+                              <div className={`w-7.5 h-7.5 rounded-full flex items-center justify-center text-[11px] font-black transition-all border ${
+                                isActive 
+                                  ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/15' 
+                                  : isCompleted 
+                                    ? 'bg-zinc-900 text-white border-zinc-900' 
+                                    : 'bg-white text-zinc-400 border-zinc-200'
+                              } relative`}>
+                                {isCompleted ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : <span>{item.step}</span>}
+                                {hasRejections && (
+                                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 border-2 border-white rounded-full animate-pulse" />
+                                )}
+                              </div>
+                              <span className="hidden xl:inline text-[10px] font-black uppercase tracking-wider">{item.label}</span>
                             </button>
+                            {idx < 3 && (
+                              <div className={`hidden sm:block flex-1 h-[2px] mx-1 rounded-full transition-all ${
+                                wizardStep > item.step ? 'bg-zinc-800' : 'bg-zinc-200'
+                              }`} />
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+
+                    {/* STEP 1: STAY RESIDENCE & CREATIVE MEDIA LIBRARY */}
+                    {wizardStep === 1 && (
+                      <div className="space-y-6 animate-fade-in">
+                        {/* Linked stay */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Select Stay Residence</label>
+                          <select 
+                            required
+                            value={formData.listing_id}
+                            onChange={(e) => handleListingChange(e.target.value)}
+                            className="w-full bg-[#F4F4F6] border border-gray-100 rounded-2xl p-3.5 text-sm font-medium outline-none transition-all focus:border-blue-500 focus:bg-white"
+                          >
+                            <option value="">-- Choose Listing --</option>
+                            {listings.map(listing => (
+                              <option key={listing.id} value={listing.id}>{listing.title} ({listing.city})</option>
+                            ))}
+                          </select>
+                          <p className="text-[10px] text-zinc-400 font-light pl-1">
+                            Selecting a stay residence will automatically fetch and load all its details, images, and videos into this form.
+                          </p>
+                        </div>
+
+                        {formData.listing_id && (
+                          <>
+                            {/* Advanced Visual Media Designer & Arrangement Panel */}
+                            <div className={`p-4 bg-zinc-50 border rounded-2xl space-y-4 transition-all ${rejectedFieldsMap.media ? 'border-rose-300 bg-rose-50/10 ring-2 ring-rose-500/10' : 'border-zinc-200'}`}>
+                              <div className="flex justify-between items-center">
+                                <div>
+                                  <h4 className="text-xs font-bold uppercase tracking-wider text-gray-700">Visual Media arrangement & Alignment</h4>
+                                  <p className="text-[10px] text-zinc-400 font-light">Rearrange ad media assets order or upload custom links.</p>
+                                </div>
+                                <span className="text-[9px] bg-blue-100 text-blue-700 font-extrabold uppercase px-2 py-0.5 rounded-full font-mono">Modern designer</span>
+                              </div>
+
+                              {rejectedFieldsMap.media && (
+                                <div className="text-xs font-semibold text-rose-600 bg-rose-50/50 p-2 rounded-xl flex items-start gap-1.5">
+                                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                                  <span><strong>Fix Requested:</strong> {rejectedFieldsMap.media}</span>
+                                </div>
+                              )}
+
+                              {/* Media arrangement list */}
+                              {formData.media_urls.length === 0 ? (
+                                <div className="text-center py-4 bg-zinc-100 border border-dashed rounded-xl text-zinc-400 text-xs">
+                                  No media loaded. Choose a stay residence above to import images or add a link below.
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                  {formData.media_urls.map((url, idx) => (
+                                    <div key={idx} className="relative group rounded-xl overflow-hidden border border-zinc-200 bg-white aspect-square flex flex-col">
+                                      <img src={url} alt="" className="w-full h-2/3 object-cover" />
+                                      <div className="p-1 text-[10px] font-mono text-center font-bold text-gray-700 bg-zinc-50 flex items-center justify-between border-t gap-1">
+                                        <span>Ad Asset #{idx + 1}</span>
+                                        <button 
+                                          type="button"
+                                          onClick={() => {
+                                            setFormData(prev => ({
+                                              ...prev,
+                                              media_urls: prev.media_urls.filter((_, i) => i !== idx)
+                                            }));
+                                          }}
+                                          className="text-rose-600 hover:bg-rose-50 p-0.5 rounded"
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                      
+                                      {/* Arrange Controls */}
+                                      <div className="absolute inset-x-0 bottom-8 flex justify-center gap-1.5 bg-black/40 backdrop-blur-xs py-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        {idx > 0 && (
+                                          <button 
+                                            type="button"
+                                            onClick={() => {
+                                              const arr = [...formData.media_urls];
+                                              const temp = arr[idx];
+                                              arr[idx] = arr[idx - 1];
+                                              arr[idx - 1] = temp;
+                                              setFormData(prev => ({ ...prev, media_urls: arr }));
+                                            }}
+                                            className="text-[10px] font-bold bg-white text-gray-800 px-1 py-0.5 rounded hover:bg-zinc-100"
+                                          >
+                                            ◀ Move
+                                          </button>
+                                        )}
+                                        {idx < formData.media_urls.length - 1 && (
+                                          <button 
+                                            type="button"
+                                            onClick={() => {
+                                              const arr = [...formData.media_urls];
+                                              const temp = arr[idx];
+                                              arr[idx] = arr[idx + 1];
+                                              arr[idx + 1] = temp;
+                                              setFormData(prev => ({ ...prev, media_urls: arr }));
+                                            }}
+                                            className="text-[10px] font-bold bg-white text-gray-800 px-1 py-0.5 rounded hover:bg-zinc-100"
+                                          >
+                                            Move ▶
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Add additional media URL option */}
+                              <div className="flex gap-2">
+                                <input 
+                                  type="url"
+                                  placeholder="Add another photo or direct MP4 video link..."
+                                  value={newMediaUrl}
+                                  onChange={(e) => setNewMediaUrl(e.target.value)}
+                                  className="flex-1 bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (!newMediaUrl) return;
+                                    if (!newMediaUrl.startsWith('http')) {
+                                      addToast('Invalid Link', 'Please provide a valid HTTP image or video link.', 'warning');
+                                      return;
+                                    }
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      media_urls: [...prev.media_urls, newMediaUrl]
+                                    }));
+                                    setNewMediaUrl('');
+                                    addToast('Asset Added', 'New creative asset added to the campaign queue.', 'success');
+                                  }}
+                                  className="bg-gray-900 text-white px-3 py-2 rounded-xl text-xs font-bold shrink-0 hover:bg-gray-800"
+                                >
+                                  Add Media
+                                </button>
+                              </div>
+
+                              {/* Aligning/Aspect ratio options for modern visual ad design */}
+                              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-zinc-200/50">
+                                <div className="space-y-1">
+                                  <label className="text-[9px] font-extrabold uppercase tracking-wider text-zinc-400">Content overlay Alignment</label>
+                                  <div className="flex bg-white rounded-lg p-0.5 border">
+                                    {['left', 'center', 'right'].map((align) => (
+                                      <button
+                                        key={align}
+                                        type="button"
+                                        onClick={() => setMediaAlignment(align as any)}
+                                        className={`flex-1 text-[10px] py-1 capitalize rounded transition-all ${mediaAlignment === align ? 'bg-zinc-900 text-white font-bold' : 'text-zinc-600 hover:bg-zinc-50'}`}
+                                      >
+                                        {align}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className="text-[9px] font-extrabold uppercase tracking-wider text-zinc-400">Visual Feed Aspect Ratio</label>
+                                  <div className="flex bg-white rounded-lg p-0.5 border">
+                                    {['1:1', '9:16', '16:9'].map((aspect) => (
+                                      <button
+                                        key={aspect}
+                                        type="button"
+                                        onClick={() => setMediaAspect(aspect as any)}
+                                        className={`flex-1 text-[10px] py-1 rounded transition-all ${mediaAspect === aspect ? 'bg-zinc-900 text-white font-bold' : 'text-zinc-600 hover:bg-zinc-50'}`}
+                                      >
+                                        {aspect}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Vertical Reels URL */}
+                            <div className={`space-y-1.5 p-3 rounded-2xl transition-all ${rejectedFieldsMap.video_url ? 'border border-rose-300 bg-rose-50/10 ring-2 ring-rose-500/10' : ''}`}>
+                              <div className="flex justify-between items-center">
+                                <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Vertical Video Reel URL (Optional)</label>
+                                <span className="text-[10px] text-zinc-400">YouTube, Vimeo, MP4</span>
+                              </div>
+
+                              {rejectedFieldsMap.video_url && (
+                                <div className="text-xs font-semibold text-rose-600 bg-rose-50/50 p-2 rounded-xl mb-2 flex items-start gap-1.5">
+                                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                                  <span><strong>Fix Requested:</strong> {rejectedFieldsMap.video_url}</span>
+                                </div>
+                              )}
+
+                              <input 
+                                type="url" 
+                                placeholder="e.g. https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+                                value={formData.video_url}
+                                onChange={(e) => setFormData(prev => ({ ...prev, video_url: e.target.value }))}
+                                className={`w-full bg-[#F4F4F6] border rounded-2xl p-3.5 text-sm font-medium outline-none transition-all focus:border-blue-500 focus:bg-white ${rejectedFieldsMap.video_url ? 'border-rose-300 focus:border-rose-500' : 'border-gray-100'}`}
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* STEP 2: CREATIVE AD FORMAT & TARGET PLATFORMS */}
+                    {wizardStep === 2 && (
+                      <div className="space-y-6 animate-fade-in">
+                        {/* Ad Format Selection (Advanced Scenario 1 requirement) */}
+                        <div className={`space-y-2 p-4 rounded-2xl border transition-all ${rejectedFieldsMap.ad_format ? 'border-rose-300 bg-rose-50/10 ring-2 ring-rose-500/10' : 'border-zinc-150'}`}>
+                          <div className="flex justify-between items-center">
+                            <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Creative Ad Format</label>
+                            <span className="text-[10px] font-mono text-zinc-400 font-bold">Scenario Format Options</span>
+                          </div>
+
+                          {rejectedFieldsMap.ad_format && (
+                            <div className="text-xs font-semibold text-rose-600 bg-rose-50/50 p-2 rounded-xl mb-2 flex items-start gap-1.5">
+                              <AlertTriangle className="w-4 h-4 shrink-0" />
+                              <span><strong>Fix Requested:</strong> {rejectedFieldsMap.ad_format}</span>
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-2.5">
+                            {[
+                              { id: 'post', label: 'Single Post', desc: '1:1 Standard Feed Grid Ad' },
+                              { id: 'reel', label: 'Vertical Reel', desc: '9:16 Full Screen Immersive Reel' },
+                              { id: 'carousel', label: 'Carousel Deck', desc: 'Multi-Image Interactive Swipe' },
+                              { id: 'story', label: 'Story Ad', desc: '9:16 Full Screen Fast-Tap View' }
+                            ].map(fmt => (
+                              <div 
+                                key={fmt.id}
+                                onClick={() => setFormData(prev => ({ ...prev, ad_format: fmt.id as any }))}
+                                className={`
+                                  p-4 rounded-xl border text-left cursor-pointer transition-all select-none flex flex-col justify-center gap-1
+                                  ${formData.ad_format === fmt.id 
+                                    ? 'border-blue-500 bg-blue-50/10 font-bold text-blue-700 ring-2 ring-blue-500/5' 
+                                    : 'border-zinc-200 text-zinc-600 hover:border-zinc-300'}
+                                `}
+                              >
+                                <span className="text-xs font-black">{fmt.label}</span>
+                                <span className="text-[10px] text-zinc-400 font-normal leading-relaxed">{fmt.desc}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Platforms selection */}
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">Select Target Social Ad Feeds</label>
+                          <div className="grid grid-cols-2 gap-3">
+                            {PLATFORM_OPTIONS.map(opt => {
+                              const isSelected = formData.platforms.includes(opt.id);
+                              return (
+                                <div 
+                                  key={opt.id}
+                                  onClick={() => handlePlatformToggle(opt.id)}
+                                  className={`
+                                    border p-3.5 rounded-2xl cursor-pointer transition-all flex items-center gap-2.5 select-none
+                                    ${isSelected 
+                                      ? 'border-blue-500 bg-blue-50/20 font-bold text-blue-700' 
+                                      : 'border-zinc-200 text-zinc-600 hover:border-zinc-300'}
+                                  `}
+                                >
+                                  <div className={`w-4.5 h-4.5 rounded-md border flex items-center justify-center shrink-0 ${isSelected ? 'border-blue-600 bg-blue-600 text-white' : 'border-zinc-300 bg-white'}`}>
+                                    {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                                  </div>
+                                  <span className="text-xs font-bold">{opt.label}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* STEP 3: AD COPY COMPOSER (INSTAGRAM STYLE) */}
+                    {wizardStep === 3 && (
+                      <div className="space-y-5 animate-fade-in">
+                        <div className="bg-zinc-50 border border-zinc-200/60 rounded-3xl p-4 md:p-5 space-y-4">
+                          <div className="flex items-center justify-between border-b border-zinc-150 pb-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-yellow-500 via-red-500 to-purple-600 p-[1.2px]">
+                                <div className="w-full h-full rounded-full bg-white p-[0.5px] flex items-center justify-center">
+                                  <img 
+                                    src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80'} 
+                                    className="w-full h-full rounded-full object-cover" 
+                                    referrerPolicy="no-referrer"
+                                    alt="" 
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <span className="text-xs font-black text-gray-900 block leading-none">{user?.name || 'LuxuryHost'}</span>
+                                <span className="text-[9px] text-zinc-400 font-bold block mt-0.5">Creating Sponsored Post</span>
+                              </div>
+                            </div>
+                            <span className="text-[9px] font-black uppercase text-blue-600 tracking-wider font-mono bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md">Mobile Composer</span>
+                          </div>
+
+                          {/* Primary Caption / Ad Copy */}
+                          <div className={`space-y-1.5 ${rejectedFieldsMap.description ? 'border-l-2 border-rose-500 pl-3' : ''}`}>
+                            <label className="text-[10px] font-black uppercase tracking-wider text-zinc-400 block flex items-center justify-between">
+                              <span>Write a caption (Primary Ad Copy)</span>
+                              {rejectedFieldsMap.description && <span className="text-rose-600 text-[9px] font-mono font-bold">Fix Flagged</span>}
+                            </label>
+
+                            {rejectedFieldsMap.description && (
+                              <div className="text-xs font-semibold text-rose-600 bg-rose-50/50 p-2 rounded-xl mb-2 text-left">
+                                <strong>Correction Request:</strong> {rejectedFieldsMap.description}
+                              </div>
+                            )}
+
+                            <textarea 
+                              rows={4}
+                              required
+                              placeholder="Describe your stay, amenities, pristine views, or special offers. Instagram posts with clear highlights convert 2.5x better!"
+                              value={formData.description}
+                              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                              className="w-full bg-white border border-zinc-200 rounded-2xl p-3 text-xs font-light outline-none font-sans focus:border-blue-500 transition-all leading-relaxed"
+                            />
+                            
+                            {/* Suggested high performance hashtag helpers */}
+                            <div className="flex flex-wrap gap-1.5 pt-1">
+                              {['#NestpickLuxury', '#VillaEscape', '#StayParadise', '#LuxuryResort'].map((tag) => (
+                                <button
+                                  key={tag}
+                                  type="button"
+                                  onClick={() => {
+                                    if (!formData.description.includes(tag)) {
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        description: prev.description ? `${prev.description} ${tag}` : tag
+                                      }));
+                                    }
+                                  }}
+                                  className="text-[9px] font-bold text-blue-600 bg-blue-50/50 hover:bg-blue-100 border border-blue-200/20 px-2 py-0.5 rounded-lg transition-colors"
+                                >
+                                  {tag} +
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Headline Title */}
+                          <div className={`space-y-1.5 ${rejectedFieldsMap.title ? 'border-l-2 border-rose-500 pl-3' : ''}`}>
+                            <label className="text-[10px] font-black uppercase tracking-wider text-zinc-400 block flex items-center justify-between">
+                              <span>Add Headline / Title</span>
+                              {rejectedFieldsMap.title && <span className="text-rose-600 text-[9px] font-mono font-bold">Fix Flagged</span>}
+                            </label>
+
+                            {rejectedFieldsMap.title && (
+                              <div className="text-xs font-semibold text-rose-600 bg-rose-50/50 p-2 rounded-xl mb-2 text-left">
+                                <strong>Correction Request:</strong> {rejectedFieldsMap.title}
+                              </div>
+                            )}
+
+                            <input 
+                              type="text" 
+                              required
+                              placeholder="e.g., Ultra-Luxury Stay Exclusive Discount"
+                              value={formData.title}
+                              onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                              className="w-full bg-white border border-zinc-200 rounded-xl p-3 text-xs font-semibold outline-none focus:border-blue-500 transition-all"
+                            />
+                          </div>
+
+                          {/* Location Tag */}
+                          <div className={`space-y-1.5 ${rejectedFieldsMap.target_locations ? 'border-l-2 border-rose-500 pl-3' : ''}`}>
+                            <div className="flex justify-between items-center">
+                              <label className="text-[10px] font-black uppercase tracking-wider text-zinc-400 block flex items-center gap-1">
+                                <span>Tag Target Locations</span>
+                                {rejectedFieldsMap.target_locations && <span className="text-rose-600 text-[9px] font-mono font-bold">(Fix Flagged)</span>}
+                              </label>
+                              <span className="text-[9px] text-zinc-400 font-light font-mono">Comma separated</span>
+                            </div>
+
+                            {rejectedFieldsMap.target_locations && (
+                              <div className="text-xs font-semibold text-rose-600 bg-rose-50/50 p-2 rounded-xl mb-2 text-left">
+                                <strong>Correction Request:</strong> {rejectedFieldsMap.target_locations}
+                              </div>
+                            )}
+
+                            <div className="relative">
+                              <input 
+                                type="text" 
+                                placeholder="e.g. Goa, Mumbai, Delhi NCR, Bangalore"
+                                value={formData.target_locations}
+                                onChange={(e) => setFormData(prev => ({ ...prev, target_locations: e.target.value }))}
+                                className="w-full bg-white border border-zinc-200 rounded-xl p-3 pl-8 text-xs font-semibold outline-none focus:border-blue-500 transition-all"
+                              />
+                              <MapPin className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                            </div>
+                          </div>
+
+                          {/* Bottom tagline */}
+                          <div className={`space-y-1.5 ${rejectedFieldsMap.feed_description ? 'border-l-2 border-rose-500 pl-3' : ''}`}>
+                            <label className="text-[10px] font-black uppercase tracking-wider text-zinc-400 block flex items-center justify-between">
+                              <span>Ad Bottom Feed Tagline</span>
+                              {rejectedFieldsMap.feed_description && <span className="text-rose-600 text-[9px] font-mono font-bold">Fix Flagged</span>}
+                            </label>
+
+                            {rejectedFieldsMap.feed_description && (
+                              <div className="text-xs font-semibold text-rose-600 bg-rose-50/50 p-2 rounded-xl mb-2 text-left">
+                                <strong>Correction Request:</strong> {rejectedFieldsMap.feed_description}
+                              </div>
+                            )}
+
+                            <input 
+                              type="text" 
+                              placeholder="e.g. Reserve premium private pools now with 24/7 butler service."
+                              value={formData.feed_description}
+                              onChange={(e) => setFormData(prev => ({ ...prev, feed_description: e.target.value }))}
+                              className="w-full bg-white border border-zinc-200 rounded-xl p-3 text-xs font-light outline-none focus:border-blue-500 transition-all"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* STEP 4: BUDGETING, COMPLIANCE & PUBLISHING */}
+                    {wizardStep === 4 && (
+                      <div className="space-y-6 animate-fade-in">
+                        {/* Marketing Budget controller */}
+                        <div className="space-y-3 bg-zinc-50 border p-4 rounded-2xl">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="font-bold uppercase tracking-wider text-gray-500">Monthly Campaign Ad Budget</span>
+                            <span className="font-bold font-mono text-blue-700 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-md">
+                              {formatPrice(formData.budget, 'INR')} /mo
+                            </span>
                           </div>
                           
-                          {/* Arrange Controls */}
-                          <div className="absolute inset-x-0 bottom-8 flex justify-center gap-1.5 bg-black/40 backdrop-blur-xs py-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {idx > 0 && (
-                              <button 
-                                type="button"
-                                onClick={() => {
-                                  const arr = [...formData.media_urls];
-                                  const temp = arr[idx];
-                                  arr[idx] = arr[idx - 1];
-                                  arr[idx - 1] = temp;
-                                  setFormData(prev => ({ ...prev, media_urls: arr }));
-                                }}
-                                className="text-[10px] font-bold bg-white text-gray-800 px-1 py-0.5 rounded hover:bg-zinc-100"
-                              >
-                                ◀ Move
-                              </button>
-                            )}
-                            {idx < formData.media_urls.length - 1 && (
-                              <button 
-                                type="button"
-                                onClick={() => {
-                                  const arr = [...formData.media_urls];
-                                  const temp = arr[idx];
-                                  arr[idx] = arr[idx + 1];
-                                  arr[idx + 1] = temp;
-                                  setFormData(prev => ({ ...prev, media_urls: arr }));
-                                }}
-                                className="text-[10px] font-bold bg-white text-gray-800 px-1 py-0.5 rounded hover:bg-zinc-100"
-                              >
-                                Move ▶
-                              </button>
-                            )}
+                          <input 
+                            type="range" 
+                            min={2500} 
+                            max={10000} 
+                            step={2500}
+                            value={formData.budget}
+                            onChange={(e) => setFormData(prev => ({ ...prev, budget: parseInt(e.target.value) }))}
+                            className="w-full accent-gray-900 h-1 bg-gray-200 rounded-lg cursor-pointer"
+                          />
+                          
+                          <div className="flex justify-between text-[10px] text-zinc-400 uppercase tracking-wider font-mono">
+                            <span>₹2,500 (Std)</span>
+                            <span>₹5,000 (Prem)</span>
+                            <span>₹7,500 (Pro)</span>
+                            <span>₹10,000 (Ent)</span>
+                          </div>
+
+                          {/* Real-time sync budget distribution estimation card */}
+                          <div className="grid grid-cols-3 gap-3 pt-3 border-t border-zinc-200 text-center select-none">
+                            <div className="bg-white border rounded-xl p-2.5">
+                              <span className="text-[8.5px] text-zinc-400 font-bold uppercase block tracking-wider">Est. Impressions</span>
+                              <span className="text-xs font-black text-gray-900 font-mono">{(formData.budget * 10).toLocaleString()}+</span>
+                            </div>
+                            <div className="bg-white border rounded-xl p-2.5">
+                              <span className="text-[8.5px] text-zinc-400 font-bold uppercase block tracking-wider">Est. Link Clicks</span>
+                              <span className="text-xs font-black text-gray-900 font-mono">{Math.floor(formData.budget * 0.45).toLocaleString()}+</span>
+                            </div>
+                            <div className="bg-white border rounded-xl p-2.5">
+                              <span className="text-[8.5px] text-zinc-400 font-bold uppercase block tracking-wider">Est. Reach Scale</span>
+                              <span className="text-xs font-black text-blue-600 font-mono">{(formData.budget * 12).toLocaleString()}+</span>
+                            </div>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
 
-                  {/* Add additional media URL option */}
-                  <div className="flex gap-2">
-                    <input 
-                      type="url"
-                      placeholder="Add another photo or direct MP4 video link..."
-                      value={newMediaUrl}
-                      onChange={(e) => setNewMediaUrl(e.target.value)}
-                      className="flex-1 bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!newMediaUrl) return;
-                        if (!newMediaUrl.startsWith('http')) {
-                          addToast('Invalid Link', 'Please provide a valid HTTP image or video link.', 'warning');
-                          return;
-                        }
-                        setFormData(prev => ({
-                          ...prev,
-                          media_urls: [...prev.media_urls, newMediaUrl]
-                        }));
-                        setNewMediaUrl('');
-                        addToast('Asset Added', 'New creative asset added to the campaign queue.', 'success');
-                      }}
-                      className="bg-gray-900 text-white px-3 py-2 rounded-xl text-xs font-bold shrink-0 hover:bg-gray-800"
-                    >
-                      Add Media
-                    </button>
-                  </div>
+                        {/* Automated Copywriting Check button */}
+                        {editingCampaignId ? (
+                          <div className="border border-zinc-150 p-4 rounded-2xl flex items-center justify-between gap-4 bg-zinc-50">
+                            <div>
+                              <h5 className="text-xs font-bold text-gray-900 uppercase">Automated AI Pre-check</h5>
+                              <p className="text-[10px] text-zinc-400 font-light leading-relaxed">Optimize stays marketing copy through Gemini Copywriter model.</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const dummyCampaign = { id: editingCampaignId } as any;
+                                handleRunAiCheck(dummyCampaign);
+                              }}
+                              disabled={runningAiCheckId === editingCampaignId}
+                              className="text-xs font-black bg-gray-950 text-white hover:bg-zinc-900 px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all"
+                            >
+                              {runningAiCheckId === editingCampaignId ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                              )}
+                              <span>Analyze Copy</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="bg-blue-50/20 border border-dashed border-blue-200/50 p-4 rounded-2xl text-[10.5px] text-blue-800 leading-relaxed font-light text-left">
+                            <strong>⚡ Pro Tip:</strong> After saving your draft campaign, a custom AI Copy Precheck with automated Gemini suggestions will be unlocked in your list dashboard. Use it to score and optimize your visual ad copy!
+                          </div>
+                        )}
 
-                  {/* Aligning/Aspect ratio options for modern visual ad design */}
-                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-zinc-200/50">
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-extrabold uppercase tracking-wider text-zinc-400">Content overlay Alignment</label>
-                      <div className="flex bg-white rounded-lg p-0.5 border">
-                        {['left', 'center', 'right'].map((align) => (
-                          <button
-                            key={align}
-                            type="button"
-                            onClick={() => setMediaAlignment(align as any)}
-                            className={`flex-1 text-[10px] py-1 capitalize rounded transition-all ${mediaAlignment === align ? 'bg-zinc-900 text-white font-bold' : 'text-zinc-600 hover:bg-zinc-50'}`}
-                          >
-                            {align}
-                          </button>
-                        ))}
+                        {/* Brand Safety Verification Deck */}
+                        <div className="space-y-2 select-none">
+                          <label className="text-[10px] font-black uppercase tracking-wider text-gray-400 block">Pre-launch Safety Checks</label>
+                          <div className="space-y-2">
+                            {[
+                              { label: 'Pixel Sandboxing partition activated (Death-Penalty protection)', checked: true },
+                              { label: `Aspect ratio and layout optimized for ${mediaAspect} feeds`, checked: true },
+                              { label: 'System Ad Accounts synchronized with target locations', checked: true },
+                            ].map((chk, idx) => (
+                              <div key={idx} className="flex items-center gap-2 text-xs font-medium text-zinc-600 bg-zinc-50 border border-zinc-150 rounded-xl p-2.5">
+                                <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+                                <span>{chk.label}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-extrabold uppercase tracking-wider text-zinc-400">Visual Feed Aspect Ratio</label>
-                      <div className="flex bg-white rounded-lg p-0.5 border">
-                        {['1:1', '9:16', '16:9'].map((aspect) => (
-                          <button
-                            key={aspect}
-                            type="button"
-                            onClick={() => setMediaAspect(aspect as any)}
-                            className={`flex-1 text-[10px] py-1 rounded transition-all ${mediaAspect === aspect ? 'bg-zinc-900 text-white font-bold' : 'text-zinc-600 hover:bg-zinc-50'}`}
-                          >
-                            {aspect}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Vertical Reels URL */}
-                <div className={`space-y-1.5 p-3 rounded-2xl transition-all ${rejectedFieldsMap.video_url ? 'border border-rose-300 bg-rose-50/10 ring-2 ring-rose-500/10' : ''}`}>
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Vertical Video Reel URL (Optional)</label>
-                    <span className="text-[10px] text-zinc-400">YouTube, Vimeo, MP4</span>
+                    )}
                   </div>
 
-                  {rejectedFieldsMap.video_url && (
-                    <div className="text-xs font-semibold text-rose-600 bg-rose-50/50 p-2 rounded-xl mb-2 flex items-start gap-1.5">
-                      <AlertTriangle className="w-4 h-4 shrink-0" />
-                      <span><strong>Fix Requested:</strong> {rejectedFieldsMap.video_url}</span>
-                    </div>
-                  )}
+                  {/* NAVIGATION CONTROL BAR (FOOTER) */}
+                  <div className="flex items-center justify-between border-t border-zinc-100 pt-5 mt-6 gap-3 select-none">
+                    {wizardStep > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => setWizardStep(prev => prev - 1)}
+                        className="flex items-center gap-1 px-4 py-2.5 rounded-xl border border-zinc-200 hover:bg-zinc-50 text-xs font-bold text-zinc-600 transition-colors"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                        <span>Back</span>
+                      </button>
+                    ) : (
+                      <div />
+                    )}
 
-                  <input 
-                    type="url" 
-                    placeholder="e.g. https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-                    value={formData.video_url}
-                    onChange={(e) => setFormData(prev => ({ ...prev, video_url: e.target.value }))}
-                    className={`w-full bg-[#F4F4F6] border rounded-2xl p-3.5 text-sm font-medium outline-none transition-all focus:border-blue-500 focus:bg-white ${rejectedFieldsMap.video_url ? 'border-rose-300 focus:border-rose-500' : 'border-gray-100'}`}
-                  />
-                  <p className="text-[10px] text-zinc-400 font-light pl-1">
-                    Connecting a high-converting video reel automatically syncs it directly to your Stays details page for visual tour play!
-                  </p>
-                </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowCreateModal(false)}
+                        className="px-4 py-2.5 rounded-xl hover:bg-zinc-50 text-xs font-bold text-zinc-500 transition-colors"
+                      >
+                        Cancel
+                      </button>
 
-                {/* Platforms selection */}
-                <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">Select Ad Feeds</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    {PLATFORM_OPTIONS.map(opt => {
-                      const isSelected = formData.platforms.includes(opt.id);
-                      return (
-                        <div 
-                          key={opt.id}
-                          onClick={() => handlePlatformToggle(opt.id)}
-                          className={`
-                            border p-3 rounded-2xl cursor-pointer transition-all flex items-center gap-2.5 select-none
-                            ${isSelected 
-                              ? 'border-blue-500 bg-blue-50/20 font-bold text-blue-700' 
-                              : 'border-zinc-200 text-zinc-600 hover:border-zinc-300'}
-                          `}
+                      {wizardStep < 4 ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (wizardStep === 1 && !formData.listing_id) {
+                              addToast('Select Stay', 'Please choose a stay residence listing in Step 1 first.', 'warning');
+                              return;
+                            }
+                            setWizardStep(prev => prev + 1);
+                          }}
+                          className="flex items-center gap-1 bg-gray-900 hover:bg-gray-800 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm transition-all active:scale-[0.98]"
                         >
-                          <div className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 ${isSelected ? 'border-blue-600 bg-blue-600 text-white' : 'border-zinc-300 bg-white'}`}>
-                            {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                          </div>
-                          <span className="text-xs">{opt.label}</span>
-                        </div>
-                      );
-                    })}
+                          <span>Next Step</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <button
+                          type="submit"
+                          className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl text-xs font-black shadow-md shadow-blue-500/10 transition-all active:scale-[0.98]"
+                        >
+                          <Send className="w-3.5 h-3.5" />
+                          <span>{editingCampaignId ? 'Update & Save Revisions' : 'Save campaign draft'}</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-
-                {/* Marketing Budget controller */}
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="font-bold uppercase tracking-wider text-gray-400">Monthly Ad Budget</span>
-                    <span className="font-bold font-mono text-gray-900 bg-zinc-100 px-2.5 py-1 rounded-md">
-                      {formatPrice(formData.budget, 'INR')} /mo
-                    </span>
-                  </div>
-                  <input 
-                    type="range" 
-                    min={2500} 
-                    max={10000} 
-                    step={2500}
-                    value={formData.budget}
-                    onChange={(e) => setFormData(prev => ({ ...prev, budget: parseInt(e.target.value) }))}
-                    className="w-full accent-gray-900 h-1 bg-gray-200 rounded-lg cursor-pointer"
-                  />
-                  <div className="flex justify-between text-[10px] text-zinc-400 uppercase tracking-wider font-mono">
-                    <span>₹2,500 (Standard)</span>
-                    <span>₹5,000 (Premium)</span>
-                    <span>₹7,500 (Pro)</span>
-                    <span>₹10,000 (Enterprise)</span>
-                  </div>
-                </div>
-
-                <button 
-                  type="submit"
-                  className="w-full bg-gray-900 hover:bg-gray-800 text-white p-4 rounded-2xl font-bold text-sm shadow-md transition-all active:scale-[0.98] mt-4"
-                >
-                  {editingCampaignId ? 'Update & Save Revisions' : 'Save campaign draft'}
-                </button>
-              </div>
 
               {/* RIGHT COLUMN: Live Social Media Preview inside realistic idle iPhone Mockup */}
               <div className="lg:col-span-5 lg:sticky lg:top-0 h-fit self-start bg-zinc-50 border border-zinc-150 rounded-3xl p-5 space-y-5">

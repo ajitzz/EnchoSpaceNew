@@ -197,6 +197,13 @@ const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({
   httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
 }) : null;
 
+// Config endpoint
+app.get('/api/config', (req, res) => {
+  res.json({
+    googleClientId: process.env.VITE_GOOGLE_CLIENT_ID || '977982063830-0eq4c0i2oassrdmj71aevnktr17hasa7.apps.googleusercontent.com'
+  });
+});
+
 // WhatsApp Webhook Registration
 app.get('/api/webhook/whatsapp', (req, res) => {
   const verify_token = process.env.WHATSAPP_VERIFY_TOKEN || 'encho_verify_123';
@@ -1764,55 +1771,141 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
 
     console.log(`[META API DISPATCH] Initiating Meta Ads API call for Campaign #${campaign.id}...`);
     console.log(`[META API DISPATCH] Validating payment state: Intent ID ${campaign.payment_intent_id}, Gateway: ${String(campaign.payment_gateway).toUpperCase()}`);
+
+    const accessToken = process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN;
+    const rawAdAccountId = process.env.META_AD_ACCOUNT_ID;
     
-    // Simulate construction of Graph API payload for Meta's servers
-    const metaPayload = {
-      name: campaign.title,
-      objective: "OUTCOME_TRAFFIC",
-      status: "ACTIVE",
-      special_ad_categories: ["HOUSING"],
-      daily_budget: Math.floor(Number(campaign.budget) / 30 * 100), // budget in cents/paise
-      targeting: {
-        geo_locations: {
-          countries: ["IN"],
-          cities: campaign.target_locations ? campaign.target_locations.split(',').map((s: string) => s.trim()) : []
-        },
-        publisher_platforms: typeof campaign.platforms === 'string' ? JSON.parse(campaign.platforms) : campaign.platforms
-      },
-      creative: {
-        title: campaign.title,
-        body: campaign.description,
-        link_data: {
-          message: campaign.description,
-          link: `https://nestpick-clone.com/listings/${campaign.listing_id}`,
-          caption: campaign.feed_description || "Nestpick Premium Property Boost",
-          attachment_style: campaign.ad_format === 'carousel' ? 'CAROUSEL' : 'SHARE_LINK',
-          image_url: campaign.listing_image
+    let cleanAdAccountId = String(rawAdAccountId || '').trim();
+    if (cleanAdAccountId && !cleanAdAccountId.startsWith('act_') && cleanAdAccountId !== 'your_ad_account_id_here') {
+      cleanAdAccountId = 'act_' + cleanAdAccountId;
+    }
+
+    const hasRealMetaCredentials = accessToken && 
+                                   cleanAdAccountId && 
+                                   !accessToken.includes('your_generated_system_token_here') && 
+                                   !cleanAdAccountId.includes('your_ad_account_id_here');
+
+    if (hasRealMetaCredentials) {
+      console.log(`[META API DISPATCH] Found real Meta credentials. Ad Account: ${cleanAdAccountId}. Access Token (masked): ${accessToken.substring(0, 10)}...`);
+      
+      try {
+        const metaUrl = `https://graph.facebook.com/v19.0/${cleanAdAccountId}/campaigns`;
+        console.log(`[META API DISPATCH] Posting to Meta: ${metaUrl}`);
+        
+        const response = await fetch(metaUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            access_token: accessToken,
+            name: `Encho Space - ${campaign.title} (Campaign #${campaign.id})`,
+            objective: 'OUTCOME_TRAFFIC',
+            special_ad_categories: ['HOUSING'],
+            status: 'PAUSED' // Extremely safe: create paused so it can be reviewed in Ads Manager before charging
+          })
+        });
+
+        const data = await response.json();
+        
+        if (response.ok && data.id) {
+          console.log(`[META API DISPATCH] SUCCESS! Meta campaign created. Meta Campaign ID: ${data.id}`);
+          
+          await pool.query(`
+            UPDATE host_marketing_campaigns
+            SET status = 'active',
+                meta_campaign_id = $1,
+                meta_dispatched_at = CURRENT_TIMESTAMP,
+                admin_approved = true,
+                admin_feedback = NULL
+            WHERE id = $2
+          `, [data.id, campaignId]);
+
+          broadcastDbEvent(req, 'marketing');
+          return true;
+        } else {
+          console.error(`[META API DISPATCH ERROR] Meta Graph API rejected the request:`, data);
+          const errorDetail = data.error?.message || JSON.stringify(data);
+          
+          // Gracefully capture the real error and display as feedback to the host
+          await pool.query(`
+            UPDATE host_marketing_campaigns
+            SET status = 'rejected',
+                admin_feedback = $1,
+                admin_approved = false
+            WHERE id = $2
+          `, [`Meta Ads API reported an issue: "${errorDetail}". Please ensure your Meta System User token has 'ads_management' permissions and your Meta Ad Account has a valid payment method.`, campaignId]);
+
+          broadcastDbEvent(req, 'marketing');
+          return false;
         }
+      } catch (apiError: any) {
+        console.error(`[META API DISPATCH FETCH ERROR] Network failure or bad response:`, apiError);
+        
+        await pool.query(`
+          UPDATE host_marketing_campaigns
+          SET status = 'rejected',
+              admin_feedback = $1,
+              admin_approved = false
+          WHERE id = $2
+        `, [`Failed to reach Meta servers: ${apiError.message || String(apiError)}`, campaignId]);
+
+        broadcastDbEvent(req, 'marketing');
+        return false;
       }
-    };
+    } else {
+      console.log(`[META API DISPATCH] Using sandbox/simulation fallback (Meta credentials not configured).`);
+      
+      // Simulate construction of Graph API payload for Meta's servers
+      const metaPayload = {
+        name: campaign.title,
+        objective: "OUTCOME_TRAFFIC",
+        status: "ACTIVE",
+        special_ad_categories: ["HOUSING"],
+        daily_budget: Math.floor(Number(campaign.budget) / 30 * 100), // budget in cents/paise
+        targeting: {
+          geo_locations: {
+            countries: ["IN"],
+            cities: campaign.target_locations ? campaign.target_locations.split(',').map((s: string) => s.trim()) : []
+          },
+          publisher_platforms: typeof campaign.platforms === 'string' ? JSON.parse(campaign.platforms) : campaign.platforms
+        },
+        creative: {
+          title: campaign.title,
+          body: campaign.description,
+          link_data: {
+            message: campaign.description,
+            link: `https://nestpick-clone.com/listings/${campaign.listing_id}`,
+            caption: campaign.feed_description || "Nestpick Premium Property Boost",
+            attachment_style: campaign.ad_format === 'carousel' ? 'CAROUSEL' : 'SHARE_LINK',
+            image_url: campaign.listing_image
+          }
+        }
+      };
 
-    console.log(`[META API DISPATCH] Outgoing HTTP POST to https://graph.facebook.com/v19.0/act_8849203/campaigns:`, JSON.stringify(metaPayload, null, 2));
+      console.log(`[META API DISPATCH] Outgoing HTTP POST to https://graph.facebook.com/v19.0/act_8849203/campaigns:`, JSON.stringify(metaPayload, null, 2));
 
-    // Simulated network latency for remote Meta Ads API dispatch
-    await new Promise(resolve => setTimeout(resolve, 1000));
+      // Simulated network latency for remote Meta Ads API dispatch
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-    const simulatedMetaCampaignId = `act_8849203_camp_${Math.floor(100000000 + Math.random() * 900000000)}`;
+      const simulatedMetaCampaignId = `act_8849203_camp_${Math.floor(100000000 + Math.random() * 900000000)}`;
 
-    console.log(`[META API DISPATCH] Meta API Success! Generated campaign ${simulatedMetaCampaignId}`);
+      console.log(`[META API DISPATCH] Meta API Success! Generated campaign ${simulatedMetaCampaignId}`);
 
-    // Update status to 'active' and record dispatch logs
-    await pool.query(`
-      UPDATE host_marketing_campaigns
-      SET status = 'active',
-          meta_campaign_id = $1,
-          meta_dispatched_at = CURRENT_TIMESTAMP,
-          admin_approved = true
-      WHERE id = $2
-    `, [simulatedMetaCampaignId, campaignId]);
+      // Update status to 'active' and record dispatch logs
+      await pool.query(`
+        UPDATE host_marketing_campaigns
+        SET status = 'active',
+            meta_campaign_id = $1,
+            meta_dispatched_at = CURRENT_TIMESTAMP,
+            admin_approved = true,
+            admin_feedback = NULL
+        WHERE id = $2
+      `, [simulatedMetaCampaignId, campaignId]);
 
-    broadcastDbEvent(req, 'marketing');
-    return true;
+      broadcastDbEvent(req, 'marketing');
+      return true;
+    }
   } catch (error) {
     console.error(`[META API DISPATCH ERROR] Failed to dispatch campaign ${campaignId} to Meta:`, error);
     return false;
