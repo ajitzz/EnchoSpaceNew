@@ -1281,7 +1281,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                             {/* Primary Hero Image */}
                                             <div className="relative flex-1 lg:w-[68%] h-full overflow-hidden">
                                                 <img 
-                                                    src={listing.imageUrl} 
+                                                    src={listing.imageUrl || undefined} 
                                                     alt={`Entire ${listing.type || 'Property'}`}
                                                     className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-[1.03]"
                                                     referrerPolicy="no-referrer"
@@ -1293,7 +1293,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                             <div className="hidden lg:flex flex-col w-[32%] border-l border-zinc-200/15 dark:border-zinc-800/50 h-full bg-zinc-900">
                                                 <div className="flex-1 overflow-hidden relative group/item1 border-b border-zinc-200/15 dark:border-zinc-800/50">
                                                     <img 
-                                                        src={(listing.imageUrls && listing.imageUrls[1]) || listing.imageUrl} 
+                                                        src={(listing.imageUrls && listing.imageUrls[1]) || listing.imageUrl || undefined} 
                                                         alt="Interior view 1"
                                                         className="w-full h-full object-cover transition-transform duration-700 group-hover/item1:scale-105"
                                                         referrerPolicy="no-referrer"
@@ -1302,7 +1302,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                                 </div>
                                                 <div className="flex-1 overflow-hidden relative group/item2">
                                                     <img 
-                                                        src={(listing.imageUrls && listing.imageUrls[2]) || (listing.imageUrls && listing.imageUrls[0]) || listing.imageUrl} 
+                                                        src={(listing.imageUrls && listing.imageUrls[2]) || (listing.imageUrls && listing.imageUrls[0]) || listing.imageUrl || undefined} 
                                                         alt="Interior view 2"
                                                         className="w-full h-full object-cover transition-transform duration-700 group-hover/item2:scale-105"
                                                         referrerPolicy="no-referrer"

@@ -1141,7 +1141,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                {/* Main Card Media */}
                <div className="relative h-44 w-full overflow-hidden group">
                   <img 
-                     src={activeListing.imageUrl} 
+                     src={activeListing.imageUrl || undefined} 
                      alt={activeListing.title} 
                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
                   />
@@ -1276,7 +1276,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                      >
                          {/* Card Image */}
                          <div className="w-[110px] h-full relative">
-                             <img src={listing.imageUrl} alt={listing.title} className="w-full h-full object-cover" />
+                             <img src={listing.imageUrl || undefined} alt={listing.title} className="w-full h-full object-cover" />
                              <div className="absolute bottom-2 left-2 bg-white/90 backdrop-blur-xs px-2 py-0.5 rounded-full text-[9px] font-black text-gray-800 tracking-tight shadow-sm">
                                  {listing.type || 'Resort'}
                              </div>

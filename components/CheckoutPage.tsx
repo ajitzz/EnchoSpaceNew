@@ -356,7 +356,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
           <div className="bg-white rounded-3xl p-6 border border-zinc-200/50 shadow-sm space-y-5">
             <div className="flex gap-4">
               <img 
-                src={isExperience ? (experience?.image_urls?.[0] || "") : (listing?.imageUrl || "")} 
+                src={isExperience ? (experience?.image_urls?.[0] || undefined) : (listing?.imageUrl || undefined)} 
                 alt={isExperience ? experience?.title : listing?.title} 
                 className="w-24 h-24 object-cover rounded-2xl bg-zinc-100 flex-shrink-0"
               />

@@ -111,7 +111,7 @@ const BookingPage: React.FC<BookingPageProps> = ({ listing, bookingDetails, onBa
               {/* Listing Recap */}
               <div className="flex gap-4 mb-8 pb-8 border-b border-gray-100">
                   <img 
-                      src={listing.imageUrl} 
+                      src={listing.imageUrl || undefined} 
                       alt={listing.title} 
                       className="w-24 h-24 object-cover rounded-xl shadow-sm bg-gray-100"
                   />

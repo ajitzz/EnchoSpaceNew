@@ -2079,7 +2079,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                   {formData.media_urls.map((url, idx) => (
                                     <div key={idx} className="relative group rounded-xl overflow-hidden border border-zinc-200 bg-white aspect-square flex flex-col">
-                                      <img src={url} alt="" className="w-full h-2/3 object-cover" />
+                                      <img src={url || undefined} alt="" className="w-full h-2/3 object-cover" />
                                       <div className="p-1 text-[10px] font-mono text-center font-bold text-gray-700 bg-zinc-50 flex items-center justify-between border-t gap-1">
                                         <span>Ad Asset #{idx + 1}</span>
                                         <button 

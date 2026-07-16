@@ -474,7 +474,7 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
                               onClick={() => onListingClick(reservation.listing)}
                           >
                               <img 
-                                  src={reservation.listing.imageUrl} 
+                                  src={reservation.listing.imageUrl || undefined} 
                                   alt={reservation.listing.title} 
                                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                               />

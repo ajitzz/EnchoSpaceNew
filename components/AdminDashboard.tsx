@@ -930,11 +930,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                   <td className="px-6 py-4">
                                      <div className="flex items-center gap-3">
                                         <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden shrink-0 border border-gray-200/50 relative">
-                                          {(listing.imageUrls && listing.imageUrls.length > 0) ? (
-                                             <img src={`${listing.imageUrls[0]}?w=100&h=100&fit=crop`} alt="" className="w-full h-full object-cover" />
-                                          ) : (
-                                             <img src={`${listing.imageUrl}?w=100&h=100&fit=crop`} alt="" className="w-full h-full object-cover" />
-                                          )}
+                                          {(() => {
+                                             const imgUrl = (listing.imageUrls && listing.imageUrls[0]) || listing.imageUrl || 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6';
+                                             return <img src={`${imgUrl}?w=100&h=100&fit=crop`} alt="" className="w-full h-full object-cover" />;
+                                          })()}
                                         </div>
                                         <div className="font-semibold text-gray-900 max-w-[200px] truncate">{listing.title}</div>
                                      </div>
