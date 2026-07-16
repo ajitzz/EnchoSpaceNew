@@ -1560,6 +1560,99 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                                </div>
                                             </div>
 
+                                            {/* Direct Conversions API (CAPI) & Google Ads Trackers */}
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs p-4 bg-blue-50/15 border border-blue-100/60 rounded-xl">
+                                               <div>
+                                                  <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block mb-1.5">Meta Conversions API (CAPI) Configuration</span>
+                                                  {campaign.meta_pixel_id ? (
+                                                     <div className="space-y-1">
+                                                        <p className="text-xs text-gray-700">
+                                                           Pixel ID: <span className="font-mono font-bold text-gray-900 bg-white border px-1.5 py-0.5 rounded">{campaign.meta_pixel_id}</span>
+                                                        </p>
+                                                        <p className="text-[10px] text-zinc-400 truncate font-mono">
+                                                           Token: {campaign.meta_capi_token ? `${campaign.meta_capi_token.substring(0, 15)}... (active)` : 'None'}
+                                                        </p>
+                                                     </div>
+                                                  ) : (
+                                                     <span className="text-[10px] text-zinc-400 font-mono block">No Meta Pixel / CAPI Linkage Configured</span>
+                                                  )}
+                                               </div>
+                                               <div>
+                                                  <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block mb-1.5">Google Ads Offline Linkage</span>
+                                                  {campaign.google_conversion_id ? (
+                                                     <div className="space-y-1">
+                                                        <p className="text-xs text-gray-700">
+                                                           Conversion ID: <span className="font-mono font-bold text-gray-900 bg-white border px-1.5 py-0.5 rounded">{campaign.google_conversion_id}</span>
+                                                        </p>
+                                                        <p className="text-[10px] text-zinc-500 font-mono">
+                                                           Label: {campaign.google_conversion_label || '—'}
+                                                        </p>
+                                                     </div>
+                                                  ) : (
+                                                     <span className="text-[10px] text-zinc-400 font-mono block">No Google Ads Conversion Label Configured</span>
+                                                  )}
+                                               </div>
+                                            </div>
+
+                                            {/* Real-time Spend and Pacing Telemetry for Admins */}
+                                            {(campaign.status === 'active' || campaign.status === 'completed') && (() => {
+                                               const spent = campaign.analytics?.spent || 0;
+                                               const budget = campaign.budget || 2500;
+                                               const pct = Math.min(100, (spent / budget) * 100);
+                                               const remaining = Math.max(0, budget - spent);
+                                               const isDepleted = campaign.status === 'completed' || pct >= 100;
+
+                                               let barColor = 'bg-emerald-500';
+                                               let textBg = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                                               if (pct >= 60 && pct < 85) {
+                                                  barColor = 'bg-amber-500';
+                                                  textBg = 'bg-amber-50 text-amber-700 border-amber-200';
+                                               } else if (pct >= 85) {
+                                                  barColor = 'bg-rose-500';
+                                                  textBg = 'bg-rose-50 text-rose-700 border-rose-200';
+                                               }
+
+                                               return (
+                                                  <div className="p-4 bg-gray-50 border border-gray-200/60 rounded-xl space-y-3 text-xs mb-4">
+                                                     <div className="flex items-center justify-between">
+                                                        <span className="font-bold text-[10px] text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                                                           🛡️ Admin Real-time Telemetry & Fuel Gauge
+                                                        </span>
+                                                        <span className={`px-2 py-0.5 rounded border text-[10px] font-bold font-mono uppercase ${textBg}`}>
+                                                           {pct.toFixed(1)}% Spent
+                                                        </span>
+                                                     </div>
+                                                     <div className="space-y-1">
+                                                        <div className="w-full h-2.5 bg-gray-200 rounded-full overflow-hidden p-[1px]">
+                                                           <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+                                                        </div>
+                                                        <div className="flex items-center justify-between text-[10px] text-gray-500 font-mono">
+                                                           <span>Spent: ₹{spent.toLocaleString()}</span>
+                                                           <span>Remaining: ₹{remaining.toLocaleString()}</span>
+                                                        </div>
+                                                     </div>
+                                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center text-[10px] font-mono">
+                                                        <div className="bg-white p-2 border rounded-lg">
+                                                           <span className="text-gray-400 block mb-0.5">Impressions</span>
+                                                           <strong className="text-gray-900 font-bold">{campaign.analytics?.impressions?.toLocaleString() || 0}</strong>
+                                                        </div>
+                                                        <div className="bg-white p-2 border rounded-lg">
+                                                           <span className="text-gray-400 block mb-0.5">Clicks</span>
+                                                           <strong className="text-gray-900 font-bold">{campaign.analytics?.clicks?.toLocaleString() || 0}</strong>
+                                                        </div>
+                                                        <div className="bg-white p-2 border rounded-lg">
+                                                           <span className="text-gray-400 block mb-0.5">CTR</span>
+                                                           <strong className="text-gray-900 font-bold">{campaign.analytics?.ctr?.toFixed(2) || '0.00'}%</strong>
+                                                        </div>
+                                                        <div className="bg-white p-2 border rounded-lg">
+                                                           <span className="text-gray-400 block mb-0.5">Pacing</span>
+                                                           <strong className="text-gray-900 font-bold uppercase">{campaign.pacing_mode || 'standard'}</strong>
+                                                        </div>
+                                                     </div>
+                                                  </div>
+                                               );
+                                            })()}
+
                                             {(() => {
                                                let mediaList = [];
                                                try {

@@ -5,7 +5,8 @@ import {
   Tv, Eye, MousePointerClick, TrendingUp, DollarSign, Target, Plus, 
   Trash2, Send, Check, ShieldCheck, HelpCircle, Loader2, CreditCard, ExternalLink,
   Heart, MessageSquare, Bookmark, ChevronLeft, ChevronRight, Volume2, Share2, MoreHorizontal,
-  Library, Layers, PenTool, Sliders, MapPin, ArrowLeft, ArrowRight, Upload
+  Library, Layers, PenTool, Sliders, MapPin, ArrowLeft, ArrowRight, Upload,
+  Gauge, Zap, Clock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from './ToastContext';
@@ -37,7 +38,12 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
     target_locations: '',
     ad_format: 'post' as 'post' | 'reel' | 'carousel' | 'story',
     feed_description: '',
-    media_urls: [] as string[]
+    media_urls: [] as string[],
+    meta_pixel_id: '',
+    meta_capi_token: '',
+    google_conversion_id: '',
+    google_conversion_label: '',
+    pacing_mode: 'standard' as 'conservative' | 'standard' | 'accelerated' | 'paused'
   });
 
   // Track layout & alignment options (Scenario 1 advanced design!)
@@ -65,6 +71,15 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   const [analyticsActiveTab, setAnalyticsActiveTab] = useState<'analytics' | 'crm'>('analytics');
   const [sendingLeadId, setSendingLeadId] = useState<string | null>(null);
   const [leadMessageDrafts, setLeadMessageDrafts] = useState<Record<string, string>>({});
+  const [activeLeadTabs, setActiveLeadTabs] = useState<Record<string, 'chat' | 'booking'>>({});
+  const [leadBookingForms, setLeadBookingForms] = useState<Record<string, {
+    moveInDate: string;
+    durationNights: number;
+    totalRent: number;
+    configuration: string;
+    roomId: string;
+  }>>({});
+  const [convertingLeadId, setConvertingLeadId] = useState<string | null>(null);
 
   // Social Proof Sandbox States (Pillar 1)
   const [sandboxComments, setSandboxComments] = useState([
@@ -122,6 +137,34 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       console.error('Failed to fetch campaigns:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUpdatePacing = async (campaignId: number, mode: 'conservative' | 'standard' | 'accelerated' | 'paused') => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/marketing/campaigns/${campaignId}/pacing`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ pacing_mode: mode })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setCampaigns(prev => prev.map(c => c.id === campaignId ? data.campaign : c));
+          if (selectedCampaignForAnalytics?.id === campaignId) {
+            setSelectedCampaignForAnalytics(data.campaign);
+          }
+        }
+      } else {
+        const errorData = await res.json();
+        alert(errorData.error || 'Failed to update pacing mode');
+      }
+    } catch (err) {
+      console.error('Error updating pacing mode:', err);
     }
   };
 
@@ -270,6 +313,65 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       console.error("Communications bridge dispatch failure:", error);
     } finally {
       setSendingLeadId(null);
+    }
+  };
+
+  // Convert lead directly to platform booking reservation (Pillar 4 Phase 2)
+  const handleConvertLeadToBooking = async (lead: any, campaignId: number) => {
+    const form = leadBookingForms[lead.id] || {
+      moveInDate: new Date().toISOString().split('T')[0],
+      durationNights: 3,
+      totalRent: 15000,
+      configuration: '2 Guests',
+      roomId: ''
+    };
+
+    if (!form.moveInDate) {
+      addToast('Input Required', 'Please choose a Check-In Date.', 'error');
+      return;
+    }
+    if (!form.totalRent || form.totalRent <= 0) {
+      addToast('Input Required', 'Please input a valid total rent amount.', 'error');
+      return;
+    }
+
+    setConvertingLeadId(lead.id);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/marketing/leads/${lead.id}/convert-booking`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          campaignId,
+          name: lead.name,
+          phone: lead.phone,
+          email: lead.email,
+          moveInDate: form.moveInDate,
+          durationNights: Number(form.durationNights) || 1,
+          totalRent: Number(form.totalRent) || 0,
+          configuration: form.configuration || '2 Guests',
+          roomId: form.roomId || ''
+        })
+      });
+
+      if (res.ok) {
+        addToast('Lead Converted!', `Successfully registered confirmed booking for ${lead.name}!`, 'success');
+        
+        // Dynamic re-fetch of campaigns & leads to instantly update the multi-touch funnel staircase and lead card status!
+        fetchCampaigns();
+        fetchCampaignLeads(campaignId);
+      } else {
+        const data = await res.json();
+        addToast('Conversion Error', data.error || 'Failed to complete direct booking.', 'error');
+      }
+    } catch (error) {
+      console.error('Error converting lead to booking:', error);
+      addToast('System Error', 'An error occurred during direct booking generation.', 'error');
+    } finally {
+      setConvertingLeadId(null);
     }
   };
 
@@ -455,7 +557,12 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           target_locations: '',
           ad_format: 'post',
           feed_description: '',
-          media_urls: []
+          media_urls: [],
+          meta_pixel_id: '',
+          meta_capi_token: '',
+          google_conversion_id: '',
+          google_conversion_label: '',
+          pacing_mode: 'standard'
         });
         fetchCampaigns();
       } else {
@@ -633,7 +740,11 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
               target_locations: '',
               ad_format: 'post',
               feed_description: '',
-              media_urls: []
+              media_urls: [],
+              meta_pixel_id: '',
+              meta_capi_token: '',
+              google_conversion_id: '',
+              google_conversion_label: ''
             });
             setShowCreateModal(true);
           }}
@@ -812,7 +923,11 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 target_locations: campaign.target_locations || '',
                                 ad_format: campaign.ad_format || 'post',
                                 feed_description: campaign.feed_description || '',
-                                media_urls: campaign.media_urls || []
+                                media_urls: campaign.media_urls || [],
+                                meta_pixel_id: campaign.meta_pixel_id || '',
+                                meta_capi_token: campaign.meta_capi_token || '',
+                                google_conversion_id: campaign.google_conversion_id || '',
+                                google_conversion_label: campaign.google_conversion_label || ''
                               });
                               setShowCreateModal(true);
                             }}
@@ -824,15 +939,116 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                       </div>
                     )}
 
-                    {campaign.status === 'active' && (
-                      <div className="mt-4 pt-4 border-t border-zinc-100 flex items-center justify-between bg-emerald-50/25 px-3 py-2 rounded-xl border border-emerald-100/50">
-                        <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-bold">
-                          <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                          <span>Live Campaign Running on Facebook & Instagram Feeds</span>
+                    {(campaign.status === 'active' || campaign.status === 'completed') && (() => {
+                      const spent = campaign.analytics?.spent || 0;
+                      const budget = campaign.budget || 2500;
+                      const pct = Math.min(100, (spent / budget) * 100);
+                      const remaining = Math.max(0, budget - spent);
+                      const isDepleted = campaign.status === 'completed' || pct >= 100;
+
+                      // Glow styles for Fuel Gauge
+                      let barColor = 'from-emerald-500 to-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.4)]';
+                      let barBg = 'bg-emerald-950/20';
+                      let textColor = 'text-emerald-700';
+                      let indicatorColor = 'bg-emerald-500';
+
+                      if (pct >= 60 && pct < 85) {
+                        barColor = 'from-amber-500 to-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.4)]';
+                        barBg = 'bg-amber-950/20';
+                        textColor = 'text-amber-700';
+                        indicatorColor = 'bg-amber-500';
+                      } else if (pct >= 85) {
+                        barColor = 'from-rose-500 to-rose-400 shadow-[0_0_12px_rgba(244,63,94,0.6)] animate-pulse';
+                        barBg = 'bg-rose-950/20';
+                        textColor = 'text-rose-700';
+                        indicatorColor = 'bg-rose-500';
+                      }
+
+                      return (
+                        <div className="mt-4 pt-4 border-t border-zinc-100 flex flex-col gap-4" onClick={(e) => e.stopPropagation()}>
+                          {/* Live Indicator Status Line */}
+                          <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${isDepleted ? 'bg-zinc-50 border-zinc-200' : 'bg-emerald-50/25 border-emerald-100/50'}`}>
+                            <div className="flex items-center gap-1.5 text-xs font-bold">
+                              {isDepleted ? (
+                                <>
+                                  <div className="w-2 h-2 bg-zinc-400 rounded-full" />
+                                  <span className="text-zinc-600">Campaign Completed (Budget Depleted)</span>
+                                </>
+                              ) : (
+                                <>
+                                  <div className={`w-2 h-2 ${indicatorColor} rounded-full animate-ping`} />
+                                  <span className={textColor}>Live & Active — Pacing: {campaign.pacing_mode || 'standard'}</span>
+                                </>
+                              )}
+                            </div>
+                            <span className="text-[10px] font-mono font-bold text-gray-500">Ad Account ID: #ENC_{campaign.id}</span>
+                          </div>
+
+                          {/* Fuel Gauge Progress Bar (Pillar 1 Hook) */}
+                          <div className="space-y-1.5 px-1">
+                            <div className="flex items-center justify-between text-[11px] font-bold">
+                              <span className="text-gray-500 flex items-center gap-1 uppercase tracking-wider font-semibold">
+                                <Gauge className="w-3.5 h-3.5" /> Fuel Gauge (Budget Burn)
+                              </span>
+                              <span className="font-mono text-gray-900">{pct.toFixed(1)}% Depleted</span>
+                            </div>
+                            <div className={`w-full h-3 rounded-full overflow-hidden ${barBg} border border-black/5 p-[1px]`}>
+                              <div 
+                                className={`h-full rounded-full bg-gradient-to-r ${barColor}`} 
+                                style={{ width: `${pct}%` }} 
+                              />
+                            </div>
+                            <div className="flex items-center justify-between text-[11px] font-mono text-gray-500">
+                              <span>Burnt: <strong className="text-gray-900 font-bold">₹{spent.toLocaleString()}</strong></span>
+                              <span>Remaining: <strong className="text-gray-900 font-bold">₹{remaining.toLocaleString()}</strong></span>
+                            </div>
+                          </div>
+
+                          {/* Pacing Controller Panel (Pillar 1 Interactive Control) */}
+                          {!isDepleted && (
+                            <div className="bg-zinc-50 border border-zinc-100 rounded-2xl p-3 space-y-2">
+                              <div className="flex items-center justify-between text-xs font-bold text-gray-700">
+                                <span className="flex items-center gap-1">
+                                  <Clock className="w-3.5 h-3.5 text-gray-400" /> Active Pacing Mode:
+                                </span>
+                                <span className="uppercase text-[10px] bg-white border border-zinc-200 px-2 py-0.5 rounded text-gray-900 font-extrabold tracking-wider">
+                                  {campaign.pacing_mode || 'standard'}
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-4 gap-1.5">
+                                {[
+                                  { mode: 'conservative', label: 'Turtle', icon: '🐢', desc: '0.5x burn rate' },
+                                  { mode: 'standard', label: 'Steady', icon: '🎯', desc: '1.0x standard' },
+                                  { mode: 'accelerated', label: 'Turbo', icon: '⚡', desc: '2.5x speed' },
+                                  { mode: 'paused', label: 'Pause', icon: '⏸️', desc: 'Stop spend' }
+                                ].map((item) => {
+                                  const isSelected = (campaign.pacing_mode || 'standard') === item.mode;
+                                  return (
+                                    <button
+                                      key={item.mode}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleUpdatePacing(campaign.id, item.mode as any);
+                                      }}
+                                      className={`
+                                        flex flex-col items-center justify-center py-2 px-1 rounded-xl border text-center transition-all duration-200
+                                        ${isSelected 
+                                          ? 'bg-gray-900 border-gray-900 text-white shadow-sm scale-[1.03]' 
+                                          : 'bg-white border-zinc-200 text-gray-700 hover:border-zinc-300 hover:bg-zinc-50'}
+                                      `}
+                                      title={item.desc}
+                                    >
+                                      <span className="text-sm mb-0.5">{item.icon}</span>
+                                      <span className="text-[10px] font-extrabold tracking-tight leading-none">{item.label}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <span className="text-[10px] font-mono font-bold text-emerald-700">Ad Account ID: #ENC_{campaign.id}</span>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 ))}
               </div>
@@ -1402,7 +1618,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                   {/* Activity Timeline logs */}
                                   <div className="bg-zinc-50 border border-zinc-100 rounded-xl p-2.5 text-[9.5px] text-zinc-600 leading-relaxed font-light">
                                     <span className="font-bold text-zinc-800 uppercase text-[8px] tracking-wider block mb-1">Attribution Trail Log:</span>
-                                    {lead.attribution_trail.map((log: string, lIdx: number) => (
+                                    {lead.attribution_trail && lead.attribution_trail.map((log: string, lIdx: number) => (
                                       <div key={lIdx} className="flex items-center gap-1">
                                         <span className="text-blue-500">•</span>
                                         <span>{log}</span>
@@ -1410,96 +1626,270 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                     ))}
                                   </div>
 
-                                  {/* Host Communication Bridge Console */}
+                                  {/* Lead Interactive Actions Console */}
                                   <div className="border-t border-zinc-100 pt-3.5 space-y-3 text-left">
-                                    <div className="flex justify-between items-center">
-                                      <span className="text-[9px] font-black uppercase text-zinc-400 block">Communications Bridge</span>
-                                      <span className="text-[8.5px] font-bold text-zinc-400 font-mono">Template-enabled (WhatsApp / SMS)</span>
-                                    </div>
-
-                                    {/* Pre-sets triggers */}
-                                    <div className="grid grid-cols-3 gap-2">
-                                      {[
-                                        { 
-                                          label: '10% Welcome Offer', 
-                                          text: `Hi ${lead.name.split(' ')[0]}, thank you for your interest in our premium stay. We are extending a verified 10% welcome discount for your stay group if you reserve this week! Let us know your preferred dates.`
-                                        },
-                                        { 
-                                          label: 'Virtual Tour Guide', 
-                                          text: `Hi ${lead.name.split(' ')[0]}! Concierge desk here. We would love to send over a brief WhatsApp video walkthrough of our stay and pool layouts. Let us know if we can share it!`
-                                        },
-                                        { 
-                                          label: 'Availability Check', 
-                                          text: `Hello ${lead.name.split(' ')[0]}! We saw you viewed our private suite package. We currently have standard availability for your target dates. Let us know if you want us to hold them for 24h!`
-                                        }
-                                      ].map((tpl, tIdx) => (
-                                        <button
-                                          key={tIdx}
-                                          type="button"
-                                          onClick={() => {
-                                            setLeadMessageDrafts(prev => ({
+                                    <div className="flex border-b border-zinc-100 pb-1.5 gap-4">
+                                      <button
+                                        type="button"
+                                        onClick={() => setActiveLeadTabs(prev => ({ ...prev, [lead.id]: 'chat' }))}
+                                        className={`pb-1 text-[10.5px] font-black uppercase tracking-wider border-b-2 transition-all ${
+                                          (activeLeadTabs[lead.id] || 'chat') === 'chat'
+                                            ? 'border-blue-600 text-blue-600'
+                                            : 'border-transparent text-zinc-400 hover:text-zinc-600'
+                                        }`}
+                                      >
+                                        💬 WhatsApp Touch
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveLeadTabs(prev => ({ ...prev, [lead.id]: 'booking' }));
+                                          if (!leadBookingForms[lead.id]) {
+                                            setLeadBookingForms(prev => ({
                                               ...prev,
-                                              [lead.id]: tpl.text
+                                              [lead.id]: {
+                                                moveInDate: new Date().toISOString().split('T')[0],
+                                                durationNights: 3,
+                                                totalRent: 15000,
+                                                configuration: '2 Guests',
+                                                roomId: ''
+                                              }
                                             }));
-                                          }}
-                                          className="py-1.5 px-2 bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-xl text-[9px] font-bold text-zinc-600 text-center transition-all flex flex-col items-center justify-center"
-                                        >
-                                          <span>{tpl.label}</span>
-                                        </button>
-                                      ))}
-                                    </div>
-
-                                    {/* Text Draft Area */}
-                                    <div className="space-y-1.5">
-                                      <textarea
-                                        placeholder="Select a message template above or write custom message to send..."
-                                        value={leadMessageDrafts[lead.id] || ''}
-                                        onChange={(e) => {
-                                          const val = e.target.value;
-                                          setLeadMessageDrafts(prev => ({
-                                            ...prev,
-                                            [lead.id]: val
-                                          }));
+                                          }
                                         }}
-                                        rows={2}
-                                        className="w-full bg-zinc-50 border border-zinc-200 rounded-xl p-2.5 text-[10px] outline-none focus:border-blue-500 font-light resize-none"
-                                      />
-                                      <div className="flex justify-between items-center">
-                                        <span className="text-[8px] text-zinc-400 font-mono uppercase">Status: {lead.status}</span>
-                                        <button
-                                          type="button"
-                                          disabled={sendingLeadId === lead.id || !(leadMessageDrafts[lead.id] || '').trim()}
-                                          onClick={() => {
-                                            const draftText = leadMessageDrafts[lead.id];
-                                            handleSendLeadMessage(lead.id, 'custom_marketing_touch', draftText);
-                                            // Reset draft
-                                            setLeadMessageDrafts(prev => ({ ...prev, [lead.id]: '' }));
-                                          }}
-                                          className="bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-100 disabled:text-zinc-400 text-white text-[10px] font-black px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all active:scale-[0.98]"
-                                        >
-                                          {sendingLeadId === lead.id ? (
-                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                          ) : (
-                                            <Send className="w-3 h-3 text-blue-400" />
-                                          )}
-                                          <span>Send WhatsApp Touchpoint</span>
-                                        </button>
-                                      </div>
+                                        className={`pb-1 text-[10.5px] font-black uppercase tracking-wider border-b-2 transition-all ${
+                                          activeLeadTabs[lead.id] === 'booking'
+                                            ? 'border-emerald-600 text-emerald-600'
+                                            : 'border-transparent text-zinc-400 hover:text-zinc-600'
+                                        }`}
+                                      >
+                                        ⚡ Direct Booking Desk
+                                      </button>
                                     </div>
 
-                                    {/* Message History logs if any */}
-                                    {lead.message_history && lead.message_history.length > 0 && (
-                                      <div className="bg-blue-50/20 border border-blue-100/30 rounded-xl p-2.5 space-y-1.5 mt-2">
-                                        <span className="text-[8px] font-black text-blue-800 uppercase tracking-wider block">Sent History Logs:</span>
-                                        {lead.message_history.map((msg: any, mIdx: number) => (
-                                          <div key={mIdx} className="text-[9.5px] leading-relaxed bg-white border border-zinc-150 p-2 rounded-lg">
-                                            <div className="flex justify-between text-[8px] text-zinc-400 font-mono mb-1 font-bold">
-                                              <span>SENDER: {msg.sender}</span>
-                                              <span>{msg.timestamp}</span>
-                                            </div>
-                                            <p className="text-zinc-600 font-light">{msg.text}</p>
+                                    {(activeLeadTabs[lead.id] || 'chat') === 'chat' ? (
+                                      <div className="space-y-3">
+                                        <div className="flex justify-between items-center text-[9px] text-zinc-400 font-bold font-mono">
+                                          <span>COMMUNICATIONS BRIDGE</span>
+                                          <span>Template-enabled (WhatsApp / SMS)</span>
+                                        </div>
+
+                                        {/* Pre-sets triggers */}
+                                        <div className="grid grid-cols-3 gap-2">
+                                          {[
+                                            { 
+                                              label: '10% Welcome Offer', 
+                                              text: `Hi ${lead.name.split(' ')[0]}, thank you for your interest in our premium stay. We are extending a verified 10% welcome discount for your stay group if you reserve this week! Let us know your preferred dates.`
+                                            },
+                                            { 
+                                              label: 'Virtual Tour Guide', 
+                                              text: `Hi ${lead.name.split(' ')[0]}! Concierge desk here. We would love to send over a brief WhatsApp video walkthrough of our stay and pool layouts. Let us know if we can share it!`
+                                            },
+                                            { 
+                                              label: 'Availability Check', 
+                                              text: `Hello ${lead.name.split(' ')[0]}! We saw you viewed our private suite package. We currently have standard availability for your target dates. Let us know if you want us to hold them for 24h!`
+                                            }
+                                          ].map((tpl, tIdx) => (
+                                            <button
+                                              key={tIdx}
+                                              type="button"
+                                              onClick={() => {
+                                                setLeadMessageDrafts(prev => ({
+                                                  ...prev,
+                                                  [lead.id]: tpl.text
+                                                }));
+                                              }}
+                                              className="py-1.5 px-2 bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-xl text-[9px] font-bold text-zinc-600 text-center transition-all flex flex-col items-center justify-center"
+                                            >
+                                              <span>{tpl.label}</span>
+                                            </button>
+                                          ))}
+                                        </div>
+
+                                        {/* Text Draft Area */}
+                                        <div className="space-y-1.5">
+                                          <textarea
+                                            placeholder="Select a message template above or write custom message to send..."
+                                            value={leadMessageDrafts[lead.id] || ''}
+                                            onChange={(e) => {
+                                              const val = e.target.value;
+                                              setLeadMessageDrafts(prev => ({
+                                                ...prev,
+                                                [lead.id]: val
+                                              }));
+                                            }}
+                                            rows={2}
+                                            className="w-full bg-zinc-50 border border-zinc-200 rounded-xl p-2.5 text-[10px] outline-none focus:border-blue-500 font-light resize-none"
+                                          />
+                                          <div className="flex justify-between items-center">
+                                            <span className="text-[8px] text-zinc-400 font-mono uppercase">Status: {lead.status}</span>
+                                            <button
+                                              type="button"
+                                              disabled={sendingLeadId === lead.id || !(leadMessageDrafts[lead.id] || '').trim()}
+                                              onClick={() => {
+                                                const draftText = leadMessageDrafts[lead.id];
+                                                handleSendLeadMessage(lead.id, 'custom_marketing_touch', draftText);
+                                                // Reset draft
+                                                setLeadMessageDrafts(prev => ({ ...prev, [lead.id]: '' }));
+                                              }}
+                                              className="bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-100 disabled:text-zinc-400 text-white text-[10px] font-black px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all active:scale-[0.98]"
+                                            >
+                                              {sendingLeadId === lead.id ? (
+                                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                              ) : (
+                                                <Send className="w-3 h-3 text-blue-400" />
+                                              )}
+                                              <span>Send WhatsApp Touchpoint</span>
+                                            </button>
                                           </div>
-                                        ))}
+                                        </div>
+
+                                        {/* Message History logs if any */}
+                                        {lead.message_history && lead.message_history.length > 0 && (
+                                          <div className="bg-blue-50/20 border border-blue-100/30 rounded-xl p-2.5 space-y-1.5 mt-2">
+                                            <span className="text-[8px] font-black text-blue-800 uppercase tracking-wider block">Sent History Logs:</span>
+                                            {lead.message_history.map((msg: any, mIdx: number) => (
+                                              <div key={mIdx} className="text-[9.5px] leading-relaxed bg-white border border-zinc-150 p-2 rounded-lg">
+                                                <div className="flex justify-between text-[8px] text-zinc-400 font-mono mb-1 font-bold">
+                                                  <span>SENDER: {msg.sender}</span>
+                                                  <span>{msg.timestamp}</span>
+                                                </div>
+                                                <p className="text-zinc-600 font-light">{msg.text}</p>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="space-y-3 bg-zinc-50 border border-zinc-200/60 rounded-2xl p-3.5">
+                                        <div className="flex justify-between items-center text-[9px] text-zinc-400 font-bold font-mono">
+                                          <span>PLATFORM INTEGRATION DESK</span>
+                                          <span className="text-emerald-600 uppercase flex items-center gap-1">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Direct Channel Active
+                                          </span>
+                                        </div>
+
+                                        {lead.status === 'Booked' ? (
+                                          <div className="py-4 text-center space-y-1.5">
+                                            <span className="text-lg">🎉</span>
+                                            <h5 className="text-[11px] font-bold text-zinc-800">Reservation Completed!</h5>
+                                            <p className="text-[9px] text-zinc-400 font-light">
+                                              This enquiry has been converted into a confirmed direct stay booking. Real-time attribution analytics are updating.
+                                            </p>
+                                          </div>
+                                        ) : (
+                                          <div className="space-y-3">
+                                            <p className="text-[9.5px] text-zinc-500 font-light leading-relaxed">
+                                              Directly schedule a stay reservation on behalf of <strong>{lead.name}</strong>. The platform will automatically link their contact metrics and record it as a direct lead attribution.
+                                            </p>
+
+                                            <div className="grid grid-cols-2 gap-2.5">
+                                              <div className="space-y-1">
+                                                <label className="text-[8.5px] font-bold text-zinc-500 uppercase block">Check-In Date</label>
+                                                <input
+                                                  type="date"
+                                                  value={(leadBookingForms[lead.id] || {}).moveInDate || new Date().toISOString().split('T')[0]}
+                                                  onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setLeadBookingForms(prev => ({
+                                                      ...prev,
+                                                      [lead.id]: {
+                                                        ...(prev[lead.id] || { durationNights: 3, totalRent: 15000, configuration: '2 Guests', roomId: '' }),
+                                                        moveInDate: val
+                                                      }
+                                                    }));
+                                                  }}
+                                                  className="w-full bg-white border border-zinc-200 rounded-lg p-1.5 text-[10px] text-gray-800 outline-none focus:border-emerald-500 font-mono"
+                                                />
+                                              </div>
+
+                                              <div className="space-y-1">
+                                                <label className="text-[8.5px] font-bold text-zinc-500 uppercase block">Stay Duration</label>
+                                                <div className="relative">
+                                                  <input
+                                                    type="number"
+                                                    min={1}
+                                                    value={(leadBookingForms[lead.id] || {}).durationNights || 3}
+                                                    onChange={(e) => {
+                                                      const val = parseInt(e.target.value) || 1;
+                                                      setLeadBookingForms(prev => ({
+                                                        ...prev,
+                                                        [lead.id]: {
+                                                          ...(prev[lead.id] || { moveInDate: new Date().toISOString().split('T')[0], totalRent: 15000, configuration: '2 Guests', roomId: '' }),
+                                                          durationNights: val
+                                                        }
+                                                      }));
+                                                    }}
+                                                    className="w-full bg-white border border-zinc-200 rounded-lg p-1.5 text-[10px] text-gray-800 outline-none focus:border-emerald-500 font-mono pr-8"
+                                                  />
+                                                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] text-zinc-400 font-medium font-mono">Nts</span>
+                                                </div>
+                                              </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-2.5">
+                                              <div className="space-y-1">
+                                                <label className="text-[8.5px] font-bold text-zinc-500 uppercase block">Total Agreed Price (₹)</label>
+                                                <div className="relative">
+                                                  <input
+                                                    type="number"
+                                                    min={0}
+                                                    placeholder="₹ Rent"
+                                                    value={(leadBookingForms[lead.id] || {}).totalRent || 15000}
+                                                    onChange={(e) => {
+                                                      const val = parseFloat(e.target.value) || 0;
+                                                      setLeadBookingForms(prev => ({
+                                                        ...prev,
+                                                        [lead.id]: {
+                                                          ...(prev[lead.id] || { moveInDate: new Date().toISOString().split('T')[0], durationNights: 3, configuration: '2 Guests', roomId: '' }),
+                                                          totalRent: val
+                                                        }
+                                                      }));
+                                                    }}
+                                                    className="w-full bg-white border border-zinc-200 rounded-lg p-1.5 text-[10px] text-gray-800 outline-none focus:border-emerald-500 font-mono pl-5"
+                                                  />
+                                                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] text-zinc-400 font-medium font-mono">₹</span>
+                                                </div>
+                                              </div>
+
+                                              <div className="space-y-1">
+                                                <label className="text-[8.5px] font-bold text-zinc-500 uppercase block">Occupancy Details</label>
+                                                <input
+                                                  type="text"
+                                                  placeholder="e.g. 2 Guests, Suite"
+                                                  value={(leadBookingForms[lead.id] || {}).configuration || '2 Guests'}
+                                                  onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setLeadBookingForms(prev => ({
+                                                      ...prev,
+                                                      [lead.id]: {
+                                                        ...(prev[lead.id] || { moveInDate: new Date().toISOString().split('T')[0], durationNights: 3, totalRent: 15000, roomId: '' }),
+                                                        configuration: val
+                                                      }
+                                                    }));
+                                                  }}
+                                                  className="w-full bg-white border border-zinc-200 rounded-lg p-1.5 text-[10px] text-gray-800 outline-none focus:border-emerald-500"
+                                                />
+                                              </div>
+                                            </div>
+
+                                            <div className="flex gap-2.5 pt-1">
+                                              <button
+                                                type="button"
+                                                disabled={convertingLeadId === lead.id}
+                                                onClick={() => handleConvertLeadToBooking(lead, selectedCampaignForAnalytics.id)}
+                                                className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:bg-zinc-200 disabled:text-zinc-400 text-white text-[10px] font-black py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.98]"
+                                              >
+                                                {convertingLeadId === lead.id ? (
+                                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                ) : (
+                                                  <span className="text-[11px]">🤝</span>
+                                                )}
+                                                <span>Confirm Direct Conversion Booking</span>
+                                              </button>
+                                            </div>
+                                          </div>
+                                        )}
                                       </div>
                                     )}
                                   </div>
@@ -2304,6 +2694,40 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               <span className="text-xs font-black text-blue-600 font-mono">{(formData.budget * 12).toLocaleString()}+</span>
                             </div>
                           </div>
+
+                          {/* Initial Campaign Spend Pacing */}
+                          <div className="mt-4 pt-4 border-t border-zinc-200 space-y-2">
+                            <span className="font-bold uppercase tracking-wider text-[11px] text-gray-500 block">Initial Campaign Spend Pacing</span>
+                            <div className="grid grid-cols-4 gap-2">
+                              {[
+                                { mode: 'conservative', label: 'Turtle 🐢', desc: 'Conservative 0.5x spend' },
+                                { mode: 'standard', label: 'Steady 🎯', desc: 'Standard 1.0x spend' },
+                                { mode: 'accelerated', label: 'Turbo ⚡', desc: 'Accelerated 2.5x spend' },
+                                { mode: 'paused', label: 'Pause ⏸️', desc: 'Launch paused' }
+                              ].map((item) => {
+                                const isSelected = formData.pacing_mode === item.mode;
+                                return (
+                                  <button
+                                    key={item.mode}
+                                    type="button"
+                                    onClick={() => setFormData(prev => ({ ...prev, pacing_mode: item.mode as any }))}
+                                    className={`
+                                      flex flex-col items-center justify-center p-2 rounded-xl border text-center transition-all duration-200
+                                      ${isSelected 
+                                        ? 'bg-gray-900 border-gray-900 text-white shadow-sm' 
+                                        : 'bg-white border-zinc-200 text-gray-700 hover:border-zinc-300 hover:bg-zinc-50'}
+                                    `}
+                                    title={item.desc}
+                                  >
+                                    <span className="text-[10px] font-extrabold tracking-tight leading-none">{item.label}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <p className="text-[9.5px] text-zinc-400 font-light leading-snug">
+                              Spend pacing adjusts the real-time background algorithms relative to your target metrics. You can change this at any time.
+                            </p>
+                          </div>
                         </div>
 
                         {/* Automated Copywriting Check button */}
@@ -2335,6 +2759,85 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                             <strong>⚡ Pro Tip:</strong> After saving your draft campaign, a custom AI Copy Precheck with automated Gemini suggestions will be unlocked in your list dashboard. Use it to score and optimize your visual ad copy!
                           </div>
                         )}
+
+                        {/* Meta CAPI & Google Ads Conversions Linkage (The Conversions API Strategy) */}
+                        <div className="space-y-4 border border-zinc-200 bg-gradient-to-br from-blue-50/10 via-zinc-50/30 to-blue-50/5 p-5 rounded-3xl text-left">
+                          <div className="flex items-center gap-2">
+                            <Target className="w-5 h-5 text-blue-600" />
+                            <div>
+                              <h4 className="text-xs font-black uppercase tracking-wider text-gray-900">Direct Conversions API (CAPI) Linkage</h4>
+                              <p className="text-[10px] text-zinc-500 font-light leading-relaxed">Direct server-to-server integration to track guest bookings and offline conversions with perfect accuracy.</p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                            {/* Meta Conversions API Card */}
+                            <div className="bg-white border border-zinc-150 rounded-2xl p-4 space-y-3 shadow-sm">
+                              <div className="flex items-center gap-2 text-xs font-bold text-gray-800">
+                                <span className="bg-blue-100 text-blue-800 text-[9px] px-2 py-0.5 rounded-md font-mono">META</span>
+                                <span>Conversions API (CAPI)</span>
+                              </div>
+                              <p className="text-[10px] text-zinc-400 font-light leading-relaxed">
+                                Avoid browser ad-blockers and iOS tracking limits. Bookings trigger high-match direct server-side payloads.
+                              </p>
+                              
+                              <div className="space-y-2 text-left">
+                                <label className="text-[9px] font-black uppercase tracking-wider text-gray-400">Meta Pixel ID</label>
+                                <input 
+                                  type="text"
+                                  placeholder="e.g. 1048593847294"
+                                  value={formData.meta_pixel_id}
+                                  onChange={(e) => setFormData(prev => ({ ...prev, meta_pixel_id: e.target.value }))}
+                                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl p-2.5 text-xs font-mono outline-none focus:bg-white focus:border-blue-500 transition-all"
+                                />
+                              </div>
+
+                              <div className="space-y-2 text-left">
+                                <label className="text-[9px] font-black uppercase tracking-wider text-gray-400">Meta CAPI Token (System User Access)</label>
+                                <input 
+                                  type="password"
+                                  placeholder="e.g. EAAGm27dB..."
+                                  value={formData.meta_capi_token}
+                                  onChange={(e) => setFormData(prev => ({ ...prev, meta_capi_token: e.target.value }))}
+                                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl p-2.5 text-xs font-mono outline-none focus:bg-white focus:border-blue-500 transition-all"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Google Ads Offline Conversions Card */}
+                            <div className="bg-white border border-zinc-150 rounded-2xl p-4 space-y-3 shadow-sm">
+                              <div className="flex items-center gap-2 text-xs font-bold text-gray-800">
+                                <span className="bg-amber-50 text-amber-800 border border-amber-100 text-[9px] px-2 py-0.5 rounded-md font-mono">GOOGLE</span>
+                                <span>Offline / Enhanced Linkage</span>
+                              </div>
+                              <p className="text-[10px] text-zinc-400 font-light leading-relaxed">
+                                Upload offline conversions or lead actions directly with SHA256 hashed customer identifiers (ph, em, fn).
+                              </p>
+
+                              <div className="space-y-2 text-left">
+                                <label className="text-[9px] font-black uppercase tracking-wider text-gray-400">Google Conversion ID</label>
+                                <input 
+                                  type="text"
+                                  placeholder="e.g. AW-11839485"
+                                  value={formData.google_conversion_id}
+                                  onChange={(e) => setFormData(prev => ({ ...prev, google_conversion_id: e.target.value }))}
+                                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl p-2.5 text-xs font-mono outline-none focus:bg-white focus:border-amber-500 transition-all"
+                                />
+                              </div>
+
+                              <div className="space-y-2 text-left">
+                                <label className="text-[9px] font-black uppercase tracking-wider text-gray-400">Google Conversion Label</label>
+                                <input 
+                                  type="text"
+                                  placeholder="e.g. abc-123_xyz"
+                                  value={formData.google_conversion_label}
+                                  onChange={(e) => setFormData(prev => ({ ...prev, google_conversion_label: e.target.value }))}
+                                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl p-2.5 text-xs font-mono outline-none focus:bg-white focus:border-amber-500 transition-all"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
 
                         {/* Brand Safety Verification Deck */}
                         <div className="space-y-2 select-none">

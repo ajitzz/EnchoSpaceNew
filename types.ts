@@ -193,7 +193,7 @@ export interface MarketingCampaign {
   media_urls: string[];
   platforms: string[];
   budget: number;
-  status: 'draft' | 'pending' | 'active' | 'rejected';
+  status: 'draft' | 'pending' | 'active' | 'rejected' | 'completed';
   admin_feedback?: string;
   created_at: string;
   approved_at?: string;
@@ -202,6 +202,16 @@ export interface MarketingCampaign {
   ad_format?: 'post' | 'reel' | 'carousel' | 'story';
   feed_description?: string;
   rejected_fields?: Record<string, string>;
+  meta_pixel_id?: string;
+  meta_capi_token?: string;
+  google_conversion_id?: string;
+  google_conversion_label?: string;
+  pacing_mode?: 'conservative' | 'standard' | 'accelerated' | 'paused';
+  accumulated_spent?: number;
+  accumulated_impressions?: number;
+  accumulated_clicks?: number;
+  accumulated_conversions?: number;
+  last_pacing_calc_at?: string;
   analytics?: {
     impressions: number;
     clicks: number;
