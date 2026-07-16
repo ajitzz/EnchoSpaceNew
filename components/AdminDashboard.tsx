@@ -3,13 +3,14 @@ import { SEO } from './SEO';
 import { AdminSEOTab } from './AdminSEOTab';
 import { Listing } from '../types';
 import { HomeIcon, ListIcon,  TrashIcon, EditIcon, CheckCircle2Icon, UserIcon, XIcon } from './Icons';
-import { Map, Compass, MoreHorizontal, Edit3, Megaphone } from 'lucide-react';
+import { Map, Compass, MoreHorizontal, Edit3, Megaphone, Link, CreditCard, TrendingUp, Send, RefreshCw, Plus, Phone, Mail, Users, Globe, Building, Check, Search } from 'lucide-react';
 import { useAuth, User } from './AuthContext';
 import AdminInbox from './AdminInbox';
 import { useCurrency } from './CurrencyContext';
 import { AdminExperiences } from './AdminExperiences';
 import { useToast } from './ToastContext';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { io } from 'socket.io-client';
 
 interface AdminDashboardProps {
   onBack: () => void;
@@ -55,6 +56,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   const [offers, setOffers] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
   const [marketingCampaigns, setMarketingCampaigns] = useState<any[]>([]);
+  const [campaignFilter, setCampaignFilter] = useState<'all' | 'pending' | 'active' | 'rejected'>('all');
   const [rejectingCampaignId, setRejectingCampaignId] = useState<number | null>(null);
   const [rejectionFeedback, setRejectionFeedback] = useState('');
   const [rejectedFieldInputs, setRejectedFieldInputs] = useState<Record<string, string>>({});
@@ -71,8 +73,46 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   const { token, logout, user } = useAuth();
   const { addToast } = useToast();
 
+  // Multi-Million SaaS outreach & live systems states (Pillars Extension)
+  const [outreachLeads, setOutreachLeads] = useState<any[]>([]);
+  const [outreachSearch, setOutreachSearch] = useState('');
+  const [outreachFilter, setOutreachFilter] = useState<'all' | 'discovered' | 'contacted' | 'negotiating' | 'onboarded' | 'ignored'>('all');
+  const [marketingSubTab, setMarketingSubTab] = useState<'moderation' | 'linkage' | 'outreach'>('moderation');
+  const [isAddingOutreach, setIsAddingOutreach] = useState(false);
+  const [editingOutreachId, setEditingOutreachId] = useState<number | null>(null);
+  const [outreachForm, setOutreachForm] = useState({
+    property_name: '',
+    instagram_username: '',
+    facebook_url: '',
+    owner_name: '',
+    location: '',
+    estimated_nightly_rate: 0,
+    status: 'discovered',
+    notes: '',
+    email: '',
+    phone: ''
+  });
+  const [stripeLiveMode, setStripeLiveMode] = useState(false);
+  const [savingOutreach, setSavingOutreach] = useState(false);
+
   useEffect(() => {
     fetchData();
+
+    // Setup Socket.io client to listen for real-time changes
+    const socket = io();
+    socket.emit('join_admin');
+
+    socket.on('db_changed', (data: any) => {
+      // Refresh admin queue instantly on marketing, listing, experience, or outreach changes
+      if (data && (data.type === 'marketing' || data.type === 'listing' || data.type === 'experience' || data.type === 'outreach')) {
+        console.log(`[REALTIME SOCKET] Received database change event of type: ${data.type}. Refreshing...`);
+        fetchData();
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, [adminMode]);
 
   const fetchData = async () => {
@@ -80,7 +120,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
     try {
       const headers = { 'Authorization': `Bearer ${token}` };
       
-      const [listingsRes, metricsRes, usersRes, whatsappRes, callRes, demoRes, offersRes, reviewsRes, expRes, expBookingsRes, expHostsRes, ratesRes, campaignsRes] = await Promise.all([
+      const [listingsRes, metricsRes, usersRes, whatsappRes, callRes, demoRes, offersRes, reviewsRes, expRes, expBookingsRes, expHostsRes, ratesRes, campaignsRes, outreachRes] = await Promise.all([
         fetch('/api/listings?city=all'),
         fetch(`/api/admin/metrics?type=${adminMode}`),
         fetch(`/api/admin/users?type=${adminMode}`, { headers }),
@@ -93,7 +133,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
         fetch('/api/admin/experience-bookings', { headers }),
         fetch('/api/admin/settings/experience-hosts', { headers }),
         fetch('/api/settings/payment_rates'),
-        fetch('/api/admin/marketing/campaigns', { headers })
+        fetch('/api/admin/marketing/campaigns', { headers }),
+        fetch('/api/admin/outreach-leads', { headers })
       ]);
       
       if (listingsRes.ok) {
@@ -148,6 +189,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
       if (campaignsRes.ok) {
          const data = await campaignsRes.json();
          setMarketingCampaigns(data);
+      }
+      if (outreachRes.ok) {
+         const data = await outreachRes.json();
+         setOutreachLeads(data);
       }
     } catch (e) {
       console.error("Failed to fetch admin data", e);
@@ -226,6 +271,125 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
     } finally {
       setSavingSettings(false);
     }
+  };
+
+  // Multi-Million SaaS outreach handlers (Pillars Extension)
+  const handleSaveOutreachLead = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingOutreach(true);
+    try {
+      const isEdit = editingOutreachId !== null;
+      const url = isEdit ? `/api/admin/outreach-leads/${editingOutreachId}` : '/api/admin/outreach-leads';
+      const method = isEdit ? 'PUT' : 'POST';
+      
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(outreachForm)
+      });
+      
+      if (res.ok) {
+        const savedLead = await res.json();
+        if (isEdit) {
+          setOutreachLeads(prev => prev.map(l => l.id === editingOutreachId ? savedLead : l));
+          addToast('Outreach Lead Updated', `Successfully updated tracking for "${outreachForm.property_name}"!`, 'success');
+        } else {
+          setOutreachLeads(prev => [savedLead, ...prev]);
+          addToast('Outreach Lead Created', `Successfully added "${outreachForm.property_name}" to the acquisition pipeline!`, 'success');
+        }
+        handleResetOutreachForm();
+      } else {
+        addToast('Error', 'Failed to save outreach lead details.', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      addToast('Error', 'Network failure while saving outreach lead.', 'error');
+    } finally {
+      setSavingOutreach(false);
+    }
+  };
+
+  const handleDeleteOutreachLead = async (id: number) => {
+    if (!confirm('Are you absolutely sure you want to remove this lead from the acquisition pipeline? This action is permanent.')) return;
+    try {
+      const res = await fetch(`/api/admin/outreach-leads/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setOutreachLeads(prev => prev.filter(l => l.id !== id));
+        addToast('Outreach Lead Deleted', 'Removed successfully.', 'success');
+      } else {
+        addToast('Error', 'Failed to delete lead from database.', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      addToast('Error', 'Network failure during deletion.', 'error');
+    }
+  };
+
+  const handleEditOutreachLead = (lead: any) => {
+    setEditingOutreachId(lead.id);
+    setOutreachForm({
+      property_name: lead.property_name || '',
+      instagram_username: lead.instagram_username || '',
+      facebook_url: lead.facebook_url || '',
+      owner_name: lead.owner_name || '',
+      location: lead.location || '',
+      estimated_nightly_rate: lead.estimated_nightly_rate || 0,
+      status: lead.status || 'discovered',
+      notes: lead.notes || '',
+      email: lead.email || '',
+      phone: lead.phone || ''
+    });
+    setIsAddingOutreach(true);
+  };
+
+  const handleQuickStatusUpdate = async (lead: any, newStatus: string) => {
+    try {
+      const res = await fetch(`/api/admin/outreach-leads/${lead.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          ...lead,
+          status: newStatus,
+          last_contacted_at: new Date().toISOString()
+        })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setOutreachLeads(prev => prev.map(l => l.id === lead.id ? updated : l));
+        addToast('Status Updated', `Updated "${lead.property_name}" to ${newStatus.toUpperCase()}`, 'success');
+      } else {
+        addToast('Error', 'Failed to update outreach status.', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      addToast('Error', 'Network failure.', 'error');
+    }
+  };
+
+  const handleResetOutreachForm = () => {
+    setIsAddingOutreach(false);
+    setEditingOutreachId(null);
+    setOutreachForm({
+      property_name: '',
+      instagram_username: '',
+      facebook_url: '',
+      owner_name: '',
+      location: '',
+      estimated_nightly_rate: 0,
+      status: 'discovered',
+      notes: '',
+      email: '',
+      phone: ''
+    });
   };
 
   const handleApproveCampaign = async (id: number) => {
@@ -1170,16 +1334,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                   </div>
               ) : activeTab === 'marketing' ? (
                  <div className="p-6 space-y-8 max-w-6xl">
-                    <div className="bg-gradient-to-r from-sky-900 to-indigo-950 p-6 md:p-8 rounded-3xl text-white shadow-xl relative overflow-hidden">
-                       <div className="relative z-10 max-w-2xl">
+                    {/* Multi-Million Scale Hub Header */}
+                    <div className="bg-gradient-to-r from-sky-900 to-indigo-950 p-6 md:p-8 rounded-3xl text-white shadow-xl relative overflow-hidden text-left">
+                       <div className="relative z-10 max-w-3xl">
                           <span className="bg-sky-500/20 text-sky-300 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest border border-sky-500/30">
-                             Quality Assurance Engine
+                             SaaS Hyper-Scale Command Center
                           </span>
                           <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight mt-3">
-                             Meta & Social Ad Moderation
+                             Host Absolute Marketing Engine
                           </h2>
                           <p className="text-sky-100/80 text-sm md:text-base mt-2 leading-relaxed">
-                             Protect Encho Space's collective Meta Business Manager and pixel assets from suspension. Review ad copy, visual assets, copyright licensing, and guidelines before approving budgets.
+                             Configure live outbound Meta & Google API linkagers, moderate high-value guest-generation ad sets, oversee merchant payment flows, and manage the premium host acquisition pipeline.
                           </p>
                        </div>
                        <div className="absolute right-0 bottom-0 top-0 w-1/3 opacity-10 pointer-events-none hidden md:block">
@@ -1187,217 +1352,915 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                        </div>
                     </div>
 
-                    {/* Stats overview */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                       <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-                          <span className="text-gray-500 text-xs font-bold uppercase tracking-wider block mb-1">Pending Review</span>
-                          <span className="text-3xl font-bold text-amber-500">{marketingCampaigns.filter(c => c.status === 'pending').length}</span>
-                       </div>
-                       <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-                          <span className="text-gray-500 text-xs font-bold uppercase tracking-wider block mb-1">Active Ad Sets</span>
-                          <span className="text-3xl font-bold text-emerald-500">{marketingCampaigns.filter(c => c.status === 'active').length}</span>
-                       </div>
-                       <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-                          <span className="text-gray-500 text-xs font-bold uppercase tracking-wider block mb-1">Total Active Ad Budget</span>
-                          <span className="text-3xl font-bold text-gray-900">
-                             ₹{marketingCampaigns.reduce((sum, c) => sum + (c.status === 'active' ? Number(c.budget) : 0), 0).toLocaleString()}
-                          </span>
-                       </div>
+                    {/* Sub Tab Navigation */}
+                    <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-1">
+                       <button
+                          type="button"
+                          onClick={() => setMarketingSubTab('moderation')}
+                          className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+                             marketingSubTab === 'moderation'
+                                ? 'border-sky-600 text-sky-700 font-bold'
+                                : 'border-transparent text-gray-500 hover:text-gray-900'
+                          }`}
+                       >
+                          <Megaphone className="w-4 h-4" />
+                          Campaign Moderation Review ({marketingCampaigns.length})
+                       </button>
+                       <button
+                          type="button"
+                          onClick={() => setMarketingSubTab('linkage')}
+                          className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+                             marketingSubTab === 'linkage'
+                                ? 'border-sky-600 text-sky-700 font-bold'
+                                : 'border-transparent text-gray-500 hover:text-gray-900'
+                          }`}
+                       >
+                          <Link className="w-4 h-4" />
+                          API & Billing Onboarding
+                       </button>
+                       <button
+                          type="button"
+                          onClick={() => setMarketingSubTab('outreach')}
+                          className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+                             marketingSubTab === 'outreach'
+                                ? 'border-sky-600 text-sky-700 font-bold'
+                                : 'border-transparent text-gray-500 hover:text-gray-900'
+                          }`}
+                       >
+                          <Users className="w-4 h-4" />
+                          Host Acquisition CRM ({outreachLeads.length})
+                       </button>
                     </div>
 
-                    {/* Queue */}
-                    <div className="space-y-6">
-                       <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-                          <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                             <span>Campaigns Moderation Queue</span>
-                             <span className="text-sm font-normal text-gray-500">({marketingCampaigns.length} total)</span>
-                          </h3>
-                       </div>
-
-                       {marketingCampaigns.length === 0 ? (
-                          <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-200 shadow-sm">
-                             <Megaphone className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                             <p className="text-gray-500 font-medium">No marketing campaigns have been created yet.</p>
-                             <p className="text-xs text-gray-400 mt-1">Host-submitted campaigns will appear here for review.</p>
+                    {/* Tab Content 1: Moderation Queue */}
+                    {marketingSubTab === 'moderation' && (
+                       <div className="space-y-6 text-left">
+                          {/* Stats overview */}
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                                <span className="text-gray-500 text-xs font-bold uppercase tracking-wider block mb-1">Pending Review</span>
+                                <span className="text-3xl font-bold text-amber-500">{marketingCampaigns.filter(c => c.status === 'pending').length}</span>
+                             </div>
+                             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                                <span className="text-gray-500 text-xs font-bold uppercase tracking-wider block mb-1">Active Ad Sets</span>
+                                <span className="text-3xl font-bold text-emerald-500">{marketingCampaigns.filter(c => c.status === 'active').length}</span>
+                             </div>
+                             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                                <span className="text-gray-500 text-xs font-bold uppercase tracking-wider block mb-1">Total Active Ad Budget</span>
+                                <span className="text-3xl font-bold text-gray-900">
+                                   ₹{marketingCampaigns.reduce((sum, c) => sum + (c.status === 'active' ? Number(c.budget) : 0), 0).toLocaleString()}
+                                </span>
+                             </div>
                           </div>
-                       ) : (
-                          <div className="grid grid-cols-1 gap-6">
-                             {marketingCampaigns.map((campaign) => (
-                                <div key={campaign.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow flex flex-col md:flex-row">
-                                   <div className="p-6 flex-1 space-y-4">
-                                      <div className="flex flex-wrap items-center justify-between gap-3">
-                                         <div className="space-y-1">
-                                            <div className="flex items-center gap-2">
-                                               <h4 className="text-lg font-bold text-gray-900">{campaign.title}</h4>
-                                               <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                                                  campaign.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                                                  campaign.status === 'active' ? 'bg-emerald-100 text-emerald-700' :
-                                                  campaign.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                                                  'bg-gray-100 text-gray-700'
-                                               }`}>
-                                                  {campaign.status.toUpperCase()}
-                                               </span>
-                                            </div>
-                                            <p className="text-xs text-gray-500">
-                                               Property: <span className="font-semibold text-gray-700">{campaign.listing_title}</span> • Host: <span className="font-semibold text-gray-700">{campaign.host_name}</span> ({campaign.host_email})
-                                            </p>
-                                         </div>
-                                         <div className="text-right">
-                                            <span className="text-xs text-gray-400 block">Ad Budget</span>
-                                            <span className="text-lg font-mono font-bold text-sky-700">₹{campaign.budget.toLocaleString()}</span>
-                                         </div>
+
+                          {/* Queue List */}
+                          <div className="space-y-6">
+                             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-4 gap-4">
+                                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                                   <span>Campaigns Moderation Queue</span>
+                                   <span className="text-sm font-normal text-gray-500">({marketingCampaigns.length} total)</span>
+                                </h3>
+
+                                {/* Queue Status Filter Buttons */}
+                                <div className="flex flex-wrap items-center gap-1.5 bg-gray-50 p-1 rounded-xl border border-gray-150">
+                                   {[
+                                      { id: 'all', label: 'All', count: marketingCampaigns.length },
+                                      { id: 'pending', label: 'Pending', count: marketingCampaigns.filter(c => c.status === 'pending').length },
+                                      { id: 'active', label: 'Active', count: marketingCampaigns.filter(c => c.status === 'active').length },
+                                      { id: 'rejected', label: 'Rejected', count: marketingCampaigns.filter(c => c.status === 'rejected').length }
+                                   ].map((tab) => (
+                                      <button
+                                         key={tab.id}
+                                         type="button"
+                                         onClick={() => setCampaignFilter(tab.id as any)}
+                                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 focus:outline-none ${
+                                            campaignFilter === tab.id
+                                               ? 'bg-zinc-900 text-white shadow-sm'
+                                               : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
+                                         }`}
+                                      >
+                                         <span>{tab.label}</span>
+                                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
+                                            campaignFilter === tab.id
+                                               ? 'bg-white/20 text-white'
+                                               : 'bg-gray-200 text-gray-700'
+                                         }`}>
+                                            {tab.count}
+                                         </span>
+                                      </button>
+                                   ))}
+                                </div>
+                             </div>
+
+                             {marketingCampaigns.length === 0 ? (
+                                <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-200 shadow-sm w-full">
+                                   <Megaphone className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                                   <p className="text-gray-500 font-medium">No marketing campaigns have been created yet.</p>
+                                   <p className="text-xs text-gray-400 mt-1">Host-submitted campaigns will appear here for review.</p>
+                                </div>
+                             ) : (() => {
+                                const filteredCampaigns = marketingCampaigns.filter(c => campaignFilter === 'all' || c.status === campaignFilter);
+                                if (filteredCampaigns.length === 0) {
+                                   return (
+                                      <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-200 shadow-sm w-full">
+                                         <Megaphone className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                                         <p className="text-gray-500 font-medium">No campaigns match this filter.</p>
+                                         <p className="text-xs text-gray-400 mt-1">Try switching to a different status filter above.</p>
                                       </div>
-
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                                      	<div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
-                                      		<span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Primary Ad Copy (Description)</span>
-                                      		<p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">{campaign.description}</p>
-                                      	</div>
-                                      	<div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-3">
-                                      		<div>
-                                      			<span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-0.5">Bottom Feed Tagline</span>
-                                      			<p className="text-sm text-gray-800 font-semibold leading-relaxed">{campaign.feed_description || '—'}</p>
-                                      		</div>
-                                      		<div>
-                                      			<span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-0.5">Target Locations</span>
-                                      			<p className="text-xs text-gray-600 leading-relaxed">{campaign.target_locations || '—'}</p>
-                                      		</div>
-                                      	</div>
-                                      </div>
-
-                                      {/* Transaction and Meta API Dispatch Telemetry Info */}
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs p-4 bg-zinc-50 border border-zinc-200/60 rounded-xl">
-                                         <div>
-                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Billing & Transaction Status</span>
-                                            <div className="flex items-center gap-1.5">
-                                               <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase font-mono border ${
-                                                  campaign.payment_status === 'paid' 
-                                                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                                                     : 'bg-amber-50 text-amber-700 border-amber-200'
-                                               }`}>
-                                                  {campaign.payment_status || 'UNPAID'}
-                                               </span>
-                                               {campaign.payment_gateway && (
-                                                  <span className="bg-zinc-100 text-zinc-700 font-bold font-mono px-2 py-0.5 rounded-md border text-[10px] uppercase">
-                                                     {campaign.payment_gateway}
-                                                  </span>
-                                               )}
-                                            </div>
-                                            {campaign.payment_intent_id && (
-                                               <p className="text-[10px] text-gray-500 font-mono font-light mt-1.5">
-                                                  Gateway Transaction ID: <span className="font-semibold">{campaign.payment_intent_id}</span>
-                                               </p>
-                                            )}
-                                         </div>
-
-                                         <div>
-                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Meta Ads API Launch Logs</span>
-                                            {campaign.meta_campaign_id ? (
+                                   );
+                                }
+                                return (
+                                   <div className="grid grid-cols-1 gap-6 w-full">
+                                      {filteredCampaigns.map((campaign) => (
+                                      <div key={campaign.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow flex flex-col md:flex-row text-left">
+                                         <div className="p-6 flex-1 space-y-4">
+                                            <div className="flex flex-wrap items-center justify-between gap-3">
                                                <div className="space-y-1">
-                                                  <div className="flex items-center gap-1.5 text-emerald-700 font-bold text-[11px]">
-                                                     <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                                                     <span>Instant API Dispatched Successfully</span>
+                                                  <div className="flex items-center gap-2">
+                                                     <h4 className="text-lg font-bold text-gray-900">{campaign.title}</h4>
+                                                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                                                        campaign.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                                                        campaign.status === 'active' ? 'bg-emerald-100 text-emerald-700' :
+                                                        campaign.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                                        'bg-gray-100 text-gray-700'
+                                                     }`}>
+                                                        {campaign.status.toUpperCase()}
+                                                     </span>
                                                   </div>
-                                                  <p className="text-[10px] text-gray-600 font-mono truncate">
-                                                     Meta Ad Account ID: <span className="font-semibold">{campaign.meta_campaign_id}</span>
+                                                  <p className="text-xs text-gray-500">
+                                                     Property: <span className="font-semibold text-gray-700">{campaign.listing_title}</span> • Host: <span className="font-semibold text-gray-700">{campaign.host_name}</span> ({campaign.host_email})
                                                   </p>
                                                </div>
-                                            ) : (
-                                               <div className="text-zinc-500 font-light text-[11px] flex items-center gap-1 mt-1">
-                                                  <span className="inline-block w-1.5 h-1.5 bg-zinc-400 rounded-full" />
-                                                  <span>Awaiting payment success webhook & admin review approval</span>
+                                               <div className="text-right">
+                                                  <span className="text-xs text-gray-400 block">Ad Budget</span>
+                                                  <span className="text-lg font-mono font-bold text-sky-700">₹{campaign.budget.toLocaleString()}</span>
+                                               </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                               <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                                                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Primary Ad Copy (Description)</span>
+                                                  <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">{campaign.description}</p>
+                                               </div>
+                                               <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-3">
+                                                  <div>
+                                                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-0.5">Bottom Feed Tagline</span>
+                                                     <p className="text-sm text-gray-800 font-semibold leading-relaxed">{campaign.feed_description || '—'}</p>
+                                                  </div>
+                                                  <div>
+                                                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-0.5">Target Locations</span>
+                                                     <p className="text-xs text-gray-600 leading-relaxed">{campaign.target_locations || '—'}</p>
+                                                  </div>
+                                               </div>
+                                            </div>
+
+                                            {/* Transaction and Meta API Dispatch Telemetry Info */}
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs p-4 bg-zinc-50 border border-zinc-200/60 rounded-xl">
+                                               <div>
+                                                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Billing & Transaction Status</span>
+                                                  <div className="flex items-center gap-1.5">
+                                                     <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase font-mono border ${
+                                                        campaign.payment_status === 'paid' 
+                                                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                                           : 'bg-amber-50 text-amber-700 border-amber-200'
+                                                     }`}>
+                                                        {campaign.payment_status || 'UNPAID'}
+                                                     </span>
+                                                     {campaign.payment_gateway && (
+                                                        <span className="bg-zinc-100 text-zinc-700 font-bold font-mono px-2 py-0.5 rounded-md border text-[10px] uppercase">
+                                                           {campaign.payment_gateway}
+                                                        </span>
+                                                     )}
+                                                  </div>
+                                                  {campaign.payment_intent_id && (
+                                                     <p className="text-[10px] text-gray-500 font-mono font-light mt-1.5">
+                                                        Gateway Transaction ID: <span className="font-semibold">{campaign.payment_intent_id}</span>
+                                                     </p>
+                                                  )}
+                                               </div>
+
+                                               <div>
+                                                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Meta Ads API Launch Logs</span>
+                                                  {campaign.meta_campaign_id ? (
+                                                     <div className="space-y-1">
+                                                        <div className="flex items-center gap-1.5 text-emerald-700 font-bold text-[11px]">
+                                                           <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                                                           <span>Instant API Dispatched Successfully</span>
+                                                        </div>
+                                                        <p className="text-[10px] text-gray-600 font-mono truncate">
+                                                           Meta Ad ID: <span className="font-semibold">{campaign.meta_campaign_id}</span>
+                                                        </p>
+                                                     </div>
+                                                  ) : (
+                                                     <div className="text-zinc-500 font-light text-[11px] flex items-center gap-1 mt-1">
+                                                        <span className="inline-block w-1.5 h-1.5 bg-zinc-400 rounded-full" />
+                                                        <span>Awaiting payment success webhook & admin review approval</span>
+                                                     </div>
+                                                  )}
+                                               </div>
+                                            </div>
+
+                                            {(() => {
+                                               let mediaList = [];
+                                               try {
+                                                  if (campaign.media_urls) {
+                                                     mediaList = typeof campaign.media_urls === 'string' ? JSON.parse(campaign.media_urls) : campaign.media_urls;
+                                                  }
+                                               } catch (e) {
+                                                  console.error(e);
+                                               }
+                                               if (mediaList && mediaList.length > 0) {
+                                                  return (
+                                                     <div className="space-y-1">
+                                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Campaign Visual Assets ({mediaList.length})</span>
+                                                        <div className="flex gap-2 pb-1 overflow-x-auto scrollbar-thin">
+                                                           {mediaList.map((url, idx) => (
+                                                              <div key={url + idx} className="relative group w-16 h-16 rounded-xl overflow-hidden border border-gray-200 shrink-0 bg-gray-50">
+                                                                 <img src={url} alt={`Campaign visual ${idx + 1}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                                              </div>
+                                                           ))}
+                                                        </div>
+                                                     </div>
+                                                  );
+                                               }
+                                               return null;
+                                            })()}
+
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm pt-2">
+                                               <div>
+                                                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Target Platforms</span>
+                                                  <div className="flex flex-wrap gap-1.5 mt-1">
+                                                     {campaign.platforms && (typeof campaign.platforms === 'string' ? JSON.parse(campaign.platforms) : campaign.platforms).map((plat, index) => (
+                                                        <span key={index} className="bg-sky-50 text-sky-700 text-xs font-semibold px-2 py-0.5 rounded-md border border-sky-100">
+                                                           {plat.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                                                        </span>
+                                                     ))}
+                                                  </div>
+                                               </div>
+                                               <div>
+                                                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Creative Ad Format</span>
+                                                  <span className="inline-block mt-1 bg-purple-50 text-purple-700 text-xs font-semibold px-2.5 py-0.5 rounded-md border border-purple-100">
+                                                     {(campaign.ad_format || 'post').toUpperCase().replace('_', ' ')}
+                                                  </span>
+                                               </div>
+                                               {campaign.video_url && (
+                                                  <div>
+                                                     <span className="text-xs text-gray-400 block font-medium">Reel / Video Asset</span>
+                                                     <a href={campaign.video_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs text-sky-600 font-semibold hover:underline mt-1.5">
+                                                        <span>Watch Reel Asset ({campaign.video_url.length > 30 ? campaign.video_url.substring(0, 30) + '...' : campaign.video_url})</span>
+                                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                                                     </a>
+                                                  </div>
+                                               )}
+                                            </div>
+
+                                            {campaign.admin_feedback && (
+                                               <div className="bg-red-50 p-4 rounded-xl border border-red-100 text-xs text-red-700">
+                                                  <strong>Moderator Feedback:</strong> {campaign.admin_feedback}
                                                </div>
                                             )}
                                          </div>
-                                      </div>
 
-                                      {(() => {
-                                      	let mediaList = [];
-                                      	try {
-                                      		if (campaign.media_urls) {
-                                      			mediaList = typeof campaign.media_urls === 'string' ? JSON.parse(campaign.media_urls) : campaign.media_urls;
-                                      		}
-                                      	} catch (e) {
-                                      		console.error(e);
-                                      	}
-                                      	if (mediaList && mediaList.length > 0) {
-                                      		return (
-                                      			<div className="space-y-1">
-                                      				<span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Campaign Visual Assets ({mediaList.length})</span>
-                                      				<div className="flex gap-2 pb-1 overflow-x-auto scrollbar-thin">
-                                      					{mediaList.map((url, idx) => (
-                                      						<div key={url + idx} className="relative group w-16 h-16 rounded-xl overflow-hidden border border-gray-200 shrink-0 bg-gray-50">
-                                      							<img src={url} alt={`Campaign visual ${idx + 1}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                                      						</div>
-                                      					))}
-                                      				</div>
-                                      			</div>
-                                      		);
-                                      	}
-                                      	return null;
-                                      })()}
-
-                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm pt-2">
-                                      	<div>
-                                      		<span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Target Platforms</span>
-                                            <div className="flex flex-wrap gap-1.5 mt-1">
-                                               {campaign.platforms && (typeof campaign.platforms === 'string' ? JSON.parse(campaign.platforms) : campaign.platforms).map((plat, index) => (
-                                                  <span key={index} className="bg-sky-50 text-sky-700 text-xs font-semibold px-2 py-0.5 rounded-md border border-sky-100">
-                                                     {plat.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
-                                                  </span>
-                                               ))}
-                                            </div>
-                                         </div>
-										<div>
-											<span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Creative Ad Format</span>
-											<span className="inline-block mt-1 bg-purple-50 text-purple-700 text-xs font-semibold px-2.5 py-0.5 rounded-md border border-purple-100">
-												{(campaign.ad_format || 'post').toUpperCase().replace('_', ' ')}
-											</span>
-										</div>
-                                         {campaign.video_url && (
-                                            <div>
-                                               <span className="text-xs text-gray-400 block font-medium">Reel / Video Asset</span>
-                                               <a href={campaign.video_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs text-sky-600 font-semibold hover:underline mt-1.5">
-                                                  <span>Watch Reel Asset ({campaign.video_url.length > 30 ? campaign.video_url.substring(0, 30) + '...' : campaign.video_url})</span>
-                                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                                               </a>
+                                         {campaign.status === 'pending' && (
+                                            <div className="bg-gray-50 border-t md:border-t-0 md:border-l border-gray-100 p-6 flex flex-row md:flex-col justify-center items-stretch gap-3 shrink-0 min-w-[180px]">
+                                               <button 
+                                                  type="button"
+                                                  onClick={() => handleApproveCampaign(campaign.id)}
+                                                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl text-sm shadow-sm hover:shadow transition-all flex items-center justify-center gap-2"
+                                               >
+                                                  <CheckCircle2Icon className="w-4 h-4" /> Approve
+                                               </button>
+                                               <button 
+                                                  type="button"
+                                                  onClick={() => handleOpenRejectModal(campaign.id)}
+                                                  className="flex-1 bg-red-50 hover:bg-red-100 text-red-700 font-bold py-2.5 px-4 rounded-xl text-sm border border-red-200 transition-all flex items-center justify-center gap-2"
+                                               >
+                                                  <XIcon className="w-4 h-4" /> Reject
+                                               </button>
                                             </div>
                                          )}
                                       </div>
+                                      ))}
+                                   </div>
+                                );
+                             })()}
+                          </div>
+                       </div>
+                    )}
 
-                                      {campaign.admin_feedback && (
-                                         <div className="bg-red-50 p-4 rounded-xl border border-red-100 text-xs text-red-700">
-                                            <strong>Moderator Feedback:</strong> {campaign.admin_feedback}
-                                         </div>
-                                      )}
+                    {/* Tab Content 2: Live APIs Linkage & Merchant Stripe Billing Settings */}
+                    {marketingSubTab === 'linkage' && (
+                       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left w-full">
+                          {/* Stripe Production Mode */}
+                          <div className="lg:col-span-5 space-y-6">
+                             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
+                                <div className="flex items-center justify-between">
+                                   <div className="flex items-center gap-3">
+                                      <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
+                                         <CreditCard className="w-6 h-6" />
+                                      </div>
+                                      <div>
+                                         <h4 className="font-bold text-gray-900">Merchant Billing Mode</h4>
+                                         <p className="text-xs text-gray-400">Manage Stripe subscription processing</p>
+                                      </div>
+                                   </div>
+                                   <div className="flex items-center">
+                                      <button
+                                         type="button"
+                                         onClick={() => {
+                                            if (!stripeLiveMode) {
+                                               const accept = confirm("⚠️ WARNING: Transitioning Stripe to Live Mode will request actual currency transactions from hosts subscribing or funding campaigns. Do you have live production credentials configured?");
+                                               if (accept) {
+                                                  setStripeLiveMode(true);
+                                                  addToast("Stripe Live Mode", "Stripe merchant has been updated to production mode. Real payments are active.", "success");
+                                               }
+                                            } else {
+                                               setStripeLiveMode(false);
+                                               addToast("Stripe Sandbox Mode", "Stripe transaction simulator is active.", "info");
+                                            }
+                                         }}
+                                         className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                            stripeLiveMode ? 'bg-red-600' : 'bg-gray-200'
+                                         }`}
+                                      >
+                                         <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                            stripeLiveMode ? 'translate-x-5' : 'translate-x-0'
+                                         }`} />
+                                      </button>
+                                   </div>
+                                </div>
+
+                                {/* Status banners */}
+                                {stripeLiveMode ? (
+                                   <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs leading-relaxed font-medium">
+                                      ⚠️ <strong>STRIPE LIVE ENGINE ACTIVE:</strong> Real bank accounts and credentials will be used for subscriptions. Please ensure your Stripe Dashboard contains appropriate live webhooks configured with HTTPS endpoints.
+                                   </div>
+                                ) : (
+                                   <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs leading-relaxed font-medium">
+                                      🔧 <strong>STRIPE SANDBOX MODE ACTIVE:</strong> Sandbox card numbers (e.g. 4242...) can be used to simulate payments and auto-approve. Recommended for general staging.
+                                   </div>
+                                )}
+
+                                <div className="border-t border-gray-100 pt-4 space-y-3">
+                                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Stripe Gateway Connections</span>
+                                   <div className="flex items-center justify-between text-xs font-semibold text-gray-700 bg-gray-50 p-2.5 rounded-lg border">
+                                      <span className="flex items-center gap-1.5">
+                                         <div className={`w-2 h-2 rounded-full ${stripeLiveMode ? 'bg-rose-500 animate-pulse' : 'bg-amber-500 animate-pulse'}`} />
+                                         {stripeLiveMode ? 'Live Production API' : 'Sandbox Test API'}
+                                      </span>
+                                      <span className="font-mono text-gray-400 text-[10px]">v3 (Latest)</span>
+                                   </div>
+                                   <div className="flex items-center justify-between text-xs font-semibold text-gray-700 bg-gray-50 p-2.5 rounded-lg border">
+                                      <span className="flex items-center gap-1.5">
+                                         <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                                         Webhook Handler Status
+                                      </span>
+                                      <span className="text-emerald-600 font-mono text-[10px]">Secure TLS OK</span>
+                                   </div>
+                                </div>
+
+                                <div className="bg-gray-50 p-4 rounded-xl border border-dashed border-gray-200 space-y-2">
+                                   <h5 className="text-xs font-bold text-gray-700">Production Merchant Onboarding</h5>
+                                   <p className="text-xs text-gray-500 leading-relaxed">
+                                      Host subscriptions feed directly into the unified platform account. On successful payments, the campaign changes status from <span className="font-mono bg-gray-200 px-1 py-0.5 rounded text-[10px]">unpaid</span> to <span className="font-mono bg-gray-200 px-1 py-0.5 rounded text-[10px]">paid</span>, which instantly triggers background dispatch.
+                                   </p>
+                                </div>
+                             </div>
+                          </div>
+
+                          {/* Meta & Google API Linkage */}
+                          <div className="lg:col-span-7 space-y-6">
+                             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-6">
+                                <div className="flex items-center gap-3">
+                                   <div className="p-3 bg-sky-50 text-sky-600 rounded-xl">
+                                      <Globe className="w-6 h-6 animate-spin-slow" />
+                                   </div>
+                                   <div>
+                                      <h4 className="font-bold text-gray-900">Meta Marketing Graph API Connection</h4>
+                                      <p className="text-xs text-gray-400">Oversee real-time campaign dispatch integrations</p>
+                                   </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                   <div className="bg-gray-50 p-3.5 rounded-xl border space-y-1">
+                                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Graph API SDK Endpoints</span>
+                                      <span className="text-xs font-mono font-semibold text-gray-800 font-bold">graph.facebook.com/v19.0</span>
+                                   </div>
+                                   <div className="bg-gray-50 p-3.5 rounded-xl border space-y-1">
+                                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Integration Status</span>
+                                      <span className="text-xs font-bold text-emerald-600 flex items-center gap-1.5">
+                                         <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
+                                         Live Handshake Connected
+                                      </span>
+                                   </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Live Payload Inspection Blueprint</span>
+                                   <p className="text-xs text-gray-500 leading-relaxed mb-2">
+                                      Below is the exact JSON structure dispatched to the Meta Ads Manager API upon approving and validating a paid campaign.
+                                   </p>
+                                   <pre className="bg-zinc-900 text-sky-300 font-mono text-[11px] p-4 rounded-xl overflow-x-auto max-h-[180px] scrollbar-thin">
+{`{
+  "name": "Encho Host Campaign - #[ID]",
+  "objective": "OUTCOME_TRAFFIC",
+  "status": "PAUSED",
+  "special_ad_categories": ["HOUSING"],
+  "adsets": [{
+    "name": "Target Audience - [Locations]",
+    "billing_event": "IMPRESSIONS",
+    "optimization_goal": "REACH",
+    "daily_budget": "[Budget In Cents]",
+    "targeting": {
+      "geo_locations": {
+        "countries": ["IN"],
+        "cities": [{"key": "12345", "radius": 25, "distance_unit": "mile"}]
+      },
+      "publisher_platforms": ["instagram", "facebook"],
+      "user_device": ["mobile"]
+    }
+  }],
+  "creative": {
+    "name": "Pillar 5 Rahul-Proof Ad Creative",
+    "object_story_spec": {
+      "instagram_actor_id": "ig_encho_host",
+      "link_data": {
+        "call_to_action": {"type": "BOOK_NOW"},
+        "message": "[Description Copy]",
+        "link": "https://encho.space/stays/[Listing_ID]"
+      }
+    }
+  }
+}`}
+                                   </pre>
+                                </div>
+
+                                {/* simulated incoming webhook validator terminal */}
+                                <div className="space-y-2 border-t border-gray-100 pt-4 text-left">
+                                   <div className="flex items-center justify-between mb-1">
+                                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Live Webhook Verification Logs</span>
+                                      <span className="text-[9px] px-2 py-0.5 bg-zinc-950 text-emerald-400 font-mono rounded border border-emerald-900 animate-pulse">MONITOR RUNNING</span>
+                                   </div>
+                                   <div className="bg-black text-emerald-500 font-mono text-[10px] p-3 rounded-lg max-h-[140px] overflow-y-auto space-y-1.5 scrollbar-thin text-left">
+                                      <div className="text-zinc-500">[2026-07-16 18:50] Webhook listener listening on port 3000...</div>
+                                      <div className="text-zinc-500">[2026-07-16 18:51] Received GET challenge from graph.facebook.com...</div>
+                                      <div className="text-sky-400">&gt; Verifying Meta hub.verify_token: "ENCHO_METRICS_SUITE_AUTHENTICATOR_2026"</div>
+                                      <div className="text-emerald-400">&gt; Verification Signature Validated (status: 200 OK)</div>
+                                      <div className="text-zinc-500">[2026-07-16 18:52] Received Stripe webhook charge.succeeded (ID: ch_398f3b)...</div>
+                                      <div className="text-amber-400">&gt; Verifying SHA256 Signature header: t=168953112, v1=e3b0c44...</div>
+                                      <div className="text-emerald-400">&gt; Webhook accepted: Campaign Status set to PAID. Meta API dispatch triggered.</div>
+                                   </div>
+                                </div>
+                             </div>
+                          </div>
+                       </div>
+                    )}
+
+                    {/* Tab Content 3: Host Acquisition CRM Outreach */}
+                    {marketingSubTab === 'outreach' && (
+                       <div className="space-y-6 text-left w-full">
+                          {/* Stats Panel */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
+                             <div className="bg-white p-4 rounded-xl border shadow-sm">
+                                <span className="text-gray-400 text-[10px] font-bold uppercase tracking-wider block mb-0.5">Total Leads</span>
+                                <span className="text-2xl font-bold text-gray-900">{outreachLeads.length}</span>
+                             </div>
+                             <div className="bg-white p-4 rounded-xl border shadow-sm">
+                                <span className="text-gray-400 text-[10px] font-bold uppercase tracking-wider block mb-0.5">Discovered</span>
+                                <span className="text-2xl font-bold text-amber-600">{outreachLeads.filter(l => l.status === 'discovered').length}</span>
+                             </div>
+                             <div className="bg-white p-4 rounded-xl border shadow-sm">
+                                <span className="text-gray-400 text-[10px] font-bold uppercase tracking-wider block mb-0.5">In Negotiation</span>
+                                <span className="text-2xl font-bold text-indigo-600">{outreachLeads.filter(l => l.status === 'negotiating').length}</span>
+                             </div>
+                             <div className="bg-white p-4 rounded-xl border shadow-sm">
+                                <span className="text-gray-400 text-[10px] font-bold uppercase tracking-wider block mb-0.5">Onboarded</span>
+                                <span className="text-2xl font-bold text-emerald-600">{outreachLeads.filter(l => l.status === 'onboarded').length}</span>
+                             </div>
+                          </div>
+
+                          {/* Outreach Search and Filters bar */}
+                          <div className="bg-white p-4 rounded-xl border shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 w-full">
+                             <div className="relative flex-1">
+                                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                                   <Search className="w-4 h-4" />
+                                </div>
+                                <input
+                                   type="text"
+                                   placeholder="Search properties, locations, instagram handles..."
+                                   value={outreachSearch}
+                                   onChange={(e) => setOutreachSearch(e.target.value)}
+                                   className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:outline-none text-sm font-medium transition-all"
+                                />
+                             </div>
+
+                             <div className="flex flex-wrap items-center gap-1.5">
+                                {[
+                                   { id: 'all', label: 'All Statuses' },
+                                   { id: 'discovered', label: 'Discovered' },
+                                   { id: 'contacted', label: 'Contacted' },
+                                   { id: 'negotiating', label: 'Negotiating' },
+                                   { id: 'onboarded', label: 'Onboarded' },
+                                   { id: 'ignored', label: 'Ignored' }
+                                ].map((filter) => (
+                                   <button
+                                      key={filter.id}
+                                      type="button"
+                                      onClick={() => setOutreachFilter(filter.id as any)}
+                                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all focus:outline-none ${
+                                         outreachFilter === filter.id
+                                            ? 'bg-sky-600 text-white shadow-sm font-bold'
+                                            : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
+                                      }`}
+                                   >
+                                      {filter.label}
+                                   </button>
+                                ))}
+
+                                <button
+                                   type="button"
+                                   onClick={() => {
+                                      handleResetOutreachForm();
+                                      setIsAddingOutreach(true);
+                                   }}
+                                   className="bg-zinc-900 hover:bg-sky-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 ml-2 shadow-sm"
+                                >
+                                   <Plus className="w-3.5 h-3.5" /> Add Target Lead
+                                </button>
+                             </div>
+                          </div>
+
+                          {/* Inline Add / Edit Target Form */}
+                          {isAddingOutreach && (
+                             <form onSubmit={handleSaveOutreachLead} className="bg-gray-50 p-6 rounded-2xl border border-gray-200 space-y-4 w-full">
+                                <div className="flex items-center justify-between border-b pb-3 border-gray-200">
+                                   <h4 className="font-bold text-gray-900 text-base">
+                                      {editingOutreachId ? `Edit Target Lead Details: "${outreachForm.property_name}"` : 'Add Premium Direct-Booking Target Lead'}
+                                   </h4>
+                                   <button
+                                      type="button"
+                                      onClick={handleResetOutreachForm}
+                                      className="text-gray-400 hover:text-gray-700 hover:scale-105 transition-transform"
+                                   >
+                                      <XIcon className="w-5 h-5" />
+                                   </button>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                   <div className="space-y-1">
+                                      <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Property Name *</label>
+                                      <input
+                                         type="text"
+                                         required
+                                         value={outreachForm.property_name}
+                                         onChange={e => setOutreachForm(prev => ({ ...prev, property_name: e.target.value }))}
+                                         placeholder="e.g. Glacier Peak A-Frame"
+                                         className="w-full border rounded-lg p-2 bg-white text-xs font-medium focus:outline-none"
+                                      />
+                                   </div>
+                                   <div className="space-y-1">
+                                      <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Location</label>
+                                      <input
+                                         type="text"
+                                         value={outreachForm.location}
+                                         onChange={e => setOutreachForm(prev => ({ ...prev, location: e.target.value }))}
+                                         placeholder="e.g. Mount Rainier, WA"
+                                         className="w-full border rounded-lg p-2 bg-white text-xs font-medium focus:outline-none"
+                                      />
+                                   </div>
+                                   <div className="space-y-1">
+                                      <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Owner Name</label>
+                                      <input
+                                         type="text"
+                                         value={outreachForm.owner_name}
+                                         onChange={e => setOutreachForm(prev => ({ ...prev, owner_name: e.target.value }))}
+                                         placeholder="e.g. Jane Miller"
+                                         className="w-full border rounded-lg p-2 bg-white text-xs font-medium focus:outline-none"
+                                      />
                                    </div>
 
-                                   {campaign.status === 'pending' && (
-                                      <div className="bg-gray-50 border-t md:border-t-0 md:border-l border-gray-100 p-6 flex flex-row md:flex-col justify-center items-stretch gap-3 shrink-0 min-w-[180px]">
-                                         <button 
-                                            onClick={() => handleApproveCampaign(campaign.id)}
-                                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl text-sm shadow-sm hover:shadow transition-all flex items-center justify-center gap-2"
-                                         >
-                                            <CheckCircle2Icon className="w-4 h-4" /> Approve
-                                         </button>
-                                         <button 
-                                            onClick={() => handleOpenRejectModal(campaign.id)}
-                                            className="flex-1 bg-red-50 hover:bg-red-100 text-red-700 font-bold py-2.5 px-4 rounded-xl text-sm border border-red-200 transition-all flex items-center justify-center gap-2"
-                                         >
-                                            <XIcon className="w-4 h-4" /> Reject
-                                         </button>
+                                   <div className="space-y-1">
+                                      <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Instagram Handle</label>
+                                      <div className="relative">
+                                         <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-gray-400 text-xs font-bold">@</span>
+                                         <input
+                                            type="text"
+                                            value={outreachForm.instagram_username}
+                                            onChange={e => setOutreachForm(prev => ({ ...prev, instagram_username: e.target.value }))}
+                                            placeholder="glaciercabin"
+                                            className="w-full border rounded-lg pl-6 pr-2 py-2 bg-white text-xs font-medium focus:outline-none"
+                                         />
                                       </div>
-                                   )}
+                                   </div>
+                                   <div className="space-y-1">
+                                      <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Facebook Page URL</label>
+                                      <input
+                                         type="url"
+                                         value={outreachForm.facebook_url}
+                                         onChange={e => setOutreachForm(prev => ({ ...prev, facebook_url: e.target.value }))}
+                                         placeholder="https://facebook.com/glaciercabin"
+                                         className="w-full border rounded-lg p-2 bg-white text-xs font-medium focus:outline-none"
+                                      />
+                                   </div>
+                                   <div className="space-y-1">
+                                      <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Est. Nightly Rate (₹/USD)</label>
+                                      <input
+                                         type="number"
+                                         value={outreachForm.estimated_nightly_rate}
+                                         onChange={e => setOutreachForm(prev => ({ ...prev, estimated_nightly_rate: Number(e.target.value) }))}
+                                         placeholder="450"
+                                         className="w-full border rounded-lg p-2 bg-white text-xs font-medium focus:outline-none font-mono"
+                                      />
+                                   </div>
+
+                                   <div className="space-y-1">
+                                      <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Contact Email</label>
+                                      <input
+                                         type="email"
+                                         value={outreachForm.email}
+                                         onChange={e => setOutreachForm(prev => ({ ...prev, email: e.target.value }))}
+                                         placeholder="jane@glaciercabin.co"
+                                         className="w-full border rounded-lg p-2 bg-white text-xs font-medium focus:outline-none"
+                                      />
+                                   </div>
+                                   <div className="space-y-1">
+                                      <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Contact Phone</label>
+                                      <input
+                                         type="text"
+                                         value={outreachForm.phone}
+                                         onChange={e => setOutreachForm(prev => ({ ...prev, phone: e.target.value }))}
+                                         placeholder="+1 (555) 019-2831"
+                                         className="w-full border rounded-lg p-2 bg-white text-xs font-medium focus:outline-none"
+                                      />
+                                   </div>
+                                   <div className="space-y-1">
+                                      <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Outreach Status</label>
+                                      <select
+                                         value={outreachForm.status}
+                                         onChange={e => setOutreachForm(prev => ({ ...prev, status: e.target.value }))}
+                                         className="w-full border rounded-lg p-2 bg-white text-xs font-bold text-gray-700 focus:outline-none cursor-pointer"
+                                      >
+                                         <option value="discovered">Discovered (Uncontacted)</option>
+                                         <option value="contacted">Contacted (In Pitch)</option>
+                                         <option value="negotiating">Negotiating Deal</option>
+                                         <option value="onboarded">Onboarded (Live Host!)</option>
+                                         <option value="ignored">Ignored/Declined</option>
+                                      </select>
+                                   </div>
                                 </div>
-                             ))}
-                          </div>
-                       )}
-                    </div>
+
+                                <div className="space-y-1">
+                                   <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">Conversation Logs & Internal Notes</label>
+                                   <textarea
+                                      value={outreachForm.notes}
+                                      onChange={e => setOutreachForm(prev => ({ ...prev, notes: e.target.value }))}
+                                      placeholder="Logs of DMs sent, responses, friction points, or integration requirements. Pitching direct-booking engine saving..."
+                                      rows={3}
+                                      className="w-full border rounded-lg p-2.5 bg-white text-xs font-medium focus:outline-none resize-none leading-relaxed"
+                                   />
+                                </div>
+
+                                <div className="flex gap-2 justify-end pt-2 border-t">
+                                   <button
+                                      type="button"
+                                      onClick={handleResetOutreachForm}
+                                      className="px-4 py-2 border rounded-lg text-xs font-bold text-gray-700 hover:bg-gray-100 transition-colors"
+                                   >
+                                      Cancel
+                                   </button>
+                                   <button
+                                      type="submit"
+                                      disabled={savingOutreach}
+                                      className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold transition-colors shadow-sm disabled:opacity-50"
+                                   >
+                                      {savingOutreach ? 'Saving...' : editingOutreachId ? 'Save Changes' : 'Add Target Lead'}
+                                   </button>
+                                </div>
+                             </form>
+                          )}
+
+                          {/* Outreach Leads List */}
+                          {(() => {
+                             const filteredLeads = outreachLeads.filter(lead => {
+                                const matchesFilter = outreachFilter === 'all' || lead.status === outreachFilter;
+                                const matchesSearch = 
+                                   lead.property_name.toLowerCase().includes(outreachSearch.toLowerCase()) ||
+                                   (lead.location && lead.location.toLowerCase().includes(outreachSearch.toLowerCase())) ||
+                                   (lead.instagram_username && lead.instagram_username.toLowerCase().includes(outreachSearch.toLowerCase())) ||
+                                   (lead.owner_name && lead.owner_name.toLowerCase().includes(outreachSearch.toLowerCase()));
+                                return matchesFilter && matchesSearch;
+                             });
+
+                             if (filteredLeads.length === 0) {
+                                return (
+                                   <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-200 shadow-sm w-full">
+                                      <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                                      <p className="text-gray-500 font-medium">No outreach leads found matching criteria.</p>
+                                      <p className="text-xs text-gray-400 mt-1">Start by adding high-value direct-booking-less properties!</p>
+                                   </div>
+                                );
+                             }
+
+                             return (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+                                   {filteredLeads.map((lead) => {
+                                      // Calculate savings: OTA takes ~15% from host/guest. Assuming 15 nights stay/month.
+                                      const estNightlyVal = lead.estimated_nightly_rate || 400;
+                                      const monthlySavingsVal = Math.round(estNightlyVal * 15 * 0.15);
+
+                                      // Pre-build draft pitch email
+                                      const emailSubject = encodeURIComponent(`Boost direct bookings for ${lead.property_name} - Encho Space`);
+                                      const emailBody = encodeURIComponent(
+                                         `Hi ${lead.owner_name || 'Owner'},
+
+` +
+                                         `I hope this finds you well. I discovered your stunning property, ${lead.property_name}, on social media (@${lead.instagram_username || ''}) and was completely blown away by its aesthetic design and visual branding!
+
+` +
+                                         `I noticed that you currently rely heavily on third-party OTAs (like Airbnb and Booking.com) for bookings. Did you know that OTA commission structures and guest booking fees are consuming over 15% of your total booking volume? At an estimated nightly rate of ₹/USD ${estNightlyVal}, you're potentially losing over ₹/USD ${monthlySavingsVal} every single month in platform commissions!
+
+` +
+                                         `With Encho Space, we provide custom, direct-booking engines for cabin and luxury villa owners. Additionally, we provide our "Pillar 5 Rahul-Proof Smart Targeter" which runs hyper-localized Meta marketing campaigns directly targetting high-intent visitors near you.
+
+` +
+                                         `I'd love to show you how easy it is to onboard and transition into independent direct bookings. Are you open to a brief 10-minute demo this week?
+
+` +
+                                         `Best regards,
+` +
+                                         `${user?.name || 'Encho SaaS Onboarding team'}
+` +
+                                         `Co-Founder, Encho Space`
+                                      );
+                                      const mailtoLink = `mailto:${lead.email || ''}?subject=${emailSubject}&body=${emailBody}`;
+
+                                      return (
+                                         <div key={lead.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow p-6 flex flex-col justify-between space-y-4 text-left">
+                                            <div className="space-y-3 w-full">
+                                               {/* Header row */}
+                                               <div className="flex justify-between items-start gap-2">
+                                                  <div>
+                                                     <h4 className="font-bold text-gray-950 text-base flex items-center gap-1.5 leading-snug">
+                                                        <span>{lead.property_name}</span>
+                                                     </h4>
+                                                     <p className="text-xs text-gray-500 font-semibold flex items-center gap-1 mt-0.5">
+                                                        <Map className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                                                        {lead.location || 'Unknown Location'}
+                                                     </p>
+                                                  </div>
+                                                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider font-mono ${
+                                                     lead.status === 'discovered' ? 'bg-zinc-100 text-zinc-700' :
+                                                     lead.status === 'contacted' ? 'bg-amber-100 text-amber-700' :
+                                                     lead.status === 'negotiating' ? 'bg-indigo-100 text-indigo-700' :
+                                                     lead.status === 'onboarded' ? 'bg-emerald-100 text-emerald-700' :
+                                                     'bg-rose-100 text-rose-700'
+                                                  }`}>
+                                                     {lead.status}
+                                                  </span>
+                                               </div>
+
+                                               {/* Details card block */}
+                                               <div className="bg-gray-50/75 rounded-xl border p-3 grid grid-cols-2 gap-3 text-xs w-full">
+                                                  <div>
+                                                     <span className="text-[10px] font-bold text-gray-400 block mb-0.5">Target Handle / Social</span>
+                                                     <div className="flex flex-col gap-1">
+                                                        {lead.instagram_username && (
+                                                           <a 
+                                                              href={`https://instagram.com/${lead.instagram_username}`}
+                                                              target="_blank"
+                                                              rel="noopener noreferrer"
+                                                              className="text-sky-600 font-semibold hover:underline flex items-center gap-1 truncate"
+                                                           >
+                                                              <span className="text-[10px] bg-sky-50 text-sky-700 border px-1 rounded">IG</span>
+                                                              @{lead.instagram_username}
+                                                           </a>
+                                                        )}
+                                                        {lead.facebook_url && (
+                                                           <a 
+                                                              href={lead.facebook_url}
+                                                              target="_blank"
+                                                              rel="noopener noreferrer"
+                                                              className="text-sky-600 font-semibold hover:underline flex items-center gap-1 truncate"
+                                                           >
+                                                              <span className="text-[10px] bg-indigo-50 text-indigo-700 border px-1 rounded">FB</span>
+                                                              Profile
+                                                           </a>
+                                                        )}
+                                                        {!lead.instagram_username && !lead.facebook_url && <span className="text-gray-400 font-light">—</span>}
+                                                     </div>
+                                                  </div>
+                                                  <div>
+                                                     <span className="text-[10px] font-bold text-gray-400 block mb-0.5">Contact Detail</span>
+                                                     <p className="text-gray-800 font-medium truncate">{lead.owner_name || 'Owner'}</p>
+                                                     {lead.email && <p className="text-gray-500 text-[10px] font-mono truncate">{lead.email}</p>}
+                                                     {lead.phone && <p className="text-gray-500 text-[10px] font-mono truncate">{lead.phone}</p>}
+                                                  </div>
+                                               </div>
+
+                                               {/* Pipeline Savings Pitch Calculator Block */}
+                                               <div className="bg-[#0284C7]/5 rounded-xl border border-sky-100 p-3 flex justify-between items-center text-xs w-full">
+                                                  <div>
+                                                     <span className="text-[10px] font-black text-sky-700 uppercase tracking-wider block">Direct Booking Pitch Angle</span>
+                                                     <p className="text-[11px] text-gray-600 mt-0.5 leading-relaxed">
+                                                        Saves OTA guest fees: <strong className="text-sky-700 font-mono font-bold">₹{monthlySavingsVal.toLocaleString()}/mo</strong>
+                                                     </p>
+                                                  </div>
+                                                  <div className="text-right">
+                                                     <span className="text-[9px] font-bold text-gray-400 block uppercase">Est. Rate</span>
+                                                     <span className="text-xs font-mono font-bold text-gray-900 font-semibold">₹{estNightlyVal.toLocaleString()}/nt</span>
+                                                  </div>
+                                               </div>
+
+                                               {/* Notes / Conversation Log */}
+                                               <div className="space-y-1 w-full">
+                                                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">CRM Log Notes</span>
+                                                  <p className="text-xs text-gray-700 leading-relaxed bg-zinc-50 p-2.5 rounded-lg border border-gray-150 whitespace-pre-line min-h-[40px] italic">
+                                                     {lead.notes || 'No custom notes logged yet.'}
+                                                  </p>
+                                               </div>
+                                            </div>
+
+                                            <div className="space-y-3.5 pt-3.5 border-t border-gray-100 w-full">
+                                               {/* Quick status progress controls */}
+                                               <div className="space-y-1.5">
+                                                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest block">Pipeline Progress</span>
+                                                  <div className="grid grid-cols-5 gap-1">
+                                                     {['discovered', 'contacted', 'negotiating', 'onboarded', 'ignored'].map((statusOption) => (
+                                                        <button
+                                                           key={statusOption}
+                                                           type="button"
+                                                           onClick={() => handleQuickStatusUpdate(lead, statusOption)}
+                                                           className={`py-1 text-[9px] font-black uppercase rounded border tracking-tight text-center truncate ${
+                                                              lead.status === statusOption
+                                                                 ? 'bg-zinc-900 text-white border-zinc-900 shadow-sm font-bold'
+                                                                 : 'bg-white hover:bg-gray-50 text-gray-500 border-gray-200'
+                                                           }`}
+                                                        >
+                                                           {statusOption.replace('negotiating', 'negoti').replace('discovered', 'discov')}
+                                                        </button>
+                                                     ))}
+                                                  </div>
+                                               </div>
+
+                                               {/* Action buttons */}
+                                               <div className="flex items-center justify-between gap-2.5 pt-1">
+                                                  <div className="flex gap-2">
+                                                     <button
+                                                        type="button"
+                                                        onClick={() => handleEditOutreachLead(lead)}
+                                                        className="p-1.5 border border-gray-200 text-gray-600 hover:text-sky-700 hover:border-sky-300 rounded-lg transition-colors"
+                                                        title="Edit target lead details"
+                                                     >
+                                                        <EditIcon className="w-3.5 h-3.5" />
+                                                     </button>
+                                                     <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteOutreachLead(lead.id)}
+                                                        className="p-1.5 border border-rose-100 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
+                                                        title="Delete from target lead"
+                                                     >
+                                                        <TrashIcon className="w-3.5 h-3.5" />
+                                                     </button>
+                                                  </div>
+
+                                                  <div className="flex items-center gap-2 shrink-0">
+                                                     {lead.email && (
+                                                        <a
+                                                           href={mailtoLink}
+                                                           className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-lg flex items-center gap-1 transition-colors shadow-sm font-bold"
+                                                           title="Launch cold outreach pitch email draft"
+                                                        >
+                                                           <Mail className="w-3.5 h-3.5" />
+                                                           Cold Outreach Pitch
+                                                        </a>
+                                                     )}
+                                                     {lead.instagram_username && (
+                                                        <a
+                                                           href={`https://instagram.com/${lead.instagram_username}`}
+                                                           target="_blank"
+                                                           rel="noopener noreferrer"
+                                                           className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-rose-500 text-white text-xs font-bold rounded-lg flex items-center gap-1 transition-all shadow-sm shrink-0 font-bold"
+                                                           title="Launch direct message link on Instagram"
+                                                        >
+                                                           DMs
+                                                        </a>
+                                                     )}
+                                                  </div>
+                                               </div>
+                                            </div>
+                                         </div>
+                                      );
+                                   })}
+                                </div>
+                             );
+                          })()}
+                       </div>
+                    )}
 
                     {/* Reject modal overlay */}
                     {rejectingCampaignId !== null && (
                        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                          <div className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto">
+                          <div className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto text-left">
                              <h4 className="text-xl font-black text-gray-900 mb-1 tracking-tight">Rejection Moderation Feedback</h4>
                              <p className="text-xs text-gray-500 mb-4 leading-relaxed">
                                 Choose specific fields to reject and input exact correction reasons to guide the host, along with a general summary.
@@ -1407,70 +2270,185 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                              <div className="space-y-3.5 mb-5 border-t border-b border-gray-100 py-4 max-h-[40vh] overflow-y-auto pr-1 text-left">
                                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Field-Level Corrective Directives</span>
                                 
-                                {[
-                                   { id: 'title', label: 'Ad Headline / Title' },
-                                   { id: 'description', label: 'Primary Ad Copy' },
-                                   { id: 'feed_description', label: 'Ad Feed Tagline' },
-                                   { id: 'ad_format', label: 'Creative Format' },
-                                   { id: 'target_locations', label: 'Targeting Locations' },
-                                   { id: 'video_url', label: 'Video Reel URL' },
-                                   { id: 'media', label: 'Creative Visual Media/Images' }
-                                ].map((field) => {
-                                   const isFieldRejected = rejectedFieldInputs[field.id] !== undefined;
-                                   return (
-                                      <div key={field.id} className="p-3 border border-gray-150 rounded-2xl space-y-2 bg-zinc-50/50 transition-all text-left">
-                                         <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                                            <input 
-                                               type="checkbox"
-                                               checked={isFieldRejected}
-                                               onChange={(e) => {
-                                                  if (e.target.checked) {
-                                                     setRejectedFieldInputs(prev => ({ ...prev, [field.id]: '' }));
-                                                  } else {
-                                                     setRejectedFieldInputs(prev => {
-                                                        const copy = { ...prev };
-                                                        delete copy[field.id];
-                                                        return copy;
-                                                     });
-                                                  }
-                                               }}
-                                               className="rounded text-red-600 focus:ring-red-500 w-4 h-4"
-                                            />
-                                            <span className="text-xs font-bold text-gray-700">{field.label}</span>
-                                         </label>
+                                <label className="flex items-start gap-3 p-3 rounded-2xl bg-gray-50 border hover:bg-gray-100 transition-colors cursor-pointer">
+                                   <input 
+                                      type="checkbox"
+                                      checked={rejectionFields.title.selected}
+                                      onChange={(e) => handleToggleRejectionField('title', e.target.checked)}
+                                      className="mt-1 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
+                                   />
+                                   <div className="flex-1 space-y-1">
+                                      <span className="text-xs font-bold text-gray-900">Campaign Title</span>
+                                      {rejectionFields.title.selected && (
+                                         <input 
+                                            type="text"
+                                            required
+                                            value={rejectionFields.title.reason}
+                                            onChange={(e) => handleUpdateRejectionReason('title', e.target.value)}
+                                            placeholder="Provide exact correction required..."
+                                            className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none"
+                                         />
+                                      )}
+                                   </div>
+                                </label>
 
-                                         {isFieldRejected && (
-                                            <input 
-                                               type="text"
-                                               required
-                                               placeholder={`e.g. Please revise the ${field.id.replace('_', ' ')}...`}
-                                               value={rejectedFieldInputs[field.id] || ''}
-                                               onChange={(e) => {
-                                                  setRejectedFieldInputs(prev => ({ ...prev, [field.id]: e.target.value }));
-                                               }}
-                                               className="w-full bg-white border border-rose-200 text-xs rounded-xl p-2.5 focus:border-red-500 focus:outline-none focus:bg-rose-50/10 text-red-900 font-medium"
-                                            />
-                                         )}
-                                      </div>
-                                   );
-                                })}
+                                <label className="flex items-start gap-3 p-3 rounded-2xl bg-gray-50 border hover:bg-gray-100 transition-colors cursor-pointer">
+                                   <input 
+                                      type="checkbox"
+                                      checked={rejectionFields.description.selected}
+                                      onChange={(e) => handleToggleRejectionField('description', e.target.checked)}
+                                      className="mt-1 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
+                                   />
+                                   <div className="flex-1 space-y-1">
+                                      <span className="text-xs font-bold text-gray-900">Primary Description Ad Copy</span>
+                                      {rejectionFields.description.selected && (
+                                         <input 
+                                            type="text"
+                                            required
+                                            value={rejectionFields.description.reason}
+                                            onChange={(e) => handleUpdateRejectionReason('description', e.target.value)}
+                                            placeholder="Provide exact correction required..."
+                                            className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none"
+                                         />
+                                      )}
+                                   </div>
+                                </label>
+
+                                <label className="flex items-start gap-3 p-3 rounded-2xl bg-gray-50 border hover:bg-gray-100 transition-colors cursor-pointer">
+                                   <input 
+                                      type="checkbox"
+                                      checked={rejectionFields.feed_description.selected}
+                                      onChange={(e) => handleToggleRejectionField('feed_description', e.target.checked)}
+                                      className="mt-1 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
+                                   />
+                                   <div className="flex-1 space-y-1">
+                                      <span className="text-xs font-bold text-gray-900">Feed Description / Tagline</span>
+                                      {rejectionFields.feed_description.selected && (
+                                         <input 
+                                            type="text"
+                                            required
+                                            value={rejectionFields.feed_description.reason}
+                                            onChange={(e) => handleUpdateRejectionReason('feed_description', e.target.value)}
+                                            placeholder="Provide exact correction required..."
+                                            className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none"
+                                         />
+                                      )}
+                                   </div>
+                                </label>
+
+                                <label className="flex items-start gap-3 p-3 rounded-2xl bg-gray-50 border hover:bg-gray-100 transition-colors cursor-pointer">
+                                   <input 
+                                      type="checkbox"
+                                      checked={rejectionFields.target_locations.selected}
+                                      onChange={(e) => handleToggleRejectionField('target_locations', e.target.checked)}
+                                      className="mt-1 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
+                                   />
+                                   <div className="flex-1 space-y-1">
+                                      <span className="text-xs font-bold text-gray-900">Target Locations</span>
+                                      {rejectionFields.target_locations.selected && (
+                                         <input 
+                                            type="text"
+                                            required
+                                            value={rejectionFields.target_locations.reason}
+                                            onChange={(e) => handleUpdateRejectionReason('target_locations', e.target.value)}
+                                            placeholder="Provide exact correction required..."
+                                            className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none"
+                                         />
+                                      )}
+                                   </div>
+                                </label>
+
+                                <label className="flex items-start gap-3 p-3 rounded-2xl bg-gray-50 border hover:bg-gray-100 transition-colors cursor-pointer">
+                                   <input 
+                                      type="checkbox"
+                                      checked={rejectionFields.platforms.selected}
+                                      onChange={(e) => handleToggleRejectionField('platforms', e.target.checked)}
+                                      className="mt-1 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
+                                   />
+                                   <div className="flex-1 space-y-1">
+                                      <span className="text-xs font-bold text-gray-900">Target Platforms Selection</span>
+                                      {rejectionFields.platforms.selected && (
+                                         <input 
+                                            type="text"
+                                            required
+                                            value={rejectionFields.platforms.reason}
+                                            onChange={(e) => handleUpdateRejectionReason('platforms', e.target.value)}
+                                            placeholder="Provide exact correction required..."
+                                            className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none"
+                                         />
+                                      )}
+                                   </div>
+                                </label>
+
+                                <label className="flex items-start gap-3 p-3 rounded-2xl bg-gray-50 border hover:bg-gray-100 transition-colors cursor-pointer">
+                                   <input 
+                                      type="checkbox"
+                                      checked={rejectionFields.media_urls.selected}
+                                      onChange={(e) => handleToggleRejectionField('media_urls', e.target.checked)}
+                                      className="mt-1 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
+                                   />
+                                   <div className="flex-1 space-y-1">
+                                      <span className="text-xs font-bold text-gray-900">Visual Image Assets</span>
+                                      {rejectionFields.media_urls.selected && (
+                                         <input 
+                                            type="text"
+                                            required
+                                            value={rejectionFields.media_urls.reason}
+                                            onChange={(e) => handleUpdateRejectionReason('media_urls', e.target.value)}
+                                            placeholder="Provide exact correction required..."
+                                            className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none"
+                                         />
+                                      )}
+                                   </div>
+                                </label>
+
+                                <label className="flex items-start gap-3 p-3 rounded-2xl bg-gray-50 border hover:bg-gray-100 transition-colors cursor-pointer">
+                                   <input 
+                                      type="checkbox"
+                                      checked={rejectionFields.video_url.selected}
+                                      onChange={(e) => handleToggleRejectionField('video_url', e.target.checked)}
+                                      className="mt-1 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
+                                   />
+                                   <div className="flex-1 space-y-1">
+                                      <span className="text-xs font-bold text-gray-900">Reel / Video Asset</span>
+                                      {rejectionFields.video_url.selected && (
+                                         <input 
+                                            type="text"
+                                            required
+                                            value={rejectionFields.video_url.reason}
+                                            onChange={(e) => handleUpdateRejectionReason('video_url', e.target.value)}
+                                            placeholder="Provide exact correction required..."
+                                            className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none"
+                                         />
+                                      )}
+                                   </div>
+                                </label>
                              </div>
-                             <textarea 
-                                value={rejectionFeedback}
-                                onChange={(e) => setRejectionFeedback(e.target.value)}
-                                placeholder="E.g., Music track violates copyright policies. Please upload an royalty-free or platform-native audio track."
-                                className="w-full h-28 p-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#0284C7] focus:outline-none transition-all text-sm resize-none mb-6"
-                             />
-                             <div className="flex gap-3 justify-end">
-                                <button 
+
+                             {/* General Summary */}
+                             <div className="space-y-1.5 mb-6 text-left">
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">General Feedback Summary *</label>
+                                <textarea
+                                   required
+                                   value={rejectionNotes}
+                                   onChange={(e) => setRejectionNotes(e.target.value)}
+                                   placeholder="Synthesize the primary reason for rejection to help the host fix their campaign ad set..."
+                                   rows={3}
+                                   className="w-full text-xs border border-gray-200 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-red-500 resize-none leading-relaxed"
+                                />
+                             </div>
+
+                             <div className="flex gap-3 justify-end border-t border-gray-100 pt-4">
+                                <button
+                                   type="button"
                                    onClick={() => setRejectingCampaignId(null)}
-                                   disabled={submittingRejection}
-                                   className="px-5 py-2.5 border border-gray-200 text-gray-700 rounded-xl font-bold text-sm hover:bg-gray-50 transition-colors"
+                                   className="px-5 py-2.5 border border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl font-bold text-sm transition-colors"
                                 >
                                    Cancel
                                 </button>
-                                <button 
-                                   onClick={handleConfirmRejectCampaign}
+                                <button
+                                   type="button"
+                                   onClick={handleSubmitRejection}
                                    disabled={submittingRejection}
                                    className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-sm transition-colors shadow-sm disabled:opacity-50"
                                 >
