@@ -129,7 +129,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
     description: formData.description || 'Description will appear here...',
     price: parseFloat(formData.price) || 0,
     currency: 'INR',
-    city: formData.city || 'City',
+    
     address: formData.address || 'Address',
     lat: formData.lat || 52.52,
     lng: formData.lng || 13.40,

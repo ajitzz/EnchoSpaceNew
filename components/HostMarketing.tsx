@@ -6,7 +6,7 @@ import {
   Trash2, Send, Check, ShieldCheck, HelpCircle, Loader2, CreditCard, ExternalLink,
   Heart, MessageSquare, Bookmark, ChevronLeft, ChevronRight, Volume2, Share2, MoreHorizontal,
   Library, Layers, PenTool, Sliders, MapPin, ArrowLeft, ArrowRight, Upload,
-  Gauge, Zap, Clock
+  Gauge, Zap, Clock, BatteryCharging, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from './ToastContext';
@@ -25,6 +25,11 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showPayModal, setShowPayModal] = useState<MarketingCampaign | null>(null);
+  const [showRefuelModal, setShowRefuelModal] = useState(false);
+  const [refuelAmount, setRefuelAmount] = useState(100);
+  const [isRefueling, setIsRefueling] = useState(false);
+  const [wallet, setWallet] = useState<any>(null);
+  const [walletTransactions, setWalletTransactions] = useState<any[]>([]);
   const [selectedCampaignForAnalytics, setSelectedCampaignForAnalytics] = useState<MarketingCampaign | null>(null);
 
   // Form states for creating campaign
@@ -118,6 +123,67 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
     { id: 'instagram_stories', label: 'Instagram Stories & Reels', icon: 'IGR' }
   ];
 
+  const handleRefuel = async (gateway: 'stripe' | 'razorpay') => {
+    try {
+      const token = localStorage.getItem('token');
+      const idempotencyKey = `refuel_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const res = await fetch('/api/marketing/wallet/refuel', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-idempotency-key': idempotencyKey
+        },
+        body: JSON.stringify({ amount: refuelAmount, gateway })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      if (gateway === 'stripe' && data.url) {
+        window.location.href = data.url;
+      } else if (gateway === 'razorpay' && data.order_id) {
+        const options = {
+          key: data.keyId,
+          amount: Math.round(refuelAmount * 100),
+          currency: 'INR',
+          name: 'Encho Marketing',
+          description: 'Wallet Refuel',
+          order_id: data.order_id,
+          handler: function (response: any) {
+            addToast('Payment successful! Processing...', 'success');
+            setTimeout(fetchWallet, 2000);
+            setShowRefuelModal(false);
+          },
+          theme: { color: '#09090b' }
+        };
+        const rzp = new (window as any).Razorpay(options);
+        rzp.open();
+      } else if (data.gateway === 'sandbox') {
+         addToast(data.message, 'success');
+         fetchWallet();
+         setShowRefuelModal(false);
+      }
+    } catch (err: any) {
+      addToast(err.message || 'Failed to initialize payment', 'error');
+    }
+  };
+
+  const fetchWallet = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/marketing/wallet', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setWallet(data.wallet);
+        setWalletTransactions(data.transactions);
+      }
+    } catch (err) {
+      console.error('Failed to fetch wallet:', err);
+    }
+  };
+
   const fetchCampaigns = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -127,6 +193,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       if (res.ok) {
         const data = await res.json();
         setCampaigns(data);
+        localStorage.setItem('cached_campaigns', JSON.stringify(data));
         if (data.length > 0 && !selectedCampaignForAnalytics) {
           // Find first active campaign or default to first
           const active = data.find((c: any) => c.status === 'active') || data[0];
@@ -135,6 +202,19 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       }
     } catch (error) {
       console.error('Failed to fetch campaigns:', error);
+      const cached = localStorage.getItem('cached_campaigns');
+      if (cached) {
+        try {
+          const data = JSON.parse(cached);
+          setCampaigns(data);
+          if (data.length > 0 && !selectedCampaignForAnalytics) {
+            const active = data.find((c: any) => c.status === 'active') || data[0];
+            setSelectedCampaignForAnalytics(active);
+          }
+        } catch (e) {
+          console.error('Error parsing cached campaigns:', e);
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -170,6 +250,17 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
   useEffect(() => {
     fetchCampaigns();
+    fetchWallet();
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('refuel_success')) {
+      addToast('Wallet Refuel successful!', 'success');
+      // Remove query param to clean URL without reloading
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (params.get('refuel_cancel')) {
+      addToast('Wallet Refuel cancelled.', 'error');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
 
     // Establish Socket.io connection for 10/10 real-time campaign status synchronizations
     const socket = io();
@@ -412,10 +503,10 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         listing_id: listingId,
         title: prev.title || `Experience Luxury at ${listing.title}`,
         description: prev.description || listing.description || `Escape to a paradise of serenity. Book your exclusive getaway at ${listing.title} today!`,
-        feed_description: prev.feed_description || `🔥 Special Booking Offer on ${listing.title}! Nestled in beautiful ${listing.city || 'scenic landscapes'}, this private luxury stay has everything you need for a restorative stay. Book now!`,
+        feed_description: prev.feed_description || `🔥 Special Booking Offer on ${listing.title}! Nestled in beautiful ${listing.address || 'scenic landscapes'}, this private luxury stay has everything you need for a restorative stay. Book now!`,
         video_url: prev.video_url || listing.video_url || '',
         media_urls: existingMedia.length > 0 ? existingMedia : prev.media_urls,
-        target_locations: prev.target_locations || listing.city || 'Mumbai, Delhi, Bangalore'
+        target_locations: prev.target_locations || listing.address || 'Mumbai, Delhi, Bangalore'
       }));
 
       // Trigger automatic AI targeting recommendations
@@ -680,7 +771,14 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         setUpiId('');
         fetchCampaigns();
       } else {
-        addToast('Payment Error', 'Failed to initialize subscription routing.', 'error');
+        const errorData = await res.json();
+        if (errorData.gatekeeper_score) {
+          addToast('Gatekeeper Auto-Reject', `Score: ${errorData.gatekeeper_score}/10. ${errorData.gatekeeper_feedback}`, 'error');
+          setShowPayModal(null);
+          fetchCampaigns(); // To show it as rejected
+        } else {
+          addToast('Payment Error', errorData.error || 'Failed to initialize subscription routing.', 'error');
+        }
       }
     } catch (err) {
       console.error(err);
@@ -768,6 +866,49 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         </div>
         <div className="text-xs font-mono font-bold text-blue-600 bg-blue-50/50 border border-blue-100 px-3 py-1.5 rounded-xl uppercase">
           Status: Protected
+        </div>
+      </div>
+
+      {/* FUEL TANK UI */}
+      <div className="mb-10 bg-gray-900 text-white rounded-[2rem] p-8 shadow-2xl relative overflow-hidden flex flex-col md:flex-row gap-8 items-center justify-between">
+        {/* Background Accents */}
+        <div className="absolute -top-32 -right-32 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute -bottom-32 -left-32 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div className="flex items-center gap-6 z-10 w-full md:w-auto">
+           {/* Circular Gauge */}
+           <div className="relative w-28 h-28 flex items-center justify-center">
+              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="8" />
+                <circle cx="50" cy="50" r="45" fill="none" stroke={wallet?.balance > 500 ? "#10b981" : wallet?.balance > 0 ? "#f59e0b" : "#ef4444"} strokeWidth="8" 
+                  strokeDasharray="283" 
+                  strokeDashoffset={283 - (283 * Math.min(100, ((wallet?.balance || 0) / 2500) * 100)) / 100}
+                  className="transition-all duration-1000 ease-out"
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <BatteryCharging className="w-6 h-6 text-emerald-400 mb-1" />
+              </div>
+           </div>
+           <div>
+              <div className="text-xs font-mono text-emerald-400 mb-1 tracking-widest uppercase">Fuel Tank</div>
+              <h2 className="text-4xl font-black tracking-tight">{formatPrice(wallet?.balance || 0, 'USD')}</h2>
+              <p className="text-gray-400 text-sm mt-1">Available Ad Spend Budget</p>
+           </div>
+        </div>
+
+        <div className="z-10 w-full md:w-auto flex flex-col gap-3">
+          <button 
+            onClick={() => setShowRefuelModal(true)}
+            className="w-full md:w-auto px-8 py-4 bg-white text-black hover:bg-gray-100 rounded-2xl font-bold transition-transform active:scale-95 shadow-xl flex items-center justify-center gap-2"
+          >
+            <Zap className="w-5 h-5 text-yellow-500" />
+            Refuel Tank
+          </button>
+          <div className="flex items-center gap-2 text-xs text-gray-500 font-mono">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            Geo-Router Active (Stripe / Razorpay)
+          </div>
         </div>
       </div>
 
@@ -1600,6 +1741,16 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                         <div className="font-bold text-zinc-900 text-xs flex items-center gap-1.5">
                                           <span>{lead.name}</span>
                                           <span className={`w-2 h-2 rounded-full ${lead.status === 'New Lead' ? 'bg-blue-500 animate-pulse' : 'bg-zinc-400'}`} />
+                                          {lead.intent_score && (
+                                            <span className={`text-[8px] px-1.5 py-0.5 rounded-sm font-black border uppercase ${
+                                              lead.intent_score.includes('HOT') ? 'bg-orange-50 text-orange-700 border-orange-200 shadow-orange-100/50' :
+                                              lead.intent_score.includes('WARM') ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                                              lead.intent_score.includes('CONVERTED') ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                              'bg-blue-50 text-blue-700 border-blue-200'
+                                            }`}>
+                                              {lead.intent_score}
+                                            </span>
+                                          )}
                                         </div>
                                         <div className="text-[10px] text-zinc-400 font-light font-mono">
                                           {lead.phone} • {lead.email}
@@ -2043,7 +2194,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                           >
                             <option value="">-- Choose Listing --</option>
                             {listings.map(listing => (
-                              <option key={listing.id} value={listing.id}>{listing.title} ({listing.city})</option>
+                              <option key={listing.id} value={listing.id}>{listing.title} ({listing.address || 'Unknown'})</option>
                             ))}
                           </select>
                           <p className="text-[10px] text-zinc-400 font-light pl-1">
@@ -2526,7 +2677,11 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                     <div className="flex justify-between items-start">
                                       <div>
                                         <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-wider block">Recommended Feeder Markets</span>
-                                        <span className="text-xs font-black text-blue-700">{aiTargetingRecs.recommended_locations.join(', ')}</span>
+                                        <span className="text-xs font-black text-blue-700">
+                                          {Array.isArray(aiTargetingRecs.recommended_locations)
+                                            ? aiTargetingRecs.recommended_locations.join(', ')
+                                            : (aiTargetingRecs.recommended_locations || '')}
+                                        </span>
                                       </div>
                                       <div className="text-right">
                                         <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-wider block">Est. Reach Scale</span>
@@ -2535,17 +2690,22 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                         </span>
                                       </div>
                                     </div>
-
                                     <div className="text-[10px] text-zinc-500 leading-relaxed font-light border-t pt-2 mt-1">
                                       <strong>Feeder Insight:</strong> {aiTargetingRecs.feeder_insights}
                                     </div>
-
+                                    {aiTargetingRecs.meta_interests && (
+                                      <div className="text-[10px] text-zinc-500 leading-relaxed font-light border-t pt-2 mt-2">
+                                        <strong>Mapped Meta Interests:</strong> {aiTargetingRecs.meta_interests}
+                                      </div>
+                                    )}
                                     <button
                                       type="button"
                                       onClick={() => {
                                         setFormData(prev => ({
                                           ...prev,
-                                          target_locations: aiTargetingRecs.recommended_locations.join(', ')
+                                          target_locations: Array.isArray(aiTargetingRecs.recommended_locations)
+                                            ? aiTargetingRecs.recommended_locations.join(', ')
+                                            : (aiTargetingRecs.recommended_locations || '')
                                         }));
                                         addToast('Applied AI Targets', 'Feeder metropolitan target markets successfully applied to campaign setup.', 'success');
                                       }}
@@ -3844,6 +4004,86 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                   )}
                 </button>
               </form>
+            </motion.div>
+          </div>
+        )}
+
+        {showRefuelModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl relative overflow-hidden"
+            >
+              <button
+                onClick={() => setShowRefuelModal(false)}
+                className="absolute top-4 right-4 p-2 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-full transition-colors z-10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="text-center mb-6">
+                <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Zap className="w-8 h-8" />
+                </div>
+                <h3 className="text-2xl font-black text-gray-900 tracking-tight">Refuel Wallet</h3>
+                <p className="text-gray-500 text-sm mt-1">Fund your master Encho advertising wallet.</p>
+              </div>
+
+              <div className="bg-gray-50 rounded-2xl p-5 mb-6 border border-gray-100">
+                 <label className="text-xs font-bold uppercase tracking-wider text-gray-500 block mb-3">Refuel Amount (USD)</label>
+                 <div className="relative">
+                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                     <span className="text-gray-500 font-bold">$</span>
+                   </div>
+                   <input
+                     type="number"
+                     min="10"
+                     value={refuelAmount}
+                     onChange={(e) => setRefuelAmount(Number(e.target.value))}
+                     className="block w-full pl-8 pr-4 py-3 bg-white border border-gray-200 rounded-xl font-mono text-xl font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all outline-none"
+                   />
+                 </div>
+                 
+                 <div className="mt-4 pt-4 border-t border-gray-200">
+                    <div className="flex justify-between items-center text-sm mb-2">
+                       <span className="text-gray-500">Gross Spend</span>
+                       <span className="font-mono font-medium">${refuelAmount.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm mb-2">
+                       <span className="text-gray-500">Optimization Fee (20%)</span>
+                       <span className="font-mono font-medium text-red-500">-${(refuelAmount * 0.20).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm font-bold">
+                       <span className="text-gray-900">Net Wallet Balance</span>
+                       <span className="font-mono text-emerald-600">+${(refuelAmount * 0.80).toFixed(2)}</span>
+                    </div>
+                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-6">
+                  <button
+                    type="button"
+                    onClick={() => handleRefuel('stripe')}
+                    className="flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all border-blue-600 bg-blue-50/40 text-blue-700 ring-2 ring-blue-600/10 font-bold hover:bg-blue-100"
+                  >
+                    <span className="text-sm font-black font-sans">Stripe</span>
+                    <span className="text-[9px] opacity-75 mt-0.5">International</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRefuel('razorpay')}
+                    className="flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all border-indigo-600 bg-indigo-50/40 text-indigo-700 ring-2 ring-indigo-600/10 font-bold hover:bg-indigo-100"
+                  >
+                    <span className="text-sm font-black font-sans">Razorpay</span>
+                    <span className="text-[9px] opacity-75 mt-0.5">India / UPI</span>
+                  </button>
+              </div>
+              
+              <p className="text-center text-[10px] text-gray-400 font-light mt-4">
+                Payments are securely processed and protected against double-spending.
+              </p>
             </motion.div>
           </div>
         )}

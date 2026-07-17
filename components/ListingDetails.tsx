@@ -532,6 +532,13 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
   const [submittingReview, setSubmittingReview] = useState(false);
 
   useEffect(() => {
+     // Gap 15: Retargeting Hook - Firing Server-Side Pixel on page load
+     fetch('/api/marketing/track/view', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify({ listingId: listing.id })
+     }).catch(console.error);
+
      fetch(`/api/listings/${listing.id}/calendar?_t=${Date.now()}`, { cache: 'no-store' })
        .then(res => res.json())
        .then(data => {

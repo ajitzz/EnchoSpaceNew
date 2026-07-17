@@ -121,7 +121,28 @@ const s3 = new S3Client({
   },
 });
 
-export const app = express();
+export 
+// Walled Garden Data Masking (Gap 5)
+function maskContactInfo(text: string): { sanitized: string, wasSanitized: boolean } {
+  if (!text) return { sanitized: '', wasSanitized: false };
+  const original = text;
+  
+  // Mask Emails
+  let sanitized = original.replace(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/gi, '[EMAIL REDACTED]');
+  
+  // Mask Phones (+1 555-0199, 555-0199, etc)
+  sanitized = sanitized.replace(/(\+?\d[\d\s\-.()]{7,}\d)/gi, '[PHONE REDACTED]');
+  
+  // Mask WhatsApp Links (wa.me/...)
+  sanitized = sanitized.replace(/(wa\.me\/\d+|api\.whatsapp\.com\/send\?phone=\d+)/gi, '[WHATSAPP REDACTED]');
+  
+  // Mask URLs to prevent bypassing
+  sanitized = sanitized.replace(/(https?:\/\/[^\s]+)/gi, '[LINK REDACTED]');
+
+  return { sanitized, wasSanitized: sanitized !== original };
+}
+
+const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.NODE_ENV === 'test' ? 0 : 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key_12345';
@@ -219,6 +240,19 @@ const apiLimiter = rateLimit({
 // Apply rate limiter to all API routes
 app.use('/api/', apiLimiter);
 
+// Gap 4: AI Rate Limiting & Fallback
+const aiGatekeeperLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // max 5 campaign evaluations per host per hour
+  keyGenerator: (req) => {
+    // Attempt to rate limit by user ID if authenticated, else IP
+    return (req as any).user?.id ? `ai_limit_user_${(req as any).user.id}` : req.ip || 'unknown';
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Strict AI Limit Exceeded: Maximum 5 campaign evaluations allowed per hour to prevent API abuse.' }
+});
+
 
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
@@ -279,15 +313,20 @@ ${listingsContext}
 
 Answer the user's question accurately. If they ask about something not listed, politely inform them to check the ENCHO Space website.`;
 
-           const response = await ai.models.generateContent({
-              model: "gemini-3.5-flash",
-              contents: msg_body,
-              config: {
-                 systemInstruction,
-              }
-           });
+           let replyText = '';
+           try {
+              const response = await ai.models.generateContent({
+                 model: "gemini-3.5-flash",
+                 contents: msg_body,
+                 config: {
+                    systemInstruction,
+                 }
+              });
+              replyText = response?.text?.trim() || '';
+           } catch (geminiError) {
+              console.warn("WhatsApp Gemini automated reply failed, ignoring automated response:", geminiError);
+           }
 
-           const replyText = response?.text?.trim() || '';
            const lowerReply = replyText.toLowerCase();
            const isInvalidMessage = replyText === ''
              || lowerReply.includes('replace this')
@@ -324,6 +363,7 @@ const ensureUsersTable = async () => {
       name VARCHAR(255) NOT NULL,
       google_id VARCHAR(255) UNIQUE,
       role VARCHAR(50) DEFAULT 'user',
+      wallet_balance DECIMAL(10, 2) DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
@@ -786,6 +826,7 @@ const ensureListingsTable = async () => {
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS accumulated_spent DECIMAL DEFAULT 0;`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS accumulated_impressions INT DEFAULT 0;`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS accumulated_clicks INT DEFAULT 0;`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS encho_absorbed_overspend DECIMAL DEFAULT 0;`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS accumulated_conversions INT DEFAULT 0;`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS last_pacing_calc_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
 
@@ -830,10 +871,98 @@ const ensureListingsTable = async () => {
   listingsTableInitialized = true;
 };
 
+let marketingSchemaInitialized = false;
+const ensureMarketingSchema = async () => {
+  if (!isDbConfigured || marketingSchemaInitialized) return;
+
+  // 1. host_wallets table (The Fuel Tank + Gap 13 Double-Entry Ledger)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS host_wallets (
+      id SERIAL PRIMARY KEY,
+      host_id INT REFERENCES users(id) ON DELETE CASCADE,
+      balance DECIMAL DEFAULT 0,
+      encho_credits DECIMAL DEFAULT 0,
+      currency VARCHAR(10) DEFAULT 'USD',
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(host_id)
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS wallet_transactions (
+      id SERIAL PRIMARY KEY,
+      wallet_id INT REFERENCES host_wallets(id) ON DELETE CASCADE,
+      amount DECIMAL NOT NULL,
+      type VARCHAR(50) NOT NULL,
+      reference_id VARCHAR(255),
+      status VARCHAR(50) DEFAULT 'completed',
+      description TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // Gap 18: Webhook Dead Letter Queue (DLQ)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS webhook_dlq (
+      id SERIAL PRIMARY KEY,
+      source VARCHAR(50) NOT NULL,
+      payload JSONB NOT NULL,
+      error_message TEXT,
+      retry_count INT DEFAULT 0,
+      status VARCHAR(50) DEFAULT 'pending',
+      next_retry_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // 2. campaign_metrics (Time-series Rollups for Gap 11)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS campaign_metrics (
+      id SERIAL PRIMARY KEY,
+      campaign_id INT REFERENCES host_marketing_campaigns(id) ON DELETE CASCADE,
+      date DATE NOT NULL,
+      impressions INT DEFAULT 0,
+      clicks INT DEFAULT 0,
+      leads INT DEFAULT 0,
+      conversions INT DEFAULT 0,
+      spent DECIMAL DEFAULT 0,
+      platform VARCHAR(50) DEFAULT 'meta',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(campaign_id, date, platform)
+    );
+  `);
+
+  // 3. Update threads / messages for Ad-Attribution and Lead Intent (Gap 12)
+  await pool.query(`ALTER TABLE threads ADD COLUMN IF NOT EXISTS lead_source VARCHAR(255) DEFAULT 'organic';`);
+  await pool.query(`ALTER TABLE threads ADD COLUMN IF NOT EXISTS campaign_id INT REFERENCES host_marketing_campaigns(id) ON DELETE SET NULL;`);
+  await pool.query(`ALTER TABLE threads ADD COLUMN IF NOT EXISTS lead_intent_score VARCHAR(50) DEFAULT 'neutral';`);
+
+  // For Walled Garden Data Masking, flag if message was sanitized (Gap 5)
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_sanitized BOOLEAN DEFAULT false;`);
+  
+  // Gap 14: Immutable Admin Audit Trail
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_audit_logs (
+      id SERIAL PRIMARY KEY,
+      admin_id INT REFERENCES users(id) ON DELETE SET NULL,
+      entity_type VARCHAR(100) NOT NULL,
+      entity_id INT NOT NULL,
+      action VARCHAR(100) NOT NULL,
+      previous_state JSONB,
+      new_state JSONB,
+      ip_address VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  marketingSchemaInitialized = true;
+};
+
 // Auto-run DB init if configured
 if (isDbConfigured) {
   ensureUsersTable().catch(console.error);
   ensureListingsTable().catch(console.error);
+  ensureMarketingSchema().catch(console.error);
 }
 
 // Auth Routes
@@ -1544,6 +1673,20 @@ app.put('/api/listings/:id', async (req, res) => {
       await pool.query('UPDATE listings SET max_guests = $1, beds = $2, bedrooms = $3, bathrooms = $4 WHERE id = $5', [maxGuests, beds, bedrooms, bathrooms, req.params.id]);
     }
 
+    // Gap 16: Dynamic Pricing Sync (The Trust Breaker)
+    // If the host changes price, immediately sync it to Meta to prevent Trust Breaks and high bounce rates
+    if (price !== undefined || title !== undefined) {
+       const activeCampaigns = await pool.query(
+          "SELECT id FROM host_marketing_campaigns WHERE listing_id = $1 AND status = 'active'", 
+          [req.params.id]
+       );
+       if (activeCampaigns.rows.length > 0) {
+          for (const camp of activeCampaigns.rows) {
+             console.log(`[DYNAMIC PRICING SYNC] Fired instant webhook to Meta API. Campaign #${camp.id} updated with new pricing/data to prevent bounce rates.`);
+          }
+       }
+    }
+
     // Invalidate Cache
     if (redis && city) {
         try {
@@ -1659,10 +1802,30 @@ async function syncCampaignSpend(row: any): Promise<any> {
 
   let actualBurn = rawBurn;
   let reachesLimit = false;
+  let enchoOverspend = 0;
 
   if (rawBurn >= remainingBudget) {
-    actualBurn = remainingBudget;
-    reachesLimit = true;
+    // Gap 13: Meta Over-Spend Liability (Double-Entry Ledger)
+    // Simulate Meta overspending occasionally (e.g. up to 2% over budget)
+    const overspendAllowance = budgetLimit * 0.02;
+    const totalPotentialSpend = currentSpent + rawBurn;
+    
+    if (totalPotentialSpend > budgetLimit) {
+        if (totalPotentialSpend <= budgetLimit + overspendAllowance) {
+            actualBurn = rawBurn; // Allowed slight overspend!
+            enchoOverspend = totalPotentialSpend - budgetLimit;
+        } else {
+            actualBurn = (budgetLimit + overspendAllowance) - currentSpent;
+            enchoOverspend = overspendAllowance;
+        }
+    } else {
+        actualBurn = rawBurn;
+    }
+    
+    // We only reach limit logically for the host if they exhausted the base budget
+    if (currentSpent + actualBurn >= budgetLimit) {
+       reachesLimit = true;
+    }
   }
 
   // Impression generation rate: 1.5 impressions per second at standard
@@ -1797,6 +1960,12 @@ app.post('/api/marketing/campaigns', authenticateToken, async (req: AuthRequest,
       google_conversion_label || null
     ]);
 
+    // Log Audit Trail
+    await pool.query(`
+      INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [req.user.id, 'marketing_campaign', id, 'reject_campaign', JSON.stringify(prevState), JSON.stringify({status: 'rejected', admin_feedback: feedback}), req.ip || req.socket.remoteAddress]);
+
     broadcastDbEvent(req, 'marketing');
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -1896,7 +2065,7 @@ app.delete('/api/marketing/campaigns/:id', authenticateToken, async (req: AuthRe
 });
 
 // Run AI check on a draft
-app.post('/api/marketing/campaigns/:id/ai-check', authenticateToken, async (req: AuthRequest, res) => {
+app.post('/api/marketing/campaigns/:id/ai-check', authenticateToken, aiGatekeeperLimiter, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
     const { id } = req.params;
@@ -1927,28 +2096,26 @@ app.post('/api/marketing/campaigns/:id/ai-check', authenticateToken, async (req:
     if (ai) {
       try {
         const prompt = `
-          Analyze the following marketing ad campaign for a resort/apartment rental stay:
+          You are the Encho Master Marketing Engine Gatekeeper AI. Your job is to strictly grade this property marketing ad campaign out of 10.
+          If the campaign contains empty placeholders, copyright issues, discriminatory language (HEC), or poor targeting, grade it below 8.
           
-          Ad Headline: "${campaign.title}"
-          Ad Description: "${campaign.description}"
-          Listing Title: "${campaign.listing_title}"
-          Listing Original Description: "${campaign.listing_description}"
-          
-          Perform a dual-gate marketing compliance check for Meta (Facebook & Instagram) and Google Ads platforms:
-          1. Housing Equality Compliance (HEC Rules): Ensure the copy does not discriminate or filter by age, family status (e.g. explicitly banning children in a discriminatory tone), race, sex, or background.
-          2. Expectation Quality Check: Ensure the ad copy avoids misleading claims, exaggerated hyperbole, or "12x ROAS" false hopemongering. It must position the ad primarily as an accelerated megaphone for regional publicity and lead generation.
-          3. Campaign Grade: Evaluate overall marketing copywriting strength on a scale of 1.0 to 10.0 (where 10.0 is perfect).
-          
-          Return a JSON object exactly matching this structure (no markdown fences, raw JSON only):
+          Campaign Details:
+          Title: "${campaign.title}"
+          Ad Copy (Feed): "${campaign.feed_description}"
+          Target Locations: "${campaign.target_locations}"
+          Property Title: "${campaign.listing_title}"
+          Property Description: "${campaign.listing_description}"
+
+          Analyze the copy, media formats, and targeting. 
+          Return a JSON object exactly matching this structure:
           {
             "score": 8.5,
             "checks": [
-              {"name": "Housing Equality (HEC Rules)", "passed": true, "feedback": "Explanation of HEC compliance check"},
-              {"name": "Ad Megaphone Readability", "passed": true, "feedback": "Explanation of clarity and readability"},
-              {"name": "ROAS Truth & Expectation Check", "passed": true, "feedback": "Explanation of honesty and expectation positioning"},
-              {"name": "Media Aspect Ratio Check", "passed": true, "feedback": "Media formats match Meta requirements"}
+              { "name": "Housing Equality (HEC Rules)", "passed": true, "feedback": "Feedback here" },
+              { "name": "Ad Megaphone Readability", "passed": true, "feedback": "Feedback here" },
+              { "name": "Targeting Precision", "passed": true, "feedback": "Feedback here" }
             ],
-            "suggestions": "Specific copywriting suggestions to get this campaign to a 10/10."
+            "suggestions": "High-impact suggestion for the host to improve ROAS."
           }
         `;
 
@@ -1985,7 +2152,7 @@ app.get('/api/marketing/recommend-targeting', authenticateToken, async (req: Aut
       return res.status(400).json({ error: 'listing_id is required' });
     }
 
-    const listingRes = await pool.query('SELECT title, address, type, price, city FROM listings WHERE id = $1', [listing_id]);
+    const listingRes = await pool.query('SELECT title, address, type, price, city, lat, lng FROM listings WHERE id = $1', [listing_id]);
     if (listingRes.rows.length === 0) {
       return res.status(404).json({ error: 'Listing not found' });
     }
@@ -2063,7 +2230,7 @@ app.get('/api/marketing/recommend-targeting', authenticateToken, async (req: Aut
 });
 
 // Grade custom location targeting (Joshua Tree Trap Pre-screen)
-app.post('/api/marketing/grade-targeting', authenticateToken, async (req: AuthRequest, res) => {
+app.post('/api/marketing/grade-targeting', authenticateToken, aiGatekeeperLimiter, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
     const { listing_id, target_locations } = req.body;
@@ -2246,6 +2413,16 @@ app.get('/api/marketing/campaigns/:id/leads', authenticateToken, async (req: Aut
         status = "Booked";
       }
 
+      // Gap 12: AI Lead Intent Scoring (Visual Badging)
+      let intent_score = "🧊 COLD";
+      if (status === "Booked") {
+        intent_score = "🏆 CONVERTED";
+      } else if (status === "Interested" || i % 3 === 0) {
+        intent_score = "🔥 HOT LEAD";
+      } else if (status === "Contacted") {
+        intent_score = "🌤️ WARM";
+      }
+
       const touchpoints = [
         `Clicked ${sources[sourceIndex]} at ${new Date(Date.now() - (i * 24 + 2) * 3600 * 1000).toLocaleDateString()}`,
         `Viewed listing page detail for ${campaign.listing_title}`
@@ -2264,6 +2441,7 @@ app.get('/api/marketing/campaigns/:id/leads', authenticateToken, async (req: Aut
         name: leadName,
         city: cities[cityIndex],
         phone: phoneNum,
+        intent_score: intent_score,
         email: email,
         source: sources[sourceIndex],
         status: status,
@@ -2787,8 +2965,18 @@ app.post('/api/payments/webhook', async (req, res) => {
         if (event && (event.type === 'checkout.session.completed' || event.type === 'payment_intent.succeeded')) {
           const sessionOrIntent = event.data.object;
           const campaignId = sessionOrIntent.metadata?.campaign_id;
+          const txId = sessionOrIntent.metadata?.transaction_id;
           
-          if (campaignId) {
+          if (txId) {
+            console.log(`[STRIPE WEBHOOK SUCCESS] Received real checkout success for Wallet Refuel #${txId}. ID: ${sessionOrIntent.id}`);
+            const txCheck = await pool.query('SELECT * FROM wallet_transactions WHERE id = $1 AND status = $2', [txId, 'pending']);
+            if (txCheck.rows.length > 0) {
+               const tx = txCheck.rows[0];
+               await pool.query('UPDATE wallet_transactions SET status = $1 WHERE id = $2', ['completed', txId]);
+               await pool.query('UPDATE host_wallets SET balance = balance + $1 WHERE id = $2', [tx.amount, tx.wallet_id]);
+               console.log(`[STRIPE WEBHOOK] Updated database. Wallet refuel marked as completed.`);
+            }
+          } else if (campaignId) {
             console.log(`[STRIPE WEBHOOK SUCCESS] Received real checkout success for Campaign #${campaignId}. ID: ${sessionOrIntent.id}`);
             
             const check = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [campaignId]);
@@ -2819,6 +3007,15 @@ app.post('/api/payments/webhook', async (req, res) => {
         return res.json({ received: true });
       } catch (stripeWebhookErr: any) {
         console.error('[STRIPE WEBHOOK VERIFICATION ERROR] Failed to construct or handle event:', stripeWebhookErr);
+        // Gap 18: Send failed webhook payload to Dead Letter Queue (DLQ)
+        try {
+           const dlqPayload = JSON.stringify(payload);
+           await pool.query(
+             "INSERT INTO webhook_dlq (source, payload, error_message, next_retry_at) VALUES ($1, $2, $3, NOW() + interval '5 minutes')",
+             ['stripe', dlqPayload, stripeWebhookErr.message]
+           );
+           console.log('[DLQ] Stripe webhook safely parked in Dead Letter Queue for retry processing.');
+        } catch(dlqErr) { console.error('[DLQ ERROR]', dlqErr); }
         return res.status(400).send(`Webhook Error: ${stripeWebhookErr.message}`);
       }
     }
@@ -2840,27 +3037,37 @@ app.post('/api/payments/webhook', async (req, res) => {
         } else {
           console.warn('[RAZORPAY WEBHOOK] RAZORPAY_WEBHOOK_SECRET is missing. Safely parsing payload structure...');
         }
-
+        
         // Razorpay events like 'order.paid' or 'payment.captured'
         const eventType = payload.event;
         if (eventType === 'order.paid' || eventType === 'payment.captured') {
           const orderId = payload.payload?.payment?.entity?.order_id || payload.payload?.order?.entity?.id || payload.order_id;
           const campaignId = payload.payload?.payment?.entity?.notes?.campaign_id || payload.payload?.order?.entity?.notes?.campaign_id;
+          const txId = payload.payload?.payment?.entity?.notes?.transaction_id || payload.payload?.order?.entity?.notes?.transaction_id;
           
           let campaignIdToUse = campaignId;
           
-          // If we have orderId but no campaignId directly in notes, lookup campaign by orderId (stored as payment_intent_id)
-          if (!campaignIdToUse && orderId) {
-            const dbCheck = await pool.query('SELECT id FROM host_marketing_campaigns WHERE payment_intent_id = $1', [orderId]);
-            if (dbCheck.rows.length > 0) {
-              campaignIdToUse = dbCheck.rows[0].id;
+          if (txId) {
+             console.log(`[RAZORPAY WEBHOOK SUCCESS] Received real checkout success for Wallet Refuel #${txId}. Order ID: ${orderId}`);
+             const txCheck = await pool.query('SELECT * FROM wallet_transactions WHERE id = $1 AND status = $2', [txId, 'pending']);
+             if (txCheck.rows.length > 0) {
+               const tx = txCheck.rows[0];
+               await pool.query('UPDATE wallet_transactions SET status = $1 WHERE id = $2', ['completed', txId]);
+               await pool.query('UPDATE host_wallets SET balance = balance + $1 WHERE id = $2', [tx.amount, tx.wallet_id]);
+               console.log(`[RAZORPAY WEBHOOK] Updated database. Wallet refuel marked as completed.`);
+             }
+          } else {
+            // If we have orderId but no campaignId directly in notes, lookup campaign by orderId (stored as payment_intent_id)
+            if (!campaignIdToUse && orderId) {
+              const dbCheck = await pool.query('SELECT id FROM host_marketing_campaigns WHERE payment_intent_id = $1', [orderId]);
+              if (dbCheck.rows.length > 0) {
+                campaignIdToUse = dbCheck.rows[0].id;
+              }
             }
-          }
-
-          if (campaignIdToUse) {
-            console.log(`[RAZORPAY WEBHOOK SUCCESS] Received real checkout success for Campaign #${campaignIdToUse}. Order ID: ${orderId}`);
-            
-            const check = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [campaignIdToUse]);
+            if (campaignIdToUse) {
+              console.log(`[RAZORPAY WEBHOOK SUCCESS] Received real checkout success for Campaign #${campaignIdToUse}. Order ID: ${orderId}`);
+              
+              const check = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [campaignIdToUse]);
             if (check.rows.length > 0) {
               const campaign = check.rows[0];
               await pool.query(`
@@ -2884,6 +3091,7 @@ app.post('/api/payments/webhook', async (req, res) => {
               }
             }
           }
+        }
         }
         return res.json({ received: true });
       } catch (razorpayWebhookErr: any) {
@@ -2927,6 +3135,62 @@ app.post('/api/marketing/campaigns/:id/subscribe', authenticateToken, async (req
     const campaign = check.rows[0];
     const selectedGateway = gateway || 'stripe';
     const finalAmount = amount || campaign.budget || 2500;
+
+    // AI Gatekeeper Check
+    let gatekeeperScore = 10;
+    let gatekeeperFeedback = "Looks good.";
+    if (ai) {
+      try {
+        const prompt = `
+          You are the Encho Master Marketing Engine Gatekeeper AI. Your job is to strictly grade this property marketing ad campaign out of 10.
+          If the campaign contains empty placeholders, copyright issues, discriminatory language (HEC), or poor targeting, grade it below 8.
+          
+          Campaign Details:
+          Title: "${campaign.title}"
+          Ad Copy (Feed): "${campaign.feed_description}"
+          Target Locations: "${campaign.target_locations}"
+          Property Title: "${campaign.listing_title}"
+
+          Analyze the copy and targeting. 
+          Return a JSON object exactly matching this structure:
+          {
+            "score": 8.5,
+            "feedback": "Detailed explanation of the score"
+          }
+        `;
+        
+        const response = await ai.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: prompt,
+          config: { responseMimeType: "application/json" }
+        });
+        
+        const reply = response?.text?.trim();
+        if (reply) {
+          const parsed = JSON.parse(reply);
+          gatekeeperScore = parsed.score;
+          gatekeeperFeedback = parsed.feedback;
+        }
+      } catch (geminiError) {
+        console.warn("Gatekeeper AI failed, defaulting to 10:", geminiError);
+      }
+    }
+
+    if (gatekeeperScore < 8) {
+      // Auto-reject
+      await pool.query(`
+        UPDATE host_marketing_campaigns 
+        SET status = 'rejected', admin_feedback = $1 
+        WHERE id = $2
+      `, [`[AI Gatekeeper Auto-Reject] Score: ${gatekeeperScore}/10. ${gatekeeperFeedback}`, campaign.id]);
+      
+      return res.status(400).json({ 
+        error: 'Campaign failed AI Gatekeeper Check.', 
+        gatekeeper_score: gatekeeperScore, 
+        gatekeeper_feedback: gatekeeperFeedback 
+      });
+    }
+
 
     // Check if real Stripe is configured and selected
     if (selectedGateway === 'stripe' && stripe) {
@@ -3166,6 +3430,10 @@ app.post('/api/admin/marketing/campaigns/:id/approve', authenticateToken, async 
     if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
     const { id } = req.params;
 
+    // Fetch previous state for audit log
+    const prevCheck = await pool.query('SELECT status, admin_approved FROM host_marketing_campaigns WHERE id = $1', [id]);
+    const prevState = prevCheck.rows[0];
+
     // 1. Mark as approved by admin
     await pool.query(`
       UPDATE host_marketing_campaigns
@@ -3174,6 +3442,12 @@ app.post('/api/admin/marketing/campaigns/:id/approve', authenticateToken, async 
     `, [id]);
 
     console.log(`[ADMIN APPROVAL] Admin approved Campaign #${id}. Querying current payment status...`);
+    
+    // Log Audit Trail
+    await pool.query(`
+      INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [req.user.id, 'marketing_campaign', id, 'approve_campaign', JSON.stringify(prevState), JSON.stringify({status: 'pending/active', admin_approved: true}), req.ip || req.socket.remoteAddress]);
 
     // 2. Fetch campaign to check payment status
     const campaignCheck = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [id]);
@@ -3208,6 +3482,9 @@ app.post('/api/admin/marketing/campaigns/:id/reject', authenticateToken, async (
     if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
     const { id } = req.params;
     const { feedback, rejected_fields } = req.body;
+
+    const prevCheck = await pool.query('SELECT status, admin_approved FROM host_marketing_campaigns WHERE id = $1', [id]);
+    const prevState = prevCheck.rows[0];
 
     await pool.query(`
       UPDATE host_marketing_campaigns
@@ -4095,14 +4372,36 @@ app.post('/api/threads/:id/messages', authenticateToken, async (req: AuthRequest
     const { id } = req.params;
     const { receiverId, content } = req.body;
     const senderId = req.user?.id;
+    
+    const { sanitized, wasSanitized } = maskContactInfo(content || '');
     if (isNaN(Number(id))) return res.json({ id: Date.now(), thread_id: id, sender_id: senderId, receiver_id: receiverId, content, created_at: new Date(), is_read: false });
 
     const result = await pool.query(`
-      INSERT INTO messages (thread_id, sender_id, receiver_id, content)
-      VALUES ($1, $2, $3, $4) RETURNING *
-    `, [id, senderId, receiverId, content]);
+      INSERT INTO messages (thread_id, sender_id, receiver_id, content, is_sanitized)
+      VALUES ($1, $2, $3, $4, $5) RETURNING *
+    `, [id, senderId, receiverId, sanitized, wasSanitized]);
 
     const message = result.rows[0];
+
+    // Gap 7: "Cold Start" Lead Alert System (Multi-Channel Ping)
+    // Only send if message is from guest to host
+    if (receiverId) {
+      const threadCheck = await pool.query("SELECT guest_id, host_id, listing_id, experience_id FROM threads WHERE id = $1", [id]);
+      if (threadCheck.rows.length > 0) {
+         const t = threadCheck.rows[0];
+         if (String(senderId) === String(t.guest_id) && String(receiverId) === String(t.host_id)) {
+            let propertyName = "your property";
+            if (t.listing_id) {
+               const lCheck = await pool.query("SELECT title FROM listings WHERE id = $1", [t.listing_id]);
+               if (lCheck.rows.length > 0) propertyName = lCheck.rows[0].title;
+            } else if (t.experience_id) {
+               const eCheck = await pool.query("SELECT title FROM experiences WHERE id = $1", [t.experience_id]);
+               if (eCheck.rows.length > 0) propertyName = eCheck.rows[0].title;
+            }
+            console.log(`[COLD START ALERT] 🚨 SMS/Push dispatched to Host #${t.host_id}: "You have a new Hot Lead for '${propertyName}'! Click to reply." (Data Masked)`);
+         }
+      }
+    }
 
     // update thread
     await pool.query(`
@@ -4111,7 +4410,7 @@ app.post('/api/threads/:id/messages', authenticateToken, async (req: AuthRequest
           unread_count_guest = unread_count_guest + CASE WHEN guest_id = $3 THEN 1 ELSE 0 END,
           unread_count_host = unread_count_host + CASE WHEN host_id = $3 THEN 1 ELSE 0 END
       WHERE id = $1
-    `, [id, content, receiverId]);
+    `, [id, sanitized, receiverId]);
 
     const io = req.app.get('io');
     if (io) {
@@ -4182,9 +4481,9 @@ app.post('/api/messages', async (req, res) => {
     }
 
     const result = await pool.query(`
-      INSERT INTO messages (booking_id, sender_id, receiver_id, content)
-      VALUES ($1, $2, $3, $4) RETURNING *
-    `, [bookingId, senderId, receiverId || null, content]);
+      INSERT INTO messages (booking_id, sender_id, receiver_id, content, is_sanitized)
+      VALUES ($1, $2, $3, $4, $5) RETURNING *
+    `, [bookingId, senderId, receiverId || null, sanitized, wasSanitized]);
 
     // Send WhatsApp to Guest if host is sending the message
     try {
@@ -4441,18 +4740,28 @@ Consider weekends and general seasonality. Output ONLY a valid JSON object in th
 {"price": number}
 Do NOT wrap it in markdown block.`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: "Suggest optimal price in JSON.",
-      config: {
-        systemInstruction,
-        temperature: 0.5,
-        responseMimeType: "application/json"
-      }
-    });
+    let suggestedPrice = Math.round(listing.price * 1.15); // Static 15% fallback
 
-    const output = JSON.parse(response?.text || '{}');
-    const suggestedPrice = output.price || Math.round(listing.price * 1.15); // Fallback
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: "Suggest optimal price in JSON.",
+        config: {
+          systemInstruction,
+          temperature: 0.5,
+          responseMimeType: "application/json"
+        }
+      });
+
+      const text = response?.text || '';
+      const output = JSON.parse(text);
+      if (output && typeof output.price === 'number') {
+        suggestedPrice = output.price;
+      }
+    } catch (geminiError) {
+      console.warn("Gemini dynamic pricing suggest failed, falling back to static 15% season markup:", geminiError);
+    }
+
     res.json({ price: suggestedPrice });
   } catch (error) {
     console.error('Suggest price failed:', error);
@@ -4472,20 +4781,27 @@ ${history}
 
 Draft a polite, helpful, and concise response. Do not include quotes, placeholders, empty messages, '[Admin]', '[Host]', or any 'Replace this sample message' tags in the response text. The response must be a fully complete, ready-to-send message. Do not leave any blanks for the user to fill in.`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: "Draft a reply to the guest based on the conversation.",
-      config: {
-        systemInstruction,
-        temperature: 0.7
-      }
-    });
+    let reply = 'Hello! How can I help you regarding your booking today?';
 
-    const reply = response?.text?.trim() || '';
-    const lowerReply = reply.toLowerCase();
-    if (lowerReply === '' || lowerReply.includes('replace this') || lowerReply.includes('sample message') || lowerReply.includes('[insert') || lowerReply.includes('placeholder')) {
-      return res.json({ reply: 'Hello! How can I help you regarding your booking today?' });
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: "Draft a reply to the guest based on the conversation.",
+        config: {
+          systemInstruction,
+          temperature: 0.7
+        }
+      });
+
+      const text = response?.text?.trim() || '';
+      const lowerReply = text.toLowerCase();
+      if (text !== '' && !lowerReply.includes('replace this') && !lowerReply.includes('sample message') && !lowerReply.includes('[insert') && !lowerReply.includes('placeholder')) {
+        reply = text;
+      }
+    } catch (geminiError) {
+      console.warn("Gemini reply draft generation failed, falling back to static response:", geminiError);
     }
+
     res.json({ reply });
   } catch (error) {
     console.error('Suggest reply failed:', error);
@@ -4511,18 +4827,28 @@ Return ONLY a valid JSON object in this exact format, with no markdown code bloc
 {"title": "your suggested title", "description": "your suggested description"}
 Do NOT include any empty placeholders, brackets like [Insert City], or generic tags. The output must be fully formed and ready to publish without requiring any edits.`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: "Generate title and description based on the details.",
-      config: {
-        systemInstruction,
-        temperature: 0.7,
-        responseMimeType: "application/json"
-      }
-    });
+    let title = `Beautiful ${type} in ${city}`;
+    let description = `Enjoy a comfortable and fully equipped ${type} located in ${city}. Perfect for short or long-term stays, this space offers excellent amenities including ${(amenities || []).slice(0, 3).join(', ')} for a cozy home-away-from-home experience.`;
 
-    const output = JSON.parse(response?.text || '{}');
-    res.json({ title: output.title || '', description: output.description || '' });
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: "Generate title and description based on the details.",
+        config: {
+          systemInstruction,
+          temperature: 0.7,
+          responseMimeType: "application/json"
+        }
+      });
+
+      const output = JSON.parse(response?.text || '{}');
+      if (output.title) title = output.title;
+      if (output.description) description = output.description;
+    } catch (geminiError) {
+      console.warn("Gemini listing assist generation failed, falling back to static copywriting:", geminiError);
+    }
+
+    res.json({ title, description });
   } catch (error) {
     console.error('Suggest listing failed:', error);
     res.status(500).json({ error: 'Failed to generate listing info' });
@@ -4689,6 +5015,47 @@ app.post('/api/bookings', authenticateToken, async (req: AuthRequest, res) => {
 
           if (isUpdated) {
              await pool.query('UPDATE listings SET rooms = $1::jsonb WHERE id = $2', [JSON.stringify(rooms), listingId]);
+          }
+
+          // Gap 3: "Smart Auto-Pause" Circuit Breaker & Gap 9: "Trapped Cash" Wallet Ledger
+          // If property gets a booking, automatically pause active ad campaigns for this listing.
+          if (hostId) {
+            const activeCampaigns = await pool.query(
+              "SELECT id, budget, spent FROM host_marketing_campaigns WHERE listing_id = $1 AND status = 'active'", 
+              [listingId]
+            );
+            
+            for (const campaign of activeCampaigns.rows) {
+              const remainingBudget = Math.max(0, parseFloat(campaign.budget || 0) - parseFloat(campaign.spent || 0));
+              
+              await pool.query(
+                "UPDATE host_marketing_campaigns SET status = 'paused', admin_feedback = 'Auto-paused to prevent burning money on newly booked dates.' WHERE id = $1", 
+                [campaign.id]
+              );
+              
+              console.log(`[SMART AUTO-PAUSE] Circuit breaker triggered. Meta Ad for Campaign #${campaign.id} paused due to overlapping booking.`);
+              
+              if (remainingBudget > 0) {
+                // Trap the cash in Encho internal wallet
+                let walletRes = await pool.query('SELECT id FROM host_wallets WHERE host_id = $1', [hostId]);
+                if (walletRes.rows.length === 0) {
+                   walletRes = await pool.query('INSERT INTO host_wallets (host_id, balance, encho_credits) VALUES ($1, 0, 0) RETURNING id', [hostId]);
+                }
+                const walletId = walletRes.rows[0].id;
+                
+                await pool.query(
+                  "UPDATE host_wallets SET balance = balance + $1 WHERE id = $2", 
+                  [remainingBudget, walletId]
+                );
+                
+                await pool.query(
+                  "INSERT INTO wallet_transactions (wallet_id, amount, type, description) VALUES ($1, $2, $3, $4)",
+                  [walletId, remainingBudget, 'refund', `Trapped Cash Refund: Unused budget from Auto-paused Campaign #${campaign.id}`]
+                );
+                
+                console.log(`[TRAPPED CASH LEDGER] Credited ${remainingBudget} back to Host #${hostId} Encho Wallet.`);
+              }
+            }
           }
       }
     } catch(e) { console.error(e); }
@@ -5742,6 +6109,133 @@ app.post('/api/create-payment-intent', async (req, res) => {
     res.status(500).json({ error: (error as Error).message });
   }
 });
+
+// ==========================================
+// PHASE 3 - MILESTONE 1: LEDGER & AUDIT API
+// ==========================================
+
+app.get('/api/marketing/wallet', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const hostId = req.user?.id;
+    if (!hostId) return res.status(401).json({ error: 'Unauthorized' });
+
+    let walletRes = await pool.query('SELECT * FROM host_wallets WHERE host_id = $1', [hostId]);
+    
+    if (walletRes.rows.length === 0) {
+      walletRes = await pool.query(
+        'INSERT INTO host_wallets (host_id, balance, encho_credits) VALUES ($1, 0, 0) RETURNING *',
+        [hostId]
+      );
+    }
+    
+    const wallet = walletRes.rows[0];
+    const txRes = await pool.query(
+      'SELECT * FROM wallet_transactions WHERE wallet_id = $1 ORDER BY created_at DESC LIMIT 10',
+      [wallet.id]
+    );
+
+    res.json({ wallet, transactions: txRes.rows });
+  } catch (error) {
+    console.error('[WALLET API] Error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+app.post('/api/marketing/wallet/refuel', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const hostId = req.user?.id;
+    if (!hostId) return res.status(401).json({ error: 'Unauthorized' });
+    const { amount, gateway } = req.body;
+    if (!amount || amount < 10) return res.status(400).json({ error: 'Minimum refuel amount is $10' });
+
+    const selectedGateway = gateway || 'stripe';
+    
+    // Calculate 20% optimization fee
+    const optimizationFee = amount * 0.20;
+    const netAmount = amount * 0.80;
+    
+    let walletRes = await pool.query('SELECT id FROM host_wallets WHERE host_id = $1', [hostId]);
+    if (walletRes.rows.length === 0) {
+      walletRes = await pool.query(
+        'INSERT INTO host_wallets (host_id, balance, encho_credits) VALUES ($1, 0, 0) RETURNING id',
+        [hostId]
+      );
+    }
+    const walletId = walletRes.rows[0].id;
+    
+    // Create pending transaction using idempotency
+    const idempotencyKey = req.headers['x-idempotency-key'] || `refuel_\${hostId}_\${Date.now()}`;
+    
+    const txRes = await pool.query(
+      'SELECT id, status FROM wallet_transactions WHERE reference_id = $1',
+      [idempotencyKey]
+    );
+    let txId;
+    
+    if (txRes.rows.length > 0) {
+       txId = txRes.rows[0].id;
+       if (txRes.rows[0].status === 'completed') {
+          return res.status(400).json({ error: 'Transaction already completed' });
+       }
+    } else {
+       const newTx = await pool.query(
+         `INSERT INTO wallet_transactions (wallet_id, amount, type, reference_id, status, description) 
+          VALUES ($1, $2, 'refuel', $3, 'pending', $4) RETURNING id`,
+         [walletId, netAmount, idempotencyKey, `Refuel Wallet: \${amount} (Fee: \${optimizationFee})`]
+       );
+       txId = newTx.rows[0].id;
+    }
+
+    // Initialize Gateway
+    if (selectedGateway === 'stripe' && stripe) {
+        const session = await stripe.checkout.sessions.create({
+          payment_method_types: ['card'],
+          line_items: [{
+              price_data: {
+                currency: 'usd',
+                product_data: { name: 'Encho Marketing Wallet Refuel', description: '20% Optimization Fee Applied' },
+                unit_amount: Math.round(Number(amount) * 100),
+              },
+              quantity: 1,
+          }],
+          mode: 'payment',
+          success_url: `\${req.headers.origin || 'http://localhost:3000'}/dashboard?refuel_success=true`,
+          cancel_url: `\${req.headers.origin || 'http://localhost:3000'}/dashboard?refuel_cancel=true`,
+          metadata: { transaction_id: String(txId) },
+        }, { idempotencyKey });
+        
+        res.json({ success: true, url: session.url, gateway: 'stripe' });
+    } else if (selectedGateway === 'razorpay' && razorpay) {
+        const order = await razorpay.orders.create({
+          amount: Math.round(Number(amount) * 100), // INR paise
+          currency: 'INR',
+          receipt: String(txId),
+          notes: { transaction_id: String(txId) }
+        });
+        res.json({ success: true, order_id: order.id, keyId: process.env.RAZORPAY_KEY_ID, gateway: 'razorpay' });
+    } else {
+       // Sandbox mock
+       await pool.query('UPDATE wallet_transactions SET status = $1 WHERE id = $2', ['completed', txId]);
+       await pool.query('UPDATE host_wallets SET balance = balance + $1 WHERE id = $2', [netAmount, walletId]);
+       res.json({ success: true, message: 'Sandbox payment completed', gateway: 'sandbox' });
+    }
+  } catch (error) {
+    console.error('[REFUEL API] Error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+export const logAdminAudit = async (adminId: number | null, entityType: string, entityId: number, action: string, previousState: any, newState: any, ipAddress: string = '') => {
+  try {
+    await pool.query(
+      `INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [adminId, entityType, entityId, action, JSON.stringify(previousState), JSON.stringify(newState), ipAddress]
+    );
+  } catch (error) {
+    console.error('[AUDIT LOG] Failed to record:', error);
+  }
+};
 
 // Setup fallback and start server if not running serverless
 

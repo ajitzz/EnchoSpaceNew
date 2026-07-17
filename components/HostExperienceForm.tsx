@@ -579,7 +579,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                       Abort
                     </button>
                     <button 
-                      onClick={(e) => handleSubmit(e, 'published')}
+                      onClick={(e) => handleSubmit(e, 'upcoming')}
                       disabled={saving} 
                       className="px-5 py-2.5 bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 font-bold text-xs uppercase tracking-widest rounded-xl transition-all shadow-md disabled:opacity-50 cursor-pointer"
                     >
@@ -1704,7 +1704,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                             ) : (
                                 <button
                                     type="button"
-                                    onClick={(e) => handleSubmit(e, 'published')}
+                                    onClick={(e) => handleSubmit(e, 'upcoming')}
                                     disabled={saving}
                                     className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md cursor-pointer flex items-center gap-1.5"
                                 >

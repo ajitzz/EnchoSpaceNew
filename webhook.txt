@@ -1,0 +1,151 @@
+
+  console.log(`[WEBHOOK] Updated database. Payment marked as paid.`);
+
+  // If already approved by admin, trigger the Meta API Dispatch!
+  if (campaign.admin_approved) {
+    console.log(`[WEBHOOK] Campaign #${campaign_id} has already been approved by Admin! Dispatching Meta Ads API call...`);
+    await dispatchMetaCampaign(campaign_id, req);
+  } else {
+    console.log(`[WEBHOOK] Campaign #${campaign_id} is awaiting Admin Quality Control review. Status set to "pending".`);
+    broadcastDbEvent(req, 'marketing');
+  }
+
+  return { success: true, message: 'Webhook processed successfully' };
+}
+
+// Public Webhook route for payment gateways
+app.post('/api/payments/webhook', async (req, res) => {
+  try {
+    const payload = req.body;
+    const signature = req.headers['x-webhook-signature-sha256'] as string;
+    const stripeSig = req.headers['stripe-signature'] as string;
+    
+    // Handle real Stripe Webhooks
+    if (stripeSig && stripe) {
+      const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+      let event;
+      try {
+        if (endpointSecret) {
+          // Note: If rawBody is not set, stringify req.body as standard fallback
+          const rawBody = (req as any).rawBody || JSON.stringify(payload);
+          event = stripe.webhooks.constructEvent(rawBody, stripeSig, endpointSecret);
+        } else {
+          console.warn('[STRIPE WEBHOOK] STRIPE_WEBHOOK_SECRET is missing. Safely parsing payload structure...');
+          event = payload;
+        }
+
+        if (event && (event.type === 'checkout.session.completed' || event.type === 'payment_intent.succeeded')) {
+          const sessionOrIntent = event.data.object;
+          const campaignId = sessionOrIntent.metadata?.campaign_id;
+          
+          if (campaignId) {
+            console.log(`[STRIPE WEBHOOK SUCCESS] Received real checkout success for Campaign #${campaignId}. ID: ${sessionOrIntent.id}`);
+            
+            const check = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [campaignId]);
+            if (check.rows.length > 0) {
+              const campaign = check.rows[0];
+              await pool.query(`
+                UPDATE host_marketing_campaigns
+                SET subscription_active = true,
+                    payment_status = 'paid',
+                    payment_gateway = 'stripe',
+                    payment_intent_id = $1,
+                    active_slide_index = 0
+                WHERE id = $2
+              `, [sessionOrIntent.id, campaignId]);
+
+              console.log(`[STRIPE WEBHOOK] Updated database. Payment marked as paid.`);
+
+              if (campaign.admin_approved) {
+                console.log(`[STRIPE WEBHOOK] Campaign #${campaignId} already approved by Admin! Dispatching Meta Ads API call...`);
+                await dispatchMetaCampaign(campaignId, req);
+              } else {
+                console.log(`[STRIPE WEBHOOK] Campaign #${campaignId} is awaiting Admin Quality Control review.`);
+                broadcastDbEvent(req, 'marketing');
+              }
+            }
+          }
+        }
+        return res.json({ received: true });
+      } catch (stripeWebhookErr: any) {
+        console.error('[STRIPE WEBHOOK VERIFICATION ERROR] Failed to construct or handle event:', stripeWebhookErr);
+        return res.status(400).send(`Webhook Error: ${stripeWebhookErr.message}`);
+      }
+    }
+
+    const razorpaySig = req.headers['x-razorpay-signature'] as string;
+    
+    // Handle real Razorpay Webhooks
+    if (razorpaySig && razorpay) {
+      const endpointSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+      try {
+        if (endpointSecret) {
+          const shasum = crypto.createHmac('sha256', endpointSecret);
+          shasum.update(JSON.stringify(payload));
+          const digest = shasum.digest('hex');
+          if (digest !== razorpaySig) {
+            console.error('[RAZORPAY WEBHOOK] Webhook signature verification failed');
+            return res.status(400).send('Invalid signature');
+          }
+        } else {
+          console.warn('[RAZORPAY WEBHOOK] RAZORPAY_WEBHOOK_SECRET is missing. Safely parsing payload structure...');
+        }
+
+        // Razorpay events like 'order.paid' or 'payment.captured'
+        const eventType = payload.event;
+        if (eventType === 'order.paid' || eventType === 'payment.captured') {
+          const orderId = payload.payload?.payment?.entity?.order_id || payload.payload?.order?.entity?.id || payload.order_id;
+          const campaignId = payload.payload?.payment?.entity?.notes?.campaign_id || payload.payload?.order?.entity?.notes?.campaign_id;
+          
+          let campaignIdToUse = campaignId;
+          
+          // If we have orderId but no campaignId directly in notes, lookup campaign by orderId (stored as payment_intent_id)
+          if (!campaignIdToUse && orderId) {
+            const dbCheck = await pool.query('SELECT id FROM host_marketing_campaigns WHERE payment_intent_id = $1', [orderId]);
+            if (dbCheck.rows.length > 0) {
+              campaignIdToUse = dbCheck.rows[0].id;
+            }
+          }
+
+          if (campaignIdToUse) {
+            console.log(`[RAZORPAY WEBHOOK SUCCESS] Received real checkout success for Campaign #${campaignIdToUse}. Order ID: ${orderId}`);
+            
+            const check = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [campaignIdToUse]);
+            if (check.rows.length > 0) {
+              const campaign = check.rows[0];
+              await pool.query(`
+                UPDATE host_marketing_campaigns
+                SET subscription_active = true,
+                    payment_status = 'paid',
+                    payment_gateway = 'razorpay',
+                    payment_intent_id = $1,
+                    active_slide_index = 0
+                WHERE id = $2
+              `, [orderId || 'rzp_' + Date.now(), campaignIdToUse]);
+
+              console.log(`[RAZORPAY WEBHOOK] Updated database. Payment marked as paid.`);
+
+              if (campaign.admin_approved) {
+                console.log(`[RAZORPAY WEBHOOK] Campaign #${campaignIdToUse} already approved by Admin! Dispatching Meta Ads API call...`);
+                await dispatchMetaCampaign(campaignIdToUse, req);
+              } else {
+                console.log(`[RAZORPAY WEBHOOK] Campaign #${campaignIdToUse} is awaiting Admin Quality Control review.`);
+                broadcastDbEvent(req, 'marketing');
+              }
+            }
+          }
+        }
+        return res.json({ received: true });
+      } catch (razorpayWebhookErr: any) {
+        console.error('[RAZORPAY WEBHOOK ERROR] Failed to handle event:', razorpayWebhookErr);
+        return res.status(400).send(`Webhook Error: ${razorpayWebhookErr.message}`);
+      }
+    }
+
+    console.log('[API WEBHOOK] Received external webhook request. Signature header present:', !!signature);
+    
+    const result = await processPaymentWebhook(payload, signature, req);
+    if (result.success) {
+      res.json({ status: 'success', message: result.message });
+    } else {
+      res.status(401).json({ error: result.message });

@@ -693,7 +693,8 @@ function App() {
         setCurrentView('BOOKING');
         window.scrollTo(0, 0);
 
-        const success = await queueMutation('/api/bookings', 'POST', payload);
+        const token = localStorage.getItem('token');
+        const success = await queueMutation('/api/bookings', 'POST', payload, { 'Authorization': `Bearer ${token}` });
         if (!success && !navigator.onLine) {
             addToast('Offline mode', 'Booking queued and will be synced when you are back online.', 'info');
         }

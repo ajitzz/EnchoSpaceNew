@@ -1,10 +1,18 @@
 const fs = require('fs');
-let dash = fs.readFileSync('components/AdminDashboard.tsx', 'utf8');
-dash = dash.replace(/, MoreHorizontal \} from 'lucide-react';\} from 'lucide-react';/g, ", MoreHorizontal } from 'lucide-react';");
-dash = dash.replace(/, MoreHorizontal } from 'lucide-react';/, "import { MoreHorizontal } from 'lucide-react';");
-fs.writeFileSync('components/AdminDashboard.tsx', dash);
+let code = fs.readFileSync('server.ts', 'utf8');
 
-let host = fs.readFileSync('components/HostDashboard.tsx', 'utf8');
-host = host.replace(/\/\* listingType=\{ \*\/\s*any\}\s*/g, '');
-host = host.replace(/listingType=\{any\}/g, '');
-fs.writeFileSync('components/HostDashboard.tsx', host);
+const target = `    // update thread
+    await pool.query(\`
+      UPDATE threads
+          // update thread
+    await pool.query(\`
+      UPDATE threads`;
+
+const replacement = `    // update thread
+    await pool.query(\`
+      UPDATE threads`;
+
+code = code.replace(target, replacement);
+
+fs.writeFileSync('server.ts', code);
+console.log('Fixed syntax error in server.ts');

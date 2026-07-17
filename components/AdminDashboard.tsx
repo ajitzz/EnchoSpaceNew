@@ -417,6 +417,25 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
     setRejectedFieldInputs({});
   };
 
+  const handleToggleRejectionField = (field: string, selected: boolean) => {
+    setRejectedFieldInputs(prev => {
+      const next = { ...prev };
+      if (selected) {
+        next[field] = '';
+      } else {
+        delete next[field];
+      }
+      return next;
+    });
+  };
+
+  const handleUpdateRejectionReason = (field: string, reason: string) => {
+    setRejectedFieldInputs(prev => ({
+      ...prev,
+      [field]: reason
+    }));
+  };
+
   const handleConfirmRejectCampaign = async () => {
     if (!rejectingCampaignId) return;
     setSubmittingRejection(true);
@@ -424,8 +443,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
       // Filter out empty input feedback values so we only send actual corrections
       const filteredRejectedFields: Record<string, string> = {};
       Object.entries(rejectedFieldInputs).forEach(([key, value]) => {
-        if (value && value.trim()) {
-          filteredRejectedFields[key] = value.trim();
+        const strVal = value as string;
+        if (strVal && strVal.trim()) {
+          filteredRejectedFields[key] = strVal.trim();
         }
       });
 
@@ -2365,17 +2385,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                 <label className="flex items-start gap-3 p-3 rounded-2xl bg-gray-50 border hover:bg-gray-100 transition-colors cursor-pointer">
                                    <input 
                                       type="checkbox"
-                                      checked={rejectionFields.title.selected}
+                                      checked={rejectedFieldInputs['title'] !== undefined}
                                       onChange={(e) => handleToggleRejectionField('title', e.target.checked)}
                                       className="mt-1 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
                                    />
                                    <div className="flex-1 space-y-1">
                                       <span className="text-xs font-bold text-gray-900">Campaign Title</span>
-                                      {rejectionFields.title.selected && (
+                                      {rejectedFieldInputs['title'] !== undefined && (
                                          <input 
                                             type="text"
                                             required
-                                            value={rejectionFields.title.reason}
+                                            value={rejectedFieldInputs['title'] || ''}
                                             onChange={(e) => handleUpdateRejectionReason('title', e.target.value)}
                                             placeholder="Provide exact correction required..."
                                             className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none"
@@ -2387,17 +2407,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                 <label className="flex items-start gap-3 p-3 rounded-2xl bg-gray-50 border hover:bg-gray-100 transition-colors cursor-pointer">
                                    <input 
                                       type="checkbox"
-                                      checked={rejectionFields.description.selected}
+                                      checked={rejectedFieldInputs['description'] !== undefined}
                                       onChange={(e) => handleToggleRejectionField('description', e.target.checked)}
                                       className="mt-1 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
                                    />
                                    <div className="flex-1 space-y-1">
                                       <span className="text-xs font-bold text-gray-900">Primary Description Ad Copy</span>
-                                      {rejectionFields.description.selected && (
+                                      {rejectedFieldInputs['description'] !== undefined && (
                                          <input 
                                             type="text"
                                             required
-                                            value={rejectionFields.description.reason}
+                                            value={rejectedFieldInputs['description'] || ''}
                                             onChange={(e) => handleUpdateRejectionReason('description', e.target.value)}
                                             placeholder="Provide exact correction required..."
                                             className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none"
@@ -2409,17 +2429,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                 <label className="flex items-start gap-3 p-3 rounded-2xl bg-gray-50 border hover:bg-gray-100 transition-colors cursor-pointer">
                                    <input 
                                       type="checkbox"
-                                      checked={rejectionFields.feed_description.selected}
+                                      checked={rejectedFieldInputs['feed_description'] !== undefined}
                                       onChange={(e) => handleToggleRejectionField('feed_description', e.target.checked)}
                                       className="mt-1 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
                                    />
                                    <div className="flex-1 space-y-1">
                                       <span className="text-xs font-bold text-gray-900">Feed Description / Tagline</span>
-                                      {rejectionFields.feed_description.selected && (
+                                      {rejectedFieldInputs['feed_description'] !== undefined && (
                                          <input 
                                             type="text"
                                             required
-                                            value={rejectionFields.feed_description.reason}
+                                            value={rejectedFieldInputs['feed_description'] || ''}
                                             onChange={(e) => handleUpdateRejectionReason('feed_description', e.target.value)}
                                             placeholder="Provide exact correction required..."
                                             className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none"
@@ -2431,17 +2451,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                 <label className="flex items-start gap-3 p-3 rounded-2xl bg-gray-50 border hover:bg-gray-100 transition-colors cursor-pointer">
                                    <input 
                                       type="checkbox"
-                                      checked={rejectionFields.target_locations.selected}
+                                      checked={rejectedFieldInputs['target_locations'] !== undefined}
                                       onChange={(e) => handleToggleRejectionField('target_locations', e.target.checked)}
                                       className="mt-1 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
                                    />
                                    <div className="flex-1 space-y-1">
                                       <span className="text-xs font-bold text-gray-900">Target Locations</span>
-                                      {rejectionFields.target_locations.selected && (
+                                      {rejectedFieldInputs['target_locations'] !== undefined && (
                                          <input 
                                             type="text"
                                             required
-                                            value={rejectionFields.target_locations.reason}
+                                            value={rejectedFieldInputs['target_locations'] || ''}
                                             onChange={(e) => handleUpdateRejectionReason('target_locations', e.target.value)}
                                             placeholder="Provide exact correction required..."
                                             className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none"
@@ -2453,17 +2473,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                 <label className="flex items-start gap-3 p-3 rounded-2xl bg-gray-50 border hover:bg-gray-100 transition-colors cursor-pointer">
                                    <input 
                                       type="checkbox"
-                                      checked={rejectionFields.platforms.selected}
+                                      checked={rejectedFieldInputs['platforms'] !== undefined}
                                       onChange={(e) => handleToggleRejectionField('platforms', e.target.checked)}
                                       className="mt-1 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
                                    />
                                    <div className="flex-1 space-y-1">
                                       <span className="text-xs font-bold text-gray-900">Target Platforms Selection</span>
-                                      {rejectionFields.platforms.selected && (
+                                      {rejectedFieldInputs['platforms'] !== undefined && (
                                          <input 
                                             type="text"
                                             required
-                                            value={rejectionFields.platforms.reason}
+                                            value={rejectedFieldInputs['platforms'] || ''}
                                             onChange={(e) => handleUpdateRejectionReason('platforms', e.target.value)}
                                             placeholder="Provide exact correction required..."
                                             className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none"
@@ -2475,17 +2495,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                 <label className="flex items-start gap-3 p-3 rounded-2xl bg-gray-50 border hover:bg-gray-100 transition-colors cursor-pointer">
                                    <input 
                                       type="checkbox"
-                                      checked={rejectionFields.media_urls.selected}
+                                      checked={rejectedFieldInputs['media_urls'] !== undefined}
                                       onChange={(e) => handleToggleRejectionField('media_urls', e.target.checked)}
                                       className="mt-1 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
                                    />
                                    <div className="flex-1 space-y-1">
                                       <span className="text-xs font-bold text-gray-900">Visual Image Assets</span>
-                                      {rejectionFields.media_urls.selected && (
+                                      {rejectedFieldInputs['media_urls'] !== undefined && (
                                          <input 
                                             type="text"
                                             required
-                                            value={rejectionFields.media_urls.reason}
+                                            value={rejectedFieldInputs['media_urls'] || ''}
                                             onChange={(e) => handleUpdateRejectionReason('media_urls', e.target.value)}
                                             placeholder="Provide exact correction required..."
                                             className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none"
@@ -2497,17 +2517,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                 <label className="flex items-start gap-3 p-3 rounded-2xl bg-gray-50 border hover:bg-gray-100 transition-colors cursor-pointer">
                                    <input 
                                       type="checkbox"
-                                      checked={rejectionFields.video_url.selected}
+                                      checked={rejectedFieldInputs['video_url'] !== undefined}
                                       onChange={(e) => handleToggleRejectionField('video_url', e.target.checked)}
                                       className="mt-1 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
                                    />
                                    <div className="flex-1 space-y-1">
                                       <span className="text-xs font-bold text-gray-900">Reel / Video Asset</span>
-                                      {rejectionFields.video_url.selected && (
+                                      {rejectedFieldInputs['video_url'] !== undefined && (
                                          <input 
                                             type="text"
                                             required
-                                            value={rejectionFields.video_url.reason}
+                                            value={rejectedFieldInputs['video_url'] || ''}
                                             onChange={(e) => handleUpdateRejectionReason('video_url', e.target.value)}
                                             placeholder="Provide exact correction required..."
                                             className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none"
@@ -2522,8 +2542,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wider block">General Feedback Summary *</label>
                                 <textarea
                                    required
-                                   value={rejectionNotes}
-                                   onChange={(e) => setRejectionNotes(e.target.value)}
+                                   value={rejectionFeedback}
+                                   onChange={(e) => setRejectionFeedback(e.target.value)}
                                    placeholder="Synthesize the primary reason for rejection to help the host fix their campaign ad set..."
                                    rows={3}
                                    className="w-full text-xs border border-gray-200 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-red-500 resize-none leading-relaxed"
@@ -2540,7 +2560,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                 </button>
                                 <button
                                    type="button"
-                                   onClick={handleSubmitRejection}
+                                   onClick={handleConfirmRejectCampaign}
                                    disabled={submittingRejection}
                                    className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-sm transition-colors shadow-sm disabled:opacity-50"
                                 >
