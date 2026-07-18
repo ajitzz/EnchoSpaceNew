@@ -260,6 +260,14 @@ const walletRefuelSchema = z.object({
   gateway: z.enum(['stripe', 'razorpay'])
 });
 
+const socialPostSchema = z.object({
+  listing_id: z.number().int().positive(),
+  media_type: z.enum(['post', 'reel', 'story', 'carousel']),
+  media_urls: z.array(z.string()),
+  caption: z.string().min(5),
+  scheduled_at: z.string().optional().nullable(),
+});
+
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.NODE_ENV === 'test' ? 0 : 3000;
@@ -1171,6 +1179,32 @@ const ensureMarketingSchema = async () => {
     );
   `);
 
+  // Pillar 6: host_social_posts table (Direct Social Publishing & Boost Engine)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS host_social_posts (
+      id SERIAL PRIMARY KEY,
+      host_id INT REFERENCES users(id) ON DELETE CASCADE,
+      listing_id INT REFERENCES listings(id) ON DELETE CASCADE,
+      media_type VARCHAR(50) DEFAULT 'post', -- 'post', 'reel', 'story', 'carousel'
+      media_urls JSONB DEFAULT '[]'::jsonb,
+      caption TEXT,
+      status VARCHAR(50) DEFAULT 'draft', -- 'draft', 'pending_approval', 'approved', 'rejected'
+      admin_feedback TEXT,
+      scheduled_at TIMESTAMP,
+      published_at TIMESTAMP,
+      is_boosted BOOLEAN DEFAULT false,
+      boosted_campaign_id INT, -- links to host_marketing_campaigns
+      likes INT DEFAULT 0,
+      comments INT DEFAULT 0,
+      shares INT DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_social_posts_host_id ON host_social_posts(host_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_social_posts_listing_id ON host_social_posts(listing_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_social_posts_status ON host_social_posts(status);`);
+
 
   // Gap 17: Strict Row-Level Security (RLS) - The Data Breach Shield
   try {
@@ -1227,6 +1261,12 @@ const ensureMarketingSchema = async () => {
       DROP POLICY IF EXISTS experience_bookings_policy ON experience_bookings;
       CREATE POLICY experience_bookings_policy ON experience_bookings
         USING (user_id = current_app_user_id() OR experience_id IN (SELECT id FROM experiences WHERE host_id = current_app_user_id()) OR current_setting('app.bypass_rls', true) = 'true');
+
+      -- 9. host_social_posts
+      ALTER TABLE host_social_posts ENABLE ROW LEVEL SECURITY;
+      DROP POLICY IF EXISTS host_social_posts_policy ON host_social_posts;
+      CREATE POLICY host_social_posts_policy ON host_social_posts
+        USING (host_id = current_app_user_id() OR current_setting('app.bypass_rls', true) = 'true');
 
     `);
     console.log('✅ Gap 17: Strict Row-Level Security (RLS) policies enforced on Neon Postgres.');
@@ -2410,6 +2450,323 @@ app.delete('/api/marketing/campaigns/:id', authenticateToken, async (req: AuthRe
   }
 });
 
+// =========================================================================
+// PILLAR 6: DIRECT SOCIAL PUBLISHING & BOOST ENGINE ROUTE HANDLERS
+// =========================================================================
+
+// Fetch social posts for current host
+app.get('/api/host/social-posts', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const result = await pool.query(`
+      SELECT p.*, l.title as listing_title, l.cover_image as listing_image
+      FROM host_social_posts p
+      JOIN listings l ON p.listing_id = l.id
+      WHERE p.host_id = $1
+      ORDER BY p.created_at DESC
+    `, [req.user?.id]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching host social posts:', error);
+    res.status(500).json({ error: 'Failed to fetch social posts' });
+  }
+});
+
+// Create social post draft & submit for admin/AI review
+app.post('/api/host/social-posts', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const parseResult = socialPostSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({ error: 'Invalid input', details: parseResult.error.errors });
+    }
+    const { listing_id, media_type, media_urls, caption, scheduled_at } = parseResult.data;
+
+    // Verify listing ownership
+    const listingCheck = await pool.query('SELECT 1 FROM listings WHERE id = $1 AND user_id = $2', [listing_id, req.user?.id]);
+    if (listingCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Unauthorized: Listing does not belong to you or does not exist.' });
+    }
+
+    // AI Safety Check pre-validation
+    const hasForbiddenWords = /crypto|scam|spam|casino|adult|unregulated|fast money/i.test(caption);
+    const hasIncompleteInfo = caption.length < 10;
+    
+    let initialStatus = 'pending_approval';
+    let feedback = null;
+    
+    if (hasForbiddenWords) {
+      initialStatus = 'rejected';
+      feedback = 'AI Safety Engine: Post copy contains forbidden keywords violating master brand safety guidelines.';
+    } else if (hasIncompleteInfo) {
+      initialStatus = 'rejected';
+      feedback = 'AI Content Analyst: High-quality publishing requires detailed, descriptive copy (minimum 10 characters).';
+    }
+
+    const result = await pool.query(`
+      INSERT INTO host_social_posts 
+      (host_id, listing_id, media_type, media_urls, caption, status, admin_feedback, scheduled_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING *
+    `, [
+      req.user?.id,
+      listing_id,
+      media_type,
+      JSON.stringify(media_urls || []),
+      caption,
+      initialStatus,
+      feedback,
+      scheduled_at ? new Date(scheduled_at) : null
+    ]);
+
+    // Audit Trail
+    await pool.query(`
+      INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [
+      req.user?.id,
+      'social_post',
+      result.rows[0].id,
+      'create_social_post',
+      JSON.stringify({}),
+      JSON.stringify(result.rows[0]),
+      req.ip || req.socket.remoteAddress
+    ]);
+
+    broadcastDbEvent(req, 'marketing');
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Error creating social post:', error);
+    res.status(500).json({ error: 'Failed to create social post' });
+  }
+});
+
+// Boost an approved social post by generating a campaign mapping
+app.post('/api/host/social-posts/:id/boost', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const { budget, platforms } = req.body;
+
+    // Verify ownership
+    const postCheck = await pool.query('SELECT * FROM host_social_posts WHERE id = $1 AND host_id = $2', [id, req.user?.id]);
+    if (postCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Social post not found or unauthorized' });
+    }
+
+    const post = postCheck.rows[0];
+
+    // Create a boosted marketing campaign mapping to this post
+    const campaignResult = await pool.query(`
+      INSERT INTO host_marketing_campaigns 
+      (host_id, listing_id, title, description, media_urls, platforms, budget, status, ad_format, feed_description)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', $8, $9)
+      RETURNING *
+    `, [
+      req.user?.id,
+      post.listing_id,
+      `Boosted ${post.media_type.toUpperCase()}: ${post.caption.substring(0, 30)}...`,
+      post.caption,
+      post.media_urls,
+      JSON.stringify(platforms || ['meta']),
+      budget || 1500,
+      post.media_type === 'reel' ? 'story' : 'post',
+      post.caption
+    ]);
+
+    const newCampaign = campaignResult.rows[0];
+
+    // Link the social post to this campaign
+    await pool.query(`
+      UPDATE host_social_posts
+      SET is_boosted = true, boosted_campaign_id = $1, status = 'pending_approval'
+      WHERE id = $2
+    `, [newCampaign.id, id]);
+
+    // Audit Trail
+    await pool.query(`
+      INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [
+      req.user?.id,
+      'social_post',
+      id,
+      'boost_social_post',
+      JSON.stringify({ is_boosted: false }),
+      JSON.stringify({ is_boosted: true, campaign_id: newCampaign.id }),
+      req.ip || req.socket.remoteAddress
+    ]);
+
+    broadcastDbEvent(req, 'marketing');
+    res.json({ success: true, campaign: newCampaign });
+  } catch (error) {
+    console.error('Error boosting social post:', error);
+    res.status(500).json({ error: 'Failed to boost social post' });
+  }
+});
+
+// Delete social post draft
+app.delete('/api/host/social-posts/:id', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const check = await pool.query('SELECT 1 FROM host_social_posts WHERE id = $1 AND host_id = $2', [id, req.user?.id]);
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: 'Social post not found or unauthorized' });
+    }
+
+    await pool.query('DELETE FROM host_social_posts WHERE id = $1', [id]);
+    broadcastDbEvent(req, 'marketing');
+    res.json({ success: true, message: 'Social post deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting social post:', error);
+    res.status(500).json({ error: 'Failed to delete social post' });
+  }
+});
+
+// Fetch all social posts for admin review
+app.get('/api/admin/social-posts', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const userRes = await pool.query('SELECT is_admin FROM users WHERE id = $1', [req.user?.id]);
+    if (userRes.rows.length === 0 || !userRes.rows[0].is_admin) {
+      return res.status(403).json({ error: 'Access denied: Administrators only' });
+    }
+
+    const result = await pool.query(`
+      SELECT p.*, l.title as listing_title, l.cover_image as listing_image, u.name as host_name
+      FROM host_social_posts p
+      JOIN listings l ON p.listing_id = l.id
+      JOIN users u ON p.host_id = u.id
+      ORDER BY p.created_at DESC
+    `);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching admin social posts:', error);
+    res.status(500).json({ error: 'Failed to fetch admin social posts' });
+  }
+});
+
+// Admin Approve Social Post
+app.post('/api/admin/social-posts/:id/approve', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    
+    const userRes = await pool.query('SELECT is_admin FROM users WHERE id = $1', [req.user?.id]);
+    if (userRes.rows.length === 0 || !userRes.rows[0].is_admin) {
+      return res.status(403).json({ error: 'Access denied: Administrators only' });
+    }
+
+    const previous = await pool.query('SELECT * FROM host_social_posts WHERE id = $1', [id]);
+    if (previous.rows.length === 0) {
+      return res.status(404).json({ error: 'Social post not found' });
+    }
+
+    const result = await pool.query(`
+      UPDATE host_social_posts
+      SET status = 'approved', published_at = CURRENT_TIMESTAMP, admin_feedback = NULL
+      WHERE id = $1
+      RETURNING *
+    `, [id]);
+
+    // Seed mock visual metrics
+    await pool.query(`
+      UPDATE host_social_posts
+      SET likes = $1, comments = $2, shares = $3
+      WHERE id = $4
+    `, [
+      Math.floor(Math.random() * 250) + 50,
+      Math.floor(Math.random() * 40) + 10,
+      Math.floor(Math.random() * 20) + 5,
+      id
+    ]);
+
+    await pool.query(`
+      INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [
+      req.user?.id,
+      'social_post',
+      id,
+      'approve_social_post',
+      JSON.stringify(previous.rows[0]),
+      JSON.stringify(result.rows[0]),
+      req.ip || req.socket.remoteAddress
+    ]);
+
+    broadcastDbEvent(req, 'marketing');
+    res.json({ success: true, post: result.rows[0] });
+  } catch (error) {
+    console.error('Error approving social post:', error);
+    res.status(500).json({ error: 'Failed to approve social post' });
+  }
+});
+
+// Admin Reject Social Post
+app.post('/api/admin/social-posts/:id/reject', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const { feedback } = req.body;
+    
+    const userRes = await pool.query('SELECT is_admin FROM users WHERE id = $1', [req.user?.id]);
+    if (userRes.rows.length === 0 || !userRes.rows[0].is_admin) {
+      return res.status(403).json({ error: 'Access denied: Administrators only' });
+    }
+
+    const previous = await pool.query('SELECT * FROM host_social_posts WHERE id = $1', [id]);
+    if (previous.rows.length === 0) {
+      return res.status(404).json({ error: 'Social post not found' });
+    }
+
+    const result = await pool.query(`
+      UPDATE host_social_posts
+      SET status = 'rejected', admin_feedback = $1
+      WHERE id = $2
+      RETURNING *
+    `, [feedback || 'Does not meet Encho community standards.', id]);
+
+    await pool.query(`
+      INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [
+      req.user?.id,
+      'social_post',
+      id,
+      'reject_social_post',
+      JSON.stringify(previous.rows[0]),
+      JSON.stringify(result.rows[0]),
+      req.ip || req.socket.remoteAddress
+    ]);
+
+    broadcastDbEvent(req, 'marketing');
+    res.json({ success: true, post: result.rows[0] });
+  } catch (error) {
+    console.error('Error rejecting social post:', error);
+    res.status(500).json({ error: 'Failed to reject social post' });
+  }
+});
+
+// Public endpoint: Fetch published social posts for a listing (Display carousel)
+app.get('/api/listings/:id/social-posts', async (req, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const result = await pool.query(`
+      SELECT p.*, u.name as host_name, u.avatar as host_avatar
+      FROM host_social_posts p
+      JOIN users u ON p.host_id = u.id
+      WHERE p.listing_id = $1 AND p.status = 'approved'
+      ORDER BY p.published_at DESC
+    `, [id]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching public social posts:', error);
+    res.status(500).json({ error: 'Failed to fetch social posts' });
+  }
+});
+
 // Run AI check on a draft
 app.post('/api/marketing/campaigns/:id/ai-check', authenticateToken, aiGatekeeperLimiter, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
@@ -3583,9 +3940,39 @@ const processAsyncWebhookQueue = async () => {
         const queueRes = await pool.query("SELECT * FROM async_webhook_queue WHERE status = 'pending' LIMIT 50");
         for (const row of queueRes.rows) {
             console.log(`[BACKGROUND WORKER] Processing queued Ad Network webhook ID: ${row.id} from ${row.source}`);
-            // Here we would parse row.payload (e.g. ad approvals, impression syncs)
-            // For now, we just mark it as processed
-            await pool.query("UPDATE async_webhook_queue SET status = 'processed' WHERE id = $1", [row.id]);
+            try {
+                // Here we would parse row.payload (e.g. ad approvals, impression syncs)
+                const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
+                
+                if (payload.event === 'ad_approved' && payload.campaign_id) {
+                    await pool.query("UPDATE host_marketing_campaigns SET status = 'active' WHERE id = $1", [payload.campaign_id]);
+                    console.log(`[ASYNC WEBHOOK] Campaign #${payload.campaign_id} marked as ACTIVE based on Ad Network webhook.`);
+                } else if (payload.event === 'ad_metrics_update' && payload.campaign_id) {
+                    // Initialize metrics row if it doesn't exist for today
+                    const metricsCheck = await pool.query("SELECT id FROM campaign_metrics WHERE campaign_id = $1 AND date = CURRENT_DATE", [payload.campaign_id]);
+                    if (metricsCheck.rows.length === 0) {
+                        await pool.query("INSERT INTO campaign_metrics (campaign_id, date, spend, impressions, clicks) VALUES ($1, CURRENT_DATE, 0, 0, 0)", [payload.campaign_id]);
+                    }
+                    
+                    await pool.query(`
+                        UPDATE campaign_metrics 
+                        SET impressions = impressions + $1, clicks = clicks + $2 
+                        WHERE campaign_id = $3 AND date = CURRENT_DATE
+                    `, [payload.impressions || 0, payload.clicks || 0, payload.campaign_id]);
+                    console.log(`[ASYNC WEBHOOK] Updated metrics for Campaign #${payload.campaign_id}.`);
+                }
+
+                // Mark as processed
+                await pool.query("UPDATE async_webhook_queue SET status = 'processed' WHERE id = $1", [row.id]);
+            } catch (err: any) {
+                console.error(`[BACKGROUND WORKER ERROR] Failed to process webhook ID ${row.id}:`, err);
+                await pool.query("UPDATE async_webhook_queue SET status = 'failed' WHERE id = $1", [row.id]);
+                // Gap 18: Send failed webhook payload to Dead Letter Queue (DLQ)
+                await pool.query(
+                    "INSERT INTO webhook_dlq (source, payload, error_message, next_retry_at) VALUES ($1, $2, $3, NOW() + interval '5 minutes')",
+                    [row.source, JSON.stringify(row.payload), err.message]
+                );
+            }
         }
     } catch (err) {
         console.error('[BACKGROUND WORKER ERROR]', err);

@@ -32,6 +32,26 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   const [walletTransactions, setWalletTransactions] = useState<any[]>([]);
   const [selectedCampaignForAnalytics, setSelectedCampaignForAnalytics] = useState<MarketingCampaign | null>(null);
 
+  // Pillar 6: Encho Social Studio States
+  const [marketingViewTab, setMarketingViewTab] = useState<'paid' | 'social'>('paid');
+  const [socialPosts, setSocialPosts] = useState<any[]>([]);
+  const [loadingSocialPosts, setLoadingSocialPosts] = useState(false);
+  const [showCreatePostModal, setShowCreatePostModal] = useState(false);
+  const [socialFormData, setSocialFormData] = useState({
+    listing_id: '',
+    media_type: 'post' as 'post' | 'reel' | 'story' | 'carousel',
+    media_urls: [] as string[],
+    caption: '',
+    scheduled_at: ''
+  });
+  const [newSocialMediaUrl, setNewSocialMediaUrl] = useState('');
+  const [isSubmittingPost, setIsSubmittingPost] = useState(false);
+  const [selectedPostForDetail, setSelectedPostForDetail] = useState<any | null>(null);
+  const [showBoostPostModal, setShowBoostPostModal] = useState<any | null>(null);
+  const [boostBudget, setBoostBudget] = useState(1500);
+  const [boostPlatforms, setBoostPlatforms] = useState<string[]>(['meta']);
+  const [isBoosting, setIsBoosting] = useState(false);
+
   // Form states for creating campaign
   const [formData, setFormData] = useState({
     listing_id: '',
@@ -248,9 +268,144 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
     }
   };
 
+  const fetchSocialPosts = async () => {
+    setLoadingSocialPosts(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/host/social-posts', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSocialPosts(data);
+        if (data.length > 0 && !selectedPostForDetail) {
+          setSelectedPostForDetail(data[0]);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch social posts:', err);
+    } finally {
+      setLoadingSocialPosts(false);
+    }
+  };
+
+  const handleCreateSocialPost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!socialFormData.listing_id) {
+      addToast('Validation Error', 'Please select a listing.', 'warning');
+      return;
+    }
+    if (socialFormData.media_urls.length === 0) {
+      addToast('Validation Error', 'Please add at least one media URL.', 'warning');
+      return;
+    }
+    if (!socialFormData.caption.trim()) {
+      addToast('Validation Error', 'Caption is required.', 'warning');
+      return;
+    }
+
+    setIsSubmittingPost(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/host/social-posts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          listing_id: Number(socialFormData.listing_id),
+          media_type: socialFormData.media_type,
+          media_urls: socialFormData.media_urls,
+          caption: socialFormData.caption,
+          scheduled_at: socialFormData.scheduled_at || null
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to submit social post');
+
+      if (data.status === 'rejected') {
+        addToast('AI Compliance Rejected', data.admin_feedback, 'warning');
+      } else {
+        addToast('Social Post Submitted', 'Your media has been submitted to the official @enchospace brand publishing queue.', 'success');
+      }
+
+      setShowCreatePostModal(false);
+      setSocialFormData({
+        listing_id: '',
+        media_type: 'post',
+        media_urls: [],
+        caption: '',
+        scheduled_at: ''
+      });
+      fetchSocialPosts();
+    } catch (err: any) {
+      addToast('Error', err.message || 'Failed to create social post.', 'error');
+    } finally {
+      setIsSubmittingPost(false);
+    }
+  };
+
+  const handleDeleteSocialPost = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this social post?')) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/host/social-posts/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        addToast('Success', 'Social post deleted.', 'success');
+        if (selectedPostForDetail?.id === id) {
+          setSelectedPostForDetail(null);
+        }
+        fetchSocialPosts();
+      } else {
+        const data = await res.json();
+        addToast('Error', data.error || 'Failed to delete post.', 'error');
+      }
+    } catch (err) {
+      console.error('Failed to delete social post:', err);
+    }
+  };
+
+  const handleBoostSocialPost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!showBoostPostModal) return;
+    setIsBoosting(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/host/social-posts/${showBoostPostModal.id}/boost`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          budget: boostBudget,
+          platforms: boostPlatforms
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to boost post');
+
+      addToast('Post Boost Initiated', `Successfully configured paid ad campaign for ${formatPrice(boostBudget, 'INR')}. Pending final moderation.`, 'success');
+      setShowBoostPostModal(null);
+      fetchSocialPosts();
+      fetchCampaigns();
+    } catch (err: any) {
+      addToast('Error', err.message || 'Failed to boost post', 'error');
+    } finally {
+      setIsBoosting(false);
+    }
+  };
+
   useEffect(() => {
     fetchCampaigns();
     fetchWallet();
+    fetchSocialPosts();
 
     const params = new URLSearchParams(window.location.search);
     if (params.get('refuel_success')) {
@@ -871,8 +1026,36 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         </div>
       </div>
 
-      {/* FUEL TANK UI */}
-      <motion.div 
+      {/* Dynamic Navigation Tabs: Paid Ads vs Brand Social Studio */}
+      <div className="flex border-b border-gray-150 mb-10 gap-8">
+        <button
+          onClick={() => setMarketingViewTab('paid')}
+          className={`pb-4 text-sm font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 focus:outline-none ${
+            marketingViewTab === 'paid'
+              ? 'border-gray-900 text-gray-900 font-black'
+              : 'border-transparent text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          <CreditCard className="w-4 h-4" />
+          <span>Paid Marketing Campaigns</span>
+        </button>
+        <button
+          onClick={() => setMarketingViewTab('social')}
+          className={`pb-4 text-sm font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 focus:outline-none ${
+            marketingViewTab === 'social'
+              ? 'border-gray-900 text-gray-900 font-black'
+              : 'border-transparent text-gray-400 hover:text-gray-600'
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-amber-500" />
+          <span>Encho Social Studio</span>
+          <span className="bg-amber-100 text-amber-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full scale-90">NEW</span>
+        </button>
+      </div>
+
+      <div className={marketingViewTab === 'social' ? 'hidden' : ''}>
+        {/* FUEL TANK UI */}
+        <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
@@ -2149,6 +2332,316 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
               <div className="text-center py-20 text-gray-500 space-y-3">
                 <Target className="w-12 h-12 text-zinc-200 mx-auto" />
                 <p className="text-sm font-light">Select or create a marketing campaign to view live feed insights.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      </div>
+
+      {marketingViewTab === 'social' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Left Column: Post Grid & Management */}
+          <div className="lg:col-span-7 space-y-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-black text-gray-900 uppercase tracking-wider text-[12px] text-gray-400">
+                  Organic Brand Posts ({socialPosts.length})
+                </h3>
+                <p className="text-xs text-zinc-500 font-light mt-0.5">Direct publishing queue for @enchospace handles.</p>
+              </div>
+              <button
+                onClick={() => {
+                  if (listings.length === 0) {
+                    addToast('No Listings Found', 'Please host a property first before publishing social posts.', 'warning');
+                    return;
+                  }
+                  setShowCreatePostModal(true);
+                }}
+                className="flex items-center gap-1.5 bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Draft New Post</span>
+              </button>
+            </div>
+
+            {loadingSocialPosts ? (
+              <div className="flex items-center justify-center py-20 bg-white border rounded-3xl">
+                <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+              </div>
+            ) : socialPosts.length === 0 ? (
+              <div className="bg-white border text-center p-12 rounded-3xl text-gray-500 border-dashed">
+                <Sparkles className="w-12 h-12 text-amber-400 mx-auto mb-4" />
+                <h4 className="font-bold text-gray-900 mb-1">Encho Space Social Studio</h4>
+                <p className="text-xs font-light text-gray-500 max-w-sm mx-auto mb-6">
+                  Draft, schedule, and publish Reels or Stories directly to the official @enchospace brand account. Let our community see your property!
+                </p>
+                <button
+                  onClick={() => setShowCreatePostModal(true)}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-900 text-xs font-bold px-4 py-2 rounded-xl"
+                >
+                  Create First Post
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {socialPosts.map((post) => (
+                  <div
+                    key={post.id}
+                    onClick={() => setSelectedPostForDetail(post)}
+                    className={`bg-white p-5 rounded-3xl border transition-all duration-300 cursor-pointer text-left relative overflow-hidden ${
+                      selectedPostForDetail?.id === post.id
+                        ? 'border-blue-500 ring-4 ring-blue-500/10 shadow-lg scale-[1.01]'
+                        : 'border-zinc-150 hover:border-zinc-300 hover:shadow-md'
+                    }`}
+                  >
+                    <div className="flex gap-4">
+                      {/* Media Display */}
+                      <div className="relative w-20 h-20 bg-gray-100 rounded-2xl overflow-hidden border shrink-0">
+                        {post.media_urls?.[0] ? (
+                          <img
+                            src={post.media_urls[0]}
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover"
+                            alt=""
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-zinc-400">
+                            <Upload className="w-6 h-6" />
+                          </div>
+                        )}
+                        <span className="absolute bottom-1 right-1 bg-black/60 text-white text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">
+                          {post.media_type}
+                        </span>
+                      </div>
+
+                      {/* Info & Caption */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1 gap-2">
+                          <h4 className="font-bold text-gray-900 truncate text-[14px]">
+                            {post.listing_title}
+                          </h4>
+                          <span
+                            className={`text-[9px] font-extrabold uppercase border px-2 py-0.5 rounded-md tracking-wider ${
+                              post.status === 'approved'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : post.status === 'rejected'
+                                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                : 'bg-amber-50 text-amber-700 border-amber-200'
+                            }`}
+                          >
+                            {post.status === 'approved' ? 'Live @enchospace' : post.status}
+                          </span>
+                        </div>
+                        <p className="text-xs font-light text-gray-600 line-clamp-2 mb-3">
+                          {post.caption}
+                        </p>
+
+                        {/* Interactive Engagement Metrics */}
+                        {post.status === 'approved' && (
+                          <div className="flex items-center gap-4 text-[11px] font-mono font-bold text-gray-500 bg-gray-50 py-1.5 px-3 rounded-xl w-fit">
+                            <span className="flex items-center gap-1">
+                              <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
+                              <span>{post.likes}</span>
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <MessageSquare className="w-3.5 h-3.5 text-blue-500" />
+                              <span>{post.comments}</span>
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Share2 className="w-3.5 h-3.5 text-emerald-500" />
+                              <span>{post.shares}</span>
+                            </span>
+                          </div>
+                        )}
+
+                        {post.status === 'rejected' && post.admin_feedback && (
+                          <div className="bg-rose-50 text-rose-800 text-[11px] p-2.5 rounded-xl border border-rose-100 mt-2 flex items-start gap-1.5">
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
+                            <span>{post.admin_feedback}</span>
+                          </div>
+                        )}
+                        
+                        {post.status === 'pending_approval' && (
+                          <div className="bg-amber-50 text-amber-800 text-[11px] p-2.5 rounded-xl border border-amber-100 mt-2 flex items-start gap-1.5">
+                            <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                            <span>Pending administrative verification before pushing live.</span>
+                          </div>
+                        )}
+
+                        {post.scheduled_at && post.status !== 'approved' && (
+                          <div className="text-[10px] text-zinc-500 mt-2 font-mono flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            <span>Scheduled: {new Date(post.scheduled_at).toLocaleString()}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Actions footer */}
+                    <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-100">
+                      {post.status === 'approved' && !post.is_boosted && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowBoostPostModal(post);
+                          }}
+                          className="flex items-center gap-1 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all animate-pulse"
+                        >
+                          <Zap className="w-3 h-3 fill-white animate-bounce" />
+                          <span>ONE-CLICK BOOST</span>
+                        </button>
+                      )}
+                      {post.is_boosted && (
+                        <span className="flex items-center gap-1 bg-blue-100 text-blue-800 text-[10px] font-bold px-3 py-1.5 rounded-lg">
+                          <CheckCircle className="w-3 h-3" />
+                          <span>BOOSTED ACTIVE</span>
+                        </span>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteSocialPost(post.id);
+                        }}
+                        className="text-gray-400 hover:text-rose-600 p-1.5 rounded-lg transition-all"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Right Column: Live Instagram Phone Mockup Feed Simulator */}
+          <div className="lg:col-span-5 bg-white p-6 md:p-8 rounded-3xl border border-zinc-150">
+            {selectedPostForDetail ? (
+              <div className="text-left space-y-6">
+                <div>
+                  <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest block font-mono">
+                    Social Studio Preview
+                  </span>
+                  <h3 className="text-xl font-bold text-gray-900 tracking-tight mt-1">
+                    Feed Simulator
+                  </h3>
+                  <p className="text-xs font-light text-gray-500">See your property showcased under the main @enchospace handle.</p>
+                </div>
+
+                {/* iPhone / Phone Mockup Wrapper */}
+                <div className="relative mx-auto max-w-[320px] bg-black rounded-[2.5rem] p-3 shadow-2xl border-4 border-zinc-800 overflow-hidden">
+                  <div className="absolute top-4 left-1/2 transform -translate-x-1/2 w-24 h-4 bg-zinc-800 rounded-full z-20"></div>
+                  
+                  <div className="bg-white rounded-[2rem] overflow-hidden text-black text-xs min-h-[460px] flex flex-col justify-between">
+                    {/* Brand Header */}
+                    <div className="flex items-center justify-between p-3 border-b">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 flex items-center justify-center text-white font-black text-[10px]">
+                          ES
+                        </div>
+                        <div>
+                          <p className="font-extrabold text-gray-900">enchospace</p>
+                          <p className="text-[9px] text-zinc-500">{selectedPostForDetail.listing_title}</p>
+                        </div>
+                      </div>
+                      <MoreHorizontal className="w-4 h-4 text-gray-400" />
+                    </div>
+
+                    {/* Media Slider / Image */}
+                    <div className="relative aspect-square bg-gray-100 flex items-center justify-center overflow-hidden">
+                      {selectedPostForDetail.media_urls?.[0] ? (
+                        <img
+                          src={selectedPostForDetail.media_urls[0]}
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover"
+                          alt=""
+                        />
+                      ) : (
+                        <div className="text-zinc-400 text-center space-y-1">
+                          <Upload className="w-8 h-8 mx-auto" />
+                          <p className="text-[10px]">No Media Loaded</p>
+                        </div>
+                      )}
+                      
+                      <div className="absolute top-2 right-2 bg-black/60 text-white text-[8px] font-black uppercase px-2 py-0.5 rounded-full">
+                        {selectedPostForDetail.media_type}
+                      </div>
+                    </div>
+
+                    {/* Post Interaction panel */}
+                    <div className="p-3 space-y-2 flex-1 flex flex-col justify-between">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <Heart className={`w-5 h-5 cursor-pointer hover:scale-110 transition-all ${hasLikedSandbox ? 'text-rose-500 fill-rose-500' : 'text-gray-700'}`} onClick={() => setHasLikedSandbox(!hasLikedSandbox)} />
+                            <MessageSquare className="w-5 h-5 text-gray-700" />
+                            <Share2 className="w-5 h-5 text-gray-700" />
+                          </div>
+                          <Bookmark className="w-5 h-5 text-gray-700" />
+                        </div>
+
+                        <div className="font-black text-gray-900">
+                          {selectedPostForDetail.likes + (hasLikedSandbox ? 1 : 0)} likes
+                        </div>
+
+                        <div>
+                          <span className="font-extrabold mr-1.5 text-gray-900">enchospace</span>
+                          <span className="text-gray-700 leading-relaxed font-light">{selectedPostForDetail.caption}</span>
+                        </div>
+                      </div>
+
+                      {/* Mock Interactive Comments Stream */}
+                      <div className="border-t pt-2 mt-2">
+                        <div className="text-[10px] font-bold text-gray-400 mb-1 uppercase font-mono">Live Sandbox Comments</div>
+                        <div className="space-y-1 max-h-[80px] overflow-y-auto">
+                          {sandboxComments.map((cmt) => (
+                            <div key={cmt.id} className="text-[11px] leading-tight">
+                              <span className="font-bold mr-1">{cmt.author.split(' ')[0].toLowerCase()}</span>
+                              <span className="text-gray-600">{cmt.text}</span>
+                            </div>
+                          ))}
+                        </div>
+                        
+                        {/* Inline custom comment typing input */}
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            const input = replyInputs[selectedPostForDetail.id] || '';
+                            if (!input.trim()) return;
+                            setSandboxComments([
+                              {
+                                id: Date.now(),
+                                author: 'You',
+                                avatar: 'H',
+                                text: input,
+                                replies: [],
+                                likes: 0,
+                                time: 'Just now'
+                              },
+                              ...sandboxComments
+                            ]);
+                            setReplyInputs({ ...replyInputs, [selectedPostForDetail.id]: '' });
+                          }}
+                          className="flex gap-2 items-center border-t pt-2 mt-2"
+                        >
+                          <input
+                            type="text"
+                            placeholder="Add comment..."
+                            value={replyInputs[selectedPostForDetail.id] || ''}
+                            onChange={(e) => setReplyInputs({ ...replyInputs, [selectedPostForDetail.id]: e.target.value })}
+                            className="flex-1 bg-gray-50 border-none outline-none focus:ring-0 p-1 rounded text-[11px]"
+                          />
+                          <button type="submit" className="text-blue-600 font-extrabold text-[10px] uppercase">Post</button>
+                        </form>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-20 text-gray-500 space-y-3">
+                <Sparkles className="w-12 h-12 text-zinc-200 mx-auto" />
+                <p className="text-sm font-light">Select or publish a brand social post to launch the real-time preview feed.</p>
               </div>
             )}
           </div>
@@ -3869,6 +4362,305 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                 </div>
               </div>
             </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* SOCIAL POST CREATION MODAL */}
+      <AnimatePresence>
+        {showCreatePostModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 shadow-2xl text-left"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-amber-500" />
+                  <span>Draft Brand Social Post</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowCreatePostModal(false)}
+                  className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateSocialPost} className="space-y-5">
+                <div>
+                  <label className="block text-[11px] font-extrabold uppercase text-gray-500 tracking-wider mb-2">
+                    Target Stay / Listing
+                  </label>
+                  <select
+                    value={socialFormData.listing_id}
+                    onChange={(e) => {
+                      const listId = e.target.value;
+                      const selected = listings.find((l) => String(l.id) === listId);
+                      setSocialFormData({
+                        ...socialFormData,
+                        listing_id: listId,
+                        media_urls: selected ? [selected.cover_image] : []
+                      });
+                    }}
+                    className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl p-3 text-sm focus:outline-none focus:border-gray-900"
+                    required
+                  >
+                    <option value="">Select a Stay</option>
+                    {listings.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.title} ({l.city})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-extrabold uppercase text-gray-500 tracking-wider mb-2">
+                      Media Format
+                    </label>
+                    <select
+                      value={socialFormData.media_type}
+                      onChange={(e: any) =>
+                        setSocialFormData({ ...socialFormData, media_type: e.target.value })
+                      }
+                      className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl p-3 text-sm focus:outline-none focus:border-gray-900"
+                    >
+                      <option value="post">Grid Post</option>
+                      <option value="reel">Instagram Reel</option>
+                      <option value="story">Instagram Story</option>
+                      <option value="carousel">Carousel Post</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-extrabold uppercase text-gray-500 tracking-wider mb-2">
+                      Schedule Release (Optional)
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={socialFormData.scheduled_at}
+                      onChange={(e) =>
+                        setSocialFormData({ ...socialFormData, scheduled_at: e.target.value })
+                      }
+                      className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl p-3 text-sm focus:outline-none focus:border-gray-900"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-extrabold uppercase text-gray-500 tracking-wider mb-2">
+                    Media URL / Image Asset
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Paste image/video URL"
+                      value={newSocialMediaUrl}
+                      onChange={(e) => setNewSocialMediaUrl(e.target.value)}
+                      className="flex-1 bg-zinc-50 border border-zinc-200 rounded-2xl p-3 text-sm focus:outline-none focus:border-gray-900"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (newSocialMediaUrl.trim()) {
+                          setSocialFormData({
+                            ...socialFormData,
+                            media_urls: [...socialFormData.media_urls, newSocialMediaUrl]
+                          });
+                          setNewSocialMediaUrl('');
+                        }
+                      }}
+                      className="bg-gray-900 text-white hover:bg-gray-800 text-xs font-bold px-4 rounded-xl"
+                    >
+                      Add
+                    </button>
+                  </div>
+                  
+                  {socialFormData.media_urls.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {socialFormData.media_urls.map((url, idx) => (
+                        <div key={idx} className="relative w-12 h-12 rounded-xl overflow-hidden border">
+                          <img src={url} className="w-full h-full object-cover" alt="" />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSocialFormData({
+                                ...socialFormData,
+                                media_urls: socialFormData.media_urls.filter((_, i) => i !== idx)
+                              })
+                            }
+                            className="absolute -top-1 -right-1 bg-rose-500 text-white rounded-full p-0.5 scale-75"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-extrabold uppercase text-gray-500 tracking-wider mb-2">
+                    Caption copy & hashtags
+                  </label>
+                  <textarea
+                    rows={4}
+                    placeholder="Write engaging copy to attract travelers. Feel free to use emojis!"
+                    value={socialFormData.caption}
+                    onChange={(e) =>
+                      setSocialFormData({ ...socialFormData, caption: e.target.value })
+                    }
+                    className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl p-3.5 text-sm focus:outline-none focus:border-gray-900 leading-relaxed font-light"
+                    required
+                  />
+                  <div className="text-[10px] text-zinc-400 mt-1 flex justify-between font-mono">
+                    <span>AI Safety Pre-Check scanning active.</span>
+                    <span>Min 10 chars.</span>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-gray-100 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreatePostModal(false)}
+                    className="px-5 py-3 text-zinc-500 hover:text-zinc-700 text-sm font-bold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingPost}
+                    className="flex items-center gap-2 bg-gray-900 hover:bg-gray-800 disabled:opacity-50 text-white px-6 py-3 rounded-2xl font-bold text-sm shadow-md transition-all"
+                  >
+                    {isSubmittingPost && <Loader2 className="w-4 h-4 animate-spin" />}
+                    <span>Submit to Brand Queue</span>
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ONE-CLICK INSTANT SOCIAL BOOST MODAL */}
+      <AnimatePresence>
+        {showBoostPostModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl max-w-md w-full p-6 md:p-8 shadow-2xl text-left"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+                  <Zap className="w-5 h-5 text-amber-500 fill-amber-500" />
+                  <span>Instant Social Boost</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowBoostPostModal(null)}
+                  className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="mb-5 bg-amber-50 border border-amber-200/50 rounded-2xl p-4 text-xs text-amber-800 leading-relaxed font-light">
+                Boost your published brand post to reach 10x more travelers across Meta ad feeds instantly. Budgets are funded from your active <strong>Master Fuel Tank</strong> balance.
+              </div>
+
+              <form onSubmit={handleBoostSocialPost} className="space-y-5">
+                <div>
+                  <label className="block text-[11px] font-extrabold uppercase text-gray-500 tracking-wider mb-2">
+                    Linked Brand Post Caption Preview
+                  </label>
+                  <p className="text-xs text-zinc-600 bg-zinc-50 border p-3 rounded-xl line-clamp-3">
+                    {showBoostPostModal.caption}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-extrabold uppercase text-gray-500 tracking-wider mb-2">
+                    Boosting Budget (INR)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₹</span>
+                    <input
+                      type="number"
+                      min={500}
+                      max={100000}
+                      value={boostBudget}
+                      onChange={(e) => setBoostBudget(Number(e.target.value))}
+                      className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl p-3 pl-8 text-sm focus:outline-none focus:border-gray-900 font-mono"
+                      required
+                    />
+                  </div>
+                  <p className="text-[10px] text-zinc-400 mt-1">Minimum boost budget ₹500. 15% Encho Optimization Fee is automatically included.</p>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-extrabold uppercase text-gray-500 tracking-wider mb-2">
+                    Target Platforms
+                  </label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={boostPlatforms.includes('meta')}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setBoostPlatforms([...boostPlatforms, 'meta']);
+                          } else {
+                            setBoostPlatforms(boostPlatforms.filter((p) => p !== 'meta'));
+                          }
+                        }}
+                        className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span>Meta Feed & Stories</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={boostPlatforms.includes('google')}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setBoostPlatforms([...boostPlatforms, 'google']);
+                          } else {
+                            setBoostPlatforms(boostPlatforms.filter((p) => p !== 'google'));
+                          }
+                        }}
+                        className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span>Google Display Network</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-gray-100 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowBoostPostModal(null)}
+                    className="px-5 py-3 text-zinc-500 hover:text-zinc-700 text-sm font-bold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isBoosting}
+                    className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white px-6 py-3 rounded-2xl font-bold text-sm shadow-md transition-all"
+                  >
+                    {isBoosting && <Loader2 className="w-4 h-4 animate-spin" />}
+                    <span>Confirm Boost</span>
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}

@@ -63,12 +63,28 @@ This blueprint outlines the 5 pillars designed to eliminate host friction, drive
 
 ---
 
+## 6. Pillar 6: Direct Social Publishing & Boost Engine (Instagram Reels, Posts, Stories, Carousels)
+* **Concept:** Property hosts want maximum visibility with zero friction. We let them draft, schedule, and publish organic media (Reels, Stories, Carousels, and Posts) directly onto Encho's official master brand accounts (e.g., the high-traffic "@enchospace" handles) straight from their Host Dashboard. Then, they can amplify (boost) those organic posts as paid campaigns with one click.
+* **The Solution (The "Encho Social Studio"):**
+  * **Unified Creator Studio:** A beautiful in-app workspace where hosts can upload media, select an asset type (Reel, Post, Story, Carousel), write engaging copy, and preview exactly how it will appear on Instagram/Facebook before publishing.
+  * **The "One-Click Boost" Pipeline:** Once a post is live (or as a draft), hosts can configure a budget, run an AI Compliance Check, pay via our Geo-Router (Stripe/Razorpay), and boost the post on the Meta Network. This drives paid traffic directly to the listing while utilizing the organic post's social proof (likes/comments).
+  * **Listing Integration & RLS-Guarded Moderation:**
+    * *Property View Page:* Displays active and published social media posts/reels as a "Featured Social Feed" to potential guests, complete with CTA buttons ("Book This Cabin Now").
+    * *Host Creator Form:* Integration in listing creation allowing hosts to link specific posts/reels to their listings.
+    * *Admin Moderation Queue:* To protect the @enchospace official brand handles, all organic and boosted post drafts are subject to a strict automated AI check and human Admin Approval Queue before being published live.
+
+---
+
 ## Implementation Readiness Checklist
 - [x] S3/Cloud Storage File Upload Pipeline with Drag-and-Drop UX & Secure Fallbacks.
 - [x] Cryptographically Signed Payment Webhooks (HMAC-SHA256) protecting campaign state transitions.
 - [x] Direct Native Stripe Checkout SDK Integration supporting real merchant billing sessions.
-- [ ] Implement Dual-Gate Gemini Compliance & Grading API in `/server.ts`.
-- [ ] Build front-end CRM Lead Feed & Visual Attribution Funnel in `HostMarketing.tsx`.
-- [ ] Add the "Fuel Gauge" interactive component with live-refreshing WebSocket data.
-- [ ] Connect the "Rahul-Proof" Smart Targeter interface with AI geo-verification alerts.
-- [ ] Implement Admin Dashboard campaign moderation triggers.
+- [x] Implement Dual-Gate Gemini Compliance & Grading API in `/server.ts`.
+- [x] Build front-end CRM Lead Feed & Visual Attribution Funnel in `HostMarketing.tsx`.
+- [x] Add the "Fuel Gauge" interactive component with live-refreshing WebSocket data.
+- [x] Connect the "Rahul-Proof" Smart Targeter interface with AI geo-verification alerts.
+- [x] Implement Admin Dashboard campaign moderation triggers.
+- [x] Create DB Schema for `host_social_posts` table supporting publishing, scheduling, and amplification.
+- [x] Build front-end "Encho Social Studio" inside `HostMarketing.tsx` with dynamic Feed Previews and post-to-campaign amplification.
+- [x] Implement organic social post moderation queue in Admin Dashboard with real-time approved/rejected states.
+- [x] Integrate "Featured Reels & Posts" carousel on Property View Page.

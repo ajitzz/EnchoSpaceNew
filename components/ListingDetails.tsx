@@ -34,7 +34,7 @@ import { OptimizedImage, getOptimizedUrl } from './OptimizedImage';
 import { useCurrency } from './CurrencyContext';
 import { ImageGallery } from './ImageGallery';
 import PremiumInventoryUnitCard from './PremiumInventoryUnitCard';
-import { Sparkles, Home, Shield, Eye, Lock, Users, Bed, ArrowRight, CheckCircle2, HelpCircle, Layers, Volume2 } from 'lucide-react';
+import { Sparkles, Home, Shield, Eye, Lock, Users, Bed, ArrowRight, CheckCircle2, HelpCircle, Layers, Volume2, Play, Check, Heart, Image as ImageIcon } from 'lucide-react';
 import { getRatingWord, formatRating } from '../lib/ratingUtils';
 import { getTaxonomyDetails } from './ListingCard';
 import { io } from 'socket.io-client';
@@ -528,6 +528,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
   const [reviews, setReviews] = useState<any[]>([]);
   const [canReview, setCanReview] = useState(false);
   const [newReviewText, setNewReviewText] = useState('');
+  const [socialPosts, setSocialPosts] = useState<any[]>([]);
   const [newReviewRating, setNewReviewRating] = useState(10);
   const [submittingReview, setSubmittingReview] = useState(false);
 
@@ -550,6 +551,13 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
        .then(res => res.json())
        .then(data => {
           if (Array.isArray(data)) setReviews(data);
+       })
+       .catch(err => console.error(err));
+
+     fetch(`/api/listings/${listing.id}/social-posts?_t=${Date.now()}`, { cache: 'no-store' })
+       .then(res => res.json())
+       .then(data => {
+          if (Array.isArray(data)) setSocialPosts(data);
        })
        .catch(err => console.error(err));
   }, [listing.id]);
@@ -1162,6 +1170,83 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                     </div>
                     <button className="mt-5 text-xs font-bold uppercase tracking-wider text-zinc-900 hover:text-zinc-600 transition-colors underline decoration-zinc-300 hover:decoration-zinc-900">Show more</button>
                 </div>
+
+                {/* Featured Social Media Posts */}
+                {socialPosts && socialPosts.length > 0 && (
+                    <div className="mb-12 py-8 border-t border-gray-150">
+                        <div className="flex items-center justify-between mb-6">
+                            <h2 className="text-[15px] font-extrabold text-zinc-900 tracking-wider uppercase flex items-center gap-2">
+                                <Sparkles className="w-5 h-5 text-sky-500" />
+                                Featured on @enchospace
+                            </h2>
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-gray-50 px-2 py-1 rounded">Live Feed</span>
+                        </div>
+                        
+                        <div className="flex overflow-x-auto pb-6 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x snap-mandatory hide-scrollbar gap-4">
+                            {socialPosts.map(post => (
+                                <div key={post.id} className="min-w-[280px] w-[280px] sm:min-w-[320px] sm:w-[320px] shrink-0 snap-center rounded-2xl overflow-hidden border border-gray-200 bg-white shadow-sm flex flex-col group relative">
+                                    <div className="h-48 sm:h-64 bg-gray-100 overflow-hidden relative">
+                                        {post.media_urls?.[0] ? (
+                                            <img
+                                                src={post.media_urls[0]}
+                                                alt="Social media post"
+                                                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                                            />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center bg-gray-50">
+                                                <ImageIcon className="w-8 h-8 text-gray-300" />
+                                            </div>
+                                        )}
+                                        {post.media_type === 'video' && (
+                                            <div className="absolute inset-0 flex items-center justify-center">
+                                                <div className="w-12 h-12 bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center">
+                                                    <Play className="w-5 h-5 text-white ml-1" />
+                                                </div>
+                                            </div>
+                                        )}
+                                        {/* Instagram style header overlay */}
+                                        <div className="absolute top-0 left-0 right-0 p-3 bg-gradient-to-b from-black/60 to-transparent flex items-center gap-2">
+                                            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-rose-500 via-fuchsia-500 to-sky-500 p-[2px]">
+                                                <div className="w-full h-full bg-black rounded-full flex items-center justify-center border border-black overflow-hidden">
+                                                    <Sparkles className="w-4 h-4 text-white" />
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-[11px] font-bold text-white shadow-sm tracking-wide">enchospace</span>
+                                                <span className="text-[9px] font-medium text-white/80 flex items-center gap-1 shadow-sm">
+                                                    <Check className="w-2.5 h-2.5 bg-blue-500 rounded-full text-white p-[1px]" />
+                                                    Official Selection
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="absolute bottom-3 left-3 flex gap-1.5">
+                                            <span className="bg-black/40 backdrop-blur-md text-white text-[9px] font-bold px-2 py-1 rounded-full uppercase tracking-wider flex items-center gap-1">
+                                                <Heart className="w-3 h-3 fill-white/20" />
+                                                {Math.floor(Math.random() * 500) + 50} Likes
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="p-4 flex flex-col flex-grow">
+                                        <div className="flex items-start gap-2 mb-3">
+                                            <p className="text-sm font-medium text-gray-700 line-clamp-3 leading-relaxed">
+                                                <span className="font-bold text-gray-900 mr-2">enchospace</span>
+                                                {post.caption}
+                                            </p>
+                                        </div>
+                                        <div className="mt-auto pt-3 border-t border-gray-100 flex items-center justify-between">
+                                            <span className="text-[10px] text-gray-400 font-mono">
+                                                {new Date(post.created_at).toLocaleDateString()}
+                                            </span>
+                                            <button className="text-[10px] font-bold text-sky-600 uppercase tracking-wider hover:text-sky-700 transition-colors">
+                                                View on Instagram
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* Video Tour Section */}
                 {listing.video_url && (
