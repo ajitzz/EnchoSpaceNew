@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 import fs from 'fs';
+import { AsyncLocalStorage } from 'async_hooks';
 import express, { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { Server as SocketIOServer } from 'socket.io'; // Import SocketIOServer
@@ -141,10 +142,45 @@ async function syncDynamicPricingToMeta(listingId, oldPrice, newPrice) {
   }
 }
 
+export const rlsStorage = new AsyncLocalStorage<{ userId?: number | string | null; isRequest?: boolean; bypassRls?: boolean }>();
+
 const pool = new Pool({
   connectionString: isDbConfigured ? dbUrl : undefined,
   ssl: isDbConfigured ? { rejectUnauthorized: false } : undefined
 });
+
+// Wrap pool.query to support secure Row-Level Security session context propagation
+const originalPoolQuery = pool.query;
+pool.query = async function (this: any, ...args: any[]) {
+  const [text, params, callback] = args;
+  if (typeof params === 'function' || typeof callback === 'function') {
+    return originalPoolQuery.apply(this, args);
+  }
+
+  const store = rlsStorage.getStore();
+  const userId = store?.userId;
+  const isRequest = store?.isRequest;
+  const bypassRls = store?.bypassRls;
+
+  if (isDbConfigured) {
+    const client = await this.connect();
+    try {
+      if (isRequest) {
+        await client.query(`SELECT set_config('app.current_user_id', $1, true)`, [userId ? String(userId) : '']);
+        await client.query(`SELECT set_config('app.bypass_rls', $1, true)`, [bypassRls ? 'true' : 'false']);
+      } else {
+        await client.query(`SELECT set_config('app.bypass_rls', 'true', true)`);
+        await client.query(`SELECT set_config('app.current_user_id', '', true)`);
+      }
+      const result = await client.query(text, params);
+      return result;
+    } finally {
+      client.release();
+    }
+  } else {
+    return originalPoolQuery.apply(this, args);
+  }
+};
 
 let dbConnectionError: string | null = null;
 if (isDbConfigured) {
@@ -293,7 +329,10 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
   jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
     if (err) return res.status(403).json({ error: 'Invalid token' });
     req.user = user;
-    next();
+    // Propagate the authenticated host's context to enable genuine row-level security
+    rlsStorage.run({ userId: user.id, isRequest: true, bypassRls: user.role === 'admin' }, () => {
+      next();
+    });
   });
 };
 
@@ -340,6 +379,7 @@ const authLimiter = rateLimit({
   max: 10, // max 10 requests per windowMs
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false,
   message: { error: 'Too many authentication attempts, please try again later' }
 });
 
@@ -348,6 +388,7 @@ const otpLimiter = rateLimit({
   max: 5, // max 5 OTP requests per hour per IP
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false,
   message: { error: 'Too many OTP requests, please try again later' }
 });
 
@@ -356,10 +397,18 @@ const apiLimiter = rateLimit({
   max: 300, // Limit each IP to 300 requests per windowMs
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false,
   message: { error: 'Too many requests, please try again later.' }
 });
 // Apply rate limiter to all API routes
 app.use('/api/', apiLimiter);
+
+// Enforce global request context for RLS mapping across all API endpoints
+app.use('/api/', (req, res, next) => {
+  rlsStorage.run({ userId: null, isRequest: true, bypassRls: false }, () => {
+    next();
+  });
+});
 
 // Gap 4: AI Rate Limiting & Fallback
 const aiGatekeeperLimiter = rateLimit({
@@ -371,7 +420,27 @@ const aiGatekeeperLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false,
   message: { error: 'Strict AI Limit Exceeded: Maximum 5 campaign evaluations allowed per hour to prevent API abuse.' }
+});
+
+// Milestone 4.4 Hardening: Anti-Spam & Abuse Limiters
+const bookingLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // max 10 bookings per hour per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: false,
+  message: { error: 'Too many bookings created from this IP, please try again after an hour.' }
+});
+
+const messageLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // max 100 messages per 15 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: false,
+  message: { error: 'Message rate limit exceeded. Please wait before sending more.' }
 });
 
 
@@ -956,6 +1025,16 @@ const ensureListingsTable = async () => {
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS accumulated_conversions INT DEFAULT 0;`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS last_pacing_calc_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
 
+  // Create async_webhook_queue table before index setup
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS async_webhook_queue (
+      id SERIAL PRIMARY KEY,
+      source VARCHAR(50) NOT NULL,
+      payload JSONB NOT NULL,
+      status VARCHAR(50) DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
   // Add database indexes for high-throughput campaign lookup queries
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_host_id ON host_marketing_campaigns(host_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_listing_id ON host_marketing_campaigns(listing_id);`);
@@ -1095,27 +1174,57 @@ const ensureMarketingSchema = async () => {
   try {
     await pool.query(`
       -- Create a helper function for the current app user
-      CREATE OR REPLACE FUNCTION current_app_user_id() RETURNS integer AS $\\$
+      CREATE OR REPLACE FUNCTION current_app_user_id() RETURNS integer AS $$
         SELECT NULLIF(current_setting('app.current_user_id', true), '')::integer;
-      \\$ LANGUAGE sql STABLE;
+      $$ LANGUAGE sql STABLE;
 
       -- 1. host_outreach_leads
       ALTER TABLE host_outreach_leads ENABLE ROW LEVEL SECURITY;
       DROP POLICY IF EXISTS host_leads_policy ON host_outreach_leads;
       CREATE POLICY host_leads_policy ON host_outreach_leads
-        USING (host_id = current_app_user_id() OR current_app_user_id() IS NULL);
+        USING (host_id = current_app_user_id() OR current_setting('app.bypass_rls', true) = 'true');
 
       -- 2. host_wallets
       ALTER TABLE host_wallets ENABLE ROW LEVEL SECURITY;
       DROP POLICY IF EXISTS host_wallets_policy ON host_wallets;
       CREATE POLICY host_wallets_policy ON host_wallets
-        USING (host_id = current_app_user_id() OR current_app_user_id() IS NULL);
+        USING (host_id = current_app_user_id() OR current_setting('app.bypass_rls', true) = 'true');
 
       -- 3. host_marketing_campaigns
       ALTER TABLE host_marketing_campaigns ENABLE ROW LEVEL SECURITY;
       DROP POLICY IF EXISTS host_campaigns_policy ON host_marketing_campaigns;
       CREATE POLICY host_campaigns_policy ON host_marketing_campaigns
-        USING (host_id = current_app_user_id() OR current_app_user_id() IS NULL);
+        USING (host_id = current_app_user_id() OR current_setting('app.bypass_rls', true) = 'true');
+
+      -- 4. wallet_transactions
+      ALTER TABLE wallet_transactions ENABLE ROW LEVEL SECURITY;
+      DROP POLICY IF EXISTS host_wallet_transactions_policy ON wallet_transactions;
+      CREATE POLICY host_wallet_transactions_policy ON wallet_transactions
+        USING (wallet_id IN (SELECT id FROM host_wallets WHERE host_id = current_app_user_id()) OR current_setting('app.bypass_rls', true) = 'true');
+
+      -- 5. threads
+      ALTER TABLE threads ENABLE ROW LEVEL SECURITY;
+      DROP POLICY IF EXISTS threads_policy ON threads;
+      CREATE POLICY threads_policy ON threads
+        USING (guest_id = current_app_user_id() OR host_id = current_app_user_id() OR current_setting('app.bypass_rls', true) = 'true');
+
+      -- 6. messages
+      ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+      DROP POLICY IF EXISTS messages_policy ON messages;
+      CREATE POLICY messages_policy ON messages
+        USING (thread_id IN (SELECT id FROM threads WHERE guest_id = current_app_user_id() OR host_id = current_app_user_id()) OR current_setting('app.bypass_rls', true) = 'true');
+
+      -- 7. bookings
+      ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
+      DROP POLICY IF EXISTS bookings_policy ON bookings;
+      CREATE POLICY bookings_policy ON bookings
+        USING (user_id = current_app_user_id() OR listing_id IN (SELECT id FROM listings WHERE user_id = current_app_user_id()) OR current_setting('app.bypass_rls', true) = 'true');
+
+      -- 8. experience_bookings
+      ALTER TABLE experience_bookings ENABLE ROW LEVEL SECURITY;
+      DROP POLICY IF EXISTS experience_bookings_policy ON experience_bookings;
+      CREATE POLICY experience_bookings_policy ON experience_bookings
+        USING (user_id = current_app_user_id() OR experience_id IN (SELECT id FROM experiences WHERE host_id = current_app_user_id()) OR current_setting('app.bypass_rls', true) = 'true');
 
     `);
     console.log('✅ Gap 17: Strict Row-Level Security (RLS) policies enforced on Neon Postgres.');
@@ -2183,10 +2292,19 @@ app.post('/api/marketing/campaigns', authenticateToken, async (req: AuthRequest,
     ]);
 
     // Log Audit Trail
+    const newCampaignId = result.rows[0].id;
     await pool.query(`
       INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
-    `, [req.user.id, 'marketing_campaign', id, 'reject_campaign', JSON.stringify(prevState), JSON.stringify({status: 'rejected', admin_feedback: feedback}), req.ip || req.socket.remoteAddress]);
+    `, [
+      req.user.id,
+      'marketing_campaign',
+      newCampaignId,
+      'create_campaign',
+      JSON.stringify({}),
+      JSON.stringify(result.rows[0]),
+      req.ip || req.socket.remoteAddress
+    ]);
 
     broadcastDbEvent(req, 'marketing');
     res.status(201).json(result.rows[0]);
@@ -3258,12 +3376,22 @@ app.post('/api/payments/webhook', async (req, res) => {
           
           if (txId) {
             console.log(`[STRIPE WEBHOOK SUCCESS] Received real checkout success for Wallet Refuel #${txId}. ID: ${sessionOrIntent.id}`);
-            const txCheck = await pool.query('SELECT * FROM wallet_transactions WHERE id = $1 AND status = $2', [txId, 'pending']);
-            if (txCheck.rows.length > 0) {
-               const tx = txCheck.rows[0];
-               await pool.query('UPDATE wallet_transactions SET status = $1 WHERE id = $2', ['completed', txId]);
-               await pool.query('UPDATE host_wallets SET balance = balance + $1 WHERE id = $2', [tx.amount, tx.wallet_id]);
-               console.log(`[STRIPE WEBHOOK] Updated database. Wallet refuel marked as completed.`);
+            const client = await pool.connect();
+            try {
+              await client.query('BEGIN');
+              const txCheck = await client.query('SELECT * FROM wallet_transactions WHERE id = $1 AND status = $2 FOR UPDATE', [txId, 'pending']);
+              if (txCheck.rows.length > 0) {
+                 const tx = txCheck.rows[0];
+                 await client.query('UPDATE wallet_transactions SET status = $1 WHERE id = $2', ['completed', txId]);
+                 await client.query('UPDATE host_wallets SET balance = balance + $1 WHERE id = $2', [tx.amount, tx.wallet_id]);
+                 console.log(`[STRIPE WEBHOOK] Updated database inside transaction. Wallet refuel marked as completed.`);
+              }
+              await client.query('COMMIT');
+            } catch (err) {
+              await client.query('ROLLBACK');
+              throw err;
+            } finally {
+              client.release();
             }
           } else if (campaignId) {
             console.log(`[STRIPE WEBHOOK SUCCESS] Received real checkout success for Campaign #${campaignId}. ID: ${sessionOrIntent.id}`);
@@ -3340,12 +3468,22 @@ app.post('/api/payments/webhook', async (req, res) => {
           
           if (txId) {
              console.log(`[RAZORPAY WEBHOOK SUCCESS] Received real checkout success for Wallet Refuel #${txId}. Order ID: ${orderId}`);
-             const txCheck = await pool.query('SELECT * FROM wallet_transactions WHERE id = $1 AND status = $2', [txId, 'pending']);
-             if (txCheck.rows.length > 0) {
-               const tx = txCheck.rows[0];
-               await pool.query('UPDATE wallet_transactions SET status = $1 WHERE id = $2', ['completed', txId]);
-               await pool.query('UPDATE host_wallets SET balance = balance + $1 WHERE id = $2', [tx.amount, tx.wallet_id]);
-               console.log(`[RAZORPAY WEBHOOK] Updated database. Wallet refuel marked as completed.`);
+             const client = await pool.connect();
+             try {
+               await client.query('BEGIN');
+               const txCheck = await client.query('SELECT * FROM wallet_transactions WHERE id = $1 AND status = $2 FOR UPDATE', [txId, 'pending']);
+               if (txCheck.rows.length > 0) {
+                 const tx = txCheck.rows[0];
+                 await client.query('UPDATE wallet_transactions SET status = $1 WHERE id = $2', ['completed', txId]);
+                 await client.query('UPDATE host_wallets SET balance = balance + $1 WHERE id = $2', [tx.amount, tx.wallet_id]);
+                 console.log(`[RAZORPAY WEBHOOK] Updated database inside transaction. Wallet refuel marked as completed.`);
+               }
+               await client.query('COMMIT');
+             } catch (err) {
+               await client.query('ROLLBACK');
+               throw err;
+             } finally {
+               client.release();
              }
           } else {
             // If we have orderId but no campaignId directly in notes, lookup campaign by orderId (stored as payment_intent_id)
@@ -3423,15 +3561,7 @@ app.post('/api/webhooks/ad-network', async (req, res) => {
      
      // Webhooks from Meta/Google must not block the main thread.
      // We push them into the async_webhook_queue to be processed by a background worker.
-     await pool.query(`
-        CREATE TABLE IF NOT EXISTS async_webhook_queue (
-            id SERIAL PRIMARY KEY,
-            source VARCHAR(50),
-            payload JSONB,
-            status VARCHAR(50) DEFAULT 'pending',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-     `);
+     
 
      await pool.query("INSERT INTO async_webhook_queue (source, payload) VALUES ($1, $2)", [source, JSON.stringify(payload)]);
      console.log(`[ASYNC WEBHOOK ENGINE] Received ${source} ad network webhook. Queued for background processing.`);
@@ -6692,8 +6822,21 @@ app.post('/api/marketing/wallet/refuel', authenticateToken, async (req: AuthRequ
         res.json({ success: true, order_id: order.id, keyId: process.env.RAZORPAY_KEY_ID, gateway: 'razorpay' });
     } else {
        // Sandbox mock
-       await pool.query('UPDATE wallet_transactions SET status = $1 WHERE id = $2', ['completed', txId]);
-       await pool.query('UPDATE host_wallets SET balance = balance + $1 WHERE id = $2', [netAmount, walletId]);
+       const client = await pool.connect();
+       try {
+         await client.query('BEGIN');
+         const txCheck = await client.query('SELECT * FROM wallet_transactions WHERE id = $1 FOR UPDATE', [txId]);
+         if (txCheck.rows.length > 0) {
+           await client.query('UPDATE wallet_transactions SET status = $1 WHERE id = $2', ['completed', txId]);
+           await client.query('UPDATE host_wallets SET balance = balance + $1 WHERE id = $2', [netAmount, walletId]);
+         }
+         await client.query('COMMIT');
+       } catch (err) {
+         await client.query('ROLLBACK');
+         throw err;
+       } finally {
+         client.release();
+       }
        res.json({ success: true, message: 'Sandbox payment completed', gateway: 'sandbox' });
     }
   } catch (error) {
