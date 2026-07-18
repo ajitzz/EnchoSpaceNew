@@ -700,6 +700,7 @@ const ensureListingsTable = async () => {
   } catch { /* ignore */ }
 
   try {
+      await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS host_id INTEGER REFERENCES users(id) ON DELETE SET NULL`);
       await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS target_audience VARCHAR(50) DEFAULT 'all'`);
       await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS highlights JSONB DEFAULT '[]'::jsonb`);
       await pool.query(`ALTER TABLE experiences ADD COLUMN IF NOT EXISTS things_to_carry JSONB DEFAULT '[]'::jsonb`);
@@ -7172,17 +7173,22 @@ const runAnalyticsRollup = async () => {
   try {
      console.log('[ANALYTICS ROLLUP] Aggregating raw ad metrics into lightweight time-series table...');
      await pool.query(`
-       INSERT INTO campaign_analytics_rollups (campaign_id, date, impressions, clicks, spent)
+       INSERT INTO campaign_metrics (campaign_id, date, impressions, clicks, spent, conversions, platform)
        SELECT 
          id as campaign_id, 
          CURRENT_DATE as date, 
          accumulated_impressions as impressions, 
          accumulated_clicks as clicks, 
-         accumulated_spent as spent
+         accumulated_spent as spent,
+         accumulated_conversions as conversions,
+         'meta' as platform
        FROM host_marketing_campaigns
        WHERE status = 'active'
        ON CONFLICT (campaign_id, date, platform) DO UPDATE 
-       SET impressions = EXCLUDED.impressions, clicks = EXCLUDED.clicks, spent = EXCLUDED.spent;
+       SET impressions = EXCLUDED.impressions, 
+           clicks = EXCLUDED.clicks, 
+           spent = EXCLUDED.spent,
+           conversions = EXCLUDED.conversions;
      `);
   } catch (err) {
     console.error('[ANALYTICS ROLLUP ERROR]', err);
