@@ -47,13 +47,15 @@ export interface NearbyPoint {
 }
 
 export interface Listing {
+  created_at?: string;
+  updated_at?: string;
   id: string;
   user_id?: number | string;
   host_id?: number | string;
   title: string;
   price: number;
   currency: string;
-  period: string;
+  period?: string;
   type: string;
   rental_mode?: 'entire_place' | 'private_rooms' | 'hybrid';
   rooms?: Room[];
@@ -64,7 +66,7 @@ export interface Listing {
   imageUrls?: string[];
   video_url?: string;
   imageCount: number;
-  provider: string;
+  provider?: string;
   isVerified: boolean;
   discount?: number; // percentage
   hasOffers?: boolean;

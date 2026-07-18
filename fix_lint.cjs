@@ -1,10 +1,7 @@
 const fs = require('fs');
-let app = fs.readFileSync('App.tsx', 'utf-8');
+let code = fs.readFileSync('server.ts', 'utf8');
 
-app = app.replace(
-    "} catch(e) {}",
-    "} catch(e) { console.error('Preview parse error:', e); }"
-);
+code = code.replace(/for \(let c of campaigns.rows\)/g, 'for (const c of campaigns.rows)');
+code = code.replace(/} catch\(e\) {}/g, "} catch(e) { console.error('Failed to parse media urls for optimization', e); }");
 
-fs.writeFileSync('App.tsx', app);
-console.log('Lint error fixed');
+fs.writeFileSync('server.ts', code);

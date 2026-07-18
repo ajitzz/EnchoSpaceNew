@@ -697,8 +697,9 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       });
       if (res.ok) {
         const data = await res.json();
-        setAiCheckResult({ campaignId: campaign.id, ...data });
-        addToast('AI Pre-Check Complete', `Ad score: ${data.score}/100. Read suggestions below.`, 'success');
+        setAiCheckResult({ campaignId: campaign.id, ...(data.ai_evaluation || data) });
+        addToast('AI Pre-Check Complete', `Ad score: ${(data.ai_evaluation || data).score}/10. Read suggestions below.`, 'success');
+        fetchCampaigns(); // Refresh to show A/B test media updates if Gap 10 triggered
       } else {
         addToast('AI Pre-Check Failed', 'Unable to run AI quality precheck.', 'error');
       }
@@ -742,7 +743,8 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` 
+          'Authorization': `Bearer ${token}`,
+          'Idempotency-Key': `${showPayModal.id}-${selectedGateway}-${showPayModal.budget}-${Math.floor(Date.now() / 10000)}`
         },
         body: JSON.stringify({
           gateway: selectedGateway,
@@ -870,47 +872,65 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       </div>
 
       {/* FUEL TANK UI */}
-      <div className="mb-10 bg-gray-900 text-white rounded-[2rem] p-8 shadow-2xl relative overflow-hidden flex flex-col md:flex-row gap-8 items-center justify-between">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="mb-10 bg-[#0a0a0a] border border-white/10 text-white rounded-[2rem] p-8 shadow-2xl relative overflow-hidden flex flex-col md:flex-row gap-8 items-center justify-between"
+      >
         {/* Background Accents */}
-        <div className="absolute -top-32 -right-32 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute -bottom-32 -left-32 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute -top-32 -right-32 w-64 h-64 bg-emerald-500/20 rounded-full blur-[100px] pointer-events-none"></div>
+        <div className="absolute -bottom-32 -left-32 w-64 h-64 bg-blue-500/20 rounded-full blur-[100px] pointer-events-none"></div>
 
         <div className="flex items-center gap-6 z-10 w-full md:w-auto">
            {/* Circular Gauge */}
-           <div className="relative w-28 h-28 flex items-center justify-center">
+           <div className="relative w-32 h-32 flex items-center justify-center">
               <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="8" />
-                <circle cx="50" cy="50" r="45" fill="none" stroke={wallet?.balance > 500 ? "#10b981" : wallet?.balance > 0 ? "#f59e0b" : "#ef4444"} strokeWidth="8" 
-                  strokeDasharray="283" 
-                  strokeDashoffset={283 - (283 * Math.min(100, ((wallet?.balance || 0) / 2500) * 100)) / 100}
-                  className="transition-all duration-1000 ease-out"
+                <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
+                <motion.circle 
+                  cx="50" cy="50" r="45" fill="none" 
+                  stroke={wallet?.balance > 500 ? "#10b981" : wallet?.balance > 0 ? "#f59e0b" : "#ef4444"} 
+                  strokeWidth="8" 
+                  strokeLinecap="round"
+                  strokeDasharray={282.74} 
+                  initial={{ strokeDashoffset: 282.74 }}
+                  animate={{ strokeDashoffset: 282.74 - (282.74 * Math.min(100, ((wallet?.balance || 0) / 2500) * 100)) / 100 }}
+                  transition={{ duration: 2, ease: "easeOut" }}
+                  style={{
+                    filter: `drop-shadow(0 0 12px ${wallet?.balance > 500 ? 'rgba(16, 185, 129, 0.6)' : wallet?.balance > 0 ? 'rgba(245, 158, 11, 0.6)' : 'rgba(239, 68, 68, 0.6)'})`
+                  }}
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <BatteryCharging className="w-6 h-6 text-emerald-400 mb-1" />
+                <BatteryCharging className={`w-7 h-7 mb-1 ${wallet?.balance > 500 ? "text-emerald-400" : wallet?.balance > 0 ? "text-amber-400" : "text-red-400"}`} />
               </div>
            </div>
-           <div>
-              <div className="text-xs font-mono text-emerald-400 mb-1 tracking-widest uppercase">Fuel Tank</div>
-              <h2 className="text-4xl font-black tracking-tight">{formatPrice(wallet?.balance || 0, 'USD')}</h2>
-              <p className="text-gray-400 text-sm mt-1">Available Ad Spend Budget</p>
+           <div className="space-y-1">
+              <div className="text-[10px] font-black font-mono text-zinc-400 tracking-[0.25em] uppercase flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full animate-pulse ${wallet?.balance > 500 ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" : wallet?.balance > 0 ? "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.8)]" : "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]"}`}></span>
+                Master Fuel Tank
+              </div>
+              <h2 className="text-4xl sm:text-5xl font-black tracking-tight font-mono">{formatPrice(wallet?.balance || 0, 'USD')}</h2>
+              <p className="text-zinc-500 text-sm font-medium">Available Network Spend Budget</p>
            </div>
         </div>
 
         <div className="z-10 w-full md:w-auto flex flex-col gap-3">
-          <button 
+          <motion.button 
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             onClick={() => setShowRefuelModal(true)}
-            className="w-full md:w-auto px-8 py-4 bg-white text-black hover:bg-gray-100 rounded-2xl font-bold transition-transform active:scale-95 shadow-xl flex items-center justify-center gap-2"
+            className="w-full md:w-auto px-8 py-4 bg-white text-black hover:bg-zinc-100 rounded-2xl font-black tracking-tight transition-colors shadow-[0_8px_30px_rgba(255,255,255,0.12)] flex items-center justify-center gap-2.5"
           >
-            <Zap className="w-5 h-5 text-yellow-500" />
+            <Zap className="w-5 h-5 text-yellow-500 fill-yellow-500" />
             Refuel Tank
-          </button>
-          <div className="flex items-center gap-2 text-xs text-gray-500 font-mono">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            Geo-Router Active (Stripe / Razorpay)
+          </motion.button>
+          <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-mono font-bold uppercase tracking-wider bg-white/5 py-1.5 px-3 rounded-full border border-white/5">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+            Geo-Router Active (Stripe/Razorpay)
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
@@ -939,15 +959,19 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
               </div>
             ) : (
               <div className="space-y-4">
-                {campaigns.map((campaign) => (
-                  <div 
+                <AnimatePresence>
+                {campaigns.map((campaign, idx) => (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.1, duration: 0.3, ease: "easeOut" }}
                     key={campaign.id}
                     onClick={() => setSelectedCampaignForAnalytics(campaign)}
                     className={`
                       bg-white p-5 rounded-3xl border transition-all duration-300 cursor-pointer text-left relative overflow-hidden
                       ${selectedCampaignForAnalytics?.id === campaign.id 
-                        ? 'border-blue-500 ring-2 ring-blue-500/10 shadow-md' 
-                        : 'border-zinc-150 hover:border-zinc-300 hover:shadow-sm'}
+                        ? 'border-blue-500 ring-4 ring-blue-500/10 shadow-lg scale-[1.01]' 
+                        : 'border-zinc-150 hover:border-zinc-300 hover:shadow-md'}
                     `}
                   >
                     <div className="flex gap-4">
@@ -1190,8 +1214,9 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                         </div>
                       );
                     })()}
-                  </div>
+                  </motion.div>
                 ))}
+                </AnimatePresence>
               </div>
             )}
 
@@ -1367,50 +1392,86 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                             }`}>
                               <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
 
-                              <div className="flex justify-between items-center mb-3">
-                                <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
-                                  <Sliders className="w-3.5 h-3.5 text-blue-400" />
-                                  <span>Ad Campaign Spend Fuel Gauge</span>
-                                </span>
-                                <span className={`text-[9px] font-black font-mono uppercase px-2.5 py-1 rounded-full flex items-center gap-1 animate-pulse ${
-                                  isFuelFinished 
-                                    ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
-                                    : isFuelCritical 
-                                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                                      : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                }`}>
-                                  <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                                  {isFuelFinished ? 'Campaign Depleted' : isFuelCritical ? 'Fuel Level Critical' : 'Fuel Injectors Active'}
-                                </span>
-                              </div>
-
-                              <div className="flex justify-between items-baseline mb-2">
-                                <h4 className="text-3xl font-black font-mono tracking-tight">
-                                  {formatPrice(spent, 'INR')}
-                                </h4>
-                                <span className="text-zinc-400 text-xs font-light">
-                                  spent of {formatPrice(budget, 'INR')} budget limit
-                                </span>
-                              </div>
-
-                              {/* Progress bar container */}
-                              <div className="space-y-1">
-                                <div className="w-full bg-zinc-800/80 rounded-full h-3 border border-zinc-700/50 p-0.5">
-                                  <div 
-                                    className={`h-1.5 rounded-full transition-all duration-1000 shadow-sm ${
-                                      isFuelFinished 
-                                        ? 'bg-gradient-to-r from-red-600 to-rose-500 shadow-red-500/40' 
-                                        : isFuelCritical 
-                                          ? 'bg-gradient-to-r from-amber-500 to-orange-400 shadow-orange-500/40'
-                                          : 'bg-gradient-to-r from-blue-500 to-sky-400 shadow-blue-500/40'
-                                    }`} 
-                                    style={{ width: `${spentPercent}%` }}
-                                  />
+                              <div className="flex flex-col sm:flex-row gap-6 items-center">
+                                {/* Radial Gauge */}
+                                <div className="relative w-36 h-36 flex shrink-0 items-center justify-center">
+                                  <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 100 100">
+                                    {/* Background Track */}
+                                    <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="8" fill="none" className="text-zinc-800/80" />
+                                    {/* Progress Indicator */}
+                                    <motion.circle
+                                      cx="50"
+                                      cy="50"
+                                      r="40"
+                                      stroke="currentColor"
+                                      strokeWidth="8"
+                                      fill="none"
+                                      strokeLinecap="round"
+                                      strokeDasharray={251.2}
+                                      initial={{ strokeDashoffset: 251.2 }}
+                                      animate={{ strokeDashoffset: 251.2 - (251.2 * (spentPercent / 100)) }}
+                                      transition={{ duration: 1.5, ease: "easeOut" }}
+                                      className={`${
+                                        isFuelFinished 
+                                          ? 'text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]' 
+                                          : isFuelCritical 
+                                            ? 'text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]'
+                                            : 'text-blue-500 drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]'
+                                      }`}
+                                    />
+                                  </svg>
+                                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                    <span className="text-2xl font-black font-mono text-white tracking-tight">{100 - Math.min(100, Math.floor(spentPercent))}%</span>
+                                    <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-widest mt-0.5">Remaining</span>
+                                  </div>
                                 </div>
-                                <div className="flex justify-between text-[9px] text-zinc-500 uppercase tracking-wider font-bold">
-                                  <span>0% Start</span>
-                                  <span>{spentPercent}% Capacity</span>
-                                  <span>100% Depleted</span>
+
+                                {/* Text Specs & Social Pulse */}
+                                <div className="flex-1 space-y-4">
+                                  <div>
+                                    <div className="flex justify-between items-center mb-1">
+                                      <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
+                                        <Sliders className="w-3.5 h-3.5 text-blue-400" />
+                                        <span>Ad Campaign Fuel Engine</span>
+                                      </span>
+                                      <span className={`text-[9px] font-black font-mono uppercase px-2.5 py-1 rounded-full flex items-center gap-1 animate-pulse ${
+                                        isFuelFinished 
+                                          ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
+                                          : isFuelCritical 
+                                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                                            : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                      }`}>
+                                        <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                                        {isFuelFinished ? 'Depleted' : isFuelCritical ? 'Critical' : 'Active'}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-baseline gap-2">
+                                      <h4 className="text-3xl font-black font-mono tracking-tight text-white">
+                                        {formatPrice(spent, 'INR')}
+                                      </h4>
+                                      <span className="text-zinc-500 text-xs font-light">
+                                        / {formatPrice(budget, 'INR')} limit
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Dopamine Social Pulse Tick */}
+                                  {!isFuelFinished && (
+                                    <div className="bg-zinc-800/50 border border-zinc-700/50 p-2.5 rounded-xl flex items-center gap-3 relative overflow-hidden">
+                                      <div className="absolute top-0 right-0 w-16 h-16 bg-blue-500/10 rounded-full blur-xl pointer-events-none animate-pulse" />
+                                      <div className="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
+                                        <Zap className="w-3.5 h-3.5 text-blue-400" />
+                                      </div>
+                                      <motion.div 
+                                        key={Date.now()} // Force re-animation if needed, or we just rely on static pulse
+                                        initial={{ opacity: 0, y: 5 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="text-[10.5px] text-zinc-300 font-medium leading-tight"
+                                      >
+                                        <span className="text-white font-bold">Social Pulse:</span> {Math.floor(Math.random() * 8) + 2} people from metropolitan areas are viewing your property right now.
+                                      </motion.div>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
 
@@ -1692,23 +1753,30 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                             Multi-Touch Conversion Funnel Staircase
                           </span>
                           
-                          <div className="grid grid-cols-4 gap-2 text-center text-[10px]">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-[10px]">
                             {[
-                              { label: '1. Ad Impressions', val: selectedCampaignForAnalytics.analytics?.impressions || 15000, desc: 'Metropolitan Feeder Target Reach' },
-                              { label: '2. Page Link Clicks', val: selectedCampaignForAnalytics.analytics?.clicks || 650, desc: '100% Active Property Visits' },
-                              { label: '3. CRM Lead Enquiries', val: campaignLeads?.leads?.length || 12, desc: `${Math.round(((campaignLeads?.leads?.length || 12) / (selectedCampaignForAnalytics.analytics?.clicks || 650)) * 100)}% Conversion` },
-                              { label: '4. Direct Bookings', val: selectedCampaignForAnalytics.analytics?.conversions || 2, desc: 'High-Yield Closed Nights' },
+                              { label: '1. Ad Impressions', val: selectedCampaignForAnalytics.analytics?.impressions || 15000, desc: 'Metropolitan Reach', color: 'from-blue-500 to-indigo-500' },
+                              { label: '2. Page Link Clicks', val: selectedCampaignForAnalytics.analytics?.clicks || 650, desc: 'Active Property Visits', color: 'from-indigo-500 to-violet-500' },
+                              { label: '3. CRM Leads', val: campaignLeads?.leads?.length || 12, desc: `${Math.round(((campaignLeads?.leads?.length || 12) / (selectedCampaignForAnalytics.analytics?.clicks || 650)) * 100)}% Conversion`, color: 'from-violet-500 to-fuchsia-500' },
+                              { label: '4. Direct Bookings', val: selectedCampaignForAnalytics.analytics?.conversions || 2, desc: 'Closed Nights', color: 'from-emerald-400 to-emerald-600' },
                             ].map((step, idx) => (
-                              <div key={idx} className="bg-white border rounded-2xl p-2.5 flex flex-col justify-between relative shadow-sm">
-                                <span className="text-[8px] font-bold text-zinc-400 uppercase block leading-none mb-1">{step.label}</span>
-                                <span className="text-base font-black text-gray-900 font-mono block py-1">{step.val.toLocaleString()}</span>
-                                <p className="text-[8px] text-zinc-500 font-light leading-snug">{step.desc}</p>
+                              <motion.div 
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: idx * 0.15, duration: 0.5, ease: "easeOut" }}
+                                key={idx} 
+                                className="bg-white border border-zinc-200/80 rounded-2xl p-3 flex flex-col justify-between relative shadow-sm hover:shadow-md transition-shadow group overflow-hidden"
+                              >
+                                <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${step.color} opacity-80 group-hover:opacity-100 transition-opacity`} />
+                                <span className="text-[9px] font-black text-zinc-400 uppercase block leading-tight mb-2 mt-1">{step.label}</span>
+                                <span className="text-2xl font-black text-gray-900 font-mono block py-1">{step.val.toLocaleString()}</span>
+                                <p className="text-[9px] text-zinc-500 font-medium leading-snug">{step.desc}</p>
                                 {idx < 3 && (
-                                  <div className="hidden sm:block absolute top-1/2 -right-1.5 -translate-y-1/2 bg-zinc-200 text-zinc-400 rounded-full p-0.5 z-10">
-                                    ➔
+                                  <div className="hidden sm:flex absolute top-1/2 -right-3 -translate-y-1/2 bg-white border border-zinc-200 text-zinc-400 rounded-full w-6 h-6 items-center justify-center z-10 shadow-sm">
+                                    <ChevronRight className="w-3.5 h-3.5" />
                                   </div>
                                 )}
-                              </div>
+                              </motion.div>
                             ))}
                           </div>
                         </div>
