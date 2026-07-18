@@ -29,6 +29,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import helmet from 'helmet';
+import hpp from 'hpp';
 // import pinoHttp from 'pino-http'; // Removed as per JS version
 // import { logger } from './src/lib/logger/index.js'; // Removed as per JS version
 // import { globalErrorHandler } from './src/lib/middleware/errorHandler.js'; // Removed as per JS version
@@ -375,6 +376,7 @@ const aiGatekeeperLimiter = rateLimit({
 
 
 app.use(express.json({ limit: '20mb' }));
+app.use(hpp()); // Protect against HTTP Parameter Pollution attacks
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
 const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({
@@ -422,7 +424,7 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
         // Automated AI reply logic using Gemini
         if (ai) {
            const listingsRes = await pool.query('SELECT title, description, price, city, currency FROM listings WHERE id > 0 LIMIT 15');
-           const listingsContext = listingsRes.rows.map((l: any) => `- ${l.title} in ${l.city} (${l.currency}${l.price}): ${l.description}`).join('\\n');
+           const listingsContext = listingsRes.rows.map((l: any) => `- ${l.title} in ${l.city} (${l.currency}${l.price}): ${l.description}`).join('\n');
 
            const systemInstruction = `You are a helpful, professional assistant for ENCHO Space (a real estate and property booking platform).
 You are answering queries from customers on WhatsApp.
@@ -958,6 +960,15 @@ const ensureListingsTable = async () => {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_host_id ON host_marketing_campaigns(host_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_listing_id ON host_marketing_campaigns(listing_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_status ON host_marketing_campaigns(status);`);
+  // Milestone 4.5: Database Query Optimization (Indexes)
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_async_webhook_status ON async_webhook_queue(status);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_webhook_dlq_retry ON webhook_dlq(retry_count, next_retry_at);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_wallet_transactions_wallet ON wallet_transactions(wallet_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_wallet_transactions_status ON wallet_transactions(status);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_entity ON admin_audit_logs(entity_type, entity_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_bookings_user_id ON bookings(user_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_bookings_listing_id ON bookings(listing_id);`);
+
 
   // Create host_outreach_leads table for Host Acquisition tracking (Pillar Extension)
   await pool.query(`
@@ -3882,7 +3893,7 @@ app.post('/api/marketing/threads/:id/score-intent', authenticateToken, async (re
     let intent_score = "🌤️ WARM";
     if (ai) {
       try {
-        const msgText = messages.rows.map((m:any) => m.content).join("\n");
+        const msgText = messages.rows.map((m:any) => m.content).join("");
         const prompt = `Analyze this conversation between a host and a prospective guest. 
 Rate the guest's buying intent.
 Respond with EXACTLY ONE of these strings: "🔥 HOT LEAD", "🌤️ WARM", "🧊 COLD", or "🏆 CONVERTED".
@@ -4946,7 +4957,7 @@ app.post('/api/messages', authenticateToken, messageLimiter, async (req: AuthReq
          if (booking.user_id !== senderId) {
             sendWhatsAppMessage(
                booking.phone,
-               `✉️ New message regarding your booking:\n\n"${content}"`
+               `✉️ New message regarding your booking:"${content}"`
             );
          }
       }
@@ -5568,7 +5579,7 @@ Details:
     // Send WhatsApp to Guest
     sendWhatsAppMessage(
       phone,
-      `Hello ${name},\n\nYour booking request for "${listingTitle}" on ${moveInDate} has been received! The total rent is $${totalRent}. You will be notified once the host confirms.`
+      `Hello ${name},Your booking request for "${listingTitle}" on ${moveInDate} has been received! The total rent is $${totalRent}. You will be notified once the host confirms.`
     );
 
     // Send WhatsApp to Host/Admin if configured
@@ -5579,7 +5590,7 @@ Details:
         if (waSettings && waSettings.enabled && waSettings.number) {
           sendWhatsAppMessage(
             waSettings.number,
-            `🌟 New Booking Request!\n\nGuest: ${name}\nPhone: ${phone}\nListing: ${listingTitle}\nMove In: ${moveInDate}\nRent: $${totalRent}\n\nPlease check your host dashboard to Accept or Decline.`
+            `🌟 New Booking Request!Guest: ${name}Phone: ${phone}Listing: ${listingTitle}Move In: ${moveInDate}Rent: $${totalRent}Please check your host dashboard to Accept or Decline.`
           );
         }
       }
@@ -7118,7 +7129,7 @@ app.post('/api/marketing/pixel', async (req, res) => {
 export default app;
 // Graceful Shutdown Handlers
 const shutdown = async (signal: string) => {
-  console.log(`\n${signal} received. Shutting down gracefully...`);
+  console.log(`${signal} received. Shutting down gracefully...`);
   if (pool) {
     try {
       await pool.end();
