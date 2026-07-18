@@ -1024,6 +1024,7 @@ const ensureListingsTable = async () => {
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS encho_absorbed_overspend DECIMAL DEFAULT 0;`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS accumulated_conversions INT DEFAULT 0;`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS last_pacing_calc_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
 
   // Create async_webhook_queue table before index setup
   await pool.query(`
