@@ -24,6 +24,14 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   const [campaigns, setCampaigns] = useState<MarketingCampaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  const [showSocialModal, setShowSocialModal] = useState(false);
+  const [socialAsset, setSocialAsset] = useState<File | null>(null);
+  const [socialAssetPreview, setSocialAssetPreview] = useState<string | null>(null);
+  const [isPublishingSocial, setIsPublishingSocial] = useState(false);
+  const [socialFormat, setSocialFormat] = useState<'reel' | 'story' | 'carousel'>('reel');
+  const [socialCaption, setSocialCaption] = useState('');
+
   const [showPayModal, setShowPayModal] = useState<MarketingCampaign | null>(null);
   const [showRefuelModal, setShowRefuelModal] = useState(false);
   const [refuelAmount, setRefuelAmount] = useState(100);
