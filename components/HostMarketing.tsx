@@ -4353,7 +4353,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                       setSocialFormData({
                         ...socialFormData,
                         listing_id: listId,
-                        media_urls: selected ? [selected.cover_image] : []
+                        media_urls: selected ? [selected.imageUrl] : []
                       });
                     }}
                     className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl p-3 text-sm focus:outline-none focus:border-gray-900"

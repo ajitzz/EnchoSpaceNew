@@ -94,6 +94,7 @@ export interface Listing {
   // Detailed fields
   description?: string;
   address?: string;
+  city?: string;
   size?: number; // sqft/sqm
   floor?: number;
   nearby?: NearbyPoint[];

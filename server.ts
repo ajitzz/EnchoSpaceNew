@@ -505,6 +505,14 @@ const cacheControl = (maxAgeSeconds: number) => {
 };
 
 app.use(express.json({ limit: '20mb' }));
+
+app.use(async (req, res, next) => {
+  if (req.path.startsWith('/api/') && req.path !== '/api/health') {
+    await ensureDbInitialized();
+  }
+  next();
+});
+
 app.use(hpp()); // Protect against HTTP Parameter Pollution attacks
 app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '1.0.0', services: { db: 'connected', ai: 'operational', payment: 'routed' } }));
 app.use('/api', idempotencyMiddleware); // Milestone 4.5: Global API Idempotency
@@ -1330,6 +1338,65 @@ const ensureMarketingSchema = async () => {
   
   marketingSchemaInitialized = true;
 };
+
+let initPromise = null;
+const ensureDbInitialized = async () => {
+  if (!isDbConfigured) return;
+  if (marketingSchemaInitialized && usersTableInitialized && listingsTableInitialized) return;
+  if (!initPromise) {
+    initPromise = (async () => {
+      try {
+        await ensureUsersTable();
+        await ensureListingsTable();
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS experiences (
+      id SERIAL PRIMARY KEY,
+      host_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      title VARCHAR(255) NOT NULL,
+      description TEXT,
+      destination VARCHAR(255),
+      departure_location VARCHAR(255),
+      start_date TIMESTAMP,
+      end_date TIMESTAMP,
+      price DECIMAL(10, 2),
+      currency VARCHAR(10) DEFAULT 'USD',
+      max_participants INTEGER DEFAULT 10,
+      available_spots INTEGER DEFAULT 10,
+      image_urls JSONB DEFAULT '[]',
+      video_url TEXT,
+      itinerary JSONB DEFAULT '[]',
+      included JSONB DEFAULT '[]',
+      not_included JSONB DEFAULT '[]',
+      status VARCHAR(50) DEFAULT 'draft',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS experience_bookings (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      experience_id INTEGER REFERENCES experiences(id) ON DELETE CASCADE,
+      num_tickets INTEGER DEFAULT 1,
+      total_price DECIMAL(10, 2) NOT NULL,
+      currency VARCHAR(10) DEFAULT 'USD',
+      status VARCHAR(50) DEFAULT 'confirmed',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+        await ensureMarketingSchema();
+        console.log("DB Initialization Complete on Request!");
+      } catch (e) {
+        console.error("DB Initialization Error:", e);
+      }
+    })();
+  }
+  await initPromise;
+};
+
+
 
 // Auto-run DB init if configured
 if (isDbConfigured) {
