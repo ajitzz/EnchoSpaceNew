@@ -519,6 +519,15 @@ const cacheControl = (maxAgeSeconds: number) => {
 app.use(express.json({ limit: '20mb' }));
 
 app.use(async (req, res, next) => {
+  if (dbConnectionError && isDbConfigured) {
+    try {
+      await pool.query('SELECT 1');
+      dbConnectionError = null;
+      console.log('✅ Database connection has self-healed and is now active.');
+    } catch (err) {
+      console.warn('Database self-healing connection check failed:', (err as Error).message || String(err));
+    }
+  }
   if (req.path.startsWith('/api/') && req.path !== '/api/health') {
     await ensureDbInitialized();
   }
