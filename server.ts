@@ -364,12 +364,10 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
 const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3000', 'https://localhost:3000'];
 app.use(cors({
   origin: function(origin, callback) {
-    // Allow Vercel deployments, localhost, or dynamically specified allowed origins
-    if (!origin || allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production' || (origin && origin.endsWith('.vercel.app'))) {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
       callback(null, true);
     } else {
-      // Instead of throwing an error which causes a 500, we simply disallow CORS.
-      callback(null, false);
+      callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true
@@ -4304,9 +4302,9 @@ app.post('/api/payments/webhook', async (req, res) => {
 app.get('/api/webhooks/meta', (req, res) => {
   const verify_token = 'encho_meta_secure_2026'; // The token from the Meta Developer Dashboard
 
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
+  let mode = req.query['hub.mode'];
+  let token = req.query['hub.verify_token'];
+  let challenge = req.query['hub.challenge'];
 
   if (mode && token) {
     if (mode === 'subscribe' && token === verify_token) {
