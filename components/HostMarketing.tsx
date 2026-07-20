@@ -3489,81 +3489,22 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                           </div>
                         )}
 
-                        {/* Meta CAPI & Google Ads Conversions Linkage (The Conversions API Strategy) */}
-                        <div className="space-y-4 border border-zinc-200 bg-gradient-to-br from-blue-50/10 via-zinc-50/30 to-blue-50/5 p-5 rounded-3xl text-left">
-                          <div className="flex items-center gap-2">
-                            <Target className="w-5 h-5 text-blue-600" />
+                        {/* Automated Conversions API Linkage */}
+                        <div className="space-y-4 border border-green-500/20 bg-gradient-to-br from-green-50/50 via-zinc-50/50 to-green-50/10 p-5 rounded-3xl text-left">
+                          <div className="flex items-start gap-3">
+                            <div className="mt-1">
+                              <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+                                <Target className="w-4 h-4 text-green-700" />
+                              </div>
+                            </div>
                             <div>
-                              <h4 className="text-xs font-black uppercase tracking-wider text-gray-900">Direct Conversions API (CAPI) Linkage</h4>
-                              <p className="text-[10px] text-zinc-500 font-light leading-relaxed">Direct server-to-server integration to track guest bookings and offline conversions with perfect accuracy.</p>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                            {/* Meta Conversions API Card */}
-                            <div className="bg-white border border-zinc-150 rounded-2xl p-4 space-y-3 shadow-sm">
-                              <div className="flex items-center gap-2 text-xs font-bold text-gray-800">
-                                <span className="bg-blue-100 text-blue-800 text-[9px] px-2 py-0.5 rounded-md font-mono">META</span>
-                                <span>Conversions API (CAPI)</span>
-                              </div>
-                              <p className="text-[10px] text-zinc-400 font-light leading-relaxed">
-                                Avoid browser ad-blockers and iOS tracking limits. Bookings trigger high-match direct server-side payloads.
+                              <h4 className="text-xs font-black uppercase tracking-wider text-gray-900 flex items-center gap-2">
+                                Encho Automated Tracking
+                                <span className="bg-green-100 text-green-800 text-[9px] px-2 py-0.5 rounded-full font-mono">ACTIVE</span>
+                              </h4>
+                              <p className="text-[10px] text-zinc-500 font-light leading-relaxed mt-1">
+                                Because you are using the Encho Master Marketing Engine, conversion tracking is fully automated. Encho's server-to-server Conversions API (CAPI) handles all iOS tracking limits and ad-blockers for you. No setup required.
                               </p>
-                              
-                              <div className="space-y-2 text-left">
-                                <label className="text-[9px] font-black uppercase tracking-wider text-gray-400">Meta Pixel ID</label>
-                                <input 
-                                  type="text"
-                                  placeholder="e.g. 1048593847294"
-                                  value={formData.meta_pixel_id}
-                                  onChange={(e) => setFormData(prev => ({ ...prev, meta_pixel_id: e.target.value }))}
-                                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl p-2.5 text-xs font-mono outline-none focus:bg-white focus:border-blue-500 transition-all"
-                                />
-                              </div>
-
-                              <div className="space-y-2 text-left">
-                                <label className="text-[9px] font-black uppercase tracking-wider text-gray-400">Meta CAPI Token (System User Access)</label>
-                                <input 
-                                  type="password"
-                                  placeholder="e.g. EAAGm27dB..."
-                                  value={formData.meta_capi_token}
-                                  onChange={(e) => setFormData(prev => ({ ...prev, meta_capi_token: e.target.value }))}
-                                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl p-2.5 text-xs font-mono outline-none focus:bg-white focus:border-blue-500 transition-all"
-                                />
-                              </div>
-                            </div>
-
-                            {/* Google Ads Offline Conversions Card */}
-                            <div className="bg-white border border-zinc-150 rounded-2xl p-4 space-y-3 shadow-sm">
-                              <div className="flex items-center gap-2 text-xs font-bold text-gray-800">
-                                <span className="bg-amber-50 text-amber-800 border border-amber-100 text-[9px] px-2 py-0.5 rounded-md font-mono">GOOGLE</span>
-                                <span>Offline / Enhanced Linkage</span>
-                              </div>
-                              <p className="text-[10px] text-zinc-400 font-light leading-relaxed">
-                                Upload offline conversions or lead actions directly with SHA256 hashed customer identifiers (ph, em, fn).
-                              </p>
-
-                              <div className="space-y-2 text-left">
-                                <label className="text-[9px] font-black uppercase tracking-wider text-gray-400">Google Conversion ID</label>
-                                <input 
-                                  type="text"
-                                  placeholder="e.g. AW-11839485"
-                                  value={formData.google_conversion_id}
-                                  onChange={(e) => setFormData(prev => ({ ...prev, google_conversion_id: e.target.value }))}
-                                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl p-2.5 text-xs font-mono outline-none focus:bg-white focus:border-amber-500 transition-all"
-                                />
-                              </div>
-
-                              <div className="space-y-2 text-left">
-                                <label className="text-[9px] font-black uppercase tracking-wider text-gray-400">Google Conversion Label</label>
-                                <input 
-                                  type="text"
-                                  placeholder="e.g. abc-123_xyz"
-                                  value={formData.google_conversion_label}
-                                  onChange={(e) => setFormData(prev => ({ ...prev, google_conversion_label: e.target.value }))}
-                                  className="w-full bg-zinc-50 border border-zinc-200 rounded-xl p-2.5 text-xs font-mono outline-none focus:bg-white focus:border-amber-500 transition-all"
-                                />
-                              </div>
                             </div>
                           </div>
                         </div>

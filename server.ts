@@ -3476,11 +3476,151 @@ app.post('/api/marketing/leads/:leadId/message', authenticateToken, async (req: 
 });
 
 // Dispatch Meta Campaign simulating automated API building on Meta's servers
+
+
+// Phase 2: Dispatch Google Ads Campaign via Google Ads API (REST/gRPC Wrapper simulation)
+async function dispatchGoogleAdsCampaign(campaignId: number, req: any) {
+  try {
+    const campaignResult = await pool.query(`
+      SELECT c.*, l.title as listing_title, l.description as listing_desc, l.image_url as listing_image, l.city
+      FROM host_marketing_campaigns c
+      JOIN listings l ON c.listing_id = l.id
+      WHERE c.id = $1
+    `, [campaignId]);
+
+    if (campaignResult.rows.length === 0) {
+      console.warn(`[GOOGLE ADS API] Campaign ${campaignId} not found.`);
+      return false;
+    }
+
+    const campaign = campaignResult.rows[0];
+    
+    // Check for Google Ads credentials
+    const devToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
+    const clientId = process.env.GOOGLE_ADS_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET;
+    const refreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN;
+    const customerId = process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID;
+
+    const hasRealGoogleCredentials = devToken && clientId && clientSecret && refreshToken && customerId && !devToken.includes('your_');
+
+    if (hasRealGoogleCredentials) {
+      console.log(`[GOOGLE ADS API] Full Search & Display Pipeline Initiated. Account: ${customerId}`);
+      
+      try {
+        // Step 1: Exchange Refresh Token for Access Token (OAuth2)
+        const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            client_id: clientId,
+            client_secret: clientSecret,
+            refresh_token: refreshToken,
+            grant_type: 'refresh_token'
+          })
+        });
+        const tokenData = await tokenRes.json();
+        if (!tokenRes.ok) throw new Error(`Failed to refresh token: ${tokenData.error}`);
+        
+        const accessToken = tokenData.access_token;
+        console.log(`[GOOGLE ADS API] OAuth2 Access Token Acquired.`);
+
+        // Step 2: Create Campaign via Google Ads REST API
+        // For simplicity, we are structuring the REST call format.
+        const campaignUrl = `https://googleads.googleapis.com/v16/customers/${customerId}/campaigns:mutate`;
+        
+        const gAdsPayload = {
+          operations: [
+            {
+              create: {
+                name: `Encho Space - ${campaign.title} (Camp #${campaign.id})`,
+                status: 'PAUSED', // Safe default
+                advertisingChannelType: 'PERFORMANCE_MAX',
+                campaignBudget: 'resourceNames/campaignBudgets/temporary',
+                targetRoas: { targetRoas: 2.5 }
+              }
+            }
+          ]
+        };
+
+        const campRes = await fetch(campaignUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'developer-token': devToken,
+            'login-customer-id': customerId,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(gAdsPayload)
+        });
+        
+        const campData = await campRes.json();
+        if (!campRes.ok) throw new Error(`Campaign creation failed: ${campData.error?.message || JSON.stringify(campData)}`);
+        
+        const googleCampaignId = campData.results[0].resourceName;
+        console.log(`[GOOGLE ADS API] Performance Max Campaign created: ${googleCampaignId}`);
+
+        // Update database with Google Ads ID
+        await pool.query(`
+          UPDATE host_marketing_campaigns
+          SET google_campaign_id = $1
+          WHERE id = $2
+        `, [googleCampaignId, campaignId]);
+        
+        return true;
+
+      } catch (apiError: any) {
+        console.error(`[GOOGLE ADS API ERROR] Pipeline failed:`, apiError);
+        // We log the error but don't reject the whole campaign if Meta succeeded
+        return false;
+      }
+    } else {
+      console.log(`[GOOGLE ADS API] Missing credentials, using P-Max simulation...`);
+      
+      const payload = {
+        campaignName: `Encho Space - ${campaign.title}`,
+        channel: "PERFORMANCE_MAX",
+        dailyBudgetMicro: Math.floor((Number(campaign.budget) / 30) * 1000000), // Micros
+        locationTargeting: campaign.city || "Global",
+        assetGroups: [
+          {
+            headlines: [`Book ${campaign.title}`, "Exclusive Retreat"],
+            descriptions: [campaign.description.substring(0, 90)],
+            images: [campaign.listing_image]
+          }
+        ]
+      };
+      
+      console.log(`[GOOGLE ADS API] Simulating Performance Max dispatch:`, JSON.stringify(payload, null, 2));
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      const simulatedGoogleId = `customers/${Math.floor(1000000000 + Math.random() * 9000000000)}/campaigns/${Math.floor(100000000 + Math.random() * 900000000)}`;
+      
+      console.log(`[GOOGLE ADS API] Success! Generated campaign ${simulatedGoogleId}`);
+      
+      // We don't overwrite the main 'status' if it's already handled by Meta dispatch, but we update the google ID
+      await pool.query(`
+        ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS google_campaign_id VARCHAR(255);
+      `);
+      
+      await pool.query(`
+        UPDATE host_marketing_campaigns
+        SET google_campaign_id = $1
+        WHERE id = $2
+      `, [simulatedGoogleId, campaignId]);
+      
+      return true;
+    }
+  } catch (error) {
+    console.error(`[GOOGLE ADS API ERROR] Failed to dispatch campaign ${campaignId}:`, error);
+    return false;
+  }
+}
+
+
 async function dispatchMetaCampaign(campaignId: number, req: any) {
   try {
-    // Fetch campaign and listing details to construct Meta API payload
     const campaignResult = await pool.query(`
-      SELECT c.*, l.title as listing_title, l.description as listing_desc, l.image_url as listing_image
+      SELECT c.*, l.title as listing_title, l.description as listing_desc, l.image_url as listing_image, l.city
       FROM host_marketing_campaigns c
       JOIN listings l ON c.listing_id = l.id
       WHERE c.id = $1
@@ -3492,174 +3632,156 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
     }
 
     const campaign = campaignResult.rows[0];
-
-    // Gap 8: Dynamic Asset Pipeline & Edge CDN
-    console.log(`[EDGE CDN PIPELINE] Intercepting raw asset: ${campaign.listing_image}`);
-    console.log(`[EDGE CDN PIPELINE] Dynamically generating required Meta/Google aspect ratios:`);
-    console.log(` - Format 1:1 (Feed) generated...`);
-    console.log(` - Format 9:16 (Stories/Reels) generated...`);
-    console.log(` - Format 16:9 (Display Network) generated...`);
-    const cdnAssets = {
-        square: `${campaign.listing_image}?crop=1:1&w=1080&h=1080&edge=true`,
-        vertical: `${campaign.listing_image}?crop=9:16&w=1080&h=1920&edge=true`,
-        horizontal: `${campaign.listing_image}?crop=16:9&w=1920&h=1080&edge=true`
-    };
-    console.log(`[EDGE CDN PIPELINE] Asset transformation complete. Passing optimized assets to Meta API.`);
-
-    console.log(`[META API DISPATCH] Initiating Meta Ads API call for Campaign #${campaign.id}...`);
-    console.log(`[META API DISPATCH] Validating payment state: Intent ID ${campaign.payment_intent_id}, Gateway: ${String(campaign.payment_gateway).toUpperCase()}`);
-
     const accessToken = process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN;
     const rawAdAccountId = process.env.META_AD_ACCOUNT_ID;
+    const pageId = process.env.META_PAGE_ID;
+    const igAccountId = process.env.META_INSTAGRAM_ACCOUNT_ID;
     
     let cleanAdAccountId = String(rawAdAccountId || '').trim();
     if (cleanAdAccountId && !cleanAdAccountId.startsWith('act_') && cleanAdAccountId !== 'your_ad_account_id_here') {
       cleanAdAccountId = 'act_' + cleanAdAccountId;
     }
 
-    const hasRealMetaCredentials = accessToken && 
-                                   cleanAdAccountId && 
-                                   !accessToken.includes('your_generated_system_token_here') && 
-                                   !cleanAdAccountId.includes('your_ad_account_id_here');
+    const hasRealMetaCredentials = accessToken && cleanAdAccountId && pageId && !accessToken.includes('your_generated_system_token');
 
     if (hasRealMetaCredentials) {
-      console.log(`[META API DISPATCH] Found real Meta credentials. Ad Account: ${cleanAdAccountId}. Access Token (masked): ${accessToken.substring(0, 10)}...`);
+      console.log(`[META API DISPATCH] Full Ad-Creation Pipeline Initiated. Account: ${cleanAdAccountId}`);
       
       try {
-        const metaUrl = `https://graph.facebook.com/v19.0/${cleanAdAccountId}/campaigns`;
-        console.log(`[META API DISPATCH] Posting to Meta: ${metaUrl}`);
-        
-        const response = await fetch(metaUrl, {
+        // 1. Create Campaign
+        const campRes = await fetch(`https://graph.facebook.com/v19.0/${cleanAdAccountId}/campaigns`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             access_token: accessToken,
             name: `Encho Space - ${campaign.title} (Campaign #${campaign.id})`,
             objective: 'OUTCOME_TRAFFIC',
             special_ad_categories: ['HOUSING'],
-            status: 'PAUSED' // Extremely safe: create paused so it can be reviewed in Ads Manager before charging
+            status: 'PAUSED' // Safe default
           })
         });
+        const campData = await campRes.json();
+        if (!campRes.ok) throw new Error(`Campaign creation failed: ${campData.error?.message}`);
+        const metaCampaignId = campData.id;
+        console.log(`[META API] Campaign created: ${metaCampaignId}`);
 
-        const data = await response.json();
-        
-        if (response.ok && data.id) {
-          console.log(`[META API DISPATCH] SUCCESS! Meta campaign created. Meta Campaign ID: ${data.id}`);
-          
-          await pool.query(`
-            UPDATE host_marketing_campaigns
-            SET status = 'active',
-                meta_campaign_id = $1,
-                meta_dispatched_at = CURRENT_TIMESTAMP,
-                admin_approved = true,
-                admin_feedback = NULL,
-                last_pacing_calc_at = CURRENT_TIMESTAMP,
-                pacing_mode = 'standard',
-                accumulated_spent = 0,
-                accumulated_impressions = 0,
-                accumulated_clicks = 0,
-                accumulated_conversions = 0
-            WHERE id = $2
-          `, [data.id, campaignId]);
+        // 2. Create Ad Set
+        const adSetRes = await fetch(`https://graph.facebook.com/v19.0/${cleanAdAccountId}/adsets`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            access_token: accessToken,
+            name: `Encho AdSet - ${campaign.city || 'Global'}`,
+            campaign_id: metaCampaignId,
+            daily_budget: Math.floor(Number(campaign.budget) / 30 * 100) || 500, // min $5/day
+            billing_event: 'IMPRESSIONS',
+            optimization_goal: 'LINK_CLICKS',
+            bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+            status: 'PAUSED',
+            targeting: {
+              geo_locations: { countries: ['US'] } // Housing category requires broad geo
+            }
+          })
+        });
+        const adSetData = await adSetRes.json();
+        if (!adSetRes.ok) throw new Error(`AdSet creation failed: ${adSetData.error?.message}`);
+        const metaAdSetId = adSetData.id;
+        console.log(`[META API] AdSet created: ${metaAdSetId}`);
 
-          broadcastDbEvent(req, 'marketing');
-          return true;
-        } else {
-          console.error(`[META API DISPATCH ERROR] Meta Graph API rejected the request:`, data);
-          const errorDetail = data.error?.message || JSON.stringify(data);
-          
-          // Gracefully capture the real error and display as feedback to the host
-          await pool.query(`
-            UPDATE host_marketing_campaigns
-            SET status = 'rejected',
-                admin_feedback = $1,
-                admin_approved = false
-            WHERE id = $2
-          `, [`Meta Ads API reported an issue: "${errorDetail}". Please ensure your Meta System User token has 'ads_management' permissions and your Meta Ad Account has a valid payment method.`, campaignId]);
+        // 3. Create Ad Creative
+        const creativeRes = await fetch(`https://graph.facebook.com/v19.0/${cleanAdAccountId}/adcreatives`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            access_token: accessToken,
+            name: `Encho Creative - ${campaign.id}`,
+            object_story_spec: {
+              page_id: pageId,
+              instagram_actor_id: igAccountId || undefined,
+              link_data: {
+                image_hash: '', // We would upload the image and get a hash here, for now using image_url
+                picture: campaign.listing_image || 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6',
+                link: `https://encho-space-chi.vercel.app/listings/${campaign.listing_id}`,
+                message: campaign.description || 'Book your dream stay with Encho.',
+                name: campaign.title || 'Exclusive Property'
+              }
+            }
+          })
+        });
+        const creativeData = await creativeRes.json();
+        if (!creativeRes.ok) throw new Error(`Creative creation failed: ${creativeData.error?.message}`);
+        const metaCreativeId = creativeData.id;
+        console.log(`[META API] Creative created: ${metaCreativeId}`);
 
-          broadcastDbEvent(req, 'marketing');
-          return false;
-        }
+        // 4. Create Ad
+        const adRes = await fetch(`https://graph.facebook.com/v19.0/${cleanAdAccountId}/ads`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            access_token: accessToken,
+            name: `Encho Ad - ${campaign.id}`,
+            adset_id: metaAdSetId,
+            creative: { creative_id: metaCreativeId },
+            status: 'PAUSED'
+          })
+        });
+        const adData = await adRes.json();
+        if (!adRes.ok) throw new Error(`Ad creation failed: ${adData.error?.message}`);
+        const metaAdId = adData.id;
+        console.log(`[META API] Ad created: ${metaAdId}`);
+
+        await pool.query(`
+          UPDATE host_marketing_campaigns
+          SET status = 'active',
+              meta_campaign_id = $1,
+              meta_dispatched_at = CURRENT_TIMESTAMP,
+              admin_approved = true,
+              admin_feedback = NULL,
+              last_pacing_calc_at = CURRENT_TIMESTAMP,
+              pacing_mode = 'standard',
+              accumulated_spent = 0,
+              accumulated_impressions = 0,
+              accumulated_clicks = 0,
+              accumulated_conversions = 0
+          WHERE id = $2
+        `, [metaCampaignId, campaignId]);
+        broadcastDbEvent(req, 'marketing');
+        return true;
+
       } catch (apiError: any) {
-        console.error(`[META API DISPATCH FETCH ERROR] Network failure or bad response:`, apiError);
-        
+        console.error(`[META API DISPATCH ERROR] Pipeline failed:`, apiError);
         await pool.query(`
           UPDATE host_marketing_campaigns
           SET status = 'rejected',
               admin_feedback = $1,
               admin_approved = false
           WHERE id = $2
-        `, [`Failed to reach Meta servers: ${apiError.message || String(apiError)}`, campaignId]);
-
+        `, [`Meta Ads API Pipeline Error: ${apiError.message}`, campaignId]);
         broadcastDbEvent(req, 'marketing');
         return false;
       }
     } else {
-      console.log(`[META API DISPATCH] Using sandbox/simulation fallback (Meta credentials not configured).`);
-      
-      // Simulate construction of Graph API payload for Meta's servers
-      const metaPayload = {
-        name: campaign.title,
-        objective: "OUTCOME_TRAFFIC",
-        status: "ACTIVE",
-        special_ad_categories: ["HOUSING"],
-        daily_budget: Math.floor(Number(campaign.budget) / 30 * 100), // budget in cents/paise
-        targeting: {
-          geo_locations: {
-            countries: ["IN"],
-            cities: campaign.target_locations ? campaign.target_locations.split(',').map((s: string) => s.trim()) : []
-          },
-          publisher_platforms: typeof campaign.platforms === 'string' ? JSON.parse(campaign.platforms) : campaign.platforms
-        },
-        creative: {
-          title: campaign.title,
-          body: campaign.description,
-          link_data: {
-            message: campaign.description,
-            link: `https://nestpick-clone.com/listings/${campaign.listing_id}`,
-            caption: campaign.feed_description || "Nestpick Premium Property Boost",
-            attachment_style: campaign.ad_format === 'carousel' ? 'CAROUSEL' : 'SHARE_LINK',
-            image_url: campaign.listing_image
-          }
-        }
-      };
-
-      console.log(`[META API DISPATCH] Outgoing HTTP POST to https://graph.facebook.com/v19.0/act_8849203/campaigns:`, JSON.stringify(metaPayload, null, 2));
-
-      // Simulated network latency for remote Meta Ads API dispatch
+      console.log(`[META API DISPATCH] Missing credentials, using simulation...`);
+      // Simulated logic here
       await new Promise(resolve => setTimeout(resolve, 1000));
-
       const simulatedMetaCampaignId = `act_8849203_camp_${Math.floor(100000000 + Math.random() * 900000000)}`;
-
-      console.log(`[META API DISPATCH] Meta API Success! Generated campaign ${simulatedMetaCampaignId}`);
-
-      // Update status to 'active' and record dispatch logs
       await pool.query(`
         UPDATE host_marketing_campaigns
         SET status = 'active',
             meta_campaign_id = $1,
             meta_dispatched_at = CURRENT_TIMESTAMP,
-            admin_approved = true,
-            admin_feedback = NULL,
-            last_pacing_calc_at = CURRENT_TIMESTAMP,
-            pacing_mode = 'standard',
-            accumulated_spent = 0,
-            accumulated_impressions = 0,
-            accumulated_clicks = 0,
-            accumulated_conversions = 0
+            admin_approved = true
         WHERE id = $2
       `, [simulatedMetaCampaignId, campaignId]);
-
       broadcastDbEvent(req, 'marketing');
       return true;
     }
   } catch (error) {
-    console.error(`[META API DISPATCH ERROR] Failed to dispatch campaign ${campaignId} to Meta:`, error);
+    console.error(`[META API DISPATCH ERROR] Failed to dispatch campaign ${campaignId}:`, error);
     return false;
   }
 }
+
 
 // Helper to hash user data for privacy-compliant Meta CAPI matching
 function hashCAPIParameter(val: string | null | undefined): string | null {
@@ -3876,6 +3998,7 @@ async function processPaymentWebhook(payload: any, signature: string | undefined
   if (finalStatus === 'active') {
     console.log('[WEBHOOK] Campaign has already been approved by Admin and cleared Risk! Dispatching Meta Ads API call...');
     await dispatchMetaCampaign(campaign_id, req);
+                await dispatchGoogleAdsCampaign(campaign_id, req);
   } else if (finalStatus === 'escrow') {
     console.log('[WEBHOOK] Campaign placed in Escrow for 24h. Meta API dispatch delayed.');
     broadcastDbEvent(req, 'marketing');
@@ -3953,6 +4076,7 @@ app.post('/api/payments/webhook', async (req, res) => {
               if (campaign.admin_approved) {
                 console.log(`[STRIPE WEBHOOK] Campaign #${campaignId} already approved by Admin! Dispatching Meta Ads API call...`);
                 await dispatchMetaCampaign(campaignId, req);
+                await dispatchGoogleAdsCampaign(campaignId, req);
               } else {
                 console.log(`[STRIPE WEBHOOK] Campaign #${campaignId} is awaiting Admin Quality Control review.`);
                 broadcastDbEvent(req, 'marketing');
@@ -4053,6 +4177,7 @@ app.post('/api/payments/webhook', async (req, res) => {
               if (campaign.admin_approved) {
                 console.log(`[RAZORPAY WEBHOOK] Campaign #${campaignIdToUse} already approved by Admin! Dispatching Meta Ads API call...`);
                 await dispatchMetaCampaign(campaignIdToUse, req);
+                await dispatchGoogleAdsCampaign(campaignIdToUse, req);
               } else {
                 console.log(`[RAZORPAY WEBHOOK] Campaign #${campaignIdToUse} is awaiting Admin Quality Control review.`);
                 broadcastDbEvent(req, 'marketing');
@@ -4558,6 +4683,7 @@ app.post('/api/admin/marketing/campaigns/:id/approve', authenticateToken, async 
     if (campaign && campaign.payment_status === 'paid') {
       console.log(`[ADMIN APPROVAL] Campaign #${id} is already paid! Triggering Meta API Dispatch...`);
       await dispatchMetaCampaign(Number(id), req);
+                await dispatchGoogleAdsCampaign(Number(id), req);
       res.json({ success: true, message: 'Campaign approved and automatically dispatched to live Meta feed.' });
     } else {
       console.log(`[ADMIN APPROVAL] Campaign #${id} approved, but payment is still pending (status: ${campaign?.payment_status}).`);
@@ -5690,6 +5816,22 @@ app.post('/api/messages', authenticateToken, messageLimiter, async (req: AuthReq
 
     if (!bookingId || !content) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Phase 4 (Security): Prevent IDOR by verifying sender belongs to the booking
+    const bookingCheck = await pool.query(`
+      SELECT b.user_id, l.user_id as host_id
+      FROM bookings b
+      JOIN listings l ON b.listing_id = l.id
+      WHERE b.id = $1
+    `, [bookingId]);
+    
+    if (bookingCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+    const bData = bookingCheck.rows[0];
+    if (bData.user_id !== senderId && bData.host_id !== senderId && req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized: You are not part of this booking.' });
     }
 
     const { sanitized, wasSanitized } = maskContactInfo(content);
@@ -7761,6 +7903,7 @@ const processEscrowCampaigns = async () => {
     for (const row of res.rows) {
       console.log(`[ESCROW CRON] 24-hour escrow period completed for Campaign #${row.id}. Dispatching to Meta Ads...`);
       await dispatchMetaCampaign(row.id, null);
+                await dispatchGoogleAdsCampaign(row.id, null);
     }
   } catch (err) {
     console.error('[ESCROW CRON ERROR]', err);
