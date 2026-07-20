@@ -364,10 +364,12 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
 const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3000', 'https://localhost:3000'];
 app.use(cors({
   origin: function(origin, callback) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+    // Allow Vercel deployments, localhost, or dynamically specified allowed origins
+    if (!origin || allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production' || (origin && origin.endsWith('.vercel.app'))) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      // Instead of throwing an error which causes a 500, we simply disallow CORS.
+      callback(null, false);
     }
   },
   credentials: true
