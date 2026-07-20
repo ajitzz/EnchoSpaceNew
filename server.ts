@@ -154,7 +154,7 @@ export const rlsStorage = new AsyncLocalStorage<{ userId?: number | string | nul
 const pool = new Pool({
   connectionString: isDbConfigured ? dbUrl : undefined,
   ssl: isDbConfigured ? { rejectUnauthorized: false } : undefined,
-  max: process.env.VERCEL ? 2 : 15, // Serverless needs small pools to avoid exhausting Neon connection limits
+  max: 15, // Increase pool size to 15 to completely prevent connection queuing on Vercel
   idleTimeoutMillis: process.env.VERCEL ? 1000 : 30000, // Close idle connections extremely fast on Vercel
   connectionTimeoutMillis: 5000 // Timeout fast (5 seconds) instead of hanging for 60 seconds
 });
@@ -172,13 +172,15 @@ pool.query = async function (this: any, ...args: any[]) {
   const isRequest = store?.isRequest;
   const bypassRls = store?.bypassRls;
 
-  if (isDbConfigured && isRequest) {
+  // Only apply RLS configuration when there is an active, authenticated non-admin userId in the request store.
+  // Otherwise, run direct queries immediately for optimal performance (e.g. unauthenticated or admin queries).
+  if (isDbConfigured && isRequest && userId && !bypassRls) {
     const client = await pool.connect();
     try {
       // Set both configs in a single optimized query
       await client.query(
         `SELECT set_config('app.current_user_id', $1, false), set_config('app.bypass_rls', $2, false)`,
-        [userId ? String(userId) : '', bypassRls ? 'true' : 'false']
+        [String(userId), 'false']
       );
       
       const result = await client.query(text, params);
