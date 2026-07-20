@@ -45,5 +45,13 @@
       "path": "/api/cron/rewarm",
       "schedule": "0 0 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "api/**/*.ts": {
+      "maxDuration": 60
+    },
+    "api/index.ts": {
+      "maxDuration": 60
+    }
+  }
 }

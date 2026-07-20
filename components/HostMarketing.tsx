@@ -820,8 +820,14 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         });
         fetchCampaigns();
       } else {
-        const errorData = await res.json();
-        addToast('Error', errorData.error || 'Failed to create campaign draft', 'error');
+        let errorMsg = 'Failed to create campaign draft';
+        try {
+          const errorData = await res.json();
+          errorMsg = errorData.error || errorMsg;
+        } catch(e) {
+          errorMsg = `Server error (${res.status}). Please try again.`;
+        }
+        addToast('Error', errorMsg, 'error');
       }
     } catch (err) {
       console.error(err);
