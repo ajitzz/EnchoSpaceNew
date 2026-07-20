@@ -260,7 +260,7 @@ const campaignSchema = z.object({
   description: z.string().min(10).max(500),
   video_url: z.string().optional().or(z.literal('')),
   media_urls: z.array(z.string()).optional(),
-  platforms: z.array(z.enum(['meta', 'google'])),
+  platforms: z.array(z.string()),
   budget: z.coerce.number().min(5),
   target_locations: z.string().optional(),
   ad_format: z.string().optional(),
