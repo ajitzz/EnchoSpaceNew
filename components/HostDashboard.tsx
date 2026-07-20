@@ -35,9 +35,9 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
     if (!user) return;
     
     Promise.all([
-      fetch(`/api/listings?userId=${user.id}&_t=${Date.now()}`, { cache: 'no-store' }).then(res => res.json()),
-      fetch(`/api/host/reservations?userId=${user.id}&_t=${Date.now()}`, { cache: 'no-store' }).then(res => res.json()),
-      fetch(`/api/experiences?host_id=${user.id}&_t=${Date.now()}`, { cache: 'no-store' }).then(res => res.json())
+      fetch(`/api/listings?userId=${user.id}&_t=${Date.now()}`, { cache: 'no-store', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }).then(res => res.json()),
+      fetch(`/api/host/reservations?userId=${user.id}&_t=${Date.now()}`, { cache: 'no-store', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }).then(res => res.json()),
+      fetch(`/api/experiences?host_id=${user.id}&_t=${Date.now()}`, { cache: 'no-store', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }).then(res => res.json())
     ])
     .then(([listingsData, reservationsData, experiencesData]) => {
       if (!active) return;
@@ -66,7 +66,7 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
 
   useEffect(() => {
     if (selectedResId && view === 'messages') {
-      fetch(`/api/messages/${selectedResId}`)
+      fetch(`/api/messages/${selectedResId}`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } })
         .then(res => res.json())
         .then(data => {
             if (Array.isArray(data)) setMessages(data);
@@ -79,7 +79,7 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
      try {
        const res = await fetch(`/api/host/reservations/${id}/status`, {
          method: 'PUT',
-         headers: { 'Content-Type': 'application/json' },
+         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
          body: JSON.stringify({ status })
        });
        if (res.ok) {
@@ -95,7 +95,7 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
     try {
       const res = await fetch('/api/messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
         body: JSON.stringify({
            bookingId: selectedResId,
            senderId: user.id,
@@ -271,7 +271,7 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
                                           <button onClick={(e) => {
                                               e.stopPropagation();
                                               if(confirm('Are you sure you want to delete this listing?')) {
-                                                  fetch(`/api/listings/${listing.id}`, { method: 'DELETE' })
+                                                  fetch(`/api/listings/${listing.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } })
                                                   .then(() => setListings(prev => prev.filter(l => l.id !== listing.id)))
                                                   .catch(err => console.error(err));
                                               }
