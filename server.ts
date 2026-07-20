@@ -169,24 +169,24 @@ pool.query = async function (this: any, ...args: any[]) {
   const isRequest = store?.isRequest;
   const bypassRls = store?.bypassRls;
 
-  if (isDbConfigured) {
+  if (isDbConfigured && isRequest) {
     const client = await this.connect();
     try {
-      if (isRequest) {
-        await client.query(`SELECT set_config('app.current_user_id', $1, false)`, [userId ? String(userId) : '']);
-        await client.query(`SELECT set_config('app.bypass_rls', $1, false)`, [bypassRls ? 'true' : 'false']);
-      } else {
-        await client.query(`SELECT set_config('app.bypass_rls', 'true', false)`);
-        await client.query(`SELECT set_config('app.current_user_id', '', false)`);
-      }
-      try {
-        const result = await client.query(text, params);
-        return result;
-      } finally {
-        await client.query(`SELECT set_config('app.bypass_rls', 'true', false)`);
-        await client.query(`SELECT set_config('app.current_user_id', '', false)`);
-      }
+      // Set both configs in a single optimized query
+      await client.query(
+        `SELECT set_config('app.current_user_id', $1, false), set_config('app.bypass_rls', $2, false)`,
+        [userId ? String(userId) : '', bypassRls ? 'true' : 'false']
+      );
+      
+      const result = await client.query(text, params);
+      return result;
     } finally {
+      // Reset configs to default in a single query before releasing back to the pool
+      try {
+        await client.query(`SELECT set_config('app.current_user_id', '', false), set_config('app.bypass_rls', 'true', false)`);
+      } catch (err) {
+        console.error('[RLS RESET ERROR]', err);
+      }
       client.release();
     }
   } else {
@@ -364,10 +364,12 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
 const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3000', 'https://localhost:3000'];
 app.use(cors({
   origin: function(origin, callback) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
+    // Allow Vercel deployments, localhost, or dynamically specified allowed origins
+    if (!origin || allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production' || (origin && origin.endsWith('.vercel.app'))) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      // Instead of throwing an error which causes a 500, we simply disallow CORS.
+      callback(null, false);
     }
   },
   credentials: true
@@ -4302,9 +4304,9 @@ app.post('/api/payments/webhook', async (req, res) => {
 app.get('/api/webhooks/meta', (req, res) => {
   const verify_token = 'encho_meta_secure_2026'; // The token from the Meta Developer Dashboard
 
-  let mode = req.query['hub.mode'];
-  let token = req.query['hub.verify_token'];
-  let challenge = req.query['hub.challenge'];
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
 
   if (mode && token) {
     if (mode === 'subscribe' && token === verify_token) {
@@ -7878,7 +7880,7 @@ async function startServer() {
     });
   }
 
-  if(!process.env.VITEST) httpServer.listen(PORT, '0.0.0.0', async () => {
+  if (!process.env.VITEST && !process.env.VERCEL) httpServer.listen(PORT, '0.0.0.0', async () => {
     console.log(`Server running on http://localhost:${PORT}`);
 
     // Auto-init DB schema
