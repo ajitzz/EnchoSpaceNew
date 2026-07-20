@@ -4304,9 +4304,9 @@ app.post('/api/payments/webhook', async (req, res) => {
 app.get('/api/webhooks/meta', (req, res) => {
   const verify_token = 'encho_meta_secure_2026'; // The token from the Meta Developer Dashboard
 
-  let mode = req.query['hub.mode'];
-  let token = req.query['hub.verify_token'];
-  let challenge = req.query['hub.challenge'];
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
 
   if (mode && token) {
     if (mode === 'subscribe' && token === verify_token) {
