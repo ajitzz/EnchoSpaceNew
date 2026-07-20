@@ -245,13 +245,13 @@ function maskContactInfo(text: string): { sanitized: string, wasSanitized: boole
 
 // ==========================================
 const campaignSchema = z.object({
-  listing_id: z.number().int().positive(),
+  listing_id: z.coerce.number().int().positive(),
   title: z.string().min(3).max(100),
   description: z.string().min(10).max(500),
   video_url: z.string().url().optional().or(z.literal('')),
   media_urls: z.array(z.string().url()).optional(),
   platforms: z.array(z.enum(['meta', 'google'])),
-  budget: z.number().min(5),
+  budget: z.coerce.number().min(5),
   target_locations: z.string().optional(),
   ad_format: z.string().optional(),
   feed_description: z.string().optional(),
@@ -569,7 +569,7 @@ Answer the user's question accurately. If they ask about something not listed, p
            let replyText = '';
            try {
               const response = await ai.models.generateContent({
-                 model: "gemini-3.5-flash",
+                 model: "gemini-2.5-flash",
                  contents: msg_body,
                  config: {
                     systemInstruction,
@@ -2405,7 +2405,7 @@ app.post('/api/marketing/campaigns', authenticateToken, async (req: AuthRequest,
       'create_campaign',
       JSON.stringify({}),
       JSON.stringify(result.rows[0]),
-      req.ip || req.socket.remoteAddress
+      req.ip || req.socket?.remoteAddress || null
     ]);
 
     broadcastDbEvent(req, 'marketing');
@@ -2642,7 +2642,7 @@ app.post('/api/host/social-posts', authenticateToken, async (req: AuthRequest, r
       'create_social_post',
       JSON.stringify({}),
       JSON.stringify(result.rows[0]),
-      req.ip || req.socket.remoteAddress
+      req.ip || req.socket?.remoteAddress || null
     ]);
 
     broadcastDbEvent(req, 'marketing');
@@ -3020,7 +3020,7 @@ app.post('/api/marketing/campaigns/:id/ai-check', authenticateToken, aiGatekeepe
         `;
 
         const response = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
+          model: "gemini-2.5-flash",
           contents: prompt,
           config: {
              responseMimeType: "application/json"
@@ -3110,7 +3110,7 @@ app.get('/api/marketing/recommend-targeting', authenticateToken, async (req: Aut
         `;
 
         const response = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
+          model: "gemini-2.5-flash",
           contents: prompt,
           config: { responseMimeType: "application/json" }
         });
@@ -3193,7 +3193,7 @@ app.post('/api/marketing/grade-targeting', authenticateToken, aiGatekeeperLimite
         `;
 
         const response = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
+          model: "gemini-2.5-flash",
           contents: prompt,
           config: { responseMimeType: "application/json" }
         });
@@ -4371,7 +4371,7 @@ app.post('/api/marketing/campaigns/:id/subscribe', authenticateToken, async (req
         `;
         
         const response = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
+          model: "gemini-2.5-flash",
           contents: prompt,
           config: { responseMimeType: "application/json" }
         });
@@ -6109,7 +6109,7 @@ Do NOT wrap it in markdown block.`;
 
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.5-flash",
         contents: "Suggest optimal price in JSON.",
         config: {
           systemInstruction,
@@ -6150,7 +6150,7 @@ Draft a polite, helpful, and concise response. Do not include quotes, placeholde
 
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.5-flash",
         contents: "Draft a reply to the guest based on the conversation.",
         config: {
           systemInstruction,
@@ -6197,7 +6197,7 @@ Do NOT include any empty placeholders, brackets like [Insert City], or generic t
 
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.5-flash",
         contents: "Generate title and description based on the details.",
         config: {
           systemInstruction,
