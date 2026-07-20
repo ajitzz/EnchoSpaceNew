@@ -258,8 +258,8 @@ const campaignSchema = z.object({
   listing_id: z.coerce.number().int().positive(),
   title: z.string().min(3).max(100),
   description: z.string().min(10).max(500),
-  video_url: z.string().url().optional().or(z.literal('')),
-  media_urls: z.array(z.string().url()).optional(),
+  video_url: z.string().optional().or(z.literal('')),
+  media_urls: z.array(z.string()).optional(),
   platforms: z.array(z.enum(['meta', 'google'])),
   budget: z.coerce.number().min(5),
   target_locations: z.string().optional(),
@@ -2053,7 +2053,8 @@ app.post('/api/upload-url', authenticateToken, async (req, res) => {
 
     // Security: Restrict allowed content types
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/quicktime', 'video/webm'];
-    if (!allowedTypes.includes(contentType)) {
+    const isAllowed = contentType.startsWith('image/') || contentType.startsWith('video/') || allowedTypes.includes(contentType);
+    if (!isAllowed) {
        return res.status(400).json({ error: 'Invalid content type. Only images and videos are allowed.' });
     }
 
@@ -2447,7 +2448,7 @@ app.post('/api/marketing/campaigns', authenticateToken, async (req: AuthRequest,
   try {
     const parseResult = campaignSchema.safeParse(req.body);
     if (!parseResult.success) {
-      return res.status(400).json({ error: 'Invalid input', details: parseResult.error.errors });
+      return res.status(400).json({ error: 'Invalid input', details: parseResult.error.issues || parseResult.error.errors });
     }
     const { listing_id, title, description, video_url, media_urls, platforms, budget, target_locations, ad_format, feed_description, meta_pixel_id, meta_capi_token, google_conversion_id, google_conversion_label } = parseResult.data;
 
@@ -2510,7 +2511,7 @@ app.put('/api/marketing/campaigns/:id', authenticateToken, async (req: AuthReque
     const { id } = req.params;
     const parseResult = campaignUpdateSchema.safeParse(req.body);
     if (!parseResult.success) {
-      return res.status(400).json({ error: 'Invalid input', details: parseResult.error.errors });
+      return res.status(400).json({ error: 'Invalid input', details: parseResult.error.issues || parseResult.error.errors });
     }
     const { title, description, video_url, media_urls, platforms, budget, status, target_locations, ad_format, feed_description, rejected_fields, meta_pixel_id, meta_capi_token, google_conversion_id, google_conversion_label } = parseResult.data;
 
@@ -2677,7 +2678,7 @@ app.post('/api/host/social-posts', authenticateToken, async (req: AuthRequest, r
   try {
     const parseResult = socialPostSchema.safeParse(req.body);
     if (!parseResult.success) {
-      return res.status(400).json({ error: 'Invalid input', details: parseResult.error.errors });
+      return res.status(400).json({ error: 'Invalid input', details: parseResult.error.issues || parseResult.error.errors });
     }
     const { listing_id, media_type, media_urls, caption, scheduled_at } = parseResult.data;
 
@@ -7610,7 +7611,7 @@ app.post('/api/marketing/wallet/refuel', authenticateToken, async (req: AuthRequ
     if (!hostId) return res.status(401).json({ error: 'Unauthorized' });
     const parseResult = walletRefuelSchema.safeParse(req.body);
     if (!parseResult.success) {
-      return res.status(400).json({ error: 'Invalid input', details: parseResult.error.errors });
+      return res.status(400).json({ error: 'Invalid input', details: parseResult.error.issues || parseResult.error.errors });
     }
     const { amount, gateway } = parseResult.data;
 
