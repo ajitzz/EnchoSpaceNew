@@ -153,7 +153,10 @@ export const rlsStorage = new AsyncLocalStorage<{ userId?: number | string | nul
 
 const pool = new Pool({
   connectionString: isDbConfigured ? dbUrl : undefined,
-  ssl: isDbConfigured ? { rejectUnauthorized: false } : undefined
+  ssl: isDbConfigured ? { rejectUnauthorized: false } : undefined,
+  max: process.env.VERCEL ? 2 : 15, // Serverless needs small pools to avoid exhausting Neon connection limits
+  idleTimeoutMillis: process.env.VERCEL ? 1000 : 30000, // Close idle connections extremely fast on Vercel
+  connectionTimeoutMillis: 5000 // Timeout fast (5 seconds) instead of hanging for 60 seconds
 });
 
 // Wrap pool.query to support secure Row-Level Security session context propagation
@@ -161,7 +164,7 @@ const originalPoolQuery = pool.query;
 pool.query = async function (this: any, ...args: any[]) {
   const [text, params, callback] = args;
   if (typeof params === 'function' || typeof callback === 'function') {
-    return originalPoolQuery.apply(this, args);
+    return originalPoolQuery.apply(pool, args);
   }
 
   const store = rlsStorage.getStore();
@@ -170,7 +173,7 @@ pool.query = async function (this: any, ...args: any[]) {
   const bypassRls = store?.bypassRls;
 
   if (isDbConfigured && isRequest) {
-    const client = await this.connect();
+    const client = await pool.connect();
     try {
       // Set both configs in a single optimized query
       await client.query(
@@ -190,7 +193,7 @@ pool.query = async function (this: any, ...args: any[]) {
       client.release();
     }
   } else {
-    return originalPoolQuery.apply(this, args);
+    return originalPoolQuery.apply(pool, args);
   }
 };
 
