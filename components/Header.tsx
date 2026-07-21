@@ -8,6 +8,7 @@ import { useAuth } from './AuthContext';
 import { useMapsLibrary } from '@vis.gl/react-google-maps';
 import { CurrencySelector } from './CurrencySelector';
 import { useToast } from './ToastContext';
+import { EnchoLogo } from './EnchoLogo';
 
 interface HeaderProps {
   onSearch: (city: string) => void;
@@ -298,16 +299,7 @@ const Header: React.FC<HeaderProps> = ({
   }}
   className="flex flex-col cursor-pointer group shrink-0 select-none justify-self-start"
 >
-  {/* Top Row: ENCHO (Deep Navy-Black) + Blue Dot */}
-  <div className="flex items-baseline font-black leading-none transition-colors duration-300">
-    <span className="text-base md:text-lg font-black tracking-tight text-[#0F172A] group-hover:text-[#0284C7] transition-colors duration-300">ENCHO</span>
-    <span className="w-1.5 h-1.5 rounded-full bg-[#0284C7] ml-[3px] transition-transform duration-300 group-hover:scale-125" />
-  </div>
-  
-  {/* Bottom Row: SPACE (Reduced Gap) */}
-  <span className="text-[7px] md:text-[8px] font-black tracking-[0.4em] text-[#8e8e93] uppercase leading-none mt-0.5 group-hover:text-[#5e687a] transition-colors duration-300">
-    SPACE
-  </span>
+  <EnchoLogo size="sm" variant="wordmark" showSubtitle />
 </div>
 
             {/* Stays / Experiences Pills perfectly centered matching the screenshot design */}
@@ -366,21 +358,15 @@ const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
         
-          {/* 1. Brand: ENCHO Space (Desktop only) */}
+          {/* 1. Brand: ENCHO Logo (Desktop only) */}
           <div 
             onClick={() => {
                 setInputValue('');
                 onSearch('Berlin'); // Reset to default/home
             }}
-            className="hidden md:flex flex-col justify-center leading-none cursor-pointer group shrink-0 select-none md:min-w-[120px]"
+            className="hidden md:flex flex-col justify-center cursor-pointer group shrink-0 select-none md:min-w-[120px]"
           >
-            <div className="flex items-baseline font-black leading-none transition-colors">
-              <span className="text-xl md:text-2xl font-black tracking-tight text-[#0F172A] group-hover:text-[#0284C7] transition-colors duration-300">ENCHO</span>
-              <span className="w-2.5 h-2.5 rounded-full bg-[#0284C7] ml-0.5 transition-transform duration-300 group-hover:scale-125" />
-            </div>
-            <span className="text-[8px] md:text-[9.5px] font-black tracking-[0.45em] text-[#8e8e93] uppercase leading-none mt-1.5 group-hover:text-[#5e687a] transition-colors">
-              SPACE
-            </span>
+            <EnchoLogo size="md" variant="wordmark" showSubtitle />
           </div>
 
          {/* 2. Center Content - Varies by Mode */}

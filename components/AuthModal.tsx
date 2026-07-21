@@ -3,6 +3,7 @@ import { useAuth } from './AuthContext';
 import { GoogleLogin } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
+import { EnchoLogo } from './EnchoLogo';
 
 interface AuthModalProps {
   onClose: () => void;
@@ -126,9 +127,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
             </button>
             
             <div className="p-6 pb-safe">
-              <h2 className="text-2xl font-bold tracking-tight text-gray-900 mb-6 flex items-center">
-                 <span className="text-[#0284C7] mr-2">Encho</span>Space
-              </h2>
+              <div className="mb-6">
+                 <EnchoLogo size="md" variant="wordmark" showSubtitle />
+              </div>
               <div className="text-lg font-semibold text-gray-900 mb-6">Continue with Mobile Number</div>
               
               {error && (

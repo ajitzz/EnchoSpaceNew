@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { EnchoLogo } from './EnchoLogo';
 import { SEO } from './SEO';
 import { Listing } from '../types';
 import { ShieldCheck, StarIcon, HouseIcon, MessageCircleIcon } from './Icons';
@@ -77,13 +78,9 @@ const BookingPage: React.FC<BookingPageProps> = ({ listing, bookingDetails, onBa
       <header className="w-full bg-white/80 backdrop-blur-xl border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 md:px-8 h-20 flex items-center justify-between">
              {/* Brand Logo - Click to Home */}
-             <div onClick={onBackToHome} className="cursor-pointer flex flex-col justify-center leading-none select-none group">
-                 <div className="flex items-baseline gap-0.5">
-                     <span className="font-black text-xl tracking-tighter text-gray-900 group-hover:text-[#0284C7] transition-colors">ENCHO</span>
-                     <div className="w-1.5 h-1.5 bg-[#0284C7] rounded-full mb-1"></div>
-                 </div>
-                 <span className="text-[9px] font-bold tracking-[0.35em] text-gray-400 uppercase ml-0.5">Space</span>
-            </div>
+             <div onClick={onBackToHome} className="cursor-pointer flex flex-col justify-center select-none group">
+                 <EnchoLogo size="md" variant="wordmark" showSubtitle />
+             </div>
 
             {/* Done Button */}
              <button 
