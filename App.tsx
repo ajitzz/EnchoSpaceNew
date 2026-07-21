@@ -1355,7 +1355,7 @@ function App() {
 
     return (
       <motion.div key="search" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition} className="min-h-screen bg-white font-sans text-gray-900 selection:bg-[#0284C7]/20 selection:text-[#0284C7]">
-        <SEO title={`Stays in ${city} | Encho Space`} description={`Find the perfect place to stay in ${city}.`} />
+        <SEO title={`Stays in ${city} | Encho Stays`} description={`Find the perfect place to stay in ${city}.`} />
         {/* Global Fly Animation Overlay */}
         {flyAnimation && (
           <FlyToAnimation 
