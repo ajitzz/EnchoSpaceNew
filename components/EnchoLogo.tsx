@@ -36,35 +36,43 @@ export const EnchoLogo: React.FC<EnchoLogoProps> = ({
   if (variant === 'icon') {
     return (
       <svg
-        viewBox="0 0 100 100"
+        viewBox="0 0 512 512"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
         className={`${heights[size]} ${className}`}
-        aria-label="ENCHO Gateway Logo Icon"
+        aria-label="ENCHO Mobile App Icon"
       >
-        {/* Rounded square container / App Icon background */}
-        <rect width="100" height="100" rx="22" fill="#0F172A" />
+        {/* Superellipse (Squircle) App Icon Container - Deep Midnight Navy */}
+        <path
+          d="M 512 256 C 512 397.382 397.382 512 256 512 C 114.618 512 0 397.382 0 256 C 0 114.618 114.618 0 256 0 C 397.382 0 512 114.618 512 256 Z"
+          fill="#0F172A"
+        />
+        {/* High Precision Squircle Clip/Mask */}
+        <rect width="512" height="512" rx="115" fill="#0F172A" />
         
-        {/* Stylized Gateway 'H' in Horizon Orange */}
-        <g transform="translate(20, 18)">
-          {/* Left Pillar */}
-          <rect x="0" y="0" width="16" height="64" rx="4" fill={orangeColor} />
+        {/* Monolithic Custom 'H' Glyph - Horizon Orange (#FF5A1F) */}
+        <g id="encho-monolithic-h">
+          {/* Left Vertical Pillar */}
+          <rect x="112" y="100" width="76" height="312" rx="18" fill={orangeColor} />
           
-          {/* Right Pillar */}
-          <rect x="44" y="0" width="16" height="64" rx="4" fill={orangeColor} />
+          {/* Right Vertical Pillar */}
+          <rect x="324" y="100" width="76" height="312" rx="18" fill={orangeColor} />
           
-          {/* Upper Bridge Crossbar */}
-          <rect x="16" y="16" width="28" height="14" fill={orangeColor} />
-          
-          {/* Archway Cutout (Gateway) beneath crossbar */}
+          {/* Arched Upper Crossbar connecting pillars */}
           <path
-            d="M 16,30 H 44 V 64 H 38 C 38,48 34,40 30,40 C 26,40 22,48 22,64 H 16 Z"
+            d="M 188 200 C 220 186 292 186 324 200 V 270 H 188 Z"
+            fill={orangeColor}
+          />
+          
+          {/* Solid Bridge Core */}
+          <rect x="188" y="210" width="136" height="60" fill={orangeColor} />
+
+          {/* Smooth Architectural Gateway / Portal Archway in Negative Space beneath crossbar */}
+          <path
+            d="M 188 270 H 324 V 412 H 300 C 300 310 280 254 256 254 C 232 254 212 310 212 412 H 188 Z"
             fill="#0F172A"
           />
         </g>
-        
-        {/* Subtle accent dot */}
-        <circle cx="82" cy="20" r="4" fill={orangeColor} />
       </svg>
     );
   }
