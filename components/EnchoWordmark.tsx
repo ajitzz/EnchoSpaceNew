@@ -7,39 +7,39 @@ interface EnchoWordmarkProps {
 export const EnchoWordmark: React.FC<EnchoWordmarkProps> = ({ className = "h-6 w-auto" }) => {
   return (
     <svg 
-      viewBox="0 0 160 40" 
+      viewBox="0 0 162 40" 
       fill="none" 
       xmlns="http://www.w3.org/2000/svg"
       className={`${className} transition-all duration-300`}
       aria-label="ENCHO"
     >
-      {/* E - Deep Midnight Black */}
+      {/* E - Deep Midnight Black (#0F172A) */}
       <path 
-        d="M 0,4 H 22 V 11 H 7 V 16.5 H 18.5 V 23.5 H 7 V 29 H 22 V 36 H 0 Z" 
+        d="M 0,5 H 21 V 11.5 H 6.5 V 16.75 H 18 V 23.25 H 6.5 V 28.5 H 21 V 35 H 0 Z" 
         fill="#0F172A" 
       />
       
-      {/* N - Deep Midnight Black */}
+      {/* N - Deep Midnight Black (#0F172A) */}
       <path 
-        d="M 28,4 H 35 L 50,26.5 V 4 H 57 V 36 H 50 L 35,13.5 V 36 H 28 Z" 
+        d="M 28.5,5 H 35 L 48.5,25.5 V 5 H 55 V 35 H 48.5 L 35,14.5 V 35 H 28.5 Z" 
         fill="#0F172A" 
       />
       
-      {/* C - Deep Midnight Black */}
+      {/* C - Deep Midnight Black (#0F172A) */}
       <path 
-        d="M 84,11.5 A 16,16 0 1,0 84,28.5 L 78.5,23.5 A 9,9 0 1,1 78.5,16.5 Z" 
+        d="M 88,10.2 A 15,15 0 1,0 88,29.8 L 83.2,25.2 A 8.5,8.5 0 1,1 83.2,14.8 Z" 
         fill="#0F172A" 
       />
       
-      {/* H - Visual Anchor in Vibrant Horizon Orange with Smooth Gateway Archway underneath */}
+      {/* H - Visual Anchor in Vibrant Horizon Orange (#FF5722) with Gateway Archway underneath */}
       <path 
-        d="M 94,4 H 101 V 16 H 117 V 4 H 124 V 36 H 117 V 29 A 8,6.5 0 0 0 101,29 V 36 H 94 Z" 
+        d="M 96,5 H 102.5 V 16.5 H 115.5 V 5 H 122 V 35 H 115.5 A 6.5,12 0 0 1 102.5,35 H 96 Z" 
         fill="#FF5722" 
       />
       
-      {/* O - Deep Midnight Black */}
+      {/* O - Deep Midnight Black (#0F172A) */}
       <path 
-        d="M 143,4 A 16,16 0 1,0 143,36 A 16,16 0 1,0 143,4 Z M 143,11 A 9,9 0 1,1 143,29 A 9,9 0 1,1 143,11 Z" 
+        d="M 144.5,5 A 15,15 0 1,0 144.5,35 A 15,15 0 1,0 144.5,5 Z M 144.5,11.5 A 8.5,8.5 0 1,1 144.5,28.5 A 8.5,8.5 0 1,1 144.5,11.5 Z" 
         fill="#0F172A" 
       />
     </svg>
