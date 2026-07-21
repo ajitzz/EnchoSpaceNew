@@ -8,7 +8,6 @@ import { useAuth } from './AuthContext';
 import { useMapsLibrary } from '@vis.gl/react-google-maps';
 import { CurrencySelector } from './CurrencySelector';
 import { useToast } from './ToastContext';
-import { EnchoLogo } from './EnchoLogo';
 
 interface HeaderProps {
   onSearch: (city: string) => void;
@@ -37,6 +36,7 @@ const POPULAR_CITIES = ['Berlin', 'London', 'Paris', 'New York', 'Tokyo', 'Barce
 
 import { WifiOffIcon, DownloadIcon } from 'lucide-react';
 import { usePWAInstall } from '../lib/usePWAInstall';
+import { EnchoWordmark } from './EnchoWordmark';
 
 const Header: React.FC<HeaderProps> = ({ 
     onSearch, 
@@ -291,7 +291,7 @@ const Header: React.FC<HeaderProps> = ({
           
           {/* Mobile-only brand, tabs, and menu button top row (unified compact layout) */}
           <div className="grid grid-cols-3 items-center md:hidden w-full mb-3.5 px-1 mt-1.5 select-none">
-            {/* Logo - text only without image, optimized for exact screenshot design */}
+            {/* Logo - vector ENCHO wordmark with custom Horizon Orange archway H */}
        <div 
   onClick={() => {
       setInputValue('');
@@ -299,7 +299,16 @@ const Header: React.FC<HeaderProps> = ({
   }}
   className="flex flex-col cursor-pointer group shrink-0 select-none justify-self-start"
 >
-  <EnchoLogo size="sm" variant="wordmark" showSubtitle />
+  {/* Top Row: ENCHO (Midnight Black E,N,C,O + Horizon Orange Archway H) + Blue Dot */}
+  <div className="flex items-center leading-none transition-colors duration-300">
+    <EnchoWordmark className="h-4.5 md:h-5 w-auto" />
+    <span className="w-1.5 h-1.5 rounded-full bg-[#0284C7] ml-[3px] transition-transform duration-300 group-hover:scale-125 shrink-0" />
+  </div>
+  
+  {/* Bottom Row: SPACE (Reduced Gap) */}
+  <span className="text-[7px] md:text-[8px] font-black tracking-[0.4em] text-[#8e8e93] uppercase leading-none mt-1 group-hover:text-[#5e687a] transition-colors duration-300">
+    SPACE
+  </span>
 </div>
 
             {/* Stays / Experiences Pills perfectly centered matching the screenshot design */}
@@ -358,15 +367,21 @@ const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
         
-          {/* 1. Brand: ENCHO Logo (Desktop only) */}
+          {/* 1. Brand: ENCHO Space (Desktop only) */}
           <div 
             onClick={() => {
                 setInputValue('');
                 onSearch('Berlin'); // Reset to default/home
             }}
-            className="hidden md:flex flex-col justify-center cursor-pointer group shrink-0 select-none md:min-w-[120px]"
+            className="hidden md:flex flex-col justify-center leading-none cursor-pointer group shrink-0 select-none md:min-w-[120px]"
           >
-            <EnchoLogo size="md" variant="wordmark" showSubtitle />
+            <div className="flex items-center leading-none transition-colors">
+              <EnchoWordmark className="h-5.5 md:h-6.5 w-auto" />
+              <span className="w-2 h-2 rounded-full bg-[#0284C7] ml-1 transition-transform duration-300 group-hover:scale-125 shrink-0" />
+            </div>
+            <span className="text-[8px] md:text-[9.5px] font-black tracking-[0.45em] text-[#8e8e93] uppercase leading-none mt-1.5 group-hover:text-[#5e687a] transition-colors">
+              SPACE
+            </span>
           </div>
 
          {/* 2. Center Content - Varies by Mode */}

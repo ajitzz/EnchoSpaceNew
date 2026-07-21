@@ -9,7 +9,6 @@ import AdminInbox from './AdminInbox';
 import { useCurrency } from './CurrencyContext';
 import { AdminExperiences } from './AdminExperiences';
 import { useToast } from './ToastContext';
-import { EnchoLogo } from './EnchoLogo';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { io } from 'socket.io-client';
 
@@ -801,11 +800,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
       {/* Sidebar */}
       <aside className="w-full md:w-64 bg-white border-b md:border-r border-gray-200 p-4 md:p-6 flex flex-col shrink-0 md:min-h-screen sticky top-0 z-10">
-        <div className="mb-4 md:mb-8 flex items-center justify-between">
-          <EnchoLogo size="md" variant="wordmark" showSubtitle />
-          <span className="text-[10px] font-black tracking-widest text-[#FF5A1F] uppercase px-2 py-0.5 bg-[#FF5A1F]/10 rounded border border-[#FF5A1F]/20">
-            ADMIN
-          </span>
+        <div className="font-bold tracking-tight text-xl mb-4 md:mb-10 text-gray-900 leading-none">
+          Encho<span className="text-[#0284C7]">Space</span> Admin
         </div>
         
         <nav className="flex overflow-x-auto pb-2 md:pb-0 md:space-y-1 md:flex-col gap-2 md:gap-0 scrollbar-hide">

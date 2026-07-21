@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { EnchoLogo } from './EnchoLogo';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { 
@@ -337,8 +336,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
             {activeStep === 3 ? 'Back to Protection' : activeStep === 2 ? 'Back to Details' : 'Cancel & Exit'}
           </button>
 
-          <div className="flex items-center select-none">
-             <EnchoLogo size="sm" variant="wordmark" showSubtitle />
+          <div className="flex items-center gap-1.5 select-none">
+             <span className="font-black text-lg tracking-tighter text-zinc-950">ENCHO</span>
+             <span className="text-[8px] font-bold tracking-[0.3em] text-zinc-400 uppercase">Space</span>
           </div>
 
           <div className="flex items-center gap-1 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-full border border-emerald-100">

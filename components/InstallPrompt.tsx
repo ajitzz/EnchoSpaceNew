@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShareIcon, PlusSquareIcon, XIcon } from './Icons';
-import { EnchoLogo } from './EnchoLogo';
 
 export const InstallPrompt: React.FC = () => {
     const [showPrompt, setShowPrompt] = useState(false);
@@ -77,9 +76,9 @@ export const InstallPrompt: React.FC = () => {
                     </button>
                     
                     <div className="flex items-start gap-4 pr-8">
-                        <EnchoLogo variant="icon" className="w-14 h-14 rounded-2xl shadow-sm shrink-0" />
+                        <img src="/logo.svg" alt="App Icon" className="w-14 h-14 rounded-2xl shadow-sm" />
                         <div>
-                            <h3 className="font-bold text-gray-900 text-[15px]">Install Encho</h3>
+                            <h3 className="font-bold text-gray-900 text-[15px]">Install EnchoSpace</h3>
                             <p className="text-sm text-gray-500 mt-1 leading-snug">
                                 Add to your home screen for a full-screen, native experience.
                             </p>
