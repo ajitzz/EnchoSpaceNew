@@ -170,16 +170,57 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       if (gateway === 'stripe' && data.url) {
         window.location.href = data.url;
       } else if (gateway === 'razorpay' && data.order_id) {
+        // Load Razorpay Checkout SDK dynamically if not already present
+        const loadRazorpayScript = () => {
+          return new Promise((resolve) => {
+            if ((window as any).Razorpay) return resolve(true);
+            const script = document.createElement('script');
+            script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+            script.onload = () => resolve(true);
+            script.onerror = () => resolve(false);
+            document.body.appendChild(script);
+          });
+        };
+        const loaded = await loadRazorpayScript();
+        if (!loaded) {
+          addToast('Failed to load Razorpay SDK. Please check your internet connection.', 'error');
+          return;
+        }
+
         const options = {
-          key: data.keyId,
+          key: data.keyId || 'rzp_test_key',
           amount: Math.round(refuelAmount * 100),
           currency: 'INR',
-          name: 'Encho Marketing',
-          description: 'Wallet Refuel',
+          name: 'Encho Marketing Engine',
+          description: 'Wallet Refuel Deposit',
           order_id: data.order_id,
-          handler: function (response: any) {
-            addToast('Payment successful! Processing...', 'success');
-            setTimeout(fetchWallet, 2000);
+          handler: async function (response: any) {
+            try {
+              addToast('Verifying payment signature with server...', 'info');
+              const verifyRes = await fetch('/api/payments/razorpay/verify', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature,
+                  transaction_type: 'wallet_refuel',
+                  transaction_id: data.transaction_id
+                })
+              });
+              const verifyData = await verifyRes.json();
+              if (verifyRes.ok && verifyData.success) {
+                addToast('Payment verified & balance credited successfully!', 'success');
+              } else {
+                addToast(verifyData.error || 'Payment signature verification failed', 'error');
+              }
+            } catch (vErr) {
+              addToast('Payment completed. Processing wallet update...', 'success');
+            }
+            setTimeout(fetchWallet, 1500);
             setShowRefuelModal(false);
           },
           theme: { color: '#09090b' }
