@@ -299,13 +299,12 @@ const Header: React.FC<HeaderProps> = ({
   }}
   className="flex flex-col cursor-pointer group shrink-0 select-none justify-self-start"
 >
-  {/* Top Row: ENCHO (Midnight Black E,N,C,O + Horizon Orange Archway H) + Blue Dot */}
+  {/* Top Row */}
   <div className="flex items-center leading-none transition-colors duration-300">
-    <EnchoWordmark className="h-4.5 md:h-5 w-auto" />
+    <EnchoWordmark className="h-5 md:h-6 w-auto" />
     <span className="w-1.5 h-1.5 rounded-full bg-[#0284C7] ml-[3px] transition-transform duration-300 group-hover:scale-125 shrink-0" />
   </div>
-  
-  {/* Bottom Row: SPACE (Reduced Gap) */}
+  {/* Bottom Row: SPACE */}
   <span className="text-[7px] md:text-[8px] font-black tracking-[0.4em] text-[#8e8e93] uppercase leading-none mt-1 group-hover:text-[#5e687a] transition-colors duration-300">
     SPACE
   </span>
@@ -375,11 +374,13 @@ const Header: React.FC<HeaderProps> = ({
             }}
             className="hidden md:flex flex-col justify-center leading-none cursor-pointer group shrink-0 select-none md:min-w-[120px]"
           >
-            <div className="flex items-center leading-none transition-colors">
-              <EnchoWordmark className="h-5.5 md:h-6.5 w-auto" />
-              <span className="w-2 h-2 rounded-full bg-[#0284C7] ml-1 transition-transform duration-300 group-hover:scale-125 shrink-0" />
+            {/* Top Row */}
+            <div className="flex items-center leading-none transition-colors duration-300">
+              <EnchoWordmark className="h-6 md:h-7 w-auto" />
+              <span className="w-2 h-2 rounded-full bg-[#0284C7] ml-[4px] transition-transform duration-300 group-hover:scale-125 shrink-0" />
             </div>
-            <span className="text-[8px] md:text-[9.5px] font-black tracking-[0.45em] text-[#8e8e93] uppercase leading-none mt-1.5 group-hover:text-[#5e687a] transition-colors">
+            {/* Bottom Row: SPACE */}
+            <span className="text-[8px] md:text-[9px] font-black tracking-[0.45em] text-[#8e8e93] uppercase leading-none mt-1.5 group-hover:text-[#5e687a] transition-colors duration-300">
               SPACE
             </span>
           </div>

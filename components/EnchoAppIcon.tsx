@@ -46,25 +46,20 @@ export const EnchoAppIcon: React.FC<EnchoAppIconProps> = ({ size = 512, classNam
       />
 
       {/* Custom 've' with artistic leaf */}
-      <g filter="url(#greenGlow)" transform="translate(102, 154) scale(7)">
+      <g filter="url(#greenGlow)" transform="translate(60, 145) scale(6)">
         {/* v */}
         <path 
-          d="M 0,10 H 5.5 L 9,22 L 12.5,10 H 18 L 11.5,28 H 6.5 Z" 
+          d="M 0,14 H 7 L 12,29 L 17,14 H 24 L 16,34 H 8 Z" 
           fill="#10B981" 
         />
-        {/* e top half */}
+        {/* e */}
         <path 
-          d="M 29,10 C 33,10 36,13 37,18 H 19.5 C 20,13 23,10 29,10 Z M 25,15 H 32 C 31,13 27,13 25,15 Z" 
-          fill="#10B981" 
-        />
-        {/* e bottom half */}
-        <path 
-          d="M 19.5,20 H 25.5 C 26,24 30,24 31,22 H 37 C 36,26 33,29 29,29 C 25,29 20,26 19.5,20 Z" 
+          d="M 40,14 C 50,14 55,19 55,25 H 31 C 32,30 36,34 41,34 C 45,34 48,32 50,29 L 56,32 C 53,36 47,37 41,37 C 30,37 23,30 23,24 C 23,18 30,14 40,14 Z M 40,19 C 35,19 32,21 31,24 H 48 C 47,21 44,19 40,19 Z" 
           fill="#10B981" 
         />
         {/* leaf */}
         <path 
-          d="M 34,11 C 34,2 44,0 44,0 C 44,10 37,12 34,11 Z" 
+          d="M 48,16 C 51,6 61,2 64,4 C 65,10 58,15 48,16 Z" 
           fill="#10B981" 
         />
       </g>

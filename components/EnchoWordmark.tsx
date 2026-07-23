@@ -7,59 +7,30 @@ interface EnchoWordmarkProps {
 export const EnchoWordmark: React.FC<EnchoWordmarkProps> = ({ className = "h-6 w-auto" }) => {
   return (
     <svg 
-      viewBox="0 0 195 40" 
+      viewBox="0 0 252 40" 
       fill="none" 
       xmlns="http://www.w3.org/2000/svg"
       className={`${className} transition-all duration-300`}
       aria-label="AMIGOve"
     >
-      {/* A - Deep Midnight Black (#0F172A) */}
-      <path 
-        d="M 11,6 H 17 L 28,34 H 21.5 L 19,27 H 9 L 6.5,34 H 0 Z M 14,12 L 10.5,22 H 17.5 Z" 
-        fill="#0F172A" 
-      />
-      
-      {/* M - Deep Midnight Black (#0F172A) */}
-      <path 
-        d="M 32,34 V 6 H 40 L 46,19 L 52,6 H 60 V 34 H 54 V 15 L 48,27 H 44 L 38,15 V 34 Z" 
-        fill="#0F172A" 
-      />
-      
-      {/* I - Deep Midnight Black (#0F172A) */}
-      <path 
-        d="M 65,6 H 71 V 34 H 65 Z" 
-        fill="#0F172A" 
-      />
-      
-      {/* G - Deep Midnight Black (#0F172A) */}
-      <path 
-        d="M 90,6 A 14,14 0 1,0 90,34 A 14,14 0 0,0 103,22 H 91 V 27.5 H 96.5 A 8,8 0 1,1 90,12 A 8.5,8.5 0 0,1 97,16 L 101,12.5 A 14,14 0 0,0 90,6 Z" 
-        fill="#0F172A" 
-      />
-      
-      {/* O - Deep Midnight Black (#0F172A) */}
-      <path 
-        d="M 123,6 A 14,14 0 1,0 123,34 A 14,14 0 1,0 123,6 Z M 123,12 A 8,8 0 1,1 123,28 A 8,8 0 1,1 123,12 Z" 
-        fill="#0F172A" 
-      />
-      
-      {/* v - Vibrant Green (#10B981) */}
-      <path 
-        d="M 143,16 H 148.5 L 152,28 L 155.5,16 H 161 L 154.5,34 H 149.5 Z" 
-        fill="#10B981" 
-      />
+      {/* A */}
+      <path d="M 17 2 L 2 34 H 10 L 12.5 28 H 25.5 L 28 34 H 36 L 21 2 H 17 Z M 19 8 L 15 21 H 23 Z" fill="#0F172A" />
+      {/* M */}
+      <path d="M 42 34 V 2 H 51 L 60 18 L 69 2 H 78 V 34 H 70 V 13 L 62 26 H 58 L 50 13 V 34 H 42 Z" fill="#0F172A" />
+      {/* I */}
+      <path d="M 86 2 H 94 V 34 H 86 Z" fill="#0F172A" />
+      {/* G */}
+      <path d="M 118 2 C 106 2 98 10 98 18 C 98 26 106 34 118 34 C 127 34 135 29 137 21 H 128 C 127 25 123 27 118 27 C 111 27 107 23 107 18 C 107 13 111 9 118 9 C 123 9 126 11 128 14 L 135 9 C 132 4 126 2 118 2 Z" fill="#0F172A" />
+      <path d="M 123 16 H 138 V 24 H 123 Z" fill="#0F172A" />
+      {/* O */}
+      <path d="M 160 2 C 148 2 140 10 140 18 C 140 26 148 34 160 34 C 172 34 180 26 180 18 C 180 10 172 2 160 2 Z M 160 9 C 167 9 171 13 171 18 C 171 23 167 27 160 27 C 153 27 149 23 149 18 C 149 13 153 9 160 9 Z" fill="#0F172A" />
 
+      {/* ve - Vibrant Green (#10B981) */}
+      <path d="M 183 14 H 190 L 195 29 L 200 14 H 207 L 199 34 H 191 Z" fill="#10B981" />
       {/* e - Vibrant Green (#10B981) */}
-      <path 
-        d="M 172,16 C 176,16 179,19 180,24 H 162.5 C 163,19 166,16 172,16 Z M 168,21 H 175 C 174,19 170,19 168,21 Z M 162.5,26 H 168.5 C 169,30 173,30 174,28 H 180 C 179,32 176,35 172,35 C 168,35 163,32 162.5,26 Z" 
-        fill="#10B981" 
-      />
-      
+      <path d="M 223 14 C 233 14 238 19 238 25 H 214 C 215 30 219 34 224 34 C 228 34 231 32 233 29 L 239 32 C 236 36 230 37 224 37 C 213 37 206 30 206 24 C 206 18 213 14 223 14 Z M 223 19 C 218 19 215 21 214 24 H 231 C 230 21 227 19 223 19 Z" fill="#10B981" />
       {/* leaf on 'e' - Vibrant Green (#10B981) */}
-      <path 
-        d="M 177,17 C 177,8 187,6 187,6 C 187,16 180,18 177,17 Z" 
-        fill="#10B981" 
-      />
+      <path d="M 231 16 C 234 6 244 2 247 4 C 248 10 241 15 231 16 Z" fill="#10B981" />
     </svg>
   );
 };
