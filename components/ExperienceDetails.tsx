@@ -209,7 +209,7 @@ const DEFAULT_VIDEOS = [
     title: "Vythiri Luxury Resort Pool",
     video_url: "https://assets.mixkit.co/videos/preview/mixkit-swimming-pool-in-a-luxury-hotel-at-sunset-10332-large.mp4",
     thumbnail_url: "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&q=80&w=300",
-    author_name: "Amigove Host",
+    author_name: "Encho Host",
     likes: 120
   }
 ];
@@ -516,12 +516,12 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
   return (
     <>
       <SEO 
-        title={experience.seo_title || `${experience.title} | Amigove Experiences`} 
+        title={experience.seo_title || `${experience.title} | Encho Space Experiences`} 
         description={experience.seo_description || experience.description?.substring(0, 160) || `Join ${experience.title} in ${experience.destination}`}
         image={experience.seo_image_url || experience.imageUrls?.[0] || experience.imageUrl}
         keywords={experience.seo_keywords || `experience, ${experience.destination}, ${experience.title}`}
       />
-    <div className="bg-[#0a0a0a] min-h-screen text-gray-200 font-sans selection:bg-brand/30">
+    <div className="bg-[#0a0a0a] min-h-screen text-gray-200 font-sans selection:bg-blue-500/30">
       
       {/* Immersive Hero Section */}
       <div className="relative h-[60vh] md:h-[75vh] w-full isolate">
@@ -565,7 +565,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                 className="flex flex-wrap items-center gap-3 mb-6"
             >
                 {experience.target_audience && experience.target_audience !== 'all' && (
-                    <span className="px-3 py-1.5 bg-brand/20 backdrop-blur-md border border-brand/30 rounded-full text-[10px] font-bold tracking-widest uppercase text-blue-400 flex items-center gap-1.5">
+                    <span className="px-3 py-1.5 bg-blue-500/20 backdrop-blur-md border border-blue-500/30 rounded-full text-[10px] font-bold tracking-widest uppercase text-blue-400 flex items-center gap-1.5">
                         <Sparkles className="w-3.5 h-3.5" />
                         {experience.target_audience.replace('_', ' ')}
                     </span>
@@ -583,7 +583,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                     </span>
                 )}
                 {experience.available_spots <= 10 && experience.available_spots > 0 && (
-                    <span className="px-3 py-1.5 bg-brand/20 backdrop-blur-md border border-orange-500/30 rounded-full text-[10px] font-bold tracking-widest uppercase text-orange-400 flex items-center gap-1.5">
+                    <span className="px-3 py-1.5 bg-orange-500/20 backdrop-blur-md border border-orange-500/30 rounded-full text-[10px] font-bold tracking-widest uppercase text-orange-400 flex items-center gap-1.5">
                         <Activity className="w-3.5 h-3.5" />
                         {experience.available_spots} Spots Left
                     </span>
@@ -605,7 +605,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                 transition={{ delay: 0.2 }}
                 className="flex items-center text-gray-300 gap-2 font-medium tracking-wide text-sm md:text-base bg-black/30 backdrop-blur-md w-fit px-4 py-2 rounded-2xl border border-white/5"
             >
-                <Navigation className="w-5 h-5 text-brand" />
+                <Navigation className="w-5 h-5 text-blue-500" />
                 <span>Round trip from <strong className="text-white">{experience.departure_location}</strong> to <strong className="text-white">{experience.destination}</strong></span>
             </motion.div>
         </div>
@@ -668,15 +668,15 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                              "Who Usually Joins Us?"}
                         </h2>
                     </div>
-                    <span className="text-xs font-bold bg-dune/5 px-3 py-1.5 rounded-full text-gray-400 border border-white/10">
+                    <span className="text-xs font-bold bg-white/5 px-3 py-1.5 rounded-full text-gray-400 border border-white/10">
                         {experience.target_audience === 'all' || !experience.target_audience ? 'Vibe Checked Crowd' : 'Strict Profile Match'}
                     </span>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {(!experience.target_audience || experience.target_audience === 'all' || experience.target_audience === 'corporate') && (
-                        <div className="bg-gradient-to-br from-[#111] to-[#0a0a0a] border border-white/5 p-5 rounded-2xl flex gap-4 hover:border-brand/20 transition-colors">
-                            <div className="w-10 h-10 rounded-full bg-brand/10 flex items-center justify-center shrink-0">
+                        <div className="bg-gradient-to-br from-[#111] to-[#0a0a0a] border border-white/5 p-5 rounded-2xl flex gap-4 hover:border-blue-500/20 transition-colors">
+                            <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center shrink-0">
                                 <svg viewBox="0 0 24 24" className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="16" height="20" x="4" y="2" rx="2" ry="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/></svg>
                             </div>
                             <div>
@@ -777,7 +777,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                         </h3>
                         <ul className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {experience.highlights.map((hl, i) => (
-                                <li key={i} className="flex items-start gap-3 text-gray-300 text-sm bg-dune/5 p-4 rounded-xl border border-white/5 shadow-sm">
+                                <li key={i} className="flex items-start gap-3 text-gray-300 text-sm bg-white/5 p-4 rounded-xl border border-white/5 shadow-sm">
                                     <Sparkles className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
                                     <span>{hl}</span>
                                 </li>
@@ -858,7 +858,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                         <ul className="space-y-3">
                             {experience.things_to_carry.map((thing, i) => (
                                 <li key={i} className="flex items-start gap-2 text-gray-400 text-sm">
-                                    <Check className="w-4 h-4 text-brand shrink-0 mt-0.5" />
+                                    <Check className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
                                     <span>{thing}</span>
                                 </li>
                             ))}
@@ -871,7 +871,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                         <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                             <AlertCircle className="w-5 h-5 text-orange-400" /> Important Notes
                         </h3>
-                        <div className="bg-brand/10 border border-orange-500/20 p-4 rounded-xl text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
+                        <div className="bg-orange-500/10 border border-orange-500/20 p-4 rounded-xl text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
                             {experience.important_notes}
                         </div>
                     </div>
@@ -882,7 +882,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                         <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                             <ShieldCheck className="w-5 h-5 text-blue-400" /> Cancellation Policy
                         </h3>
-                        <div className="bg-brand/10 border border-brand/20 p-4 rounded-xl text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
+                        <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
                             {experience.cancellation_policy}
                         </div>
                     </div>
@@ -890,7 +890,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                 
                 {experience.map_link && (
                     <div className="md:col-span-2 border-t border-white/5 pt-6 md:pt-8 flex justify-center">
-                        <a href={experience.map_link} target="_blank" rel="noreferrer" className="px-6 py-3 bg-dune/10 hover:bg-dune/20 border border-white/10 rounded-full text-white text-sm font-bold flex items-center gap-2 transition-colors">
+                        <a href={experience.map_link} target="_blank" rel="noreferrer" className="px-6 py-3 bg-white/10 hover:bg-white/20 border border-white/10 rounded-full text-white text-sm font-bold flex items-center gap-2 transition-colors">
                             <MapPin className="w-4 h-4" />
                             View Starting Point on Google Maps
                         </a>
@@ -917,7 +917,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                         <div 
                             key={place.id || index} 
                             onClick={() => setSelectedPlace(place)}
-                            className="relative w-[80vw] sm:w-[300px] max-w-[300px] shrink-0 rounded-3xl overflow-hidden aspect-[4/5] group border border-white/5 bg-[#111] snap-center sm:snap-start cursor-pointer hover:border-brand/30 transition-all hover:shadow-2xl hover:shadow-blue-500/10"
+                            className="relative w-[80vw] sm:w-[300px] max-w-[300px] shrink-0 rounded-3xl overflow-hidden aspect-[4/5] group border border-white/5 bg-[#111] snap-center sm:snap-start cursor-pointer hover:border-blue-500/30 transition-all hover:shadow-2xl hover:shadow-blue-500/10"
                         >
                             <div className="absolute inset-0 h-2/3">
                                 <OptimizedImage src={place.image} alt={place.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
@@ -1007,7 +1007,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
 
                     <button
                         onClick={() => setShowAddVideo(!showAddVideo)}
-                        className="px-4 py-2 bg-dune/5 hover:bg-dune/10 border border-white/10 text-white rounded-2xl text-xs font-bold transition-all flex items-center gap-2 tracking-wide self-start md:self-auto"
+                        className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-2xl text-xs font-bold transition-all flex items-center gap-2 tracking-wide self-start md:self-auto"
                     >
                         <Plus className="w-4 h-4 text-blue-400" />
                         {showAddVideo ? 'Close Form' : 'Share Your Reel'}
@@ -1034,7 +1034,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                                             const found = DEFAULT_VIDEOS.find(v => v.video_url === e.target.value);
                                             if (found) setNewVideoTitle(found.title);
                                         }}
-                                        className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white text-xs focus:outline-none focus:border-brand transition-colors"
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white text-xs focus:outline-none focus:border-blue-500 transition-colors"
                                         required
                                     >
                                         <option value="">-- Choose Vertical Highlight Video --</option>
@@ -1052,7 +1052,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                                         value={newVideoTitle}
                                         onChange={(e) => setNewVideoTitle(e.target.value)}
                                         placeholder="e.g. My first Chembra peak summit!"
-                                        className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white text-xs focus:outline-none focus:border-brand transition-colors placeholder:text-gray-600"
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white text-xs focus:outline-none focus:border-blue-500 transition-colors placeholder:text-gray-600"
                                         required
                                     />
                                 </div>
@@ -1065,7 +1065,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                                 <button
                                     type="submit"
                                     disabled={submittingVideo || !user}
-                                    className="px-5 py-2 rounded-xl bg-brand hover:bg-blue-400 text-white font-bold text-xs transition-colors disabled:opacity-40"
+                                    className="px-5 py-2 rounded-xl bg-blue-500 hover:bg-blue-400 text-white font-bold text-xs transition-colors disabled:opacity-40"
                                 >
                                     {submittingVideo ? 'Publishing...' : 'Publish Reel'}
                                 </button>
@@ -1078,7 +1078,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                 <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide -mx-6 px-6 md:mx-0 md:px-0 w-full min-w-0 snap-x snap-mandatory">
                     {loadingVideos ? (
                         <div className="flex gap-4 py-8 w-full justify-center">
-                            <div className="w-6 h-6 border-2 border-brand/30 border-t-blue-500 rounded-full animate-spin" />
+                            <div className="w-6 h-6 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
                         </div>
                     ) : videos.length === 0 ? (
                         <p className="text-xs text-gray-500 py-4 italic">No traveler reels added yet. Be the first to add yours!</p>
@@ -1091,7 +1091,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                                     setActiveVideo(vid);
                                     setIsMuted(false);
                                 }}
-                                className="relative w-[140px] h-[240px] sm:w-[180px] sm:h-[300px] shrink-0 rounded-3xl overflow-hidden border border-white/10 bg-black cursor-pointer group shadow-2xl snap-center sm:snap-start ring-1 ring-white/5 hover:ring-brand/30 transition-all"
+                                className="relative w-[140px] h-[240px] sm:w-[180px] sm:h-[300px] shrink-0 rounded-3xl overflow-hidden border border-white/10 bg-black cursor-pointer group shadow-2xl snap-center sm:snap-start ring-1 ring-white/5 hover:ring-blue-500/30 transition-all"
                             >
                                 <div className="absolute inset-0">
                                     <OptimizedImage
@@ -1104,7 +1104,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
 
                                 {/* Persistent Play button overlay */}
                                 <div className="absolute inset-0 flex items-center justify-center opacity-80 group-hover:opacity-100 transition-opacity duration-300">
-                                    <div className="w-12 h-12 rounded-full bg-dune/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-2xl transition-transform active:scale-95 duration-200 group-hover:bg-brand/20 group-hover:border-brand/50">
+                                    <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-2xl transition-transform active:scale-95 duration-200 group-hover:bg-blue-500/20 group-hover:border-blue-500/50">
                                         <Play className="w-5 h-5 text-white fill-white ml-0.5 group-hover:text-blue-400 group-hover:fill-blue-400 transition-colors" />
                                     </div>
                                 </div>
@@ -1252,21 +1252,21 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                                     >
                                         <div className={`absolute -left-[43px] md:-left-[51px] top-1 w-10 h-10 rounded-full bg-[#0a0a0a] border-2 transition-all duration-300 flex items-center justify-center z-10 ${
                                             isActive 
-                                                ? 'border-brand scale-110 shadow-[0_0_15px_rgba(59,130,246,0.6)] text-white' 
+                                                ? 'border-blue-500 scale-110 shadow-[0_0_15px_rgba(59,130,246,0.6)] text-white' 
                                                 : 'border-white/10 text-gray-500 group-hover:border-white/30'
                                         }`}>
                                             <span className="font-bold text-sm">{idx + 1}</span>
                                         </div>
                                         <div className={`border transition-all duration-300 overflow-hidden rounded-3xl ${
                                             isActive 
-                                                ? 'bg-[#151515] border-brand/30 shadow-2xl' 
+                                                ? 'bg-[#151515] border-blue-500/30 shadow-2xl' 
                                                 : 'bg-[#111111] border-white/5 hover:border-white/10 hover:bg-[#131313]'
                                         }`}>
                                             <div className="p-6 md:p-8">
                                                 <div className="flex justify-between items-start gap-4">
                                                     <div>
                                                         <span className={`inline-block px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-3 ${
-                                                            isActive ? 'bg-brand/20 text-blue-400' : 'bg-dune/5 text-gray-400'
+                                                            isActive ? 'bg-blue-500/20 text-blue-400' : 'bg-white/5 text-gray-400'
                                                         }`}>
                                                             Day {idx + 1}
                                                         </span>
@@ -1274,7 +1274,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                                                             {day.title || `Exploring Day ${idx + 1}`}
                                                         </h3>
                                                     </div>
-                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-transform duration-300 ${isActive ? 'bg-brand text-white rotate-90' : 'bg-dune/5 text-gray-400 group-hover:bg-dune/10'}`}>
+                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-transform duration-300 ${isActive ? 'bg-blue-500 text-white rotate-90' : 'bg-white/5 text-gray-400 group-hover:bg-white/10'}`}>
                                                         <ChevronRight className="w-4 h-4" />
                                                     </div>
                                                 </div>
@@ -1331,21 +1331,21 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                                     >
                                         <div className={`absolute -left-[43px] md:-left-[51px] top-1 w-10 h-10 rounded-full bg-[#0a0a0a] border-2 transition-all duration-300 flex items-center justify-center z-10 ${
                                             isActive 
-                                                ? 'border-brand scale-110 shadow-[0_0_15px_rgba(59,130,246,0.6)] text-white font-black' 
+                                                ? 'border-blue-500 scale-110 shadow-[0_0_15px_rgba(59,130,246,0.6)] text-white font-black' 
                                                 : 'border-white/10 text-gray-500 font-bold group-hover:border-white/30'
                                         }`}>
                                             <span>{row.step}</span>
                                         </div>
                                         <div className={`border transition-all duration-300 overflow-hidden rounded-3xl ${
                                             isActive 
-                                                ? 'bg-[#151515] border-brand/30 shadow-2xl' 
+                                                ? 'bg-[#151515] border-blue-500/30 shadow-2xl' 
                                                 : 'bg-[#111111] border-white/5 hover:border-white/10 hover:bg-[#131313]'
                                         }`}>
                                             <div className="p-6 md:p-8">
                                                 <div className="flex justify-between items-start gap-4">
                                                     <div>
                                                         <span className={`inline-block px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-3 ${
-                                                            isActive ? 'bg-brand/20 text-blue-400' : 'bg-dune/5 text-gray-400'
+                                                            isActive ? 'bg-blue-500/20 text-blue-400' : 'bg-white/5 text-gray-400'
                                                         }`}>
                                                             {row.tag}
                                                         </span>
@@ -1353,7 +1353,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                                                             {row.title}
                                                         </h3>
                                                     </div>
-                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-transform duration-300 ${isActive ? 'bg-brand text-white rotate-90' : 'bg-dune/5 text-gray-400 group-hover:bg-dune/10'}`}>
+                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-transform duration-300 ${isActive ? 'bg-blue-500 text-white rotate-90' : 'bg-white/5 text-gray-400 group-hover:bg-white/10'}`}>
                                                         <ChevronRight className="w-4 h-4" />
                                                     </div>
                                                 </div>
@@ -1416,13 +1416,13 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                             
                             {/* Topological Map Grid lines and technical compass markings */}
                             <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] [background-size:2rem_2rem] opacity-20" />
-                            <div className="absolute top-1/2 left-0 right-0 h-[1px] bg-brand/20" />
-                            <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-brand/20" />
+                            <div className="absolute top-1/2 left-0 right-0 h-[1px] bg-blue-500/20" />
+                            <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-blue-500/20" />
                             
                             {/* Radar rings */}
-                            <div className="absolute inset-8 rounded-full border border-brand/10 border-dashed" />
-                            <div className="absolute inset-24 rounded-full border border-brand/10 border-dashed pointer-events-none" />
-                            <div className="absolute inset-40 rounded-full border border-brand/5 pointer-events-none" />
+                            <div className="absolute inset-8 rounded-full border border-blue-500/10 border-dashed" />
+                            <div className="absolute inset-24 rounded-full border border-blue-500/10 border-dashed pointer-events-none" />
+                            <div className="absolute inset-40 rounded-full border border-blue-500/5 pointer-events-none" />
 
                             <div className="absolute top-4 right-4 flex items-center gap-2 text-[9px] font-mono text-gray-500 bg-black/60 px-2 py-1 rounded backdrop-blur-sm border border-white/5">
                                 <Compass className="w-3.5 h-3.5 text-blue-400 animate-spin-slow" />
@@ -1512,7 +1512,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                                         {getGeoPointsForExperience(experience)[activeDayIdx]?.name || 'Wayanad High Trail'}
                                     </h4>
                                 </div>
-                                <span className="px-2.5 py-1 rounded-full bg-brand/10 border border-brand/20 text-[10px] font-black text-blue-400 font-mono">
+                                <span className="px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-[10px] font-black text-blue-400 font-mono">
                                     ALT: {getGeoPointsForExperience(experience)[activeDayIdx]?.elevation || '700m'}
                                 </span>
                             </div>
@@ -1536,7 +1536,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                                             <div key={i} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
                                                 <div 
                                                     className={`w-full rounded-t-md transition-all duration-500 ${
-                                                        i === activeDayIdx ? 'bg-brand shadow-[0_0_10px_rgba(59,130,246,0.5)]' : 'bg-dune/10'
+                                                        i === activeDayIdx ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]' : 'bg-white/10'
                                                     }`}
                                                     style={{ height: hPct }}
                                                 />
@@ -1566,20 +1566,20 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                 <div className="bg-[#111] border border-white/5 p-8 rounded-3xl">
                     <ul className="space-y-5">
                         <li className="flex items-start gap-4">
-                            <div className="w-8 h-8 rounded-full bg-brand/10 flex items-center justify-center shrink-0 mt-0.5">
-                                <ArrowRight className="w-4 h-4 text-brand" />
+                            <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                                <ArrowRight className="w-4 h-4 text-blue-500" />
                             </div>
                             <p className="text-gray-400 font-light leading-relaxed">Pack light and wear comfortable walking shoes for the excursions. The terrain can be uneven during treks.</p>
                         </li>
                         <li className="flex items-start gap-4">
-                            <div className="w-8 h-8 rounded-full bg-brand/10 flex items-center justify-center shrink-0 mt-0.5">
-                                <ArrowRight className="w-4 h-4 text-brand" />
+                            <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                                <ArrowRight className="w-4 h-4 text-blue-500" />
                             </div>
                             <p className="text-gray-400 font-light leading-relaxed">Keep a light jacket handy as temperatures can drop in the evenings, especially near the hills.</p>
                         </li>
                         <li className="flex items-start gap-4">
-                            <div className="w-8 h-8 rounded-full bg-brand/10 flex items-center justify-center shrink-0 mt-0.5">
-                                <ArrowRight className="w-4 h-4 text-brand" />
+                            <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                                <ArrowRight className="w-4 h-4 text-blue-500" />
                             </div>
                             <p className="text-gray-400 font-light leading-relaxed">Don't forget your camera—the sunrise views from the resort are spectacular and highly photogenic.</p>
                         </li>
@@ -1622,11 +1622,11 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                 className="mt-16 mb-24 relative"
             >
                 {/* Background glow */}
-                <div className="absolute inset-0 bg-brand/5 blur-3xl rounded-full" />
+                <div className="absolute inset-0 bg-blue-500/5 blur-3xl rounded-full" />
                 
                 <div className="relative bg-[#0d0d0d] border border-white/5 rounded-[2.5rem] p-8 md:p-12 overflow-hidden shadow-2xl">
                     <div className="absolute top-0 right-0 p-8 opacity-20 pointer-events-none">
-                        <Crown className="w-32 h-32 text-brand/20" />
+                        <Crown className="w-32 h-32 text-blue-500/20" />
                     </div>
 
                     <div className="flex flex-col md:flex-row gap-10 md:gap-16 relative z-10">
@@ -1644,7 +1644,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                             </div>
                             <div className="mt-8 text-center">
                                 <h3 className="text-2xl md:text-3xl font-black text-white tracking-tight">
-                                    {experience.host_id ? 'Verified Guide' : 'Amigove Team'}
+                                    {experience.host_id ? 'Verified Guide' : 'Encho Team'}
                                 </h3>
                                 <p className="text-blue-400 text-sm font-bold uppercase tracking-widest mt-1">Host since 2019</p>
                             </div>
@@ -1681,7 +1681,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                             </div>
                             
                             <div className="mt-8 pt-8 border-t border-white/5 flex items-center gap-4">
-                                <button className="bg-dune/5 hover:bg-dune/10 text-white font-bold py-3.5 px-6 rounded-full text-sm transition-colors border border-white/10">
+                                <button className="bg-white/5 hover:bg-white/10 text-white font-bold py-3.5 px-6 rounded-full text-sm transition-colors border border-white/10">
                                     Message Host
                                 </button>
                                 <span className="text-xs text-gray-500 font-medium">
@@ -1710,7 +1710,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                             Real feedback from our verified community. We take pride in delivering exceptional experiences every single time.
                         </p>
                     </div>
-                    <span className="text-sm font-bold text-gray-400 uppercase tracking-widest bg-dune/5 px-4 py-2 rounded-full border border-white/5 whitespace-nowrap">
+                    <span className="text-sm font-bold text-gray-400 uppercase tracking-widest bg-white/5 px-4 py-2 rounded-full border border-white/5 whitespace-nowrap">
                         {reviews.length} Verified Reviews
                     </span>
                 </div>
@@ -1759,11 +1759,11 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
 
                 {/* Add Review Form */}
                 <div className="bg-[#111] border border-white/5 p-8 rounded-[2rem] mb-12 shadow-xl relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-brand/5 rounded-bl-full blur-2xl pointer-events-none" />
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-bl-full blur-2xl pointer-events-none" />
                     {user ? (
                         <form onSubmit={handleSubmitReview} className="space-y-6 relative z-10">
                             <div className="flex items-center gap-4 mb-4">
-                                <div className="w-12 h-12 rounded-full bg-brand/20 border border-brand/30 flex items-center justify-center text-blue-400 font-bold text-lg">
+                                <div className="w-12 h-12 rounded-full bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold text-lg">
                                     {user.name?.charAt(0) || 'U'}
                                 </div>
                                 <div>
@@ -1774,7 +1774,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                             
                             <div className="flex flex-col md:flex-row md:items-center gap-4 bg-black/30 w-fit px-5 py-3.5 rounded-2xl border border-white/5">
                                 <span className="text-sm font-semibold text-gray-300">Your Rating</span>
-                                <div className="hidden md:block w-px h-6 bg-dune/10 mx-2" />
+                                <div className="hidden md:block w-px h-6 bg-white/10 mx-2" />
                                 <div className="flex items-center gap-1.5">
                                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((starValue) => {
                                         const isHighlighted = hoverRating !== null 
@@ -1811,7 +1811,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                                     onChange={(e) => setNewContent(e.target.value)}
                                     placeholder="Write your review about the resort, activities, guides, and total experience..."
                                     rows={4}
-                                    className="w-full bg-[#0a0a0a] border border-white/10 group-hover:border-white/20 rounded-[1.5rem] p-6 text-white text-sm md:text-base focus:outline-none focus:border-brand transition-all placeholder:text-gray-600 resize-none shadow-inner"
+                                    className="w-full bg-[#0a0a0a] border border-white/10 group-hover:border-white/20 rounded-[1.5rem] p-6 text-white text-sm md:text-base focus:outline-none focus:border-blue-500 transition-all placeholder:text-gray-600 resize-none shadow-inner"
                                     required
                                 />
                                 <div className="absolute bottom-4 right-4 text-xs font-bold text-gray-600">
@@ -1833,7 +1833,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                                 <button
                                     type="submit"
                                     disabled={submittingReview}
-                                    className="w-full md:w-auto px-8 py-3.5 rounded-full bg-brand-dark hover:bg-brand text-white font-bold text-sm tracking-wide transition-all active:scale-[0.97] disabled:opacity-50 flex items-center justify-center gap-2 shadow-[0_5px_20px_rgba(59,130,246,0.3)] hover:shadow-[0_5px_25px_rgba(59,130,246,0.5)]"
+                                    className="w-full md:w-auto px-8 py-3.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm tracking-wide transition-all active:scale-[0.97] disabled:opacity-50 flex items-center justify-center gap-2 shadow-[0_5px_20px_rgba(59,130,246,0.3)] hover:shadow-[0_5px_25px_rgba(59,130,246,0.5)]"
                                 >
                                     {submittingReview ? (
                                         <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -1848,14 +1848,14 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                         </form>
                     ) : (
                         <div className="text-center py-12 relative z-10">
-                            <div className="w-20 h-20 rounded-full bg-dune/5 border border-white/10 flex items-center justify-center mx-auto mb-6">
+                            <div className="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mx-auto mb-6">
                                 <Users className="w-8 h-8 text-gray-400" />
                             </div>
                             <h4 className="text-white text-2xl font-black mb-3 tracking-tight">Have you taken this trip?</h4>
                             <p className="text-gray-400 text-sm mb-8 font-light max-w-md mx-auto leading-relaxed">Please log in to share your rating and authentic experience with other travelers in our community.</p>
                             <button
                                 onClick={onRequestAuth}
-                                className="px-10 py-4 rounded-full bg-dune text-black hover:bg-gray-200 font-bold text-sm tracking-wide transition-all hover:scale-105 active:scale-95 shadow-xl"
+                                className="px-10 py-4 rounded-full bg-white text-black hover:bg-gray-200 font-bold text-sm tracking-wide transition-all hover:scale-105 active:scale-95 shadow-xl"
                             >
                                 Login to Review
                             </button>
@@ -1867,7 +1867,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                 <div className="w-full">
                     {loadingReviews ? (
                         <div className="flex items-center justify-center py-20">
-                            <div className="w-12 h-12 border-[3px] border-brand/30 border-t-blue-500 rounded-full animate-spin" />
+                            <div className="w-12 h-12 border-[3px] border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
                         </div>
                     ) : reviews.length === 0 ? (
                         <div className="text-center py-20 border border-dashed border-white/10 rounded-[2.5rem] bg-[#0a0a0a]">
@@ -1993,7 +1993,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                                                 Only {exp.available_spots} left
                                             </div>
                                         ) : (
-                                            <div className="bg-dune/10 backdrop-blur-md border border-white/20 text-white px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-xl">
+                                            <div className="bg-white/10 backdrop-blur-md border border-white/20 text-white px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-xl">
                                                 Available
                                             </div>
                                         )}
@@ -2024,7 +2024,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                                             <Calendar className="w-4 h-4 text-gray-500" />
                                             <span>{format(new Date(exp.start_date), 'MMM d')} - {format(new Date(exp.end_date), 'MMM d')}</span>
                                         </div>
-                                        <div className="w-8 h-8 rounded-full bg-dune/5 flex items-center justify-center text-gray-400 group-hover:bg-brand group-hover:text-white transition-all">
+                                        <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-gray-400 group-hover:bg-blue-500 group-hover:text-white transition-all">
                                             <ArrowRight className="w-4 h-4" />
                                         </div>
                                     </div>
@@ -2074,7 +2074,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                             </span>
                         </div>
                     </div>
-                    <div className="h-[1px] w-full bg-dune/5" />
+                    <div className="h-[1px] w-full bg-white/5" />
                     <div className="flex items-center gap-3 sm:gap-4 text-gray-300">
                         <div className="w-10 h-10 rounded-full bg-[#1a1a1a] flex items-center justify-center border border-white/5 shrink-0">
                             <Clock className="w-5 h-5 text-blue-400" />
@@ -2131,9 +2131,9 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                 <button
                     onClick={handleBook}
                     disabled={bookingStatus === 'loading' || experience.status === 'sold_out'}
-                    className="w-full h-14 rounded-2xl bg-brand hover:bg-blue-400 text-white font-bold text-lg transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:shadow-[0_0_30px_rgba(59,130,246,0.5)] relative overflow-hidden group"
+                    className="w-full h-14 rounded-2xl bg-blue-500 hover:bg-blue-400 text-white font-bold text-lg transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:shadow-[0_0_30px_rgba(59,130,246,0.5)] relative overflow-hidden group"
                 >
-                    <div className="absolute inset-0 bg-dune/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
+                    <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
                     <span className="relative flex items-center gap-2">
                         {bookingStatus === 'loading' ? (
                             <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -2161,7 +2161,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
 
                 <button
                     onClick={() => {
-                        window.location.href = "mailto:corporate@amigove.com?subject=Team Outing Request: " + experience.title;
+                        window.location.href = "mailto:corporate@encho.com?subject=Team Outing Request: " + experience.title;
                     }}
                     className="w-full h-12 rounded-2xl bg-[#1a1a1a] hover:bg-[#222] border border-white/10 hover:border-white/20 text-gray-300 hover:text-white font-bold text-sm transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                 >
@@ -2221,7 +2221,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                 onClick={() => {
                     setShowMobileBooking(true);
                 }}
-                className="flex-1 h-12 bg-brand-dark hover:bg-brand text-white font-bold rounded-xl text-base transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 h-12 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-base transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
               >
                  {bookingStatus === 'loading' ? (
                       <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -2267,7 +2267,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                       </div>
                       <button 
                           onClick={() => setShowMobileBooking(false)} 
-                          className="p-2.5 bg-dune/5 border border-white/10 rounded-full text-gray-300 hover:text-white transition-all active:scale-90"
+                          className="p-2.5 bg-white/5 border border-white/10 rounded-full text-gray-300 hover:text-white transition-all active:scale-90"
                       >
                           <X className="w-5 h-5" />
                       </button>
@@ -2275,9 +2275,9 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
 
                   <div className="space-y-6">
                       {/* Scheduled Dates & Departure Info Block */}
-                      <div className="bg-dune/[0.02] border border-white/5 rounded-2xl p-4 flex flex-col gap-3">
+                      <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 flex flex-col gap-3">
                           <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-xl bg-brand/10 border border-brand/20 flex items-center justify-center text-blue-400">
+                              <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
                                   <Calendar className="w-5 h-5" />
                               </div>
                               <div className="flex flex-col">
@@ -2304,7 +2304,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                       {/* Traveler Count Selection */}
                       <div>
                           <label className="block text-[11px] font-black text-gray-400 uppercase tracking-wider mb-2.5">Travelers Selection</label>
-                          <div className="flex items-center justify-between p-4 bg-dune/[0.02] border border-white/10 rounded-2xl">
+                          <div className="flex items-center justify-between p-4 bg-white/[0.02] border border-white/10 rounded-2xl">
                               <div className="flex flex-col">
                                   <span className="font-bold text-white text-sm">Number of Tickets</span>
                                   <span className="text-xs text-gray-400 font-medium">Max {experience.available_spots || 10} spots left</span>
@@ -2313,7 +2313,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                                   <button 
                                       onClick={() => setNumTickets(Math.max(1, numTickets - 1))}
                                       disabled={numTickets <= 1}
-                                      className="w-10 h-10 rounded-full bg-dune/5 hover:bg-dune/10 border border-white/10 flex items-center justify-center text-white disabled:opacity-20 active:scale-95 transition-all"
+                                      className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white disabled:opacity-20 active:scale-95 transition-all"
                                   >
                                       <Minus className="w-4 h-4" />
                                   </button>
@@ -2321,7 +2321,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                                   <button 
                                       onClick={() => setNumTickets(Math.min(experience.available_spots || 10, numTickets + 1))}
                                       disabled={numTickets >= (experience.available_spots || 10)}
-                                      className="w-10 h-10 rounded-full bg-dune/5 hover:bg-dune/10 border border-white/10 flex items-center justify-center text-white disabled:opacity-20 active:scale-95 transition-all"
+                                      className="w-10 h-10 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white disabled:opacity-20 active:scale-95 transition-all"
                                   >
                                       <Plus className="w-4 h-4" />
                                   </button>
@@ -2341,7 +2341,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                                           value={guestName}
                                           onChange={(e) => setGuestName(e.target.value)}
                                           placeholder="Full Name"
-                                          className="w-full bg-[#1c1c1e] border border-white/10 text-white text-base rounded-xl px-4 py-3.5 focus:border-brand/50 focus:ring-1 focus:ring-brand/50 outline-none font-bold"
+                                          className="w-full bg-[#1c1c1e] border border-white/10 text-white text-base rounded-xl px-4 py-3.5 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 outline-none font-bold"
                                       />
                                   </div>
                                   <div>
@@ -2351,7 +2351,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                                           value={guestPhone}
                                           onChange={(e) => setGuestPhone(e.target.value)}
                                           placeholder="Phone Number"
-                                          className="w-full bg-[#1c1c1e] border border-white/10 text-white text-base rounded-xl px-4 py-3.5 focus:border-brand/50 focus:ring-1 focus:ring-brand/50 outline-none font-bold"
+                                          className="w-full bg-[#1c1c1e] border border-white/10 text-white text-base rounded-xl px-4 py-3.5 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 outline-none font-bold"
                                       />
                                   </div>
                               </div>
@@ -2374,7 +2374,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                       )}
 
                       {/* Total Calculation Display */}
-                      <div className="bg-dune/[0.02] border border-white/5 rounded-2xl p-4 flex flex-col gap-2 mt-2">
+                      <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4 flex flex-col gap-2 mt-2">
                           <div className="flex justify-between text-xs text-gray-400 font-bold">
                               <span>Ticket Price x {numTickets}</span>
                               <span>{formatPrice(Number(experience.price), 'INR')} x {numTickets}</span>
@@ -2383,7 +2383,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                               <span>Taxes & Service Fees</span>
                               <span className="text-emerald-400">Included</span>
                           </div>
-                          <div className="h-[1px] bg-dune/5 my-2"></div>
+                          <div className="h-[1px] bg-white/5 my-2"></div>
                           <div className="flex justify-between items-center">
                               <span className="font-bold text-gray-300 text-sm">Total Price</span>
                               <span className="font-black text-white text-2xl">{formatPrice(experience.price * numTickets, 'INR')}</span>
@@ -2426,7 +2426,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                           className={`w-full text-white font-extrabold text-[16px] py-4 rounded-xl active:scale-[0.98] transition-all shadow-lg flex items-center justify-center gap-2 ${
                               (experience.status === 'sold_out' || (experience.available_spots !== undefined && experience.available_spots <= 0))
                               ? 'bg-zinc-700 cursor-not-allowed opacity-50' 
-                              : 'bg-brand-dark hover:bg-brand'
+                              : 'bg-blue-600 hover:bg-blue-500'
                           }`}
                       >
                           <span>
@@ -2446,7 +2446,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
         {showVerificationModal && (
             <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
                 <div className="bg-[#111] border border-white/10 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden relative p-6">
-                    <button onClick={() => setShowVerificationModal(false)} className="absolute top-4 right-4 p-2 bg-dune/5 hover:bg-dune/10 rounded-full transition-colors z-10 text-gray-400 hover:text-white">
+                    <button onClick={() => setShowVerificationModal(false)} className="absolute top-4 right-4 p-2 bg-white/5 hover:bg-white/10 rounded-full transition-colors z-10 text-gray-400 hover:text-white">
                         <X className="w-5 h-5" />
                     </button>
                     
@@ -2508,7 +2508,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
           >
             <button
               onClick={() => setShowLobby(true)}
-              className="flex items-center gap-3 bg-brand-dark hover:bg-brand text-white px-5 py-3.5 rounded-full shadow-[0_10px_30px_rgba(59,130,246,0.4)] font-bold transition-all hover:scale-105 active:scale-95 group"
+              className="flex items-center gap-3 bg-blue-600 hover:bg-blue-500 text-white px-5 py-3.5 rounded-full shadow-[0_10px_30px_rgba(59,130,246,0.4)] font-bold transition-all hover:scale-105 active:scale-95 group"
             >
               <div className="relative">
                 <Users className="w-5 h-5" />
@@ -2549,7 +2549,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                             )}
                             <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-transparent to-black/30" />
                             <div className="absolute bottom-6 left-6 md:bottom-8 md:left-8">
-                                <div className="flex items-center gap-2 text-xs font-bold tracking-widest uppercase text-blue-400 mb-3 bg-brand/10 px-3 py-1.5 rounded-full border border-brand/20 w-fit">
+                                <div className="flex items-center gap-2 text-xs font-bold tracking-widest uppercase text-blue-400 mb-3 bg-blue-500/10 px-3 py-1.5 rounded-full border border-blue-500/20 w-fit">
                                     <MapPin className="w-4 h-4" />
                                     {selectedPlace.location}
                                 </div>

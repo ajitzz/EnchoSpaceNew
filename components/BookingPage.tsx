@@ -46,7 +46,7 @@ const BookingPage: React.FC<BookingPageProps> = ({ listing, bookingDetails, onBa
     if (!whatsappConfig?.number) return;
     
     // Formatting the message
-    const message = `Hello! I have just placed a booking request on AMIGOVE Space.\n\n*Property:* ${listing.title}\n*Location:* ${listing.address}\n*Move-in Date:* ${new Date(bookingDetails.moveInDate).toLocaleDateString()}\n*Name:* ${bookingDetails.name}`;
+    const message = `Hello! I have just placed a booking request on ENCHO Space.\n\n*Property:* ${listing.title}\n*Location:* ${listing.address}\n*Move-in Date:* ${new Date(bookingDetails.moveInDate).toLocaleDateString()}\n*Name:* ${bookingDetails.name}`;
     
     const encodedMessage = encodeURIComponent(message);
     const whatsappUrl = `https://wa.me/${whatsappConfig.number}?text=${encodedMessage}`;
@@ -74,12 +74,12 @@ const BookingPage: React.FC<BookingPageProps> = ({ listing, bookingDetails, onBa
     <div className="min-h-screen bg-gray-50 flex flex-col items-center animate-fade-in-up font-sans">
       
       {/* Navbar */}
-      <header className="w-full bg-dune/80 backdrop-blur-xl border-b border-gray-200 sticky top-0 z-50">
+      <header className="w-full bg-white/80 backdrop-blur-xl border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 md:px-8 h-20 flex items-center justify-between">
              {/* Brand Logo - Click to Home */}
              <div onClick={onBackToHome} className="cursor-pointer flex flex-col justify-center leading-none select-none group">
                  <div className="flex items-baseline gap-0.5">
-                     <span className="font-black text-xl tracking-tighter text-canvas group-hover:text-[#0284C7] transition-colors">AMIGOVE</span>
+                     <span className="font-black text-xl tracking-tighter text-gray-900 group-hover:text-[#0284C7] transition-colors">ENCHO</span>
                      <div className="w-1.5 h-1.5 bg-[#0284C7] rounded-full mb-1"></div>
                  </div>
                  <span className="text-[9px] font-bold tracking-[0.35em] text-gray-400 uppercase ml-0.5">Space</span>
@@ -96,11 +96,11 @@ const BookingPage: React.FC<BookingPageProps> = ({ listing, bookingDetails, onBa
       </header>
 
       <div className="w-full max-w-2xl mt-8 mb-12 px-4 sm:px-6">
-        <div className="bg-dune rounded-3xl shadow-xl overflow-hidden border border-gray-100">
+        <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
           
           {/* Success Header */}
           <div className="bg-[#0284C7] p-8 text-center text-white">
-            <div className="w-16 h-16 bg-dune/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
+            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
                <ShieldCheck className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-3xl font-extrabold mb-2">Reservation Request Sent!</h1>
@@ -117,7 +117,7 @@ const BookingPage: React.FC<BookingPageProps> = ({ listing, bookingDetails, onBa
                   />
                   <div>
                       <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">{listing.type} in {listing.address?.split(',')[0]}</div>
-                      <h3 className="font-bold text-canvas text-lg leading-tight mb-2">{listing.title}</h3>
+                      <h3 className="font-bold text-gray-900 text-lg leading-tight mb-2">{listing.title}</h3>
                       <div className="flex items-center gap-1 text-sm font-medium text-gray-600">
                           <StarIcon className="w-3.5 h-3.5 fill-current text-orange-400" />
                           <span>{listing.rating}</span>
@@ -131,19 +131,19 @@ const BookingPage: React.FC<BookingPageProps> = ({ listing, bookingDetails, onBa
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 mb-8">
                   <div>
                       <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Move-in Date</label>
-                      <div className="font-semibold text-canvas text-lg">{new Date(bookingDetails.moveInDate).toLocaleDateString(undefined, { dateStyle: 'long' })}</div>
+                      <div className="font-semibold text-gray-900 text-lg">{new Date(bookingDetails.moveInDate).toLocaleDateString(undefined, { dateStyle: 'long' })}</div>
                   </div>
                   <div>
                       <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Configuration</label>
-                      <div className="font-semibold text-canvas text-lg">{bookingDetails.configuration}</div>
+                      <div className="font-semibold text-gray-900 text-lg">{bookingDetails.configuration}</div>
                   </div>
                    <div>
                       <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Guest Name</label>
-                      <div className="font-semibold text-canvas text-lg">{bookingDetails.name}</div>
+                      <div className="font-semibold text-gray-900 text-lg">{bookingDetails.name}</div>
                   </div>
                    <div>
                       <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Contact</label>
-                      <div className="font-semibold text-canvas text-lg">{bookingDetails.phone}</div>
+                      <div className="font-semibold text-gray-900 text-lg">{bookingDetails.phone}</div>
                   </div>
               </div>
 
@@ -151,7 +151,7 @@ const BookingPage: React.FC<BookingPageProps> = ({ listing, bookingDetails, onBa
               <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 mb-8">
                   <div className="flex justify-between items-center mb-4">
                       <span className="text-gray-600 font-medium">Estimated Monthly Rent</span>
-                      <span className="font-bold text-canvas text-xl">₹{bookingDetails.totalRent.toLocaleString()}</span>
+                      <span className="font-bold text-gray-900 text-xl">₹{bookingDetails.totalRent.toLocaleString()}</span>
                   </div>
                   <div className="text-xs text-gray-500 leading-relaxed">
                       * This is an estimate. Final lease terms including deposit and maintenance fees will be confirmed by the property manager upon approval of your application.
@@ -175,7 +175,7 @@ const BookingPage: React.FC<BookingPageProps> = ({ listing, bookingDetails, onBa
                            <MessageCircleIcon className="w-5 h-5" />
                        </button>
                        {callConfig?.enabled && callConfig?.number && (
-                           <button onClick={() => window.open(`tel:${callConfig.number}`, '_self')} className="flex-shrink-0 flex items-center justify-center gap-2 bg-dune hover:bg-gray-50 text-canvas px-6 py-3 rounded-full font-bold text-sm shadow-sm border border-gray-200 transition-all active:scale-95">
+                           <button onClick={() => window.open(`tel:${callConfig.number}`, '_self')} className="flex-shrink-0 flex items-center justify-center gap-2 bg-white hover:bg-gray-50 text-gray-900 px-6 py-3 rounded-full font-bold text-sm shadow-sm border border-gray-200 transition-all active:scale-95">
                                <span>Call Us</span>
                            </button>
                        )}
@@ -190,7 +190,7 @@ const BookingPage: React.FC<BookingPageProps> = ({ listing, bookingDetails, onBa
                   >
                       Back to Explore
                   </button>
-                  <button className="w-full bg-dune text-canvas py-4 rounded-xl font-bold border border-gray-200 hover:bg-gray-50 transition-colors">
+                  <button className="w-full bg-white text-gray-900 py-4 rounded-xl font-bold border border-gray-200 hover:bg-gray-50 transition-colors">
                       Download Summary PDF
                   </button>
               </div>
@@ -199,7 +199,7 @@ const BookingPage: React.FC<BookingPageProps> = ({ listing, bookingDetails, onBa
         
         <div className="mt-8 text-gray-400 text-sm font-medium flex items-center gap-2 justify-center">
            <HouseIcon className="w-4 h-4" />
-           <span>AMIGOVE Space Secure Booking</span>
+           <span>ENCHO Space Secure Booking</span>
         </div>
       </div>
     </div>

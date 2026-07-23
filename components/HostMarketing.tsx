@@ -40,7 +40,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   const [walletTransactions, setWalletTransactions] = useState<any[]>([]);
   const [selectedCampaignForAnalytics, setSelectedCampaignForAnalytics] = useState<MarketingCampaign | null>(null);
 
-  // Pillar 6: Amigove Social Studio States
+  // Pillar 6: Encho Social Studio States
   const [marketingViewTab, setMarketingViewTab] = useState<'paid' | 'social'>('paid');
   const [socialPosts, setSocialPosts] = useState<any[]>([]);
   const [loadingSocialPosts, setLoadingSocialPosts] = useState(false);
@@ -191,7 +191,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           key: data.keyId || 'rzp_test_key',
           amount: Math.round(refuelAmount * 100),
           currency: 'INR',
-          name: 'Amigove Marketing Engine',
+          name: 'Encho Marketing Engine',
           description: 'Wallet Refuel Deposit',
           order_id: data.order_id,
           handler: async function (response: any) {
@@ -377,7 +377,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       if (data.status === 'rejected') {
         addToast('AI Compliance Rejected', data.admin_feedback, 'warning');
       } else {
-        addToast('Social Post Submitted', 'Your media has been submitted to the official @amigove brand publishing queue.', 'success');
+        addToast('Social Post Submitted', 'Your media has been submitted to the official @enchospace brand publishing queue.', 'success');
       }
 
       setShowCreatePostModal(false);
@@ -1020,14 +1020,14 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-[10px] font-black text-brand-dark uppercase tracking-[0.25em] block font-mono">
-              Amigove Marketing
+            <span className="text-[10px] font-black text-blue-600 uppercase tracking-[0.25em] block font-mono">
+              Encho Space Marketing
             </span>
             <span className="bg-blue-100 text-blue-700 text-[8.5px] font-bold uppercase px-2 py-0.5 rounded-full font-mono scale-90">Meta CAPI sandboxed</span>
           </div>
-          <h1 className="text-3xl md:text-5xl font-black text-canvas tracking-tight">Host marketing</h1>
+          <h1 className="text-3xl md:text-5xl font-black text-gray-900 tracking-tight">Host marketing</h1>
           <p className="text-gray-500 font-light mt-1 max-w-xl text-sm leading-relaxed">
-            Market your stays on Facebook & Instagram directly from your Amigove dashboard. Programmatically managed via sandboxed pixels to avoid Meta BM flags.
+            Market your stays on Facebook & Instagram directly from your Encho Space dashboard. Programmatically managed via sandboxed pixels to avoid Meta BM flags.
           </p>
         </div>
 
@@ -1071,12 +1071,12 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           <ShieldCheck className="w-6 h-6" />
         </div>
         <div className="flex-1">
-          <h4 className="text-sm font-bold text-canvas uppercase tracking-tight mb-1">PROGRAMMATIC SANDBOX & DEATH PENALTY PROTECTION IN EFFECT</h4>
+          <h4 className="text-sm font-bold text-gray-900 uppercase tracking-tight mb-1">PROGRAMMATIC SANDBOX & DEATH PENALTY PROTECTION IN EFFECT</h4>
           <p className="text-xs text-gray-600 leading-relaxed font-light">
             Each resort utilizes programmatically partitioned System User Tokens and sandboxed Meta Conversions API (CAPI) endpoints. Stays are never co-mingled under a single Pixel, completely neutralizing the risk of a collective Meta Business Manager ban.
           </p>
         </div>
-        <div className="text-xs font-mono font-bold text-brand-dark bg-blue-50/50 border border-blue-100 px-3 py-1.5 rounded-xl uppercase">
+        <div className="text-xs font-mono font-bold text-blue-600 bg-blue-50/50 border border-blue-100 px-3 py-1.5 rounded-xl uppercase">
           Status: Protected
         </div>
       </div>
@@ -1087,7 +1087,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           onClick={() => setMarketingViewTab('paid')}
           className={`pb-4 text-sm font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 focus:outline-none ${
             marketingViewTab === 'paid'
-              ? 'border-gray-900 text-canvas font-black'
+              ? 'border-gray-900 text-gray-900 font-black'
               : 'border-transparent text-gray-400 hover:text-gray-600'
           }`}
         >
@@ -1098,12 +1098,12 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           onClick={() => setMarketingViewTab('social')}
           className={`pb-4 text-sm font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 focus:outline-none ${
             marketingViewTab === 'social'
-              ? 'border-gray-900 text-canvas font-black'
+              ? 'border-gray-900 text-gray-900 font-black'
               : 'border-transparent text-gray-400 hover:text-gray-600'
           }`}
         >
           <Sparkles className="w-4 h-4 text-amber-500" />
-          <span>Amigove Social Studio</span>
+          <span>Encho Social Studio</span>
           <span className="bg-amber-100 text-amber-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full scale-90">NEW</span>
         </button>
       </div>
@@ -1118,7 +1118,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       >
         {/* Background Accents */}
         <div className="absolute -top-32 -right-32 w-64 h-64 bg-emerald-500/20 rounded-full blur-[100px] pointer-events-none"></div>
-        <div className="absolute -bottom-32 -left-32 w-64 h-64 bg-brand/20 rounded-full blur-[100px] pointer-events-none"></div>
+        <div className="absolute -bottom-32 -left-32 w-64 h-64 bg-blue-500/20 rounded-full blur-[100px] pointer-events-none"></div>
 
         <div className="flex items-center gap-6 z-10 w-full md:w-auto">
            {/* Circular Gauge */}
@@ -1158,13 +1158,13 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => setShowRefuelModal(true)}
-            className="w-full md:w-auto px-8 py-4 bg-dune text-black hover:bg-zinc-100 rounded-2xl font-black tracking-tight transition-colors shadow-[0_8px_30px_rgba(255,255,255,0.12)] flex items-center justify-center gap-2.5"
+            className="w-full md:w-auto px-8 py-4 bg-white text-black hover:bg-zinc-100 rounded-2xl font-black tracking-tight transition-colors shadow-[0_8px_30px_rgba(255,255,255,0.12)] flex items-center justify-center gap-2.5"
           >
             <Zap className="w-5 h-5 text-yellow-500 fill-yellow-500" />
             Refuel Tank
           </motion.button>
-          <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-mono font-bold uppercase tracking-wider bg-dune/5 py-1.5 px-3 rounded-full border border-white/5">
-            <span className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse"></span>
+          <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-mono font-bold uppercase tracking-wider bg-white/5 py-1.5 px-3 rounded-full border border-white/5">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
             Geo-Router Active (Stripe/Razorpay)
           </div>
         </div>
@@ -1172,25 +1172,25 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-10 h-10 text-brand-dark animate-spin" />
+          <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* LEFT: Campaigns List */}
           <div className="lg:col-span-7 space-y-6">
-            <h3 className="text-lg font-bold text-canvas uppercase tracking-tight text-[13px] text-gray-400">Your campaigns ({campaigns.length})</h3>
+            <h3 className="text-lg font-bold text-gray-900 uppercase tracking-tight text-[13px] text-gray-400">Your campaigns ({campaigns.length})</h3>
             
             {campaigns.length === 0 ? (
-              <div className="bg-dune border text-center p-12 rounded-3xl text-gray-500 border-dashed">
+              <div className="bg-white border text-center p-12 rounded-3xl text-gray-500 border-dashed">
                 <Target className="w-12 h-12 text-zinc-300 mx-auto mb-4" />
-                <h4 className="font-bold text-canvas mb-1">No marketing campaigns yet</h4>
+                <h4 className="font-bold text-gray-900 mb-1">No marketing campaigns yet</h4>
                 <p className="text-sm font-light text-gray-500 max-w-sm mx-auto mb-6">
                   Create a campaign draft, optimize it with our automated Gemini AI, and publish to Facebook & Instagram feeds.
                 </p>
                 <button 
                   onClick={() => setShowCreateModal(true)}
-                  className="bg-gray-100 hover:bg-gray-200 text-canvas text-xs font-bold px-4 py-2 rounded-xl"
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-900 text-xs font-bold px-4 py-2 rounded-xl"
                 >
                   Create Draft
                 </button>
@@ -1206,9 +1206,9 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                     key={campaign.id}
                     onClick={() => setSelectedCampaignForAnalytics(campaign)}
                     className={`
-                      bg-dune p-5 rounded-3xl border transition-all duration-300 cursor-pointer text-left relative overflow-hidden
+                      bg-white p-5 rounded-3xl border transition-all duration-300 cursor-pointer text-left relative overflow-hidden
                       ${selectedCampaignForAnalytics?.id === campaign.id 
-                        ? 'border-brand ring-4 ring-brand/10 shadow-lg scale-[1.01]' 
+                        ? 'border-blue-500 ring-4 ring-blue-500/10 shadow-lg scale-[1.01]' 
                         : 'border-zinc-150 hover:border-zinc-300 hover:shadow-md'}
                     `}
                   >
@@ -1222,7 +1222,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                       
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1 gap-2">
-                          <h4 className="font-bold text-canvas truncate text-[15px]">{campaign.title}</h4>
+                          <h4 className="font-bold text-gray-900 truncate text-[15px]">{campaign.title}</h4>
                           <span className={`text-[9px] font-extrabold uppercase border px-2 py-0.5 rounded-md tracking-wider ${getStatusStyle(campaign.status)}`}>
                             {campaign.status}
                           </span>
@@ -1231,11 +1231,11 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                         
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold text-gray-700">
                           <span className="flex items-center gap-1 font-mono">
-                            Budget: <span className="text-canvas font-bold">{formatPrice(campaign.budget, 'INR')}</span>/mo
+                            Budget: <span className="text-gray-900 font-bold">{formatPrice(campaign.budget, 'INR')}</span>/mo
                           </span>
                           <span className="text-gray-300">|</span>
                           <span className="flex items-center gap-1">
-                            Platforms: <span className="text-canvas font-bold">{(campaign.platforms || []).length} active</span>
+                            Platforms: <span className="text-gray-900 font-bold">{(campaign.platforms || []).length} active</span>
                           </span>
                         </div>
                       </div>
@@ -1255,7 +1255,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               handleRunAiCheck(campaign);
                             }}
                             disabled={runningAiCheckId === campaign.id}
-                            className="text-xs font-bold text-brand-dark hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-100/20 px-3 py-1.5 rounded-xl flex items-center gap-1"
+                            className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-100/20 px-3 py-1.5 rounded-xl flex items-center gap-1"
                           >
                             {runningAiCheckId === campaign.id ? (
                               <Loader2 className="w-3 h-3 animate-spin" />
@@ -1307,7 +1307,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                           <span>Quality Control Review Rejected</span>
                         </div>
                         <p className="text-xs text-gray-600 font-light">
-                          <strong className="font-bold text-canvas">Feedback:</strong> {campaign.admin_feedback || 'The ad contains copyright-flagged music or claims that do not meet guidelines.'}
+                          <strong className="font-bold text-gray-900">Feedback:</strong> {campaign.admin_feedback || 'The ad contains copyright-flagged music or claims that do not meet guidelines.'}
                         </p>
                         <div className="flex justify-end gap-2 mt-1">
                           <button 
@@ -1334,7 +1334,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               });
                               setShowCreateModal(true);
                             }}
-                            className="text-xs font-bold text-canvas bg-dune border border-gray-200 px-3 py-1.5 rounded-xl hover:bg-gray-50"
+                            className="text-xs font-bold text-gray-900 bg-white border border-gray-200 px-3 py-1.5 rounded-xl hover:bg-gray-50"
                           >
                             Revise Draft
                           </button>
@@ -1393,7 +1393,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               <span className="text-gray-500 flex items-center gap-1 uppercase tracking-wider font-semibold">
                                 <Gauge className="w-3.5 h-3.5" /> Fuel Gauge (Budget Burn)
                               </span>
-                              <span className="font-mono text-canvas">{pct.toFixed(1)}% Depleted</span>
+                              <span className="font-mono text-gray-900">{pct.toFixed(1)}% Depleted</span>
                             </div>
                             <div className={`w-full h-3 rounded-full overflow-hidden ${barBg} border border-black/5 p-[1px]`}>
                               <div 
@@ -1402,8 +1402,8 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               />
                             </div>
                             <div className="flex items-center justify-between text-[11px] font-mono text-gray-500">
-                              <span>Burnt: <strong className="text-canvas font-bold">₹{spent.toLocaleString()}</strong></span>
-                              <span>Remaining: <strong className="text-canvas font-bold">₹{remaining.toLocaleString()}</strong></span>
+                              <span>Burnt: <strong className="text-gray-900 font-bold">₹{spent.toLocaleString()}</strong></span>
+                              <span>Remaining: <strong className="text-gray-900 font-bold">₹{remaining.toLocaleString()}</strong></span>
                             </div>
                           </div>
 
@@ -1414,7 +1414,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 <span className="flex items-center gap-1">
                                   <Clock className="w-3.5 h-3.5 text-gray-400" /> Active Pacing Mode:
                                 </span>
-                                <span className="uppercase text-[10px] bg-dune border border-zinc-200 px-2 py-0.5 rounded text-canvas font-extrabold tracking-wider">
+                                <span className="uppercase text-[10px] bg-white border border-zinc-200 px-2 py-0.5 rounded text-gray-900 font-extrabold tracking-wider">
                                   {campaign.pacing_mode || 'standard'}
                                 </span>
                               </div>
@@ -1437,7 +1437,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                         flex flex-col items-center justify-center py-2 px-1 rounded-xl border text-center transition-all duration-200
                                         ${isSelected 
                                           ? 'bg-gray-900 border-gray-900 text-white shadow-sm scale-[1.03]' 
-                                          : 'bg-dune border-zinc-200 text-gray-700 hover:border-zinc-300 hover:bg-zinc-50'}
+                                          : 'bg-white border-zinc-200 text-gray-700 hover:border-zinc-300 hover:bg-zinc-50'}
                                       `}
                                       title={item.desc}
                                     >
@@ -1465,11 +1465,11 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 10 }}
-                  className="bg-canvas text-white rounded-3xl p-6 shadow-xl border border-zinc-800 text-left"
+                  className="bg-zinc-900 text-white rounded-3xl p-6 shadow-xl border border-zinc-800 text-left"
                 >
                   <div className="flex items-center justify-between mb-4 border-b border-zinc-800 pb-4">
                     <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-brand text-white rounded-xl">
+                      <div className="p-1.5 bg-blue-500 text-white rounded-xl">
                         <Sparkles className="w-4 h-4" />
                       </div>
                       <h4 className="font-bold text-sm uppercase tracking-wider">Gemini Automated Copy Optimizer</h4>
@@ -1519,14 +1519,14 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           </div>
 
           {/* RIGHT: Live Campaign Analytics Screen */}
-          <div className="lg:col-span-5 bg-dune p-6 md:p-8 rounded-3xl border border-zinc-150">
+          <div className="lg:col-span-5 bg-white p-6 md:p-8 rounded-3xl border border-zinc-150">
             {selectedCampaignForAnalytics ? (
               <div className="text-left space-y-6">
                 <div>
-                  <span className="text-[9px] font-black text-brand-dark uppercase tracking-widest block font-mono">
+                  <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest block font-mono">
                     Live Performance
                   </span>
-                  <h3 className="text-xl font-bold text-canvas tracking-tight mt-1 truncate">
+                  <h3 className="text-xl font-bold text-gray-900 tracking-tight mt-1 truncate">
                     {selectedCampaignForAnalytics.title}
                   </h3>
                   <p className="text-xs font-light text-gray-500">Linked stays: {selectedCampaignForAnalytics.listing_title}</p>
@@ -1541,7 +1541,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                         onClick={() => setAnalyticsActiveTab('analytics')}
                         className={`pb-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all relative flex items-center gap-1.5 focus:outline-none ${
                           analyticsActiveTab === 'analytics'
-                            ? 'border-blue-600 text-brand-dark font-black'
+                            ? 'border-blue-600 text-blue-600 font-black'
                             : 'border-transparent text-zinc-400 hover:text-zinc-600 font-bold'
                         }`}
                       >
@@ -1553,14 +1553,14 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                         onClick={() => setAnalyticsActiveTab('crm')}
                         className={`pb-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all relative flex items-center gap-1.5 focus:outline-none ${
                           analyticsActiveTab === 'crm'
-                            ? 'border-blue-600 text-brand-dark font-black'
+                            ? 'border-blue-600 text-blue-600 font-black'
                             : 'border-transparent text-zinc-400 hover:text-zinc-600 font-bold'
                         }`}
                       >
                         <MessageSquare className="w-3.5 h-3.5" />
                         <span>Ad-Generated Leads (CRM)</span>
                         {campaignLeads?.leads && campaignLeads.leads.length > 0 && (
-                          <span className="bg-brand-dark text-white text-[8.5px] px-1.5 py-0.5 rounded-full font-black animate-pulse">
+                          <span className="bg-blue-600 text-white text-[8.5px] px-1.5 py-0.5 rounded-full font-black animate-pulse">
                             {campaignLeads.leads.length}
                           </span>
                         )}
@@ -1576,7 +1576,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               <Eye className="w-4 h-4 text-zinc-400" />
                               <span className="text-[9px] font-black uppercase tracking-wider">Impressions</span>
                             </div>
-                            <h4 className="text-xl font-black text-canvas font-mono">
+                            <h4 className="text-xl font-black text-gray-900 font-mono">
                               {selectedCampaignForAnalytics.analytics?.impressions.toLocaleString() || '0'}
                             </h4>
                           </div>
@@ -1586,7 +1586,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               <MousePointerClick className="w-4 h-4 text-zinc-400" />
                               <span className="text-[9px] font-black uppercase tracking-wider">Link Clicks</span>
                             </div>
-                            <h4 className="text-xl font-black text-canvas font-mono">
+                            <h4 className="text-xl font-black text-gray-900 font-mono">
                               {selectedCampaignForAnalytics.analytics?.clicks.toLocaleString() || '0'}
                             </h4>
                           </div>
@@ -1596,7 +1596,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               <TrendingUp className="w-4 h-4 text-zinc-400" />
                               <span className="text-[9px] font-black uppercase tracking-wider">CTR %</span>
                             </div>
-                            <h4 className="text-xl font-black text-canvas font-mono">
+                            <h4 className="text-xl font-black text-gray-900 font-mono">
                               {selectedCampaignForAnalytics.analytics?.ctr.toFixed(2) || '0.00'}%
                             </h4>
                           </div>
@@ -1606,7 +1606,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               <Target className="w-4 h-4 text-zinc-400" />
                               <span className="text-[9px] font-black uppercase tracking-wider">Conversions</span>
                             </div>
-                            <h4 className="text-xl font-black text-brand-dark font-mono">
+                            <h4 className="text-xl font-black text-blue-600 font-mono">
                               {selectedCampaignForAnalytics.analytics?.conversions || '0'}
                             </h4>
                           </div>
@@ -1628,7 +1628,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                   ? 'bg-gradient-to-br from-amber-950 via-zinc-900 to-zinc-950 border border-amber-500/20'
                                   : 'bg-gradient-to-br from-gray-900 to-zinc-950 border border-zinc-800'
                             }`}>
-                              <div className="absolute top-0 right-0 w-32 h-32 bg-brand/5 rounded-full blur-3xl pointer-events-none" />
+                              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
 
                               <div className="flex flex-col sm:flex-row gap-6 items-center">
                                 {/* Radial Gauge */}
@@ -1654,7 +1654,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                           ? 'text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]' 
                                           : isFuelCritical 
                                             ? 'text-amber-500 drop-shadow-[0_0_8px_rgba(245,158,11,0.5)]'
-                                            : 'text-brand drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]'
+                                            : 'text-blue-500 drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]'
                                       }`}
                                     />
                                   </svg>
@@ -1696,8 +1696,8 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                   {/* Dopamine Social Pulse Tick */}
                                   {!isFuelFinished && (
                                     <div className="bg-zinc-800/50 border border-zinc-700/50 p-2.5 rounded-xl flex items-center gap-3 relative overflow-hidden">
-                                      <div className="absolute top-0 right-0 w-16 h-16 bg-brand/10 rounded-full blur-xl pointer-events-none animate-pulse" />
-                                      <div className="w-6 h-6 rounded-full bg-brand/20 flex items-center justify-center shrink-0">
+                                      <div className="absolute top-0 right-0 w-16 h-16 bg-blue-500/10 rounded-full blur-xl pointer-events-none animate-pulse" />
+                                      <div className="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
                                         <Zap className="w-3.5 h-3.5 text-blue-400" />
                                       </div>
                                       <motion.div 
@@ -1759,26 +1759,26 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                         {/* PILLAR 2: Honest Expectation Setting & "12x ROAS" Brutal Math Card */}
                         <div className="bg-zinc-50 border border-zinc-200 rounded-3xl p-5 space-y-3.5 text-left select-none relative overflow-hidden">
                           <div className="flex items-center gap-1.5">
-                            <ShieldCheck className="w-4 h-4 text-brand-dark" />
-                            <span className="text-[10px] font-black uppercase tracking-wider text-canvas">
+                            <ShieldCheck className="w-4 h-4 text-blue-600" />
+                            <span className="text-[10px] font-black uppercase tracking-wider text-gray-900">
                               The Brutal Math of Luxury Bookings (Honest ROAS)
                             </span>
                           </div>
                           
                           <p className="text-[10.5px] text-zinc-500 leading-relaxed font-light">
-                            Other platforms promise fake "12x ROAS" lies to get your subscription. Amigove values total transparency. Let's look at the actual physics of holiday marketing. This ad acts as a **publicity funnel** for luxury stays:
+                            Other platforms promise fake "12x ROAS" lies to get your subscription. Encho values total transparency. Let's look at the actual physics of holiday marketing. This ad acts as a **publicity funnel** for luxury stays:
                           </p>
 
                           {/* Funnel Math Grid */}
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-dune border border-zinc-200 p-3 rounded-2xl text-center">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-white border border-zinc-200 p-3 rounded-2xl text-center">
                             <div className="space-y-1">
                               <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-wider block">1. Scale Views</span>
-                              <span className="text-sm font-black text-canvas font-mono">15,000+</span>
+                              <span className="text-sm font-black text-gray-900 font-mono">15,000+</span>
                               <span className="text-[8px] text-zinc-500 block">Metropolitan Reach</span>
                             </div>
                             <div className="space-y-1 border-t sm:border-t-0 sm:border-l pt-2 sm:pt-0 border-zinc-100">
                               <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-wider block">2. Clicks</span>
-                              <span className="text-sm font-black text-brand-dark font-mono">650+</span>
+                              <span className="text-sm font-black text-blue-600 font-mono">650+</span>
                               <span className="text-[8px] text-zinc-500 block">Property Visits</span>
                             </div>
                             <div className="space-y-1 border-t sm:border-t-0 sm:border-l pt-2 sm:pt-0 border-zinc-100">
@@ -1812,7 +1812,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               <div key={i} className="space-y-1 select-none">
                                 <div className="flex justify-between items-center text-zinc-600 font-medium">
                                   <span>{spec.label}</span>
-                                  <span className="font-mono text-canvas font-bold">{spec.percentage} ({spec.clicks})</span>
+                                  <span className="font-mono text-gray-900 font-bold">{spec.percentage} ({spec.clicks})</span>
                                 </div>
                                 <div className="w-full bg-zinc-100 rounded-full h-1.5">
                                   <div className="bg-zinc-800 h-1.5 rounded-full" style={{ width: spec.percentage }} />
@@ -1826,8 +1826,8 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                         <div className="border border-zinc-200 rounded-3xl p-5 space-y-4">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-1.5">
-                              <MessageSquare className="w-4 h-4 text-brand-dark" />
-                              <span className="text-[10px] font-black uppercase tracking-wider text-canvas">
+                              <MessageSquare className="w-4 h-4 text-blue-600" />
+                              <span className="text-[10px] font-black uppercase tracking-wider text-gray-900">
                                 Live Social Feed Simulator (Ad Sandbox)
                               </span>
                             </div>
@@ -1836,17 +1836,17 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
                           {/* Smartphone Viewport Preview */}
                           <div className="max-w-md mx-auto bg-zinc-100 border border-zinc-200 rounded-3xl p-3 shadow-inner">
-                            <div className="bg-dune rounded-2xl overflow-hidden border shadow-sm text-[11px] text-zinc-800 text-left">
+                            <div className="bg-white rounded-2xl overflow-hidden border shadow-sm text-[11px] text-zinc-800 text-left">
                               {/* Post Header */}
                               <div className="p-3 border-b flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                  <div className="w-7 h-7 rounded-full bg-canvas flex items-center justify-center text-white text-[9px] font-black">
+                                  <div className="w-7 h-7 rounded-full bg-zinc-900 flex items-center justify-center text-white text-[9px] font-black">
                                     EN
                                   </div>
                                   <div>
-                                    <div className="font-black flex items-center gap-1 text-canvas">
-                                      <span>amigove_stays</span>
-                                      <span className="bg-brand text-white rounded-full p-0.5 text-[6px]">✓</span>
+                                    <div className="font-black flex items-center gap-1 text-zinc-900">
+                                      <span>encho_stays</span>
+                                      <span className="bg-blue-500 text-white rounded-full p-0.5 text-[6px]">✓</span>
                                     </div>
                                     <span className="text-[8px] text-zinc-400 block font-light">Sponsored Ad</span>
                                   </div>
@@ -1889,13 +1889,13 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                   <Bookmark className="w-4 h-4 text-zinc-700" />
                                 </div>
 
-                                <div className="font-bold text-canvas font-mono">
+                                <div className="font-bold text-zinc-900 font-mono">
                                   {sandboxLikes.toLocaleString()} Likes
                                 </div>
 
                                 {/* Caption */}
                                 <p className="leading-relaxed">
-                                  <span className="font-bold text-canvas mr-1.5">amigove_stays</span>
+                                  <span className="font-bold text-zinc-900 mr-1.5">encho_stays</span>
                                   {selectedCampaignForAnalytics.description || 'Escape the routine. Luxury stays optimized for direct, peaceful nights.'}
                                 </p>
 
@@ -1910,7 +1910,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                       <div key={cmt.id} className="space-y-1.5 bg-zinc-50/50 p-2 rounded-xl">
                                         <div className="flex items-start justify-between">
                                           <div>
-                                            <span className="font-bold text-canvas mr-1">{cmt.author}</span>
+                                            <span className="font-bold text-zinc-900 mr-1">{cmt.author}</span>
                                             <span className="text-zinc-500">{cmt.text}</span>
                                           </div>
                                           <span className="text-[8px] text-zinc-400">{cmt.time}</span>
@@ -1941,7 +1941,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                               const text = e.target.value;
                                               setReplyInputs(prev => ({ ...prev, [cmt.id]: text }));
                                             }}
-                                            className="flex-1 bg-dune border border-zinc-200 rounded-lg px-2.5 py-1 text-[10px] outline-none focus:border-brand font-light"
+                                            className="flex-1 bg-white border border-zinc-200 rounded-lg px-2.5 py-1 text-[10px] outline-none focus:border-blue-500 font-light"
                                           />
                                           <button
                                             type="button"
@@ -1968,7 +1968,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                               setReplyInputs(prev => ({ ...prev, [cmt.id]: '' }));
                                               addToast('Owner Reply Added', 'Your verified owner reply is now live on the simulated ad feed.', 'success');
                                             }}
-                                            className="bg-canvas hover:bg-zinc-800 text-white text-[9px] font-black px-2 py-1 rounded-lg transition-colors"
+                                            className="bg-zinc-900 hover:bg-zinc-800 text-white text-[9px] font-black px-2 py-1 rounded-lg transition-colors"
                                           >
                                             Reply
                                           </button>
@@ -2003,14 +2003,14 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: idx * 0.15, duration: 0.5, ease: "easeOut" }}
                                 key={idx} 
-                                className="bg-dune border border-zinc-200/80 rounded-2xl p-3 flex flex-col justify-between relative shadow-sm hover:shadow-md transition-shadow group overflow-hidden"
+                                className="bg-white border border-zinc-200/80 rounded-2xl p-3 flex flex-col justify-between relative shadow-sm hover:shadow-md transition-shadow group overflow-hidden"
                               >
                                 <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${step.color} opacity-80 group-hover:opacity-100 transition-opacity`} />
                                 <span className="text-[9px] font-black text-zinc-400 uppercase block leading-tight mb-2 mt-1">{step.label}</span>
-                                <span className="text-2xl font-black text-canvas font-mono block py-1">{step.val.toLocaleString()}</span>
+                                <span className="text-2xl font-black text-gray-900 font-mono block py-1">{step.val.toLocaleString()}</span>
                                 <p className="text-[9px] text-zinc-500 font-medium leading-snug">{step.desc}</p>
                                 {idx < 3 && (
-                                  <div className="hidden sm:flex absolute top-1/2 -right-3 -translate-y-1/2 bg-dune border border-zinc-200 text-zinc-400 rounded-full w-6 h-6 items-center justify-center z-10 shadow-sm">
+                                  <div className="hidden sm:flex absolute top-1/2 -right-3 -translate-y-1/2 bg-white border border-zinc-200 text-zinc-400 rounded-full w-6 h-6 items-center justify-center z-10 shadow-sm">
                                     <ChevronRight className="w-3.5 h-3.5" />
                                   </div>
                                 )}
@@ -2030,13 +2030,13 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
                           {loadingLeads ? (
                             <div className="flex flex-col items-center justify-center py-12 space-y-2">
-                              <Loader2 className="w-6 h-6 animate-spin text-brand-dark" />
+                              <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
                               <span className="text-xs text-zinc-500">Syncing live lead enquiries...</span>
                             </div>
                           ) : campaignLeads?.leads && campaignLeads.leads.length > 0 ? (
                             <div className="space-y-3.5">
                               {campaignLeads.leads.map((lead: any) => (
-                                <div key={lead.id} className="bg-dune border border-zinc-200 hover:border-zinc-300 rounded-2xl p-4 space-y-3.5 transition-all">
+                                <div key={lead.id} className="bg-white border border-zinc-200 hover:border-zinc-300 rounded-2xl p-4 space-y-3.5 transition-all">
                                   {/* Lead Header */}
                                   <div className="flex items-start justify-between">
                                     <div className="flex items-center gap-2.5">
@@ -2044,9 +2044,9 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                         {lead.name.split(' ').map((n: string) => n[0]).join('')}
                                       </div>
                                       <div>
-                                        <div className="font-bold text-canvas text-xs flex items-center gap-1.5">
+                                        <div className="font-bold text-zinc-900 text-xs flex items-center gap-1.5">
                                           <span>{lead.name}</span>
-                                          <span className={`w-2 h-2 rounded-full ${lead.status === 'New Lead' ? 'bg-brand animate-pulse' : 'bg-zinc-400'}`} />
+                                          <span className={`w-2 h-2 rounded-full ${lead.status === 'New Lead' ? 'bg-blue-500 animate-pulse' : 'bg-zinc-400'}`} />
                                           {lead.intent_score && (
                                             <span className={`text-[8px] px-1.5 py-0.5 rounded-sm font-black border uppercase ${
                                               lead.intent_score.includes('HOT') ? 'bg-orange-50 text-orange-700 border-orange-200 shadow-orange-100/50' :
@@ -2077,7 +2077,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                     <span className="font-bold text-zinc-800 uppercase text-[8px] tracking-wider block mb-1">Attribution Trail Log:</span>
                                     {lead.attribution_trail && lead.attribution_trail.map((log: string, lIdx: number) => (
                                       <div key={lIdx} className="flex items-center gap-1">
-                                        <span className="text-brand">•</span>
+                                        <span className="text-blue-500">•</span>
                                         <span>{log}</span>
                                       </div>
                                     ))}
@@ -2091,7 +2091,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                         onClick={() => setActiveLeadTabs(prev => ({ ...prev, [lead.id]: 'chat' }))}
                                         className={`pb-1 text-[10.5px] font-black uppercase tracking-wider border-b-2 transition-all ${
                                           (activeLeadTabs[lead.id] || 'chat') === 'chat'
-                                            ? 'border-blue-600 text-brand-dark'
+                                            ? 'border-blue-600 text-blue-600'
                                             : 'border-transparent text-zinc-400 hover:text-zinc-600'
                                         }`}
                                       >
@@ -2156,7 +2156,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                                   [lead.id]: tpl.text
                                                 }));
                                               }}
-                                              className="py-1.5 px-2 bg-dune hover:bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-xl text-[9px] font-bold text-zinc-600 text-center transition-all flex flex-col items-center justify-center"
+                                              className="py-1.5 px-2 bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-xl text-[9px] font-bold text-zinc-600 text-center transition-all flex flex-col items-center justify-center"
                                             >
                                               <span>{tpl.label}</span>
                                             </button>
@@ -2176,7 +2176,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                               }));
                                             }}
                                             rows={2}
-                                            className="w-full bg-zinc-50 border border-zinc-200 rounded-xl p-2.5 text-[10px] outline-none focus:border-brand font-light resize-none"
+                                            className="w-full bg-zinc-50 border border-zinc-200 rounded-xl p-2.5 text-[10px] outline-none focus:border-blue-500 font-light resize-none"
                                           />
                                           <div className="flex justify-between items-center">
                                             <span className="text-[8px] text-zinc-400 font-mono uppercase">Status: {lead.status}</span>
@@ -2189,7 +2189,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                                 // Reset draft
                                                 setLeadMessageDrafts(prev => ({ ...prev, [lead.id]: '' }));
                                               }}
-                                              className="bg-canvas hover:bg-zinc-800 disabled:bg-zinc-100 disabled:text-zinc-400 text-white text-[10px] font-black px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all active:scale-[0.98]"
+                                              className="bg-zinc-900 hover:bg-zinc-800 disabled:bg-zinc-100 disabled:text-zinc-400 text-white text-[10px] font-black px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all active:scale-[0.98]"
                                             >
                                               {sendingLeadId === lead.id ? (
                                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -2206,7 +2206,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                           <div className="bg-blue-50/20 border border-blue-100/30 rounded-xl p-2.5 space-y-1.5 mt-2">
                                             <span className="text-[8px] font-black text-blue-800 uppercase tracking-wider block">Sent History Logs:</span>
                                             {lead.message_history.map((msg: any, mIdx: number) => (
-                                              <div key={mIdx} className="text-[9.5px] leading-relaxed bg-dune border border-zinc-150 p-2 rounded-lg">
+                                              <div key={mIdx} className="text-[9.5px] leading-relaxed bg-white border border-zinc-150 p-2 rounded-lg">
                                                 <div className="flex justify-between text-[8px] text-zinc-400 font-mono mb-1 font-bold">
                                                   <span>SENDER: {msg.sender}</span>
                                                   <span>{msg.timestamp}</span>
@@ -2256,7 +2256,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                                       }
                                                     }));
                                                   }}
-                                                  className="w-full bg-dune border border-zinc-200 rounded-lg p-1.5 text-[10px] text-gray-800 outline-none focus:border-emerald-500 font-mono"
+                                                  className="w-full bg-white border border-zinc-200 rounded-lg p-1.5 text-[10px] text-gray-800 outline-none focus:border-emerald-500 font-mono"
                                                 />
                                               </div>
 
@@ -2277,7 +2277,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                                         }
                                                       }));
                                                     }}
-                                                    className="w-full bg-dune border border-zinc-200 rounded-lg p-1.5 text-[10px] text-gray-800 outline-none focus:border-emerald-500 font-mono pr-8"
+                                                    className="w-full bg-white border border-zinc-200 rounded-lg p-1.5 text-[10px] text-gray-800 outline-none focus:border-emerald-500 font-mono pr-8"
                                                   />
                                                   <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] text-zinc-400 font-medium font-mono">Nts</span>
                                                 </div>
@@ -2303,7 +2303,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                                         }
                                                       }));
                                                     }}
-                                                    className="w-full bg-dune border border-zinc-200 rounded-lg p-1.5 text-[10px] text-gray-800 outline-none focus:border-emerald-500 font-mono pl-5"
+                                                    className="w-full bg-white border border-zinc-200 rounded-lg p-1.5 text-[10px] text-gray-800 outline-none focus:border-emerald-500 font-mono pl-5"
                                                   />
                                                   <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] text-zinc-400 font-medium font-mono">₹</span>
                                                 </div>
@@ -2325,7 +2325,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                                       }
                                                     }));
                                                   }}
-                                                  className="w-full bg-dune border border-zinc-200 rounded-lg p-1.5 text-[10px] text-gray-800 outline-none focus:border-emerald-500"
+                                                  className="w-full bg-white border border-zinc-200 rounded-lg p-1.5 text-[10px] text-gray-800 outline-none focus:border-emerald-500"
                                                 />
                                               </div>
                                             </div>
@@ -2367,7 +2367,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                   <div className="bg-zinc-50 border border-dashed rounded-3xl p-8 text-center space-y-4">
                     <BarChart3 className="w-12 h-12 text-zinc-300 mx-auto" />
                     <div className="space-y-1">
-                      <h4 className="font-bold text-canvas">Performance metrics not live yet</h4>
+                      <h4 className="font-bold text-gray-900">Performance metrics not live yet</h4>
                       <p className="text-xs text-gray-500 font-light leading-relaxed max-w-xs mx-auto">
                         Once this marketing campaign passes Quality Control review and starts running on Meta, live metrics will stream here in real-time.
                       </p>
@@ -2400,10 +2400,10 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           <div className="lg:col-span-7 space-y-6">
             <div className="flex justify-between items-center">
               <div>
-                <h3 className="text-lg font-black text-canvas uppercase tracking-wider text-[12px] text-gray-400">
+                <h3 className="text-lg font-black text-gray-900 uppercase tracking-wider text-[12px] text-gray-400">
                   Organic Brand Posts ({socialPosts.length})
                 </h3>
-                <p className="text-xs text-zinc-500 font-light mt-0.5">Direct publishing queue for @amigove handles.</p>
+                <p className="text-xs text-zinc-500 font-light mt-0.5">Direct publishing queue for @enchospace handles.</p>
               </div>
               <button
                 onClick={() => {
@@ -2421,19 +2421,19 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
             </div>
 
             {loadingSocialPosts ? (
-              <div className="flex items-center justify-center py-20 bg-dune border rounded-3xl">
-                <Loader2 className="w-8 h-8 text-brand-dark animate-spin" />
+              <div className="flex items-center justify-center py-20 bg-white border rounded-3xl">
+                <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
               </div>
             ) : socialPosts.length === 0 ? (
-              <div className="bg-dune border text-center p-12 rounded-3xl text-gray-500 border-dashed">
+              <div className="bg-white border text-center p-12 rounded-3xl text-gray-500 border-dashed">
                 <Sparkles className="w-12 h-12 text-amber-400 mx-auto mb-4" />
-                <h4 className="font-bold text-canvas mb-1">Amigove Social Studio</h4>
+                <h4 className="font-bold text-gray-900 mb-1">Encho Space Social Studio</h4>
                 <p className="text-xs font-light text-gray-500 max-w-sm mx-auto mb-6">
-                  Draft, schedule, and publish Reels or Stories directly to the official @amigove brand account. Let our community see your property!
+                  Draft, schedule, and publish Reels or Stories directly to the official @enchospace brand account. Let our community see your property!
                 </p>
                 <button
                   onClick={() => setShowCreatePostModal(true)}
-                  className="bg-gray-100 hover:bg-gray-200 text-canvas text-xs font-bold px-4 py-2 rounded-xl"
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-900 text-xs font-bold px-4 py-2 rounded-xl"
                 >
                   Create First Post
                 </button>
@@ -2444,9 +2444,9 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                   <div
                     key={post.id}
                     onClick={() => setSelectedPostForDetail(post)}
-                    className={`bg-dune p-5 rounded-3xl border transition-all duration-300 cursor-pointer text-left relative overflow-hidden ${
+                    className={`bg-white p-5 rounded-3xl border transition-all duration-300 cursor-pointer text-left relative overflow-hidden ${
                       selectedPostForDetail?.id === post.id
-                        ? 'border-brand ring-4 ring-brand/10 shadow-lg scale-[1.01]'
+                        ? 'border-blue-500 ring-4 ring-blue-500/10 shadow-lg scale-[1.01]'
                         : 'border-zinc-150 hover:border-zinc-300 hover:shadow-md'
                     }`}
                   >
@@ -2473,7 +2473,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                       {/* Info & Caption */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1 gap-2">
-                          <h4 className="font-bold text-canvas truncate text-[14px]">
+                          <h4 className="font-bold text-gray-900 truncate text-[14px]">
                             {post.listing_title}
                           </h4>
                           <span
@@ -2485,7 +2485,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 : 'bg-amber-50 text-amber-700 border-amber-200'
                             }`}
                           >
-                            {post.status === 'approved' ? 'Live @amigove' : post.status}
+                            {post.status === 'approved' ? 'Live @enchospace' : post.status}
                           </span>
                         </div>
                         <p className="text-xs font-light text-gray-600 line-clamp-2 mb-3">
@@ -2500,7 +2500,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               <span>{post.likes}</span>
                             </span>
                             <span className="flex items-center gap-1">
-                              <MessageSquare className="w-3.5 h-3.5 text-brand" />
+                              <MessageSquare className="w-3.5 h-3.5 text-blue-500" />
                               <span>{post.comments}</span>
                             </span>
                             <span className="flex items-center gap-1">
@@ -2570,24 +2570,24 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           </div>
 
           {/* Right Column: Live Instagram Phone Mockup Feed Simulator */}
-          <div className="lg:col-span-5 bg-dune p-6 md:p-8 rounded-3xl border border-zinc-150">
+          <div className="lg:col-span-5 bg-white p-6 md:p-8 rounded-3xl border border-zinc-150">
             {selectedPostForDetail ? (
               <div className="text-left space-y-6">
                 <div>
-                  <span className="text-[9px] font-black text-brand-dark uppercase tracking-widest block font-mono">
+                  <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest block font-mono">
                     Social Studio Preview
                   </span>
-                  <h3 className="text-xl font-bold text-canvas tracking-tight mt-1">
+                  <h3 className="text-xl font-bold text-gray-900 tracking-tight mt-1">
                     Feed Simulator
                   </h3>
-                  <p className="text-xs font-light text-gray-500">See your property showcased under the main @amigove handle.</p>
+                  <p className="text-xs font-light text-gray-500">See your property showcased under the main @enchospace handle.</p>
                 </div>
 
                 {/* iPhone / Phone Mockup Wrapper */}
                 <div className="relative mx-auto max-w-[320px] bg-black rounded-[2.5rem] p-3 shadow-2xl border-4 border-zinc-800 overflow-hidden">
                   <div className="absolute top-4 left-1/2 transform -translate-x-1/2 w-24 h-4 bg-zinc-800 rounded-full z-20"></div>
                   
-                  <div className="bg-dune rounded-[2rem] overflow-hidden text-black text-xs min-h-[460px] flex flex-col justify-between">
+                  <div className="bg-white rounded-[2rem] overflow-hidden text-black text-xs min-h-[460px] flex flex-col justify-between">
                     {/* Brand Header */}
                     <div className="flex items-center justify-between p-3 border-b">
                       <div className="flex items-center gap-2">
@@ -2595,7 +2595,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                           ES
                         </div>
                         <div>
-                          <p className="font-extrabold text-canvas">amigove</p>
+                          <p className="font-extrabold text-gray-900">enchospace</p>
                           <p className="text-[9px] text-zinc-500">{selectedPostForDetail.listing_title}</p>
                         </div>
                       </div>
@@ -2635,12 +2635,12 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                           <Bookmark className="w-5 h-5 text-gray-700" />
                         </div>
 
-                        <div className="font-black text-canvas">
+                        <div className="font-black text-gray-900">
                           {selectedPostForDetail.likes + (hasLikedSandbox ? 1 : 0)} likes
                         </div>
 
                         <div>
-                          <span className="font-extrabold mr-1.5 text-canvas">amigove</span>
+                          <span className="font-extrabold mr-1.5 text-gray-900">enchospace</span>
                           <span className="text-gray-700 leading-relaxed font-light">{selectedPostForDetail.caption}</span>
                         </div>
                       </div>
@@ -2686,7 +2686,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                             onChange={(e) => setReplyInputs({ ...replyInputs, [selectedPostForDetail.id]: e.target.value })}
                             className="flex-1 bg-gray-50 border-none outline-none focus:ring-0 p-1 rounded text-[11px]"
                           />
-                          <button type="submit" className="text-brand-dark font-extrabold text-[10px] uppercase">Post</button>
+                          <button type="submit" className="text-blue-600 font-extrabold text-[10px] uppercase">Post</button>
                         </form>
                       </div>
                     </div>
@@ -2711,11 +2711,11 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-dune rounded-3xl max-w-5xl w-full p-6 md:p-8 max-h-[95vh] overflow-y-auto shadow-2xl text-left"
+              className="bg-white rounded-3xl max-w-5xl w-full p-6 md:p-8 max-h-[95vh] overflow-y-auto shadow-2xl text-left"
             >
               <div className="flex justify-between items-center mb-6">
                 <div>
-                  <h3 className="text-2xl font-black text-canvas tracking-tight">
+                  <h3 className="text-2xl font-black text-gray-900 tracking-tight">
                     {editingCampaignId ? 'Edit Ad Campaign Draft' : 'Draft Marketing Campaign'}
                   </h3>
                   <p className="text-xs text-gray-500 font-light mt-0.5">Customize your creative assets, formats, targets, and launch budget.</p>
@@ -2769,15 +2769,15 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 setWizardStep(item.step);
                               }}
                               className={`flex items-center gap-2 cursor-pointer transition-all border-none bg-transparent p-0 focus:outline-none ${
-                                isActive ? 'text-brand-dark font-bold scale-[1.01]' : isCompleted ? 'text-zinc-800 hover:text-canvas' : 'text-zinc-400 hover:text-zinc-600'
+                                isActive ? 'text-blue-600 font-bold scale-[1.01]' : isCompleted ? 'text-zinc-800 hover:text-zinc-900' : 'text-zinc-400 hover:text-zinc-600'
                               }`}
                             >
                               <div className={`w-7.5 h-7.5 rounded-full flex items-center justify-center text-[11px] font-black transition-all border ${
                                 isActive 
-                                  ? 'bg-brand-dark text-white border-blue-600 shadow-md shadow-blue-500/15' 
+                                  ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/15' 
                                   : isCompleted 
-                                    ? 'bg-canvas text-white border-zinc-900' 
-                                    : 'bg-dune text-zinc-400 border-zinc-200'
+                                    ? 'bg-zinc-900 text-white border-zinc-900' 
+                                    : 'bg-white text-zinc-400 border-zinc-200'
                               } relative`}>
                                 {isCompleted ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : <span>{item.step}</span>}
                                 {hasRejections && (
@@ -2806,7 +2806,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                             required
                             value={formData.listing_id}
                             onChange={(e) => handleListingChange(e.target.value)}
-                            className="w-full bg-[#F4F4F6] border border-gray-100 rounded-2xl p-3.5 text-sm font-medium outline-none transition-all focus:border-brand focus:bg-dune"
+                            className="w-full bg-[#F4F4F6] border border-gray-100 rounded-2xl p-3.5 text-sm font-medium outline-none transition-all focus:border-blue-500 focus:bg-white"
                           >
                             <option value="">-- Choose Listing --</option>
                             {listings.map(listing => (
@@ -2845,7 +2845,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               ) : (
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                   {formData.media_urls.map((url, idx) => (
-                                    <div key={idx} className="relative group rounded-xl overflow-hidden border border-zinc-200 bg-dune aspect-square flex flex-col">
+                                    <div key={idx} className="relative group rounded-xl overflow-hidden border border-zinc-200 bg-white aspect-square flex flex-col">
                                       <img src={url || undefined} alt="" className="w-full h-2/3 object-cover" />
                                       <div className="p-1 text-[10px] font-mono text-center font-bold text-gray-700 bg-zinc-50 flex items-center justify-between border-t gap-1">
                                         <span>Ad Asset #{idx + 1}</span>
@@ -2875,7 +2875,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                               arr[idx - 1] = temp;
                                               setFormData(prev => ({ ...prev, media_urls: arr }));
                                             }}
-                                            className="text-[10px] font-bold bg-dune text-gray-800 px-1 py-0.5 rounded hover:bg-zinc-100"
+                                            className="text-[10px] font-bold bg-white text-gray-800 px-1 py-0.5 rounded hover:bg-zinc-100"
                                           >
                                             ◀ Move
                                           </button>
@@ -2890,7 +2890,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                               arr[idx + 1] = temp;
                                               setFormData(prev => ({ ...prev, media_urls: arr }));
                                             }}
-                                            className="text-[10px] font-bold bg-dune text-gray-800 px-1 py-0.5 rounded hover:bg-zinc-100"
+                                            className="text-[10px] font-bold bg-white text-gray-800 px-1 py-0.5 rounded hover:bg-zinc-100"
                                           >
                                             Move ▶
                                           </button>
@@ -2917,7 +2917,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 }}
                                 className={`border-2 border-dashed rounded-xl p-5 text-center transition-all ${
                                   isDragging 
-                                    ? 'border-brand bg-blue-50/20 scale-[1.01]' 
+                                    ? 'border-blue-500 bg-blue-50/20 scale-[1.01]' 
                                     : 'border-zinc-200 bg-zinc-50 hover:bg-zinc-100/50'
                                 }`}
                               >
@@ -2935,11 +2935,11 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 
                                 {isUploading ? (
                                   <div className="space-y-2">
-                                    <Loader2 className="w-6 h-6 animate-spin text-brand-dark mx-auto" />
+                                    <Loader2 className="w-6 h-6 animate-spin text-blue-600 mx-auto" />
                                     <p className="text-xs font-bold text-gray-700">Uploading Creative Asset...</p>
                                     <div className="w-full max-w-xs mx-auto bg-zinc-200 rounded-full h-1.5 overflow-hidden">
                                       <div 
-                                        className="bg-brand-dark h-1.5 rounded-full transition-all duration-300" 
+                                        className="bg-blue-600 h-1.5 rounded-full transition-all duration-300" 
                                         style={{ width: `${uploadProgress || 0}%` }}
                                       />
                                     </div>
@@ -2964,7 +2964,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                   placeholder="Add another photo or direct MP4 video link..."
                                   value={newMediaUrl}
                                   onChange={(e) => setNewMediaUrl(e.target.value)}
-                                  className="flex-1 bg-dune border border-zinc-200 rounded-xl px-3 py-2 text-xs outline-none"
+                                  className="flex-1 bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs outline-none"
                                 />
                                 <button
                                   type="button"
@@ -2991,13 +2991,13 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               <div className="grid grid-cols-2 gap-3 pt-2 border-t border-zinc-200/50">
                                 <div className="space-y-1">
                                   <label className="text-[9px] font-extrabold uppercase tracking-wider text-zinc-400">Content overlay Alignment</label>
-                                  <div className="flex bg-dune rounded-lg p-0.5 border">
+                                  <div className="flex bg-white rounded-lg p-0.5 border">
                                     {['left', 'center', 'right'].map((align) => (
                                       <button
                                         key={align}
                                         type="button"
                                         onClick={() => setMediaAlignment(align as any)}
-                                        className={`flex-1 text-[10px] py-1 capitalize rounded transition-all ${mediaAlignment === align ? 'bg-canvas text-white font-bold' : 'text-zinc-600 hover:bg-zinc-50'}`}
+                                        className={`flex-1 text-[10px] py-1 capitalize rounded transition-all ${mediaAlignment === align ? 'bg-zinc-900 text-white font-bold' : 'text-zinc-600 hover:bg-zinc-50'}`}
                                       >
                                         {align}
                                       </button>
@@ -3007,13 +3007,13 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
                                 <div className="space-y-1">
                                   <label className="text-[9px] font-extrabold uppercase tracking-wider text-zinc-400">Visual Feed Aspect Ratio</label>
-                                  <div className="flex bg-dune rounded-lg p-0.5 border">
+                                  <div className="flex bg-white rounded-lg p-0.5 border">
                                     {['1:1', '9:16', '16:9'].map((aspect) => (
                                       <button
                                         key={aspect}
                                         type="button"
                                         onClick={() => setMediaAspect(aspect as any)}
-                                        className={`flex-1 text-[10px] py-1 rounded transition-all ${mediaAspect === aspect ? 'bg-canvas text-white font-bold' : 'text-zinc-600 hover:bg-zinc-50'}`}
+                                        className={`flex-1 text-[10px] py-1 rounded transition-all ${mediaAspect === aspect ? 'bg-zinc-900 text-white font-bold' : 'text-zinc-600 hover:bg-zinc-50'}`}
                                       >
                                         {aspect}
                                       </button>
@@ -3042,7 +3042,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 placeholder="e.g. https://www.youtube.com/watch?v=dQw4w9WgXcQ"
                                 value={formData.video_url}
                                 onChange={(e) => setFormData(prev => ({ ...prev, video_url: e.target.value }))}
-                                className={`w-full bg-[#F4F4F6] border rounded-2xl p-3.5 text-sm font-medium outline-none transition-all focus:border-brand focus:bg-dune ${rejectedFieldsMap.video_url ? 'border-rose-300 focus:border-rose-500' : 'border-gray-100'}`}
+                                className={`w-full bg-[#F4F4F6] border rounded-2xl p-3.5 text-sm font-medium outline-none transition-all focus:border-blue-500 focus:bg-white ${rejectedFieldsMap.video_url ? 'border-rose-300 focus:border-rose-500' : 'border-gray-100'}`}
                               />
                             </div>
                           </>
@@ -3080,7 +3080,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 className={`
                                   p-4 rounded-xl border text-left cursor-pointer transition-all select-none flex flex-col justify-center gap-1
                                   ${formData.ad_format === fmt.id 
-                                    ? 'border-brand bg-blue-50/10 font-bold text-blue-700 ring-2 ring-brand/5' 
+                                    ? 'border-blue-500 bg-blue-50/10 font-bold text-blue-700 ring-2 ring-blue-500/5' 
                                     : 'border-zinc-200 text-zinc-600 hover:border-zinc-300'}
                                 `}
                               >
@@ -3104,11 +3104,11 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                   className={`
                                     border p-3.5 rounded-2xl cursor-pointer transition-all flex items-center gap-2.5 select-none
                                     ${isSelected 
-                                      ? 'border-brand bg-blue-50/20 font-bold text-blue-700' 
+                                      ? 'border-blue-500 bg-blue-50/20 font-bold text-blue-700' 
                                       : 'border-zinc-200 text-zinc-600 hover:border-zinc-300'}
                                   `}
                                 >
-                                  <div className={`w-4.5 h-4.5 rounded-md border flex items-center justify-center shrink-0 ${isSelected ? 'border-blue-600 bg-brand-dark text-white' : 'border-zinc-300 bg-dune'}`}>
+                                  <div className={`w-4.5 h-4.5 rounded-md border flex items-center justify-center shrink-0 ${isSelected ? 'border-blue-600 bg-blue-600 text-white' : 'border-zinc-300 bg-white'}`}>
                                     {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
                                   </div>
                                   <span className="text-xs font-bold">{opt.label}</span>
@@ -3127,7 +3127,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                           <div className="flex items-center justify-between border-b border-zinc-150 pb-3">
                             <div className="flex items-center gap-2">
                               <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-yellow-500 via-red-500 to-purple-600 p-[1.2px]">
-                                <div className="w-full h-full rounded-full bg-dune p-[0.5px] flex items-center justify-center">
+                                <div className="w-full h-full rounded-full bg-white p-[0.5px] flex items-center justify-center">
                                   <img 
                                     src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80'} 
                                     className="w-full h-full rounded-full object-cover" 
@@ -3137,11 +3137,11 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 </div>
                               </div>
                               <div>
-                                <span className="text-xs font-black text-canvas block leading-none">{user?.name || 'LuxuryHost'}</span>
+                                <span className="text-xs font-black text-gray-900 block leading-none">{user?.name || 'LuxuryHost'}</span>
                                 <span className="text-[9px] text-zinc-400 font-bold block mt-0.5">Creating Sponsored Post</span>
                               </div>
                             </div>
-                            <span className="text-[9px] font-black uppercase text-brand-dark tracking-wider font-mono bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md">Mobile Composer</span>
+                            <span className="text-[9px] font-black uppercase text-blue-600 tracking-wider font-mono bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md">Mobile Composer</span>
                           </div>
 
                           {/* Primary Caption / Ad Copy */}
@@ -3163,7 +3163,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               placeholder="Describe your stay, amenities, pristine views, or special offers. Instagram posts with clear highlights convert 2.5x better!"
                               value={formData.description}
                               onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                              className="w-full bg-dune border border-zinc-200 rounded-2xl p-3 text-xs font-light outline-none font-sans focus:border-brand transition-all leading-relaxed"
+                              className="w-full bg-white border border-zinc-200 rounded-2xl p-3 text-xs font-light outline-none font-sans focus:border-blue-500 transition-all leading-relaxed"
                             />
                             
                             {/* Suggested high performance hashtag helpers */}
@@ -3180,7 +3180,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                       }));
                                     }
                                   }}
-                                  className="text-[9px] font-bold text-brand-dark bg-blue-50/50 hover:bg-blue-100 border border-blue-200/20 px-2 py-0.5 rounded-lg transition-colors"
+                                  className="text-[9px] font-bold text-blue-600 bg-blue-50/50 hover:bg-blue-100 border border-blue-200/20 px-2 py-0.5 rounded-lg transition-colors"
                                 >
                                   {tag} +
                                 </button>
@@ -3207,7 +3207,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               placeholder="e.g., Ultra-Luxury Stay Exclusive Discount"
                               value={formData.title}
                               onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                              className="w-full bg-dune border border-zinc-200 rounded-xl p-3 text-xs font-semibold outline-none focus:border-brand transition-all"
+                              className="w-full bg-white border border-zinc-200 rounded-xl p-3 text-xs font-semibold outline-none focus:border-blue-500 transition-all"
                             />
                           </div>
 
@@ -3233,19 +3233,19 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 placeholder="e.g. Goa, Mumbai, Delhi NCR, Bangalore"
                                 value={formData.target_locations}
                                 onChange={(e) => setFormData(prev => ({ ...prev, target_locations: e.target.value }))}
-                                className="w-full bg-dune border border-zinc-200 rounded-xl p-3 pl-8 text-xs font-semibold outline-none focus:border-brand transition-all"
+                                className="w-full bg-white border border-zinc-200 rounded-xl p-3 pl-8 text-xs font-semibold outline-none focus:border-blue-500 transition-all"
                               />
                               <MapPin className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
                             </div>
 
                             {/* Rahul-Proof Smart Targeter Panel (Pillar 5) */}
                             <div className="bg-zinc-50 border border-zinc-200/80 rounded-2xl p-4 space-y-4 text-left select-none relative overflow-hidden">
-                              <div className="absolute top-0 right-0 w-24 h-24 bg-brand/5 rounded-full blur-2xl pointer-events-none" />
+                              <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-full blur-2xl pointer-events-none" />
                               
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-1.5">
-                                  <Sparkles className="w-4 h-4 text-brand-dark animate-pulse" />
-                                  <span className="text-xs font-black text-canvas uppercase tracking-tight">Rahul-Proof Smart Targeter</span>
+                                  <Sparkles className="w-4 h-4 text-blue-600 animate-pulse" />
+                                  <span className="text-xs font-black text-gray-900 uppercase tracking-tight">Rahul-Proof Smart Targeter</span>
                                 </div>
                                 <span className="bg-blue-100 text-blue-800 text-[8px] font-bold font-mono uppercase px-2 py-0.5 rounded-full">
                                   AI Geospatial Guard
@@ -3254,7 +3254,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
                               {loadingTargetingRecs ? (
                                 <div className="flex items-center gap-2 text-xs text-zinc-500 py-3">
-                                  <Loader2 className="w-4 h-4 animate-spin text-brand-dark" />
+                                  <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
                                   <span>Calculating high-yielding feeder markets from AI...</span>
                                 </div>
                               ) : aiTargetingRecs ? (
@@ -3273,14 +3273,14 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                           className={`py-1.5 px-2 text-[10px] font-bold rounded-xl border capitalize transition-all ${
                                             selectedAudienceBucket === bucket
                                               ? 'bg-gray-900 border-gray-900 text-white shadow-sm'
-                                              : 'bg-dune border-zinc-200 text-zinc-500 hover:bg-zinc-50'
+                                              : 'bg-white border-zinc-200 text-zinc-500 hover:bg-zinc-50'
                                           }`}
                                         >
                                           {bucket}
                                         </button>
                                       ))}
                                     </div>
-                                    <div className="text-[10px] text-zinc-500 leading-relaxed bg-dune border rounded-xl p-2.5">
+                                    <div className="text-[10px] text-zinc-500 leading-relaxed bg-white border rounded-xl p-2.5">
                                       <span className="font-bold text-gray-800 uppercase text-[8px] tracking-wider block mb-0.5">Meta Ads Mapping:</span>
                                       {selectedAudienceBucket === 'couples' && "🎯 Targets: Married couples, honeymooners, luxury travelers, high-income weekenders."}
                                       {selectedAudienceBucket === 'families' && "🎯 Targets: Parents with school-aged children, multi-generational vacationers, safety-focused groups."}
@@ -3289,7 +3289,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                   </div>
 
                                   {/* Feeder markets insights */}
-                                  <div className="bg-dune border border-zinc-200 rounded-xl p-3 space-y-2">
+                                  <div className="bg-white border border-zinc-200 rounded-xl p-3 space-y-2">
                                     <div className="flex justify-between items-start">
                                       <div>
                                         <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-wider block">Recommended Feeder Markets</span>
@@ -3301,7 +3301,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                       </div>
                                       <div className="text-right">
                                         <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-wider block">Est. Reach Scale</span>
-                                        <span className="text-xs font-black text-canvas font-mono">
+                                        <span className="text-xs font-black text-gray-900 font-mono">
                                           {aiTargetingRecs.audience_reach_count ? parseInt(aiTargetingRecs.audience_reach_count).toLocaleString() : '12,946,585'}+
                                         </span>
                                       </div>
@@ -3419,7 +3419,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               placeholder="e.g. Reserve premium private pools now with 24/7 butler service."
                               value={formData.feed_description}
                               onChange={(e) => setFormData(prev => ({ ...prev, feed_description: e.target.value }))}
-                              className="w-full bg-dune border border-zinc-200 rounded-xl p-3 text-xs font-light outline-none focus:border-brand transition-all"
+                              className="w-full bg-white border border-zinc-200 rounded-xl p-3 text-xs font-light outline-none focus:border-blue-500 transition-all"
                             />
                           </div>
                         </div>
@@ -3457,17 +3457,17 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
                           {/* Real-time sync budget distribution estimation card */}
                           <div className="grid grid-cols-3 gap-3 pt-3 border-t border-zinc-200 text-center select-none">
-                            <div className="bg-dune border rounded-xl p-2.5">
+                            <div className="bg-white border rounded-xl p-2.5">
                               <span className="text-[8.5px] text-zinc-400 font-bold uppercase block tracking-wider">Est. Impressions</span>
-                              <span className="text-xs font-black text-canvas font-mono">{(formData.budget * 10).toLocaleString()}+</span>
+                              <span className="text-xs font-black text-gray-900 font-mono">{(formData.budget * 10).toLocaleString()}+</span>
                             </div>
-                            <div className="bg-dune border rounded-xl p-2.5">
+                            <div className="bg-white border rounded-xl p-2.5">
                               <span className="text-[8.5px] text-zinc-400 font-bold uppercase block tracking-wider">Est. Link Clicks</span>
-                              <span className="text-xs font-black text-canvas font-mono">{Math.floor(formData.budget * 0.45).toLocaleString()}+</span>
+                              <span className="text-xs font-black text-gray-900 font-mono">{Math.floor(formData.budget * 0.45).toLocaleString()}+</span>
                             </div>
-                            <div className="bg-dune border rounded-xl p-2.5">
+                            <div className="bg-white border rounded-xl p-2.5">
                               <span className="text-[8.5px] text-zinc-400 font-bold uppercase block tracking-wider">Est. Reach Scale</span>
-                              <span className="text-xs font-black text-brand-dark font-mono">{(formData.budget * 12).toLocaleString()}+</span>
+                              <span className="text-xs font-black text-blue-600 font-mono">{(formData.budget * 12).toLocaleString()}+</span>
                             </div>
                           </div>
 
@@ -3491,7 +3491,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                       flex flex-col items-center justify-center p-2 rounded-xl border text-center transition-all duration-200
                                       ${isSelected 
                                         ? 'bg-gray-900 border-gray-900 text-white shadow-sm' 
-                                        : 'bg-dune border-zinc-200 text-gray-700 hover:border-zinc-300 hover:bg-zinc-50'}
+                                        : 'bg-white border-zinc-200 text-gray-700 hover:border-zinc-300 hover:bg-zinc-50'}
                                     `}
                                     title={item.desc}
                                   >
@@ -3510,7 +3510,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                         {editingCampaignId ? (
                           <div className="border border-zinc-150 p-4 rounded-2xl flex items-center justify-between gap-4 bg-zinc-50">
                             <div>
-                              <h5 className="text-xs font-bold text-canvas uppercase">Automated AI Pre-check</h5>
+                              <h5 className="text-xs font-bold text-gray-900 uppercase">Automated AI Pre-check</h5>
                               <p className="text-[10px] text-zinc-400 font-light leading-relaxed">Optimize stays marketing copy through Gemini Copywriter model.</p>
                             </div>
                             <button
@@ -3520,7 +3520,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 handleRunAiCheck(dummyCampaign);
                               }}
                               disabled={runningAiCheckId === editingCampaignId}
-                              className="text-xs font-black bg-gray-950 text-white hover:bg-canvas px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all"
+                              className="text-xs font-black bg-gray-950 text-white hover:bg-zinc-900 px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all"
                             >
                               {runningAiCheckId === editingCampaignId ? (
                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -3545,12 +3545,12 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               </div>
                             </div>
                             <div>
-                              <h4 className="text-xs font-black uppercase tracking-wider text-canvas flex items-center gap-2">
-                                Amigove Automated Tracking
+                              <h4 className="text-xs font-black uppercase tracking-wider text-gray-900 flex items-center gap-2">
+                                Encho Automated Tracking
                                 <span className="bg-green-100 text-green-800 text-[9px] px-2 py-0.5 rounded-full font-mono">ACTIVE</span>
                               </h4>
                               <p className="text-[10px] text-zinc-500 font-light leading-relaxed mt-1">
-                                Because you are using the Amigove Master Marketing Engine, conversion tracking is fully automated. Amigove's server-to-server Conversions API (CAPI) handles all iOS tracking limits and ad-blockers for you. No setup required.
+                                Because you are using the Encho Master Marketing Engine, conversion tracking is fully automated. Encho's server-to-server Conversions API (CAPI) handles all iOS tracking limits and ad-blockers for you. No setup required.
                               </p>
                             </div>
                           </div>
@@ -3618,7 +3618,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                       ) : (
                         <button
                           type="submit"
-                          className="flex items-center gap-1.5 bg-brand-dark hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl text-xs font-black shadow-md shadow-blue-500/10 transition-all active:scale-[0.98]"
+                          className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl text-xs font-black shadow-md shadow-blue-500/10 transition-all active:scale-[0.98]"
                         >
                           <Send className="w-3.5 h-3.5" />
                           <span>{editingCampaignId ? 'Update & Save Revisions' : 'Save campaign draft'}</span>
@@ -3645,7 +3645,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                       }}
                       className={`text-[10px] font-bold px-3 py-1 rounded-lg transition-all ${
                         previewPlatform === 'instagram'
-                          ? 'bg-dune text-canvas shadow-sm font-black'
+                          ? 'bg-white text-gray-900 shadow-sm font-black'
                           : 'text-gray-500 hover:text-gray-800'
                       }`}
                     >
@@ -3659,7 +3659,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                       }}
                       className={`text-[10px] font-bold px-3 py-1 rounded-lg transition-all ${
                         previewPlatform === 'facebook'
-                          ? 'bg-dune text-canvas shadow-sm font-black'
+                          ? 'bg-white text-gray-900 shadow-sm font-black'
                           : 'text-gray-500 hover:text-gray-800'
                       }`}
                     >
@@ -3674,7 +3674,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                     
                     {/* Apple Dynamic Island / Notch */}
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 w-24 h-5.5 bg-black rounded-full z-50 flex items-center justify-between px-3.5">
-                      <div className="w-1.5 h-1.5 rounded-full bg-canvas" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-zinc-900" />
                       <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/80 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
                     </div>
 
@@ -3682,13 +3682,13 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                     <div className="absolute top-2.5 left-1/2 -translate-x-1/2 w-10 h-0.5 bg-zinc-800 rounded-full z-50" />
 
                     {/* iPhone Display Content */}
-                    <div className="relative w-full h-full rounded-[38px] bg-dune overflow-hidden flex flex-col z-30">
+                    <div className="relative w-full h-full rounded-[38px] bg-white overflow-hidden flex flex-col z-30">
                       
                       {/* iOS Status Bar */}
                       <div className={`absolute top-0 inset-x-0 h-10 px-5 flex justify-between items-center z-50 text-[10px] font-semibold tracking-tight transition-colors ${
                         (formData.ad_format === 'reel' || formData.ad_format === 'story')
                           ? 'text-white' 
-                          : 'text-canvas bg-dune/70 backdrop-blur-xs'
+                          : 'text-gray-900 bg-white/70 backdrop-blur-xs'
                       }`}>
                         {/* Time */}
                         <span className="font-bold">9:41</span>
@@ -3745,8 +3745,8 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                     const currentIdx = activeSlideIndex % mediaList.length;
                                     const widthPct = i === currentIdx ? '100%' : i < currentIdx ? '100%' : '0%';
                                     return (
-                                      <div key={i} className="h-[2px] flex-1 bg-dune/20 rounded-full overflow-hidden">
-                                        <div className="h-full bg-dune transition-all duration-300" style={{ width: widthPct }} />
+                                      <div key={i} className="h-[2px] flex-1 bg-white/20 rounded-full overflow-hidden">
+                                        <div className="h-full bg-white transition-all duration-300" style={{ width: widthPct }} />
                                       </div>
                                     );
                                   })}
@@ -3775,7 +3775,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 </div>
 
                                 {/* Immersive Interactive Core Media area */}
-                                <div className="flex-1 relative flex items-center justify-center bg-canvas overflow-hidden">
+                                <div className="flex-1 relative flex items-center justify-center bg-zinc-900 overflow-hidden">
                                   {/* Blurred Background Plate */}
                                   <div className="absolute inset-0 bg-cover bg-center blur-2xl opacity-40" style={{ backgroundImage: `url(${activeImage})` }} />
                                   
@@ -3801,7 +3801,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 </div>
 
                                 {/* Story Bottom Call-to-action Deck */}
-                                <div className="absolute bottom-6 inset-x-3 z-40 bg-dune/15 backdrop-blur-lg border border-white/20 p-2.5 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-dune/25 transition-all text-center">
+                                <div className="absolute bottom-6 inset-x-3 z-40 bg-white/15 backdrop-blur-lg border border-white/20 p-2.5 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-white/25 transition-all text-center">
                                   <span className="text-[11px] font-black text-white uppercase tracking-widest flex items-center gap-1">
                                     Book Stay <span>✈️</span>
                                   </span>
@@ -3820,7 +3820,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 </div>
 
                                 {/* Full screen Background Reel Asset */}
-                                <div className="absolute inset-0 z-10 bg-canvas flex items-center justify-center overflow-hidden">
+                                <div className="absolute inset-0 z-10 bg-zinc-900 flex items-center justify-center overflow-hidden">
                                   <img 
                                     src={activeImage} 
                                     className={`w-full h-full object-cover ${
@@ -3834,7 +3834,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
                                 {/* Bouncing Indicator */}
                                 <div className="absolute top-12 left-3 z-30 bg-red-600 backdrop-blur-xs text-[8px] text-white font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-1 shadow-md">
-                                  <span className="w-1.5 h-1.5 bg-dune rounded-full animate-ping" />
+                                  <span className="w-1.5 h-1.5 bg-white rounded-full animate-ping" />
                                   <span>REELS AD</span>
                                 </div>
 
@@ -3891,7 +3891,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                       <span className="font-extrabold text-[11px] block">{user?.name || 'LuxuryHost'}</span>
                                       <span className="text-[8.5px] text-blue-400 font-bold mt-0.5 block uppercase tracking-wider">Sponsored</span>
                                     </div>
-                                    <span className="text-[9px] font-extrabold bg-brand-dark text-white px-2 py-0.5 rounded-md hover:bg-blue-700 cursor-pointer">Book Now</span>
+                                    <span className="text-[9px] font-extrabold bg-blue-600 text-white px-2 py-0.5 rounded-md hover:bg-blue-700 cursor-pointer">Book Now</span>
                                   </div>
 
                                   <div className="space-y-1">
@@ -3910,25 +3910,25 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                           } else {
                             /* INSTAGRAM FEED SINGLE POST & CAROUSEL */
                             return (
-                              <div className="absolute inset-0 bg-dune flex flex-col justify-between pt-10 pb-5 text-canvas text-xs select-none">
+                              <div className="absolute inset-0 bg-white flex flex-col justify-between pt-10 pb-5 text-gray-900 text-xs select-none">
                                 
                                 {/* Instagram Feed Header app-bar */}
-                                <div className="h-10 border-b border-zinc-100 flex items-center justify-between px-3 bg-dune/95 backdrop-blur-xs">
-                                  <span className="font-extrabold tracking-tight text-[13px] font-serif text-canvas">Instagram</span>
+                                <div className="h-10 border-b border-zinc-100 flex items-center justify-between px-3 bg-white/95 backdrop-blur-xs">
+                                  <span className="font-extrabold tracking-tight text-[13px] font-serif text-gray-900">Instagram</span>
                                   <div className="flex items-center gap-3.5 text-zinc-700">
-                                    <Plus className="w-4 h-4 cursor-pointer hover:text-canvas" />
-                                    <Heart className="w-4 h-4 cursor-pointer hover:text-canvas" />
-                                    <MessageSquare className="w-4 h-4 cursor-pointer hover:text-canvas" />
+                                    <Plus className="w-4 h-4 cursor-pointer hover:text-zinc-900" />
+                                    <Heart className="w-4 h-4 cursor-pointer hover:text-zinc-900" />
+                                    <MessageSquare className="w-4 h-4 cursor-pointer hover:text-zinc-900" />
                                   </div>
                                 </div>
 
                                 {/* Feed Content Scroll-area */}
-                                <div className="flex-1 overflow-y-auto no-scrollbar bg-dune">
+                                <div className="flex-1 overflow-y-auto no-scrollbar bg-white">
                                   {/* User Row Info */}
                                   <div className="p-2.5 flex items-center justify-between border-b border-zinc-50">
                                     <div className="flex items-center gap-2">
                                       <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-yellow-500 via-red-500 to-purple-600 p-[1.2px]">
-                                        <div className="w-full h-full rounded-full bg-dune flex items-center justify-center p-[0.5px]">
+                                        <div className="w-full h-full rounded-full bg-white flex items-center justify-center p-[0.5px]">
                                           <img 
                                             src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80'} 
                                             className="w-full h-full rounded-full object-cover" 
@@ -3938,7 +3938,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                         </div>
                                       </div>
                                       <div className="text-left leading-none">
-                                        <span className="font-bold text-[10.5px] block text-canvas">{user?.name || 'LuxuryHost'}</span>
+                                        <span className="font-bold text-[10.5px] block text-gray-900">{user?.name || 'LuxuryHost'}</span>
                                         <span className="text-[8.5px] text-gray-500 mt-0.5 block">Sponsored</span>
                                       </div>
                                     </div>
@@ -3990,7 +3990,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                   </div>
 
                                   {/* Instantly recognisable Instagram Sponsored Action Bar CTA */}
-                                  <div className="bg-brand-dark/5 hover:bg-brand-dark/10 transition-all border-b border-zinc-100 p-2.5 flex justify-between items-center cursor-pointer">
+                                  <div className="bg-blue-600/5 hover:bg-blue-600/10 transition-all border-b border-zinc-100 p-2.5 flex justify-between items-center cursor-pointer">
                                     <span className="text-blue-700 font-extrabold text-[10px] uppercase tracking-wider">Book Now</span>
                                     <div className="flex items-center gap-1 text-blue-700">
                                       <span className="text-[9px] font-bold font-mono">nestpick.luxury</span>
@@ -4013,7 +4013,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                           <div 
                                             key={idx} 
                                             className={`w-1.5 h-1.5 rounded-full transition-all ${
-                                              (activeSlideIndex % mediaList.length) === idx ? 'bg-brand scale-110' : 'bg-zinc-200'
+                                              (activeSlideIndex % mediaList.length) === idx ? 'bg-blue-500 scale-110' : 'bg-zinc-200'
                                             }`} 
                                           />
                                         ))}
@@ -4025,15 +4025,15 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
                                   {/* Likes and caption blocks */}
                                   <div className="px-3 pb-3 text-left space-y-1">
-                                    <div className="font-extrabold text-[10.5px] text-canvas">
+                                    <div className="font-extrabold text-[10.5px] text-gray-900">
                                       1,294 likes
                                     </div>
                                     <div className="leading-normal text-[10.5px]">
-                                      <span className="font-extrabold text-canvas mr-1.5">{user?.name || 'LuxuryHost'}</span>
+                                      <span className="font-extrabold text-gray-900 mr-1.5">{user?.name || 'LuxuryHost'}</span>
                                       <span className="font-bold text-blue-700 mr-1">{formData.title || 'Stay Paradise Resort'}</span>
                                       <span className="text-gray-700 font-light font-sans">{formData.description || 'Book this amazing private space now.'}</span>
                                     </div>
-                                    <div className="flex flex-wrap gap-1 text-[9px] text-brand-dark font-semibold pt-1">
+                                    <div className="flex flex-wrap gap-1 text-[9px] text-blue-600 font-semibold pt-1">
                                       <span>#NestpickLuxury</span>
                                       <span>#VillaGetaway</span>
                                       {formData.target_locations && (
@@ -4061,8 +4061,8 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                     const currentIdx = activeSlideIndex % mediaList.length;
                                     const widthPct = i === currentIdx ? '100%' : i < currentIdx ? '100%' : '0%';
                                     return (
-                                      <div key={i} className="h-[2px] flex-1 bg-dune/20 rounded-full overflow-hidden">
-                                        <div className="h-full bg-brand transition-all duration-300" style={{ width: widthPct }} />
+                                      <div key={i} className="h-[2px] flex-1 bg-white/20 rounded-full overflow-hidden">
+                                        <div className="h-full bg-blue-500 transition-all duration-300" style={{ width: widthPct }} />
                                       </div>
                                     );
                                   })}
@@ -4071,7 +4071,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 {/* FB Story Header Row */}
                                 <div className="p-3 pt-4 flex items-center justify-between z-30 relative bg-gradient-to-b from-black/60 to-transparent">
                                   <div className="flex items-center gap-2">
-                                    <div className="w-7 h-7 rounded-full border-2 border-brand p-[1px]">
+                                    <div className="w-7 h-7 rounded-full border-2 border-blue-500 p-[1px]">
                                       <img 
                                         src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80'} 
                                         className="w-full h-full rounded-full object-cover" 
@@ -4088,7 +4088,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 </div>
 
                                 {/* Center Media Section with blurred background */}
-                                <div className="flex-1 relative flex items-center justify-center bg-canvas overflow-hidden">
+                                <div className="flex-1 relative flex items-center justify-center bg-zinc-900 overflow-hidden">
                                   <div className="absolute inset-0 bg-cover bg-center blur-2xl opacity-40" style={{ backgroundImage: `url(${activeImage})` }} />
                                   <img 
                                     src={activeImage} 
@@ -4105,14 +4105,14 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
                                   {/* FB Text Plate Overlay */}
                                   <div className="absolute inset-x-3 bottom-14 z-30 bg-zinc-950/70 backdrop-blur-md rounded-xl p-3 border border-zinc-800 text-left">
-                                    <span className="text-[8.5px] bg-brand-dark font-extrabold px-1.5 py-0.5 rounded-sm uppercase tracking-wide inline-block mb-1">Featured Stay</span>
+                                    <span className="text-[8.5px] bg-blue-600 font-extrabold px-1.5 py-0.5 rounded-sm uppercase tracking-wide inline-block mb-1">Featured Stay</span>
                                     <h5 className="font-black text-white text-[11px] leading-tight">{formData.title || 'Ultimate Retreat Booking'}</h5>
                                     <p className="text-zinc-300 text-[9.5px] font-light mt-0.5 line-clamp-2">{formData.description || 'Verified luxury bookings with premium amenities.'}</p>
                                   </div>
                                 </div>
 
                                 {/* FB story swipe-up action */}
-                                <div className="absolute bottom-6 inset-x-3 z-40 bg-brand-dark hover:bg-blue-700 border border-brand p-2.5 rounded-xl flex items-center justify-center cursor-pointer transition-all">
+                                <div className="absolute bottom-6 inset-x-3 z-40 bg-blue-600 hover:bg-blue-700 border border-blue-500 p-2.5 rounded-xl flex items-center justify-center cursor-pointer transition-all">
                                   <span className="text-[10px] font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
                                     <span>Book Stay Now</span> <span>⚡</span>
                                   </span>
@@ -4130,7 +4130,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 </div>
 
                                 {/* Immersive background visual asset */}
-                                <div className="absolute inset-0 z-10 bg-canvas flex items-center justify-center overflow-hidden">
+                                <div className="absolute inset-0 z-10 bg-zinc-900 flex items-center justify-center overflow-hidden">
                                   <img 
                                     src={activeImage} 
                                     className={`w-full h-full object-cover ${
@@ -4145,21 +4145,21 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 {/* Facebook interactive right tools stack */}
                                 <div className="absolute right-2 bottom-12 z-30 flex flex-col items-center gap-4 text-white">
                                   <div className="flex flex-col items-center gap-1">
-                                    <div className="w-8.5 h-8.5 rounded-full bg-canvas/60 backdrop-blur-xs flex items-center justify-center border border-zinc-800">
+                                    <div className="w-8.5 h-8.5 rounded-full bg-zinc-900/60 backdrop-blur-xs flex items-center justify-center border border-zinc-800">
                                       <span className="text-sm">👍</span>
                                     </div>
                                     <span className="text-[8.5px] font-bold text-zinc-300">1.8K</span>
                                   </div>
 
                                   <div className="flex flex-col items-center gap-1">
-                                    <div className="w-8.5 h-8.5 rounded-full bg-canvas/60 backdrop-blur-xs flex items-center justify-center border border-zinc-800">
+                                    <div className="w-8.5 h-8.5 rounded-full bg-zinc-900/60 backdrop-blur-xs flex items-center justify-center border border-zinc-800">
                                       <span className="text-sm">💬</span>
                                     </div>
                                     <span className="text-[8.5px] font-bold text-zinc-300">92</span>
                                   </div>
 
                                   <div className="flex flex-col items-center gap-1">
-                                    <div className="w-8.5 h-8.5 rounded-full bg-canvas/60 backdrop-blur-xs flex items-center justify-center border border-zinc-800">
+                                    <div className="w-8.5 h-8.5 rounded-full bg-zinc-900/60 backdrop-blur-xs flex items-center justify-center border border-zinc-800">
                                       <span className="text-sm">↗️</span>
                                     </div>
                                     <span className="text-[8.5px] font-bold text-zinc-300">Share</span>
@@ -4171,7 +4171,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                   <div className="flex items-center gap-2">
                                     <img 
                                       src={user?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80'} 
-                                      className="w-6 h-6 rounded-full object-cover border border-brand" 
+                                      className="w-6 h-6 rounded-full object-cover border border-blue-500" 
                                       referrerPolicy="no-referrer"
                                       alt="" 
                                     />
@@ -4184,7 +4184,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                   <div className="bg-black/40 backdrop-blur-md rounded-lg p-2.5 border border-zinc-800/50 space-y-1">
                                     <h4 className="font-extrabold text-white text-[10.5px] leading-tight">{formData.title || 'Premium Villa Deals'}</h4>
                                     <p className="text-zinc-200 text-[9.5px] leading-relaxed line-clamp-2 font-light">{formData.description || 'Verified luxury resort listings.'}</p>
-                                    <button type="button" className="w-full bg-brand-dark hover:bg-blue-700 text-white font-black text-[9.5px] py-1.5 rounded-md mt-1 uppercase tracking-wider">Book Stay Now</button>
+                                    <button type="button" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black text-[9.5px] py-1.5 rounded-md mt-1 uppercase tracking-wider">Book Stay Now</button>
                                   </div>
                                 </div>
                               </div>
@@ -4192,11 +4192,11 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                           } else {
                             /* FACEBOOK FEED SINGLE POST & CAROUSEL */
                             return (
-                              <div className="absolute inset-0 bg-zinc-100 flex flex-col justify-between pt-10 pb-5 text-canvas text-xs select-none">
+                              <div className="absolute inset-0 bg-zinc-100 flex flex-col justify-between pt-10 pb-5 text-gray-900 text-xs select-none">
                                 
                                 {/* FB Brand Header bar */}
-                                <div className="h-10 bg-dune border-b border-zinc-200 flex items-center justify-between px-3 bg-dune/95 backdrop-blur-xs">
-                                  <span className="font-black text-[15px] text-brand-dark tracking-tight">facebook</span>
+                                <div className="h-10 bg-white border-b border-zinc-200 flex items-center justify-between px-3 bg-white/95 backdrop-blur-xs">
+                                  <span className="font-black text-[15px] text-blue-600 tracking-tight">facebook</span>
                                   <div className="flex gap-2.5 text-zinc-600">
                                     <span className="w-6 h-6 rounded-full bg-zinc-100 flex items-center justify-center text-xs cursor-pointer">🔍</span>
                                     <span className="w-6 h-6 rounded-full bg-zinc-100 flex items-center justify-center text-xs cursor-pointer">💬</span>
@@ -4204,7 +4204,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 </div>
 
                                 {/* Facebook feed scroll view */}
-                                <div className="flex-1 overflow-y-auto no-scrollbar bg-dune">
+                                <div className="flex-1 overflow-y-auto no-scrollbar bg-white">
                                   {/* User Row Header block */}
                                   <div className="p-3 flex items-start gap-2.5">
                                     <img 
@@ -4215,10 +4215,10 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                     />
                                     <div className="flex-1 min-w-0 text-left">
                                       <div className="flex items-center gap-1">
-                                        <span className="font-extrabold text-canvas text-[11px] hover:underline cursor-pointer">
+                                        <span className="font-extrabold text-gray-900 text-[11px] hover:underline cursor-pointer">
                                           {user?.name || 'LuxuryHost'}
                                         </span>
-                                        <span className="text-[10px] text-brand font-extrabold leading-none">✓</span>
+                                        <span className="text-[10px] text-blue-500 font-extrabold leading-none">✓</span>
                                       </div>
                                       <div className="flex items-center gap-1 text-gray-500 text-[9px] font-medium mt-0.5">
                                         <span>Sponsored</span>
@@ -4276,7 +4276,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                   <div className="bg-zinc-50 border-b border-zinc-100 p-2.5 px-3 flex items-center justify-between gap-3 text-left">
                                     <div className="flex-1 min-w-0">
                                       <span className="text-[8px] text-zinc-400 uppercase tracking-wider block font-mono">NESTPICK.LUXURY</span>
-                                      <h5 className="font-extrabold text-[11px] text-canvas truncate mt-0.5">
+                                      <h5 className="font-extrabold text-[11px] text-gray-900 truncate mt-0.5">
                                         {formData.title || 'Experience Certified Paradise'}
                                       </h5>
                                       <p className="text-[9.5px] text-gray-500 font-light truncate mt-0.5">
@@ -4294,7 +4294,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                   {/* Reactions & engagement line */}
                                   <div className="px-3 py-2 flex items-center justify-between text-[10px] text-gray-500 border-b border-zinc-100">
                                     <div className="flex items-center gap-1.5">
-                                      <span className="flex items-center justify-center w-3.5 h-3.5 bg-brand text-white rounded-full text-[8px] font-bold">👍</span>
+                                      <span className="flex items-center justify-center w-3.5 h-3.5 bg-blue-500 text-white rounded-full text-[8px] font-bold">👍</span>
                                       <span className="flex items-center justify-center w-3.5 h-3.5 bg-red-500 text-white rounded-full text-[8px] font-bold">❤️</span>
                                       <span className="font-medium">You and 1.2K others</span>
                                     </div>
@@ -4325,7 +4325,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                         <div 
                                           key={idx} 
                                           className={`w-1.5 h-1.5 rounded-full transition-all ${
-                                            (activeSlideIndex % mediaList.length) === idx ? 'bg-brand-dark scale-110' : 'bg-zinc-200'
+                                            (activeSlideIndex % mediaList.length) === idx ? 'bg-blue-600 scale-110' : 'bg-zinc-200'
                                           }`} 
                                         />
                                       ))}
@@ -4341,7 +4341,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                       {/* iPhone Home Indicator bar */}
                       <div className={`absolute bottom-1.5 left-1/2 -translate-x-1/2 w-28 h-1 rounded-full z-50 transition-colors ${
                         (formData.ad_format === 'reel' || formData.ad_format === 'story')
-                          ? 'bg-dune/80' 
+                          ? 'bg-white/80' 
                           : 'bg-zinc-800'
                       }`} />
 
@@ -4352,7 +4352,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                 {/* Real-time sync informational metadata card */}
                 <div className="bg-zinc-100/80 border border-zinc-200 p-3 rounded-2xl text-[10.5px] text-zinc-600 leading-relaxed font-light text-left">
                   <span className="font-extrabold text-zinc-700 block mb-0.5 uppercase tracking-wider text-[9px] flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-brand-dark animate-pulse" /> Live Device Sync Active
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" /> Live Device Sync Active
                   </span>
                   Your media layout alignment is <strong>{mediaAlignment}</strong> and the active ad format is <strong>{formData.ad_format}</strong>. Click inside the phone mockup to test interactive swipe & navigation controls.
                 </div>
@@ -4371,10 +4371,10 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-dune rounded-3xl max-w-lg w-full p-6 md:p-8 shadow-2xl text-left"
+              className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 shadow-2xl text-left"
             >
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-black text-canvas tracking-tight flex items-center gap-2">
+                <h3 className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2">
                   <Sparkles className="w-5 h-5 text-amber-500" />
                   <span>Draft Brand Social Post</span>
                 </h3>
@@ -4552,10 +4552,10 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-dune rounded-3xl max-w-md w-full p-6 md:p-8 shadow-2xl text-left"
+              className="bg-white rounded-3xl max-w-md w-full p-6 md:p-8 shadow-2xl text-left"
             >
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-black text-canvas tracking-tight flex items-center gap-2">
+                <h3 className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2">
                   <Zap className="w-5 h-5 text-amber-500 fill-amber-500" />
                   <span>Instant Social Boost</span>
                 </h3>
@@ -4598,7 +4598,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                       required
                     />
                   </div>
-                  <p className="text-[10px] text-zinc-400 mt-1">Minimum boost budget ₹500. 15% Amigove Optimization Fee is automatically included.</p>
+                  <p className="text-[10px] text-zinc-400 mt-1">Minimum boost budget ₹500. 15% Encho Optimization Fee is automatically included.</p>
                 </div>
 
                 <div>
@@ -4617,7 +4617,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                             setBoostPlatforms(boostPlatforms.filter((p) => p !== 'meta'));
                           }
                         }}
-                        className="rounded border-zinc-300 text-brand-dark focus:ring-brand"
+                        className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
                       />
                       <span>Meta Feed & Stories</span>
                     </label>
@@ -4632,7 +4632,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                             setBoostPlatforms(boostPlatforms.filter((p) => p !== 'google'));
                           }
                         }}
-                        className="rounded border-zinc-300 text-brand-dark focus:ring-brand"
+                        className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
                       />
                       <span>Google Display Network</span>
                     </label>
@@ -4670,10 +4670,10 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-dune rounded-3xl max-w-md w-full p-6 md:p-8 shadow-2xl text-left"
+              className="bg-white rounded-3xl max-w-md w-full p-6 md:p-8 shadow-2xl text-left"
             >
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-black text-canvas tracking-tight text-sans">Secure Checkout Gateway</h3>
+                <h3 className="text-xl font-black text-gray-900 tracking-tight text-sans">Secure Checkout Gateway</h3>
                 <button 
                   type="button"
                   onClick={() => {
@@ -4687,11 +4687,11 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
               <div className="mb-6 bg-zinc-50 border border-zinc-150 p-4 rounded-2xl flex justify-between items-center">
                 <div>
-                  <h4 className="font-bold text-canvas text-[14px]">Campaign Ad Subscription</h4>
+                  <h4 className="font-bold text-gray-900 text-[14px]">Campaign Ad Subscription</h4>
                   <p className="text-xs text-gray-500 font-light truncate max-w-[200px]">Listing: {showPayModal.listing_title}</p>
                 </div>
                 <div className="text-right">
-                  <div className="text-lg font-black text-canvas font-mono">
+                  <div className="text-lg font-black text-gray-900 font-mono">
                     {formatPrice(showPayModal.budget, 'INR')}
                   </div>
                   <span className="text-[10px] text-zinc-400 uppercase font-mono">Setup budget</span>
@@ -4708,7 +4708,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                     className={`flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all ${
                       selectedGateway === 'stripe'
                         ? 'border-blue-600 bg-blue-50/40 text-blue-700 ring-2 ring-blue-600/10 font-bold'
-                        : 'border-zinc-200 hover:border-zinc-300 bg-dune text-zinc-600'
+                        : 'border-zinc-200 hover:border-zinc-300 bg-white text-zinc-600'
                     }`}
                   >
                     <span className="text-sm font-black font-sans">Stripe</span>
@@ -4720,7 +4720,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                     className={`flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all ${
                       selectedGateway === 'razorpay'
                         ? 'border-indigo-600 bg-indigo-50/40 text-indigo-700 ring-2 ring-indigo-600/10 font-bold'
-                        : 'border-zinc-200 hover:border-zinc-300 bg-dune text-zinc-600'
+                        : 'border-zinc-200 hover:border-zinc-300 bg-white text-zinc-600'
                     }`}
                   >
                     <span className="text-sm font-black font-sans">Razorpay</span>
@@ -4844,7 +4844,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                   type="submit"
                   disabled={isPaying}
                   className={`w-full text-white p-4 rounded-2xl font-bold text-sm shadow-md transition-all active:scale-[0.98] mt-4 flex items-center justify-center gap-2 ${
-                    selectedGateway === 'stripe' ? 'bg-brand-dark hover:bg-blue-700' : 'bg-indigo-600 hover:bg-indigo-700'
+                    selectedGateway === 'stripe' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-indigo-600 hover:bg-indigo-700'
                   }`}
                 >
                   {isPaying ? (
@@ -4870,7 +4870,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="bg-dune rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl relative overflow-hidden"
+              className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl relative overflow-hidden"
             >
               <button
                 onClick={() => setShowRefuelModal(false)}
@@ -4883,8 +4883,8 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                 <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Zap className="w-8 h-8" />
                 </div>
-                <h3 className="text-2xl font-black text-canvas tracking-tight">Refuel Wallet</h3>
-                <p className="text-gray-500 text-sm mt-1">Fund your master Amigove advertising wallet.</p>
+                <h3 className="text-2xl font-black text-gray-900 tracking-tight">Refuel Wallet</h3>
+                <p className="text-gray-500 text-sm mt-1">Fund your master Encho advertising wallet.</p>
               </div>
 
               <div className="bg-gray-50 rounded-2xl p-5 mb-6 border border-gray-100">
@@ -4898,7 +4898,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                      min="10"
                      value={refuelAmount}
                      onChange={(e) => setRefuelAmount(Number(e.target.value))}
-                     className="block w-full pl-8 pr-4 py-3 bg-dune border border-gray-200 rounded-xl font-mono text-xl font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all outline-none"
+                     className="block w-full pl-8 pr-4 py-3 bg-white border border-gray-200 rounded-xl font-mono text-xl font-bold focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all outline-none"
                    />
                  </div>
                  
@@ -4912,7 +4912,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                        <span className="font-mono font-medium text-red-500">-${(refuelAmount * 0.20).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between items-center text-sm font-bold">
-                       <span className="text-canvas">Net Wallet Balance</span>
+                       <span className="text-gray-900">Net Wallet Balance</span>
                        <span className="font-mono text-emerald-600">+${(refuelAmount * 0.80).toFixed(2)}</span>
                     </div>
                  </div>

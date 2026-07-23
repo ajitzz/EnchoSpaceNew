@@ -48,11 +48,11 @@ const FilterChip = ({ label, active = false, hasDropdown = false, onClick }: { l
     group flex items-center justify-center gap-2 px-3 lg:px-5 py-2 lg:py-2.5 rounded-full text-xs lg:text-sm font-medium transition-all duration-200 whitespace-nowrap border select-none
     ${active 
         ? 'bg-gray-900 border-gray-900 text-white shadow-lg lg:shadow-gray-200' 
-        : 'bg-dune border-gray-200 text-gray-700 hover:border-gray-800 hover:shadow-sm active:bg-gray-50'}
+        : 'bg-white border-gray-200 text-gray-700 hover:border-gray-800 hover:shadow-sm active:bg-gray-50'}
   `}>
     <span>{label}</span>
     {hasDropdown && (
-      <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 group-hover:rotate-180 ${active ? 'text-white' : 'text-gray-400 group-hover:text-canvas'}`} />
+      <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 group-hover:rotate-180 ${active ? 'text-white' : 'text-gray-400 group-hover:text-gray-900'}`} />
     )}
   </button>
 );
@@ -259,7 +259,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
 
   return (
     <>
-      <div className="sticky top-20 z-40 bg-dune/95 backdrop-blur-3xl border-b border-gray-100 py-3 md:py-4 transition-all duration-300">
+      <div className="sticky top-20 z-40 bg-white/95 backdrop-blur-3xl border-b border-gray-100 py-3 md:py-4 transition-all duration-300">
         <div className="max-w-[1920px] mx-auto px-4 md:px-6 flex items-center justify-between gap-4 relative">
         
         {/* Scrollable Filter List - Removed masking on Desktop, only on mobile */}
@@ -279,20 +279,20 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                 />
                 
                 {activePopover === 'price' && (
-                    <div className="absolute top-[calc(100%+0.5rem)] left-0 bg-dune rounded-[2rem] shadow-[0_12px_48px_rgba(0,0,0,0.12)] border border-gray-100 p-6 md:p-8 w-[90vw] max-w-[380px] z-50 animate-scale-in">
-                        <h4 className="font-bold text-canvas mb-2 text-lg">Price range</h4>
+                    <div className="absolute top-[calc(100%+0.5rem)] left-0 bg-white rounded-[2rem] shadow-[0_12px_48px_rgba(0,0,0,0.12)] border border-gray-100 p-6 md:p-8 w-[90vw] max-w-[380px] z-50 animate-scale-in">
+                        <h4 className="font-bold text-gray-900 mb-2 text-lg">Price range</h4>
                         <p className="text-sm text-gray-500 mb-6">Nightly prices before fees and taxes</p>
                         {renderPriceHistogram(localMin, localMax)}
                         <div className="flex items-center gap-4 mb-8">
                             <div className="flex-1">
                                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Minimum</label>
                                 <div className="relative">
-                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-canvas font-medium">₹</span>
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-900 font-medium">₹</span>
                                     <input 
                                         type="number" 
                                         value={localMin}
                                         onChange={e => setLocalMin(e.target.value)}
-                                        className="w-full pl-8 pr-4 py-3.5 bg-dune border border-gray-300 hover:border-gray-900 rounded-2xl focus:border-gray-900 focus:ring-1 focus:ring-gray-900 outline-none transition-all font-medium text-canvas" 
+                                        className="w-full pl-8 pr-4 py-3.5 bg-white border border-gray-300 hover:border-gray-900 rounded-2xl focus:border-gray-900 focus:ring-1 focus:ring-gray-900 outline-none transition-all font-medium text-gray-900" 
                                         placeholder="0"
                                     />
                                 </div>
@@ -301,19 +301,19 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                             <div className="flex-1">
                                 <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Maximum</label>
                                 <div className="relative">
-                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-canvas font-medium">₹</span>
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-900 font-medium">₹</span>
                                     <input 
                                         type="number" 
                                         value={localMax}
                                         onChange={e => setLocalMax(e.target.value)}
-                                        className="w-full pl-8 pr-4 py-3.5 bg-dune border border-gray-300 hover:border-gray-900 rounded-2xl focus:border-gray-900 focus:ring-1 focus:ring-gray-900 outline-none transition-all font-medium text-canvas" 
+                                        className="w-full pl-8 pr-4 py-3.5 bg-white border border-gray-300 hover:border-gray-900 rounded-2xl focus:border-gray-900 focus:ring-1 focus:ring-gray-900 outline-none transition-all font-medium text-gray-900" 
                                         placeholder="Any"
                                     />
                                 </div>
                             </div>
                         </div>
                         <div className="flex justify-between items-center pt-5 border-t border-gray-100">
-                            <button onClick={clearPrice} className="text-sm font-semibold underline text-canvas hover:text-gray-500 transition-colors">Clear</button>
+                            <button onClick={clearPrice} className="text-sm font-semibold underline text-gray-900 hover:text-gray-500 transition-colors">Clear</button>
                             <button onClick={applyPrice} className="bg-gray-900 text-white px-8 py-3 rounded-xl font-bold text-sm hover:bg-black transition-transform active:scale-95 shadow-md">Apply</button>
                         </div>
                     </div>
@@ -329,13 +329,13 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                 />
                 
                 {activePopover === 'type' && (
-                    <div className="absolute top-[calc(100%+0.5rem)] left-0 bg-dune rounded-[2rem] shadow-[0_12px_48px_rgba(0,0,0,0.12)] border border-gray-100 p-6 w-[90vw] max-w-[340px] z-50 animate-scale-in">
+                    <div className="absolute top-[calc(100%+0.5rem)] left-0 bg-white rounded-[2rem] shadow-[0_12px_48px_rgba(0,0,0,0.12)] border border-gray-100 p-6 w-[90vw] max-w-[340px] z-50 animate-scale-in">
                         <div className="grid grid-cols-2 gap-3">
                             {propertyTypes.map((type) => (
                                 <button
                                     key={type}
                                     onClick={() => toggleType(type)}
-                                    className={`px-4 py-3 md:py-4 text-left rounded-xl md:rounded-2xl text-sm transition-all border-2 ${currentFilters.type === type ? 'bg-gray-900 border-gray-900 text-white font-semibold shadow-md' : 'bg-dune border-gray-200 text-gray-700 hover:border-gray-600'}`}
+                                    className={`px-4 py-3 md:py-4 text-left rounded-xl md:rounded-2xl text-sm transition-all border-2 ${currentFilters.type === type ? 'bg-gray-900 border-gray-900 text-white font-semibold shadow-md' : 'bg-white border-gray-200 text-gray-700 hover:border-gray-600'}`}
                                 >
                                     {type}
                                 </button>
@@ -354,8 +354,8 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                 />
                 
                 {activePopover === 'amenities' && (
-                    <div className="absolute top-[calc(100%+0.5rem)] left-0 bg-dune rounded-[2rem] shadow-[0_12px_48px_rgba(0,0,0,0.12)] border border-gray-100 p-6 md:p-8 w-[90vw] max-w-[420px] z-50 animate-scale-in">
-                        <h4 className="font-bold text-canvas mb-6 text-lg">Top Amenities</h4>
+                    <div className="absolute top-[calc(100%+0.5rem)] left-0 bg-white rounded-[2rem] shadow-[0_12px_48px_rgba(0,0,0,0.12)] border border-gray-100 p-6 md:p-8 w-[90vw] max-w-[420px] z-50 animate-scale-in">
+                        <h4 className="font-bold text-gray-900 mb-6 text-lg">Top Amenities</h4>
                         <div className="grid grid-cols-2 gap-4">
                             {allAmenities.slice(0, 10).map((amenity) => (
                                 <label key={amenity} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-xl cursor-pointer transition-colors group">
@@ -368,12 +368,12 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                                       />
                                       <svg className="absolute w-3 h-3 text-white pointer-events-none opacity-0 peer-checked:opacity-100 transition-all" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                                     </div>
-                                    <span className="text-sm text-gray-700 font-medium select-none group-hover:text-canvas">{amenity}</span>
+                                    <span className="text-sm text-gray-700 font-medium select-none group-hover:text-gray-900">{amenity}</span>
                                 </label>
                             ))}
                         </div>
                          <div className="mt-6 pt-5 border-t border-gray-100 text-center">
-                            <button onClick={openMoreFilters} className="text-sm font-semibold underline text-canvas hover:text-gray-600 transition-colors">View all amenities</button>
+                            <button onClick={openMoreFilters} className="text-sm font-semibold underline text-gray-900 hover:text-gray-600 transition-colors">View all amenities</button>
                         </div>
                     </div>
                 )}
@@ -392,8 +392,8 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                 />
                 
                 {activePopover === 'privacy' && (
-                    <div className="absolute top-[calc(100%+0.5rem)] left-0 bg-dune rounded-[2rem] shadow-[0_12px_48px_rgba(0,0,0,0.12)] border border-gray-100 p-6 md:p-8 w-[90vw] max-w-[360px] z-50 animate-scale-in font-sans">
-                        <h4 className="font-extrabold text-canvas mb-1 text-lg flex items-center gap-2">
+                    <div className="absolute top-[calc(100%+0.5rem)] left-0 bg-white rounded-[2rem] shadow-[0_12px_48px_rgba(0,0,0,0.12)] border border-gray-100 p-6 md:p-8 w-[90vw] max-w-[360px] z-50 animate-scale-in font-sans">
+                        <h4 className="font-extrabold text-gray-900 mb-1 text-lg flex items-center gap-2">
                             <Shield className="w-5 h-5 text-amber-500" />
                             Privacy & Seclusion
                         </h4>
@@ -405,13 +405,13 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                             <div className="flex gap-2">
                                 <button 
                                     onClick={() => setLocalRentalMode(localRentalMode === 'entire_place' ? '' : 'entire_place')}
-                                    className={`flex-1 py-2 px-3 rounded-xl border text-xs font-extrabold transition-all ${localRentalMode === 'entire_place' ? 'bg-gray-900 border-gray-900 text-white shadow-md' : 'bg-dune border-gray-200 text-gray-600 hover:border-gray-400'}`}
+                                    className={`flex-1 py-2 px-3 rounded-xl border text-xs font-extrabold transition-all ${localRentalMode === 'entire_place' ? 'bg-gray-900 border-gray-900 text-white shadow-md' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`}
                                 >
                                     Entire Space
                                 </button>
                                 <button 
                                     onClick={() => setLocalRentalMode(localRentalMode === 'private_rooms' ? '' : 'private_rooms')}
-                                    className={`flex-1 py-2 px-3 rounded-xl border text-xs font-extrabold transition-all ${localRentalMode === 'private_rooms' ? 'bg-gray-900 border-gray-900 text-white shadow-md' : 'bg-dune border-gray-200 text-gray-600 hover:border-gray-400'}`}
+                                    className={`flex-1 py-2 px-3 rounded-xl border text-xs font-extrabold transition-all ${localRentalMode === 'private_rooms' ? 'bg-gray-900 border-gray-900 text-white shadow-md' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`}
                                 >
                                     Private Room
                                 </button>
@@ -433,7 +433,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                                     <button 
                                         key={item.value}
                                         onClick={() => setLocalMinAcousticRating(localMinAcousticRating === item.value ? 0 : item.value)}
-                                        className={`flex items-center justify-between p-2.5 rounded-xl border text-left transition-all ${localMinAcousticRating === item.value ? 'bg-emerald-50/50 border-emerald-500 text-emerald-950 shadow-sm' : 'bg-dune border-gray-100 text-gray-600 hover:bg-gray-50'}`}
+                                        className={`flex items-center justify-between p-2.5 rounded-xl border text-left transition-all ${localMinAcousticRating === item.value ? 'bg-emerald-50/50 border-emerald-500 text-emerald-950 shadow-sm' : 'bg-white border-gray-100 text-gray-600 hover:bg-gray-50'}`}
                                     >
                                         <div>
                                             <p className="text-xs font-bold">{item.label}</p>
@@ -462,7 +462,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                                     <button 
                                         key={item.value}
                                         onClick={() => setLocalMinCrowdingRating(localMinCrowdingRating === item.value ? 0 : item.value)}
-                                        className={`flex items-center justify-between p-2.5 rounded-xl border text-left transition-all ${localMinCrowdingRating === item.value ? 'bg-amber-50/50 border-amber-500 text-amber-950 shadow-sm' : 'bg-dune border-gray-100 text-gray-600 hover:bg-gray-50'}`}
+                                        className={`flex items-center justify-between p-2.5 rounded-xl border text-left transition-all ${localMinCrowdingRating === item.value ? 'bg-amber-50/50 border-amber-500 text-amber-950 shadow-sm' : 'bg-white border-gray-100 text-gray-600 hover:bg-gray-50'}`}
                                     >
                                         <div>
                                             <p className="text-xs font-bold">{item.label}</p>
@@ -477,7 +477,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                         </div>
 
                         <div className="flex justify-between items-center pt-4 border-t border-gray-100">
-                            <button onClick={clearPrivacy} className="text-xs font-bold underline text-gray-500 hover:text-canvas transition-colors">Clear</button>
+                            <button onClick={clearPrivacy} className="text-xs font-bold underline text-gray-500 hover:text-gray-900 transition-colors">Clear</button>
                             <button onClick={applyPrivacy} className="bg-gray-900 text-white px-6 py-2.5 rounded-xl font-bold text-xs hover:bg-black transition-all shadow-md active:scale-95">Apply</button>
                         </div>
                     </div>
@@ -493,13 +493,13 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                 />
                 
                 {activePopover === 'sort' && (
-                    <div className="absolute top-[calc(100%+0.5rem)] left-0 bg-dune rounded-3xl shadow-[0_12px_48px_rgba(0,0,0,0.12)] border border-gray-100 p-4 w-[90vw] max-w-[240px] z-50 animate-scale-in">
+                    <div className="absolute top-[calc(100%+0.5rem)] left-0 bg-white rounded-3xl shadow-[0_12px_48px_rgba(0,0,0,0.12)] border border-gray-100 p-4 w-[90vw] max-w-[240px] z-50 animate-scale-in">
                         <div className="flex flex-col gap-1">
                             {sortOptions.map((opt) => (
                                 <button
                                     key={opt.value}
                                     onClick={() => toggleSort(opt.value)}
-                                    className={`px-4 py-3 text-left rounded-xl text-sm transition-all ${currentFilters.sort === opt.value || (!currentFilters.sort && opt.value === '') ? 'bg-gray-50 text-canvas font-bold' : 'text-gray-700 hover:bg-gray-50'}`}
+                                    className={`px-4 py-3 text-left rounded-xl text-sm transition-all ${currentFilters.sort === opt.value || (!currentFilters.sort && opt.value === '') ? 'bg-gray-50 text-gray-900 font-bold' : 'text-gray-700 hover:bg-gray-50'}`}
                                 >
                                     {opt.label}
                                 </button>
@@ -512,15 +512,15 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
 
         {/* Filters Action Button / Toggle right side */}
         <div className="flex items-center gap-3 md:gap-6 flex-shrink-0 pl-3 md:pl-6 border-l border-gray-100">
-             <button onClick={openMoreFilters} className="flex items-center gap-2 text-sm font-bold text-canvas md:text-gray-700 md:hover:bg-gray-50 md:px-3 py-2 rounded-lg transition-colors">
+             <button onClick={openMoreFilters} className="flex items-center gap-2 text-sm font-bold text-gray-900 md:text-gray-700 md:hover:bg-gray-50 md:px-3 py-2 rounded-lg transition-colors">
                 <FilterIcon className="w-4 h-4 md:w-5 md:h-5" />
                 <span className="hidden md:block">Filters</span>
              </button>
              
-             <div className="hidden lg:flex items-center gap-3 text-sm font-medium text-gray-600 px-3 py-2 rounded-lg border border-gray-200 cursor-pointer hover:border-gray-900 hover:text-canvas transition-colors group">
+             <div className="hidden lg:flex items-center gap-3 text-sm font-medium text-gray-600 px-3 py-2 rounded-lg border border-gray-200 cursor-pointer hover:border-gray-900 hover:text-gray-900 transition-colors group">
                 <span className="group-hover:font-semibold transition-all">Total price before taxes</span>
                 <div className="w-9 h-5 bg-gray-200 rounded-full relative transition-colors group-hover:bg-gray-300">
-                    <div className="w-3.5 h-3.5 bg-dune rounded-full absolute top-0.5 left-0.5 shadow-sm transform transition-transform group-hover:translate-x-4"></div>
+                    <div className="w-3.5 h-3.5 bg-white rounded-full absolute top-0.5 left-0.5 shadow-sm transform transition-transform group-hover:translate-x-4"></div>
                 </div>
             </div>
         </div>
@@ -530,29 +530,29 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
       {/* Advanced Filters Modal - Production Grade Unified Screen */}
       {showMoreFilters && (
         <div className="fixed inset-0 z-[250] flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm transition-all duration-300 animate-fade-in md:p-6 lg:p-12">
-            <div className="bg-dune md:rounded-[2rem] shadow-2xl w-full h-[95vh] md:h-[85vh] md:max-w-4xl overflow-hidden flex flex-col rounded-t-[2rem] animate-slide-up sm:animate-scale-in">
+            <div className="bg-white md:rounded-[2rem] shadow-2xl w-full h-[95vh] md:h-[85vh] md:max-w-4xl overflow-hidden flex flex-col rounded-t-[2rem] animate-slide-up sm:animate-scale-in">
                 
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-gray-100 sticky top-0 bg-dune z-10">
+                <div className="flex items-center justify-between p-6 border-b border-gray-100 sticky top-0 bg-white z-10">
                     <button onClick={() => setShowMoreFilters(false)} className="w-10 h-10 flex items-center justify-center hover:bg-gray-100 rounded-full transition-colors group">
-                        <XIcon className="w-5 h-5 text-canvas group-hover:scale-110 transition-transform" />
+                        <XIcon className="w-5 h-5 text-gray-900 group-hover:scale-110 transition-transform" />
                     </button>
-                    <h2 className="text-xl font-bold text-canvas tracking-tight">Advanced Filters</h2>
+                    <h2 className="text-xl font-bold text-gray-900 tracking-tight">Advanced Filters</h2>
                     <div className="w-10"></div>
                 </div>
                 
-                <div className="flex-1 overflow-y-auto px-6 md:px-12 py-8 space-y-14 bg-dune scroll-smooth relative">
+                <div className="flex-1 overflow-y-auto px-6 md:px-12 py-8 space-y-14 bg-white scroll-smooth relative">
                     
                     {/* Sort By section (important for mobile where hover menu is not accessible) */}
                     {isMobileView() && (
                         <section>
-                            <h3 className="text-2xl font-bold text-canvas mb-6 tracking-tight">Sort By</h3>
+                            <h3 className="text-2xl font-bold text-gray-900 mb-6 tracking-tight">Sort By</h3>
                             <div className="flex flex-wrap gap-3">
                                 {sortOptions.map((opt) => (
                                     <button
                                         key={opt.value}
                                         onClick={() => setLocalSort(localSort === opt.value ? '' : opt.value)}
-                                        className={`px-5 py-3 rounded-full text-sm font-semibold transition-all border-2 ${localSort === opt.value || (!localSort && opt.value === '') ? 'bg-gray-900 border-gray-900 text-white' : 'bg-dune border-gray-200 text-gray-700 hover:border-gray-400'}`}
+                                        className={`px-5 py-3 rounded-full text-sm font-semibold transition-all border-2 ${localSort === opt.value || (!localSort && opt.value === '') ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-200 text-gray-700 hover:border-gray-400'}`}
                                     >
                                         {opt.label}
                                     </button>
@@ -564,21 +564,21 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
 
                     {/* Price Range */}
                     <section>
-                        <h3 className="text-2xl font-bold text-canvas mb-2 tracking-tight">Price range</h3>
+                        <h3 className="text-2xl font-bold text-gray-900 mb-2 tracking-tight">Price range</h3>
                         <p className="text-gray-500 text-base mb-4">Nightly prices before fees and taxes</p>
                         <div className="mb-6 -mx-4 md:mx-0 px-4 md:px-0">
                             {renderPriceHistogram(localMin, localMax)}
                         </div>
                         <div className="flex flex-col md:flex-row items-center gap-6">
                             <div className="relative w-full">
-                                <label className="absolute -top-3 left-4 bg-dune px-2 mb-0 text-xs font-bold text-gray-400 uppercase tracking-wider z-10 transition-colors peer-focus-within:text-canvas">Minimum</label>
+                                <label className="absolute -top-3 left-4 bg-white px-2 mb-0 text-xs font-bold text-gray-400 uppercase tracking-wider z-10 transition-colors peer-focus-within:text-gray-900">Minimum</label>
                                 <div className="relative peer-focus-within:ring-2 ring-gray-900 rounded-2xl transition-shadow border border-gray-300">
-                                    <span className="absolute left-5 top-1/2 -translate-y-1/2 text-canvas font-semibold text-lg">₹</span>
+                                    <span className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-900 font-semibold text-lg">₹</span>
                                     <input 
                                         type="number" 
                                         value={localMin}
                                         onChange={e => setLocalMin(e.target.value)}
-                                        className="w-full pl-10 pr-5 py-5 bg-transparent border-none focus:ring-0 outline-none transition-all font-semibold text-canvas text-lg rounded-2xl" 
+                                        className="w-full pl-10 pr-5 py-5 bg-transparent border-none focus:ring-0 outline-none transition-all font-semibold text-gray-900 text-lg rounded-2xl" 
                                         placeholder="1,000"
                                     />
                                 </div>
@@ -587,14 +587,14 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"></path></svg>
                             </span>
                             <div className="relative w-full">
-                                <label className="absolute -top-3 left-4 bg-dune px-2 mb-0 text-xs font-bold text-gray-400 uppercase tracking-wider z-10 transition-colors peer-focus-within:text-canvas">Maximum</label>
+                                <label className="absolute -top-3 left-4 bg-white px-2 mb-0 text-xs font-bold text-gray-400 uppercase tracking-wider z-10 transition-colors peer-focus-within:text-gray-900">Maximum</label>
                                 <div className="relative peer-focus-within:ring-2 ring-gray-900 rounded-2xl transition-shadow border border-gray-300">
-                                    <span className="absolute left-5 top-1/2 -translate-y-1/2 text-canvas font-semibold text-lg">₹</span>
+                                    <span className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-900 font-semibold text-lg">₹</span>
                                     <input 
                                         type="number" 
                                         value={localMax}
                                         onChange={e => setLocalMax(e.target.value)}
-                                        className="w-full pl-10 pr-5 py-5 bg-transparent border-none focus:ring-0 outline-none transition-all font-semibold text-canvas text-lg rounded-2xl" 
+                                        className="w-full pl-10 pr-5 py-5 bg-transparent border-none focus:ring-0 outline-none transition-all font-semibold text-gray-900 text-lg rounded-2xl" 
                                         placeholder="Any"
                                     />
                                 </div>
@@ -606,13 +606,13 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
 
                     {/* Property Type */}
                     <section>
-                        <h3 className="text-2xl font-bold text-canvas mb-8 tracking-tight">Property type</h3>
+                        <h3 className="text-2xl font-bold text-gray-900 mb-8 tracking-tight">Property type</h3>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-5">
                             {propertyTypes.map((type) => (
                                 <button
                                     key={type}
                                     onClick={() => setLocalType(localType === type ? '' : type)}
-                                    className={`flex flex-col items-start gap-6 p-5 rounded-[1.5rem] text-sm transition-all border-2 ${localType === type ? 'border-gray-900 bg-gray-50 scale-[0.98]' : 'border-gray-200 bg-dune hover:border-gray-400'}`}
+                                    className={`flex flex-col items-start gap-6 p-5 rounded-[1.5rem] text-sm transition-all border-2 ${localType === type ? 'border-gray-900 bg-gray-50 scale-[0.98]' : 'border-gray-200 bg-white hover:border-gray-400'}`}
                                 >
                                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${localType === type ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'}`}>
                                         {type === 'Apartment' && <BriefcaseIcon className="w-5 h-5" />}
@@ -621,7 +621,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                                         {type === 'Resort' && <TreeIcon className="w-5 h-5" />}
                                         {type !== 'Apartment' && type !== 'House' && type !== 'Cabin' && type !== 'Resort' && <HomeIcon className="w-5 h-5" />}
                                     </div>
-                                    <span className={`font-bold text-base ${localType === type ? 'text-canvas' : 'text-gray-800'}`}>{type}</span>
+                                    <span className={`font-bold text-base ${localType === type ? 'text-gray-900' : 'text-gray-800'}`}>{type}</span>
                                 </button>
                             ))}
                         </div>
@@ -631,7 +631,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
 
                     {/* Amenities */}
                     <section>
-                        <h3 className="text-2xl font-bold text-canvas mb-8 tracking-tight">Amenities</h3>
+                        <h3 className="text-2xl font-bold text-gray-900 mb-8 tracking-tight">Amenities</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-10">
                             {allAmenities.map((amenity) => (
                                 <label key={amenity} className="flex items-center gap-5 p-2 hover:bg-gray-50 rounded-xl cursor-pointer transition-colors group">
@@ -644,7 +644,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                                       />
                                       <svg className="absolute w-4 h-4 text-white pointer-events-none opacity-0 peer-checked:opacity-100 transition-all" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                                     </div>
-                                    <span className="text-lg text-gray-800 select-none group-hover:text-canvas">{amenity}</span>
+                                    <span className="text-lg text-gray-800 select-none group-hover:text-gray-900">{amenity}</span>
                                 </label>
                             ))}
                         </div>
@@ -654,7 +654,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
 
                     {/* Rooms and beds */}
                     <section>
-                        <h3 className="text-2xl font-bold text-canvas mb-8 tracking-tight">Rooms and beds</h3>
+                        <h3 className="text-2xl font-bold text-gray-900 mb-8 tracking-tight">Rooms and beds</h3>
                         <div className="space-y-8 max-w-2xl">
                             {[
                                 { label: 'Bedrooms', value: localBedrooms, setter: setLocalBedrooms },
@@ -662,11 +662,11 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                                 { label: 'Bathrooms', value: localBathrooms, setter: setLocalBathrooms },
                             ].map((item) => (
                                 <div key={item.label} className="flex items-center justify-between pb-8 border-b border-gray-100 last:border-0 last:pb-0">
-                                    <span className="text-canvas text-lg font-medium">{item.label}</span>
+                                    <span className="text-gray-900 text-lg font-medium">{item.label}</span>
                                     <div className="flex items-center gap-4 md:gap-6">
                                         <button 
                                             onClick={() => item.setter(Math.max(0, item.value - 1))}
-                                            className={`w-10 h-10 md:w-12 md:h-12 rounded-full border flex items-center justify-center transition-all ${item.value > 0 ? 'border-gray-400 text-gray-600 hover:border-gray-900 hover:text-canvas hover:shadow-md active:scale-95' : 'border-gray-200 text-gray-200 cursor-not-allowed bg-gray-50'}`}
+                                            className={`w-10 h-10 md:w-12 md:h-12 rounded-full border flex items-center justify-center transition-all ${item.value > 0 ? 'border-gray-400 text-gray-600 hover:border-gray-900 hover:text-gray-900 hover:shadow-md active:scale-95' : 'border-gray-200 text-gray-200 cursor-not-allowed bg-gray-50'}`}
                                             disabled={item.value === 0}
                                         >
                                             <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" /></svg>
@@ -674,7 +674,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                                         <span className="w-8 text-center text-xl font-medium">{item.value === 0 ? 'Any' : item.value}</span>
                                         <button 
                                             onClick={() => item.setter(item.value + 1)}
-                                            className="w-10 h-10 md:w-12 md:h-12 rounded-full border border-gray-400 text-gray-600 flex items-center justify-center hover:border-gray-900 hover:text-canvas hover:shadow-md transition-all active:scale-95"
+                                            className="w-10 h-10 md:w-12 md:h-12 rounded-full border border-gray-400 text-gray-600 flex items-center justify-center hover:border-gray-900 hover:text-gray-900 hover:shadow-md transition-all active:scale-95"
                                         >
                                             <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
                                         </button>
@@ -688,7 +688,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
 
                     {/* Premium Seclusion & Comfort Options */}
                     <section>
-                        <h3 className="text-2xl font-bold text-canvas mb-2 tracking-tight flex items-center gap-2">
+                        <h3 className="text-2xl font-bold text-gray-900 mb-2 tracking-tight flex items-center gap-2">
                             <Shield className="w-6 h-6 text-amber-500" />
                             Premium Seclusion & Comfort
                         </h3>
@@ -708,7 +708,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                                             key={opt.value}
                                             type="button"
                                             onClick={() => setLocalRentalMode(opt.value)}
-                                            className={`flex-1 py-3 px-2 rounded-xl border text-xs font-bold transition-all text-center ${localRentalMode === opt.value ? 'bg-gray-900 border-gray-900 text-white shadow-md' : 'bg-dune border-gray-200 text-gray-600 hover:border-gray-400'}`}
+                                            className={`flex-1 py-3 px-2 rounded-xl border text-xs font-bold transition-all text-center ${localRentalMode === opt.value ? 'bg-gray-900 border-gray-900 text-white shadow-md' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`}
                                         >
                                             {opt.label}
                                         </button>
@@ -733,7 +733,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                                             key={opt.value}
                                             type="button"
                                             onClick={() => setLocalMinAcousticRating(opt.value)}
-                                            className={`flex-1 py-3 px-1 rounded-xl border text-xs font-bold transition-all text-center ${localMinAcousticRating === opt.value ? 'bg-emerald-500 border-emerald-500 text-white shadow-md' : 'bg-dune border-gray-200 text-gray-600 hover:border-gray-400'}`}
+                                            className={`flex-1 py-3 px-1 rounded-xl border text-xs font-bold transition-all text-center ${localMinAcousticRating === opt.value ? 'bg-emerald-500 border-emerald-500 text-white shadow-md' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`}
                                         >
                                             {opt.label}
                                         </button>
@@ -758,7 +758,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                                             key={opt.value}
                                             type="button"
                                             onClick={() => setLocalMinCrowdingRating(opt.value)}
-                                            className={`flex-1 py-3 px-1 rounded-xl border text-xs font-bold transition-all text-center ${localMinCrowdingRating === opt.value ? 'bg-amber-500 border-amber-500 text-white shadow-md' : 'bg-dune border-gray-200 text-gray-600 hover:border-gray-400'}`}
+                                            className={`flex-1 py-3 px-1 rounded-xl border text-xs font-bold transition-all text-center ${localMinCrowdingRating === opt.value ? 'bg-amber-500 border-amber-500 text-white shadow-md' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`}
                                         >
                                             {opt.label}
                                         </button>
@@ -802,8 +802,8 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                     <div className="h-10"></div>
                 </div>
 
-                <div className="p-5 md:px-10 md:py-6 pb-safe border-t border-white/50 flex items-center justify-between bg-dune/85 backdrop-blur-2xl saturate-150 w-full sticky bottom-0 z-20 shadow-[0_-10px_40px_rgba(0,0,0,0.03)] glass-panel">
-                    <button onClick={clearAdvancedFilters} className="text-base font-bold underline text-canvas hover:text-gray-600 transition-colors p-2">Clear all</button>
+                <div className="p-5 md:px-10 md:py-6 pb-safe border-t border-white/50 flex items-center justify-between bg-white/85 backdrop-blur-2xl saturate-150 w-full sticky bottom-0 z-20 shadow-[0_-10px_40px_rgba(0,0,0,0.03)] glass-panel">
+                    <button onClick={clearAdvancedFilters} className="text-base font-bold underline text-gray-900 hover:text-gray-600 transition-colors p-2">Clear all</button>
                     <button onClick={applyAdvancedFilters} className="bg-gray-900 text-white px-10 py-3.5 md:py-4 rounded-xl font-bold text-base hover:bg-black transition-all shadow-xl shadow-gray-200 active:scale-95">Show places</button>
                 </div>
             </div>

@@ -37,9 +37,9 @@ export const MobileProfileSheet: React.FC<MobileProfileSheetProps> = ({ isOpen, 
   return (
     <div className="fixed inset-0 z-[300] md:hidden">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={onClose} />
-      <div className="absolute left-0 right-0 bottom-0 bg-dune rounded-t-3xl shadow-2xl transform transition-transform animate-slide-in-bottom max-h-[90vh] overflow-y-auto pb-safe">
-        <div className="sticky top-0 bg-dune/90 backdrop-blur-md z-10 flex items-center justify-between p-4 border-b border-gray-100">
-           <h2 className="text-xl font-bold text-canvas ml-2">Profile</h2>
+      <div className="absolute left-0 right-0 bottom-0 bg-white rounded-t-3xl shadow-2xl transform transition-transform animate-slide-in-bottom max-h-[90vh] overflow-y-auto pb-safe">
+        <div className="sticky top-0 bg-white/90 backdrop-blur-md z-10 flex items-center justify-between p-4 border-b border-gray-100">
+           <h2 className="text-xl font-bold text-gray-900 ml-2">Profile</h2>
            <button onClick={() => { uiAudio.playClick(); onClose(); }} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200">
                <XIcon className="w-5 h-5 text-gray-600" />
            </button>
@@ -53,7 +53,7 @@ export const MobileProfileSheet: React.FC<MobileProfileSheetProps> = ({ isOpen, 
                  {isInstallable && (
                     <button onClick={() => { promptInstall(); onClose(); }} className="flex flex-col items-center justify-center p-4 rounded-2xl bg-gray-50 border border-gray-100 active:scale-95 transition-transform col-span-2">
                         <DownloadIcon className="w-6 h-6 text-gray-700 mb-2" />
-                        <span className="font-bold text-canvas text-sm">Install App</span>
+                        <span className="font-bold text-gray-900 text-sm">Install App</span>
                     </button>
                  )}
                  {user ? (
@@ -63,12 +63,12 @@ export const MobileProfileSheet: React.FC<MobileProfileSheetProps> = ({ isOpen, 
                             <UserIcon className="w-6 h-6 text-gray-500" />
                         </div>
                         <div>
-                            <div className="font-bold text-canvas">{user.name}</div>
+                            <div className="font-bold text-gray-900">{user.name}</div>
                             <div className="text-sm text-gray-500">{user.email}</div>
                         </div>
                      </div>
                      <button onClick={() => { logout(); onClose(); }} className="flex items-center justify-center p-4 rounded-2xl bg-gray-50 hover:bg-gray-100 active:scale-95 transition-colors col-span-2">
-                         <span className="font-bold text-canvas text-sm">Log out</span>
+                         <span className="font-bold text-gray-900 text-sm">Log out</span>
                      </button>
                      {user.role === 'admin' && (
                          <button onClick={() => { onNavigateToAdmin(); onClose(); }} className="flex flex-col items-center justify-center p-4 rounded-2xl bg-black text-white active:scale-95 transition-transform col-span-2 shadow-md">
@@ -80,7 +80,7 @@ export const MobileProfileSheet: React.FC<MobileProfileSheetProps> = ({ isOpen, 
                     <>
                      <button onClick={() => { onLoginClick(); onClose(); }} className="flex flex-col items-center justify-center p-4 rounded-2xl bg-gray-50 border border-gray-100 active:scale-95 transition-transform">
                          <LogInIcon className="w-6 h-6 text-gray-700 mb-2" />
-                         <span className="font-bold text-canvas text-sm">Log in</span>
+                         <span className="font-bold text-gray-900 text-sm">Log in</span>
                      </button>
                      <button onClick={() => { onLoginClick(); onClose(); }} className="flex flex-col items-center justify-center p-4 rounded-2xl bg-[#e51d53] text-white active:scale-95 transition-transform shadow-md">
                          <UserIcon className="w-6 h-6 mb-2" />
@@ -98,7 +98,7 @@ export const MobileProfileSheet: React.FC<MobileProfileSheetProps> = ({ isOpen, 
                    <div className="relative z-10">
                        <h3 className="font-bold text-xl mb-1">Airbnb your place</h3>
                        <p className="text-white/80 text-sm font-medium mb-4">It's simple to get set up and start earning.</p>
-                       <div className="bg-dune text-black self-start inline-block px-4 py-2 rounded-xl text-sm font-bold">Learn more</div>
+                       <div className="bg-white text-black self-start inline-block px-4 py-2 rounded-xl text-sm font-bold">Learn more</div>
                    </div>
                    <HouseIcon className="absolute -bottom-4 -right-4 w-24 h-24 text-white/10" />
                </div>

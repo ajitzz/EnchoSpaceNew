@@ -230,7 +230,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        addToast('Success', 'Social post approved and pushed live to @amigove feeds!', 'success');
+        addToast('Success', 'Social post approved and pushed live to @enchospace feeds!', 'success');
         fetchAdminSocialPosts();
       } else {
         const data = await res.json();
@@ -796,42 +796,42 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
 
   return (
     <>
-      <SEO title="Admin Console | Amigove" description="Amigove Administration Console" />
+      <SEO title="Admin Console | Encho Space" description="Encho Space Administration Console" />
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
       {/* Sidebar */}
-      <aside className="w-full md:w-64 bg-dune border-b md:border-r border-gray-200 p-4 md:p-6 flex flex-col shrink-0 md:min-h-screen sticky top-0 z-10">
-        <div className="font-bold tracking-tight text-xl mb-4 md:mb-10 text-canvas leading-none">
-          Amigove<span className="text-[#0284C7]">Space</span> Admin
+      <aside className="w-full md:w-64 bg-white border-b md:border-r border-gray-200 p-4 md:p-6 flex flex-col shrink-0 md:min-h-screen sticky top-0 z-10">
+        <div className="font-bold tracking-tight text-xl mb-4 md:mb-10 text-gray-900 leading-none">
+          Encho<span className="text-[#0284C7]">Space</span> Admin
         </div>
         
         <nav className="flex overflow-x-auto pb-2 md:pb-0 md:space-y-1 md:flex-col gap-2 md:gap-0 scrollbar-hide">
-          <button onClick={() => setActiveTab('analytics')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'analytics' ? 'bg-gray-100 text-canvas' : 'text-gray-500 hover:bg-gray-50 hover:text-canvas'}`}>
+          <button onClick={() => setActiveTab('analytics')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'analytics' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg> Analytics
           </button>
-          <button onClick={() => setActiveTab('listings')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'listings' ? 'bg-gray-100 text-canvas' : 'text-gray-500 hover:bg-gray-50 hover:text-canvas'}`}>
+          <button onClick={() => setActiveTab('listings')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'listings' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
              <ListIcon className="w-4 h-4" /> Properties
           </button>
-          <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'users' ? 'bg-gray-100 text-canvas' : 'text-gray-500 hover:bg-gray-50 hover:text-canvas'}`}>
+          <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'users' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
              <UserIcon className="w-4 h-4" /> Users
           </button>
-          <button onClick={() => setActiveTab('offers')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'offers' ? 'bg-gray-100 text-canvas' : 'text-gray-500 hover:bg-gray-50 hover:text-canvas'}`}>
+          <button onClick={() => setActiveTab('offers')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'offers' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg> Offers
           </button>
-          <button onClick={() => setActiveTab('reviews')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'reviews' ? 'bg-gray-100 text-canvas' : 'text-gray-500 hover:bg-gray-50 hover:text-canvas'}`}>
+          <button onClick={() => setActiveTab('reviews')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'reviews' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
              <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg> Reviews
           </button>
-          <button onClick={() => setActiveTab('messages')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'messages' ? 'bg-gray-100 text-canvas' : 'text-gray-500 hover:bg-gray-50 hover:text-canvas'}`}>
+          <button onClick={() => setActiveTab('messages')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'messages' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg> Messages
           </button>
-          <button onClick={() => setActiveTab('settings')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'settings' ? 'bg-gray-100 text-canvas' : 'text-gray-500 hover:bg-gray-50 hover:text-canvas'}`}>
+          <button onClick={() => setActiveTab('settings')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'settings' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
              Settings
           </button>
-          <button onClick={() => setActiveTab('seo')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'seo' ? 'bg-gray-100 text-canvas' : 'text-gray-500 hover:bg-gray-50 hover:text-canvas'}`}>
+          <button onClick={() => setActiveTab('seo')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'seo' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg>
              SEO Metadata
           </button>
-          <button onClick={() => setActiveTab('marketing')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'marketing' ? 'bg-gray-100 text-canvas' : 'text-gray-500 hover:bg-gray-50 hover:text-canvas'}`}>
+          <button onClick={() => setActiveTab('marketing')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'marketing' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
              <Megaphone className="w-4 h-4" />
              QC Marketing {marketingCampaigns.filter(c => c.status === 'pending').length > 0 && (
                <span className="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
@@ -852,20 +852,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
       <main className="flex-1 p-6 md:p-10 w-full overflow-x-hidden bg-gray-50/50 relative">
         {/* Global Admin Toggle */}
         <div className="w-full flex justify-center mb-10 sticky top-0 z-20">
-          <div className="flex bg-dune p-1 rounded-full shadow-sm border border-gray-200 relative backdrop-blur-md">
-             <button onClick={() => setAdminMode('stays')} className={`px-8 py-2.5 rounded-full font-bold text-sm transition-all ${adminMode === 'stays' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-500 hover:text-canvas'}`}>Stays Mode</button>
-             <button onClick={() => setAdminMode('experiences')} className={`px-8 py-2.5 rounded-full font-bold text-sm transition-all ${adminMode === 'experiences' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-500 hover:text-canvas'}`}>Experiences Mode</button>
+          <div className="flex bg-white p-1 rounded-full shadow-sm border border-gray-200 relative backdrop-blur-md">
+             <button onClick={() => setAdminMode('stays')} className={`px-8 py-2.5 rounded-full font-bold text-sm transition-all ${adminMode === 'stays' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-500 hover:text-gray-900'}`}>Stays Mode</button>
+             <button onClick={() => setAdminMode('experiences')} className={`px-8 py-2.5 rounded-full font-bold text-sm transition-all ${adminMode === 'experiences' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-500 hover:text-gray-900'}`}>Experiences Mode</button>
           </div>
         </div>
 
         {/* Mobile Header */}
         <div className="md:hidden flex items-center justify-between mb-6 pb-6 border-b border-gray-200">
-           <div className="font-bold tracking-tight text-xl text-canvas">Admin</div>
-           <button onClick={onBack} className="text-sm font-medium text-gray-500 hover:text-canvas">Exit</button>
+           <div className="font-bold tracking-tight text-xl text-gray-900">Admin</div>
+           <button onClick={onBack} className="text-sm font-medium text-gray-500 hover:text-gray-900">Exit</button>
         </div>
 
         <div className="mb-8">
-           <h1 className="text-2xl md:text-3xl font-extrabold text-canvas tracking-tight mb-2">
+           <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight mb-2">
              {activeTab === 'analytics' ? 'Analytics Overview' : activeTab === 'listings' ? (adminMode === 'stays' ? 'Properties' : 'Experiences') : activeTab === 'users' ? 'Users' : activeTab === 'offers' ? 'Offers' : activeTab === 'reviews' ? 'Reviews' : activeTab === 'messages' ? 'Messages' : 'Settings'}
            </h1>
            <p className="text-gray-500 text-sm">
@@ -876,40 +876,40 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
         {/* Metrics Bar */}
         {(activeTab === 'analytics' || activeTab === 'listings' || activeTab === 'users') && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-               <div className="bg-dune p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col hover:shadow-md transition-shadow">
+               <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col hover:shadow-md transition-shadow">
                   <span className="text-gray-500 text-sm font-medium mb-1">Total Revenue</span>
-                  <span className="text-3xl font-bold text-canvas">${metrics.revenue.toLocaleString()}</span>
+                  <span className="text-3xl font-bold text-gray-900">${metrics.revenue.toLocaleString()}</span>
                   <span className="text-xs text-emerald-600 font-medium mt-2 flex items-center gap-1">
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
                       All time
                   </span>
                </div>
-               <div className="bg-dune p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col hover:shadow-md transition-shadow">
+               <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col hover:shadow-md transition-shadow">
                   <span className="text-gray-500 text-sm font-medium mb-1">Total Bookings</span>
-                  <span className="text-3xl font-bold text-canvas">{metrics.totalBookings}</span>
+                  <span className="text-3xl font-bold text-gray-900">{metrics.totalBookings}</span>
                </div>
-               <div className="bg-dune p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col hover:shadow-md transition-shadow">
+               <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col hover:shadow-md transition-shadow">
                   <span className="text-gray-500 text-sm font-medium mb-1">Active Properties</span>
-                  <span className="text-3xl font-bold text-canvas">{metrics.totalListings}</span>
+                  <span className="text-3xl font-bold text-gray-900">{metrics.totalListings}</span>
                </div>
-               <div className="bg-dune p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col hover:shadow-md transition-shadow">
+               <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col hover:shadow-md transition-shadow">
                   <span className="text-gray-500 text-sm font-medium mb-1">Registered Users</span>
-                  <span className="text-3xl font-bold text-canvas">{metrics.totalUsers}</span>
+                  <span className="text-3xl font-bold text-gray-900">{metrics.totalUsers}</span>
                </div>
             </div>
         )}
 
         {/* Data Table */}
-        <div className="bg-dune rounded-2xl border border-gray-200 shadow-sm overflow-hidden w-full">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden w-full">
             <div className="overflow-x-auto w-full">
               {activeTab === 'analytics' ? (
-                <div className="p-4 md:p-8 pb-12 space-y-12 bg-dune">
+                <div className="p-4 md:p-8 pb-12 space-y-12 bg-white">
                    <div className="space-y-6">
                        <div>
-                           <h2 className="text-xl font-bold text-canvas">Revenue Overview</h2>
+                           <h2 className="text-xl font-bold text-gray-900">Revenue Overview</h2>
                            <p className="text-sm text-gray-500">Monthly confirmed revenue trajectory</p>
                        </div>
-                       <div className="w-full h-[350px] bg-dune border border-gray-100 rounded-xl p-4 shadow-sm">
+                       <div className="w-full h-[350px] bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
                            <ResponsiveContainer width="100%" height="100%">
                                <AreaChart data={metrics.chartData}>
                                    <defs>
@@ -933,10 +933,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
 
                    <div className="space-y-6 pt-6 border-t border-gray-100">
                        <div>
-                           <h2 className="text-xl font-bold text-canvas">Booking Volume</h2>
+                           <h2 className="text-xl font-bold text-gray-900">Booking Volume</h2>
                            <p className="text-sm text-gray-500">Number of confirmed bookings per month</p>
                        </div>
-                       <div className="w-full h-[300px] bg-dune border border-gray-100 rounded-xl p-4 shadow-sm">
+                       <div className="w-full h-[300px] bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
                            <ResponsiveContainer width="100%" height="100%">
                                <BarChart data={metrics.chartData} barSize={40}>
                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
@@ -955,10 +955,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                    {/* Recent Transactions List */}
                    <div className="space-y-6 pt-6 border-t border-gray-100">
                        <div>
-                           <h2 className="text-xl font-bold text-canvas">Recent Transactions</h2>
+                           <h2 className="text-xl font-bold text-gray-900">Recent Transactions</h2>
                            <p className="text-sm text-gray-500">Latest confirmed bookings across the platform</p>
                        </div>
-                       <div className="bg-dune rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
                            <div className="overflow-x-auto">
                                <table className="w-full text-left text-sm whitespace-nowrap">
                                    <thead className="bg-gray-50 text-gray-500 border-b border-gray-200">
@@ -977,7 +977,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                        ) : (
                                            metrics.recentTransactions.map((tx: any) => (
                                                <tr key={tx.id} className="hover:bg-gray-50/50 transition-colors pointer-events-none">
-                                                   <td className="px-6 py-4 font-medium text-canvas max-w-[200px] truncate">{tx.listing_title}</td>
+                                                   <td className="px-6 py-4 font-medium text-gray-900 max-w-[200px] truncate">{tx.listing_title}</td>
                                                    <td className="px-6 py-4 text-gray-600">{tx.name}</td>
                                                    <td className="px-6 py-4 text-gray-500">{new Date(tx.created_at).toLocaleDateString()}</td>
                                                    <td className="px-6 py-4 text-emerald-600 font-bold text-right">${parseFloat(tx.total_rent).toLocaleString()}</td>
@@ -992,7 +992,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                 </div>
               ) : activeTab === 'listings' ? (
                 adminMode === 'stays' ? (
-                <div className="bg-dune rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
                    <div className="overflow-x-auto">
                       <table className="w-full text-left text-sm whitespace-nowrap min-w-[800px]">
                    <thead className="bg-gray-50 text-gray-500 border-b border-gray-200">
@@ -1021,7 +1021,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                              return <img src={`${imgUrl}?w=100&h=100&fit=crop`} alt="" className="w-full h-full object-cover" />;
                                           })()}
                                         </div>
-                                        <div className="font-semibold text-canvas max-w-[200px] truncate">{listing.title}</div>
+                                        <div className="font-semibold text-gray-900 max-w-[200px] truncate">{listing.title}</div>
                                      </div>
                                   </td>
                                   <td className="px-6 py-4 text-gray-600 truncate max-w-[150px]">{listing.city}</td>
@@ -1040,7 +1040,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                           </span>
                                       )}
                                   </td>
-                                  <td className="px-6 py-4 font-medium text-canvas">{formatPrice(listing.price, 'INR')}</td>
+                                  <td className="px-6 py-4 font-medium text-gray-900">{formatPrice(listing.price, 'INR')}</td>
                                   <td className="px-6 py-4">
                                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700">
                                          <CheckCircle2Icon className="w-3.5 h-3.5" /> Active
@@ -1054,7 +1054,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                           <button onClick={(e) => handleEditCapacity(listing, e)} title="Edit Capacity" className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors">
                                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
                                           </button>
-                                          <button onClick={(e) => handleEditType(listing, e)} title="Edit Type" className="p-2 text-gray-400 hover:text-brand-dark hover:bg-orange-50 rounded-md transition-colors">
+                                          <button onClick={(e) => handleEditType(listing, e)} title="Edit Type" className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-md transition-colors">
                                              <Map className="w-4 h-4" />
                                           </button>
                                           <button onClick={(e) => handleEditAmenities(listing, e)} title="Edit Amenities" className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-md transition-colors">
@@ -1063,10 +1063,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                           <button onClick={(e) => handleEditRentalMode(listing, e)} title="Edit Rental Mode" className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-md transition-colors">
                                              <HomeIcon className="w-4 h-4" />
                                           </button>
-                                          <button onClick={(e) => handleEditCoordinates(listing, e)} title="Edit Coordinates" className="p-2 text-gray-400 hover:text-brand-dark hover:bg-orange-50 rounded-md transition-colors">
+                                          <button onClick={(e) => handleEditCoordinates(listing, e)} title="Edit Coordinates" className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-md transition-colors">
                                              <Compass className="w-4 h-4" />
                                           </button>
-                                          <button onClick={(e) => handleEditVideoUrl(listing, e)} title="Edit Video URL" className="p-2 text-gray-400 hover:text-brand-dark hover:bg-blue-50 rounded-md transition-colors">
+                                          <button onClick={(e) => handleEditVideoUrl(listing, e)} title="Edit Video URL" className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors">
                                              <EditIcon className="w-4 h-4" />
                                           </button>
                                           <button onClick={(e) => handleDeleteListing(listing.id, e)} title="Delete" className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors">
@@ -1086,7 +1086,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                     <AdminExperiences token={token!} />
                     
                     <h2 className="text-xl font-bold mt-8">Experience Bookings</h2>
-                    <div className="bg-dune rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
                        <div className="overflow-x-auto">
                           <table className="w-full text-left text-sm whitespace-nowrap min-w-[800px]">
                         <thead className="bg-gray-50 text-gray-500 border-b border-gray-200">
@@ -1103,9 +1103,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                            ) : (
                                experienceBookings.map(b => (
                                    <tr key={b.id} className="hover:bg-gray-50/50 transition-colors group">
-                                       <td className="px-6 py-4 font-semibold text-canvas">{b.name} <br/><span className="text-xs text-gray-500">{b.phone}</span></td>
+                                       <td className="px-6 py-4 font-semibold text-gray-900">{b.name} <br/><span className="text-xs text-gray-500">{b.phone}</span></td>
                                        <td className="px-6 py-4 text-gray-600">{b.title} <br/><span className="text-xs text-gray-500">{new Date(b.start_date).toLocaleDateString()}</span></td>
-                                       <td className="px-6 py-4 font-medium text-canvas">{b.num_tickets}</td>
+                                       <td className="px-6 py-4 font-medium text-gray-900">{b.num_tickets}</td>
                                        <td className="px-6 py-4 font-bold text-emerald-600">{formatPrice(Number(b.total_price), 'INR')}</td>
                                    </tr>
                                ))
@@ -1117,7 +1117,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                 </div>
               )
               ) : activeTab === 'users' ? (
-                <div className="bg-dune rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
                    <div className="overflow-x-auto">
                       <table className="w-full text-left text-sm whitespace-nowrap min-w-[800px]">
                    <thead className="bg-gray-50 text-gray-500 border-b border-gray-200">
@@ -1138,7 +1138,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                           users.map(u => (
                               <tr key={u.id} className="hover:bg-gray-50/50 transition-colors group">
                                   <td className="px-6 py-4">{u.id}</td>
-                                  <td className="px-6 py-4 font-semibold text-canvas">{u.name}</td>
+                                  <td className="px-6 py-4 font-semibold text-gray-900">{u.name}</td>
                                   <td className="px-6 py-4 text-gray-600">{u.email}</td>
                                   <td className="px-6 py-4">
                                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold ${u.role === 'admin' ? 'bg-purple-50 text-purple-700' : 'bg-gray-100 text-gray-700'}`}>
@@ -1162,7 +1162,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
               ) : activeTab === 'offers' ? (
                  <div className="p-6 max-w-3xl">
                     <div className="flex justify-between items-center mb-8 border-b border-gray-100 pb-4">
-                       <h2 className="text-xl font-bold text-canvas">Platform Offers</h2>
+                       <h2 className="text-xl font-bold text-gray-900">Platform Offers</h2>
                        <button onClick={handleCreateOffer} className="bg-gray-900 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-gray-800 transition-colors">
                           + Create Offer
                        </button>
@@ -1170,9 +1170,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                     
                     <div className="space-y-4">
                        {offers.map(offer => (
-                          <div key={offer.id} className="flex items-center justify-between p-5 bg-dune border border-gray-200 rounded-xl shadow-sm">
+                          <div key={offer.id} className="flex items-center justify-between p-5 bg-white border border-gray-200 rounded-xl shadow-sm">
                              <div>
-                                <div className="font-bold text-lg text-canvas mb-1">{offer.title}</div>
+                                <div className="font-bold text-lg text-gray-900 mb-1">{offer.title}</div>
                                 <div className="text-sm font-bold text-[#0284C7] bg-[#0284C7]/10 inline-block px-2.5 py-1 rounded-md">{offer.discount_percentage}% OFF</div>
                              </div>
                              <button onClick={() => handleDeleteOffer(offer.id)} className="text-gray-400 hover:text-red-600 transition-colors p-2 hover:bg-red-50 rounded-lg">
@@ -1181,7 +1181,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                           </div>
                        ))}
                        {offers.length === 0 && (
-                           <div className="text-center py-12 text-gray-500 bg-dune rounded-2xl border border-dashed border-gray-200 shadow-sm">
+                           <div className="text-center py-12 text-gray-500 bg-white rounded-2xl border border-dashed border-gray-200 shadow-sm">
                                No offers created yet.<br/>Create offers for hosts to apply to their listings.
                            </div>
                        )}
@@ -1189,14 +1189,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                  </div>
               ) : activeTab === 'reviews' ? (
                  <div className="p-6">
-                    <h2 className="text-xl font-bold text-canvas mb-6">Property Reviews</h2>
+                    <h2 className="text-xl font-bold text-gray-900 mb-6">Property Reviews</h2>
                     <div className="space-y-4 max-w-4xl">
                         {reviews.map(review => (
-                            <div key={review.id} className="bg-dune p-6 rounded-2xl border border-gray-200 shadow-sm flex items-start justify-between gap-6 hover:shadow-md transition-shadow">
+                            <div key={review.id} className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex items-start justify-between gap-6 hover:shadow-md transition-shadow">
                                 <div>
-                                    <h3 className="font-bold text-canvas mb-1 leading-tight">{review.listing_title}</h3>
+                                    <h3 className="font-bold text-gray-900 mb-1 leading-tight">{review.listing_title}</h3>
                                     <div className="flex items-center gap-2 text-sm text-gray-500 mb-3">
-                                        <span className="font-medium text-canvas">{review.user_name}</span>
+                                        <span className="font-medium text-gray-900">{review.user_name}</span>
                                         <span>•</span>
                                         <span>{new Date(review.created_at).toLocaleDateString()}</span>
                                         <span>•</span>
@@ -1214,7 +1214,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                             </div>
                         ))}
                         {reviews.length === 0 && (
-                            <div className="text-center py-12 text-gray-500 bg-dune rounded-2xl border border-dashed border-gray-200 shadow-sm">
+                            <div className="text-center py-12 text-gray-500 bg-white rounded-2xl border border-dashed border-gray-200 shadow-sm">
                                 No reviews have been written yet.
                             </div>
                         )}
@@ -1222,35 +1222,35 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                  </div>
               ) : activeTab === 'messages' ? (
                 <div className="p-4 md:p-8">
-                    <h2 className="text-xl font-bold text-canvas mb-6">Platform Messages & Conversations</h2>
+                    <h2 className="text-xl font-bold text-gray-900 mb-6">Platform Messages & Conversations</h2>
                     <AdminInbox adminMode={adminMode} />
                 </div>
               ) : activeTab === 'settings' ? (
                 <div className="p-4 md:p-8 max-w-2xl space-y-12">
                    <section>
-                       <h2 className="text-xl font-bold text-canvas mb-6">WhatsApp Redirection Settings</h2>
+                       <h2 className="text-xl font-bold text-gray-900 mb-6">WhatsApp Redirection Settings</h2>
                        
                        <div className="space-y-6">
                           <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
                              <div>
-                                <h3 className="font-semibold text-canvas mb-1">Enable Automatic Redirection</h3>
+                                <h3 className="font-semibold text-gray-900 mb-1">Enable Automatic Redirection</h3>
                                 <p className="text-sm text-gray-500">Automatically redirect customers to WhatsApp 5 seconds after a booking is complete.</p>
                              </div>
                              <label className="relative inline-flex items-center cursor-pointer">
                                 <input type="checkbox" className="sr-only peer" checked={whatsappSettings.enabled} onChange={e => setWhatsappSettings(prev => ({ ...prev, enabled: e.target.checked }))} />
-                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-dune after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0284C7]"></div>
+                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0284C7]"></div>
                              </label>
                           </div>
 
                           {whatsappSettings.enabled && (
                               <div className="space-y-2">
-                                 <label className="block text-sm font-semibold text-canvas">Support WhatsApp Number</label>
+                                 <label className="block text-sm font-semibold text-gray-900">Support WhatsApp Number</label>
                                  <input 
                                     type="text"
                                     placeholder="e.g. 1234567890"
                                     value={whatsappSettings.number}
                                     onChange={e => setWhatsappSettings(prev => ({ ...prev, number: e.target.value }))}
-                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-dune focus:ring-2 focus:ring-[#0284C7] focus:outline-none transition-all"
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#0284C7] focus:outline-none transition-all"
                                  />
                                  <p className="text-xs text-gray-500 mt-1">Include country code without '+' or '00'. Example: 447123456789 for UK.</p>
                               </div>
@@ -1259,29 +1259,29 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                    </section>
 
                    <section>
-                       <h2 className="text-xl font-bold text-canvas mb-6">Call Settings</h2>
+                       <h2 className="text-xl font-bold text-gray-900 mb-6">Call Settings</h2>
                        
                        <div className="space-y-6">
                           <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
                              <div>
-                                <h3 className="font-semibold text-canvas mb-1">Enable Call Button</h3>
+                                <h3 className="font-semibold text-gray-900 mb-1">Enable Call Button</h3>
                                 <p className="text-sm text-gray-500">Allow customers to call the support number from their reservations.</p>
                              </div>
                              <label className="relative inline-flex items-center cursor-pointer">
                                 <input type="checkbox" className="sr-only peer" checked={callSettings.enabled} onChange={e => setCallSettings(prev => ({ ...prev, enabled: e.target.checked }))} />
-                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-dune after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0284C7]"></div>
+                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0284C7]"></div>
                              </label>
                           </div>
 
                           {callSettings.enabled && (
                               <div className="space-y-2">
-                                 <label className="block text-sm font-semibold text-canvas">Support Phone Number</label>
+                                 <label className="block text-sm font-semibold text-gray-900">Support Phone Number</label>
                                  <input 
                                     type="text"
                                     placeholder="e.g. +447123456789"
                                     value={callSettings.number}
                                     onChange={e => setCallSettings(prev => ({ ...prev, number: e.target.value }))}
-                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-dune focus:ring-2 focus:ring-[#0284C7] focus:outline-none transition-all"
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#0284C7] focus:outline-none transition-all"
                                  />
                                  <p className="text-xs text-gray-500 mt-1">Include country code with '+' (Optional). Example: +44 7123 456789.</p>
                               </div>
@@ -1290,12 +1290,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                    </section>
 
                    <section>
-                       <h2 className="text-xl font-bold text-canvas mb-6">Authorized Experience Hosts</h2>
+                       <h2 className="text-xl font-bold text-gray-900 mb-6">Authorized Experience Hosts</h2>
                        
                        <div className="space-y-6">
                           <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
                              <div className="mb-4">
-                                <h3 className="font-semibold text-canvas mb-1">Allowed Host Emails</h3>
+                                <h3 className="font-semibold text-gray-900 mb-1">Allowed Host Emails</h3>
                                 <p className="text-sm text-gray-500">Only emails in this list (and admins) are allowed to host experiences.</p>
                              </div>
                              
@@ -1314,7 +1314,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                           }
                                       }
                                   }}
-                                  className="flex-1 px-4 py-2 bg-dune border border-gray-200 rounded-xl focus:bg-dune focus:ring-2 focus:ring-[#0284C7] focus:outline-none transition-all"
+                                  className="flex-1 px-4 py-2 bg-white border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#0284C7] focus:outline-none transition-all"
                                />
                                <button 
                                   onClick={() => {
@@ -1331,7 +1331,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
 
                              <div className="flex flex-wrap gap-2">
                                 {authorizedExperienceHosts.map((email, idx) => (
-                                    <div key={idx} className="flex items-center gap-2 bg-dune border border-gray-200 px-3 py-1.5 rounded-lg text-sm text-gray-700">
+                                    <div key={idx} className="flex items-center gap-2 bg-white border border-gray-200 px-3 py-1.5 rounded-lg text-sm text-gray-700">
                                         {email}
                                         <button onClick={() => setAuthorizedExperienceHosts(authorizedExperienceHosts.filter(e => e !== email))} className="text-gray-400 hover:text-red-500 ml-1">
                                             <TrashIcon />
@@ -1343,15 +1343,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                        </div>
                    </section>
 
-                   <section className="bg-dune p-6 rounded-2xl border border-gray-100 shadow-sm space-y-6">
+                   <section className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-6">
                         <div>
-                            <h2 className="text-xl font-bold text-canvas">Payment & Commission Settings</h2>
+                            <h2 className="text-xl font-bold text-gray-900">Payment & Commission Settings</h2>
                             <p className="text-sm text-gray-500 mt-1">Configure global rates for platform commissions, tax, and system fees applied during checkout.</p>
                         </div>
                         
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                            <div className="space-y-2">
-                              <label className="block text-sm font-semibold text-canvas">Platform Commission (%)</label>
+                              <label className="block text-sm font-semibold text-gray-900">Platform Commission (%)</label>
                               <div className="relative">
                                  <input 
                                     type="number"
@@ -1359,7 +1359,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                     max="100"
                                     value={paymentRates.commission_rate}
                                     onChange={e => setPaymentRates(prev => ({ ...prev, commission_rate: Number(e.target.value) }))}
-                                    className="w-full pl-4 pr-10 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-dune focus:ring-2 focus:ring-[#0284C7] focus:outline-none transition-all font-mono font-semibold"
+                                    className="w-full pl-4 pr-10 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#0284C7] focus:outline-none transition-all font-mono font-semibold"
                                  />
                                  <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-gray-500 font-bold">%</div>
                               </div>
@@ -1367,7 +1367,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                            </div>
 
                            <div className="space-y-2">
-                              <label className="block text-sm font-semibold text-canvas">GST / Tax Rate (%)</label>
+                              <label className="block text-sm font-semibold text-gray-900">GST / Tax Rate (%)</label>
                               <div className="relative">
                                  <input 
                                     type="number"
@@ -1375,7 +1375,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                     max="100"
                                     value={paymentRates.tax_rate}
                                     onChange={e => setPaymentRates(prev => ({ ...prev, tax_rate: Number(e.target.value) }))}
-                                    className="w-full pl-4 pr-10 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-dune focus:ring-2 focus:ring-[#0284C7] focus:outline-none transition-all font-mono font-semibold"
+                                    className="w-full pl-4 pr-10 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#0284C7] focus:outline-none transition-all font-mono font-semibold"
                                  />
                                  <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-gray-500 font-bold">%</div>
                               </div>
@@ -1383,7 +1383,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                            </div>
 
                            <div className="space-y-2">
-                              <label className="block text-sm font-semibold text-canvas">Flat System Fee (₹)</label>
+                              <label className="block text-sm font-semibold text-gray-900">Flat System Fee (₹)</label>
                               <div className="relative">
                                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-500 font-bold">₹</div>
                                  <input 
@@ -1391,7 +1391,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                     min="0"
                                     value={paymentRates.system_fee}
                                     onChange={e => setPaymentRates(prev => ({ ...prev, system_fee: Number(e.target.value) }))}
-                                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-dune focus:ring-2 focus:ring-[#0284C7] focus:outline-none transition-all font-mono font-semibold"
+                                    className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#0284C7] focus:outline-none transition-all font-mono font-semibold"
                                  />
                               </div>
                               <p className="text-xs text-gray-400">Flat processing fee added to final checkout total.</p>
@@ -1445,7 +1445,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                           className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
                              marketingSubTab === 'moderation'
                                 ? 'border-sky-600 text-sky-700 font-bold'
-                                : 'border-transparent text-gray-500 hover:text-canvas'
+                                : 'border-transparent text-gray-500 hover:text-gray-900'
                           }`}
                        >
                           <Megaphone className="w-4 h-4" />
@@ -1457,7 +1457,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                           className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
                              marketingSubTab === 'linkage'
                                 ? 'border-sky-600 text-sky-700 font-bold'
-                                : 'border-transparent text-gray-500 hover:text-canvas'
+                                : 'border-transparent text-gray-500 hover:text-gray-900'
                           }`}
                        >
                           <Link className="w-4 h-4" />
@@ -1469,7 +1469,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                           className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
                              marketingSubTab === 'outreach'
                                 ? 'border-sky-600 text-sky-700 font-bold'
-                                : 'border-transparent text-gray-500 hover:text-canvas'
+                                : 'border-transparent text-gray-500 hover:text-gray-900'
                           }`}
                        >
                           <Users className="w-4 h-4" />
@@ -1481,7 +1481,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                           className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
                              marketingSubTab === 'organic_social'
                                 ? 'border-sky-600 text-sky-700 font-bold'
-                                : 'border-transparent text-gray-500 hover:text-canvas'
+                                : 'border-transparent text-gray-500 hover:text-gray-900'
                           }`}
                        >
                           <Sparkles className="w-4 h-4 text-amber-500" />
@@ -1494,17 +1494,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                        <div className="space-y-6 text-left">
                           {/* Stats overview */}
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                             <div className="bg-dune p-6 rounded-2xl border border-gray-200 shadow-sm">
+                             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                                 <span className="text-gray-500 text-xs font-bold uppercase tracking-wider block mb-1">Pending Review</span>
                                 <span className="text-3xl font-bold text-amber-500">{marketingCampaigns.filter(c => c.status === 'pending').length}</span>
                              </div>
-                             <div className="bg-dune p-6 rounded-2xl border border-gray-200 shadow-sm">
+                             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                                 <span className="text-gray-500 text-xs font-bold uppercase tracking-wider block mb-1">Active Ad Sets</span>
                                 <span className="text-3xl font-bold text-emerald-500">{marketingCampaigns.filter(c => c.status === 'active').length}</span>
                              </div>
-                             <div className="bg-dune p-6 rounded-2xl border border-gray-200 shadow-sm">
+                             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                                 <span className="text-gray-500 text-xs font-bold uppercase tracking-wider block mb-1">Total Active Ad Budget</span>
-                                <span className="text-3xl font-bold text-canvas">
+                                <span className="text-3xl font-bold text-gray-900">
                                    ₹{marketingCampaigns.reduce((sum, c) => sum + (c.status === 'active' ? Number(c.budget) : 0), 0).toLocaleString()}
                                 </span>
                              </div>
@@ -1513,7 +1513,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                           {/* Queue List */}
                           <div className="space-y-6">
                              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-4 gap-4">
-                                <h3 className="text-lg font-bold text-canvas flex items-center gap-2">
+                                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                                    <span>Campaigns Moderation Queue</span>
                                    <span className="text-sm font-normal text-gray-500">({marketingCampaigns.length} total)</span>
                                 </h3>
@@ -1532,14 +1532,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                          onClick={() => setCampaignFilter(tab.id as any)}
                                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 focus:outline-none ${
                                             campaignFilter === tab.id
-                                               ? 'bg-canvas text-white shadow-sm'
-                                               : 'text-gray-500 hover:text-canvas hover:bg-gray-100'
+                                               ? 'bg-zinc-900 text-white shadow-sm'
+                                               : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
                                          }`}
                                       >
                                          <span>{tab.label}</span>
                                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono ${
                                             campaignFilter === tab.id
-                                               ? 'bg-dune/20 text-white'
+                                               ? 'bg-white/20 text-white'
                                                : 'bg-gray-200 text-gray-700'
                                          }`}>
                                             {tab.count}
@@ -1550,7 +1550,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                              </div>
 
                              {marketingCampaigns.length === 0 ? (
-                                <div className="text-center py-16 bg-dune rounded-2xl border border-dashed border-gray-200 shadow-sm w-full">
+                                <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-200 shadow-sm w-full">
                                    <Megaphone className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                                    <p className="text-gray-500 font-medium">No marketing campaigns have been created yet.</p>
                                    <p className="text-xs text-gray-400 mt-1">Host-submitted campaigns will appear here for review.</p>
@@ -1559,7 +1559,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                 const filteredCampaigns = marketingCampaigns.filter(c => campaignFilter === 'all' || c.status === campaignFilter);
                                 if (filteredCampaigns.length === 0) {
                                    return (
-                                      <div className="text-center py-16 bg-dune rounded-2xl border border-dashed border-gray-200 shadow-sm w-full">
+                                      <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-200 shadow-sm w-full">
                                          <Megaphone className="w-10 h-10 text-gray-300 mx-auto mb-2" />
                                          <p className="text-gray-500 font-medium">No campaigns match this filter.</p>
                                          <p className="text-xs text-gray-400 mt-1">Try switching to a different status filter above.</p>
@@ -1569,12 +1569,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                 return (
                                    <div className="grid grid-cols-1 gap-6 w-full">
                                       {filteredCampaigns.map((campaign) => (
-                                      <div key={campaign.id} className="bg-dune rounded-2xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow flex flex-col md:flex-row text-left">
+                                      <div key={campaign.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow flex flex-col md:flex-row text-left">
                                          <div className="p-6 flex-1 space-y-4">
                                             <div className="flex flex-wrap items-center justify-between gap-3">
                                                <div className="space-y-1">
                                                   <div className="flex items-center gap-2">
-                                                     <h4 className="text-lg font-bold text-canvas">{campaign.title}</h4>
+                                                     <h4 className="text-lg font-bold text-gray-900">{campaign.title}</h4>
                                                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
                                                         campaign.status === 'pending' ? 'bg-amber-100 text-amber-700' :
                                                         campaign.status === 'active' ? 'bg-emerald-100 text-emerald-700' :
@@ -1660,11 +1660,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                             {/* Direct Conversions API (CAPI) & Google Ads Trackers */}
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs p-4 bg-blue-50/15 border border-blue-100/60 rounded-xl">
                                                <div>
-                                                  <span className="text-[10px] font-bold text-brand-dark uppercase tracking-wider block mb-1.5">Meta Conversions API (CAPI) Configuration</span>
+                                                  <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block mb-1.5">Meta Conversions API (CAPI) Configuration</span>
                                                   {campaign.meta_pixel_id ? (
                                                      <div className="space-y-1">
                                                         <p className="text-xs text-gray-700">
-                                                           Pixel ID: <span className="font-mono font-bold text-canvas bg-dune border px-1.5 py-0.5 rounded">{campaign.meta_pixel_id}</span>
+                                                           Pixel ID: <span className="font-mono font-bold text-gray-900 bg-white border px-1.5 py-0.5 rounded">{campaign.meta_pixel_id}</span>
                                                         </p>
                                                         <p className="text-[10px] text-zinc-400 truncate font-mono">
                                                            Token: {campaign.meta_capi_token ? `${campaign.meta_capi_token.substring(0, 15)}... (active)` : 'None'}
@@ -1679,7 +1679,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                                   {campaign.google_conversion_id ? (
                                                      <div className="space-y-1">
                                                         <p className="text-xs text-gray-700">
-                                                           Conversion ID: <span className="font-mono font-bold text-canvas bg-dune border px-1.5 py-0.5 rounded">{campaign.google_conversion_id}</span>
+                                                           Conversion ID: <span className="font-mono font-bold text-gray-900 bg-white border px-1.5 py-0.5 rounded">{campaign.google_conversion_id}</span>
                                                         </p>
                                                         <p className="text-[10px] text-zinc-500 font-mono">
                                                            Label: {campaign.google_conversion_label || '—'}
@@ -1729,21 +1729,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                                         </div>
                                                      </div>
                                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center text-[10px] font-mono">
-                                                        <div className="bg-dune p-2 border rounded-lg">
+                                                        <div className="bg-white p-2 border rounded-lg">
                                                            <span className="text-gray-400 block mb-0.5">Impressions</span>
-                                                           <strong className="text-canvas font-bold">{campaign.analytics?.impressions?.toLocaleString() || 0}</strong>
+                                                           <strong className="text-gray-900 font-bold">{campaign.analytics?.impressions?.toLocaleString() || 0}</strong>
                                                         </div>
-                                                        <div className="bg-dune p-2 border rounded-lg">
+                                                        <div className="bg-white p-2 border rounded-lg">
                                                            <span className="text-gray-400 block mb-0.5">Clicks</span>
-                                                           <strong className="text-canvas font-bold">{campaign.analytics?.clicks?.toLocaleString() || 0}</strong>
+                                                           <strong className="text-gray-900 font-bold">{campaign.analytics?.clicks?.toLocaleString() || 0}</strong>
                                                         </div>
-                                                        <div className="bg-dune p-2 border rounded-lg">
+                                                        <div className="bg-white p-2 border rounded-lg">
                                                            <span className="text-gray-400 block mb-0.5">CTR</span>
-                                                           <strong className="text-canvas font-bold">{campaign.analytics?.ctr?.toFixed(2) || '0.00'}%</strong>
+                                                           <strong className="text-gray-900 font-bold">{campaign.analytics?.ctr?.toFixed(2) || '0.00'}%</strong>
                                                         </div>
-                                                        <div className="bg-dune p-2 border rounded-lg">
+                                                        <div className="bg-white p-2 border rounded-lg">
                                                            <span className="text-gray-400 block mb-0.5">Pacing</span>
-                                                           <strong className="text-canvas font-bold uppercase">{campaign.pacing_mode || 'standard'}</strong>
+                                                           <strong className="text-gray-900 font-bold uppercase">{campaign.pacing_mode || 'standard'}</strong>
                                                         </div>
                                                      </div>
                                                   </div>
@@ -1843,14 +1843,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 text-left w-full">
                           {/* Stripe Production Mode */}
                           <div className="lg:col-span-5 space-y-6">
-                             <div className="bg-dune p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
+                             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
                                 <div className="flex items-center justify-between">
                                    <div className="flex items-center gap-3">
                                       <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
                                          <CreditCard className="w-6 h-6" />
                                       </div>
                                       <div>
-                                         <h4 className="font-bold text-canvas">Merchant Billing Mode</h4>
+                                         <h4 className="font-bold text-gray-900">Merchant Billing Mode</h4>
                                          <p className="text-xs text-gray-400">Manage Stripe subscription processing</p>
                                       </div>
                                    </div>
@@ -1873,7 +1873,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                             stripeLiveMode ? 'bg-red-600' : 'bg-gray-200'
                                          }`}
                                       >
-                                         <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-dune shadow ring-0 transition duration-200 ease-in-out ${
+                                         <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
                                             stripeLiveMode ? 'translate-x-5' : 'translate-x-0'
                                          }`} />
                                       </button>
@@ -1920,13 +1920,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
 
                           {/* Meta & Google API Linkage */}
                           <div className="lg:col-span-7 space-y-6">
-                             <div className="bg-dune p-6 rounded-2xl border border-gray-200 shadow-sm space-y-6">
+                             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-6">
                                 <div className="flex items-center gap-3">
                                    <div className="p-3 bg-sky-50 text-sky-600 rounded-xl">
                                       <Globe className="w-6 h-6 animate-spin-slow" />
                                    </div>
                                    <div>
-                                      <h4 className="font-bold text-canvas">Meta Marketing Graph API Connection</h4>
+                                      <h4 className="font-bold text-gray-900">Meta Marketing Graph API Connection</h4>
                                       <p className="text-xs text-gray-400">Oversee real-time campaign dispatch integrations</p>
                                    </div>
                                 </div>
@@ -1950,9 +1950,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                    <p className="text-xs text-gray-500 leading-relaxed mb-2">
                                       Below is the exact JSON structure dispatched to the Meta Ads Manager API upon approving and validating a paid campaign.
                                    </p>
-                                   <pre className="bg-canvas text-sky-300 font-mono text-[11px] p-4 rounded-xl overflow-x-auto max-h-[180px] scrollbar-thin">
+                                   <pre className="bg-zinc-900 text-sky-300 font-mono text-[11px] p-4 rounded-xl overflow-x-auto max-h-[180px] scrollbar-thin">
 {`{
-  "name": "Amigove Host Campaign - #[ID]",
+  "name": "Encho Host Campaign - #[ID]",
   "objective": "OUTCOME_TRAFFIC",
   "status": "PAUSED",
   "special_ad_categories": ["HOUSING"],
@@ -1973,11 +1973,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   "creative": {
     "name": "Pillar 5 Rahul-Proof Ad Creative",
     "object_story_spec": {
-      "instagram_actor_id": "ig_amigove_host",
+      "instagram_actor_id": "ig_encho_host",
       "link_data": {
         "call_to_action": {"type": "BOOK_NOW"},
         "message": "[Description Copy]",
-        "link": "https://amigove.com/stays/[Listing_ID]"
+        "link": "https://encho.space/stays/[Listing_ID]"
       }
     }
   }
@@ -1994,7 +1994,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                    <div className="bg-black text-emerald-500 font-mono text-[10px] p-3 rounded-lg max-h-[140px] overflow-y-auto space-y-1.5 scrollbar-thin text-left">
                                       <div className="text-zinc-500">[2026-07-16 18:50] Webhook listener listening on port 3000...</div>
                                       <div className="text-zinc-500">[2026-07-16 18:51] Received GET challenge from graph.facebook.com...</div>
-                                      <div className="text-sky-400">&gt; Verifying Meta hub.verify_token: "AMIGOVE_METRICS_SUITE_AUTHENTICATOR_2026"</div>
+                                      <div className="text-sky-400">&gt; Verifying Meta hub.verify_token: "ENCHO_METRICS_SUITE_AUTHENTICATOR_2026"</div>
                                       <div className="text-emerald-400">&gt; Verification Signature Validated (status: 200 OK)</div>
                                       <div className="text-zinc-500">[2026-07-16 18:52] Received Stripe webhook charge.succeeded (ID: ch_398f3b)...</div>
                                       <div className="text-amber-400">&gt; Verifying SHA256 Signature header: t=168953112, v1=e3b0c44...</div>
@@ -2011,26 +2011,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                        <div className="space-y-6 text-left w-full">
                           {/* Stats Panel */}
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
-                             <div className="bg-dune p-4 rounded-xl border shadow-sm">
+                             <div className="bg-white p-4 rounded-xl border shadow-sm">
                                 <span className="text-gray-400 text-[10px] font-bold uppercase tracking-wider block mb-0.5">Total Leads</span>
-                                <span className="text-2xl font-bold text-canvas">{outreachLeads.length}</span>
+                                <span className="text-2xl font-bold text-gray-900">{outreachLeads.length}</span>
                              </div>
-                             <div className="bg-dune p-4 rounded-xl border shadow-sm">
+                             <div className="bg-white p-4 rounded-xl border shadow-sm">
                                 <span className="text-gray-400 text-[10px] font-bold uppercase tracking-wider block mb-0.5">Discovered</span>
                                 <span className="text-2xl font-bold text-amber-600">{outreachLeads.filter(l => l.status === 'discovered').length}</span>
                              </div>
-                             <div className="bg-dune p-4 rounded-xl border shadow-sm">
+                             <div className="bg-white p-4 rounded-xl border shadow-sm">
                                 <span className="text-gray-400 text-[10px] font-bold uppercase tracking-wider block mb-0.5">In Negotiation</span>
                                 <span className="text-2xl font-bold text-indigo-600">{outreachLeads.filter(l => l.status === 'negotiating').length}</span>
                              </div>
-                             <div className="bg-dune p-4 rounded-xl border shadow-sm">
+                             <div className="bg-white p-4 rounded-xl border shadow-sm">
                                 <span className="text-gray-400 text-[10px] font-bold uppercase tracking-wider block mb-0.5">Onboarded</span>
                                 <span className="text-2xl font-bold text-emerald-600">{outreachLeads.filter(l => l.status === 'onboarded').length}</span>
                              </div>
                           </div>
 
                           {/* Outreach Search and Filters bar */}
-                          <div className="bg-dune p-4 rounded-xl border shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 w-full">
+                          <div className="bg-white p-4 rounded-xl border shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 w-full">
                              <div className="relative flex-1">
                                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
                                    <Search className="w-4 h-4" />
@@ -2040,7 +2040,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                    placeholder="Search properties, locations, instagram handles..."
                                    value={outreachSearch}
                                    onChange={(e) => setOutreachSearch(e.target.value)}
-                                   className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:bg-dune focus:outline-none text-sm font-medium transition-all"
+                                   className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:outline-none text-sm font-medium transition-all"
                                 />
                              </div>
 
@@ -2060,7 +2060,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                       className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all focus:outline-none ${
                                          outreachFilter === filter.id
                                             ? 'bg-sky-600 text-white shadow-sm font-bold'
-                                            : 'text-gray-500 hover:text-canvas hover:bg-gray-100'
+                                            : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
                                       }`}
                                    >
                                       {filter.label}
@@ -2073,7 +2073,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                       handleResetOutreachForm();
                                       setIsAddingOutreach(true);
                                    }}
-                                   className="bg-canvas hover:bg-sky-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 ml-2 shadow-sm"
+                                   className="bg-zinc-900 hover:bg-sky-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 ml-2 shadow-sm"
                                 >
                                    <Plus className="w-3.5 h-3.5" /> Add Target Lead
                                 </button>
@@ -2084,7 +2084,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                           {isAddingOutreach && (
                              <form onSubmit={handleSaveOutreachLead} className="bg-gray-50 p-6 rounded-2xl border border-gray-200 space-y-4 w-full">
                                 <div className="flex items-center justify-between border-b pb-3 border-gray-200">
-                                   <h4 className="font-bold text-canvas text-base">
+                                   <h4 className="font-bold text-gray-900 text-base">
                                       {editingOutreachId ? `Edit Target Lead Details: "${outreachForm.property_name}"` : 'Add Premium Direct-Booking Target Lead'}
                                    </h4>
                                    <button
@@ -2105,7 +2105,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                          value={outreachForm.property_name}
                                          onChange={e => setOutreachForm(prev => ({ ...prev, property_name: e.target.value }))}
                                          placeholder="e.g. Glacier Peak A-Frame"
-                                         className="w-full border rounded-lg p-2 bg-dune text-xs font-medium focus:outline-none"
+                                         className="w-full border rounded-lg p-2 bg-white text-xs font-medium focus:outline-none"
                                       />
                                    </div>
                                    <div className="space-y-1">
@@ -2115,7 +2115,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                          value={outreachForm.location}
                                          onChange={e => setOutreachForm(prev => ({ ...prev, location: e.target.value }))}
                                          placeholder="e.g. Mount Rainier, WA"
-                                         className="w-full border rounded-lg p-2 bg-dune text-xs font-medium focus:outline-none"
+                                         className="w-full border rounded-lg p-2 bg-white text-xs font-medium focus:outline-none"
                                       />
                                    </div>
                                    <div className="space-y-1">
@@ -2125,7 +2125,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                          value={outreachForm.owner_name}
                                          onChange={e => setOutreachForm(prev => ({ ...prev, owner_name: e.target.value }))}
                                          placeholder="e.g. Jane Miller"
-                                         className="w-full border rounded-lg p-2 bg-dune text-xs font-medium focus:outline-none"
+                                         className="w-full border rounded-lg p-2 bg-white text-xs font-medium focus:outline-none"
                                       />
                                    </div>
 
@@ -2138,7 +2138,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                             value={outreachForm.instagram_username}
                                             onChange={e => setOutreachForm(prev => ({ ...prev, instagram_username: e.target.value }))}
                                             placeholder="glaciercabin"
-                                            className="w-full border rounded-lg pl-6 pr-2 py-2 bg-dune text-xs font-medium focus:outline-none"
+                                            className="w-full border rounded-lg pl-6 pr-2 py-2 bg-white text-xs font-medium focus:outline-none"
                                          />
                                       </div>
                                    </div>
@@ -2149,7 +2149,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                          value={outreachForm.facebook_url}
                                          onChange={e => setOutreachForm(prev => ({ ...prev, facebook_url: e.target.value }))}
                                          placeholder="https://facebook.com/glaciercabin"
-                                         className="w-full border rounded-lg p-2 bg-dune text-xs font-medium focus:outline-none"
+                                         className="w-full border rounded-lg p-2 bg-white text-xs font-medium focus:outline-none"
                                       />
                                    </div>
                                    <div className="space-y-1">
@@ -2159,7 +2159,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                          value={outreachForm.estimated_nightly_rate}
                                          onChange={e => setOutreachForm(prev => ({ ...prev, estimated_nightly_rate: Number(e.target.value) }))}
                                          placeholder="450"
-                                         className="w-full border rounded-lg p-2 bg-dune text-xs font-medium focus:outline-none font-mono"
+                                         className="w-full border rounded-lg p-2 bg-white text-xs font-medium focus:outline-none font-mono"
                                       />
                                    </div>
 
@@ -2170,7 +2170,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                          value={outreachForm.email}
                                          onChange={e => setOutreachForm(prev => ({ ...prev, email: e.target.value }))}
                                          placeholder="jane@glaciercabin.co"
-                                         className="w-full border rounded-lg p-2 bg-dune text-xs font-medium focus:outline-none"
+                                         className="w-full border rounded-lg p-2 bg-white text-xs font-medium focus:outline-none"
                                       />
                                    </div>
                                    <div className="space-y-1">
@@ -2180,7 +2180,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                          value={outreachForm.phone}
                                          onChange={e => setOutreachForm(prev => ({ ...prev, phone: e.target.value }))}
                                          placeholder="+1 (555) 019-2831"
-                                         className="w-full border rounded-lg p-2 bg-dune text-xs font-medium focus:outline-none"
+                                         className="w-full border rounded-lg p-2 bg-white text-xs font-medium focus:outline-none"
                                       />
                                    </div>
                                    <div className="space-y-1">
@@ -2188,7 +2188,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                       <select
                                          value={outreachForm.status}
                                          onChange={e => setOutreachForm(prev => ({ ...prev, status: e.target.value }))}
-                                         className="w-full border rounded-lg p-2 bg-dune text-xs font-bold text-gray-700 focus:outline-none cursor-pointer"
+                                         className="w-full border rounded-lg p-2 bg-white text-xs font-bold text-gray-700 focus:outline-none cursor-pointer"
                                       >
                                          <option value="discovered">Discovered (Uncontacted)</option>
                                          <option value="contacted">Contacted (In Pitch)</option>
@@ -2206,7 +2206,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                       onChange={e => setOutreachForm(prev => ({ ...prev, notes: e.target.value }))}
                                       placeholder="Logs of DMs sent, responses, friction points, or integration requirements. Pitching direct-booking engine saving..."
                                       rows={3}
-                                      className="w-full border rounded-lg p-2.5 bg-dune text-xs font-medium focus:outline-none resize-none leading-relaxed"
+                                      className="w-full border rounded-lg p-2.5 bg-white text-xs font-medium focus:outline-none resize-none leading-relaxed"
                                    />
                                 </div>
 
@@ -2243,7 +2243,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
 
                              if (filteredLeads.length === 0) {
                                 return (
-                                   <div className="text-center py-16 bg-dune rounded-2xl border border-dashed border-gray-200 shadow-sm w-full">
+                                   <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-200 shadow-sm w-full">
                                       <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                                       <p className="text-gray-500 font-medium">No outreach leads found matching criteria.</p>
                                       <p className="text-xs text-gray-400 mt-1">Start by adding high-value direct-booking-less properties!</p>
@@ -2259,7 +2259,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                       const monthlySavingsVal = Math.round(estNightlyVal * 15 * 0.15);
 
                                       // Pre-build draft pitch email
-                                      const emailSubject = encodeURIComponent(`Boost direct bookings for ${lead.property_name} - Amigove`);
+                                      const emailSubject = encodeURIComponent(`Boost direct bookings for ${lead.property_name} - Encho Space`);
                                       const emailBody = encodeURIComponent(
                                          `Hi ${lead.owner_name || 'Owner'},
 
@@ -2270,7 +2270,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                          `I noticed that you currently rely heavily on third-party OTAs (like Airbnb and Booking.com) for bookings. Did you know that OTA commission structures and guest booking fees are consuming over 15% of your total booking volume? At an estimated nightly rate of ₹/USD ${estNightlyVal}, you're potentially losing over ₹/USD ${monthlySavingsVal} every single month in platform commissions!
 
 ` +
-                                         `With Amigove, we provide custom, direct-booking engines for cabin and luxury villa owners. Additionally, we provide our "Pillar 5 Rahul-Proof Smart Targeter" which runs hyper-localized Meta marketing campaigns directly targetting high-intent visitors near you.
+                                         `With Encho Space, we provide custom, direct-booking engines for cabin and luxury villa owners. Additionally, we provide our "Pillar 5 Rahul-Proof Smart Targeter" which runs hyper-localized Meta marketing campaigns directly targetting high-intent visitors near you.
 
 ` +
                                          `I'd love to show you how easy it is to onboard and transition into independent direct bookings. Are you open to a brief 10-minute demo this week?
@@ -2278,14 +2278,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
 ` +
                                          `Best regards,
 ` +
-                                         `${user?.name || 'Amigove SaaS Onboarding team'}
+                                         `${user?.name || 'Encho SaaS Onboarding team'}
 ` +
-                                         `Co-Founder, Amigove`
+                                         `Co-Founder, Encho Space`
                                       );
                                       const mailtoLink = `mailto:${lead.email || ''}?subject=${emailSubject}&body=${emailBody}`;
 
                                       return (
-                                         <div key={lead.id} className="bg-dune rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow p-6 flex flex-col justify-between space-y-4 text-left">
+                                         <div key={lead.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow p-6 flex flex-col justify-between space-y-4 text-left">
                                             <div className="space-y-3 w-full">
                                                {/* Header row */}
                                                <div className="flex justify-between items-start gap-2">
@@ -2357,7 +2357,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                                   </div>
                                                   <div className="text-right">
                                                      <span className="text-[9px] font-bold text-gray-400 block uppercase">Est. Rate</span>
-                                                     <span className="text-xs font-mono font-bold text-canvas font-semibold">₹{estNightlyVal.toLocaleString()}/nt</span>
+                                                     <span className="text-xs font-mono font-bold text-gray-900 font-semibold">₹{estNightlyVal.toLocaleString()}/nt</span>
                                                   </div>
                                                </div>
 
@@ -2382,8 +2382,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                                            onClick={() => handleQuickStatusUpdate(lead, statusOption)}
                                                            className={`py-1 text-[9px] font-black uppercase rounded border tracking-tight text-center truncate ${
                                                               lead.status === statusOption
-                                                                 ? 'bg-canvas text-white border-zinc-900 shadow-sm font-bold'
-                                                                 : 'bg-dune hover:bg-gray-50 text-gray-500 border-gray-200'
+                                                                 ? 'bg-zinc-900 text-white border-zinc-900 shadow-sm font-bold'
+                                                                 : 'bg-white hover:bg-gray-50 text-gray-500 border-gray-200'
                                                            }`}
                                                         >
                                                            {statusOption.replace('negotiating', 'negoti').replace('discovered', 'discov')}
@@ -2452,19 +2452,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                        <div className="space-y-6 text-left w-full">
                           {/* Stats Overview */}
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                             <div className="bg-dune p-6 rounded-2xl border border-gray-200 shadow-sm">
+                             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                                 <span className="text-gray-500 text-xs font-bold uppercase tracking-wider block mb-1">Pending Approval</span>
                                 <span className="text-3xl font-bold text-amber-500">
                                    {adminSocialPosts.filter(p => p.status === 'pending_approval').length}
                                 </span>
                              </div>
-                             <div className="bg-dune p-6 rounded-2xl border border-gray-200 shadow-sm">
+                             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                                 <span className="text-gray-500 text-xs font-bold uppercase tracking-wider block mb-1">Approved Posts</span>
                                 <span className="text-3xl font-bold text-emerald-500">
                                    {adminSocialPosts.filter(p => p.status === 'approved').length}
                                 </span>
                              </div>
-                             <div className="bg-dune p-6 rounded-2xl border border-gray-200 shadow-sm">
+                             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                                 <span className="text-gray-500 text-xs font-bold uppercase tracking-wider block mb-1">AI/Admin Rejected</span>
                                 <span className="text-3xl font-bold text-rose-500">
                                    {adminSocialPosts.filter(p => p.status === 'rejected').length}
@@ -2473,9 +2473,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                           </div>
 
                           {/* Posts Table */}
-                          <div className="bg-dune rounded-3xl border border-gray-200 shadow-sm overflow-hidden">
+                          <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden">
                              <div className="p-6 border-b border-gray-150 flex items-center justify-between">
-                                <h3 className="text-base font-extrabold text-canvas uppercase">
+                                <h3 className="text-base font-extrabold text-gray-900 uppercase">
                                    Organic Publishing Request Pipeline
                                 </h3>
                                 <button
@@ -2513,7 +2513,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                       <tbody className="divide-y divide-gray-150 text-xs">
                                          {adminSocialPosts.map((post) => (
                                             <tr key={post.id} className="hover:bg-gray-50/50 transition-colors">
-                                               <td className="px-6 py-4 font-bold text-canvas">
+                                               <td className="px-6 py-4 font-bold text-gray-900">
                                                   {post.listing_title}
                                                </td>
                                                <td className="px-6 py-4 text-gray-500 font-mono">
@@ -2602,8 +2602,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                     {/* Reject social post modal overlay */}
                     {rejectingSocialPostId !== null && (
                        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                          <div className="bg-dune rounded-3xl max-w-lg w-full p-6 md:p-8 shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto text-left">
-                             <h4 className="text-xl font-black text-canvas mb-1 tracking-tight">Social Post Rejection Moderation</h4>
+                          <div className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto text-left">
+                             <h4 className="text-xl font-black text-gray-900 mb-1 tracking-tight">Social Post Rejection Moderation</h4>
                              <p className="text-xs text-gray-500 mb-4 leading-relaxed">
                                 Provide specific feedback to the host on how they can improve the caption or media before resubmitting.
                              </p>
@@ -2645,8 +2645,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                     {/* Reject modal overlay */}
                     {rejectingCampaignId !== null && (
                        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                          <div className="bg-dune rounded-3xl max-w-lg w-full p-6 md:p-8 shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto text-left">
-                             <h4 className="text-xl font-black text-canvas mb-1 tracking-tight">Rejection Moderation Feedback</h4>
+                          <div className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto text-left">
+                             <h4 className="text-xl font-black text-gray-900 mb-1 tracking-tight">Rejection Moderation Feedback</h4>
                              <p className="text-xs text-gray-500 mb-4 leading-relaxed">
                                 Choose specific fields to reject and input exact correction reasons to guide the host, along with a general summary.
                              </p>
@@ -2663,7 +2663,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                       className="mt-1 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
                                    />
                                    <div className="flex-1 space-y-1">
-                                      <span className="text-xs font-bold text-canvas">Campaign Title</span>
+                                      <span className="text-xs font-bold text-gray-900">Campaign Title</span>
                                       {rejectedFieldInputs['title'] !== undefined && (
                                          <input 
                                             type="text"
@@ -2671,7 +2671,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                             value={rejectedFieldInputs['title'] || ''}
                                             onChange={(e) => handleUpdateRejectionReason('title', e.target.value)}
                                             placeholder="Provide exact correction required..."
-                                            className="w-full text-xs p-2 bg-dune border border-gray-200 rounded-lg focus:outline-none"
+                                            className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none"
                                          />
                                       )}
                                    </div>
@@ -2685,7 +2685,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                       className="mt-1 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
                                    />
                                    <div className="flex-1 space-y-1">
-                                      <span className="text-xs font-bold text-canvas">Primary Description Ad Copy</span>
+                                      <span className="text-xs font-bold text-gray-900">Primary Description Ad Copy</span>
                                       {rejectedFieldInputs['description'] !== undefined && (
                                          <input 
                                             type="text"
@@ -2693,7 +2693,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                             value={rejectedFieldInputs['description'] || ''}
                                             onChange={(e) => handleUpdateRejectionReason('description', e.target.value)}
                                             placeholder="Provide exact correction required..."
-                                            className="w-full text-xs p-2 bg-dune border border-gray-200 rounded-lg focus:outline-none"
+                                            className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none"
                                          />
                                       )}
                                    </div>
@@ -2707,7 +2707,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                       className="mt-1 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
                                    />
                                    <div className="flex-1 space-y-1">
-                                      <span className="text-xs font-bold text-canvas">Feed Description / Tagline</span>
+                                      <span className="text-xs font-bold text-gray-900">Feed Description / Tagline</span>
                                       {rejectedFieldInputs['feed_description'] !== undefined && (
                                          <input 
                                             type="text"
@@ -2715,7 +2715,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                             value={rejectedFieldInputs['feed_description'] || ''}
                                             onChange={(e) => handleUpdateRejectionReason('feed_description', e.target.value)}
                                             placeholder="Provide exact correction required..."
-                                            className="w-full text-xs p-2 bg-dune border border-gray-200 rounded-lg focus:outline-none"
+                                            className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none"
                                          />
                                       )}
                                    </div>
@@ -2729,7 +2729,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                       className="mt-1 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
                                    />
                                    <div className="flex-1 space-y-1">
-                                      <span className="text-xs font-bold text-canvas">Target Locations</span>
+                                      <span className="text-xs font-bold text-gray-900">Target Locations</span>
                                       {rejectedFieldInputs['target_locations'] !== undefined && (
                                          <input 
                                             type="text"
@@ -2737,7 +2737,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                             value={rejectedFieldInputs['target_locations'] || ''}
                                             onChange={(e) => handleUpdateRejectionReason('target_locations', e.target.value)}
                                             placeholder="Provide exact correction required..."
-                                            className="w-full text-xs p-2 bg-dune border border-gray-200 rounded-lg focus:outline-none"
+                                            className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none"
                                          />
                                       )}
                                    </div>
@@ -2751,7 +2751,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                       className="mt-1 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
                                    />
                                    <div className="flex-1 space-y-1">
-                                      <span className="text-xs font-bold text-canvas">Target Platforms Selection</span>
+                                      <span className="text-xs font-bold text-gray-900">Target Platforms Selection</span>
                                       {rejectedFieldInputs['platforms'] !== undefined && (
                                          <input 
                                             type="text"
@@ -2759,7 +2759,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                             value={rejectedFieldInputs['platforms'] || ''}
                                             onChange={(e) => handleUpdateRejectionReason('platforms', e.target.value)}
                                             placeholder="Provide exact correction required..."
-                                            className="w-full text-xs p-2 bg-dune border border-gray-200 rounded-lg focus:outline-none"
+                                            className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none"
                                          />
                                       )}
                                    </div>
@@ -2773,7 +2773,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                       className="mt-1 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
                                    />
                                    <div className="flex-1 space-y-1">
-                                      <span className="text-xs font-bold text-canvas">Visual Image Assets</span>
+                                      <span className="text-xs font-bold text-gray-900">Visual Image Assets</span>
                                       {rejectedFieldInputs['media_urls'] !== undefined && (
                                          <input 
                                             type="text"
@@ -2781,7 +2781,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                             value={rejectedFieldInputs['media_urls'] || ''}
                                             onChange={(e) => handleUpdateRejectionReason('media_urls', e.target.value)}
                                             placeholder="Provide exact correction required..."
-                                            className="w-full text-xs p-2 bg-dune border border-gray-200 rounded-lg focus:outline-none"
+                                            className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none"
                                          />
                                       )}
                                    </div>
@@ -2795,7 +2795,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                       className="mt-1 rounded border-gray-300 text-sky-600 focus:ring-sky-500"
                                    />
                                    <div className="flex-1 space-y-1">
-                                      <span className="text-xs font-bold text-canvas">Reel / Video Asset</span>
+                                      <span className="text-xs font-bold text-gray-900">Reel / Video Asset</span>
                                       {rejectedFieldInputs['video_url'] !== undefined && (
                                          <input 
                                             type="text"
@@ -2803,7 +2803,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                             value={rejectedFieldInputs['video_url'] || ''}
                                             onChange={(e) => handleUpdateRejectionReason('video_url', e.target.value)}
                                             placeholder="Provide exact correction required..."
-                                            className="w-full text-xs p-2 bg-dune border border-gray-200 rounded-lg focus:outline-none"
+                                            className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none"
                                          />
                                       )}
                                    </div>

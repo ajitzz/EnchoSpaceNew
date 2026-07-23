@@ -98,7 +98,7 @@ const AdminInbox = ({ adminMode }: AdminInboxProps) => {
                     </div>
                     <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-start">
-                            <h4 className="font-semibold text-canvas truncate text-sm">{thread.listing_title}</h4>
+                            <h4 className="font-semibold text-gray-900 truncate text-sm">{thread.listing_title}</h4>
                             <span className="text-xs text-gray-400 whitespace-nowrap">{new Date(thread.updated_at).toLocaleDateString()}</span>
                         </div>
                         <p className="text-xs text-gray-500 truncate">
@@ -106,7 +106,7 @@ const AdminInbox = ({ adminMode }: AdminInboxProps) => {
                         </p>
                     </div>
                 </div>
-                <p className={`text-sm truncate text-gray-500 bg-dune p-2 rounded-lg border border-gray-100`}>
+                <p className={`text-sm truncate text-gray-500 bg-white p-2 rounded-lg border border-gray-100`}>
                     {thread.last_message || 'No messages yet'}
                 </p>
             </div>
@@ -118,11 +118,11 @@ const AdminInbox = ({ adminMode }: AdminInboxProps) => {
     }
 
     return (
-        <div className="bg-dune rounded-2xl shadow-sm border border-gray-200 h-[600px] flex overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 h-[600px] flex overflow-hidden">
             {/* Threads List Sidebar */}
             <div className={`${activeThread ? 'hidden md:flex' : 'flex'} w-full md:w-1/3 border-r border-gray-200 flex-col bg-slate-50/50`}>
-                <div className="p-4 border-b border-gray-100 bg-dune/50 backdrop-blur-md sticky top-0 z-10">
-                    <h2 className="font-bold text-canvas">All Platform Conversations</h2>
+                <div className="p-4 border-b border-gray-100 bg-white/50 backdrop-blur-md sticky top-0 z-10">
+                    <h2 className="font-bold text-gray-900">All Platform Conversations</h2>
                     <p className="text-xs text-gray-500 mt-1">{threads.length} total threads</p>
                 </div>
                 <div className="flex-1 overflow-y-auto">
@@ -135,19 +135,19 @@ const AdminInbox = ({ adminMode }: AdminInboxProps) => {
             </div>
 
             {/* Chat Area */}
-            <div className={`${!activeThread ? 'hidden md:flex' : 'flex'} w-full md:w-2/3 flex-col bg-dune`}>
+            <div className={`${!activeThread ? 'hidden md:flex' : 'flex'} w-full md:w-2/3 flex-col bg-white`}>
                 {activeThread ? (
                     <>
                         {/* Chat Header */}
-                        <div className="p-4 bg-dune border-b border-gray-100 flex items-center gap-4 sticky top-0 z-10">
+                        <div className="p-4 bg-white border-b border-gray-100 flex items-center gap-4 sticky top-0 z-10">
                             <button className="md:hidden p-2 hover:bg-gray-100 rounded-full" onClick={() => setActiveThread(null)}>
                                 <ArrowLeft className="w-5 h-5" />
                             </button>
                             <div className="flex-1">
-                                <div className="font-bold text-canvas text-sm">
+                                <div className="font-bold text-gray-900 text-sm">
                                     {activeThread.guest_name} ↔ {activeThread.host_name}
                                 </div>
-                                <div className="text-xs text-brand-dark font-medium">
+                                <div className="text-xs text-blue-600 font-medium">
                                     {activeThread.listing_title}
                                 </div>
                             </div>
@@ -179,7 +179,7 @@ const AdminInbox = ({ adminMode }: AdminInboxProps) => {
                                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                                 </button>
                                             )}
-                                            <div className={`max-w-md rounded-2xl px-5 py-3 shadow-[0_2px_10px_rgba(0,0,0,0.02)] border ${isHost ? 'bg-black text-white rounded-tr-sm border-black' : 'bg-dune text-canvas rounded-tl-sm border-gray-100'}`}>
+                                            <div className={`max-w-md rounded-2xl px-5 py-3 shadow-[0_2px_10px_rgba(0,0,0,0.02)] border ${isHost ? 'bg-black text-white rounded-tr-sm border-black' : 'bg-white text-gray-900 rounded-tl-sm border-gray-100'}`}>
                                                 <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                                             </div>
                                             {!isHost && (
@@ -207,7 +207,7 @@ const AdminInbox = ({ adminMode }: AdminInboxProps) => {
                         </div>
 
                         {/* Input Area */}
-                        <div className="p-4 bg-dune border-t border-gray-100 mt-auto">
+                        <div className="p-4 bg-white border-t border-gray-100 mt-auto">
                             <form 
                                 onSubmit={async (e) => {
                                     e.preventDefault();

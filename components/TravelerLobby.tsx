@@ -127,7 +127,7 @@ export const TravelerLobby: React.FC<TravelerLobbyProps> = ({ experience, onClos
             </div>
             <button 
               onClick={onClose}
-              className="md:hidden w-8 h-8 flex items-center justify-center rounded-full bg-dune/5 text-white"
+              className="md:hidden w-8 h-8 flex items-center justify-center rounded-full bg-white/5 text-white"
             >
               <X className="w-4 h-4" />
             </button>
@@ -136,13 +136,13 @@ export const TravelerLobby: React.FC<TravelerLobbyProps> = ({ experience, onClos
           <div className="flex md:hidden border-b border-white/5">
             <button
               onClick={() => setActiveTab('chat')}
-              className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider ${activeTab === 'chat' ? 'text-blue-400 border-b-2 border-brand' : 'text-gray-500'}`}
+              className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider ${activeTab === 'chat' ? 'text-blue-400 border-b-2 border-blue-500' : 'text-gray-500'}`}
             >
               Group Chat
             </button>
             <button
               onClick={() => setActiveTab('participants')}
-              className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider ${activeTab === 'participants' ? 'text-blue-400 border-b-2 border-brand' : 'text-gray-500'}`}
+              className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider ${activeTab === 'participants' ? 'text-blue-400 border-b-2 border-blue-500' : 'text-gray-500'}`}
             >
               Passengers ({participants.length})
             </button>
@@ -156,14 +156,14 @@ export const TravelerLobby: React.FC<TravelerLobbyProps> = ({ experience, onClos
 
             {loading ? (
               <div className="flex justify-center py-8">
-                <div className="w-5 h-5 border-2 border-brand/30 border-t-blue-500 rounded-full animate-spin" />
+                <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
               </div>
             ) : (
               <div className="space-y-3">
                 {participants.map(p => (
-                  <div key={p.id} className="flex items-center gap-3 p-3 rounded-2xl bg-dune/5 border border-white/5">
+                  <div key={p.id} className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 border border-white/5">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${
-                      p.id === experience.host_id ? 'bg-brand/20 text-blue-400 border border-brand/30' : 'bg-dune/10 text-gray-300'
+                      p.id === experience.host_id ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-white/10 text-gray-300'
                     }`}>
                       {p.name.charAt(0).toUpperCase()}
                     </div>
@@ -197,7 +197,7 @@ export const TravelerLobby: React.FC<TravelerLobbyProps> = ({ experience, onClos
             </div>
             <button 
               onClick={onClose}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-dune/5 hover:bg-dune/10 text-white transition-colors"
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-white transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -205,7 +205,7 @@ export const TravelerLobby: React.FC<TravelerLobbyProps> = ({ experience, onClos
 
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
             <div className="text-center py-6">
-              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-brand/10 mb-3">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-500/10 mb-3">
                 <Crown className="w-6 h-6 text-blue-400" />
               </div>
               <h4 className="text-white font-bold">Welcome to the Lobby!</h4>
@@ -216,7 +216,7 @@ export const TravelerLobby: React.FC<TravelerLobbyProps> = ({ experience, onClos
 
             {loading ? (
               <div className="flex justify-center py-8">
-                <div className="w-6 h-6 border-2 border-brand/30 border-t-blue-500 rounded-full animate-spin" />
+                <div className="w-6 h-6 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
               </div>
             ) : (
               messages.map((msg, idx) => {
@@ -232,7 +232,7 @@ export const TravelerLobby: React.FC<TravelerLobbyProps> = ({ experience, onClos
                           {isMe ? 'You' : msg.user_name}
                         </span>
                         {isHost && !isMe && (
-                          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-brand/20 text-blue-400 border border-brand/30">
+                          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-blue-500/20 text-blue-400 border border-blue-500/30">
                             Host
                           </span>
                         )}
@@ -243,10 +243,10 @@ export const TravelerLobby: React.FC<TravelerLobbyProps> = ({ experience, onClos
                     )}
                     <div className={`max-w-[80%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
                       isMe 
-                        ? 'bg-brand-dark text-white rounded-tr-sm' 
+                        ? 'bg-blue-600 text-white rounded-tr-sm' 
                         : isHost
-                          ? 'bg-[#1a1a1a] text-blue-50 border border-brand/20 rounded-tl-sm'
-                          : 'bg-dune/10 text-gray-100 rounded-tl-sm'
+                          ? 'bg-[#1a1a1a] text-blue-50 border border-blue-500/20 rounded-tl-sm'
+                          : 'bg-white/10 text-gray-100 rounded-tl-sm'
                     }`}>
                       {msg.content}
                     </div>
@@ -264,12 +264,12 @@ export const TravelerLobby: React.FC<TravelerLobbyProps> = ({ experience, onClos
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
                 placeholder="Message the group..."
-                className="flex-1 bg-dune/5 border border-white/10 rounded-full px-5 py-3 text-sm text-white focus:outline-none focus:border-brand transition-colors placeholder:text-gray-600"
+                className="flex-1 bg-white/5 border border-white/10 rounded-full px-5 py-3 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors placeholder:text-gray-600"
               />
               <button
                 type="submit"
                 disabled={sending || !newMessage.trim()}
-                className="w-12 h-12 shrink-0 bg-brand hover:bg-blue-400 rounded-full flex items-center justify-center text-white transition-colors disabled:opacity-50"
+                className="w-12 h-12 shrink-0 bg-blue-500 hover:bg-blue-400 rounded-full flex items-center justify-center text-white transition-colors disabled:opacity-50"
               >
                 <Send className="w-5 h-5 ml-0.5" />
               </button>

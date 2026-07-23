@@ -213,7 +213,7 @@ const ExperienceCard: React.FC<ExperienceCardProps> = ({
                     </span>
                 ) : null}
                 {exp.target_audience && exp.target_audience !== 'all' && (
-                    <span className="px-2.5 py-1 rounded-full bg-dune/10 backdrop-blur-md border border-white/10 text-[9px] font-extrabold uppercase tracking-widest text-zinc-100 shadow-sm">
+                    <span className="px-2.5 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/10 text-[9px] font-extrabold uppercase tracking-widest text-zinc-100 shadow-sm">
                         {exp.target_audience.replace('_', ' ')}
                     </span>
                 )}
@@ -221,7 +221,7 @@ const ExperienceCard: React.FC<ExperienceCardProps> = ({
         </div>
 
         {/* Top-Right: Dark circular action button with a diagonal arrow (Sleek hover glassmorphism) */}
-        <div className="absolute top-7 right-7 z-20 w-11 h-11 md:w-12 md:h-12 rounded-full bg-zinc-950/80 backdrop-blur-md border border-white/10 flex items-center justify-center text-white transition-all duration-300 group-hover:bg-dune/15 group-hover:backdrop-blur-xl group-hover:border-white/20 group-hover:scale-105 group-hover:shadow-lg">
+        <div className="absolute top-7 right-7 z-20 w-11 h-11 md:w-12 md:h-12 rounded-full bg-zinc-950/80 backdrop-blur-md border border-white/10 flex items-center justify-center text-white transition-all duration-300 group-hover:bg-white/15 group-hover:backdrop-blur-xl group-hover:border-white/20 group-hover:scale-105 group-hover:shadow-lg">
             <svg className="w-5 h-5 text-white transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform duration-300" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" />
             </svg>
@@ -253,7 +253,7 @@ const ExperienceCard: React.FC<ExperienceCardProps> = ({
                     className={`p-2.5 rounded-full backdrop-blur-md border transition-all duration-300 hover:scale-110 active:scale-95 pointer-events-auto ${
                         isFav 
                             ? 'bg-rose-500/20 border-rose-500/35 text-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.3)]' 
-                            : 'bg-dune/10 border-white/10 text-white/80 hover:text-white hover:bg-dune/20'
+                            : 'bg-white/10 border-white/10 text-white/80 hover:text-white hover:bg-white/20'
                     }`}
                     title={isFav ? "Saved to wishlist" : "Add to wishlist"}
                 >
@@ -430,7 +430,7 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
                 uiAudio.playClick();
                 setCurrentReelIndex((prev) => (prev - 1 + activeReels.length) % activeReels.length);
               }}
-              className="p-2 rounded-xl text-white/70 hover:text-white hover:bg-dune/10 active:scale-90 transition-all cursor-pointer"
+              className="p-2 rounded-xl text-white/70 hover:text-white hover:bg-white/10 active:scale-90 transition-all cursor-pointer"
               title="Previous Tour Reel"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
@@ -445,7 +445,7 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
                 uiAudio.playClick();
                 setIsPlaying(!isPlaying);
               }}
-              className="p-2 rounded-xl text-white/70 hover:text-white hover:bg-dune/10 active:scale-90 transition-all flex items-center justify-center cursor-pointer"
+              className="p-2 rounded-xl text-white/70 hover:text-white hover:bg-white/10 active:scale-90 transition-all flex items-center justify-center cursor-pointer"
               title={isPlaying ? "Pause Tour Reels" : "Play Tour Reels"}
             >
               {isPlaying ? (
@@ -466,7 +466,7 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
                 uiAudio.playClick();
                 setCurrentReelIndex((prev) => (prev + 1) % activeReels.length);
               }}
-              className="p-2 rounded-xl text-white/70 hover:text-white hover:bg-dune/10 active:scale-90 transition-all cursor-pointer"
+              className="p-2 rounded-xl text-white/70 hover:text-white hover:bg-white/10 active:scale-90 transition-all cursor-pointer"
               title="Next Tour Reel"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
@@ -477,7 +477,7 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
 
           {/* Auto-advance linear progress indicator */}
           {isPlaying && (
-            <div className="w-32 h-[3px] bg-dune/10 rounded-full overflow-hidden">
+            <div className="w-32 h-[3px] bg-white/10 rounded-full overflow-hidden">
               <motion.div
                 key={currentReelIndex}
                 initial={{ width: "0%" }}
@@ -547,7 +547,7 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
                     uiAudio.playClick();
                     onExperienceClick(currentReel.experience);
                   }}
-                  className="ml-auto inline-flex items-center gap-2.5 px-6 py-3 rounded-2xl bg-dune text-black hover:bg-slate-100 font-extrabold text-xs tracking-wider uppercase transition-all duration-300 transform active:scale-95 shadow-md hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 self-center font-sans cursor-pointer"
+                  className="ml-auto inline-flex items-center gap-2.5 px-6 py-3 rounded-2xl bg-white text-black hover:bg-slate-100 font-extrabold text-xs tracking-wider uppercase transition-all duration-300 transform active:scale-95 shadow-md hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 self-center font-sans cursor-pointer"
                 >
                   <span>Explore Experience</span>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
@@ -576,7 +576,7 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
                     className={`flex items-center gap-2.5 px-6 py-3.5 rounded-full font-bold text-sm transition-all duration-300 ${
                         isActive 
                             ? 'bg-black text-white shadow-xl shadow-black/20 scale-[1.02] transform' 
-                            : 'bg-dune text-gray-600 hover:bg-gray-50 border border-gray-100 hover:border-gray-200 shadow-sm'
+                            : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-100 hover:border-gray-200 shadow-sm'
                     }`}
                 >
                     <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400' : 'text-gray-400'}`} />
@@ -587,7 +587,7 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
       </div>
 
       {/* Advanced Filters */}
-      <div className="mb-12 bg-dune p-3 md:p-4 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col md:flex-row gap-3 md:items-center">
+      <div className="mb-12 bg-white p-3 md:p-4 rounded-[2rem] shadow-sm border border-gray-100 flex flex-col md:flex-row gap-3 md:items-center">
           <div className="flex-1 relative">
               <Search className="w-5 h-5 absolute left-5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input 
@@ -595,7 +595,7 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
                   placeholder="Search destinations, experiences..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-5 py-4 bg-gray-50/50 rounded-[1.5rem] border border-transparent focus:bg-dune focus:border-gray-200 focus:ring-4 focus:ring-gray-100/50 font-medium text-canvas transition-all outline-none"
+                  className="w-full pl-12 pr-5 py-4 bg-gray-50/50 rounded-[1.5rem] border border-transparent focus:bg-white focus:border-gray-200 focus:ring-4 focus:ring-gray-100/50 font-medium text-gray-900 transition-all outline-none"
               />
           </div>
           <div className="flex gap-3 overflow-x-auto pb-2 md:pb-0 no-scrollbar w-full md:w-auto snap-x snap-mandatory">
@@ -604,7 +604,7 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
                   <select 
                       value={selectedDestination}
                       onChange={(e) => setSelectedDestination(e.target.value)}
-                      className="pl-11 pr-10 py-4 bg-dune hover:bg-gray-50 rounded-[1.5rem] border border-gray-100 focus:border-black focus:ring-1 focus:ring-black font-semibold text-gray-700 min-w-[160px] cursor-pointer appearance-none transition-all outline-none"
+                      className="pl-11 pr-10 py-4 bg-white hover:bg-gray-50 rounded-[1.5rem] border border-gray-100 focus:border-black focus:ring-1 focus:ring-black font-semibold text-gray-700 min-w-[160px] cursor-pointer appearance-none transition-all outline-none"
                   >
                       {destinations.map(d => <option key={d} value={d}>{d === 'All' ? 'Any Destination' : d}</option>)}
                   </select>
@@ -624,7 +624,7 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
                   <select 
                       value={priceFilter}
                       onChange={(e) => setPriceFilter(e.target.value)}
-                      className="pl-11 pr-10 py-4 bg-dune hover:bg-gray-50 rounded-[1.5rem] border border-gray-100 focus:border-black focus:ring-1 focus:ring-black font-semibold text-gray-700 min-w-[160px] cursor-pointer appearance-none transition-all outline-none"
+                      className="pl-11 pr-10 py-4 bg-white hover:bg-gray-50 rounded-[1.5rem] border border-gray-100 focus:border-black focus:ring-1 focus:ring-black font-semibold text-gray-700 min-w-[160px] cursor-pointer appearance-none transition-all outline-none"
                   >
                       <option value="All">Any Price</option>
                       <option value="under_5k">Under {formatPrice(5000, 'INR')}</option>
@@ -639,7 +639,7 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
                   <select 
                       value={tripType}
                       onChange={(e) => setTripType(e.target.value)}
-                      className="pl-11 pr-10 py-4 bg-dune hover:bg-gray-50 rounded-[1.5rem] border border-gray-100 focus:border-black focus:ring-1 focus:ring-black font-semibold text-gray-700 min-w-[180px] cursor-pointer appearance-none transition-all outline-none"
+                      className="pl-11 pr-10 py-4 bg-white hover:bg-gray-50 rounded-[1.5rem] border border-gray-100 focus:border-black focus:ring-1 focus:ring-black font-semibold text-gray-700 min-w-[180px] cursor-pointer appearance-none transition-all outline-none"
                   >
                       <option value="All">All Trip Types</option>
                       <option value="weekend">Weekend Getaways</option>
@@ -652,7 +652,7 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
       </div>
 
       <div className="flex justify-between items-end mb-8 md:mb-12">
-          <h2 className="text-3xl md:text-5xl font-black tracking-tight text-canvas">All Experiences</h2>
+          <h2 className="text-3xl md:text-5xl font-black tracking-tight text-gray-900">All Experiences</h2>
       </div>
 
       {loading ? (
@@ -668,7 +668,7 @@ export const ExperiencesPage: React.FC<ExperiencesPageProps> = ({
       ) : filteredExperiences.length === 0 ? (
         <div className="text-center py-20 bg-gray-50 rounded-3xl border border-gray-100 flex flex-col items-center justify-center">
             <Compass className="w-16 h-16 text-gray-300 mb-4" />
-            <h3 className="text-2xl font-bold text-canvas mb-2">No experiences found</h3>
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">No experiences found</h3>
             <p className="text-gray-500 text-lg">Try adjusting your search or filters.</p>
             <button 
                 onClick={() => {

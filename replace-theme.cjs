@@ -1,50 +1,41 @@
 const fs = require('fs');
 const path = require('path');
 
-const walkSync = (dir, filelist = []) => {
-  fs.readdirSync(dir).forEach(file => {
-    const dirFile = path.join(dir, file);
-    try {
-      filelist = walkSync(dirFile, filelist);
-    } catch (err) {
-      if (err.code === 'ENOTDIR' || err.code === 'EBADF') filelist.push(dirFile);
+const DIR = './';
+
+function walk(dir) {
+  let list = [];
+  const files = fs.readdirSync(dir);
+  files.forEach(file => {
+    const filePath = path.join(dir, file);
+    if (fs.statSync(filePath).isDirectory()) {
+      if (file !== 'node_modules' && file !== '.git' && file !== 'dist') {
+        list = list.concat(walk(filePath));
+      }
+    } else {
+      if (filePath.endsWith('.tsx') || filePath.endsWith('.ts') || filePath.endsWith('.css') || filePath.endsWith('.html') || filePath.endsWith('.svg') || filePath.endsWith('.json') || file.endsWith('.ts')) {
+        list.push(filePath);
+      }
     }
   });
-  return filelist;
-};
+  return list;
+}
 
-const files = walkSync('./components').filter(f => f.endsWith('.tsx') || f.endsWith('.ts'));
+const files = walk(DIR);
 
 files.forEach(file => {
   let content = fs.readFileSync(file, 'utf8');
+  let original = content;
   
-  // Replace blues/corals/oranges with brand
-  content = content.replace(/\btext-blue-500\b/g, 'text-brand');
-  content = content.replace(/\btext-blue-600\b/g, 'text-brand-dark');
-  content = content.replace(/\bbg-blue-500\b/g, 'bg-brand');
-  content = content.replace(/\bbg-blue-600\b/g, 'bg-brand-dark');
-  content = content.replace(/\bhover:bg-blue-600\b/g, 'hover:bg-brand-dark');
-  content = content.replace(/\bring-blue-500\b/g, 'ring-brand');
-  content = content.replace(/\bborder-blue-500\b/g, 'border-brand');
+  content = content.replace(/#E31C5F/gi, '#0284C7'); // Sky 600
+  content = content.replace(/#C90E4F/gi, '#0369A1'); // Sky 700
+  content = content.replace(/#FFE8F0/gi, '#E0F2FE'); // Sky 100
+  // Handle some specific Tailwind classes if they were hardcoded
+  content = content.replace(/bg-\[#E31C5F\]/gi, 'bg-[#0284C7]');
+  content = content.replace(/text-\[#E31C5F\]/gi, 'text-[#0284C7]');
   
-  content = content.replace(/\btext-coral-500\b/g, 'text-brand');
-  content = content.replace(/\bbg-coral-500\b/g, 'bg-brand');
-  content = content.replace(/\btext-orange-500\b/g, 'text-brand');
-  content = content.replace(/\bbg-orange-500\b/g, 'bg-brand');
-  content = content.replace(/\btext-orange-600\b/g, 'text-brand-dark');
-  content = content.replace(/\bbg-orange-600\b/g, 'bg-brand-dark');
-
-  // Replace darks with canvas
-  content = content.replace(/\bbg-neutral-900\b/g, 'bg-canvas');
-  content = content.replace(/\bbg-zinc-900\b/g, 'bg-canvas');
-  content = content.replace(/\btext-zinc-900\b/g, 'text-canvas');
-  content = content.replace(/\btext-neutral-900\b/g, 'text-canvas');
-  content = content.replace(/\btext-gray-900\b/g, 'text-canvas');
-  
-  // Replace some bg-whites with dune
-  content = content.replace(/\bbg-white\b/g, 'bg-dune');
-  
-  fs.writeFileSync(file, content, 'utf8');
+  if (content !== original) {
+    fs.writeFileSync(file, content, 'utf8');
+    console.log(`Updated theme in: ${file}`);
+  }
 });
-
-console.log('Replaced colors in components.');

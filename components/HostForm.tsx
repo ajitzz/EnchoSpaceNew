@@ -346,7 +346,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
 
   if (submitted) {
       return (
-          <div className="min-h-screen bg-canvas flex flex-col items-center justify-center p-6 text-center text-zinc-100">
+          <div className="min-h-screen bg-neutral-900 flex flex-col items-center justify-center p-6 text-center text-zinc-100">
               <motion.div 
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -373,13 +373,13 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
     <div className="min-h-screen bg-zinc-50 dark:bg-neutral-950 flex flex-col font-sans">
       
       {/* Premium Sleek Control Bar */}
-      <header className="sticky top-0 z-50 bg-dune dark:bg-canvas border-b border-zinc-200 dark:border-neutral-800 px-4 md:px-8 py-3.5 flex items-center justify-between">
+      <header className="sticky top-0 z-50 bg-white dark:bg-neutral-900 border-b border-zinc-200 dark:border-neutral-800 px-4 md:px-8 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
-            <button onClick={onBack} className="p-2 hover:bg-zinc-100 dark:hover:bg-neutral-800 rounded-full transition-colors cursor-pointer text-canvas dark:text-zinc-100">
+            <button onClick={onBack} className="p-2 hover:bg-zinc-100 dark:hover:bg-neutral-800 rounded-full transition-colors cursor-pointer text-zinc-900 dark:text-zinc-100">
                 <ChevronLeft className="w-6 h-6" />
             </button>
             <div>
-              <h1 className="text-base font-bold text-canvas dark:text-white tracking-tight leading-none">
+              <h1 className="text-base font-bold text-zinc-900 dark:text-white tracking-tight leading-none">
                 {existingListing ? 'Revise Luxury Listing' : 'Setup Masterful Listing'}
               </h1>
               <p className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7] mt-1">Host Portal Engine</p>
@@ -390,18 +390,18 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
         <div className="hidden lg:flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
           <span>Step {currentStep} of {STEPS.length}</span>
           <span className="text-zinc-300 dark:text-neutral-700">|</span>
-          <span className="text-canvas dark:text-white font-extrabold">{STEPS[currentStep - 1].name}</span>
+          <span className="text-zinc-900 dark:text-white font-extrabold">{STEPS[currentStep - 1].name}</span>
         </div>
 
         <div className="flex items-center gap-4">
-            <button onClick={onBack} type="button" className="px-5 py-2 font-bold text-xs uppercase tracking-widest text-zinc-500 hover:text-canvas dark:hover:text-white transition-colors cursor-pointer">
+            <button onClick={onBack} type="button" className="px-5 py-2 font-bold text-xs uppercase tracking-widest text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer">
               Abort
             </button>
             <button 
               form="host-form" 
               type="submit" 
               disabled={loading || isCompressing} 
-              className="px-6 py-2.5 bg-canvas dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 font-bold text-xs uppercase tracking-widest rounded-xl transition-all shadow-md disabled:opacity-50 cursor-pointer"
+              className="px-6 py-2.5 bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 font-bold text-xs uppercase tracking-widest rounded-xl transition-all shadow-md disabled:opacity-50 cursor-pointer"
             >
                 {isCompressing ? 'Compressing...' : loading ? 'Saving...' : existingListing ? 'Save Master' : 'Publish Master'}
             </button>
@@ -409,7 +409,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
       </header>
 
       {/* Elegant Multi-Step Stepper & Progress Ribbon */}
-      <div className="w-full bg-dune dark:bg-canvas border-b border-zinc-100 dark:border-neutral-800/50 py-3 px-4 md:px-8">
+      <div className="w-full bg-white dark:bg-neutral-900 border-b border-zinc-100 dark:border-neutral-800/50 py-3 px-4 md:px-8">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           
           {/* Progress bar info */}
@@ -419,7 +419,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
             </div>
             <div>
               <div className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Setup Progress</div>
-              <div className="text-sm font-extrabold text-canvas dark:text-white mt-0.5">{STEPS[currentStep - 1].label}</div>
+              <div className="text-sm font-extrabold text-zinc-900 dark:text-white mt-0.5">{STEPS[currentStep - 1].label}</div>
             </div>
           </div>
 
@@ -446,15 +446,15 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                   }}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-left transition-all shrink-0 cursor-pointer ${
                     isActive 
-                      ? 'border-zinc-900 dark:border-white bg-zinc-50 dark:bg-neutral-800 text-canvas dark:text-white font-extrabold shadow-sm' 
+                      ? 'border-zinc-900 dark:border-white bg-zinc-50 dark:bg-neutral-800 text-zinc-900 dark:text-white font-extrabold shadow-sm' 
                       : isCompleted 
                         ? 'border-emerald-200 dark:border-emerald-950/40 bg-emerald-50/50 dark:bg-emerald-950/10 text-emerald-700 dark:text-emerald-400' 
-                        : 'border-zinc-100 dark:border-neutral-800 bg-dune dark:bg-canvas text-zinc-400 dark:text-zinc-500'
+                        : 'border-zinc-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-zinc-400 dark:text-zinc-500'
                   }`}
                 >
                   <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-mono font-extrabold ${
                     isActive 
-                      ? 'bg-canvas dark:bg-dune text-white dark:text-canvas' 
+                      ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900' 
                       : isCompleted 
                         ? 'bg-emerald-500 text-white' 
                         : 'bg-zinc-100 dark:bg-neutral-800 text-zinc-400 dark:text-zinc-500'
@@ -495,10 +495,10 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                   <div className="space-y-6">
                     
                     {/* Visual Category Grid */}
-                    <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm">
+                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm">
                       <div className="mb-4">
                         <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 1.1</span>
-                        <h2 className="text-lg font-extrabold text-canvas dark:text-white tracking-tight mt-0.5">Which of these best describes your architectural canvas?</h2>
+                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Which of these best describes your architectural canvas?</h2>
                         <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Specify the property format category to align query routing engines.</p>
                       </div>
                       
@@ -518,7 +518,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                                 }
                               `}
                             >
-                              <div className={`p-2 rounded-lg ${isSelected ? 'bg-canvas text-white dark:bg-dune dark:text-zinc-950' : 'bg-zinc-100 text-zinc-500 dark:bg-neutral-800/50 dark:text-zinc-400'}`}>
+                              <div className={`p-2 rounded-lg ${isSelected ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-950' : 'bg-zinc-100 text-zinc-500 dark:bg-neutral-800/50 dark:text-zinc-400'}`}>
                                 <Icon className="w-5 h-5" strokeWidth={1.5} />
                               </div>
                               <span className="font-extrabold text-xs text-zinc-800 dark:text-zinc-200 leading-tight tracking-wider uppercase">{pt.label}</span>
@@ -529,11 +529,11 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                     </div>
 
                     {/* Basic Meta Inputs */}
-                    <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-6">
+                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-6">
                       <div className="flex items-center justify-between">
                         <div>
                           <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 1.2</span>
-                          <h2 className="text-lg font-extrabold text-canvas dark:text-white tracking-tight mt-0.5 font-sans">Core Details</h2>
+                          <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5 font-sans">Core Details</h2>
                         </div>
                         <button 
                             type="button" 
@@ -574,7 +574,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                           required 
                           value={formData.title} 
                           onChange={e => setFormData({...formData, title: e.target.value})} 
-                          className="w-full p-4 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas focus:ring-2 focus:ring-[#0284C7] focus:border-transparent outline-none text-sm font-semibold transition-all dark:text-white" 
+                          className="w-full p-4 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 focus:ring-2 focus:ring-[#0284C7] focus:border-transparent outline-none text-sm font-semibold transition-all dark:text-white" 
                           placeholder="e.g. Grand Chalet with Panoramic Valley View" 
                         />
                       </div>
@@ -586,17 +586,17 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                           rows={6}
                           value={formData.description} 
                           onChange={e => setFormData({...formData, description: e.target.value})} 
-                          className="w-full p-4 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas focus:ring-2 focus:ring-[#0284C7] outline-none text-sm transition-all dark:text-white resize-none" 
+                          className="w-full p-4 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 focus:ring-2 focus:ring-[#0284C7] outline-none text-sm transition-all dark:text-white resize-none" 
                           placeholder="Compose a description highlighting the materials, layout, unique location context, and experience offerings..." 
                         />
                       </div>
                     </div>
 
                     {/* Property Video Tour */}
-                    <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
+                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
                       <div>
                         <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 1.3</span>
-                        <h2 className="text-lg font-extrabold text-canvas dark:text-white tracking-tight mt-0.5">High-Fidelity Video Tour (Optional)</h2>
+                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">High-Fidelity Video Tour (Optional)</h2>
                         <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Provide a link to a video tour (YouTube, Vimeo, or a raw .mp4 asset URL).</p>
                       </div>
 
@@ -605,7 +605,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                           type="url"
                           value={formData.videoUrl} 
                           onChange={e => setFormData({...formData, videoUrl: e.target.value})} 
-                          className="w-full p-4 pl-12 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas focus:ring-2 focus:ring-[#0284C7] focus:border-transparent outline-none text-sm font-semibold transition-all dark:text-white" 
+                          className="w-full p-4 pl-12 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 focus:ring-2 focus:ring-[#0284C7] focus:border-transparent outline-none text-sm font-semibold transition-all dark:text-white" 
                           placeholder="https://youtube.com/watch?v=..." 
                         />
                         <Video className="w-5 h-5 text-zinc-400 absolute left-4 top-4" />
@@ -626,10 +626,10 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                 {/* STEP 2: LOCATION & MAP SPATIAL */}
                 {currentStep === 2 && (
                   <div className="space-y-6">
-                    <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-6">
+                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-6">
                       <div>
                         <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 2.1</span>
-                        <h2 className="text-lg font-extrabold text-canvas dark:text-white tracking-tight mt-0.5">Geospatial Information</h2>
+                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Geospatial Information</h2>
                         <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Set physical coordinate geometry and textual address details.</p>
                       </div>
 
@@ -647,7 +647,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                             step="any"
                             value={formData.lat}
                             onChange={e => setFormData(p => ({ ...p, lat: parseFloat(e.target.value) || 0 }))}
-                            className="w-full p-3 rounded-lg border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs dark:text-white font-mono"
+                            className="w-full p-3 rounded-lg border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs dark:text-white font-mono"
                           />
                         </div>
                         <div>
@@ -657,7 +657,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                             step="any"
                             value={formData.lng}
                             onChange={e => setFormData(p => ({ ...p, lng: parseFloat(e.target.value) || 0 }))}
-                            className="w-full p-3 rounded-lg border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs dark:text-white font-mono"
+                            className="w-full p-3 rounded-lg border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs dark:text-white font-mono"
                           />
                         </div>
                       </div>
@@ -670,10 +670,10 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                   <div className="space-y-6">
                     
                     {/* Booking Mode Options */}
-                    <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
+                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
                       <div>
                         <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 3.1</span>
-                        <h2 className="text-lg font-extrabold text-canvas dark:text-white tracking-tight mt-0.5 font-sans">Rental Operations Model</h2>
+                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5 font-sans">Rental Operations Model</h2>
                         <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Select whether guests rent the entirety of your estate, private individual suites, or both models.</p>
                       </div>
 
@@ -681,21 +681,21 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                         <label className={`cursor-pointer border-2 rounded-xl p-4 flex items-center gap-4 transition-all hover:bg-zinc-50 dark:hover:bg-neutral-800/20 ${formData.rentalMode === 'entire_place' ? 'border-zinc-900 dark:border-white bg-zinc-50 dark:bg-neutral-800/30' : 'border-zinc-200 dark:border-neutral-800'}`}>
                           <input type="radio" name="rentalMode" value="entire_place" checked={formData.rentalMode === 'entire_place'} onChange={() => setFormData({...formData, rentalMode: 'entire_place'})} className="sr-only" />
                           <div className="flex-1">
-                            <span className="font-extrabold text-canvas dark:text-white text-sm block">Entire Place Buyout</span>
+                            <span className="font-extrabold text-zinc-900 dark:text-white text-sm block">Entire Place Buyout</span>
                             <span className="text-zinc-400 dark:text-zinc-500 text-xs mt-0.5 block">Guests secure exclusive occupancy of the absolute entirety of your estate.</span>
                           </div>
                         </label>
                         <label className={`cursor-pointer border-2 rounded-xl p-4 flex items-center gap-4 transition-all hover:bg-zinc-50 dark:hover:bg-neutral-800/20 ${formData.rentalMode === 'private_rooms' ? 'border-zinc-900 dark:border-white bg-zinc-50 dark:bg-neutral-800/30' : 'border-zinc-200 dark:border-neutral-800'}`}>
                           <input type="radio" name="rentalMode" value="private_rooms" checked={formData.rentalMode === 'private_rooms'} onChange={() => setFormData({...formData, rentalMode: 'private_rooms'})} className="sr-only" />
                           <div className="flex-1">
-                            <span className="font-extrabold text-canvas dark:text-white text-sm block">Boutique Room Inventory</span>
+                            <span className="font-extrabold text-zinc-900 dark:text-white text-sm block">Boutique Room Inventory</span>
                             <span className="text-zinc-400 dark:text-zinc-500 text-xs mt-0.5 block">Guests purchase specific rooms, cabins, or wings, sharing common core facilities.</span>
                           </div>
                         </label>
                         <label className={`cursor-pointer border-2 rounded-xl p-4 flex items-center gap-4 transition-all hover:bg-zinc-50 dark:hover:bg-neutral-800/20 ${formData.rentalMode === 'hybrid' ? 'border-zinc-900 dark:border-white bg-zinc-50 dark:bg-neutral-800/30' : 'border-zinc-200 dark:border-neutral-800'}`}>
                           <input type="radio" name="rentalMode" value="hybrid" checked={formData.rentalMode === 'hybrid'} onChange={() => setFormData({...formData, rentalMode: 'hybrid'})} className="sr-only" />
                           <div className="flex-1">
-                            <span className="font-extrabold text-canvas dark:text-white text-sm block">Hybrid (Entire Place & Individual Rooms)</span>
+                            <span className="font-extrabold text-zinc-900 dark:text-white text-sm block">Hybrid (Entire Place & Individual Rooms)</span>
                             <span className="text-zinc-400 dark:text-zinc-500 text-xs mt-0.5 block">Supports full buyout booking or multi-subunit breakdown reservation dynamically.</span>
                           </div>
                         </label>
@@ -704,10 +704,10 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
 
                     {/* Capacity layout for buyout entire place */}
                     {formData.rentalMode !== 'private_rooms' && (
-                      <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
+                      <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
                         <div>
                           <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 3.2</span>
-                          <h2 className="text-lg font-extrabold text-canvas dark:text-white tracking-tight mt-0.5">Buyout Spatial Capacity</h2>
+                          <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Buyout Spatial Capacity</h2>
                           <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Specify maximum capacity limits and details for entire place buyout.</p>
                         </div>
 
@@ -718,21 +718,21 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                             { label: 'Beds', key: 'beds' as const },
                             { label: 'Bathrooms', key: 'bathrooms' as const },
                           ].map((item) => (
-                            <div key={item.key} className="space-y-1.5 p-3 rounded-xl border border-zinc-100 dark:border-neutral-800 bg-zinc-50/40 dark:bg-canvas">
+                            <div key={item.key} className="space-y-1.5 p-3 rounded-xl border border-zinc-100 dark:border-neutral-800 bg-zinc-50/40 dark:bg-neutral-900">
                               <label className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest block text-center">{item.label}</label>
                               <div className="flex items-center justify-between gap-1 mt-2">
                                 <button 
                                   type="button"
                                   onClick={() => setFormData(prev => ({ ...prev, [item.key]: Math.max(1, prev[item.key] - 1) }))}
-                                  className="w-7 h-7 flex items-center justify-center rounded-full border border-zinc-200 dark:border-neutral-700 hover:border-zinc-950 dark:hover:border-white transition-colors cursor-pointer bg-dune dark:bg-neutral-800 font-extrabold text-xs dark:text-white"
+                                  className="w-7 h-7 flex items-center justify-center rounded-full border border-zinc-200 dark:border-neutral-700 hover:border-zinc-950 dark:hover:border-white transition-colors cursor-pointer bg-white dark:bg-neutral-800 font-extrabold text-xs dark:text-white"
                                 >
                                   -
                                 </button>
-                                <span className="font-extrabold text-sm text-canvas dark:text-white">{formData[item.key]}</span>
+                                <span className="font-extrabold text-sm text-zinc-900 dark:text-white">{formData[item.key]}</span>
                                 <button 
                                   type="button"
                                   onClick={() => setFormData(prev => ({ ...prev, [item.key]: prev[item.key] + 1 }))}
-                                  className="w-7 h-7 flex items-center justify-center rounded-full border border-zinc-200 dark:border-neutral-700 hover:border-zinc-950 dark:hover:border-white transition-colors cursor-pointer bg-dune dark:bg-neutral-800 font-extrabold text-xs dark:text-white"
+                                  className="w-7 h-7 flex items-center justify-center rounded-full border border-zinc-200 dark:border-neutral-700 hover:border-zinc-950 dark:hover:border-white transition-colors cursor-pointer bg-white dark:bg-neutral-800 font-extrabold text-xs dark:text-white"
                                 >
                                   +
                                 </button>
@@ -746,9 +746,9 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                     {/* Subunit Rooms Interactive Builder */}
                     {(formData.rentalMode === 'private_rooms' || formData.rentalMode === 'hybrid') && (
                       <div className="space-y-4">
-                        <div className="flex items-center justify-between bg-dune dark:bg-canvas p-4 rounded-xl border border-zinc-200/60 dark:border-neutral-800">
+                        <div className="flex items-center justify-between bg-white dark:bg-neutral-900 p-4 rounded-xl border border-zinc-200/60 dark:border-neutral-800">
                           <div>
-                            <h3 className="font-extrabold text-sm text-canvas dark:text-white">Spatial Inventory Units</h3>
+                            <h3 className="font-extrabold text-sm text-zinc-900 dark:text-white">Spatial Inventory Units</h3>
                             <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">Manage suites, cottages, or individual private spaces.</p>
                           </div>
                           <button 
@@ -774,8 +774,8 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                                 key={room.id} 
                                 className={`border rounded-2xl transition-all shadow-sm ${
                                   isExpanded 
-                                    ? 'border-zinc-900 dark:border-white bg-dune dark:bg-canvas p-6' 
-                                    : 'border-zinc-200/70 dark:border-neutral-800 bg-dune dark:bg-canvas/50 p-4'
+                                    ? 'border-zinc-900 dark:border-white bg-white dark:bg-neutral-900 p-6' 
+                                    : 'border-zinc-200/70 dark:border-neutral-800 bg-white dark:bg-neutral-900/50 p-4'
                                 }`}
                               >
                                 {/* Collapsed Header Summary */}
@@ -785,7 +785,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                                       {index + 1}
                                     </div>
                                     <div>
-                                      <h4 className="font-extrabold text-sm text-canvas dark:text-white leading-snug">{room.name || `Unit ${index + 1}`}</h4>
+                                      <h4 className="font-extrabold text-sm text-zinc-900 dark:text-white leading-snug">{room.name || `Unit ${index + 1}`}</h4>
                                       <p className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mt-0.5">
                                         {formatPrice(room.price || 0, 'INR')} / Month • {room.capacity || 1} Max Guests {room.bedrooms ? `• ${room.bedrooms} BHK` : ''}
                                       </p>
@@ -828,7 +828,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                                             value={room.name} 
                                             required 
                                             onChange={e => handleUpdateRoom(index, 'name', e.target.value)} 
-                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-sm font-semibold dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7]" 
+                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm font-semibold dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7]" 
                                             placeholder="e.g. Master Penthouse Suite" 
                                           />
                                         </div>
@@ -838,7 +838,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                                           <textarea 
                                             value={room.description || ''} 
                                             onChange={e => handleUpdateRoom(index, 'description', e.target.value)} 
-                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7] resize-none" 
+                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7] resize-none" 
                                             rows={2}
                                             placeholder="Introduce details of the space, bathroom access, custom views, private entrance details..." 
                                           />
@@ -852,7 +852,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                                             type="number" 
                                             min="0" 
                                             onChange={e => handleUpdateRoom(index, 'price', parseFloat(e.target.value) || 0)} 
-                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-sm font-semibold dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7]" 
+                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm font-semibold dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7]" 
                                             placeholder="e.g. 5000" 
                                           />
                                         </div>
@@ -864,7 +864,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                                             type="number" 
                                             min="1" 
                                             onChange={e => handleUpdateRoom(index, 'capacity', parseInt(e.target.value) || 1)} 
-                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-sm font-semibold dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7]" 
+                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm font-semibold dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7]" 
                                             placeholder="Guests" 
                                           />
                                         </div>
@@ -876,7 +876,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                                             type="number" 
                                             min="0" 
                                             onChange={e => handleUpdateRoom(index, 'bedrooms', parseInt(e.target.value) || 0)} 
-                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-sm font-semibold dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7]" 
+                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm font-semibold dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7]" 
                                             placeholder="e.g. 1" 
                                           />
                                         </div>
@@ -888,7 +888,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                                             type="number" 
                                             min="1" 
                                             onChange={e => handleUpdateRoom(index, 'inventory_count', parseInt(e.target.value) || 1)} 
-                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-sm font-semibold dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7]" 
+                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm font-semibold dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7]" 
                                             placeholder="e.g. 1" 
                                           />
                                         </div>
@@ -900,7 +900,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                                             type="number" 
                                             min="1" 
                                             onChange={e => handleUpdateRoom(index, 'beds', parseInt(e.target.value) || 1)} 
-                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-sm font-semibold dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7]" 
+                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm font-semibold dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7]" 
                                             placeholder="Beds Count" 
                                           />
                                         </div>
@@ -911,7 +911,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                                             type="url"
                                             value={room.video_url || ''} 
                                             onChange={e => handleUpdateRoom(index, 'video_url', e.target.value)} 
-                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-sm font-semibold dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7]" 
+                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm font-semibold dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7]" 
                                             placeholder="Video link" 
                                           />
                                         </div>
@@ -919,7 +919,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
 
                                       {/* Subunit Checkbox features */}
                                       <div className="grid grid-cols-2 gap-3">
-                                        <div className="flex items-center justify-between p-3 border border-zinc-200 dark:border-neutral-800 rounded-xl bg-zinc-50/50 dark:bg-canvas/30">
+                                        <div className="flex items-center justify-between p-3 border border-zinc-200 dark:border-neutral-800 rounded-xl bg-zinc-50/50 dark:bg-neutral-900/30">
                                           <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Attached Bathroom</label>
                                           <input 
                                             type="checkbox" 
@@ -928,7 +928,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                                             className="w-4 h-4 rounded text-[#0284C7] focus:ring-0 cursor-pointer"
                                           />
                                         </div>
-                                        <div className="flex items-center justify-between p-3 border border-zinc-200 dark:border-neutral-800 rounded-xl bg-zinc-50/50 dark:bg-canvas/30">
+                                        <div className="flex items-center justify-between p-3 border border-zinc-200 dark:border-neutral-800 rounded-xl bg-zinc-50/50 dark:bg-neutral-900/30">
                                           <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Air Conditioning (AC)</label>
                                           <input 
                                             type="checkbox" 
@@ -993,7 +993,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                                                       newTiers[tIndex].name = e.target.value;
                                                       handleUpdateRoom(index, 'tiers', newTiers);
                                                     }} 
-                                                    className="w-full p-2 mt-1 border border-zinc-200 dark:border-neutral-800 rounded-lg text-xs dark:text-white bg-dune dark:bg-canvas focus:ring-1 outline-none font-semibold" 
+                                                    className="w-full p-2 mt-1 border border-zinc-200 dark:border-neutral-800 rounded-lg text-xs dark:text-white bg-white dark:bg-neutral-900 focus:ring-1 outline-none font-semibold" 
                                                     placeholder="e.g. Breakfast + Airport Shuttle" 
                                                   />
                                                 </div>
@@ -1007,7 +1007,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                                                       newTiers[tIndex].price = parseFloat(e.target.value) || 0;
                                                       handleUpdateRoom(index, 'tiers', newTiers);
                                                     }} 
-                                                    className="w-full p-2 mt-1 border border-zinc-200 dark:border-neutral-800 rounded-lg text-xs dark:text-white bg-dune dark:bg-canvas focus:ring-1 outline-none font-semibold" 
+                                                    className="w-full p-2 mt-1 border border-zinc-200 dark:border-neutral-800 rounded-lg text-xs dark:text-white bg-white dark:bg-neutral-900 focus:ring-1 outline-none font-semibold" 
                                                     placeholder="e.g. 6000" 
                                                   />
                                                 </div>
@@ -1020,7 +1020,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                                                       newTiers[tIndex].amenities = e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean);
                                                       handleUpdateRoom(index, 'tiers', newTiers);
                                                     }} 
-                                                    className="w-full p-2 mt-1 border border-zinc-200 dark:border-neutral-800 rounded-lg text-xs dark:text-white bg-dune dark:bg-canvas focus:ring-1 outline-none" 
+                                                    className="w-full p-2 mt-1 border border-zinc-200 dark:border-neutral-800 rounded-lg text-xs dark:text-white bg-white dark:bg-neutral-900 focus:ring-1 outline-none" 
                                                     placeholder="e.g. Full Hot Buffet Breakfast, Airport Pickup, Free Cancellation" 
                                                   />
                                                 </div>
@@ -1056,10 +1056,10 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                 {currentStep === 4 && (
                   <div className="space-y-6">
                     {/* Photos upload */}
-                    <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
+                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
                       <div>
                         <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 4.1</span>
-                        <h2 className="text-lg font-extrabold text-canvas dark:text-white tracking-tight mt-0.5">Asset Gallery Upload</h2>
+                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Asset Gallery Upload</h2>
                         <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Upload at least one primary cover image. Drag to reorder. The first photo will act as cover.</p>
                       </div>
 
@@ -1073,10 +1073,10 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                     </div>
 
                     {/* General Amenities Selection */}
-                    <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
+                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
                       <div>
                         <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 4.2</span>
-                        <h2 className="text-lg font-extrabold text-canvas dark:text-white tracking-tight mt-0.5">What amenities does your estate offer globally?</h2>
+                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">What amenities does your estate offer globally?</h2>
                         <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Select all features available on site to populate filtering query pipelines.</p>
                       </div>
 
@@ -1088,10 +1088,10 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                 {/* STEP 5: DYNAMIC PRICING & BUSINESS RULES */}
                 {currentStep === 5 && (
                   <div className="space-y-6">
-                    <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-6">
+                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-6">
                       <div>
                         <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 5.1</span>
-                        <h2 className="text-lg font-extrabold text-canvas dark:text-white tracking-tight mt-0.5">Base & Calendar Overrides</h2>
+                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Base & Calendar Overrides</h2>
                         <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Determine global pricing settings and currency metrics.</p>
                       </div>
 
@@ -1105,7 +1105,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                               min="0" 
                               value={formData.price} 
                               onChange={e => setFormData({...formData, price: e.target.value})} 
-                              className="w-full p-4 pl-10 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-sm font-semibold transition-all dark:text-white focus:ring-1 focus:ring-black focus:border-transparent outline-none" 
+                              className="w-full p-4 pl-10 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm font-semibold transition-all dark:text-white focus:ring-1 focus:ring-black focus:border-transparent outline-none" 
                               placeholder="e.g. 15000" 
                             />
                             <div className="absolute left-4 top-4 font-extrabold text-zinc-400 text-sm">₹</div>
@@ -1122,7 +1122,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
 
                       <div className="space-y-4 pt-4 border-t border-zinc-100 dark:border-neutral-800">
                         <div>
-                          <h4 className="font-extrabold text-xs text-canvas dark:text-white uppercase tracking-widest">Multipliers Rules</h4>
+                          <h4 className="font-extrabold text-xs text-zinc-900 dark:text-white uppercase tracking-widest">Multipliers Rules</h4>
                           <p className="text-[10px] text-zinc-400 mt-1">Automate pricing adjustments for specific seasonal schedules.</p>
                         </div>
 
@@ -1136,7 +1136,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                                max="5.0"
                                value={formData.dynamicPricing.weekendMultiplier}
                                onChange={e => setFormData(p => ({ ...p, dynamicPricing: { ...p.dynamicPricing, weekendMultiplier: parseFloat(e.target.value) || 1.0 }}))}
-                               className="w-full p-2.5 mt-1 rounded-lg border border-zinc-200 dark:border-neutral-800 text-sm font-bold bg-dune dark:bg-canvas text-canvas dark:text-white focus:ring-1 outline-none"
+                               className="w-full p-2.5 mt-1 rounded-lg border border-zinc-200 dark:border-neutral-800 text-sm font-bold bg-white dark:bg-neutral-900 text-zinc-900 dark:text-white focus:ring-1 outline-none"
                              />
                              <span className="text-[9px] text-zinc-400 mt-1 block">Multiplies rate for Fri/Sat nights.</span>
                            </div>
@@ -1149,7 +1149,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                                max="5.0"
                                value={formData.dynamicPricing.seasonalMultiplier}
                                onChange={e => setFormData(p => ({ ...p, dynamicPricing: { ...p.dynamicPricing, seasonalMultiplier: parseFloat(e.target.value) || 1.0 }}))}
-                               className="w-full p-2.5 mt-1 rounded-lg border border-zinc-200 dark:border-neutral-800 text-sm font-bold bg-dune dark:bg-canvas text-canvas dark:text-white focus:ring-1 outline-none"
+                               className="w-full p-2.5 mt-1 rounded-lg border border-zinc-200 dark:border-neutral-800 text-sm font-bold bg-white dark:bg-neutral-900 text-zinc-900 dark:text-white focus:ring-1 outline-none"
                              />
                              <span className="text-[9px] text-zinc-400 mt-1 block">Multiplies rate during peak periods.</span>
                            </div>
@@ -1164,10 +1164,10 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                   <div className="space-y-6 animate-fade-in">
                     
                     {/* Beautiful Google Search Preview Snippet Card */}
-                    <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
+                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
                       <div>
                         <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 6.1</span>
-                        <h2 className="text-lg font-extrabold text-canvas dark:text-white tracking-tight mt-0.5 font-sans">Google Search Preview</h2>
+                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5 font-sans">Google Search Preview</h2>
                         <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Live simulation of your indexing metadata in search results.</p>
                       </div>
 
@@ -1191,10 +1191,10 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                     </div>
 
                     {/* SEO Metadata Form */}
-                    <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
+                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
                       <div>
                         <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 6.2</span>
-                        <h2 className="text-lg font-extrabold text-canvas dark:text-white tracking-tight mt-0.5 font-sans">SEO Meta Parameters</h2>
+                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5 font-sans">SEO Meta Parameters</h2>
                         <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Populate parameters to achieve high positioning in algorithmic indexing cycles.</p>
                       </div>
 
@@ -1205,7 +1205,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                             type="text" 
                             value={formData.seo_title} 
                             onChange={e => setFormData({...formData, seo_title: e.target.value})} 
-                            className="w-full p-3.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-sm font-semibold text-canvas dark:text-white focus:ring-1 focus:ring-[#0284C7] outline-none" 
+                            className="w-full p-3.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm font-semibold text-zinc-900 dark:text-white focus:ring-1 focus:ring-[#0284C7] outline-none" 
                             placeholder="Defaults to Property Title" 
                           />
                         </div>
@@ -1216,7 +1216,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                             rows={3} 
                             value={formData.seo_description} 
                             onChange={e => setFormData({...formData, seo_description: e.target.value})} 
-                            className="w-full p-3.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white focus:ring-1 focus:ring-[#0284C7] outline-none resize-none" 
+                            className="w-full p-3.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white focus:ring-1 focus:ring-[#0284C7] outline-none resize-none" 
                             placeholder="Summarize property features and local area attraction specifics under 160 characters..." 
                           />
                         </div>
@@ -1227,7 +1227,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                             type="text" 
                             value={formData.seo_keywords} 
                             onChange={e => setFormData({...formData, seo_keywords: e.target.value})} 
-                            className="w-full p-3.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-sm text-canvas dark:text-white focus:ring-1 focus:ring-[#0284C7] outline-none" 
+                            className="w-full p-3.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm text-zinc-900 dark:text-white focus:ring-1 focus:ring-[#0284C7] outline-none" 
                             placeholder="e.g. boutique stay, exclusive pool, mountain view, cozy room" 
                           />
                         </div>
@@ -1238,7 +1238,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                             type="text" 
                             value={formData.seo_image_url} 
                             onChange={e => setFormData({...formData, seo_image_url: e.target.value})} 
-                            className="w-full p-3.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white focus:ring-1 focus:ring-[#0284C7] outline-none" 
+                            className="w-full p-3.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white focus:ring-1 focus:ring-[#0284C7] outline-none" 
                             placeholder="https://example.com/sharing-card.jpg" 
                           />
                         </div>
@@ -1270,7 +1270,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                 <button
                   type="button"
                   onClick={handleNextStep}
-                  className="flex items-center gap-2 px-6 py-3 bg-canvas dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 rounded-xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-sm"
+                  className="flex items-center gap-2 px-6 py-3 bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 rounded-xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-sm"
                 >
                   Next Step
                   <ChevronRight className="w-4 h-4" />
@@ -1293,10 +1293,10 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
         <div className="hidden lg:flex lg:col-span-6 xl:col-span-6 flex-col h-[calc(100vh-170px)] sticky top-[140px] overflow-hidden">
           
           {/* Preview Navigation & Fidelity controls */}
-          <div className="bg-dune dark:bg-canvas rounded-t-2xl p-4 border-t border-x border-zinc-200/80 dark:border-neutral-800 flex items-center justify-between shadow-sm z-20 shrink-0">
+          <div className="bg-white dark:bg-neutral-900 rounded-t-2xl p-4 border-t border-x border-zinc-200/80 dark:border-neutral-800 flex items-center justify-between shadow-sm z-20 shrink-0">
              <div className="flex items-center gap-2.5">
                 <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-xs font-bold uppercase tracking-widest text-canvas dark:text-white">Active Customer Preview</span>
+                <span className="text-xs font-bold uppercase tracking-widest text-zinc-900 dark:text-white">Active Customer Preview</span>
              </div>
 
              <div className="flex items-center gap-1.5 p-1 bg-zinc-100 dark:bg-neutral-800 rounded-xl">
@@ -1305,7 +1305,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                  onClick={() => setPreviewFidelity('desktop')}
                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
                    previewFidelity === 'desktop' 
-                     ? 'bg-dune dark:bg-canvas text-canvas dark:text-white shadow-sm' 
+                     ? 'bg-white dark:bg-neutral-900 text-zinc-900 dark:text-white shadow-sm' 
                      : 'text-zinc-400 hover:text-zinc-600'
                  }`}
                >
@@ -1317,7 +1317,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                  onClick={() => setPreviewFidelity('mobile')}
                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
                    previewFidelity === 'mobile' 
-                     ? 'bg-dune dark:bg-canvas text-canvas dark:text-white shadow-sm' 
+                     ? 'bg-white dark:bg-neutral-900 text-zinc-900 dark:text-white shadow-sm' 
                      : 'text-zinc-400 hover:text-zinc-600'
                  }`}
                >
@@ -1333,7 +1333,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
             {previewFidelity === 'desktop' ? (
               <div 
                 id="preview-container-content"
-                className="w-full h-full bg-dune dark:bg-canvas rounded-2xl overflow-y-auto border border-zinc-200/60 dark:border-neutral-800 shadow-md no-scrollbar relative pointer-events-none"
+                className="w-full h-full bg-white dark:bg-neutral-900 rounded-2xl overflow-y-auto border border-zinc-200/60 dark:border-neutral-800 shadow-md no-scrollbar relative pointer-events-none"
               >
                 <div className="p-1 scale-[0.95] origin-top">
                   <ListingDetails 
@@ -1352,7 +1352,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                 
                 {/* Dynamic Camera Notch Island */}
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 w-28 h-5 bg-black rounded-full z-50 flex items-center justify-between px-3">
-                  <div className="w-2.5 h-2.5 rounded-full bg-canvas border border-neutral-800 flex items-center justify-center">
+                  <div className="w-2.5 h-2.5 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center">
                     <div className="w-1 h-1 rounded-full bg-blue-900/40" />
                   </div>
                   <div className="w-1.5 h-1.5 rounded-full bg-[#0284C7]/20 animate-pulse" />
@@ -1361,7 +1361,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                 {/* Simulated Screen Body */}
                 <div 
                   id="preview-container-content"
-                  className="flex-1 bg-dune dark:bg-canvas rounded-[38px] overflow-y-auto no-scrollbar pointer-events-none relative"
+                  className="flex-1 bg-white dark:bg-neutral-900 rounded-[38px] overflow-y-auto no-scrollbar pointer-events-none relative"
                 >
                   <div className="scale-[0.8] origin-top-left w-[125%] h-auto pb-10">
                     <ListingDetails 
@@ -1401,12 +1401,12 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
-            className="fixed inset-0 z-[100] bg-dune dark:bg-canvas overflow-y-auto"
+            className="fixed inset-0 z-[100] bg-white dark:bg-neutral-900 overflow-y-auto"
           >
-             <div className="sticky top-0 bg-dune/95 dark:bg-canvas/95 backdrop-blur-md z-10 border-b border-zinc-100 dark:border-neutral-800 px-4 py-4 flex items-center justify-between shadow-sm">
+             <div className="sticky top-0 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md z-10 border-b border-zinc-100 dark:border-neutral-800 px-4 py-4 flex items-center justify-between shadow-sm">
                <div className="flex items-center gap-2">
                   <Eye className="w-5 h-5 text-[#0284C7]" />
-                  <h3 className="font-extrabold text-sm text-canvas dark:text-white uppercase tracking-wider">Live mobile Preview</h3>
+                  <h3 className="font-extrabold text-sm text-zinc-900 dark:text-white uppercase tracking-wider">Live mobile Preview</h3>
                </div>
                <button onClick={() => setShowMobilePreview(false)} className="p-2 bg-zinc-100 dark:bg-neutral-800 rounded-full cursor-pointer">
                   <X className="w-5 h-5 text-zinc-800 dark:text-zinc-100" />

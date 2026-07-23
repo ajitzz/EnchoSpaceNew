@@ -111,7 +111,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                     onClose();
                 }
             }}
-            className="bg-dune w-full md:max-w-md rounded-t-[32px] md:rounded-2xl shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden"
+            className="bg-white w-full md:max-w-md rounded-t-[32px] md:rounded-2xl shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
         >
             <div 
@@ -121,15 +121,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                 <div className="w-12 h-1.5 bg-gray-300 rounded-full" />
             </div>
             
-            <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-canvas z-10 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100">
+            <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-900 z-10 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
             
             <div className="p-6 pb-safe">
-              <h2 className="text-2xl font-bold tracking-tight text-canvas mb-6 flex items-center">
-                 <span className="text-[#0284C7] mr-2">Amigove</span>Space
+              <h2 className="text-2xl font-bold tracking-tight text-gray-900 mb-6 flex items-center">
+                 <span className="text-[#0284C7] mr-2">Encho</span>Space
               </h2>
-              <div className="text-lg font-semibold text-canvas mb-6">Continue with Mobile Number</div>
+              <div className="text-lg font-semibold text-gray-900 mb-6">Continue with Mobile Number</div>
               
               {error && (
                 <div className="p-3 mb-4 bg-red-50 text-red-700 text-sm rounded-lg border border-red-100">
@@ -145,7 +145,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                          type="tel"
                          value={phone}
                          onChange={(e) => setPhone(e.target.value)}
-                         className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-[#0284C7] focus:border-[#0284C7] transition-all bg-gray-50 focus:bg-dune"
+                         className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-[#0284C7] focus:border-[#0284C7] transition-all bg-gray-50 focus:bg-white"
                          placeholder="+91 9999999999"
                          required
                        />
@@ -156,7 +156,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                          type="text"
                          value={name}
                          onChange={(e) => setName(e.target.value)}
-                         className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-[#0284C7] focus:border-[#0284C7] transition-all bg-gray-50 focus:bg-dune"
+                         className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-[#0284C7] focus:border-[#0284C7] transition-all bg-gray-50 focus:bg-white"
                          placeholder="John Doe"
                        />
                      </div>
@@ -172,7 +172,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
               ) : (
                    <form onSubmit={handleVerifyOTP} className="space-y-4">
                      <div className="text-sm text-gray-600 mb-4">
-                        We've sent a verification code to <span className="font-bold text-canvas">{phone}</span>.
+                        We've sent a verification code to <span className="font-bold text-gray-900">{phone}</span>.
                      </div>
                      <div>
                        <label className="block text-sm font-medium text-gray-700 mb-1">Verification Code</label>
@@ -180,7 +180,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                          type="text"
                          value={otp}
                          onChange={(e) => setOtp(e.target.value)}
-                         className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-[#0284C7] focus:border-[#0284C7] transition-all bg-gray-50 focus:bg-dune text-center font-mono tracking-[0.5em] text-lg"
+                         className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-[#0284C7] focus:border-[#0284C7] transition-all bg-gray-50 focus:bg-white text-center font-mono tracking-[0.5em] text-lg"
                          placeholder="••••••"
                          maxLength={6}
                          required
@@ -198,7 +198,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                          <button
                              type="button"
                              onClick={() => { setIsOtpSent(false); setOtp(''); }}
-                             className="text-sm font-medium text-gray-500 hover:text-canvas transition-colors"
+                             className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors"
                          >
                              Change mobile number
                          </button>
@@ -211,7 +211,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                   <div className="w-full border-t border-gray-200"></div>
                 </div>
                 <div className="relative flex justify-center text-sm">
-                  <span className="bg-dune px-2 text-gray-500">or continue with</span>
+                  <span className="bg-white px-2 text-gray-500">or continue with</span>
                 </div>
               </div>
 

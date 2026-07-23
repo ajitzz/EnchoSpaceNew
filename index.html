@@ -5,16 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover" />
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#FAFAFA" media="(prefers-color-scheme: light)">
-    <meta name="theme-color" content="#1A1C21" media="(prefers-color-scheme: dark)">
-    <title>AMIGOVE | Go, Friend</title>
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: dark)">
+    <title>EnchoSpace</title>
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <link rel="apple-touch-icon" href="/logo.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://images.unsplash.com" crossorigin>
     <link rel="dns-prefetch" href="https://images.unsplash.com">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/index.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <script type="importmap">
@@ -32,7 +32,7 @@
       #native-splash {
         position: fixed;
         inset: 0;
-        background-color: #FAFAFA;
+        background-color: #ffffff;
         z-index: 999999;
         display: flex;
         flex-direction: column;
@@ -49,18 +49,18 @@
         width: 72px;
         height: 72px;
         animation: splash-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        filter: drop-shadow(0 10px 20px rgba(224, 90, 61, 0.2));
+        filter: drop-shadow(0 10px 20px rgba(2, 132, 199, 0.2));
       }
       @keyframes splash-pulse {
-        0%, 100% { transform: scale(1) translateY(0px); opacity: 1; }
-        50% { transform: scale(0.95) translateY(-4px); opacity: 0.9; }
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(0.95); opacity: 0.8; }
       }
       @media (prefers-color-scheme: dark) {
-        #native-splash { background-color: #1A1C21; }
+        #native-splash { background-color: #000000; }
       }
     </style>
     <div id="native-splash">
-       <img src="/logo.svg" class="splash-logo" alt="Amigove Logo" />
+       <img src="/logo.svg" class="splash-logo" alt="Logo" />
     </div>
     <div id="root"></div>
   <script type="module" src="/index.tsx"></script>

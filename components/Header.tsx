@@ -36,7 +36,7 @@ const POPULAR_CITIES = ['Berlin', 'London', 'Paris', 'New York', 'Tokyo', 'Barce
 
 import { WifiOffIcon, DownloadIcon } from 'lucide-react';
 import { usePWAInstall } from '../lib/usePWAInstall';
-import { AmigoveWordmark } from './AmigoveWordmark';
+import { EnchoWordmark } from './EnchoWordmark';
 
 const Header: React.FC<HeaderProps> = ({ 
     onSearch, 
@@ -283,15 +283,15 @@ const Header: React.FC<HeaderProps> = ({
         className={`
           sticky top-0 z-50 transition-all duration-300
           ${isScrolled 
-            ? 'bg-dune/90 backdrop-blur-xl border-b border-gray-100 shadow-sm' 
-            : 'bg-dune border-b border-transparent'}
+            ? 'bg-white/90 backdrop-blur-xl border-b border-gray-100 shadow-sm' 
+            : 'bg-white border-b border-transparent'}
         `}
       >
         <div className="max-w-[1920px] mx-auto px-4 md:px-8 flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4 relative py-3 md:py-0 md:h-20">
           
           {/* Mobile-only brand, tabs, and menu button top row (unified compact layout) */}
           <div className="grid grid-cols-3 items-center md:hidden w-full mb-3.5 px-1 mt-1.5 select-none">
-            {/* Logo - vector AMIGOVE wordmark with custom Horizon Orange archway H */}
+            {/* Logo - vector ENCHO wordmark with custom Horizon Orange archway H */}
        <div 
   onClick={() => {
       setInputValue('');
@@ -299,9 +299,9 @@ const Header: React.FC<HeaderProps> = ({
   }}
   className="flex flex-col cursor-pointer group shrink-0 select-none justify-self-start"
 >
-  {/* Top Row: AMIGOVE (Midnight Black E,N,C,O + Horizon Orange Archway H) + Blue Dot */}
+  {/* Top Row: ENCHO (Midnight Black E,N,C,O + Horizon Orange Archway H) + Blue Dot */}
   <div className="flex items-center leading-none transition-colors duration-300">
-    <AmigoveWordmark className="h-4.5 md:h-5 w-auto" />
+    <EnchoWordmark className="h-4.5 md:h-5 w-auto" />
     <span className="w-1.5 h-1.5 rounded-full bg-[#0284C7] ml-[3px] transition-transform duration-300 group-hover:scale-125 shrink-0" />
   </div>
   
@@ -325,7 +325,7 @@ const Header: React.FC<HeaderProps> = ({
                   {activeTab === 'stays' && (
                     <motion.div
                       layoutId="activeMobileHeaderPill"
-                      className="absolute inset-0 bg-dune rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.08)] -z-10"
+                      className="absolute inset-0 bg-white rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.08)] -z-10"
                       transition={{ type: "spring", stiffness: 380, damping: 25 }}
                     />
                   )}
@@ -343,7 +343,7 @@ const Header: React.FC<HeaderProps> = ({
                   {activeTab === 'experiences' && (
                     <motion.div
                       layoutId="activeMobileHeaderPill"
-                      className="absolute inset-0 bg-dune rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.08)] -z-10"
+                      className="absolute inset-0 bg-white rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.08)] -z-10"
                       transition={{ type: "spring", stiffness: 380, damping: 25 }}
                     />
                   )}
@@ -367,7 +367,7 @@ const Header: React.FC<HeaderProps> = ({
             </button>
           </div>
         
-          {/* 1. Brand: AMIGOVE Space (Desktop only) */}
+          {/* 1. Brand: ENCHO Space (Desktop only) */}
           <div 
             onClick={() => {
                 setInputValue('');
@@ -376,7 +376,7 @@ const Header: React.FC<HeaderProps> = ({
             className="hidden md:flex flex-col justify-center leading-none cursor-pointer group shrink-0 select-none md:min-w-[120px]"
           >
             <div className="flex items-center leading-none transition-colors">
-              <AmigoveWordmark className="h-5.5 md:h-6.5 w-auto" />
+              <EnchoWordmark className="h-5.5 md:h-6.5 w-auto" />
               <span className="w-2 h-2 rounded-full bg-[#0284C7] ml-1 transition-transform duration-300 group-hover:scale-125 shrink-0" />
             </div>
             <span className="text-[8px] md:text-[9.5px] font-black tracking-[0.45em] text-[#8e8e93] uppercase leading-none mt-1.5 group-hover:text-[#5e687a] transition-colors">
@@ -400,7 +400,7 @@ const Header: React.FC<HeaderProps> = ({
                      {activeTab === 'stays' && (
                        <motion.div
                          layoutId="activeDesktopHeaderPill"
-                         className="absolute inset-0 bg-dune rounded-full shadow-[0_2px_10px_rgba(0,0,0,0.06)] -z-10"
+                         className="absolute inset-0 bg-white rounded-full shadow-[0_2px_10px_rgba(0,0,0,0.06)] -z-10"
                          transition={{ type: "spring", stiffness: 380, damping: 25 }}
                        />
                      )}
@@ -418,7 +418,7 @@ const Header: React.FC<HeaderProps> = ({
                      {activeTab === 'experiences' && (
                        <motion.div
                          layoutId="activeDesktopHeaderPill"
-                         className="absolute inset-0 bg-dune rounded-full shadow-[0_2px_10px_rgba(0,0,0,0.06)] -z-10"
+                         className="absolute inset-0 bg-white rounded-full shadow-[0_2px_10px_rgba(0,0,0,0.06)] -z-10"
                          transition={{ type: "spring", stiffness: 380, damping: 25 }}
                        />
                      )}
@@ -430,7 +430,7 @@ const Header: React.FC<HeaderProps> = ({
                ref={searchRef}
                onSubmit={handleSubmit} 
                className={`
-                 relative w-full flex items-center bg-dune border border-gray-200 rounded-full transition-all duration-300 group z-50
+                 relative w-full flex items-center bg-white border border-gray-200 rounded-full transition-all duration-300 group z-50
                  ${isFocused 
                    ? 'h-14 shadow-lg border-gray-300 ring-4 ring-[#0284C7]/10 scale-[1.02]' 
                    : 'h-12 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border-gray-200 hover:shadow-md hover:border-gray-300'}
@@ -447,7 +447,7 @@ const Header: React.FC<HeaderProps> = ({
                       value={inputValue}
                       onFocus={() => setIsFocused(true)}
                       onChange={(e) => setInputValue(e.target.value)}
-                      className="w-full bg-transparent border-none text-sm md:text-base font-medium text-canvas placeholder-gray-500 focus:ring-0 outline-none truncate"
+                      className="w-full bg-transparent border-none text-sm md:text-base font-medium text-gray-900 placeholder-gray-500 focus:ring-0 outline-none truncate"
                       placeholder="Search destinations"
                   />
                   
@@ -479,7 +479,7 @@ const Header: React.FC<HeaderProps> = ({
 
                 {/* SEARCH DROPDOWN - The Core of the Redesign */}
                 {isFocused && (
-                    <div className="absolute top-full left-0 w-full mt-3 bg-dune rounded-3xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15)] border border-gray-100 overflow-hidden animate-fade-in-up origin-top z-[100]">
+                    <div className="absolute top-full left-0 w-full mt-3 bg-white rounded-3xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15)] border border-gray-100 overflow-hidden animate-fade-in-up origin-top z-[100]">
                         <div className="p-2">
                             
                             {/* Section: Nearby (Only when input is empty) */}
@@ -493,7 +493,7 @@ const Header: React.FC<HeaderProps> = ({
                                           <NavigationIcon className="w-6 h-6" />
                                       </div>
                                       <div>
-                                          <div className="font-bold text-canvas">Explore nearby</div>
+                                          <div className="font-bold text-gray-900">Explore nearby</div>
                                           <div className="text-xs text-gray-500">Based on your current location</div>
                                       </div>
                                   </div>
@@ -513,7 +513,7 @@ const Header: React.FC<HeaderProps> = ({
                                                   setRecentSearches([]);
                                                   localStorage.removeItem('recentSearches');
                                               }}
-                                              className="text-[10px] text-gray-400 hover:text-canvas underline"
+                                              className="text-[10px] text-gray-400 hover:text-gray-900 underline"
                                             >
                                               Clear
                                             </button>
@@ -524,10 +524,10 @@ const Header: React.FC<HeaderProps> = ({
                                               onClick={(e) => { uiAudio.playClick(); handleSubmit(e, city); }}
                                               className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-2xl cursor-pointer group transition-colors"
                                             >
-                                                <div className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center text-gray-400 group-hover:bg-dune group-hover:shadow-sm group-hover:text-canvas transition-all border border-transparent group-hover:border-gray-100">
-                                                    <svg className="w-5 h-5 text-gray-400 group-hover:text-canvas" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                                <div className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center text-gray-400 group-hover:bg-white group-hover:shadow-sm group-hover:text-gray-900 transition-all border border-transparent group-hover:border-gray-100">
+                                                    <svg className="w-5 h-5 text-gray-400 group-hover:text-gray-900" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                                 </div>
-                                                <div className="text-sm font-medium text-gray-700 group-hover:text-canvas">
+                                                <div className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
                                                     {city}
                                                 </div>
                                             </div>
@@ -546,10 +546,10 @@ const Header: React.FC<HeaderProps> = ({
                                           onClick={(e) => { uiAudio.playClick(); handleSubmit(e, city); }}
                                           className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-2xl cursor-pointer group transition-colors"
                                         >
-                                            <div className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center text-gray-400 group-hover:bg-dune group-hover:shadow-sm group-hover:text-canvas transition-all border border-transparent group-hover:border-gray-100">
+                                            <div className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center text-gray-400 group-hover:bg-white group-hover:shadow-sm group-hover:text-gray-900 transition-all border border-transparent group-hover:border-gray-100">
                                                 <MapIcon className="w-5 h-5" />
                                             </div>
-                                            <div className="text-sm font-medium text-gray-700 group-hover:text-canvas">
+                                            <div className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
                                                 {city}
                                             </div>
                                         </div>
@@ -562,11 +562,11 @@ const Header: React.FC<HeaderProps> = ({
                                               onClick={(e) => { uiAudio.playClick(); handleSubmit(e, prediction.structured_formatting.main_text); }}
                                               className="flex items-center gap-4 p-3 hover:bg-gray-50 rounded-2xl cursor-pointer group transition-colors"
                                             >
-                                                <div className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center text-gray-400 group-hover:bg-dune group-hover:shadow-sm group-hover:text-canvas transition-all border border-transparent group-hover:border-gray-100">
+                                                <div className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center text-gray-400 group-hover:bg-white group-hover:shadow-sm group-hover:text-gray-900 transition-all border border-transparent group-hover:border-gray-100">
                                                     <MapIcon className="w-5 h-5" />
                                                 </div>
                                                 <div className="flex flex-col">
-                                                    <div className="text-sm font-medium text-gray-700 group-hover:text-canvas">
+                                                    <div className="text-sm font-medium text-gray-700 group-hover:text-gray-900">
                                                         {prediction.structured_formatting.main_text}
                                                     </div>
                                                     <div className="text-[11px] text-gray-400">
@@ -591,48 +591,48 @@ const Header: React.FC<HeaderProps> = ({
             
             {/* Overlay to dim background when focused */}
             {isFocused && (
-              <div className="fixed inset-0 top-20 bg-dune/60 backdrop-blur-sm z-[-1] animate-fade-in"></div>
+              <div className="fixed inset-0 top-20 bg-white/60 backdrop-blur-sm z-[-1] animate-fade-in"></div>
             )}
           </div>
         ) : (
           <div className="flex-1 hidden md:flex justify-center max-w-2xl gap-8 font-semibold text-gray-500">
             <button 
               onClick={() => onHostViewChange?.('today')} 
-              className={`hover:text-canvas transition-colors ${hostView === 'today' ? 'text-canvas border-b-2 border-gray-900' : ''}`}
+              className={`hover:text-gray-900 transition-colors ${hostView === 'today' ? 'text-gray-900 border-b-2 border-gray-900' : ''}`}
             >
               Today
             </button>
             <button 
               onClick={() => onHostViewChange?.('calendar')} 
-              className={`hover:text-canvas transition-colors ${hostView === 'calendar' ? 'text-canvas border-b-2 border-gray-900' : ''}`}
+              className={`hover:text-gray-900 transition-colors ${hostView === 'calendar' ? 'text-gray-900 border-b-2 border-gray-900' : ''}`}
             >
               Calendar
             </button>
             <button 
               onClick={() => onHostViewChange?.('listings')} 
-              className={`hover:text-canvas transition-colors ${hostView === 'listings' ? 'text-canvas border-b-2 border-gray-900' : ''}`}
+              className={`hover:text-gray-900 transition-colors ${hostView === 'listings' ? 'text-gray-900 border-b-2 border-gray-900' : ''}`}
             >
               Listings
             </button>
             <button 
               onClick={() => onHostViewChange?.('messages')} 
-              className={`hover:text-canvas transition-colors ${hostView === 'messages' ? 'text-canvas border-b-2 border-gray-900' : ''}`}
+              className={`hover:text-gray-900 transition-colors ${hostView === 'messages' ? 'text-gray-900 border-b-2 border-gray-900' : ''}`}
             >
               Messages
             </button>
             <button 
               onClick={() => onHostViewChange?.('analytics')} 
-              className={`hover:text-canvas transition-colors ${hostView === 'analytics' ? 'text-canvas border-b-2 border-gray-900' : ''}`}
+              className={`hover:text-gray-900 transition-colors ${hostView === 'analytics' ? 'text-gray-900 border-b-2 border-gray-900' : ''}`}
             >
               Analytics
             </button>
             <button 
               onClick={() => onHostViewChange?.('marketing')} 
-              className={`hover:text-canvas transition-colors flex items-center gap-1.5 ${hostView === 'marketing' ? 'text-canvas border-b-2 border-gray-900' : ''}`}
+              className={`hover:text-gray-900 transition-colors flex items-center gap-1.5 ${hostView === 'marketing' ? 'text-gray-900 border-b-2 border-gray-900' : ''}`}
             >
               <span className="font-bold">Marketing Engine</span>
               <span className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full tracking-widest scale-90 shadow-sm shadow-blue-500/20 relative flex items-center gap-1">
-                <span className="w-1 h-1 bg-dune rounded-full animate-pulse" /> AI
+                <span className="w-1 h-1 bg-white rounded-full animate-pulse" /> AI
               </span>
             </button>
           </div>
@@ -731,7 +731,7 @@ const Header: React.FC<HeaderProps> = ({
           <div ref={desktopMenuRef} className="relative hidden md:block">
             <div 
                 onClick={() => setIsDesktopMenuOpen(!isDesktopMenuOpen)}
-                className="flex items-center gap-2 border border-gray-200 rounded-full p-1 pl-3 hover:shadow-md transition-all cursor-pointer bg-dune ml-2"
+                className="flex items-center gap-2 border border-gray-200 rounded-full p-1 pl-3 hover:shadow-md transition-all cursor-pointer bg-white ml-2"
             >
                 <div className="w-4 h-4 text-gray-600">
                     <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="presentation" focusable="false" style={{display: 'block', height: '16px', width: '16px', fill: 'none', stroke: 'currentColor', strokeWidth: 3}}><g><path d="m2 16h28"></path><path d="m2 24h28"></path><path d="m2 8h28"></path></g></svg>
@@ -743,11 +743,11 @@ const Header: React.FC<HeaderProps> = ({
 
             {/* Desktop Menu Dropdown */}
             {isDesktopMenuOpen && (
-                <div className="absolute right-0 top-full mt-3 w-72 bg-dune rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.2)] border border-gray-100 overflow-hidden animate-fade-in-up origin-top-right z-50">
+                <div className="absolute right-0 top-full mt-3 w-72 bg-white rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.2)] border border-gray-100 overflow-hidden animate-fade-in-up origin-top-right z-50">
                     <div className="p-2 border-b border-gray-100">
                         {user ? (
                            <>
-                             <div className="p-3 font-semibold text-canvas border-b border-gray-50">{user.name} ({user.role})</div>
+                             <div className="p-3 font-semibold text-gray-900 border-b border-gray-50">{user.name} ({user.role})</div>
                              {user.role === 'admin' && (
                                 <div onClick={() => { setIsDesktopMenuOpen(false); window.location.hash = '#admin'; }} className="p-3 font-medium text-[#0284C7] hover:bg-gray-50 rounded-xl cursor-pointer">Admin Dashboard</div>
                              )}
@@ -755,7 +755,7 @@ const Header: React.FC<HeaderProps> = ({
                            </>
                         ) : (
                            <>
-                             <div onClick={() => { setIsDesktopMenuOpen(false); onLoginClick(); }} className="p-3 font-semibold text-canvas hover:bg-gray-50 rounded-xl cursor-pointer">Log in</div>
+                             <div onClick={() => { setIsDesktopMenuOpen(false); onLoginClick(); }} className="p-3 font-semibold text-gray-900 hover:bg-gray-50 rounded-xl cursor-pointer">Log in</div>
                              <div onClick={() => { setIsDesktopMenuOpen(false); onLoginClick(); }} className="p-3 font-medium text-gray-700 hover:bg-gray-50 rounded-xl cursor-pointer">Sign up</div>
                            </>
                         )}

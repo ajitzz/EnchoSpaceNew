@@ -273,7 +273,7 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
   <div class="ticket">
     <div class="header">
       <div class="type-badge">${type} Ticket</div>
-      <h1>Amigove</h1>
+      <h1>Encho Space</h1>
       <p>Booking ID: ${bookingId}</p>
     </div>
     <div class="content">
@@ -336,7 +336,7 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
       </div>
     </div>
     <div class="footer">
-      <p style="margin: 0; font-size: 12px; color: #6b7280; font-weight: 500;">Thank you for booking with Amigove!</p>
+      <p style="margin: 0; font-size: 12px; color: #6b7280; font-weight: 500;">Thank you for booking with Encho Space!</p>
       <button class="print-btn" onclick="window.print()">Print Ticket</button>
     </div>
   </div>
@@ -358,21 +358,21 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
 
   return (
     <>
-      <SEO title="Reservations | Amigove" description="View and manage your upcoming reservations." />
+      <SEO title="Reservations | Encho Space" description="View and manage your upcoming reservations." />
     <div className="min-h-screen bg-gray-50 animate-fade-in font-sans">
       {/* Header */}
-      <div className="bg-dune/80 backdrop-blur-xl border-b border-gray-200 sticky top-0 z-40">
+      <div className="bg-white/80 backdrop-blur-xl border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-5xl mx-auto px-4 md:px-8 h-20 flex items-center justify-between">
             <button 
                 onClick={onBack} 
-                className="flex items-center gap-2 text-canvas hover:bg-black/5 px-3 py-2 rounded-full transition-all group font-semibold"
+                className="flex items-center gap-2 text-gray-900 hover:bg-black/5 px-3 py-2 rounded-full transition-all group font-semibold"
             >
-                <div className="p-1.5 rounded-full bg-gray-100 group-hover:bg-dune transition-colors border border-transparent group-hover:border-gray-200 shadow-sm">
+                <div className="p-1.5 rounded-full bg-gray-100 group-hover:bg-white transition-colors border border-transparent group-hover:border-gray-200 shadow-sm">
                     <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
                 </div>
                 <span className="text-sm">Back</span>
             </button>
-            <h1 className="text-lg font-bold text-canvas tracking-tight hidden md:block font-sans">Your Reservations</h1>
+            <h1 className="text-lg font-bold text-gray-900 tracking-tight hidden md:block font-sans">Your Reservations</h1>
             <div className="w-16"></div> {/* Spacer */}
         </div>
       </div>
@@ -380,11 +380,11 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
       <main className="max-w-5xl mx-auto px-4 md:px-8 py-10">
         {!isOnline && (
             <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
-                <div className="p-2 bg-blue-100/50 rounded-lg text-brand-dark shrink-0">
+                <div className="p-2 bg-blue-100/50 rounded-lg text-blue-600 shrink-0">
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2v2a2 2 0 002 2h.5a2 2 0 012 2v2.5M15 9h2.5M3 12a9 9 0 1018 0 9 9 0 00-18 0z" /></svg>
                 </div>
                 <div>
-                    <h3 className="font-bold text-canvas text-sm">Offline Itinerary</h3>
+                    <h3 className="font-bold text-gray-900 text-sm">Offline Itinerary</h3>
                     <p className="text-gray-600 text-xs mt-0.5">You are currently offline. Here's your saved itinerary and bookings for quick access. Certain actions like cancelling or messaging hosts will be unavailable until you reconnect.</p>
                 </div>
             </div>
@@ -392,7 +392,7 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
 
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
             <div>
-                <h1 className="text-3xl font-extrabold text-canvas tracking-tight">Bookings</h1>
+                <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Bookings</h1>
                 <p className="text-gray-500 mt-1 text-sm font-medium">
                   {activeTab === 'stays' 
                     ? `${reservations.length} active stay${reservations.length === 1 ? '' : 's'}`
@@ -405,7 +405,7 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
                 <button
                     onClick={handleCacheItinerary}
                     disabled={isCaching || cacheComplete}
-                    className="flex items-center gap-2 bg-dune border border-gray-200 hover:border-gray-300 text-gray-700 px-4 py-2 rounded-xl transition-colors font-semibold text-sm shadow-sm disabled:opacity-75"
+                    className="flex items-center gap-2 bg-white border border-gray-200 hover:border-gray-300 text-gray-700 px-4 py-2 rounded-xl transition-colors font-semibold text-sm shadow-sm disabled:opacity-75"
                 >
                     {isCaching ? (
                         <>
@@ -431,14 +431,14 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
         <div className="flex bg-gray-100 p-1 rounded-2xl w-fit mb-8 border border-gray-200">
             <button
                 onClick={() => setActiveTab('stays')}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 ${activeTab === 'stays' ? 'bg-dune text-canvas shadow-sm' : 'text-gray-500 hover:text-canvas'}`}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 ${activeTab === 'stays' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
             >
                 <Home className="w-4 h-4" />
                 <span>Stays ({reservations.length})</span>
             </button>
             <button
                 onClick={() => setActiveTab('experiences')}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 ${activeTab === 'experiences' ? 'bg-dune text-canvas shadow-sm' : 'text-gray-500 hover:text-canvas'}`}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 ${activeTab === 'experiences' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
             >
                 <Compass className="w-4 h-4" />
                 <span>Experiences ({experienceBookings.length})</span>
@@ -448,11 +448,11 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
         {/* Tab content */}
         {activeTab === 'stays' ? (
           reservations.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-24 text-center bg-dune rounded-3xl border border-gray-100 shadow-sm">
+              <div className="flex flex-col items-center justify-center py-24 text-center bg-white rounded-3xl border border-gray-100 shadow-sm">
                   <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-6 text-gray-300 ring-8 ring-gray-50/50">
                       <CalendarIcon className="w-8 h-8" />
                   </div>
-                  <h2 className="text-xl font-bold text-canvas mb-2">No upcoming stays</h2>
+                  <h2 className="text-xl font-bold text-gray-900 mb-2">No upcoming stays</h2>
                   <p className="text-gray-400 max-w-xs mb-8 text-sm">Your confirmed bookings will appear here. Start exploring to find your next home.</p>
                   <button 
                       onClick={onBack}
@@ -466,7 +466,7 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
                   {reservations.map((reservation) => (
                       <div 
                           key={reservation.id} 
-                          className="group relative bg-dune rounded-[2rem] p-4 border border-gray-100 shadow-[0_2px_8px_rgba(0,0,0,0.02)] hover:shadow-[0_20px_40px_-12px_rgba(0,0,0,0.1)] hover:border-gray-200 transition-all duration-500 ease-out flex flex-col md:flex-row gap-6 items-start"
+                          className="group relative bg-white rounded-[2rem] p-4 border border-gray-100 shadow-[0_2px_8px_rgba(0,0,0,0.02)] hover:shadow-[0_20px_40px_-12px_rgba(0,0,0,0.1)] hover:border-gray-200 transition-all duration-500 ease-out flex flex-col md:flex-row gap-6 items-start"
                       >
                           {/* Image Thumbnail with Hover Zoom */}
                           <div 
@@ -483,12 +483,12 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
                               
                               {/* Mobile Status Overlay */}
                               <div className="absolute top-3 left-3 md:hidden">
-                                  <div className="flex items-center gap-1.5 bg-dune/95 backdrop-blur-md px-2.5 py-1 rounded-full shadow-sm">
+                                  <div className="flex items-center gap-1.5 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full shadow-sm">
                                       <span className="relative flex h-1.5 w-1.5">
                                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                                         <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#10B981]"></span>
                                       </span>
-                                      <span className="text-[10px] font-bold text-canvas uppercase tracking-wide">Confirmed</span>
+                                      <span className="text-[10px] font-bold text-gray-900 uppercase tracking-wide">Confirmed</span>
                                   </div>
                               </div>
                           </div>
@@ -500,7 +500,7 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
                                   <div className="flex justify-between items-start mb-1">
                                       <div className="min-w-0 mr-4">
                                            <h3 
-                                              className="font-bold text-canvas text-lg md:text-xl leading-snug truncate cursor-pointer group-hover:text-[#0284C7] transition-colors"
+                                              className="font-bold text-gray-900 text-lg md:text-xl leading-snug truncate cursor-pointer group-hover:text-[#0284C7] transition-colors"
                                               onClick={() => onListingClick(reservation.listing)}
                                           >
                                               {reservation.listing.displayTitle || reservation.listing.title}
@@ -509,7 +509,7 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
                                       </div>
                                       {/* Price Pill */}
                                        <div className="text-right flex-shrink-0">
-                                          <div className="font-extrabold text-canvas text-lg tracking-tight">{formatPrice(reservation.totalRent, 'INR')}</div>
+                                          <div className="font-extrabold text-gray-900 text-lg tracking-tight">{formatPrice(reservation.totalRent, 'INR')}</div>
                                           <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">/month</div>
                                       </div>
                                   </div>
@@ -579,7 +579,7 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
                                           <span className="text-xs font-medium text-gray-600 leading-tight">Your stay has concluded. We hope you enjoyed it!</span>
                                       ) : (
                                           <>
-                                              <div className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse flex-shrink-0"></div>
+                                              <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse flex-shrink-0"></div>
                                               <span className="text-xs font-medium text-gray-600 leading-tight">Our team will reach out to you shortly for assistance.</span>
                                           </>
                                       )}
@@ -608,7 +608,7 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
                                            <button 
                                               onClick={(e) => { e.stopPropagation(); handleCancelClick(reservation.id); }}
                                               disabled={!isOnline}
-                                              className="flex items-center justify-center gap-2 bg-dune hover:bg-red-50 text-red-600 px-4 py-2 rounded-xl transition-colors text-xs font-bold border border-red-100 hover:border-red-200 disabled:opacity-50"
+                                              className="flex items-center justify-center gap-2 bg-white hover:bg-red-50 text-red-600 px-4 py-2 rounded-xl transition-colors text-xs font-bold border border-red-100 hover:border-red-200 disabled:opacity-50"
                                            >
                                               <span>Cancel</span>
                                            </button>
@@ -635,7 +635,7 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
                                            <button 
                                               onClick={handleCallClick}
                                               disabled={!isOnline}
-                                              className="flex items-center justify-center gap-2 bg-dune hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-xl transition-colors text-xs font-bold border border-gray-200 hover:border-gray-300 disabled:opacity-50"
+                                              className="flex items-center justify-center gap-2 bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-xl transition-colors text-xs font-bold border border-gray-200 hover:border-gray-300 disabled:opacity-50"
                                            >
                                               <PhoneIcon className="w-4 h-4" />
                                               <span>Call</span>
@@ -651,11 +651,11 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
           )
         ) : (
           experienceBookings.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-24 text-center bg-dune rounded-3xl border border-gray-100 shadow-sm">
+              <div className="flex flex-col items-center justify-center py-24 text-center bg-white rounded-3xl border border-gray-100 shadow-sm">
                   <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-6 text-gray-300 ring-8 ring-gray-50/50">
                       <Compass className="w-8 h-8" />
                   </div>
-                  <h2 className="text-xl font-bold text-canvas mb-2">No booked experiences</h2>
+                  <h2 className="text-xl font-bold text-gray-900 mb-2">No booked experiences</h2>
                   <p className="text-gray-400 max-w-xs mb-8 text-sm">Your booked experiences will appear here. Start exploring amazing curated adventures.</p>
                   <button 
                       onClick={onBack}
@@ -680,7 +680,7 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
                       return (
                           <div 
                               key={booking.id} 
-                              className="group relative bg-dune rounded-[2rem] p-4 border border-gray-100 shadow-[0_2px_8px_rgba(0,0,0,0.02)] hover:shadow-[0_20px_40px_-12px_rgba(0,0,0,0.1)] hover:border-gray-200 transition-all duration-500 ease-out flex flex-col md:flex-row gap-6 items-start"
+                              className="group relative bg-white rounded-[2rem] p-4 border border-gray-100 shadow-[0_2px_8px_rgba(0,0,0,0.02)] hover:shadow-[0_20px_40px_-12px_rgba(0,0,0,0.1)] hover:border-gray-200 transition-all duration-500 ease-out flex flex-col md:flex-row gap-6 items-start"
                           >
                               {/* Image Thumbnail with Hover Zoom */}
                               <div 
@@ -702,7 +702,7 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
                                       <div className="flex justify-between items-start mb-1">
                                           <div className="min-w-0 mr-4">
                                                <h3 
-                                                  className="font-bold text-canvas text-lg md:text-xl leading-snug truncate cursor-pointer group-hover:text-[#0284C7] transition-colors"
+                                                  className="font-bold text-gray-900 text-lg md:text-xl leading-snug truncate cursor-pointer group-hover:text-[#0284C7] transition-colors"
                                                   onClick={() => onExperienceClick?.(booking.experience_id)}
                                               >
                                                   {booking.title}
@@ -714,7 +714,7 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
                                           </div>
                                           {/* Price Pill */}
                                            <div className="text-right flex-shrink-0">
-                                              <div className="font-extrabold text-canvas text-lg tracking-tight">{formatPrice(Number(booking.total_price), 'INR')}</div>
+                                              <div className="font-extrabold text-gray-900 text-lg tracking-tight">{formatPrice(Number(booking.total_price), 'INR')}</div>
                                               <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{booking.num_tickets} ticket{booking.num_tickets === 1 ? '' : 's'}</div>
                                           </div>
                                       </div>
@@ -776,7 +776,7 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
                                               <span className="text-xs font-medium text-gray-600 leading-tight">This experience booking is no longer active.</span>
                                           ) : (
                                               <>
-                                                  <div className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse flex-shrink-0"></div>
+                                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse flex-shrink-0"></div>
                                                   <span className="text-xs font-medium text-gray-600 leading-tight">Your spot is secured. Enjoy your adventure!</span>
                                               </>
                                           )}
@@ -796,7 +796,7 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
                                                <button 
                                                   onClick={(e) => { e.stopPropagation(); handleCancelExperienceBookingClick(booking.id); }}
                                                   disabled={!isOnline}
-                                                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-dune hover:bg-red-50 text-red-600 px-4 py-2 rounded-xl transition-colors text-xs font-bold border border-red-100 hover:border-red-200 disabled:opacity-50"
+                                                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white hover:bg-red-50 text-red-600 px-4 py-2 rounded-xl transition-colors text-xs font-bold border border-red-100 hover:border-red-200 disabled:opacity-50"
                                                >
                                                   <span>Cancel</span>
                                                </button>

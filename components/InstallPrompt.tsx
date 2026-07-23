@@ -67,7 +67,7 @@ export const InstallPrompt: React.FC = () => {
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
                 className="fixed bottom-24 left-4 right-4 md:left-auto md:right-8 md:bottom-8 md:w-96 z-[9999]"
             >
-                <div className="bg-dune/90 backdrop-blur-3xl saturate-150 p-5 rounded-3xl shadow-[0_20px_40px_rgba(0,0,0,0.15)] border border-white/50 glass-panel">
+                <div className="bg-white/90 backdrop-blur-3xl saturate-150 p-5 rounded-3xl shadow-[0_20px_40px_rgba(0,0,0,0.15)] border border-white/50 glass-panel">
                     <button 
                         onClick={() => setShowPrompt(false)}
                         className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200 transition-colors"
@@ -78,7 +78,7 @@ export const InstallPrompt: React.FC = () => {
                     <div className="flex items-start gap-4 pr-8">
                         <img src="/logo.svg" alt="App Icon" className="w-14 h-14 rounded-2xl shadow-sm" />
                         <div>
-                            <h3 className="font-bold text-canvas text-[15px]">Install Amigove</h3>
+                            <h3 className="font-bold text-gray-900 text-[15px]">Install EnchoSpace</h3>
                             <p className="text-sm text-gray-500 mt-1 leading-snug">
                                 Add to your home screen for a full-screen, native experience.
                             </p>
@@ -88,10 +88,10 @@ export const InstallPrompt: React.FC = () => {
                     {isIOS ? (
                         <div className="mt-4 bg-gray-50/50 rounded-xl p-3 text-xs text-gray-600 font-medium flex flex-col gap-2 border border-gray-100/50">
                             <div className="flex items-center gap-2">
-                                1. Tap <ShareIcon className="w-4 h-4 text-brand" /> in the Safari menu bar
+                                1. Tap <ShareIcon className="w-4 h-4 text-blue-500" /> in the Safari menu bar
                             </div>
                             <div className="flex items-center gap-2">
-                                2. Scroll down and tap <PlusSquareIcon className="w-4 h-4 text-canvas" /> "Add to Home Screen"
+                                2. Scroll down and tap <PlusSquareIcon className="w-4 h-4 text-gray-900" /> "Add to Home Screen"
                             </div>
                         </div>
                     ) : (

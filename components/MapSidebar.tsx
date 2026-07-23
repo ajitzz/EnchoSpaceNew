@@ -186,7 +186,7 @@ const MarkerWithInfoWindow = ({
                 </div>
             ) : (
                 // Inactive custom white/gray badge with price
-                <div className="bg-dune text-canvas border border-gray-150 rounded-full px-2.5 py-1 text-[11px] font-black shadow-[0_4px_10px_rgba(0,0,0,0.12)] hover:scale-110 active:scale-95 transition-all">
+                <div className="bg-white text-gray-900 border border-gray-150 rounded-full px-2.5 py-1 text-[11px] font-black shadow-[0_4px_10px_rgba(0,0,0,0.12)] hover:scale-110 active:scale-95 transition-all">
                     {formatPrice(currentPrice)}
                 </div>
             )
@@ -203,7 +203,7 @@ const MarkerWithInfoWindow = ({
                   transition-all duration-500 ring-1 ring-black/5 ease-[cubic-bezier(0.34,1.56,0.64,1)]
                   ${isActive 
                       ? 'bg-gray-900 text-white px-5 py-2.5 scale-125 z-50 shadow-[0_20px_40px_rgba(0,0,0,0.4)] -translate-y-2 ring-2 ring-white/50' 
-                      : 'bg-dune text-canvas px-3.5 py-1.5 hover:scale-110 hover:shadow-xl z-10'}
+                      : 'bg-white text-gray-900 px-3.5 py-1.5 hover:scale-110 hover:shadow-xl z-10'}
               `}
             >
                 <span className={`font-bold whitespace-nowrap ${isActive ? 'text-sm' : 'text-xs'}`}>
@@ -273,7 +273,7 @@ const MapInner = ({
                         div.innerHTML = `
                            <div class="flex items-center gap-1.5">
                               <span class="font-bold whitespace-nowrap text-sm">${formattedPrice}</span>
-                              <span class="text-[10px] font-bold bg-dune/25 px-1.5 py-0.5 rounded-full">${count}</span>
+                              <span class="text-[10px] font-bold bg-white/25 px-1.5 py-0.5 rounded-full">${count}</span>
                            </div>
                         `;
                         
@@ -377,19 +377,19 @@ const MapInner = ({
           {/* Top Floating Control - ONLY on Desktop */}
           {!isMobile && (
              <div className="absolute top-6 left-1/2 -translate-x-1/2 z-30 w-full flex justify-center gap-3 px-4 pointer-events-none">
-                <label className="pointer-events-auto flex items-center gap-3 bg-dune/90 backdrop-blur-xl px-5 py-2.5 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/50 cursor-pointer hover:scale-105 transition-all active:scale-95 group select-none">
+                <label className="pointer-events-auto flex items-center gap-3 bg-white/90 backdrop-blur-xl px-5 py-2.5 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/50 cursor-pointer hover:scale-105 transition-all active:scale-95 group select-none">
                    <div className="relative flex items-center justify-center">
                      <input type="checkbox" checked={searchAsIMove} onChange={(e) => { uiAudio.playClick(); setSearchAsIMove(e.target.checked); }} className="peer w-5 h-5 appearance-none border-2 border-gray-300 rounded-md checked:bg-gray-900 checked:border-gray-900 transition-all cursor-pointer" />
                      <svg className="absolute w-3.5 h-3.5 text-white pointer-events-none opacity-0 peer-checked:opacity-100 transition-all scale-50 peer-checked:scale-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                    </div>
-                   <span className="text-sm font-bold text-gray-700 group-hover:text-canvas">Search as I move</span>
+                   <span className="text-sm font-bold text-gray-700 group-hover:text-gray-900">Search as I move</span>
                 </label>
                 <button
                    onClick={fitBounds}
-                   className="pointer-events-auto flex items-center justify-center bg-dune/90 backdrop-blur-xl p-3 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/50 cursor-pointer hover:scale-105 hover:text-canvas transition-all active:scale-95 group"
+                   className="pointer-events-auto flex items-center justify-center bg-white/90 backdrop-blur-xl p-3 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/50 cursor-pointer hover:scale-105 hover:text-gray-900 transition-all active:scale-95 group"
                    title="Focus on listings"
                 >
-                   <svg className="w-5 h-5 text-gray-700 group-hover:text-canvas" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                   <svg className="w-5 h-5 text-gray-700 group-hover:text-gray-900" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
                        <circle cx="12" cy="12" r="3"></circle>
                        <path d="M19 12h2"></path>
                        <path d="M3 12h2"></path>
@@ -707,12 +707,12 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                     uiAudio.playClick();
                     if (onClose) onClose();
                   }}
-                  className="pointer-events-auto w-11 h-11 rounded-full bg-dune/95 backdrop-blur-md shadow-lg border border-gray-100 flex items-center justify-center text-gray-700 hover:text-canvas active:scale-95 transition-all cursor-pointer"
+                  className="pointer-events-auto w-11 h-11 rounded-full bg-white/95 backdrop-blur-md shadow-lg border border-gray-100 flex items-center justify-center text-gray-700 hover:text-gray-900 active:scale-95 transition-all cursor-pointer"
                 >
                   <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
                 </button>
 
-                <div className="pointer-events-auto bg-dune/95 backdrop-blur-md px-5 h-11 rounded-full shadow-lg border border-gray-100 flex items-center justify-center gap-1.5 text-xs font-extrabold text-gray-800">
+                <div className="pointer-events-auto bg-white/95 backdrop-blur-md px-5 h-11 rounded-full shadow-lg border border-gray-100 flex items-center justify-center gap-1.5 text-xs font-extrabold text-gray-800">
                   <MapPin className="w-3.5 h-3.5 text-red-500 fill-red-100" />
                   <span>{city || 'Yogyakarta, id'}</span>
                 </div>
@@ -722,14 +722,14 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                     uiAudio.playClick();
                     setShowLocalFilters(true);
                   }}
-                  className="pointer-events-auto w-11 h-11 rounded-full bg-dune/95 backdrop-blur-md shadow-lg border border-gray-100 flex items-center justify-center text-gray-700 hover:text-canvas active:scale-95 transition-all cursor-pointer"
+                  className="pointer-events-auto w-11 h-11 rounded-full bg-white/95 backdrop-blur-md shadow-lg border border-gray-100 flex items-center justify-center text-gray-700 hover:text-gray-900 active:scale-95 transition-all cursor-pointer"
                 >
                   <SlidersHorizontal className="w-4 h-4" />
                 </button>
              </div>
 
              {/* Row 2: Search Input Card */}
-             <div className="pointer-events-auto w-full bg-dune/95 backdrop-blur-md h-12 rounded-2xl flex items-center px-4 shadow-lg border border-gray-100/50">
+             <div className="pointer-events-auto w-full bg-white/95 backdrop-blur-md h-12 rounded-2xl flex items-center px-4 shadow-lg border border-gray-100/50">
                <form onSubmit={handleSearchSubmit} className="flex-1 flex items-center">
                  <Search className="w-4 h-4 text-gray-400 mr-2.5 shrink-0" />
                  <input 
@@ -737,25 +737,25 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                    value={searchQuery}
                    onChange={(e) => setSearchQuery(e.target.value)}
                    placeholder="Search destinations..."
-                   className="w-full bg-transparent border-none text-xs font-semibold text-canvas placeholder-gray-400 focus:ring-0 outline-none"
+                   className="w-full bg-transparent border-none text-xs font-semibold text-gray-900 placeholder-gray-400 focus:ring-0 outline-none"
                  />
                </form>
              </div>
 
              {/* Row 3: Map Mode Selector (Only shown if key is valid) */}
              {hasValidKey && !googleMapsError && (
-               <div className="pointer-events-auto self-center flex p-1 bg-dune/95 backdrop-blur-md rounded-full shadow-lg border border-gray-100/50">
+               <div className="pointer-events-auto self-center flex p-1 bg-white/95 backdrop-blur-md rounded-full shadow-lg border border-gray-100/50">
                  <button 
                    type="button"
                    onClick={() => { uiAudio.playClick(); setMapMode('vector'); }}
-                   className={`px-4 py-1.5 rounded-full text-[10px] font-black transition-all uppercase tracking-wider ${mapMode === 'vector' ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-500 hover:text-canvas'}`}
+                   className={`px-4 py-1.5 rounded-full text-[10px] font-black transition-all uppercase tracking-wider ${mapMode === 'vector' ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
                  >
                    Scenic Map
                  </button>
                  <button 
                    type="button"
                    onClick={() => { uiAudio.playClick(); setMapMode('google'); }}
-                   className={`px-4 py-1.5 rounded-full text-[10px] font-black transition-all uppercase tracking-wider ${mapMode === 'google' ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-500 hover:text-canvas'}`}
+                   className={`px-4 py-1.5 rounded-full text-[10px] font-black transition-all uppercase tracking-wider ${mapMode === 'google' ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
                  >
                    Satellite Map
                  </button>
@@ -769,18 +769,18 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
           <div className="absolute top-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 px-4 pointer-events-none">
              {/* Map Mode Selector */}
              {hasValidKey && !googleMapsError && (
-               <div className="pointer-events-auto flex p-1 bg-dune/95 backdrop-blur-md rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/50">
+               <div className="pointer-events-auto flex p-1 bg-white/95 backdrop-blur-md rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/50">
                  <button 
                    type="button"
                    onClick={() => { uiAudio.playClick(); setMapMode('vector'); }}
-                   className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${mapMode === 'vector' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-canvas'}`}
+                   className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${mapMode === 'vector' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-900'}`}
                  >
                    Scenic Map
                  </button>
                  <button 
                    type="button"
                    onClick={() => { uiAudio.playClick(); setMapMode('google'); }}
-                   className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${mapMode === 'google' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-canvas'}`}
+                   className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${mapMode === 'google' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-900'}`}
                  >
                    Satellite Map
                  </button>
@@ -803,10 +803,10 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                     if (el) el.click();
                   }
                 }}
-                className="pointer-events-auto flex items-center justify-center bg-dune/95 backdrop-blur-md p-3 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/50 cursor-pointer hover:scale-105 hover:text-canvas transition-all active:scale-95 group"
+                className="pointer-events-auto flex items-center justify-center bg-white/95 backdrop-blur-md p-3 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-white/50 cursor-pointer hover:scale-105 hover:text-gray-900 transition-all active:scale-95 group"
                 title="Focus on listings"
              >
-                <svg className="w-5 h-5 text-gray-700 group-hover:text-canvas" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 text-gray-700 group-hover:text-gray-900" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
                     <circle cx="12" cy="12" r="3"></circle>
                     <path d="M19 12h2"></path>
                     <path d="M3 12h2"></path>
@@ -961,7 +961,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                              </div>
                            ) : (
                              // Cozy, premium badge with price text
-                             <div className="bg-dune text-canvas border border-gray-150 rounded-full px-2.5 py-1.5 text-[11px] font-black shadow-md hover:scale-110 active:scale-95 transition-all select-none whitespace-nowrap">
+                             <div className="bg-white text-gray-900 border border-gray-150 rounded-full px-2.5 py-1.5 text-[11px] font-black shadow-md hover:scale-110 active:scale-95 transition-all select-none whitespace-nowrap">
                                {formatPrice(getActivePrice(listing))}
                              </div>
                            )}
@@ -979,7 +979,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                        uiAudio.playClick();
                        setZoom(prev => Math.min(prev + 0.2, 3.0));
                      }}
-                     className="pointer-events-auto w-10 h-10 rounded-xl bg-dune/95 backdrop-blur-md shadow-lg border border-gray-100 flex items-center justify-center text-gray-800 hover:bg-gray-50 active:scale-95 transition-all font-black text-lg select-none"
+                     className="pointer-events-auto w-10 h-10 rounded-xl bg-white/95 backdrop-blur-md shadow-lg border border-gray-100 flex items-center justify-center text-gray-800 hover:bg-gray-50 active:scale-95 transition-all font-black text-lg select-none"
                   >
                      +
                   </button>
@@ -990,7 +990,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                        uiAudio.playClick();
                        setZoom(prev => Math.max(prev - 0.2, 0.5));
                      }}
-                     className="pointer-events-auto w-10 h-10 rounded-xl bg-dune/95 backdrop-blur-md shadow-lg border border-gray-100 flex items-center justify-center text-gray-800 hover:bg-gray-50 active:scale-95 transition-all font-black text-lg select-none"
+                     className="pointer-events-auto w-10 h-10 rounded-xl bg-white/95 backdrop-blur-md shadow-lg border border-gray-100 flex items-center justify-center text-gray-800 hover:bg-gray-50 active:scale-95 transition-all font-black text-lg select-none"
                   >
                      −
                   </button>
@@ -998,12 +998,12 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
 
                {/* Fixed Compass Rose inside Vector Map container */}
                <div className="absolute bottom-6 left-6 z-30 pointer-events-none flex flex-col items-start gap-2">
-                  <div className="w-12 h-12 rounded-full bg-dune/90 backdrop-blur-md shadow-md border border-gray-100 flex items-center justify-center pointer-events-auto">
+                  <div className="w-12 h-12 rounded-full bg-white/90 backdrop-blur-md shadow-md border border-gray-100 flex items-center justify-center pointer-events-auto">
                      <Compass className="w-6 h-6 text-gray-700 animate-spin-slow" />
                   </div>
                   
                   {/* Map Scale Legend Bar */}
-                  <div className="bg-dune/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-gray-150 shadow-sm flex flex-col gap-0.5 pointer-events-auto">
+                  <div className="bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-gray-150 shadow-sm flex flex-col gap-0.5 pointer-events-auto">
                      <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none">Scale</div>
                      <div className="flex items-center gap-1.5 mt-0.5">
                         <div className="w-12 h-1 bg-gray-900 relative">
@@ -1058,14 +1058,14 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                     uiAudio.playClick();
                     if (onClose) onClose();
                   }}
-                  className="w-11 h-11 rounded-full bg-dune/95 backdrop-blur-md shadow-lg border border-gray-100 flex items-center justify-center text-gray-700 hover:text-canvas active:scale-95 transition-all cursor-pointer shrink-0"
+                  className="w-11 h-11 rounded-full bg-white/95 backdrop-blur-md shadow-lg border border-gray-100 flex items-center justify-center text-gray-700 hover:text-gray-900 active:scale-95 transition-all cursor-pointer shrink-0"
                   title="Go Back"
                >
                   <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
                </button>
 
                {/* Floating Filter Dashboard Panel */}
-               <div className="bg-dune/95 backdrop-blur-md p-1.5 rounded-full shadow-[0_12px_36px_rgba(0,0,0,0.12)] border border-gray-100/50 flex items-center gap-2">
+               <div className="bg-white/95 backdrop-blur-md p-1.5 rounded-full shadow-[0_12px_36px_rgba(0,0,0,0.12)] border border-gray-100/50 flex items-center gap-2">
                   {/* Search Input field inside the bar */}
                   <div className="flex items-center px-4 py-1.5 border-r border-gray-100 gap-2">
                      <Search className="w-4 h-4 text-gray-400" />
@@ -1098,7 +1098,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                                  setLocalType(item.value);
                               }}
                               className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all ${
-                                 isSel ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-500 hover:text-canvas'
+                                 isSel ? 'bg-gray-900 text-white shadow-sm' : 'text-gray-500 hover:text-gray-900'
                               }`}
                            >
                               {item.label}
@@ -1137,7 +1137,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
 
           {/* DESKTOP UNIFIED FLOATING PREMIUM PREVIEW CARD */}
           {!isMobile && activeListing && (
-            <div className="absolute bottom-6 left-6 z-30 w-[330px] bg-dune rounded-[2rem] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.18)] border border-gray-100/80 flex flex-col pointer-events-auto animate-fade-in">
+            <div className="absolute bottom-6 left-6 z-30 w-[330px] bg-white rounded-[2rem] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.18)] border border-gray-100/80 flex flex-col pointer-events-auto animate-fade-in">
                {/* Main Card Media */}
                <div className="relative h-44 w-full overflow-hidden group">
                   <img 
@@ -1160,7 +1160,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                   </button>
 
                   {/* Rating Badge */}
-                  <div className="absolute bottom-3 left-4 flex items-center gap-1.5 bg-dune/95 backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-black text-gray-800 tracking-tight shadow-md">
+                  <div className="absolute bottom-3 left-4 flex items-center gap-1.5 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-black text-gray-800 tracking-tight shadow-md">
                      <Star className="w-3.5 h-3.5 text-orange-400 fill-orange-400" />
                      <span>{activeListing.rating || 4.8}</span>
                      <span className="text-gray-300">•</span>
@@ -1168,7 +1168,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                   </div>
 
                   {/* Type Pill */}
-                  <div className="absolute top-3 left-3 bg-dune/95 backdrop-blur-md px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider text-gray-700 shadow-sm border border-gray-100">
+                  <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider text-gray-700 shadow-sm border border-gray-100">
                      {activeListing.type || 'Stay'}
                   </div>
                </div>
@@ -1176,7 +1176,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                {/* Content Details */}
                <div className="p-4 flex flex-col gap-3">
                   <div>
-                     <h4 className="font-extrabold text-sm text-canvas leading-snug line-clamp-1">{activeListing.title}</h4>
+                     <h4 className="font-extrabold text-sm text-gray-900 leading-snug line-clamp-1">{activeListing.title}</h4>
                      <p className="text-[11px] font-medium text-gray-500 mt-0.5 line-clamp-1">{activeListing.address || 'Central Area'}</p>
                   </div>
 
@@ -1198,7 +1198,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                                     className={`px-2.5 py-1 rounded-full text-[9.5px] font-black transition-all whitespace-nowrap border flex items-center gap-1 cursor-pointer ${
                                        isSelected 
                                           ? 'bg-gray-900 text-white border-gray-900 scale-102 shadow-sm' 
-                                          : 'bg-dune text-gray-600 border-gray-200 hover:border-gray-400'
+                                          : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
                                     }`}
                                  >
                                     {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
@@ -1215,7 +1215,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                      <div className="flex flex-col">
                         <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Price / stay</span>
                         <div className="flex items-baseline gap-1 mt-0.5">
-                           <span className="text-base font-black text-canvas">{formatPrice(getActivePrice(activeListing))}</span>
+                           <span className="text-base font-black text-gray-900">{formatPrice(getActivePrice(activeListing))}</span>
                            <span className="text-[10px] font-bold text-gray-500">/ night</span>
                         </div>
                      </div>
@@ -1270,14 +1270,14 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                              if (onSelectListing) onSelectListing(listing);
                          }}
                          className={`
-                             w-[290px] h-[124px] bg-dune rounded-3xl overflow-hidden flex-shrink-0 snap-center shadow-[0_12px_36px_rgba(0,0,0,0.15)] flex relative border-2 transition-all duration-300 cursor-pointer
+                             w-[290px] h-[124px] bg-white rounded-3xl overflow-hidden flex-shrink-0 snap-center shadow-[0_12px_36px_rgba(0,0,0,0.15)] flex relative border-2 transition-all duration-300 cursor-pointer
                              ${isActive ? 'border-red-500 ring-4 ring-red-500/10' : 'border-transparent'}
                          `}
                      >
                          {/* Card Image */}
                          <div className="w-[110px] h-full relative">
                              <img src={listing.imageUrl || undefined} alt={listing.title} className="w-full h-full object-cover" />
-                             <div className="absolute bottom-2 left-2 bg-dune/90 backdrop-blur-xs px-2 py-0.5 rounded-full text-[9px] font-black text-gray-800 tracking-tight shadow-sm">
+                             <div className="absolute bottom-2 left-2 bg-white/90 backdrop-blur-xs px-2 py-0.5 rounded-full text-[9px] font-black text-gray-800 tracking-tight shadow-sm">
                                  {listing.type || 'Resort'}
                              </div>
                          </div>
@@ -1291,7 +1291,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                                      <span className="text-gray-300">•</span>
                                      <span>{listing.reviewCount} reviews</span>
                                  </div>
-                                 <h4 className="font-extrabold text-xs text-canvas leading-tight line-clamp-2">{listing.title}</h4>
+                                 <h4 className="font-extrabold text-xs text-gray-900 leading-tight line-clamp-2">{listing.title}</h4>
                                  
                                  {/* Mobile quick room selector chips */}
                                  {listing.rooms && listing.rooms.length > 0 && (
@@ -1322,7 +1322,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                              
                              <div className="flex items-baseline justify-between mt-0.5">
                                  <div>
-                                     <span className="text-sm font-black text-canvas">{formatPrice(getActivePrice(listing))}</span>
+                                     <span className="text-sm font-black text-gray-900">{formatPrice(getActivePrice(listing))}</span>
                                      <span className="text-[9px] text-gray-400 font-bold"> / night</span>
                                  </div>
                              </div>
@@ -1335,7 +1335,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                                  uiAudio.playClick();
                                  if (onToggleFavorite) onToggleFavorite(listing);
                              }}
-                             className="absolute top-2 right-2 w-8 h-8 rounded-full bg-dune/95 backdrop-blur-md shadow-md flex items-center justify-center text-gray-600 hover:text-red-500 hover:scale-105 active:scale-90 transition-all border border-gray-100/50"
+                             className="absolute top-2 right-2 w-8 h-8 rounded-full bg-white/95 backdrop-blur-md shadow-md flex items-center justify-center text-gray-600 hover:text-red-500 hover:scale-105 active:scale-90 transition-all border border-gray-100/50"
                          >
                              <Heart className={`w-4 h-4 ${isFavorite && isFavorite(listing.id) ? 'text-red-500 fill-red-500' : 'text-gray-600'}`} />
                          </button>
@@ -1348,20 +1348,20 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
         {/* MOBILE LOCAL QUICK FILTER BOTTOM SHEET */}
         {isMobile && showLocalFilters && (
             <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/60 backdrop-blur-xs transition-all duration-300 animate-fade-in pointer-events-auto">
-                <div className="bg-dune rounded-t-[2.5rem] w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl animate-slide-up">
+                <div className="bg-white rounded-t-[2.5rem] w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl animate-slide-up">
                     {/* Header */}
                     <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
                         <button onClick={() => setShowLocalFilters(false)} className="text-gray-400 hover:text-gray-600 p-1">
                             <X className="w-5 h-5" />
                         </button>
-                        <h3 className="text-sm font-black text-canvas">Filters</h3>
+                        <h3 className="text-sm font-black text-gray-900">Filters</h3>
                         <button 
                             onClick={() => {
                                 setLocalMinPrice('');
                                 setLocalMaxPrice('');
                                 setLocalType('');
                             }}
-                            className="text-xs font-bold text-gray-500 hover:text-canvas underline"
+                            className="text-xs font-bold text-gray-500 hover:text-gray-900 underline"
                         >
                             Clear
                         </button>
@@ -1371,7 +1371,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                     <div className="flex-1 overflow-y-auto p-6 space-y-6">
                         {/* Price Section */}
                         <div>
-                            <h4 className="font-extrabold text-xs text-canvas mb-3 uppercase tracking-wider">Price Range</h4>
+                            <h4 className="font-extrabold text-xs text-gray-900 mb-3 uppercase tracking-wider">Price Range</h4>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-[9px] font-bold text-gray-400 uppercase mb-1.5">Min Price</label>
@@ -1382,7 +1382,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                                             value={localMinPrice}
                                             onChange={(e) => setLocalMinPrice(e.target.value)}
                                             placeholder="0"
-                                            className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-6 pr-3 py-3 text-xs font-semibold text-canvas focus:outline-none focus:ring-1 focus:ring-gray-900 focus:bg-dune"
+                                            className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-6 pr-3 py-3 text-xs font-semibold text-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 focus:bg-white"
                                         />
                                     </div>
                                 </div>
@@ -1395,7 +1395,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                                             value={localMaxPrice}
                                             onChange={(e) => setLocalMaxPrice(e.target.value)}
                                             placeholder="Any"
-                                            className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-6 pr-3 py-3 text-xs font-semibold text-canvas focus:outline-none focus:ring-1 focus:ring-gray-900 focus:bg-dune"
+                                            className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-6 pr-3 py-3 text-xs font-semibold text-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 focus:bg-white"
                                         />
                                     </div>
                                 </div>
@@ -1404,7 +1404,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                         
                         {/* Property Type Section */}
                         <div>
-                            <h4 className="font-extrabold text-xs text-canvas mb-3 uppercase tracking-wider">Property Type</h4>
+                            <h4 className="font-extrabold text-xs text-gray-900 mb-3 uppercase tracking-wider">Property Type</h4>
                             <div className="grid grid-cols-2 gap-3">
                                 {['Apartment', 'House', 'Cabin', 'Resort'].map((type) => {
                                     const isSel = localType === type;
@@ -1415,7 +1415,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                                             onClick={() => setLocalType(isSel ? '' : type)}
                                             className={`
                                                 py-3 rounded-xl text-xs font-bold border-2 transition-all
-                                                ${isSel ? 'border-gray-900 bg-gray-900 text-white shadow-md' : 'border-gray-200 bg-dune text-gray-700 hover:border-gray-400'}
+                                                ${isSel ? 'border-gray-900 bg-gray-900 text-white shadow-md' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-400'}
                                             `}
                                         >
                                             {type}
@@ -1444,14 +1444,14 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
 
         {/* MOBILE FLOATING GLASSMORPHIC BOTTOM TAB BAR */}
         {isMobile && (
-          <div className="absolute bottom-0 left-0 right-0 h-[72px] bg-dune/90 backdrop-blur-lg border-t border-gray-150/50 flex items-center justify-between px-8 z-[120] pb-safe pointer-events-auto">
+          <div className="absolute bottom-0 left-0 right-0 h-[72px] bg-white/90 backdrop-blur-lg border-t border-gray-150/50 flex items-center justify-between px-8 z-[120] pb-safe pointer-events-auto">
               {/* Explore Button */}
               <button 
                   onClick={() => {
                       uiAudio.playClick();
                       if (onClose) onClose();
                   }}
-                  className="flex flex-col items-center justify-center text-gray-400 hover:text-canvas transition-colors p-2"
+                  className="flex flex-col items-center justify-center text-gray-400 hover:text-gray-900 transition-colors p-2"
               >
                   <Compass className="w-5 h-5 mb-0.5" />
                   <span className="text-[10px] font-extrabold tracking-tight">Explore</span>
@@ -1474,7 +1474,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                       }
                       if (onClose) onClose();
                   }}
-                  className="flex flex-col items-center justify-center text-gray-400 hover:text-canvas transition-colors p-2"
+                  className="flex flex-col items-center justify-center text-gray-400 hover:text-gray-900 transition-colors p-2"
               >
                   <MessageCircle className="w-5 h-5 mb-0.5" />
                   <span className="text-[10px] font-extrabold tracking-tight">Inbox</span>
@@ -1496,7 +1496,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                           }
                       }, 100);
                   }}
-                  className="flex flex-col items-center justify-center text-gray-400 hover:text-canvas transition-colors p-2"
+                  className="flex flex-col items-center justify-center text-gray-400 hover:text-gray-900 transition-colors p-2"
               >
                   <User className="w-5 h-5 mb-0.5" />
                   <span className="text-[10px] font-extrabold tracking-tight">Profile</span>

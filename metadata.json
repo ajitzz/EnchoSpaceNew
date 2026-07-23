@@ -1,6 +1,6 @@
 {
-  "name": "AMIGOVE",
-  "description": "AMIGOVE - Find somewhere worth going. A premium platform to discover extraordinary homes, villas, and curated experiences worldwide.",
+  "name": "Nestpick Clone",
+  "description": "A rental property finder application replicating the Nestpick UI with real-time search results.",
   "requestFramePermissions": [
     "geolocation"
   ],

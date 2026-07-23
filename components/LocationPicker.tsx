@@ -99,7 +99,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({ address, city, o
     <div className="space-y-4">
       <div className="flex justify-between items-end mb-4">
         <div>
-          <h3 className="font-bold text-canvas">Pinpoint your location</h3>
+          <h3 className="font-bold text-gray-900">Pinpoint your location</h3>
           <p className="text-sm text-gray-500">Drag the pin to your exact spot.</p>
         </div>
         <button

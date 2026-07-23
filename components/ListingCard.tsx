@@ -150,7 +150,7 @@ export const getTaxonomyDetails = (listing: Listing) => {
         badge = "Resort Unit";
       }
       explanation = `Private Sub-Unit inside ${parentTitle || 'the Resort'} with shared resort grounds`;
-      iconColor = "text-brand dark:text-blue-400";
+      iconColor = "text-blue-500 dark:text-blue-400";
       labelColor = "bg-blue-50/95 text-blue-700 border-blue-200/60 dark:bg-blue-950/90 dark:text-blue-300 dark:border-blue-800";
     } else if (category === 'villa') {
       badge = "Villa Suite";
@@ -165,7 +165,7 @@ export const getTaxonomyDetails = (listing: Listing) => {
     } else if (category === 'house') {
       badge = "House Room";
       explanation = `Private lockable Room inside ${parentTitle || 'the House'} with shared common facilities`;
-      iconColor = "text-brand dark:text-orange-400";
+      iconColor = "text-orange-500 dark:text-orange-400";
       labelColor = "bg-orange-50/95 text-orange-700 border-orange-200/60 dark:bg-orange-950/90 dark:text-orange-300 dark:border-orange-800";
     } else {
       badge = `${parentType} Room`;
@@ -188,7 +188,7 @@ export const getTaxonomyDetails = (listing: Listing) => {
     let badge = "Entire Place";
     let explanation = "Exclusive access to the full property for your group only.";
     let iconColor = "text-zinc-500 dark:text-zinc-400";
-    let labelColor = "bg-zinc-50/95 text-zinc-700 border-zinc-200/60 dark:bg-canvas/90 dark:text-zinc-300 dark:border-zinc-800";
+    let labelColor = "bg-zinc-50/95 text-zinc-700 border-zinc-200/60 dark:bg-zinc-900/90 dark:text-zinc-300 dark:border-zinc-800";
 
     const hasSubUnits = (listing.rooms && listing.rooms.length > 0) || category === 'resort' || listing.rental_mode === 'hybrid' || listing.rental_mode === 'private_rooms';
     const isPrivateRoomsOnly = listing.rental_mode === 'private_rooms';
@@ -205,7 +205,7 @@ export const getTaxonomyDetails = (listing: Listing) => {
       explanation = childUnitsSummary 
         ? `Rent the full resort, or reserve specific sub-units: ${childUnitsSummary}`
         : `Rent the Entire Resort with all rooms and grounds for private, exclusive use`;
-      iconColor = "text-brand-dark dark:text-blue-400";
+      iconColor = "text-blue-600 dark:text-blue-400";
       labelColor = "bg-blue-50/95 text-blue-700 border-blue-200/60 dark:bg-blue-950/90 dark:text-blue-300 dark:border-blue-800";
     } else if (category === 'villa') {
       badge = "Entire Villa";
@@ -226,7 +226,7 @@ export const getTaxonomyDetails = (listing: Listing) => {
       explanation = childUnitsSummary 
         ? `Standalone House or individual private rooms: ${childUnitsSummary}`
         : `Standalone House all to yourself for ultimate private residential stay`;
-      iconColor = "text-brand-dark dark:text-orange-400";
+      iconColor = "text-orange-600 dark:text-orange-400";
       labelColor = "bg-orange-50/95 text-orange-700 border-orange-200/60 dark:bg-orange-950/90 dark:text-orange-300 dark:border-orange-800";
     } else {
       badge = `Entire ${parentType}`;
@@ -269,7 +269,7 @@ export const getStayStructure = (listing: Listing) => {
         privacyPercent: 85,
         privacyText: "Resort Seclusion",
         color: "bg-blue-50/95 text-blue-700 border-blue-200/60 dark:bg-blue-950/90 dark:text-blue-300 dark:border-blue-800",
-        indicatorBg: "bg-brand",
+        indicatorBg: "bg-blue-500",
         type: "resort"
       };
     }
@@ -412,7 +412,7 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
     <motion.div 
         whileHover={{ y: -6, scale: 1.01 }}
         whileTap={{ scale: 0.98 }}
-        className="group flex flex-col cursor-pointer bg-dune rounded-3xl border border-zinc-150/70 transition-all duration-300 hover:border-[#003B95]/20 hover:shadow-[0_20px_40px_-6px_rgba(0,59,149,0.06),0_8px_20px_-4px_rgba(0,0,0,0.02)] relative overflow-hidden h-full"
+        className="group flex flex-col cursor-pointer bg-white rounded-3xl border border-zinc-150/70 transition-all duration-300 hover:border-[#003B95]/20 hover:shadow-[0_20px_40px_-6px_rgba(0,59,149,0.06),0_8px_20px_-4px_rgba(0,0,0,0.02)] relative overflow-hidden h-full"
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         onClick={handleClick}
@@ -462,7 +462,7 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
                 uiAudio.playPop();
                 onToggleFavorite?.(listing);
             }}
-            className="absolute top-4 right-4 p-2.5 rounded-full bg-dune/90 hover:bg-dune border border-zinc-200/50 shadow-sm backdrop-blur-md transition-all z-20 group/heart"
+            className="absolute top-4 right-4 p-2.5 rounded-full bg-white/90 hover:bg-white border border-zinc-200/50 shadow-sm backdrop-blur-md transition-all z-20 group/heart"
         >
             <HeartIcon className={`w-4.5 h-4.5 transition-colors ${isFavorite ? 'text-[#e51d53] fill-[#e51d53]' : 'text-zinc-600 hover:text-[#e51d53]'}`} filled={isFavorite} />
         </motion.button>
@@ -470,7 +470,7 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
         {/* Tags */}
         <div className="absolute top-4 left-4 flex flex-col gap-2 z-20">
             {listing.isVerified && (
-                 <div className="bg-dune/95 backdrop-blur-md px-3 py-1 rounded-full shadow-xs flex items-center gap-1.5 self-start border border-zinc-150/80">
+                 <div className="bg-white/95 backdrop-blur-md px-3 py-1 rounded-full shadow-xs flex items-center gap-1.5 self-start border border-zinc-150/80">
                     <ShieldCheck className="w-3.5 h-3.5 text-[#003B95]" />
                     <span className="text-[10px] font-extrabold tracking-wider text-zinc-800 uppercase font-mono">
                         Verified
@@ -482,12 +482,12 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
                  {taxonomy.badge}
             </div>
             {listing.discount && (
-                 <div className="bg-brand-dark backdrop-blur-md px-3 py-1 rounded-full shadow-sm text-white font-extrabold self-start border border-white/10">
+                 <div className="bg-blue-600 backdrop-blur-md px-3 py-1 rounded-full shadow-sm text-white font-extrabold self-start border border-white/10">
                     <span className="text-[10px] font-bold tracking-wider uppercase">-{listing.discount}% Off</span>
                  </div>
             )}
             {listing.hasOffers && !listing.discount && (
-                 <div className="bg-brand-dark backdrop-blur-md px-3 py-1 rounded-full shadow-sm text-white font-extrabold self-start border border-white/10">
+                 <div className="bg-blue-600 backdrop-blur-md px-3 py-1 rounded-full shadow-sm text-white font-extrabold self-start border border-white/10">
                     <span className="text-[10px] font-bold tracking-wider uppercase">Offers Available</span>
                  </div>
             )}
@@ -495,17 +495,17 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
 
         {/* Navigation Arrows - Hidden on mobile, visible on group hover for desktop */}
         <div className={`hidden md:flex absolute inset-x-3 top-1/2 -translate-y-1/2 justify-between pointer-events-none transition-opacity duration-300 ${isHovered ? 'opacity-100' : 'opacity-0'}`}>
-             <button onClick={prevImage} className="w-9 h-9 bg-dune/95 hover:bg-dune rounded-full flex items-center justify-center shadow-md border border-zinc-200/50 pointer-events-auto transform transition-transform hover:scale-110 active:scale-95">
+             <button onClick={prevImage} className="w-9 h-9 bg-white/95 hover:bg-white rounded-full flex items-center justify-center shadow-md border border-zinc-200/50 pointer-events-auto transform transition-transform hover:scale-110 active:scale-95">
                 <ChevronLeft className="w-4 h-4 text-zinc-800" />
              </button>
-             <button onClick={nextImage} className="w-9 h-9 bg-dune/95 hover:bg-dune rounded-full flex items-center justify-center shadow-md border border-zinc-200/50 pointer-events-auto transform transition-transform hover:scale-110 active:scale-95">
+             <button onClick={nextImage} className="w-9 h-9 bg-white/95 hover:bg-white rounded-full flex items-center justify-center shadow-md border border-zinc-200/50 pointer-events-auto transform transition-transform hover:scale-110 active:scale-95">
                 <ChevronRight className="w-4 h-4 text-zinc-800" />
              </button>
         </div>
 
         {/* Dots Pagination */}
         <div className="absolute bottom-4 inset-x-0 flex justify-center z-20">
-            <div className="bg-dune/95 backdrop-blur-md px-2.5 py-1 rounded-full flex gap-1.5 shadow-sm border border-zinc-200/30">
+            <div className="bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full flex gap-1.5 shadow-sm border border-zinc-200/30">
                 {images.slice(0, 5).map((_, i) => (
                     <div 
                         key={i} 
@@ -522,7 +522,7 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
       {/* Content */}
       <div className="p-5 flex flex-col gap-3 flex-grow">
         <div className="flex justify-between items-start gap-2">
-            <h3 className="font-bold text-canvas truncate text-[16px] sm:text-[17px] leading-snug group-hover:text-[#003B95] transition-colors duration-300" title={listing.displayTitle || listing.title}>
+            <h3 className="font-bold text-zinc-900 truncate text-[16px] sm:text-[17px] leading-snug group-hover:text-[#003B95] transition-colors duration-300" title={listing.displayTitle || listing.title}>
                 {listing.displayTitle || listing.title}
             </h3>
             <div className="flex items-center gap-1 shrink-0 bg-zinc-50 px-2 py-0.5 rounded-lg border border-zinc-150/80">
@@ -600,7 +600,7 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
                 <div className="flex items-center justify-between w-full bg-zinc-50/40 px-3.5 py-2.5 rounded-2xl border border-zinc-100/40">
                     <span className="text-zinc-500 text-[10px] font-extrabold uppercase tracking-widest">Total Price</span>
                     <div className="flex items-baseline gap-0.5">
-                        <span className="font-extrabold text-canvas text-[18px] tracking-tight">
+                        <span className="font-extrabold text-zinc-900 text-[18px] tracking-tight">
                             {formatPrice(listing.displayPrice ?? listing.price, listing.currency)}
                         </span>
                         <span className="text-zinc-500 text-xs font-semibold">/{listing.period}</span>
