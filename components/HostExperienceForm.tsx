@@ -521,7 +521,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
 
     if (submitted) {
         return (
-            <div className="min-h-screen bg-neutral-900 flex flex-col items-center justify-center p-6 text-center text-zinc-100">
+            <div className="min-h-screen bg-canvas flex flex-col items-center justify-center p-6 text-center text-zinc-100">
                 <motion.div 
                   initial={{ scale: 0.8, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
@@ -547,13 +547,13 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
         <div className="min-h-screen bg-zinc-50 dark:bg-neutral-950 flex flex-col font-sans">
             
             {/* STICKY CONTROL HEADER */}
-            <header className="sticky top-0 z-50 bg-white dark:bg-neutral-900 border-b border-zinc-200 dark:border-neutral-800 px-4 md:px-8 py-3.5 flex items-center justify-between shadow-sm">
+            <header className="sticky top-0 z-50 bg-dune dark:bg-canvas border-b border-zinc-200 dark:border-neutral-800 px-4 md:px-8 py-3.5 flex items-center justify-between shadow-sm">
                 <div className="flex items-center gap-3">
-                    <button onClick={onBack} className="p-2 hover:bg-zinc-100 dark:hover:bg-neutral-800 rounded-full transition-colors cursor-pointer text-zinc-900 dark:text-zinc-100">
+                    <button onClick={onBack} className="p-2 hover:bg-zinc-100 dark:hover:bg-neutral-800 rounded-full transition-colors cursor-pointer text-canvas dark:text-zinc-100">
                         <ChevronLeft className="w-6 h-6" />
                     </button>
                     <div>
-                      <h1 className="text-base font-bold text-zinc-900 dark:text-white tracking-tight leading-none">
+                      <h1 className="text-base font-bold text-canvas dark:text-white tracking-tight leading-none">
                         {existingExperience ? 'Revise Luxury Experience' : 'Host Custom Master Experience'}
                       </h1>
                       <p className="text-[10px] uppercase font-bold tracking-widest text-emerald-500 mt-1">Adventure & Experience Engine</p>
@@ -563,7 +563,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                 <div className="hidden lg:flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
                     <span>Step {currentStep} of {STEPS.length}</span>
                     <span className="text-zinc-300 dark:text-neutral-700">|</span>
-                    <span className="text-zinc-900 dark:text-white font-extrabold">{STEPS[currentStep - 1].name}</span>
+                    <span className="text-canvas dark:text-white font-extrabold">{STEPS[currentStep - 1].name}</span>
                 </div>
 
                 <div className="flex items-center gap-2.5">
@@ -575,13 +575,13 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                         <Sparkles className="w-3.5 h-3.5" />
                         <span>Fill Demo Data</span>
                     </button>
-                    <button onClick={onBack} type="button" className="hidden sm:inline-block px-4 py-2 font-bold text-xs uppercase tracking-widest text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer">
+                    <button onClick={onBack} type="button" className="hidden sm:inline-block px-4 py-2 font-bold text-xs uppercase tracking-widest text-zinc-500 hover:text-canvas dark:hover:text-white transition-colors cursor-pointer">
                       Abort
                     </button>
                     <button 
                       onClick={(e) => handleSubmit(e, 'upcoming')}
                       disabled={saving} 
-                      className="px-5 py-2.5 bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 font-bold text-xs uppercase tracking-widest rounded-xl transition-all shadow-md disabled:opacity-50 cursor-pointer"
+                      className="px-5 py-2.5 bg-canvas dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 font-bold text-xs uppercase tracking-widest rounded-xl transition-all shadow-md disabled:opacity-50 cursor-pointer"
                     >
                         {saving ? 'Syncing...' : existingExperience ? 'Save Changes' : 'Publish Live'}
                     </button>
@@ -589,7 +589,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
             </header>
 
             {/* STEPPER PROGRESS RIBBON */}
-            <div className="w-full bg-white dark:bg-neutral-900 border-b border-zinc-100 dark:border-neutral-800/50 py-3 px-4 md:px-8">
+            <div className="w-full bg-dune dark:bg-canvas border-b border-zinc-100 dark:border-neutral-800/50 py-3 px-4 md:px-8">
                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
                   
                   <div className="flex items-center gap-3">
@@ -598,7 +598,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                     </div>
                     <div>
                       <div className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest leading-none">Setup Progress</div>
-                      <div className="text-sm font-extrabold text-zinc-900 dark:text-white mt-1">{STEPS[currentStep - 1].label}</div>
+                      <div className="text-sm font-extrabold text-canvas dark:text-white mt-1">{STEPS[currentStep - 1].label}</div>
                     </div>
                   </div>
 
@@ -623,15 +623,15 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                           }}
                           className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-left transition-all shrink-0 cursor-pointer ${
                             isActive 
-                              ? 'border-zinc-900 dark:border-white bg-zinc-50 dark:bg-neutral-800 text-zinc-900 dark:text-white font-extrabold shadow-sm' 
+                              ? 'border-zinc-900 dark:border-white bg-zinc-50 dark:bg-neutral-800 text-canvas dark:text-white font-extrabold shadow-sm' 
                               : isCompleted 
                                 ? 'border-emerald-200 dark:border-emerald-950/40 bg-emerald-50/50 dark:bg-emerald-950/10 text-emerald-700 dark:text-emerald-400' 
-                                : 'border-zinc-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-zinc-400 dark:text-zinc-500'
+                                : 'border-zinc-100 dark:border-neutral-800 bg-dune dark:bg-canvas text-zinc-400 dark:text-zinc-500'
                           }`}
                         >
                           <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-mono font-extrabold ${
                             isActive 
-                              ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900' 
+                              ? 'bg-canvas dark:bg-dune text-white dark:text-canvas' 
                               : isCompleted 
                                 ? 'bg-emerald-500 text-white' 
                                 : 'bg-zinc-100 dark:bg-neutral-800 text-zinc-400 dark:text-zinc-500'
@@ -669,10 +669,10 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                 {/* STEP 1: BASICS */}
                                 {currentStep === 1 && (
                                     <div className="space-y-6">
-                                        <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-6">
+                                        <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-6">
                                             <div>
                                                 <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-500">Segment 1.1</span>
-                                                <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Core Event Information</h2>
+                                                <h2 className="text-lg font-extrabold text-canvas dark:text-white tracking-tight mt-0.5">Core Event Information</h2>
                                                 <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Provide the high-level metadata identifying this experiential package.</p>
                                             </div>
 
@@ -683,7 +683,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                     required
                                                     value={formData.title}
                                                     onChange={e => setFormData({ ...formData, title: e.target.value })}
-                                                    className="w-full p-3.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm font-semibold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                                                    className="w-full p-3.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-sm font-semibold text-canvas dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
                                                     placeholder="e.g. Wayanad Forest Mystic & Heart Lake Trek"
                                                 />
                                             </div>
@@ -696,7 +696,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                         required
                                                         value={formData.departure_location}
                                                         onChange={e => setFormData({ ...formData, departure_location: e.target.value })}
-                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs font-semibold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs font-semibold text-canvas dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
                                                         placeholder="e.g. Bangalore Assembly Point, KA"
                                                     />
                                                 </div>
@@ -707,7 +707,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                         required
                                                         value={formData.destination}
                                                         onChange={e => setFormData({ ...formData, destination: e.target.value })}
-                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs font-semibold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs font-semibold text-canvas dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
                                                         placeholder="e.g. Wayanad, Kerala"
                                                     />
                                                 </div>
@@ -721,7 +721,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                         required
                                                         value={formData.total_spots}
                                                         onChange={e => setFormData({ ...formData, total_spots: e.target.value, available_spots: e.target.value })}
-                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs font-semibold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs font-semibold text-canvas dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
                                                         placeholder="16"
                                                     />
                                                 </div>
@@ -732,7 +732,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                         required
                                                         value={formData.price}
                                                         onChange={e => setFormData({ ...formData, price: e.target.value })}
-                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs font-semibold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs font-semibold text-canvas dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
                                                         placeholder="8500"
                                                     />
                                                 </div>
@@ -741,7 +741,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                     <select 
                                                         value={formData.target_audience}
                                                         onChange={e => setFormData({ ...formData, target_audience: e.target.value })}
-                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs font-semibold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs font-semibold text-canvas dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
                                                     >
                                                         {AUDIENCE_OPTIONS.map(opt => (
                                                             <option key={opt.id} value={opt.id}>{opt.label}</option>
@@ -753,7 +753,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                     <select 
                                                         value={formData.language}
                                                         onChange={e => setFormData({ ...formData, language: e.target.value })}
-                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs font-semibold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs font-semibold text-canvas dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
                                                     >
                                                         {LANGUAGES.map(lang => (
                                                             <option key={lang} value={lang}>{lang}</option>
@@ -769,7 +769,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                         type="date" 
                                                         value={formData.start_date}
                                                         onChange={e => setFormData({ ...formData, start_date: e.target.value })}
-                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs font-semibold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs font-semibold text-canvas dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
                                                     />
                                                 </div>
                                                 <div className="space-y-2">
@@ -778,7 +778,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                         type="date" 
                                                         value={formData.end_date}
                                                         onChange={e => setFormData({ ...formData, end_date: e.target.value })}
-                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs font-semibold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs font-semibold text-canvas dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
                                                     />
                                                 </div>
                                             </div>
@@ -790,7 +790,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                         type="time" 
                                                         value={formData.start_time}
                                                         onChange={e => setFormData({ ...formData, start_time: e.target.value })}
-                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs font-semibold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs font-semibold text-canvas dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
                                                     />
                                                 </div>
                                                 <div className="space-y-2">
@@ -799,7 +799,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                         type="time" 
                                                         value={formData.end_time}
                                                         onChange={e => setFormData({ ...formData, end_time: e.target.value })}
-                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs font-semibold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs font-semibold text-canvas dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
                                                     />
                                                 </div>
                                             </div>
@@ -811,17 +811,17 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                     required
                                                     value={formData.description}
                                                     onChange={e => setFormData({ ...formData, description: e.target.value })}
-                                                    className="w-full p-4 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 resize-none leading-relaxed"
+                                                    className="w-full p-4 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-sm text-canvas dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 resize-none leading-relaxed"
                                                     placeholder="Describe the magical experiences, mountains climbs, campfire stories, and memories you are offering..."
                                                 />
                                             </div>
                                         </div>
 
                                         {/* Gallery upload */}
-                                        <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
+                                        <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
                                             <div>
                                                 <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-500">Segment 1.2</span>
-                                                <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Stunning Event Gallery</h2>
+                                                <h2 className="text-lg font-extrabold text-canvas dark:text-white tracking-tight mt-0.5">Stunning Event Gallery</h2>
                                                 <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Upload high-resolution landscape images. Drag and drop to re-order. The first photo will act as primary hero banner.</p>
                                             </div>
 
@@ -829,16 +829,16 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                         </div>
 
                                          {/* Video stream URL */}
-                                         <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
+                                         <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
                                              <div>
                                                  <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-500">Segment 1.3</span>
-                                                 <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Dynamic Video Tour Reels</h2>
+                                                 <h2 className="text-lg font-extrabold text-canvas dark:text-white tracking-tight mt-0.5">Dynamic Video Tour Reels</h2>
                                                  <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Paste streaming links (Vimeo, YouTube, or raw `.mp4` URLs) or upload a video file to include engaging video overlays.</p>
                                              </div>
  
                                              <div className="space-y-4">
                                                  {/* File upload zone for local video files */}
-                                                 <div className="border-2 border-dashed border-zinc-200 dark:border-neutral-800 rounded-2xl p-6 flex flex-col items-center justify-center bg-zinc-50/50 dark:bg-neutral-900/50 hover:bg-zinc-100 dark:hover:bg-neutral-850 transition-all cursor-pointer relative group">
+                                                 <div className="border-2 border-dashed border-zinc-200 dark:border-neutral-800 rounded-2xl p-6 flex flex-col items-center justify-center bg-zinc-50/50 dark:bg-canvas/50 hover:bg-zinc-100 dark:hover:bg-neutral-850 transition-all cursor-pointer relative group">
                                                      <input 
                                                          type="file" 
                                                          accept="video/*" 
@@ -866,7 +866,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                                      />
                                                      <div className="flex flex-col items-center gap-1.5 pointer-events-none">
-                                                         <div className="p-3 bg-white dark:bg-neutral-800 rounded-full shadow-sm text-zinc-400 group-hover:text-emerald-500 transition-colors">
+                                                         <div className="p-3 bg-dune dark:bg-neutral-800 rounded-full shadow-sm text-zinc-400 group-hover:text-emerald-500 transition-colors">
                                                              <Upload className="w-5 h-5" />
                                                          </div>
                                                          <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Upload a Video Tour File</span>
@@ -878,7 +878,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                      <div className="absolute inset-0 flex items-center">
                                                          <div className="w-full border-t border-zinc-100 dark:border-neutral-800" />
                                                      </div>
-                                                     <span className="relative px-3 bg-white dark:bg-neutral-900 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Or paste a link</span>
+                                                     <span className="relative px-3 bg-dune dark:bg-canvas text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Or paste a link</span>
                                                  </div>
 
                                                  <div className="flex gap-2">
@@ -886,7 +886,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                          type="text" 
                                                          value={newVideoUrl}
                                                          onChange={e => setNewVideoUrl(e.target.value)}
-                                                         className="flex-1 p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs font-semibold text-zinc-900 dark:text-white outline-none"
+                                                         className="flex-1 p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs font-semibold text-canvas dark:text-white outline-none"
                                                          placeholder="https://www.youtube.com/watch?v=..."
                                                      />
                                                      <button 
@@ -898,7 +898,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                                  addToast('Video link appended successfully', 'success');
                                                              }
                                                          }}
-                                                         className="px-4 py-3 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 rounded-xl font-bold text-xs uppercase"
+                                                         className="px-4 py-3 bg-canvas hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 rounded-xl font-bold text-xs uppercase"
                                                      >
                                                          Add
                                                      </button>
@@ -932,11 +932,11 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                 {/* STEP 2: GEOSPATIAL WAYPOINTS */}
                                 {currentStep === 2 && (
                                     <div className="space-y-6">
-                                        <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
+                                        <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
                                             <div className="flex items-center justify-between">
                                                 <div>
                                                     <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-500">Segment 2.1</span>
-                                                    <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Waypoints & Spatial Trails</h2>
+                                                    <h2 className="text-lg font-extrabold text-canvas dark:text-white tracking-tight mt-0.5">Waypoints & Spatial Trails</h2>
                                                     <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Configure physical locations, elevation metrics, and custom coordinates for each day.</p>
                                                 </div>
                                                 <button 
@@ -958,7 +958,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                 {itinerary.map((day, idx) => {
                                                     const isExpanded = !!expandedItineraryIndices[idx];
                                                     return (
-                                                        <div key={idx} className={`border rounded-2xl transition-all shadow-sm ${isExpanded ? 'border-zinc-900 dark:border-white p-5 bg-white dark:bg-neutral-900' : 'border-zinc-200/60 dark:border-neutral-800/80 p-3 bg-zinc-50/50 dark:bg-neutral-900/30'}`}>
+                                                        <div key={idx} className={`border rounded-2xl transition-all shadow-sm ${isExpanded ? 'border-zinc-900 dark:border-white p-5 bg-dune dark:bg-canvas' : 'border-zinc-200/60 dark:border-neutral-800/80 p-3 bg-zinc-50/50 dark:bg-canvas/30'}`}>
                                                             
                                                             <div 
                                                                 className="flex items-center justify-between cursor-pointer"
@@ -969,7 +969,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                                         {idx + 1}
                                                                     </div>
                                                                     <div>
-                                                                        <h4 className="font-extrabold text-sm text-zinc-900 dark:text-white">{day.title || `Day ${idx + 1} Waypoint`}</h4>
+                                                                        <h4 className="font-extrabold text-sm text-canvas dark:text-white">{day.title || `Day ${idx + 1} Waypoint`}</h4>
                                                                         {day.name && <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">{day.name} • {day.distance || '0km'}</span>}
                                                                     </div>
                                                                 </div>
@@ -1004,7 +1004,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                                                 required
                                                                                 value={day.title || ''}
                                                                                 onChange={e => updateItineraryDay(idx, 'title', e.target.value)}
-                                                                                className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-emerald-500"
+                                                                                className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none focus:ring-1 focus:ring-emerald-500"
                                                                                 placeholder="e.g. scenic transit & mountain ascent"
                                                                             />
                                                                         </div>
@@ -1016,7 +1016,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                                                     type="text"
                                                                                     value={day.name || ''}
                                                                                     onChange={e => updateItineraryDay(idx, 'name', e.target.value)}
-                                                                                    className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-emerald-500"
+                                                                                    className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none focus:ring-1 focus:ring-emerald-500"
                                                                                     placeholder="e.g. Vythiri Forest Entry Checkpoint"
                                                                                 />
                                                                             </div>
@@ -1026,7 +1026,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                                                     type="text"
                                                                                     value={day.distance || ''}
                                                                                     onChange={e => updateItineraryDay(idx, 'distance', e.target.value)}
-                                                                                    className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-emerald-500"
+                                                                                    className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none focus:ring-1 focus:ring-emerald-500"
                                                                                     placeholder="e.g. 14 km trek or 45 min boat"
                                                                                 />
                                                                             </div>
@@ -1039,7 +1039,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                                                     type="text"
                                                                                     value={day.lat || ''}
                                                                                     onChange={e => updateItineraryDay(idx, 'lat', e.target.value)}
-                                                                                    className="w-full p-2 rounded-lg border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-[11px] text-zinc-900 dark:text-white font-mono"
+                                                                                    className="w-full p-2 rounded-lg border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-[11px] text-canvas dark:text-white font-mono"
                                                                                     placeholder="e.g. 11.5362"
                                                                                 />
                                                                             </div>
@@ -1049,7 +1049,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                                                     type="text"
                                                                                     value={day.lng || ''}
                                                                                     onChange={e => updateItineraryDay(idx, 'lng', e.target.value)}
-                                                                                    className="w-full p-2 rounded-lg border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-[11px] text-zinc-900 dark:text-white font-mono"
+                                                                                    className="w-full p-2 rounded-lg border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-[11px] text-canvas dark:text-white font-mono"
                                                                                     placeholder="e.g. 76.0841"
                                                                                 />
                                                                             </div>
@@ -1059,7 +1059,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                                                     type="text"
                                                                                     value={day.elevation || ''}
                                                                                     onChange={e => updateItineraryDay(idx, 'elevation', e.target.value)}
-                                                                                    className="w-full p-2 rounded-lg border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-[11px] text-zinc-900 dark:text-white"
+                                                                                    className="w-full p-2 rounded-lg border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-[11px] text-canvas dark:text-white"
                                                                                     placeholder="e.g. 2100m"
                                                                                 />
                                                                             </div>
@@ -1069,7 +1069,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                                                     type="text"
                                                                                     value={day.landmark || ''}
                                                                                     onChange={e => updateItineraryDay(idx, 'landmark', e.target.value)}
-                                                                                    className="w-full p-2 rounded-lg border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-[11px] text-zinc-900 dark:text-white"
+                                                                                    className="w-full p-2 rounded-lg border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-[11px] text-canvas dark:text-white"
                                                                                     placeholder="Vythiri Ridge"
                                                                                 />
                                                                             </div>
@@ -1082,7 +1082,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                                                 required
                                                                                 value={day.description || ''}
                                                                                 onChange={e => updateItineraryDay(idx, 'description', e.target.value)}
-                                                                                className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-emerald-500 resize-none leading-relaxed"
+                                                                                className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none focus:ring-1 focus:ring-emerald-500 resize-none leading-relaxed"
                                                                                 placeholder="Describe step activities, rest spots, and scheduled meals details..."
                                                                             />
                                                                         </div>
@@ -1100,10 +1100,10 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                 {/* STEP 3: LUXURY STAY */}
                                 {currentStep === 3 && (
                                     <div className="space-y-6">
-                                        <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-6">
+                                        <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-6">
                                             <div>
                                                 <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-500">Segment 3.1</span>
-                                                <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Luxury Stay Resort</h2>
+                                                <h2 className="text-lg font-extrabold text-canvas dark:text-white tracking-tight mt-0.5">Luxury Stay Resort</h2>
                                                 <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Specify hotel/resort accommodations integrated directly within the package.</p>
                                             </div>
 
@@ -1114,7 +1114,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                         type="text"
                                                         value={includedStay.title || ''}
                                                         onChange={e => setIncludedStay({ ...includedStay, title: e.target.value })}
-                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs font-semibold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs font-semibold text-canvas dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
                                                         placeholder="Vythiri Village Resort"
                                                     />
                                                 </div>
@@ -1124,7 +1124,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                         type="text"
                                                         value={includedStay.location || ''}
                                                         onChange={e => setIncludedStay({ ...includedStay, location: e.target.value })}
-                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs font-semibold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs font-semibold text-canvas dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
                                                         placeholder="Wayanad, Kerala"
                                                     />
                                                 </div>
@@ -1137,10 +1137,10 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                         type="text"
                                                         value={includedStay.image || ''}
                                                         onChange={e => setIncludedStay({ ...includedStay, image: e.target.value })}
-                                                        className="flex-1 p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none"
+                                                        className="flex-1 p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none"
                                                         placeholder="https://..."
                                                     />
-                                                    <label className="cursor-pointer bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 px-4 py-3 rounded-xl text-xs font-bold uppercase whitespace-nowrap flex items-center justify-center">
+                                                    <label className="cursor-pointer bg-canvas hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 px-4 py-3 rounded-xl text-xs font-bold uppercase whitespace-nowrap flex items-center justify-center">
                                                         Upload
                                                         <input 
                                                             type="file" 
@@ -1166,7 +1166,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                     type="text"
                                                     value={includedStay.video || ''}
                                                     onChange={e => setIncludedStay({ ...includedStay, video: e.target.value })}
-                                                    className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none"
+                                                    className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none"
                                                     placeholder="https://assets.mixkit.co/videos/preview/..."
                                                 />
                                             </div>
@@ -1177,7 +1177,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                     rows={2}
                                                     value={includedStay.description || ''}
                                                     onChange={e => setIncludedStay({ ...includedStay, description: e.target.value })}
-                                                    className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-emerald-500 resize-none leading-relaxed"
+                                                    className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none focus:ring-1 focus:ring-emerald-500 resize-none leading-relaxed"
                                                     placeholder="Brief overview highlight..."
                                                 />
                                             </div>
@@ -1188,7 +1188,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                     rows={4}
                                                     value={includedStay.long_description || ''}
                                                     onChange={e => setIncludedStay({ ...includedStay, long_description: e.target.value })}
-                                                    className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-emerald-500 resize-none leading-relaxed"
+                                                    className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none focus:ring-1 focus:ring-emerald-500 resize-none leading-relaxed"
                                                     placeholder="Complete layout descriptions, sleep accommodations (e.g. private cabins, infinity pool details)..."
                                                 />
                                             </div>
@@ -1199,7 +1199,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                     type="text"
                                                     value={includedStay.amenities?.join(', ') || ''}
                                                     onChange={e => setIncludedStay({ ...includedStay, amenities: e.target.value.split(',').map(a => a.trim()).filter(Boolean) })}
-                                                    className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none"
+                                                    className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none"
                                                     placeholder="e.g. WiFi, Infinity Pool, Bonfire, Spa"
                                                 />
                                             </div>
@@ -1210,7 +1210,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                     type="text"
                                                     value={includedStay.gallery?.join(', ') || ''}
                                                     onChange={e => setIncludedStay({ ...includedStay, gallery: e.target.value.split(',').map(a => a.trim()).filter(Boolean) })}
-                                                    className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none"
+                                                    className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none"
                                                     placeholder="https://image1.com, https://image2.com"
                                                 />
                                             </div>
@@ -1221,11 +1221,11 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                 {/* STEP 4: EXCURSION STOPS */}
                                 {currentStep === 4 && (
                                     <div className="space-y-6">
-                                        <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
+                                        <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
                                             <div className="flex items-center justify-between">
                                                 <div>
                                                     <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-500">Segment 4.1</span>
-                                                    <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Excursion stops & points</h2>
+                                                    <h2 className="text-lg font-extrabold text-canvas dark:text-white tracking-tight mt-0.5">Excursion stops & points</h2>
                                                     <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Configure individual sights, activities, or landmarks visited on this tour.</p>
                                                 </div>
                                                 <button 
@@ -1247,7 +1247,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                 {placesToVisit.map((place, idx) => {
                                                     const isExpanded = !!expandedExcursionIndices[idx];
                                                     return (
-                                                        <div key={idx} className={`border rounded-2xl transition-all shadow-sm ${isExpanded ? 'border-zinc-900 dark:border-white p-5 bg-white dark:bg-neutral-900' : 'border-zinc-200/60 dark:border-neutral-800/80 p-3 bg-zinc-50/50 dark:bg-neutral-900/30'}`}>
+                                                        <div key={idx} className={`border rounded-2xl transition-all shadow-sm ${isExpanded ? 'border-zinc-900 dark:border-white p-5 bg-dune dark:bg-canvas' : 'border-zinc-200/60 dark:border-neutral-800/80 p-3 bg-zinc-50/50 dark:bg-canvas/30'}`}>
                                                             
                                                             <div 
                                                                 className="flex items-center justify-between cursor-pointer"
@@ -1258,7 +1258,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                                         {idx + 1}
                                                                     </div>
                                                                     <div>
-                                                                        <h4 className="font-extrabold text-sm text-zinc-900 dark:text-white">{place.title || `Excursion Destination ${idx + 1}`}</h4>
+                                                                        <h4 className="font-extrabold text-sm text-canvas dark:text-white">{place.title || `Excursion Destination ${idx + 1}`}</h4>
                                                                         {place.location && <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">{place.location}</span>}
                                                                     </div>
                                                                 </div>
@@ -1294,7 +1294,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                                                     required
                                                                                     value={place.title || ''}
                                                                                     onChange={e => updateExcursionStop(idx, 'title', e.target.value)}
-                                                                                    className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-emerald-500"
+                                                                                    className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none focus:ring-1 focus:ring-emerald-500"
                                                                                     placeholder="e.g. Chembra Peak"
                                                                                 />
                                                                             </div>
@@ -1304,7 +1304,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                                                     type="text"
                                                                                     value={place.location || ''}
                                                                                     onChange={e => updateExcursionStop(idx, 'location', e.target.value)}
-                                                                                    className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-emerald-500"
+                                                                                    className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none focus:ring-1 focus:ring-emerald-500"
                                                                                     placeholder="e.g. WAYANAD"
                                                                                 />
                                                                             </div>
@@ -1317,10 +1317,10 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                                                     type="text"
                                                                                     value={place.image || ''}
                                                                                     onChange={e => updateExcursionStop(idx, 'image', e.target.value)}
-                                                                                    className="flex-1 p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none"
+                                                                                    className="flex-1 p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none"
                                                                                     placeholder="https://..."
                                                                                 />
-                                                                                <label className="cursor-pointer bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 px-3.5 py-2.5 rounded-xl text-xs font-bold uppercase whitespace-nowrap flex items-center justify-center">
+                                                                                <label className="cursor-pointer bg-canvas hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 px-3.5 py-2.5 rounded-xl text-xs font-bold uppercase whitespace-nowrap flex items-center justify-center">
                                                                                     Upload
                                                                                     <input 
                                                                                         type="file" 
@@ -1347,7 +1347,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                                                     type="text"
                                                                                     value={place.video || ''}
                                                                                     onChange={e => updateExcursionStop(idx, 'video', e.target.value)}
-                                                                                    className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none"
+                                                                                    className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none"
                                                                                     placeholder="https://..."
                                                                                 />
                                                                             </div>
@@ -1357,7 +1357,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                                                     type="text"
                                                                                     value={place.gallery?.join(', ') || ''}
                                                                                     onChange={e => updateExcursionStop(idx, 'gallery', e.target.value.split(',').map(a => a.trim()).filter(Boolean))}
-                                                                                    className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none"
+                                                                                    className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none"
                                                                                     placeholder="https://img1.com, https://img2.com"
                                                                                 />
                                                                             </div>
@@ -1369,7 +1369,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                                                 type="text"
                                                                                 value={place.description || ''}
                                                                                 onChange={e => updateExcursionStop(idx, 'description', e.target.value)}
-                                                                                className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-emerald-500"
+                                                                                className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none focus:ring-1 focus:ring-emerald-500"
                                                                                 placeholder="e.g. Climb to heart-shaped lake."
                                                                             />
                                                                         </div>
@@ -1380,7 +1380,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                                                 rows={3}
                                                                                 value={place.details || ''}
                                                                                 onChange={e => updateExcursionStop(idx, 'details', e.target.value)}
-                                                                                className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none focus:ring-1 focus:ring-emerald-500 resize-none leading-relaxed"
+                                                                                className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none focus:ring-1 focus:ring-emerald-500 resize-none leading-relaxed"
                                                                                 placeholder="Provide background info, historical significance, or specific challenges..."
                                                                             />
                                                                         </div>
@@ -1400,10 +1400,10 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                     <div className="space-y-6">
                                         
                                         {/* Highlights list builder */}
-                                        <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
+                                        <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
                                             <div>
                                                 <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-500">Segment 5.1</span>
-                                                <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Experience Highlights</h2>
+                                                <h2 className="text-lg font-extrabold text-canvas dark:text-white tracking-tight mt-0.5">Experience Highlights</h2>
                                                 <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Specify key unique value propositions shown at the top of the details page.</p>
                                             </div>
 
@@ -1412,7 +1412,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                     type="text"
                                                     value={newHighlight}
                                                     onChange={e => setNewHighlight(e.target.value)}
-                                                    className="flex-1 p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs font-semibold text-zinc-900 dark:text-white outline-none"
+                                                    className="flex-1 p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs font-semibold text-canvas dark:text-white outline-none"
                                                     placeholder="e.g. Certified Native Guides & Experts"
                                                 />
                                                 <button 
@@ -1423,7 +1423,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                             setNewHighlight('');
                                                         }
                                                     }}
-                                                    className="px-4 py-3 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 rounded-xl font-bold text-xs uppercase"
+                                                    className="px-4 py-3 bg-canvas hover:bg-zinc-800 dark:bg-zinc-100 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 rounded-xl font-bold text-xs uppercase"
                                                 >
                                                     + Add
                                                 </button>
@@ -1444,10 +1444,10 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                         </div>
 
                                         {/* Inclusions & Exclusions */}
-                                        <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-6">
+                                        <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-6">
                                             <div>
                                                 <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-500">Segment 5.2</span>
-                                                <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Pricing Inclusions & Exclusions</h2>
+                                                <h2 className="text-lg font-extrabold text-canvas dark:text-white tracking-tight mt-0.5">Pricing Inclusions & Exclusions</h2>
                                                 <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Be absolutely clear with guests about what is covered in their registration fee.</p>
                                             </div>
 
@@ -1460,7 +1460,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                             type="text"
                                                             value={newInclude}
                                                             onChange={e => setNewInclude(e.target.value)}
-                                                            className="flex-1 p-2 rounded-lg border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none"
+                                                            className="flex-1 p-2 rounded-lg border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none"
                                                             placeholder="e.g. 5-Star Resort stay"
                                                         />
                                                         <button 
@@ -1496,7 +1496,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                             type="text"
                                                             value={newExclude}
                                                             onChange={e => setNewExclude(e.target.value)}
-                                                            className="flex-1 p-2 rounded-lg border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none"
+                                                            className="flex-1 p-2 rounded-lg border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none"
                                                             placeholder="e.g. flights to Bangalore"
                                                         />
                                                         <button 
@@ -1507,7 +1507,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                                     setNewExclude('');
                                                                 }
                                                             }}
-                                                            className="px-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-950 rounded-lg font-bold text-xs uppercase"
+                                                            className="px-2.5 bg-canvas dark:bg-zinc-100 text-white dark:text-zinc-950 rounded-lg font-bold text-xs uppercase"
                                                         >
                                                             +
                                                         </button>
@@ -1527,10 +1527,10 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                         </div>
 
                                         {/* Things to carry, Cancellation policy, notes */}
-                                        <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-6">
+                                        <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-6">
                                             <div>
                                                 <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-500">Segment 5.3</span>
-                                                <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Rules & Carry List</h2>
+                                                <h2 className="text-lg font-extrabold text-canvas dark:text-white tracking-tight mt-0.5">Rules & Carry List</h2>
                                                 <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Specify preparation guidelines, carry gear, and cancellation windows.</p>
                                             </div>
 
@@ -1541,7 +1541,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                         type="text"
                                                         value={newThingToCarry}
                                                         onChange={e => setNewThingToCarry(e.target.value)}
-                                                        className="flex-1 p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs font-semibold text-zinc-900 dark:text-white outline-none"
+                                                        className="flex-1 p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs font-semibold text-canvas dark:text-white outline-none"
                                                         placeholder="e.g. Anti-slip hiking boots"
                                                     />
                                                     <button 
@@ -1577,7 +1577,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                     type="text"
                                                     value={formData.cancellation_policy}
                                                     onChange={e => setFormData({ ...formData, cancellation_policy: e.target.value })}
-                                                    className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs font-semibold text-zinc-900 dark:text-white outline-none"
+                                                    className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs font-semibold text-canvas dark:text-white outline-none"
                                                     placeholder="e.g. Full refund up to 7 days before departure."
                                                 />
                                             </div>
@@ -1588,7 +1588,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                     rows={3}
                                                     value={importantNotes}
                                                     onChange={e => setImportantNotes(e.target.value)}
-                                                    className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none resize-none leading-relaxed"
+                                                    className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none resize-none leading-relaxed"
                                                     placeholder="e.g. Plastics are strictly restricted at this resort campus..."
                                                 />
                                             </div>
@@ -1600,10 +1600,10 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                 {/* STEP 6: SEO PREVIEW ENGINE */}
                                 {currentStep === 6 && (
                                     <div className="space-y-6">
-                                        <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-6">
+                                        <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-6">
                                             <div>
                                                 <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-500">Segment 6.1</span>
-                                                <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Google Search Results Card</h2>
+                                                <h2 className="text-lg font-extrabold text-canvas dark:text-white tracking-tight mt-0.5">Google Search Results Card</h2>
                                                 <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Configure search titles and description tags to maximize discoverability.</p>
                                             </div>
 
@@ -1614,7 +1614,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                         type="text" 
                                                         value={formData.seo_title}
                                                         onChange={e => setFormData({ ...formData, seo_title: e.target.value })}
-                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none"
+                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none"
                                                         placeholder="Custom SEO Title"
                                                     />
                                                 </div>
@@ -1625,7 +1625,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                         rows={2}
                                                         value={formData.seo_description}
                                                         onChange={e => setFormData({ ...formData, seo_description: e.target.value })}
-                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none resize-none"
+                                                        className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none resize-none"
                                                         placeholder="Custom SEO description..."
                                                     />
                                                 </div>
@@ -1637,7 +1637,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                             type="text" 
                                                             value={formData.seo_keywords}
                                                             onChange={e => setFormData({ ...formData, seo_keywords: e.target.value })}
-                                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none"
+                                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none"
                                                             placeholder="trekking, kerala, retreat"
                                                         />
                                                     </div>
@@ -1647,7 +1647,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                             type="text" 
                                                             value={formData.seo_image_url}
                                                             onChange={e => setFormData({ ...formData, seo_image_url: e.target.value })}
-                                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none"
+                                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas text-xs text-canvas dark:text-white outline-none"
                                                             placeholder="https://..."
                                                         />
                                                     </div>
@@ -1656,17 +1656,17 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                         </div>
 
                                         {/* Dynamic real-time Google search result mock */}
-                                        <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
+                                        <div className="bg-dune dark:bg-canvas rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
                                             <div>
                                                 <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Real-Time Search engine Mockup</label>
                                             </div>
-                                            <div className="p-5 bg-white dark:bg-neutral-950 border border-zinc-250 dark:border-neutral-900 rounded-xl font-sans max-w-lg">
+                                            <div className="p-5 bg-dune dark:bg-neutral-950 border border-zinc-250 dark:border-neutral-900 rounded-xl font-sans max-w-lg">
                                                 <div className="flex items-center gap-1.5 text-[11px] text-zinc-600 dark:text-zinc-400">
                                                     <Globe className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                                                    <span>https://encho.space › experiences › details</span>
+                                                    <span>https://amigove.com › experiences › details</span>
                                                 </div>
                                                 <h3 className="text-lg font-medium text-blue-800 dark:text-blue-400 hover:underline cursor-pointer mt-1 leading-snug">
-                                                    {formData.seo_title || formData.title || 'Untitled Exotic Retreat | Encho Space'}
+                                                    {formData.seo_title || formData.title || 'Untitled Exotic Retreat | Amigove'}
                                                 </h3>
                                                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5 leading-relaxed truncate-3-lines">
                                                     <span className="text-zinc-400 dark:text-zinc-500 font-medium">{new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} — </span>
@@ -1687,7 +1687,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                 type="button"
                                 onClick={handlePrevStep}
                                 disabled={currentStep === 1}
-                                className="px-5 py-2.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 hover:bg-zinc-50 dark:hover:bg-neutral-800/60 text-zinc-700 dark:text-zinc-300 font-bold text-xs uppercase tracking-wider transition-colors disabled:opacity-40 cursor-pointer"
+                                className="px-5 py-2.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-dune dark:bg-canvas hover:bg-zinc-50 dark:hover:bg-neutral-800/60 text-zinc-700 dark:text-zinc-300 font-bold text-xs uppercase tracking-wider transition-colors disabled:opacity-40 cursor-pointer"
                             >
                                 Previous Step
                             </button>
@@ -1696,7 +1696,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                 <button
                                     type="button"
                                     onClick={handleNextStep}
-                                    className="px-5 py-2.5 bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-sm cursor-pointer flex items-center gap-1.5"
+                                    className="px-5 py-2.5 bg-canvas dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-sm cursor-pointer flex items-center gap-1.5"
                                 >
                                     <span>Next Step</span>
                                     <ChevronRight className="w-4 h-4" />
@@ -1716,10 +1716,10 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                 </div>
 
                 {/* Right Column: High-Fidelity Desktop or Mobile Preview frame simulation */}
-                <div className="hidden lg:col-span-6 xl:col-span-6 lg:flex flex-col h-[calc(100vh-180px)] border border-zinc-200/80 dark:border-neutral-800 bg-zinc-50 dark:bg-neutral-900 rounded-2xl overflow-hidden relative shadow-inner">
+                <div className="hidden lg:col-span-6 xl:col-span-6 lg:flex flex-col h-[calc(100vh-180px)] border border-zinc-200/80 dark:border-neutral-800 bg-zinc-50 dark:bg-canvas rounded-2xl overflow-hidden relative shadow-inner">
                     
                     {/* Frame Top control bar */}
-                    <div className="px-4 py-3 border-b border-zinc-200/80 dark:border-neutral-800/80 bg-white dark:bg-neutral-900 flex items-center justify-between">
+                    <div className="px-4 py-3 border-b border-zinc-200/80 dark:border-neutral-800/80 bg-dune dark:bg-canvas flex items-center justify-between">
                          <div className="flex items-center gap-2">
                              <span className="w-3 h-3 rounded-full bg-red-400" />
                              <span className="w-3 h-3 rounded-full bg-amber-400" />
@@ -1734,7 +1734,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                              onClick={() => setPreviewFidelity('desktop')}
                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
                                previewFidelity === 'desktop' 
-                                 ? 'bg-white dark:bg-neutral-900 text-zinc-900 dark:text-white shadow-sm' 
+                                 ? 'bg-dune dark:bg-canvas text-canvas dark:text-white shadow-sm' 
                                  : 'text-zinc-400 hover:text-zinc-600'
                              }`}
                            >
@@ -1746,7 +1746,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                              onClick={() => setPreviewFidelity('mobile')}
                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
                                previewFidelity === 'mobile' 
-                                 ? 'bg-white dark:bg-neutral-900 text-zinc-900 dark:text-white shadow-sm' 
+                                 ? 'bg-dune dark:bg-canvas text-canvas dark:text-white shadow-sm' 
                                  : 'text-zinc-400 hover:text-zinc-600'
                              }`}
                            >
@@ -1777,7 +1777,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                           
                           {/* Dynamic Notch */}
                           <div className="absolute top-4 left-1/2 -translate-x-1/2 w-28 h-5 bg-black rounded-full z-50 flex items-center justify-between px-3">
-                            <div className="w-2.5 h-2.5 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center">
+                            <div className="w-2.5 h-2.5 rounded-full bg-canvas border border-neutral-800 flex items-center justify-center">
                               <div className="w-1 h-1 rounded-full bg-blue-900/40" />
                             </div>
                             <div className="w-1.5 h-1.5 rounded-full bg-[#0284C7]/20 animate-pulse" />

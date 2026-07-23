@@ -63,7 +63,7 @@ export const PullToRefresh: React.FC<Props> = ({ onRefresh, children }) => {
       <motion.div className="absolute top-0 left-0 w-full flex justify-center items-center pointer-events-none z-0 h-16">
         <motion.div style={{ opacity: useMotionValue(0), scale: isRefreshing ? 1 : 0.8 }} animate={isRefreshing ? { rotate: 360 } : {}} transition={isRefreshing ? { repeat: Infinity, duration: 1, ease: 'linear' } : {}} className="w-8 h-8 rounded-full border-2 border-gray-300 border-t-gray-900 mt-safe" />
       </motion.div>
-      <motion.div style={{ y }} animate={controls} className="w-full bg-white relative z-10 min-h-screen">{children}</motion.div>
+      <motion.div style={{ y }} animate={controls} className="w-full bg-dune relative z-10 min-h-screen">{children}</motion.div>
     </div>
   );
 };

@@ -11,14 +11,14 @@ interface SEOProps {
 }
 
 export const SEO: React.FC<SEOProps> = ({
-  title = 'Encho Space - Premium Stays & Experiences',
-  description = 'Discover extraordinary homes, villas, and curated experiences worldwide. Book your next unforgettable journey with Encho Space.',
+  title = 'Amigove - Premium Stays & Experiences',
+  description = 'Discover extraordinary homes, villas, and curated experiences worldwide. Book your next unforgettable journey with Amigove.',
   image = 'https://images.unsplash.com/photo-1488085061387-422e29b40080?auto=format&fit=crop&w=1200&q=80',
   url = typeof window !== 'undefined' ? window.location.href : '',
   type = 'website',
   keywords = 'travel, stays, experiences, villas, vacation rentals, bookings',
 }) => {
-  const fullTitle = title === 'Encho Space - Premium Stays & Experiences' ? title : `${title} | Encho Space`;
+  const fullTitle = title === 'Amigove - Premium Stays & Experiences' ? title : `${title} | Amigove`;
 
   return (
     <Helmet>

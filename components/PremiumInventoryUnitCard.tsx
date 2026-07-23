@@ -251,7 +251,7 @@ const PremiumInventoryUnitCard = ({
       className={`relative overflow-hidden transition-all duration-500 ease-in-out font-sans ${
         isSelected 
           ? 'rounded-3xl border-2 border-amber-500/80 shadow-[0_12px_40px_rgba(245,158,11,0.08)] bg-gradient-to-br from-[#FCFBF7] via-white to-amber-50/10 dark:from-zinc-900/40 dark:via-zinc-950 dark:to-zinc-900/30 my-8' 
-          : 'rounded-3xl border border-zinc-200/80 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-lg bg-white dark:bg-zinc-900 my-6'
+          : 'rounded-3xl border border-zinc-200/80 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-lg bg-dune dark:bg-canvas my-6'
       }`}
     >
       {/* Elegance Top-Bar for Selected Unit */}
@@ -263,7 +263,7 @@ const PremiumInventoryUnitCard = ({
       <div className="flex flex-col md:flex-row w-full overflow-hidden">
         
         {/* Left Media Pane (40% width on md+, fixed height on mobile) */}
-        <div className="relative w-full md:w-[38%] h-56 md:h-64 overflow-hidden bg-zinc-900 flex-shrink-0 group">
+        <div className="relative w-full md:w-[38%] h-56 md:h-64 overflow-hidden bg-canvas flex-shrink-0 group">
           <img 
             src={images[isSelected ? activeImageIndex : 0]} 
             alt={room.name}
@@ -299,7 +299,7 @@ const PremiumInventoryUnitCard = ({
         </div>
 
         {/* Right Details Deck (60% width) */}
-        <div className="flex-1 p-6 md:p-8 flex flex-col justify-between relative bg-white dark:bg-zinc-900">
+        <div className="flex-1 p-6 md:p-8 flex flex-col justify-between relative bg-dune dark:bg-canvas">
           
           <div>
             {/* Top Row: Category and Nightly Price */}
@@ -324,7 +324,7 @@ const PremiumInventoryUnitCard = ({
               </div>
               <div className="text-right flex-shrink-0">
                 <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-1">Nightly Price</span>
-                <span className="font-extrabold text-xl md:text-2xl text-zinc-900 dark:text-white">{formatPrice(room.price, listing.currency)}</span>
+                <span className="font-extrabold text-xl md:text-2xl text-canvas dark:text-white">{formatPrice(room.price, listing.currency)}</span>
               </div>
             </div>
 
@@ -367,7 +367,7 @@ const PremiumInventoryUnitCard = ({
                 e.stopPropagation();
                 setIsModalOpen(true);
               }}
-              className="text-xs font-semibold text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors underline underline-offset-4"
+              className="text-xs font-semibold text-zinc-500 hover:text-canvas dark:text-zinc-400 dark:hover:text-white transition-colors underline underline-offset-4"
             >
               Details & Gallery
             </button>
@@ -389,7 +389,7 @@ const PremiumInventoryUnitCard = ({
                       e.stopPropagation();
                       scrollToBookingCard();
                     }}
-                    className="px-5 py-2.5 bg-zinc-950 text-white dark:bg-white dark:text-black rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-300 shadow-sm hover:bg-zinc-800 dark:hover:bg-zinc-100 hover:scale-[1.02] flex items-center gap-1.5"
+                    className="px-5 py-2.5 bg-zinc-950 text-white dark:bg-dune dark:text-black rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-300 shadow-sm hover:bg-zinc-800 dark:hover:bg-zinc-100 hover:scale-[1.02] flex items-center gap-1.5"
                   >
                     Book House
                     <ArrowRight className="w-3.5 h-3.5 stroke-[2]" />
@@ -402,7 +402,7 @@ const PremiumInventoryUnitCard = ({
                   className={`px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-300 border ${
                     room.inventory_count === 0 
                       ? 'bg-zinc-50 text-zinc-400 border-zinc-200 cursor-not-allowed dark:bg-zinc-800 dark:text-zinc-600 dark:border-zinc-700' 
-                      : 'bg-white text-zinc-900 border-zinc-300 hover:border-zinc-900 dark:bg-zinc-900 dark:text-white dark:border-zinc-700 dark:hover:border-zinc-400 hover:bg-zinc-50/50'
+                      : 'bg-dune text-canvas border-zinc-300 hover:border-zinc-900 dark:bg-canvas dark:text-white dark:border-zinc-700 dark:hover:border-zinc-400 hover:bg-zinc-50/50'
                   }`}
                 >
                   {room.inventory_count === 0 ? 'Sold Out' : 'Select House'}
@@ -433,7 +433,7 @@ const PremiumInventoryUnitCard = ({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
               transition={{ type: "spring", duration: 0.5 }}
-              className="relative bg-white dark:bg-zinc-900 w-full max-w-5xl rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row h-auto max-h-[90vh] md:h-[650px] border border-zinc-100 dark:border-zinc-800 z-10"
+              className="relative bg-dune dark:bg-canvas w-full max-w-5xl rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row h-auto max-h-[90vh] md:h-[650px] border border-zinc-100 dark:border-zinc-800 z-10"
             >
               {/* Media Column (50% width on md+) */}
               <div className="relative w-full md:w-[50%] h-[260px] md:h-full bg-black shrink-0 overflow-hidden">
@@ -488,7 +488,7 @@ const PremiumInventoryUnitCard = ({
                             <button 
                               key={i} 
                               onClick={() => setActiveImageIndex(i)}
-                              className={`w-1.5 h-1.5 rounded-full transition-all ${i === activeImageIndex ? 'w-4 bg-amber-400' : 'bg-white/40'}`}
+                              className={`w-1.5 h-1.5 rounded-full transition-all ${i === activeImageIndex ? 'w-4 bg-amber-400' : 'bg-dune/40'}`}
                             />
                           ))}
                         </div>
@@ -521,7 +521,7 @@ const PremiumInventoryUnitCard = ({
               </div>
 
               {/* Information Column (50% width on md+, fully scrollable) */}
-              <div className="flex-1 p-6 md:p-8 flex flex-col justify-between overflow-y-auto h-full bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">
+              <div className="flex-1 p-6 md:p-8 flex flex-col justify-between overflow-y-auto h-full bg-dune dark:bg-canvas text-canvas dark:text-white">
                 
                 {/* Scrollable details container */}
                 <div className="space-y-6">
@@ -608,16 +608,16 @@ const PremiumInventoryUnitCard = ({
                     <div className="space-y-1 pt-2 border-t border-zinc-100/60 dark:border-zinc-800/50">
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5 font-sans">
-                          <Users className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                          <Users className="w-3.5 h-3.5 text-brand shrink-0" />
                           Social Crowding Density
                         </span>
-                        <span className="text-[11px] font-mono font-extrabold text-blue-600 dark:text-blue-400">
+                        <span className="text-[11px] font-mono font-extrabold text-brand-dark dark:text-blue-400">
                           {privacy.crowdingRating}% Dilution
                         </span>
                       </div>
                       <div className="w-full h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
                         <div 
-                          className="h-full bg-blue-500 transition-all duration-1000 ease-out" 
+                          className="h-full bg-brand transition-all duration-1000 ease-out" 
                           style={{ width: `${privacy.crowdingRating}%` }} 
                         />
                       </div>
@@ -661,7 +661,7 @@ const PremiumInventoryUnitCard = ({
                   <div className="space-y-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
                     <div className="flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-amber-500" />
-                      <h4 className="text-xs font-bold tracking-tight text-zinc-900 dark:text-white uppercase font-mono">
+                      <h4 className="text-xs font-bold tracking-tight text-canvas dark:text-white uppercase font-mono">
                         Spatial Matrix: My Space vs. Shared Space
                       </h4>
                     </div>
@@ -733,7 +733,7 @@ const PremiumInventoryUnitCard = ({
                         ? 'bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed dark:bg-zinc-800 dark:text-zinc-600 dark:border-zinc-700' 
                         : isSelected
                           ? 'bg-amber-500 text-black hover:bg-amber-600 shadow-md shadow-amber-500/10'
-                          : 'bg-zinc-950 text-white hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-100 shadow-md shadow-black/10'
+                          : 'bg-zinc-950 text-white hover:bg-zinc-800 dark:bg-dune dark:text-black dark:hover:bg-zinc-100 shadow-md shadow-black/10'
                       }`}
                   >
                     <span>{isSelected ? 'Remove Selected Residence' : 'Add Residence to Reservation'}</span>

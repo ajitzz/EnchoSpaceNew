@@ -67,7 +67,7 @@ const FlyToAnimation: React.FC<Props> = ({ listing, target, onComplete }) => {
     return (
         <div 
             style={style}
-            className="flex flex-col items-center p-2 bg-white rounded-2xl shadow-[0_20px_60px_-10px_rgba(0,0,0,0.5)] border border-gray-100 w-56 pointer-events-none overflow-hidden transition-all"
+            className="flex flex-col items-center p-2 bg-dune rounded-2xl shadow-[0_20px_60px_-10px_rgba(0,0,0,0.5)] border border-gray-100 w-56 pointer-events-none overflow-hidden transition-all"
         >
             <div className="relative w-full aspect-[4/3] rounded-xl overflow-hidden mb-2">
                 <img src={listing.imageUrl} className="w-full h-full object-cover" alt="" />
@@ -83,7 +83,7 @@ const FlyToAnimation: React.FC<Props> = ({ listing, target, onComplete }) => {
                 <div className={`font-bold text-[10px] uppercase tracking-wider mb-0.5 ${isWishlist ? 'text-pink-500' : 'text-[#0284C7]'}`}>
                     {isWishlist ? 'Saved to Wishlist' : 'Booking Confirmed'}
                 </div>
-                <div className="text-gray-900 font-bold text-xs truncate">{listing.title}</div>
+                <div className="text-canvas font-bold text-xs truncate">{listing.title}</div>
             </div>
         </div>
     );

@@ -94,8 +94,8 @@ export const AdminSEOTab: React.FC<AdminSEOTabProps> = ({ items, type, onSuccess
 
     return (
         <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">SEO Override Management</h2>
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <h2 className="text-2xl font-bold text-canvas mb-6">SEO Override Management</h2>
+            <div className="bg-dune rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <table className="w-full text-left text-sm">
                     <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-200">
                         <tr>
@@ -112,7 +112,7 @@ export const AdminSEOTab: React.FC<AdminSEOTabProps> = ({ items, type, onSuccess
                                 <React.Fragment key={item.id}>
                                     <tr className="hover:bg-gray-50/50 transition-colors">
                                         <td className="px-6 py-4">
-                                            <div className="font-medium text-gray-900 line-clamp-1">{item.title}</div>
+                                            <div className="font-medium text-canvas line-clamp-1">{item.title}</div>
                                             <div className="text-gray-500 text-xs mt-1">ID: {item.id}</div>
                                         </td>
                                         <td className="px-6 py-4 text-gray-600 truncate max-w-[200px]">
@@ -124,7 +124,7 @@ export const AdminSEOTab: React.FC<AdminSEOTabProps> = ({ items, type, onSuccess
                                         <td className="px-6 py-4 text-right">
                                             <button 
                                                 onClick={() => handleEdit(item)}
-                                                className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-xs font-medium rounded-md hover:bg-gray-50 transition-colors"
+                                                className="px-3 py-1.5 bg-dune border border-gray-300 text-gray-700 text-xs font-medium rounded-md hover:bg-gray-50 transition-colors"
                                             >
                                                 {editingId === item.id ? 'Cancel' : 'Edit'}
                                             </button>

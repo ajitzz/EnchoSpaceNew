@@ -146,7 +146,7 @@ export const AdminExperiences: React.FC<AdminExperiencesProps> = ({ token }) => 
           {activeTab === 'listings' && (
             <div className="flex flex-col gap-6">
               <div className="flex justify-between items-center">
-                <h3 className="text-xl font-bold text-gray-900">All Experiences</h3>
+                <h3 className="text-xl font-bold text-canvas">All Experiences</h3>
                 <div className="flex items-center gap-3">
                   <button
                     onClick={async () => {
@@ -191,7 +191,7 @@ export const AdminExperiences: React.FC<AdminExperiencesProps> = ({ token }) => 
               ) : (
                 <div className="grid gap-4">
                   {experiences.map(exp => (
-                    <div key={exp.id} className="bg-white p-4 rounded-xl border border-gray-100 flex items-center justify-between shadow-sm">
+                    <div key={exp.id} className="bg-dune p-4 rounded-xl border border-gray-100 flex items-center justify-between shadow-sm">
                       <div className="flex items-center gap-4">
                         <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100">
                           {exp.image_urls?.[0] ? (
@@ -201,7 +201,7 @@ export const AdminExperiences: React.FC<AdminExperiencesProps> = ({ token }) => 
                           )}
                         </div>
                         <div>
-                          <h4 className="font-bold text-gray-900">{exp.title}</h4>
+                          <h4 className="font-bold text-canvas">{exp.title}</h4>
                           <p className="text-sm text-gray-500">{exp.destination} • {formatPrice(exp.price, 'INR')}/person</p>
                         </div>
                       </div>
@@ -211,7 +211,7 @@ export const AdminExperiences: React.FC<AdminExperiencesProps> = ({ token }) => 
                             setEditingExperience(exp);
                             setIsFormOpen(true);
                           }}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                          className="p-2 text-brand-dark hover:bg-blue-50 rounded-lg"
                         >
                           Edit
                         </button>
@@ -230,9 +230,9 @@ export const AdminExperiences: React.FC<AdminExperiencesProps> = ({ token }) => 
           )}
 
           {activeTab === 'design' && (
-            <div className="flex flex-col gap-6 bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+            <div className="flex flex-col gap-6 bg-dune p-6 rounded-xl border border-gray-100 shadow-sm">
               <div>
-                <h3 className="text-xl font-bold text-gray-900 mb-1">Experiences Page Design</h3>
+                <h3 className="text-xl font-bold text-canvas mb-1">Experiences Page Design</h3>
                 <p className="text-sm text-gray-500 mb-6">Customize the hero section of the experiences page.</p>
               </div>
 
@@ -442,13 +442,13 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
     };
 
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden font-sans pb-32">
-            <div className="flex items-center mb-10 sticky top-0 bg-white/80 backdrop-blur-md z-10 py-4 px-6 border-b border-gray-100">
+        <div className="bg-dune rounded-2xl shadow-sm border border-gray-100 overflow-hidden font-sans pb-32">
+            <div className="flex items-center mb-10 sticky top-0 bg-dune/80 backdrop-blur-md z-10 py-4 px-6 border-b border-gray-100">
                 <button onClick={onClose} className="w-10 h-10 bg-gray-50 border border-gray-200 rounded-full flex items-center justify-center hover:bg-gray-100 hover:scale-105 transition-all mr-5">
                     <ChevronLeft className="w-5 h-5 text-gray-700" />
                 </button>
                 <div>
-                    <h1 className="text-2xl font-black text-gray-900 tracking-tight">{experience ? 'Edit Experience' : 'Create Experience'}</h1>
+                    <h1 className="text-2xl font-black text-canvas tracking-tight">{experience ? 'Edit Experience' : 'Create Experience'}</h1>
                 </div>
                 <div className="ml-auto">
                     <button type="button" onClick={handleSubmit} disabled={saving} className="px-6 py-2.5 bg-gray-900 text-white rounded-full font-bold shadow-lg shadow-black/10 hover:bg-black transition-all disabled:opacity-50">
@@ -459,31 +459,31 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
 
             <form onSubmit={handleSubmit} className="px-6 space-y-12">
                 {/* 1. OVERVIEW */}
-                <div className="bg-white p-8 rounded-3xl border border-gray-200 shadow-sm relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500"></div>
+                <div className="bg-dune p-8 rounded-3xl border border-gray-200 shadow-sm relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-1.5 h-full bg-brand"></div>
                     <div className="mb-6">
-                        <h2 className="text-xl font-black text-gray-900">1. Overview</h2>
+                        <h2 className="text-xl font-black text-canvas">1. Overview</h2>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="md:col-span-2">
                             <label className="block text-sm font-bold text-gray-700 mb-2">Experience Title</label>
-                            <input required type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full p-4 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-lg font-medium" />
+                            <input required type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full p-4 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-brand/20 focus:border-brand transition-all text-lg font-medium" />
                         </div>
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-2">Destination (City/Region)</label>
-                            <input required type="text" value={formData.destination} onChange={e => setFormData({...formData, destination: e.target.value})} className="w-full p-3 border border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium" />
+                            <input required type="text" value={formData.destination} onChange={e => setFormData({...formData, destination: e.target.value})} className="w-full p-3 border border-gray-200 rounded-xl focus:ring-4 focus:ring-brand/20 focus:border-brand transition-all font-medium" />
                         </div>
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-2">Departure Location</label>
-                            <input type="text" value={formData.departure_location} onChange={e => setFormData({...formData, departure_location: e.target.value})} className="w-full p-3 border border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium" />
+                            <input type="text" value={formData.departure_location} onChange={e => setFormData({...formData, departure_location: e.target.value})} className="w-full p-3 border border-gray-200 rounded-xl focus:ring-4 focus:ring-brand/20 focus:border-brand transition-all font-medium" />
                         </div>
                         <div className="md:col-span-2">
                             <label className="block text-sm font-bold text-gray-700 mb-2">Description</label>
-                            <textarea required value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full p-3 border border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium min-h-[150px]"></textarea>
+                            <textarea required value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full p-3 border border-gray-200 rounded-xl focus:ring-4 focus:ring-brand/20 focus:border-brand transition-all font-medium min-h-[150px]"></textarea>
                         </div>
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-2">Target Audience</label>
-                            <select value={formData.target_audience} onChange={e => setFormData({...formData, target_audience: e.target.value})} className="w-full p-3 border border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium bg-white">
+                            <select value={formData.target_audience} onChange={e => setFormData({...formData, target_audience: e.target.value})} className="w-full p-3 border border-gray-200 rounded-xl focus:ring-4 focus:ring-brand/20 focus:border-brand transition-all font-medium bg-dune">
                                 <option value="all">Everyone</option>
                                 <option value="adults">Adults Only</option>
                                 <option value="family">Family Friendly</option>
@@ -493,16 +493,16 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
                         </div>
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-2">Language</label>
-                            <input type="text" value={formData.language} onChange={e => setFormData({...formData, language: e.target.value})} className="w-full p-3 border border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium" />
+                            <input type="text" value={formData.language} onChange={e => setFormData({...formData, language: e.target.value})} className="w-full p-3 border border-gray-200 rounded-xl focus:ring-4 focus:ring-brand/20 focus:border-brand transition-all font-medium" />
                         </div>
                     </div>
                 </div>
 
                 {/* 2. MEDIA */}
-                <div className="bg-white p-8 rounded-3xl border border-gray-200 shadow-sm relative overflow-hidden">
+                <div className="bg-dune p-8 rounded-3xl border border-gray-200 shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-1.5 h-full bg-purple-500"></div>
                     <div className="mb-6">
-                        <h2 className="text-xl font-black text-gray-900">2. Media</h2>
+                        <h2 className="text-xl font-black text-canvas">2. Media</h2>
                     </div>
                     <div className="space-y-6">
                         <div>
@@ -541,7 +541,7 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
                                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                 />
                                 <div className="flex flex-col items-center gap-1.5 pointer-events-none">
-                                    <div className="p-2.5 bg-white rounded-full shadow-sm text-gray-400 group-hover:text-purple-600 transition-colors">
+                                    <div className="p-2.5 bg-dune rounded-full shadow-sm text-gray-400 group-hover:text-purple-600 transition-colors">
                                         <Upload className="w-5 h-5" />
                                     </div>
                                     <span className="text-xs font-bold text-gray-700">Upload a Video Tour File</span>
@@ -553,7 +553,7 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
                                 <div className="absolute inset-0 flex items-center">
                                     <div className="w-full border-t border-gray-100" />
                                 </div>
-                                <span className="relative px-3 bg-white text-[10px] font-bold text-gray-400 uppercase tracking-wider">Or paste a link</span>
+                                <span className="relative px-3 bg-dune text-[10px] font-bold text-gray-400 uppercase tracking-wider">Or paste a link</span>
                             </div>
 
                             <div className="flex gap-3 mb-4">
@@ -561,7 +561,7 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
                                 <button type="button" onClick={() => {
                                     const input = document.getElementById('video_input') as HTMLInputElement;
                                     if (input && input.value) { setVideoUrls([...videoUrls, input.value]); input.value = ''; }
-                                }} className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-xl font-bold transition-colors">Add</button>
+                                }} className="px-4 py-3 bg-gray-100 hover:bg-gray-200 text-canvas rounded-xl font-bold transition-colors">Add</button>
                             </div>
                             {videoUrls.length > 0 && (
                                 <div className="flex flex-col gap-2">
@@ -578,10 +578,10 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
                 </div>
 
                 {/* 3. LOGISTICS */}
-                <div className="bg-white p-8 rounded-3xl border border-gray-200 shadow-sm relative overflow-hidden">
+                <div className="bg-dune p-8 rounded-3xl border border-gray-200 shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-1.5 h-full bg-emerald-500"></div>
                     <div className="mb-6">
-                        <h2 className="text-xl font-black text-gray-900">3. Logistics & Pricing</h2>
+                        <h2 className="text-xl font-black text-canvas">3. Logistics & Pricing</h2>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         <div className="lg:col-span-2">
@@ -598,19 +598,19 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
                         </div>
                         <div className="lg:col-span-2">
                             <label className="block text-sm font-bold text-gray-700 mb-2">Start Date</label>
-                            <input required type="date" value={formData.start_date.split('T')[0]} onChange={e => setFormData({...formData, start_date: new Date(e.target.value).toISOString()})} className="w-full p-3 border border-gray-200 rounded-xl font-medium bg-white" />
+                            <input required type="date" value={formData.start_date.split('T')[0]} onChange={e => setFormData({...formData, start_date: new Date(e.target.value).toISOString()})} className="w-full p-3 border border-gray-200 rounded-xl font-medium bg-dune" />
                         </div>
                         <div className="lg:col-span-2">
                             <label className="block text-sm font-bold text-gray-700 mb-2">End Date</label>
-                            <input required type="date" value={formData.end_date.split('T')[0]} onChange={e => setFormData({...formData, end_date: new Date(e.target.value).toISOString()})} className="w-full p-3 border border-gray-200 rounded-xl font-medium bg-white" />
+                            <input required type="date" value={formData.end_date.split('T')[0]} onChange={e => setFormData({...formData, end_date: new Date(e.target.value).toISOString()})} className="w-full p-3 border border-gray-200 rounded-xl font-medium bg-dune" />
                         </div>
                         <div className="lg:col-span-2">
                             <label className="block text-sm font-bold text-gray-700 mb-2">Start Time</label>
-                            <input type="time" value={formData.start_time || ''} onChange={e => setFormData({...formData, start_time: e.target.value})} className="w-full p-3 border border-gray-200 rounded-xl font-medium bg-white" />
+                            <input type="time" value={formData.start_time || ''} onChange={e => setFormData({...formData, start_time: e.target.value})} className="w-full p-3 border border-gray-200 rounded-xl font-medium bg-dune" />
                         </div>
                         <div className="lg:col-span-2">
                             <label className="block text-sm font-bold text-gray-700 mb-2">End Time</label>
-                            <input type="time" value={formData.end_time || ''} onChange={e => setFormData({...formData, end_time: e.target.value})} className="w-full p-3 border border-gray-200 rounded-xl font-medium bg-white" />
+                            <input type="time" value={formData.end_time || ''} onChange={e => setFormData({...formData, end_time: e.target.value})} className="w-full p-3 border border-gray-200 rounded-xl font-medium bg-dune" />
                         </div>
                         <div className="lg:col-span-4">
                             <label className="block text-sm font-bold text-gray-700 mb-2">Meeting Point Map Link (Google Maps)</label>
@@ -618,7 +618,7 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
                         </div>
                         <div className="lg:col-span-4">
                             <label className="block text-sm font-bold text-gray-700 mb-2">Status</label>
-                            <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full p-3 border border-gray-200 rounded-xl font-medium bg-white">
+                            <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full p-3 border border-gray-200 rounded-xl font-medium bg-dune">
                                 <option value="upcoming">Upcoming</option>
                                 <option value="completed">Completed</option>
                                 <option value="cancelled">Cancelled</option>
@@ -628,21 +628,21 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
                 </div>
 
                 {/* 4. HIGHLIGHTS & CHECKLIST */}
-                <div className="bg-white p-8 rounded-3xl border border-gray-200 shadow-sm relative overflow-hidden">
+                <div className="bg-dune p-8 rounded-3xl border border-gray-200 shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-1.5 h-full bg-amber-500"></div>
                     <div className="mb-6">
-                        <h2 className="text-xl font-black text-gray-900">4. Highlights & Details</h2>
+                        <h2 className="text-xl font-black text-canvas">4. Highlights & Details</h2>
                     </div>
                     <div className="space-y-8">
                         <div className="bg-amber-50/50 p-5 rounded-2xl border border-amber-100">
                             <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2"><Sparkles className="w-4 h-4 text-amber-500"/> Highlights</label>
                             <div className="flex gap-2 mb-4">
-                                <input type="text" value={newHighlight} onChange={(e) => setNewHighlight(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (newHighlight.trim()) { setHighlights([...highlights, newHighlight.trim()]); setNewHighlight(''); } } }} className="flex-1 p-3 border border-amber-200 rounded-xl bg-white" placeholder="e.g. Campfire with Music" />
+                                <input type="text" value={newHighlight} onChange={(e) => setNewHighlight(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (newHighlight.trim()) { setHighlights([...highlights, newHighlight.trim()]); setNewHighlight(''); } } }} className="flex-1 p-3 border border-amber-200 rounded-xl bg-dune" placeholder="e.g. Campfire with Music" />
                                 <button type="button" onClick={() => { if (newHighlight.trim()) { setHighlights([...highlights, newHighlight.trim()]); setNewHighlight(''); } }} className="px-5 py-2 bg-amber-500 text-white rounded-xl font-bold">Add</button>
                             </div>
                             <div className="flex flex-wrap gap-2">
                                 {highlights.map((item, idx) => (
-                                    <div key={idx} className="flex items-center gap-2 bg-white border border-amber-200 px-3 py-1 rounded-lg">
+                                    <div key={idx} className="flex items-center gap-2 bg-dune border border-amber-200 px-3 py-1 rounded-lg">
                                         <span className="text-sm font-medium text-gray-800">{item}</span>
                                         <button type="button" onClick={() => { const n = [...highlights]; n.splice(idx,1); setHighlights(n); }} className="text-gray-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
                                     </div>
@@ -654,7 +654,7 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-3">What's Included</label>
                                 <div className="flex gap-2 mb-4">
-                                    <input type="text" id="inc_input" className="flex-1 p-3 border border-gray-200 rounded-xl bg-white" />
+                                    <input type="text" id="inc_input" className="flex-1 p-3 border border-gray-200 rounded-xl bg-dune" />
                                     <button type="button" onClick={() => { const el=document.getElementById('inc_input') as HTMLInputElement; if(el.value) { setIncludes([...includes, el.value]); el.value=''; } }} className="px-4 bg-gray-100 rounded-xl font-bold text-gray-700">Add</button>
                                 </div>
                                 <div className="space-y-2">
@@ -668,7 +668,7 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 mb-3">What's Not Included</label>
                                 <div className="flex gap-2 mb-4">
-                                    <input type="text" id="exc_input" className="flex-1 p-3 border border-gray-200 rounded-xl bg-white" />
+                                    <input type="text" id="exc_input" className="flex-1 p-3 border border-gray-200 rounded-xl bg-dune" />
                                     <button type="button" onClick={() => { const el=document.getElementById('exc_input') as HTMLInputElement; if(el.value) { setExcludes([...excludes, el.value]); el.value=''; } }} className="px-4 bg-gray-100 rounded-xl font-bold text-gray-700">Add</button>
                                 </div>
                                 <div className="space-y-2">
@@ -684,7 +684,7 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-3">Things to Carry</label>
                             <div className="flex gap-2 mb-4">
-                                <input type="text" value={newThingToCarry} onChange={(e) => setNewThingToCarry(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (newThingToCarry.trim()) { setThingsToCarry([...thingsToCarry, newThingToCarry.trim()]); setNewThingToCarry(''); } } }} className="flex-1 p-3 border border-gray-200 rounded-xl bg-white" />
+                                <input type="text" value={newThingToCarry} onChange={(e) => setNewThingToCarry(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (newThingToCarry.trim()) { setThingsToCarry([...thingsToCarry, newThingToCarry.trim()]); setNewThingToCarry(''); } } }} className="flex-1 p-3 border border-gray-200 rounded-xl bg-dune" />
                                 <button type="button" onClick={() => { if (newThingToCarry.trim()) { setThingsToCarry([...thingsToCarry, newThingToCarry.trim()]); setNewThingToCarry(''); } }} className="px-5 py-2 bg-gray-900 text-white rounded-xl font-bold">Add</button>
                             </div>
                             <div className="flex flex-wrap gap-2">
@@ -706,10 +706,10 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
                 </div>
 
                 {/* 5. ITINERARY */}
-                <div className="bg-white p-8 rounded-3xl border border-gray-200 shadow-sm relative overflow-hidden">
+                <div className="bg-dune p-8 rounded-3xl border border-gray-200 shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-1.5 h-full bg-indigo-500"></div>
                     <div className="flex items-center justify-between mb-6">
-                        <h2 className="text-xl font-black text-gray-900">5. The Journey (Itinerary)</h2>
+                        <h2 className="text-xl font-black text-canvas">5. The Journey (Itinerary)</h2>
                         <button type="button" onClick={addItineraryDay} className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl font-bold flex items-center gap-2">
                             <Plus className="w-4 h-4" /> Add Day
                         </button>
@@ -723,35 +723,35 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="md:col-span-2">
                                         <label className="block text-xs font-bold text-indigo-900/60 uppercase mb-2">Day {index + 1} Title</label>
-                                        <input type="text" value={day.title} onChange={(e) => updateItineraryDay(index, 'title', e.target.value)} className="w-full p-3 border border-indigo-200/50 rounded-xl bg-white" />
+                                        <input type="text" value={day.title} onChange={(e) => updateItineraryDay(index, 'title', e.target.value)} className="w-full p-3 border border-indigo-200/50 rounded-xl bg-dune" />
                                     </div>
                                     <div className="md:col-span-2">
                                         <label className="block text-xs font-bold text-indigo-900/60 uppercase mb-2">Description</label>
-                                        <textarea value={day.description} onChange={(e) => updateItineraryDay(index, 'description', e.target.value)} className="w-full p-3 border border-indigo-200/50 rounded-xl bg-white" rows={2} />
+                                        <textarea value={day.description} onChange={(e) => updateItineraryDay(index, 'description', e.target.value)} className="w-full p-3 border border-indigo-200/50 rounded-xl bg-dune" rows={2} />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-indigo-900/60 uppercase mb-2">Station / Highlight Point</label>
-                                        <input type="text" value={day.name || ''} onChange={(e) => updateItineraryDay(index, 'name', e.target.value)} className="w-full p-3 border border-indigo-200/50 rounded-xl bg-white text-sm" />
+                                        <input type="text" value={day.name || ''} onChange={(e) => updateItineraryDay(index, 'name', e.target.value)} className="w-full p-3 border border-indigo-200/50 rounded-xl bg-dune text-sm" />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-indigo-900/60 uppercase mb-2">Elevation / Altitude</label>
-                                        <input type="text" value={day.elevation || ''} onChange={(e) => updateItineraryDay(index, 'elevation', e.target.value)} className="w-full p-3 border border-indigo-200/50 rounded-xl bg-white text-sm" />
+                                        <input type="text" value={day.elevation || ''} onChange={(e) => updateItineraryDay(index, 'elevation', e.target.value)} className="w-full p-3 border border-indigo-200/50 rounded-xl bg-dune text-sm" />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-indigo-900/60 uppercase mb-2">Transit Distance</label>
-                                        <input type="text" value={day.distance || ''} onChange={(e) => updateItineraryDay(index, 'distance', e.target.value)} className="w-full p-3 border border-indigo-200/50 rounded-xl bg-white text-sm" />
+                                        <input type="text" value={day.distance || ''} onChange={(e) => updateItineraryDay(index, 'distance', e.target.value)} className="w-full p-3 border border-indigo-200/50 rounded-xl bg-dune text-sm" />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-indigo-900/60 uppercase mb-2">Station Landmark</label>
-                                        <input type="text" value={day.landmark || ''} onChange={(e) => updateItineraryDay(index, 'landmark', e.target.value)} className="w-full p-3 border border-indigo-200/50 rounded-xl bg-white text-sm" />
+                                        <input type="text" value={day.landmark || ''} onChange={(e) => updateItineraryDay(index, 'landmark', e.target.value)} className="w-full p-3 border border-indigo-200/50 rounded-xl bg-dune text-sm" />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-indigo-900/60 uppercase tracking-wider mb-2">Latitude (Map Pin)</label>
-                                        <input type="text" value={day.lat || ''} onChange={(e) => updateItineraryDay(index, 'lat', e.target.value)} className="w-full p-3 border border-indigo-200/50 rounded-xl bg-white text-sm" placeholder="e.g. 11.5362° N" />
+                                        <input type="text" value={day.lat || ''} onChange={(e) => updateItineraryDay(index, 'lat', e.target.value)} className="w-full p-3 border border-indigo-200/50 rounded-xl bg-dune text-sm" placeholder="e.g. 11.5362° N" />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-indigo-900/60 uppercase tracking-wider mb-2">Longitude (Map Pin)</label>
-                                        <input type="text" value={day.lng || ''} onChange={(e) => updateItineraryDay(index, 'lng', e.target.value)} className="w-full p-3 border border-indigo-200/50 rounded-xl bg-white text-sm" placeholder="e.g. 76.0841° E" />
+                                        <input type="text" value={day.lng || ''} onChange={(e) => updateItineraryDay(index, 'lng', e.target.value)} className="w-full p-3 border border-indigo-200/50 rounded-xl bg-dune text-sm" placeholder="e.g. 76.0841° E" />
                                     </div>
                                 </div>
                             </div>
@@ -760,10 +760,10 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
                 </div>
 
                 {/* 6. PLACES TO VISIT */}
-                <div className="bg-white p-8 rounded-3xl border border-gray-200 shadow-sm relative overflow-hidden">
+                <div className="bg-dune p-8 rounded-3xl border border-gray-200 shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-1.5 h-full bg-rose-500"></div>
                     <div className="flex items-center justify-between mb-6">
-                        <h2 className="text-xl font-black text-gray-900">6. Places to Visit</h2>
+                        <h2 className="text-xl font-black text-canvas">6. Places to Visit</h2>
                         <button type="button" onClick={() => setPlacesToVisit([...placesToVisit, { title: '', location: '', image: '', description: '', details: '' }])} className="px-4 py-2 bg-rose-50 text-rose-700 rounded-xl font-bold flex items-center gap-2">
                             <Plus className="w-4 h-4" /> Add Place
                         </button>
@@ -777,17 +777,17 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-xs font-bold text-rose-900/60 uppercase mb-2">Place Title</label>
-                                        <input type="text" value={place.title} onChange={e => { const n = [...placesToVisit]; n[index].title = e.target.value; setPlacesToVisit(n); }} className="w-full p-3 border border-rose-200/50 rounded-xl bg-white" />
+                                        <input type="text" value={place.title} onChange={e => { const n = [...placesToVisit]; n[index].title = e.target.value; setPlacesToVisit(n); }} className="w-full p-3 border border-rose-200/50 rounded-xl bg-dune" />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-rose-900/60 uppercase mb-2">Location/Area</label>
-                                        <input type="text" value={place.location} onChange={e => { const n = [...placesToVisit]; n[index].location = e.target.value; setPlacesToVisit(n); }} className="w-full p-3 border border-rose-200/50 rounded-xl bg-white" />
+                                        <input type="text" value={place.location} onChange={e => { const n = [...placesToVisit]; n[index].location = e.target.value; setPlacesToVisit(n); }} className="w-full p-3 border border-rose-200/50 rounded-xl bg-dune" />
                                     </div>
                                     <div className="md:col-span-2">
                                         <label className="block text-xs font-bold text-rose-900/60 uppercase mb-2">Image URL / Upload</label>
                                         <div className="flex gap-2">
-                                            <input type="text" value={place.image} onChange={e => { const n = [...placesToVisit]; n[index].image = e.target.value; setPlacesToVisit(n); }} className="flex-1 p-3 border border-rose-200/50 rounded-xl bg-white text-sm" />
-                                            <label className="cursor-pointer bg-white border border-rose-200/50 px-4 py-3 rounded-xl text-sm font-bold text-rose-700 flex items-center">
+                                            <input type="text" value={place.image} onChange={e => { const n = [...placesToVisit]; n[index].image = e.target.value; setPlacesToVisit(n); }} className="flex-1 p-3 border border-rose-200/50 rounded-xl bg-dune text-sm" />
+                                            <label className="cursor-pointer bg-dune border border-rose-200/50 px-4 py-3 rounded-xl text-sm font-bold text-rose-700 flex items-center">
                                                 Upload
                                                 <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
                                                     if (e.target.files?.[0]) {
@@ -799,7 +799,7 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
                                     </div>
                                     <div className="md:col-span-2">
                                         <label className="block text-xs font-bold text-rose-900/60 uppercase mb-2">Short Description</label>
-                                        <textarea value={place.description} onChange={e => { const n = [...placesToVisit]; n[index].description = e.target.value; setPlacesToVisit(n); }} className="w-full p-3 border border-rose-200/50 rounded-xl bg-white" rows={2} />
+                                        <textarea value={place.description} onChange={e => { const n = [...placesToVisit]; n[index].description = e.target.value; setPlacesToVisit(n); }} className="w-full p-3 border border-rose-200/50 rounded-xl bg-dune" rows={2} />
                                     </div>
                                 </div>
                             </div>
@@ -808,25 +808,25 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
                 </div>
 
                 {/* 7. STAY DETAILS */}
-                <div className="bg-white p-8 rounded-3xl border border-gray-200 shadow-sm relative overflow-hidden">
+                <div className="bg-dune p-8 rounded-3xl border border-gray-200 shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-1.5 h-full bg-cyan-500"></div>
                     <div className="mb-6">
-                        <h2 className="text-xl font-black text-gray-900">7. Stay Details (Optional)</h2>
+                        <h2 className="text-xl font-black text-canvas">7. Stay Details (Optional)</h2>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-cyan-50/30 p-6 rounded-2xl border border-cyan-100">
                         <div>
                             <label className="block text-xs font-bold text-cyan-900/60 uppercase mb-2">Resort/Hotel Title</label>
-                            <input type="text" value={includedStay?.title || ''} onChange={e => setIncludedStay({...includedStay, title: e.target.value})} className="w-full p-3 border border-cyan-200/50 rounded-xl bg-white" />
+                            <input type="text" value={includedStay?.title || ''} onChange={e => setIncludedStay({...includedStay, title: e.target.value})} className="w-full p-3 border border-cyan-200/50 rounded-xl bg-dune" />
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-cyan-900/60 uppercase mb-2">Location</label>
-                            <input type="text" value={includedStay?.location || ''} onChange={e => setIncludedStay({...includedStay, location: e.target.value})} className="w-full p-3 border border-cyan-200/50 rounded-xl bg-white" />
+                            <input type="text" value={includedStay?.location || ''} onChange={e => setIncludedStay({...includedStay, location: e.target.value})} className="w-full p-3 border border-cyan-200/50 rounded-xl bg-dune" />
                         </div>
                         <div className="md:col-span-2">
                             <label className="block text-xs font-bold text-cyan-900/60 uppercase mb-2">Primary Image URL / Upload</label>
                             <div className="flex gap-2">
-                                <input type="text" value={includedStay?.image || ''} onChange={e => setIncludedStay({...includedStay, image: e.target.value})} className="flex-1 p-3 border border-cyan-200/50 rounded-xl bg-white text-sm" />
-                                <label className="cursor-pointer bg-white border border-cyan-200/50 px-4 py-3 rounded-xl text-sm font-bold text-cyan-700 flex items-center">
+                                <input type="text" value={includedStay?.image || ''} onChange={e => setIncludedStay({...includedStay, image: e.target.value})} className="flex-1 p-3 border border-cyan-200/50 rounded-xl bg-dune text-sm" />
+                                <label className="cursor-pointer bg-dune border border-cyan-200/50 px-4 py-3 rounded-xl text-sm font-bold text-cyan-700 flex items-center">
                                     Upload
                                     <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
                                         if (e.target.files?.[0]) {
@@ -839,8 +839,8 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
                         <div className="md:col-span-2">
                             <label className="block text-xs font-bold text-cyan-900/60 uppercase mb-2">Gallery Image URLs (Comma separated)</label>
                             <div className="flex gap-2">
-                                <input type="text" value={includedStay?.gallery?.join(', ') || ''} onChange={e => setIncludedStay({...includedStay, gallery: e.target.value.split(',').map(a => a.trim()).filter(a => a)})} className="flex-1 p-3 border border-cyan-200/50 rounded-xl bg-white text-sm" />
-                                <label className="cursor-pointer bg-white border border-cyan-200/50 px-4 py-3 rounded-xl text-sm font-bold text-cyan-700 flex items-center">
+                                <input type="text" value={includedStay?.gallery?.join(', ') || ''} onChange={e => setIncludedStay({...includedStay, gallery: e.target.value.split(',').map(a => a.trim()).filter(a => a)})} className="flex-1 p-3 border border-cyan-200/50 rounded-xl bg-dune text-sm" />
+                                <label className="cursor-pointer bg-dune border border-cyan-200/50 px-4 py-3 rounded-xl text-sm font-bold text-cyan-700 flex items-center">
                                     Upload
                                     <input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => {
                                         if (e.target.files && e.target.files.length > 0) {
@@ -855,15 +855,15 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
                         </div>
                         <div className="md:col-span-2">
                             <label className="block text-xs font-bold text-cyan-900/60 uppercase mb-2">Short Description</label>
-                            <textarea value={includedStay?.description || ''} onChange={e => setIncludedStay({...includedStay, description: e.target.value})} rows={2} className="w-full p-3 border border-cyan-200/50 rounded-xl bg-white" />
+                            <textarea value={includedStay?.description || ''} onChange={e => setIncludedStay({...includedStay, description: e.target.value})} rows={2} className="w-full p-3 border border-cyan-200/50 rounded-xl bg-dune" />
                         </div>
                         <div className="md:col-span-2">
                             <label className="block text-xs font-bold text-cyan-900/60 uppercase mb-2">Long Description (Detailed)</label>
-                            <textarea value={includedStay?.long_description || ''} onChange={e => setIncludedStay({...includedStay, long_description: e.target.value})} rows={3} className="w-full p-3 border border-cyan-200/50 rounded-xl bg-white" />
+                            <textarea value={includedStay?.long_description || ''} onChange={e => setIncludedStay({...includedStay, long_description: e.target.value})} rows={3} className="w-full p-3 border border-cyan-200/50 rounded-xl bg-dune" />
                         </div>
                         <div className="md:col-span-2">
                             <label className="block text-xs font-bold text-cyan-900/60 uppercase mb-2">Amenities (Comma separated)</label>
-                            <input type="text" value={includedStay?.amenities?.join(', ') || ''} onChange={e => setIncludedStay({...includedStay, amenities: e.target.value.split(',').map(a => a.trim()).filter(a => a)})} className="w-full p-3 border border-cyan-200/50 rounded-xl bg-white text-sm" />
+                            <input type="text" value={includedStay?.amenities?.join(', ') || ''} onChange={e => setIncludedStay({...includedStay, amenities: e.target.value.split(',').map(a => a.trim()).filter(a => a)})} className="w-full p-3 border border-cyan-200/50 rounded-xl bg-dune text-sm" />
                         </div>
                     </div>
                 </div>

@@ -1,7 +1,14 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  
+  --color-brand: #E05A3D;
+  --color-brand-dark: #C24A30;
+  --color-canvas: #1A1C21;
+  --color-accent: #F4B34A;
+  --color-dune: #FAFAFA;
 }
 
 html {
@@ -12,7 +19,7 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #ffffff;
+  background-color: var(--color-dune);
   overflow-x: hidden;
 }
 
@@ -131,11 +138,11 @@ body {
   -webkit-touch-callout: default;
   -webkit-user-select: text;
   user-select: text;
-  background-color: #ffffff;
+  background-color: var(--color-dune);
 }
 
 #root {
-  background-color: #ffffff;
+  background-color: var(--color-dune);
   min-height: 100vh;
   min-height: 100dvh;
 }
@@ -164,3 +171,8 @@ input, textarea, [contenteditable="true"] {
 }
 
 
+
+html, body {
+  background-color: var(--color-dune);
+  color: var(--color-canvas);
+}

@@ -55,7 +55,7 @@ const SortablePhoto: React.FC<SortablePhotoProps> = ({ id, url, onRemove, isMain
       </div>
       
       {/* Overlay to dim on drag */}
-      {isDragging && <div className="absolute inset-0 bg-white/20 backdrop-blur-[2px]" />}
+      {isDragging && <div className="absolute inset-0 bg-dune/20 backdrop-blur-[2px]" />}
 
       {/* Drag Handle */}
       <div 
@@ -68,7 +68,7 @@ const SortablePhoto: React.FC<SortablePhotoProps> = ({ id, url, onRemove, isMain
 
       {isMain && (
         <div className="absolute bottom-3 left-3 bg-[#0284C7] text-white px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider shadow-md z-10 flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+          <span className="w-1.5 h-1.5 rounded-full bg-dune animate-pulse" />
           Cover Photo
         </div>
       )}
@@ -83,7 +83,7 @@ const SortablePhoto: React.FC<SortablePhotoProps> = ({ id, url, onRemove, isMain
           e.stopPropagation();
           onRemove(id);
         }}
-        className="absolute top-3 right-3 p-2 bg-white/90 backdrop-blur-md rounded-xl shadow-sm hover:bg-white transition-all opacity-0 group-hover:opacity-100 hover:scale-105 hover:text-red-500"
+        className="absolute top-3 right-3 p-2 bg-dune/90 backdrop-blur-md rounded-xl shadow-sm hover:bg-dune transition-all opacity-0 group-hover:opacity-100 hover:scale-105 hover:text-red-500"
       >
         <X className="w-5 h-5" />
       </button>
@@ -268,7 +268,7 @@ export const PhotoUpload: React.FC<PhotoUploadProps> = ({ photos, setPhotos, isC
             <ImagePlus className="w-8 h-8" />
           </div>
           <div>
-            <p className={`text-lg font-bold transition-colors ${isDragActive ? 'text-[#0284C7]' : 'text-gray-900'}`}>
+            <p className={`text-lg font-bold transition-colors ${isDragActive ? 'text-[#0284C7]' : 'text-canvas'}`}>
               {(isCompressing || localCompressing) ? 'Compressing images...' : isDragActive ? 'Drop your photos here' : photos.length > 0 ? 'Add more photos' : 'Add photos of your space'}
             </p>
             <p className="text-gray-500 mt-1">

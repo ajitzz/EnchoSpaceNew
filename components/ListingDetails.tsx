@@ -135,20 +135,20 @@ const NearbyCategorySection = ({ type, points }: { type: string; points: NearbyP
                 {/* Main Content */}
                 <div className="flex-1 min-w-0 pt-0.5">
                     <div className="flex justify-between items-center mb-1">
-                        <span className="font-bold text-zinc-900 text-sm sm:text-base tracking-tight truncate pr-2 group-hover:text-blue-600 transition-colors">{topPoint.name}</span>
+                        <span className="font-bold text-canvas text-sm sm:text-base tracking-tight truncate pr-2 group-hover:text-brand-dark transition-colors">{topPoint.name}</span>
                         <span className="text-xs font-bold text-zinc-500 whitespace-nowrap bg-zinc-50 border border-zinc-100 px-2.5 py-0.5 rounded-md font-mono">{topPoint.distance}</span>
                     </div>
                     <div className="flex items-center gap-2">
                          <span className="text-[9px] font-extrabold text-zinc-400 tracking-widest uppercase">{type}</span>
                          {hasMore && !expanded && (
-                             <span className="text-[9px] font-extrabold text-blue-600 bg-blue-50/50 border border-blue-100/20 px-2 py-0.5 rounded uppercase tracking-wider">+ {otherPoints.length} more</span>
+                             <span className="text-[9px] font-extrabold text-brand-dark bg-blue-50/50 border border-blue-100/20 px-2 py-0.5 rounded uppercase tracking-wider">+ {otherPoints.length} more</span>
                          )}
                     </div>
                 </div>
 
                 {/* Right Arrow */}
                 {hasMore && (
-                    <div className="pt-1 pl-2 text-zinc-400 group-hover:text-zinc-900 transition-colors">
+                    <div className="pt-1 pl-2 text-zinc-400 group-hover:text-canvas transition-colors">
                         <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`} />
                     </div>
                 )}
@@ -176,7 +176,7 @@ const NearbyCategorySection = ({ type, points }: { type: string; points: NearbyP
                             e.stopPropagation();
                             setExpanded(false);
                         }}
-                        className="text-[9px] font-extrabold text-zinc-400 hover:text-zinc-900 mt-2 uppercase tracking-widest block underline decoration-zinc-200 hover:decoration-zinc-900"
+                        className="text-[9px] font-extrabold text-zinc-400 hover:text-canvas mt-2 uppercase tracking-widest block underline decoration-zinc-200 hover:decoration-zinc-900"
                     >
                         Minimize list
                     </button>
@@ -224,8 +224,8 @@ const SelfClosingDropdown: React.FC<SelfClosingDropdownProps> = ({ title, badge,
       ref={containerRef} 
       className={`rounded-2xl border transition-all duration-300 ease-out overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.01)] ${
         isOpen 
-          ? 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900/90 shadow-[0_4px_20px_rgba(0,0,0,0.05)] ring-1 ring-zinc-100 dark:ring-zinc-850/50' 
-          : 'border-zinc-150/80 dark:border-zinc-800/60 bg-zinc-50/30 dark:bg-zinc-900/10 hover:border-zinc-250 dark:hover:border-zinc-700 hover:bg-zinc-50/80 dark:hover:bg-zinc-900/30'
+          ? 'border-zinc-300 dark:border-zinc-700 bg-dune dark:bg-canvas/90 shadow-[0_4px_20px_rgba(0,0,0,0.05)] ring-1 ring-zinc-100 dark:ring-zinc-850/50' 
+          : 'border-zinc-150/80 dark:border-zinc-800/60 bg-zinc-50/30 dark:bg-canvas/10 hover:border-zinc-250 dark:hover:border-zinc-700 hover:bg-zinc-50/80 dark:hover:bg-canvas/30'
       } ${className}`}
     >
       <button
@@ -233,7 +233,7 @@ const SelfClosingDropdown: React.FC<SelfClosingDropdownProps> = ({ title, badge,
           e.stopPropagation();
           setIsOpen(!isOpen);
         }}
-        className="w-full flex items-center justify-between p-3.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#003B95] dark:focus-visible:ring-blue-500 transition-colors cursor-pointer group"
+        className="w-full flex items-center justify-between p-3.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#003B95] dark:focus-visible:ring-brand transition-colors cursor-pointer group"
       >
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 flex-1 min-w-0 pr-2">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -365,7 +365,7 @@ const PrivacySpectrumCard: React.FC<PrivacySpectrumCardProps> = ({ listing }) =>
       id="privacy-dropdown-container"
       ref={containerRef}
       onClick={() => setIsOpen(!isOpen)}
-      className={`rounded-xl border border-zinc-200 bg-white transition-all duration-300 ease-out select-none cursor-pointer p-2.5 mb-5 mt-1 text-zinc-900 hover:shadow-[0_4px_12px_rgba(0,0,0,0.015)] ${
+      className={`rounded-xl border border-zinc-200 bg-dune transition-all duration-300 ease-out select-none cursor-pointer p-2.5 mb-5 mt-1 text-canvas hover:shadow-[0_4px_12px_rgba(0,0,0,0.015)] ${
         isOpen 
           ? 'shadow-[0_6px_20px_rgba(0,0,0,0.02)] border-zinc-300' 
           : 'shadow-[0_2px_4px_rgba(0,0,0,0.005)]'
@@ -900,7 +900,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                   w-full flex flex-col p-3.5 rounded-xl text-left transition-all duration-300 border-2 relative overflow-hidden group cursor-pointer
                                   ${isSelected 
                                     ? 'border-[#0284C7] bg-[#0284C7]/5 shadow-[0_4px_12px_rgba(2,132,199,0.04)]' 
-                                    : 'border-zinc-150 bg-white hover:border-zinc-300 hover:bg-zinc-50/40'}
+                                    : 'border-zinc-150 bg-dune hover:border-zinc-300 hover:bg-zinc-50/40'}
                               `}
                           >
                               {/* Selection glow line */}
@@ -911,12 +911,12 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                               <div className="flex items-start justify-between w-full gap-2">
                                   <div className="flex items-start gap-2.5">
                                       <div className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all shrink-0 ${
-                                          isSelected ? 'border-[#0284C7] bg-[#0284C7] text-white' : 'border-zinc-300 bg-white group-hover:border-zinc-400'
+                                          isSelected ? 'border-[#0284C7] bg-[#0284C7] text-white' : 'border-zinc-300 bg-dune group-hover:border-zinc-400'
                                       }`}>
                                           {isSelected && <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
                                       </div>
                                       <div>
-                                          <p className={`font-bold text-xs tracking-tight transition-colors leading-tight ${isSelected ? 'text-[#0284C7]' : 'text-zinc-900'}`}>
+                                          <p className={`font-bold text-xs tracking-tight transition-colors leading-tight ${isSelected ? 'text-[#0284C7]' : 'text-canvas'}`}>
                                               {opt.label}
                                           </p>
                                           <p className="text-[10px] text-zinc-400 font-medium mt-0.5 leading-none">
@@ -955,7 +955,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
               {/* Fade Overlay for scrolling & scrolling helper badge */}
               {showScroll && (
                   <div className="absolute bottom-0 inset-x-0 h-10 bg-gradient-to-t from-white via-white/80 to-transparent pointer-events-none flex items-end justify-center">
-                      <span className="text-[8px] bg-zinc-900 text-white font-bold tracking-widest uppercase px-2 py-0.5 rounded-full mb-1 opacity-80 shadow-xs">
+                      <span className="text-[8px] bg-canvas text-white font-bold tracking-widest uppercase px-2 py-0.5 rounded-full mb-1 opacity-80 shadow-xs">
                           {configOptions.length} Units Available · Scroll to View
                       </span>
                   </div>
@@ -967,12 +967,12 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
   return (
     <>
       <SEO 
-        title={listing.seo_title || `${listing.title} | Encho Space`} 
+        title={listing.seo_title || `${listing.title} | Amigove`} 
         description={listing.seo_description || listing.description?.substring(0, 160) || `Stay at ${listing.title} in ${listing.city}`}
         image={listing.seo_image_url || listing.imageUrls?.[0] || listing.imageUrl}
         keywords={listing.seo_keywords || `stay, ${listing.city}, ${listing.title}`}
       />
-    <div className="bg-white min-h-screen animate-fade-in pb-32">
+    <div className="bg-dune min-h-screen animate-fade-in pb-32">
       
       {/* Main Content Container - Spaced elegantly on all viewports */}
       <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
@@ -985,10 +985,10 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
         <div className="absolute top-0 inset-x-0 z-[40] flex items-center justify-between p-4 md:p-6 mt-2 pointer-events-none">
             <button 
                 onClick={(e) => { e.stopPropagation(); uiAudio.playClick(); onBack(); }}
-                className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-white/95 backdrop-blur-md flex items-center justify-center shadow-lg pointer-events-auto active:scale-95 transition-transform hover:scale-105 border border-gray-100"
+                className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-dune/95 backdrop-blur-md flex items-center justify-center shadow-lg pointer-events-auto active:scale-95 transition-transform hover:scale-105 border border-gray-100"
                 title="Back to search"
             >
-                <ChevronLeft className="w-5 h-5 md:w-6 md:h-6 text-gray-900 pr-0.5" />
+                <ChevronLeft className="w-5 h-5 md:w-6 md:h-6 text-canvas pr-0.5" />
             </button>
             <div className="flex gap-2.5 md:gap-3 pointer-events-auto">
                 <button 
@@ -1006,17 +1006,17 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                             addToast("Link Copied", "Listing link copied to clipboard!", "success");
                         }
                     }}
-                    className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-white/95 backdrop-blur-md flex items-center justify-center shadow-lg active:scale-95 transition-transform hover:scale-105 border border-gray-100"
+                    className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-dune/95 backdrop-blur-md flex items-center justify-center shadow-lg active:scale-95 transition-transform hover:scale-105 border border-gray-100"
                     title="Share listing"
                 >
-                    <svg viewBox="0 0 32 32" className="w-4 h-4 md:w-4.5 md:h-4.5 text-gray-900" aria-hidden="true" role="presentation" focusable="false" style={{display: 'block', fill: 'none', stroke: 'currentcolor', strokeWidth: 2.5, overflow: 'visible'}}><g fill="none"><path d="M27 18v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-9"></path><path d="M16 3v23V3z"></path><path d="M6 13l9.293-9.293a1 1 0 0 1 1.414 0L26 13"></path></g></svg>
+                    <svg viewBox="0 0 32 32" className="w-4 h-4 md:w-4.5 md:h-4.5 text-canvas" aria-hidden="true" role="presentation" focusable="false" style={{display: 'block', fill: 'none', stroke: 'currentcolor', strokeWidth: 2.5, overflow: 'visible'}}><g fill="none"><path d="M27 18v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-9"></path><path d="M16 3v23V3z"></path><path d="M6 13l9.293-9.293a1 1 0 0 1 1.414 0L26 13"></path></g></svg>
                 </button>
                 <button 
                     onClick={(e) => { e.stopPropagation(); uiAudio.playPop(); onToggleFavorite(listing); }}
-                    className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-white/95 backdrop-blur-md flex items-center justify-center shadow-lg active:scale-95 transition-transform hover:scale-105 border border-gray-100"
+                    className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-dune/95 backdrop-blur-md flex items-center justify-center shadow-lg active:scale-95 transition-transform hover:scale-105 border border-gray-100"
                     title={isFavorite ? "Remove from wishlist" : "Add to wishlist"}
                 >
-                    <HeartIcon className={`w-5 h-5 md:w-5.5 md:h-5.5 ${isFavorite ? 'fill-[#e51d53] text-[#e51d53]' : 'text-gray-900'}`} filled={isFavorite} />
+                    <HeartIcon className={`w-5 h-5 md:w-5.5 md:h-5.5 ${isFavorite ? 'fill-[#e51d53] text-[#e51d53]' : 'text-canvas'}`} filled={isFavorite} />
                 </button>
             </div>
         </div>
@@ -1033,9 +1033,9 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                         onClick={() => openGallery(i)}
                     />
                     {listing.isVerified && i === 0 && (
-                        <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1.5 pointer-events-none">
-                            <ShieldCheck className="w-4 h-4 text-blue-600" />
-                            <span className="text-xs font-bold tracking-wide text-gray-900 uppercase">Verified Plus</span>
+                        <div className="absolute bottom-4 left-4 bg-dune/90 backdrop-blur-md px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1.5 pointer-events-none">
+                            <ShieldCheck className="w-4 h-4 text-brand-dark" />
+                            <span className="text-xs font-bold tracking-wide text-canvas uppercase">Verified Plus</span>
                         </div>
                     )}
                     <div className="absolute bottom-4 right-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-md text-white text-xs font-medium cursor-pointer pointer-events-none">
@@ -1055,9 +1055,9 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                         onClick={() => openGallery(0)}
                     />
                     {listing.isVerified && (
-                        <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-md px-3.5 py-1.5 rounded-md shadow-sm border border-zinc-200/40 flex items-center gap-1.5 pointer-events-none">
-                            <ShieldCheck className="w-4 h-4 text-blue-600" />
-                            <span className="text-[10px] font-bold tracking-wider text-zinc-900 uppercase">Verified Plus</span>
+                        <div className="absolute bottom-4 left-4 bg-dune/95 backdrop-blur-md px-3.5 py-1.5 rounded-md shadow-sm border border-zinc-200/40 flex items-center gap-1.5 pointer-events-none">
+                            <ShieldCheck className="w-4 h-4 text-brand-dark" />
+                            <span className="text-[10px] font-bold tracking-wider text-canvas uppercase">Verified Plus</span>
                         </div>
                     )}
                 </div>
@@ -1067,14 +1067,14 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                 {images.length > 4 ? (
                   <div className="relative overflow-hidden h-full">
                       <OptimizedImage src={images[4]} className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" alt="Detail 4" onClick={() => openGallery(4)} />
-                      <button onClick={() => openGallery(0)} className="absolute bottom-4 right-4 bg-white/95 hover:bg-white border border-zinc-200 text-zinc-900 px-4 py-2.5 rounded-lg text-[10px] font-extrabold uppercase tracking-widest shadow-md hover:scale-[1.02] transition-transform active:scale-95">
+                      <button onClick={() => openGallery(0)} className="absolute bottom-4 right-4 bg-dune/95 hover:bg-dune border border-zinc-200 text-canvas px-4 py-2.5 rounded-lg text-[10px] font-extrabold uppercase tracking-widest shadow-md hover:scale-[1.02] transition-transform active:scale-95">
                           View Gallery
                       </button>
                   </div>
                 ) : (
                     <div className="bg-zinc-100 relative overflow-hidden h-full">
                        {images.length <= 4 && (
-                          <button onClick={() => openGallery(0)} className="absolute bottom-4 right-4 bg-white/95 hover:bg-white border border-zinc-200 text-zinc-900 px-4 py-2.5 rounded-lg text-[10px] font-extrabold uppercase tracking-widest shadow-md hover:scale-[1.02] transition-transform active:scale-95">
+                          <button onClick={() => openGallery(0)} className="absolute bottom-4 right-4 bg-dune/95 hover:bg-dune border border-zinc-200 text-canvas px-4 py-2.5 rounded-lg text-[10px] font-extrabold uppercase tracking-widest shadow-md hover:scale-[1.02] transition-transform active:scale-95">
                               View Gallery
                           </button>
                        )}
@@ -1096,7 +1096,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                     className="border-b border-zinc-100 pb-8 mb-8"
                 >
                     <div className="flex justify-between items-start mb-3">
-                        <h1 className="text-3xl md:text-4xl font-extrabold text-zinc-900 tracking-tighter leading-none">{listing.title}</h1>
+                        <h1 className="text-3xl md:text-4xl font-extrabold text-canvas tracking-tighter leading-none">{listing.title}</h1>
                     </div>
                     {/* Dynamic Taxonomy Option Tag */}
                     <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -1108,7 +1108,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                     {/* Rating and Reviews Row with clean high-contrast elements */}
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-zinc-500 mb-6 text-sm">
                         <div className="flex items-center gap-1.5 bg-zinc-50 border border-zinc-100 px-2 py-1 rounded-md">
-                            <span className="font-bold text-zinc-900 flex items-center gap-1">
+                            <span className="font-bold text-canvas flex items-center gap-1">
                                 <StarIcon className="w-3.5 h-3.5 fill-[#003B95] text-[#003B95]" />
                                 {formatRating(listing.rating)}
                             </span>
@@ -1125,8 +1125,8 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                         {liveViewers > 1 && (
                             <>
                                 <span className="text-zinc-200">|</span>
-                                <span className="flex items-center gap-1.5 text-blue-600 font-bold bg-blue-50/50 border border-blue-100/30 px-3 py-1 rounded-md text-xs">
-                                    <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-pulse" />
+                                <span className="flex items-center gap-1.5 text-brand-dark font-bold bg-blue-50/50 border border-blue-100/30 px-3 py-1 rounded-md text-xs">
+                                    <div className="w-1.5 h-1.5 bg-brand-dark rounded-full animate-pulse" />
                                     {liveViewers} people looking now
                                 </span>
                             </>
@@ -1137,19 +1137,19 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-zinc-50/50 border border-zinc-100 p-4 rounded-xl">
                         <div className="flex flex-col">
                             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-0.5">Capacity</span>
-                            <span className="text-sm font-semibold text-zinc-900">{listing.maxGuests} guests</span>
+                            <span className="text-sm font-semibold text-canvas">{listing.maxGuests} guests</span>
                         </div>
                         <div className="flex flex-col">
                             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-0.5">Bedrooms</span>
-                            <span className="text-sm font-semibold text-zinc-900">{listing.bedrooms || 1} private</span>
+                            <span className="text-sm font-semibold text-canvas">{listing.bedrooms || 1} private</span>
                         </div>
                         <div className="flex flex-col">
                             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-0.5">Beds</span>
-                            <span className="text-sm font-semibold text-zinc-900">{listing.beds || 1} comfortable</span>
+                            <span className="text-sm font-semibold text-canvas">{listing.beds || 1} comfortable</span>
                         </div>
                         <div className="flex flex-col">
                             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-0.5">Bathrooms</span>
-                            <span className="text-sm font-semibold text-zinc-900">{listing.bathrooms || 1} clean</span>
+                            <span className="text-sm font-semibold text-canvas">{listing.bathrooms || 1} clean</span>
                         </div>
                     </div>
                 </motion.div>
@@ -1159,7 +1159,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
 
                 {/* About Section */}
                 <div className="mb-12 py-2">
-                    <h2 className="text-xl font-extrabold text-zinc-900 mb-4 tracking-tighter uppercase text-[15px] tracking-wider text-zinc-400">About this residence</h2>
+                    <h2 className="text-xl font-extrabold text-canvas mb-4 tracking-tighter uppercase text-[15px] tracking-wider text-zinc-400">About this residence</h2>
                     <div className="text-zinc-600 leading-relaxed text-base space-y-4 font-normal">
                         <p className="font-sans">
                             {listing.description || "Experience the best of city living in this beautifully furnished apartment. Located in a vibrant neighborhood, you'll have easy access to local cafes, restaurants, and public transport. The space features modern amenities, high-speed Wi-Fi, and a fully equipped kitchen, making it perfect for both short and long-term stays."}
@@ -1168,23 +1168,23 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                             Architecturally conceived to maximize natural light and layout fluidity, this residence harmonizes contemporary Swiss modernist elements with local cultural context. Every design element—from custom hand-selected furniture to the meticulously planned spatial flow—is engineered to deliver an atmosphere of serene, refined living.
                         </p>
                     </div>
-                    <button className="mt-5 text-xs font-bold uppercase tracking-wider text-zinc-900 hover:text-zinc-600 transition-colors underline decoration-zinc-300 hover:decoration-zinc-900">Show more</button>
+                    <button className="mt-5 text-xs font-bold uppercase tracking-wider text-canvas hover:text-zinc-600 transition-colors underline decoration-zinc-300 hover:decoration-zinc-900">Show more</button>
                 </div>
 
                 {/* Featured Social Media Posts */}
                 {socialPosts && socialPosts.length > 0 && (
                     <div className="mb-12 py-8 border-t border-gray-150">
                         <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-[15px] font-extrabold text-zinc-900 tracking-wider uppercase flex items-center gap-2">
+                            <h2 className="text-[15px] font-extrabold text-canvas tracking-wider uppercase flex items-center gap-2">
                                 <Sparkles className="w-5 h-5 text-sky-500" />
-                                Featured on @enchospace
+                                Featured on @amigove
                             </h2>
                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-gray-50 px-2 py-1 rounded">Live Feed</span>
                         </div>
                         
                         <div className="flex overflow-x-auto pb-6 -mx-4 px-4 sm:mx-0 sm:px-0 snap-x snap-mandatory hide-scrollbar gap-4">
                             {socialPosts.map(post => (
-                                <div key={post.id} className="min-w-[280px] w-[280px] sm:min-w-[320px] sm:w-[320px] shrink-0 snap-center rounded-2xl overflow-hidden border border-gray-200 bg-white shadow-sm flex flex-col group relative">
+                                <div key={post.id} className="min-w-[280px] w-[280px] sm:min-w-[320px] sm:w-[320px] shrink-0 snap-center rounded-2xl overflow-hidden border border-gray-200 bg-dune shadow-sm flex flex-col group relative">
                                     <div className="h-48 sm:h-64 bg-gray-100 overflow-hidden relative">
                                         {post.media_urls?.[0] ? (
                                             <img
@@ -1212,9 +1212,9 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                                 </div>
                                             </div>
                                             <div className="flex flex-col">
-                                                <span className="text-[11px] font-bold text-white shadow-sm tracking-wide">enchospace</span>
+                                                <span className="text-[11px] font-bold text-white shadow-sm tracking-wide">amigove</span>
                                                 <span className="text-[9px] font-medium text-white/80 flex items-center gap-1 shadow-sm">
-                                                    <Check className="w-2.5 h-2.5 bg-blue-500 rounded-full text-white p-[1px]" />
+                                                    <Check className="w-2.5 h-2.5 bg-brand rounded-full text-white p-[1px]" />
                                                     Official Selection
                                                 </span>
                                             </div>
@@ -1229,7 +1229,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                     <div className="p-4 flex flex-col flex-grow">
                                         <div className="flex items-start gap-2 mb-3">
                                             <p className="text-sm font-medium text-gray-700 line-clamp-3 leading-relaxed">
-                                                <span className="font-bold text-gray-900 mr-2">enchospace</span>
+                                                <span className="font-bold text-canvas mr-2">amigove</span>
                                                 {post.caption}
                                             </p>
                                         </div>
@@ -1251,7 +1251,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                 {/* Video Tour Section */}
                 {listing.video_url && (
                     <div className="mb-10 py-8 border-t border-gray-200">
-                        <h2 className="text-xl font-bold text-gray-900 mb-6">Video Tour</h2>
+                        <h2 className="text-xl font-bold text-canvas mb-6">Video Tour</h2>
                         <div className="relative rounded-2xl overflow-hidden bg-gray-100 aspect-video shadow-sm border border-gray-100 group">
                             {listing.video_url.includes('youtube.com') || listing.video_url.includes('youtu.be') ? (
                                 <iframe 
@@ -1274,7 +1274,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                     Your browser does not support the video tag.
                                 </video>
                             )}
-                            <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider text-gray-900 shadow-sm">
+                            <div className="absolute top-4 left-4 bg-dune/90 backdrop-blur-sm px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider text-canvas shadow-sm">
                                 Max 45s Tour
                             </div>
                         </div>
@@ -1309,7 +1309,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                     {hingeTab === 'entire' && (
                                         <motion.div 
                                             layoutId="activeHingeTab" 
-                                            className="absolute inset-0 bg-white dark:bg-zinc-900 border border-zinc-200/40 dark:border-zinc-800/60 rounded-lg shadow-sm -z-10"
+                                            className="absolute inset-0 bg-dune dark:bg-canvas border border-zinc-200/40 dark:border-zinc-800/60 rounded-lg shadow-sm -z-10"
                                             transition={{ type: "spring", stiffness: 380, damping: 30 }}
                                         />
                                     )}
@@ -1332,7 +1332,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                     {hingeTab === 'units' && (
                                         <motion.div 
                                             layoutId="activeHingeTab" 
-                                            className="absolute inset-0 bg-white dark:bg-zinc-900 border border-zinc-200/40 dark:border-zinc-800/60 rounded-lg shadow-sm -z-10"
+                                            className="absolute inset-0 bg-dune dark:bg-canvas border border-zinc-200/40 dark:border-zinc-800/60 rounded-lg shadow-sm -z-10"
                                             transition={{ type: "spring", stiffness: 380, damping: 30 }}
                                         />
                                     )}
@@ -1356,7 +1356,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                     className={`relative overflow-hidden transition-all duration-500 ease-in-out font-sans cursor-pointer ${
                                         isEntirePlace 
                                             ? 'rounded-3xl border-2 border-[#003B95] dark:border-amber-500/80 shadow-[0_20px_50px_-12px_rgba(0,59,149,0.06)] dark:shadow-[0_20px_50px_-12px_rgba(245,158,11,0.06)] bg-gradient-to-br from-zinc-50/50 via-white to-zinc-50/10 dark:from-zinc-900/40 dark:via-zinc-950 dark:to-zinc-900/30' 
-                                            : 'rounded-3xl border border-zinc-200/80 dark:border-zinc-800 hover:border-zinc-350 dark:hover:border-zinc-700 hover:shadow-lg bg-white dark:bg-zinc-900'
+                                            : 'rounded-3xl border border-zinc-200/80 dark:border-zinc-800 hover:border-zinc-350 dark:hover:border-zinc-700 hover:shadow-lg bg-dune dark:bg-canvas'
                                     }`}
                                     onClick={() => {
                                         uiAudio.playClick();
@@ -1382,7 +1382,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                             </div>
 
                                             {/* Secondary stacked photos - visible on desktop to show complete layout and avoid severe cropping */}
-                                            <div className="hidden lg:flex flex-col w-[32%] border-l border-zinc-200/15 dark:border-zinc-800/50 h-full bg-zinc-900">
+                                            <div className="hidden lg:flex flex-col w-[32%] border-l border-zinc-200/15 dark:border-zinc-800/50 h-full bg-canvas">
                                                 <div className="flex-1 overflow-hidden relative group/item1 border-b border-zinc-200/15 dark:border-zinc-800/50">
                                                     <img 
                                                         src={(listing.imageUrls && listing.imageUrls[1]) || listing.imageUrl || undefined} 
@@ -1550,7 +1550,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                                                      bookingCard.scrollIntoView({ behavior: 'smooth' });
                                                                  }
                                                              }}
-                                                            className="relative group overflow-hidden w-full px-7 py-4 bg-zinc-950 text-white dark:bg-white dark:text-black rounded-xl font-extrabold text-[11px] uppercase tracking-[0.18em] transition-all duration-300 shadow-[0_4px_18px_rgba(0,0,0,0.12)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.22)] hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 border border-zinc-800 dark:border-zinc-200/20 cursor-pointer"
+                                                            className="relative group overflow-hidden w-full px-7 py-4 bg-zinc-950 text-white dark:bg-dune dark:text-black rounded-xl font-extrabold text-[11px] uppercase tracking-[0.18em] transition-all duration-300 shadow-[0_4px_18px_rgba(0,0,0,0.12)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.22)] hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 border border-zinc-800 dark:border-zinc-200/20 cursor-pointer"
                                                         >
                                                             <span className="relative z-10 flex items-center gap-2">
                                                                 Secure Exclusive Buyout
@@ -1571,7 +1571,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                                                      }
                                                                  }, 300);
                                                              }}
-                                                            className="w-full px-7 py-4 rounded-xl font-bold text-[11px] uppercase tracking-[0.18em] transition-all duration-300 border bg-white text-zinc-900 border-zinc-200 hover:border-zinc-900 dark:bg-zinc-900 dark:text-white dark:border-zinc-700 dark:hover:border-zinc-400 hover:bg-zinc-50/50 active:scale-[0.98] shadow-sm cursor-pointer text-center"
+                                                            className="w-full px-7 py-4 rounded-xl font-bold text-[11px] uppercase tracking-[0.18em] transition-all duration-300 border bg-dune text-canvas border-zinc-200 hover:border-zinc-900 dark:bg-canvas dark:text-white dark:border-zinc-700 dark:hover:border-zinc-400 hover:bg-zinc-50/50 active:scale-[0.98] shadow-sm cursor-pointer text-center"
                                                         >
                                                             Select Entire Place
                                                         </button>
@@ -1637,7 +1637,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                         </div>
 
                                         {/* Bento Card 2: Seclusion & Quiet Score */}
-                                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 rounded-3xl p-6 flex flex-col justify-between shadow-sm relative overflow-hidden group">
+                                        <div className="bg-dune dark:bg-canvas border border-zinc-200/60 dark:border-zinc-800 rounded-3xl p-6 flex flex-col justify-between shadow-sm relative overflow-hidden group">
                                             <div>
                                                 <div className="flex items-center justify-between">
                                                     <span className="text-[9px] font-black tracking-widest text-zinc-400 dark:text-zinc-500 uppercase font-mono">
@@ -1660,15 +1660,15 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                         </div>
 
                                         {/* Bento Card 3: Elite Security & Access Control */}
-                                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 rounded-3xl p-6 flex flex-col justify-between shadow-sm relative overflow-hidden group">
+                                        <div className="bg-dune dark:bg-canvas border border-zinc-200/60 dark:border-zinc-800 rounded-3xl p-6 flex flex-col justify-between shadow-sm relative overflow-hidden group">
                                             <div>
                                                 <div className="flex items-center justify-between">
                                                     <span className="text-[9px] font-black tracking-widest text-zinc-400 dark:text-zinc-500 uppercase font-mono">
                                                         Keyless Entry
                                                     </span>
-                                                    <Lock className="w-4 h-4 text-blue-500 animate-pulse" />
+                                                    <Lock className="w-4 h-4 text-brand animate-pulse" />
                                                 </div>
-                                                <h5 className="text-xs font-black text-zinc-900 dark:text-white mt-3 uppercase tracking-wider">
+                                                <h5 className="text-xs font-black text-canvas dark:text-white mt-3 uppercase tracking-wider">
                                                     Lockable Private Modules
                                                 </h5>
                                                 <p className="text-zinc-500 dark:text-zinc-400 text-[11px] mt-1 leading-relaxed font-light">
@@ -1676,19 +1676,19 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                                 </p>
                                             </div>
                                             <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
-                                                <CheckCircle2 className="w-3.5 h-3.5 text-blue-500" />
-                                                <span className="text-[9px] text-blue-500 font-bold uppercase tracking-wider">Secure Access Verified</span>
+                                                <CheckCircle2 className="w-3.5 h-3.5 text-brand" />
+                                                <span className="text-[9px] text-brand font-bold uppercase tracking-wider">Secure Access Verified</span>
                                             </div>
                                         </div>
 
                                         {/* Bento Card 4: Shared vs Private Amenities Ratio */}
-                                        <div className="md:col-span-2 bg-white dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 rounded-3xl p-6 flex flex-col justify-between shadow-sm relative overflow-hidden group">
+                                        <div className="md:col-span-2 bg-dune dark:bg-canvas border border-zinc-200/60 dark:border-zinc-800 rounded-3xl p-6 flex flex-col justify-between shadow-sm relative overflow-hidden group">
                                             <div className="flex flex-col sm:flex-row justify-between gap-4">
                                                 <div className="max-w-xs">
                                                     <span className="text-[9px] font-black tracking-widest text-zinc-400 dark:text-zinc-500 uppercase font-mono">
                                                         Amenity Buyout Advantage
                                                     </span>
-                                                    <h5 className="text-sm font-black text-zinc-900 dark:text-white mt-1.5 leading-tight">
+                                                    <h5 className="text-sm font-black text-canvas dark:text-white mt-1.5 leading-tight">
                                                         Personal Comfort vs Shared Luxury
                                                     </h5>
                                                     <p className="text-zinc-500 dark:text-zinc-400 text-[11px] mt-1.5 leading-relaxed font-light">
@@ -1705,11 +1705,11 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                                     {/* Interactive stacked bar */}
                                                     <div className="w-full h-3 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden flex shadow-[inset_0_1px_2px_rgba(0,0,0,0.1)]">
                                                         <div className="h-full bg-amber-400 w-[60%] transition-all duration-500" title="60% Private Dedicated Comfort" />
-                                                        <div className="h-full bg-blue-500 w-[40%] transition-all duration-500" title="40% Grand Shared Estates" />
+                                                        <div className="h-full bg-brand w-[40%] transition-all duration-500" title="40% Grand Shared Estates" />
                                                     </div>
                                                     <div className="flex justify-between items-center text-[10px] mt-2 text-zinc-400 font-bold">
                                                         <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />60% Private Suite</span>
-                                                        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />40% Resort Area</span>
+                                                        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-brand" />40% Resort Area</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1737,14 +1737,14 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
 
                 {/* Redesigned Amenities Section */}
                 <div className="mb-12 py-10 border-t border-zinc-100">
-                    <h2 className="text-xl font-extrabold text-zinc-900 mb-6 tracking-tighter uppercase text-[15px] tracking-wider text-zinc-400">What this place offers</h2>
+                    <h2 className="text-xl font-extrabold text-canvas mb-6 tracking-tighter uppercase text-[15px] tracking-wider text-zinc-400">What this place offers</h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {listing.amenities?.map((amenity, idx) => (
                             <motion.div 
                                 key={idx} 
                                 whileHover={{ y: -2, x: 2 }}
                                 transition={{ duration: 0.2 }}
-                                className="flex items-center gap-4 p-4 rounded-xl border border-zinc-100 bg-zinc-50/50 hover:bg-white hover:border-zinc-200 transition-colors"
+                                className="flex items-center gap-4 p-4 rounded-xl border border-zinc-100 bg-zinc-50/50 hover:bg-dune hover:border-zinc-200 transition-colors"
                             >
                                 <div className="text-zinc-700 w-5 h-5 flex items-center justify-center">
                                     {getAmenityIcon(amenity)}
@@ -1753,14 +1753,14 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                             </motion.div>
                         ))}
                     </div>
-                    <button className="mt-8 w-full sm:w-auto border border-zinc-200 text-zinc-900 px-6 py-3.5 rounded-xl text-[10px] font-extrabold uppercase tracking-widest hover:bg-zinc-950 hover:border-zinc-950 hover:text-white transition-all duration-300">
+                    <button className="mt-8 w-full sm:w-auto border border-zinc-200 text-canvas px-6 py-3.5 rounded-xl text-[10px] font-extrabold uppercase tracking-widest hover:bg-zinc-950 hover:border-zinc-950 hover:text-white transition-all duration-300">
                         Show all {listing.amenities?.length || 10} amenities
                     </button>
                 </div>
 
                 {/* Redesigned Location / Nearby Section with Collapsible Categories */}
                 <div className="mb-12 py-10 border-t border-zinc-100">
-                    <h2 className="text-xl font-extrabold text-zinc-900 mb-6 tracking-tighter uppercase text-[15px] tracking-wider text-zinc-400">Neighborhood Context</h2>
+                    <h2 className="text-xl font-extrabold text-canvas mb-6 tracking-tighter uppercase text-[15px] tracking-wider text-zinc-400">Neighborhood Context</h2>
                     {/* Grouped Nearby List */}
                     <div className="space-y-1">
                         <NearbyCategorySection type="TRANSPORT" points={nearbyByType['TRANSPORT']} />
@@ -1773,7 +1773,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
 
                 {/* Map Section */}
                 <div className="mb-12 pt-10 pb-8 border-t border-zinc-100">
-                    <h2 className="text-xl font-extrabold text-zinc-900 mb-6 tracking-tighter uppercase text-[15px] tracking-wider text-zinc-400">Where you'll be</h2>
+                    <h2 className="text-xl font-extrabold text-canvas mb-6 tracking-tighter uppercase text-[15px] tracking-wider text-zinc-400">Where you'll be</h2>
                      <div className="relative w-full h-72 md:h-96 bg-zinc-50 rounded-3xl overflow-hidden border border-zinc-200/80 shadow-none group">
                         <iframe
                             width="100%"
@@ -1784,12 +1784,12 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                             referrerPolicy="no-referrer-when-downgrade"
                             src={`https://maps.google.com/maps?q=${encodeURIComponent(listing.address || listing.title + " " + (listing.city || ""))}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
                         ></iframe>
-                         <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-md px-4 py-2.5 rounded-xl shadow-md text-[10px] font-bold uppercase tracking-wider text-zinc-900 border border-zinc-200 max-w-[85%] truncate">
+                         <div className="absolute bottom-4 left-4 bg-dune/95 backdrop-blur-md px-4 py-2.5 rounded-xl shadow-md text-[10px] font-bold uppercase tracking-wider text-canvas border border-zinc-200 max-w-[85%] truncate">
                              {listing.address || "Berlin, Germany"}
                          </div>
                     </div>
                      <div className="mt-5">
-                        <h3 className="font-extrabold text-zinc-900 mb-1.5 text-base tracking-tight">{listing.address || "Berlin, Germany"}</h3>
+                        <h3 className="font-extrabold text-canvas mb-1.5 text-base tracking-tight">{listing.address || "Berlin, Germany"}</h3>
                         <p className="text-zinc-500 text-sm leading-relaxed font-sans font-light">
                             Secured and private: the precise street and house coordinates are held confidentially. You will receive immediate direct digital access details as soon as your booking request is successfully approved.
                         </p>
@@ -1798,7 +1798,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
 
                 {/* Reviews Section */}
                 <div className="mb-12 pt-10 pb-8 border-t border-zinc-100">
-                    <h2 className="text-xl font-extrabold text-zinc-900 mb-6 tracking-tighter uppercase text-[15px] tracking-wider text-zinc-400">Guest Experiences</h2>
+                    <h2 className="text-xl font-extrabold text-canvas mb-6 tracking-tighter uppercase text-[15px] tracking-wider text-zinc-400">Guest Experiences</h2>
                     
                     <div className="flex items-center gap-4 mb-8 bg-zinc-50 border border-zinc-100 p-4 rounded-2xl w-full sm:w-fit">
                         {reviews.length > 0 ? (
@@ -1807,7 +1807,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                     {(reviews.reduce((a,c) => a + Number(c.rating), 0) / reviews.length).toFixed(1)}
                                 </div>
                                 <div className="flex flex-col">
-                                    <span className="text-base font-bold text-zinc-900 leading-tight">
+                                    <span className="text-base font-bold text-canvas leading-tight">
                                         {getRatingWord(reviews.reduce((a,c) => a + Number(c.rating), 0) / reviews.length)}
                                     </span>
                                     <span className="text-zinc-400 text-xs font-medium tracking-wide uppercase">{reviews.length} authenticated reviews</span>
@@ -1833,7 +1833,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                         {review.user_name?.charAt(0).toUpperCase()}
                                     </div>
                                     <div>
-                                        <h4 className="font-bold text-zinc-900 text-sm tracking-tight">{review.user_name}</h4>
+                                        <h4 className="font-bold text-canvas text-sm tracking-tight">{review.user_name}</h4>
                                         <p className="text-zinc-400 text-xs">{new Date(review.created_at).toLocaleDateString()}</p>
                                     </div>
                                 </div>
@@ -1852,7 +1852,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                     {user ? (
                         canReview ? (
                             <div className="mt-8 bg-zinc-50 p-6 rounded-2xl border border-zinc-100">
-                                <h3 className="font-extrabold text-zinc-900 mb-4 tracking-tight uppercase text-xs tracking-wider text-zinc-400">Leave an authentic review</h3>
+                                <h3 className="font-extrabold text-canvas mb-4 tracking-tight uppercase text-xs tracking-wider text-zinc-400">Leave an authentic review</h3>
                                 <div className="flex mb-4 cursor-pointer gap-0.5">
                                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => (
                                         <StarIcon 
@@ -1865,24 +1865,24 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                 <textarea 
                                     value={newReviewText}
                                     onChange={(e) => setNewReviewText(e.target.value)}
-                                    className="w-full bg-white border border-zinc-200 rounded-xl p-4 text-sm focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 outline-none mb-4 min-h-[90px] font-sans font-normal"
+                                    className="w-full bg-dune border border-zinc-200 rounded-xl p-4 text-sm focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 outline-none mb-4 min-h-[90px] font-sans font-normal"
                                     placeholder="Share your stay experience..."
                                 />
                                 <button 
                                     onClick={submitReview}
                                     disabled={submittingReview || !newReviewText.trim()}
-                                    className="bg-zinc-950 text-white px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-zinc-900 transition-all disabled:opacity-40"
+                                    className="bg-zinc-950 text-white px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-canvas transition-all disabled:opacity-40"
                                 >
                                     {submittingReview ? 'Submitting...' : 'Submit Review'}
                                 </button>
                             </div>
                         ) : (
                             <div className="mt-8 bg-zinc-50 p-5 rounded-2xl border border-zinc-100 flex items-start gap-4">
-                                <div className="p-2 bg-white border border-zinc-200 text-zinc-400 rounded-full shrink-0">
+                                <div className="p-2 bg-dune border border-zinc-200 text-zinc-400 rounded-full shrink-0">
                                     <StarIcon className="w-4 h-4 fill-none" />
                                 </div>
                                 <div>
-                                    <h4 className="font-bold text-zinc-900 text-sm tracking-tight">Review this property</h4>
+                                    <h4 className="font-bold text-canvas text-sm tracking-tight">Review this property</h4>
                                     <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
                                         You can leave an authentic review after your reservation starts. We value direct, certified feedback from verified guests.
                                     </p>
@@ -1903,7 +1903,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.6, cubicBezier: [0.16, 1, 0.3, 1] }}
-                    className="sticky top-28 bg-white rounded-3xl border border-zinc-200/80 shadow-[0_12px_40px_rgba(0,0,0,0.03)] p-7 overflow-hidden"
+                    className="sticky top-28 bg-dune rounded-3xl border border-zinc-200/80 shadow-[0_12px_40px_rgba(0,0,0,0.03)] p-7 overflow-hidden"
                 >
                     {/* Header: Price & Rating */}
                     <div className="flex justify-between items-baseline mb-8 pb-6 border-b border-zinc-100">
@@ -1912,11 +1912,11 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                 <div className="text-zinc-400 line-through text-xs font-semibold tracking-tight mb-0.5">{formatPrice(activeConfig.price, listing.currency)}</div>
                             )}
                             <div className="flex items-baseline gap-1">
-                                <span className="text-3xl font-extrabold text-zinc-900 tracking-tighter">{formatPrice(currentDayPrice, listing.currency)}</span>
+                                <span className="text-3xl font-extrabold text-canvas tracking-tighter">{formatPrice(currentDayPrice, listing.currency)}</span>
                                 <span className="text-zinc-400 text-xs font-medium tracking-wide uppercase">/ month</span>
                             </div>
                             {currentOffer && (
-                                <div className="text-blue-600 text-[10px] font-bold uppercase tracking-wider mt-1.5 bg-blue-50 border border-blue-100/35 inline-block px-2 py-0.5 rounded">
+                                <div className="text-brand-dark text-[10px] font-bold uppercase tracking-wider mt-1.5 bg-blue-50 border border-blue-100/35 inline-block px-2 py-0.5 rounded">
                                     {currentOffer.title}
                                 </div>
                             )}
@@ -1956,8 +1956,8 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                             className={`
                                                 whitespace-nowrap px-3.5 py-2 rounded-lg text-xs font-bold border transition-all duration-300
                                                 ${moveInDate === opt.value 
-                                                    ? 'bg-zinc-900 text-white border-zinc-900 shadow-sm' 
-                                                    : 'bg-zinc-50 text-zinc-700 border-zinc-100 hover:border-zinc-400 hover:bg-white'}
+                                                    ? 'bg-canvas text-white border-zinc-900 shadow-sm' 
+                                                    : 'bg-zinc-50 text-zinc-700 border-zinc-100 hover:border-zinc-400 hover:bg-dune'}
                                             `}
                                         >
                                             {opt.label}
@@ -1971,10 +1971,10 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                         value={moveInDate}
                                         min={minDate}
                                         onChange={(e) => setMoveInDate(e.target.value)}
-                                        className="w-full bg-zinc-50/50 border border-zinc-200 text-zinc-950 text-sm font-semibold rounded-xl px-4 py-4 focus:bg-white focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 outline-none transition-all appearance-none cursor-pointer placeholder-zinc-400 group-hover:border-zinc-400"
+                                        className="w-full bg-zinc-50/50 border border-zinc-200 text-zinc-950 text-sm font-semibold rounded-xl px-4 py-4 focus:bg-dune focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 outline-none transition-all appearance-none cursor-pointer placeholder-zinc-400 group-hover:border-zinc-400"
                                         required
                                     />
-                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-900">
+                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-canvas">
                                         <CalendarIcon className="w-4 h-4 text-zinc-400" />
                                     </div>
                                 </div>
@@ -1995,7 +1995,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                         {/* Contact Form Expansion */}
                         <div className={`overflow-hidden transition-all duration-500 ease-in-out ${bookingStep === 'CONTACT' ? 'max-h-80 opacity-100 mt-4' : 'max-h-0 opacity-0'}`}>
                             <div className="space-y-4 pt-4 border-t border-zinc-100">
-                                <h3 className="text-sm font-bold text-zinc-900 tracking-tight uppercase text-[11px] tracking-wider text-zinc-400">Introduce Yourself</h3>
+                                <h3 className="text-sm font-bold text-canvas tracking-tight uppercase text-[11px] tracking-wider text-zinc-400">Introduce Yourself</h3>
                                 <div className="space-y-3.5">
                                     <div>
                                         <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5">Full Name</label>
@@ -2004,7 +2004,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                             value={guestName}
                                             onChange={(e) => setGuestName(e.target.value)}
                                             placeholder="e.g., Jean-Luc Godard"
-                                            className="w-full bg-zinc-50 border border-zinc-200 text-zinc-900 text-sm rounded-xl px-4 py-3 focus:bg-white focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 outline-none font-semibold transition-all"
+                                            className="w-full bg-zinc-50 border border-zinc-200 text-canvas text-sm rounded-xl px-4 py-3 focus:bg-dune focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 outline-none font-semibold transition-all"
                                             autoFocus={bookingStep === 'CONTACT'}
                                         />
                                     </div>
@@ -2015,7 +2015,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                             value={guestPhone}
                                             onChange={(e) => setGuestPhone(e.target.value)}
                                             placeholder="e.g., +41 22 749 11 11"
-                                            className="w-full bg-zinc-50 border border-zinc-200 text-zinc-900 text-sm rounded-xl px-4 py-3 focus:bg-white focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 outline-none font-semibold transition-all"
+                                            className="w-full bg-zinc-50 border border-zinc-200 text-canvas text-sm rounded-xl px-4 py-3 focus:bg-dune focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900 outline-none font-semibold transition-all"
                                         />
                                     </div>
                                 </div>
@@ -2029,7 +2029,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                         disabled={dayInfo?.status === 'blocked'}
                         whileHover={dayInfo?.status !== 'blocked' ? { scale: 1.01, y: -1 } : {}}
                         whileTap={dayInfo?.status !== 'blocked' ? { scale: 0.99 } : {}}
-                        className={`w-full text-white font-extrabold text-sm uppercase tracking-widest py-4.5 rounded-xl transition-all duration-300 relative overflow-hidden group shadow-none ${dayInfo?.status === 'blocked' ? 'bg-zinc-300 cursor-not-allowed' : 'bg-zinc-950 hover:bg-zinc-900'}`}
+                        className={`w-full text-white font-extrabold text-sm uppercase tracking-widest py-4.5 rounded-xl transition-all duration-300 relative overflow-hidden group shadow-none ${dayInfo?.status === 'blocked' ? 'bg-zinc-300 cursor-not-allowed' : 'bg-zinc-950 hover:bg-canvas'}`}
                     >
                         <span className="relative z-10">
                             {dayInfo?.status === 'blocked' ? 'Sold Out' : bookingStep === 'AVAILABILITY' ? 'Check Availability' : 'Request Reservation'}
@@ -2043,7 +2043,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                     {/* Detailed Cost Breakdown */}
                     <div className="space-y-3 pt-6 border-t border-zinc-100">
                         {currentOffer && (
-                             <div className="flex justify-between text-blue-600 text-xs font-bold bg-blue-50/50 p-3 rounded-xl border border-blue-100/20 flex-col">
+                             <div className="flex justify-between text-brand-dark text-xs font-bold bg-blue-50/50 p-3 rounded-xl border border-blue-100/20 flex-col">
                                  <div className="flex justify-between w-full">
                                     <span className="uppercase tracking-wider">Discount ({currentOffer.title})</span>
                                     <span className="font-mono">-{formatPrice(activeConfig.price - currentDayPrice, listing.currency)}</span>
@@ -2052,32 +2052,32 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                         )}
                         <div className="flex justify-between text-zinc-500 text-sm font-medium">
                             <span className="underline decoration-zinc-200 decoration-dotted cursor-help">Base Rent</span>
-                            <span className="font-mono text-zinc-900 font-semibold">{formatPrice(currentDayPrice, listing.currency)}</span>
+                            <span className="font-mono text-canvas font-semibold">{formatPrice(currentDayPrice, listing.currency)}</span>
                         </div>
                         {commissionFee > 0 && (
                             <div className="flex justify-between text-zinc-500 text-sm font-medium">
                                 <span className="underline decoration-zinc-200 decoration-dotted cursor-help">Platform Service Fee ({paymentRates.commission_rate}%)</span>
-                                <span className="font-mono text-zinc-900 font-semibold">{formatPrice(commissionFee, listing.currency)}</span>
+                                <span className="font-mono text-canvas font-semibold">{formatPrice(commissionFee, listing.currency)}</span>
                             </div>
                         )}
                         {taxFee > 0 && (
                             <div className="flex justify-between text-zinc-500 text-sm font-medium">
                                 <span className="underline decoration-zinc-200 decoration-dotted cursor-help">Estimated GST / Taxes ({paymentRates.tax_rate}%)</span>
-                                <span className="font-mono text-zinc-900 font-semibold">{formatPrice(taxFee, listing.currency)}</span>
+                                <span className="font-mono text-canvas font-semibold">{formatPrice(taxFee, listing.currency)}</span>
                             </div>
                         )}
                         {systemFee > 0 && (
                             <div className="flex justify-between text-zinc-500 text-sm font-medium">
                                 <span className="underline decoration-zinc-200 decoration-dotted cursor-help">Flat System Booking Fee</span>
-                                <span className="font-mono text-zinc-900 font-semibold">{formatPrice(systemFee, listing.currency)}</span>
+                                <span className="font-mono text-canvas font-semibold">{formatPrice(systemFee, listing.currency)}</span>
                             </div>
                         )}
                          <div className="flex justify-between text-zinc-500 text-sm font-medium">
                             <span className="underline decoration-zinc-200 decoration-dotted cursor-help">Security Deposit</span>
-                            <span className="font-mono text-zinc-900 font-semibold">{formatPrice(deposit, listing.currency)}</span>
+                            <span className="font-mono text-canvas font-semibold">{formatPrice(deposit, listing.currency)}</span>
                         </div>
                         
-                        <div className="flex justify-between text-zinc-900 pt-5 border-t border-zinc-100 items-center">
+                        <div className="flex justify-between text-canvas pt-5 border-t border-zinc-100 items-center">
                             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Total Monthly Cost</span>
                             <span className="font-extrabold text-2xl tracking-tighter">{formatPrice(totalRent, listing.currency)}</span>
                         </div>
@@ -2092,11 +2092,11 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                     className="mt-6 bg-zinc-50/50 rounded-3xl p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between border border-zinc-200/60 gap-4"
                 >
                     <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm text-sm font-extrabold border border-zinc-200 text-zinc-800">
+                        <div className="w-12 h-12 bg-dune rounded-full flex items-center justify-center shadow-sm text-sm font-extrabold border border-zinc-200 text-zinc-800">
                             {listing.provider?.substring(0, 2).toUpperCase() || "H"}
                         </div>
                         <div>
-                            <div className="font-bold text-zinc-900 text-sm flex items-center gap-2 tracking-tight">
+                            <div className="font-bold text-canvas text-sm flex items-center gap-2 tracking-tight">
                                 Hosted by {listing.provider}
                                 <span className="inline-flex items-center px-2 py-0.5 rounded text-[8px] font-extrabold bg-[#003B95]/10 text-[#003B95] uppercase tracking-wider">SUPERHOST</span>
                             </div>
@@ -2106,7 +2106,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                     {onContactHost && (
                         <button 
                             onClick={onContactHost}
-                            className="bg-white px-5 py-3 rounded-xl font-extrabold text-[10px] uppercase tracking-wider border border-zinc-200 hover:border-zinc-950 hover:bg-white transition-all hidden md:block shadow-sm"
+                            className="bg-dune px-5 py-3 rounded-xl font-extrabold text-[10px] uppercase tracking-wider border border-zinc-200 hover:border-zinc-950 hover:bg-dune transition-all hidden md:block shadow-sm"
                         >
                             Message Host
                         </button>
@@ -2115,7 +2115,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                  {onContactHost && (
                      <button 
                          onClick={onContactHost}
-                         className="w-full mt-4 bg-white px-4 py-3 rounded-xl font-bold text-sm border border-black hover:bg-gray-50 transition-colors md:hidden"
+                         className="w-full mt-4 bg-dune px-4 py-3 rounded-xl font-bold text-sm border border-black hover:bg-gray-50 transition-colors md:hidden"
                      >
                          Message Host
                      </button>
@@ -2125,7 +2125,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
 
         {/* Nearby Places Slider */}
         <div className="mt-16 mb-8 pt-12 border-t border-zinc-100">
-             <h2 className="text-2xl font-extrabold text-zinc-900 mb-8 tracking-tighter">Nearby places to stay</h2>
+             <h2 className="text-2xl font-extrabold text-canvas mb-8 tracking-tighter">Nearby places to stay</h2>
              <div className="flex gap-6 md:gap-8 overflow-x-auto pb-8 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-hide snap-x snap-mandatory w-full min-w-0">
                 {similarListings.map((item) => (
                     <motion.div 
@@ -2143,18 +2143,18 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                             <button 
-                                className="absolute top-3.5 right-3.5 w-9 h-9 flex items-center justify-center rounded-full bg-white/90 hover:bg-white backdrop-blur-md text-zinc-900 transition-all active:scale-90 shadow-sm"
+                                className="absolute top-3.5 right-3.5 w-9 h-9 flex items-center justify-center rounded-full bg-dune/90 hover:bg-dune backdrop-blur-md text-canvas transition-all active:scale-90 shadow-sm"
                                 onClick={(e) => { 
                                     e.stopPropagation(); 
                                     onToggleFavorite(item);
                                 }}
                             >
-                                <HeartIcon className="w-4 h-4 text-zinc-900" filled={false} />
+                                <HeartIcon className="w-4 h-4 text-canvas" filled={false} />
                             </button>
                         </div>
                         <div className="space-y-1.5">
                             <div className="flex justify-between items-start gap-2">
-                                <h3 className="font-bold text-zinc-900 text-sm tracking-tight truncate group-hover:text-blue-600 transition-colors pr-2">{item.title}</h3>
+                                <h3 className="font-bold text-canvas text-sm tracking-tight truncate group-hover:text-brand-dark transition-colors pr-2">{item.title}</h3>
                                 <div className="flex items-center gap-1.5 shrink-0">
                                     <div className="bg-[#003B95] text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded-md shadow-none">
                                         {formatRating(item.rating)}
@@ -2163,7 +2163,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                             </div>
                             <p className="text-xs text-zinc-400 font-medium tracking-wide uppercase">{item.type === 'APARTMENT' ? 'Entire residence' : 'Private Suite'}</p>
                             <div className="flex items-baseline gap-1 mt-1">
-                                <span className="font-extrabold text-zinc-900 text-sm tracking-tight">{formatPrice(item.price, item.currency || 'USD')}</span>
+                                <span className="font-extrabold text-canvas text-sm tracking-tight">{formatPrice(item.price, item.currency || 'USD')}</span>
                                 <span className="text-zinc-500 text-xs font-normal"> / {item.period === 'month' ? 'month' : 'night'}</span>
                             </div>
                         </div>
@@ -2175,11 +2175,11 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
       </div>
 
       {/* Mobile Fixed Bottom Action Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white/85 backdrop-blur-2xl saturate-150 border-t border-gray-200/50 p-4 pb-safe z-50 flex items-center justify-between gap-4 md:hidden shadow-[0_-4px_20px_-1px_rgba(0,0,0,0.08)]">
+      <div className="fixed bottom-0 left-0 right-0 bg-dune/85 backdrop-blur-2xl saturate-150 border-t border-gray-200/50 p-4 pb-safe z-50 flex items-center justify-between gap-4 md:hidden shadow-[0_-4px_20px_-1px_rgba(0,0,0,0.08)]">
           <div className="flex flex-col">
-              <span className="text-[16px] font-bold text-gray-900">{formatPrice(listing.displayPrice ?? listing.price, listing.currency)} <span className="font-normal text-sm text-gray-500">/{listing.period}</span></span>
+              <span className="text-[16px] font-bold text-canvas">{formatPrice(listing.displayPrice ?? listing.price, listing.currency)} <span className="font-normal text-sm text-gray-500">/{listing.period}</span></span>
               {listing.rating && listing.rating > 0 && (
-                  <span className="text-xs font-semibold text-gray-900 underline mt-0.5">{getRatingWord(listing.rating)}</span>
+                  <span className="text-xs font-semibold text-canvas underline mt-0.5">{getRatingWord(listing.rating)}</span>
               )}
           </div>
           <button 
@@ -2200,12 +2200,12 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
             ></div>
             
             {/* Sheet Content */}
-            <div className="relative w-full bg-white rounded-t-3xl shadow-2xl p-6 pb-10 animate-slide-up max-h-[90vh] overflow-y-auto">
+            <div className="relative w-full bg-dune rounded-t-3xl shadow-2xl p-6 pb-10 animate-slide-up max-h-[90vh] overflow-y-auto">
                 {/* Drag Handle */}
                 <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-6"></div>
                 
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-bold text-gray-900">Plan your move</h2>
+                    <h2 className="text-xl font-bold text-canvas">Plan your move</h2>
                     <button onClick={() => setShowMobileBooking(false)} className="p-2 bg-gray-100 rounded-full text-gray-600 hover:bg-gray-200">
                         <XIcon className="w-5 h-5" />
                     </button>
@@ -2225,7 +2225,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                         whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-bold border transition-all
                                         ${moveInDate === opt.value 
                                             ? 'bg-black text-white border-black' 
-                                            : 'bg-white text-gray-900 border-gray-200 hover:border-black'}
+                                            : 'bg-dune text-canvas border-gray-200 hover:border-black'}
                                     `}
                                 >
                                     {opt.label}
@@ -2239,10 +2239,10 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                 value={moveInDate}
                                 min={minDate}
                                 onChange={(e) => setMoveInDate(e.target.value)}
-                                className="w-full bg-white border border-gray-200 text-gray-900 text-base rounded-xl px-4 py-3.5 focus:ring-1 focus:ring-black outline-none font-bold appearance-none"
+                                className="w-full bg-dune border border-gray-200 text-canvas text-base rounded-xl px-4 py-3.5 focus:ring-1 focus:ring-black outline-none font-bold appearance-none"
                                 required
                             />
-                             <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-900">
+                             <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-canvas">
                                 <CalendarIcon className="w-4 h-4" />
                             </div>
                         </div>
@@ -2274,7 +2274,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                             w-full flex flex-col p-3 rounded-xl text-left transition-all duration-300 border-2 relative overflow-hidden group active:scale-[0.98] cursor-pointer
                                             ${isSelected 
                                               ? 'border-[#0284C7] bg-[#0284C7]/5 shadow-[0_4px_12px_rgba(2,132,199,0.04)]' 
-                                              : 'border-zinc-150 bg-white hover:border-zinc-300'}
+                                              : 'border-zinc-150 bg-dune hover:border-zinc-300'}
                                         `}
                                     >
                                         {/* Selection indicator line */}
@@ -2285,12 +2285,12 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                         <div className="flex items-center justify-between w-full gap-2">
                                             <div className="flex items-center gap-2.5 min-w-0">
                                                 <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all shrink-0 ${
-                                                    isSelected ? 'border-[#0284C7] bg-[#0284C7] text-white' : 'border-zinc-300 bg-white'
+                                                    isSelected ? 'border-[#0284C7] bg-[#0284C7] text-white' : 'border-zinc-300 bg-dune'
                                                 }`}>
                                                     {isSelected && <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
                                                 </div>
                                                 <div className="truncate">
-                                                    <p className={`font-bold text-xs tracking-tight transition-colors leading-tight truncate ${isSelected ? 'text-[#0284C7]' : 'text-zinc-900'}`}>
+                                                    <p className={`font-bold text-xs tracking-tight transition-colors leading-tight truncate ${isSelected ? 'text-[#0284C7]' : 'text-canvas'}`}>
                                                         {opt.label}
                                                     </p>
                                                     <p className="text-[9px] text-zinc-400 font-medium mt-0.5 leading-none">
@@ -2329,7 +2329,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                     
                     {user && (
                         <div className="pt-4 border-t border-gray-100 fade-in">
-                            <h3 className="text-sm font-bold text-gray-900 mb-4">Your Details</h3>
+                            <h3 className="text-sm font-bold text-canvas mb-4">Your Details</h3>
                             <div className="space-y-4">
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Full Name</label>
@@ -2338,7 +2338,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                         value={guestName}
                                         onChange={(e) => setGuestName(e.target.value)}
                                         placeholder="Full Name"
-                                        className="w-full bg-white border border-gray-300 text-gray-900 text-base rounded-xl px-4 py-3.5 focus:ring-2 focus:ring-black outline-none font-medium"
+                                        className="w-full bg-dune border border-gray-300 text-canvas text-base rounded-xl px-4 py-3.5 focus:ring-2 focus:ring-black outline-none font-medium"
                                     />
                                 </div>
                                 <div>
@@ -2348,7 +2348,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                         value={guestPhone}
                                         onChange={(e) => setGuestPhone(e.target.value)}
                                         placeholder="Phone Number"
-                                        className="w-full bg-white border border-gray-300 text-gray-900 text-base rounded-xl px-4 py-3.5 focus:ring-2 focus:ring-black outline-none font-medium"
+                                        className="w-full bg-dune border border-gray-300 text-canvas text-base rounded-xl px-4 py-3.5 focus:ring-2 focus:ring-black outline-none font-medium"
                                     />
                                 </div>
                             </div>
@@ -2357,7 +2357,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
 
                     <div className="bg-gray-50 rounded-xl p-4 flex justify-between items-center border border-gray-100 mt-2">
                         <span className="font-bold text-gray-700">Total /mo</span>
-                        <span className="font-extrabold text-xl text-gray-900">{formatPrice(totalRent, listing.currency)}</span>
+                        <span className="font-extrabold text-xl text-canvas">{formatPrice(totalRent, listing.currency)}</span>
                     </div>
 
                     <button 

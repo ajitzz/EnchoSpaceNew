@@ -192,9 +192,10 @@ function App() {
   // Preloaded Experiences State
   const [globalExperiences, setGlobalExperiences] = useState<Experience[]>([]);
   const [globalExperiencesSettings, setGlobalExperiencesSettings] = useState<any>({
-      hero_title: 'Unforgettable Experiences',
-      hero_subtitle: 'Discover exclusive weekend getaways, cultural tours, and extreme adventures curated by local experts.',
-      badge_text: 'Curated Collections',
+      hero_title: `Find Somewhere
+Worth Going.`,
+      hero_subtitle: 'Explore curated journeys, secret hideaways, and unforgettable moments across the globe.',
+      badge_text: 'The Amigove Collection',
       hero_image_urls: ['https://images.unsplash.com/photo-1501555088652-021faa106b9b?auto=format&fit=crop&q=80&w=2400']
   });
   const [loadingExperiences, setLoadingExperiences] = useState(true);
@@ -945,7 +946,7 @@ function App() {
 
     if (appMode === 'host') {
         return (
-          <div className="min-h-screen bg-white font-sans text-gray-900 selection:bg-[#0284C7]/20 selection:text-[#0284C7]">
+          <div className="min-h-screen bg-dune font-sans text-canvas selection:bg-brand/20 selection:text-brand">
             <div style={{ display: (currentView === 'HOST_DASHBOARD' || currentView === 'SEARCH') ? 'block' : 'none' }}>
               <motion.div key="host-dashboard" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition}>
                 <Header 
@@ -1032,7 +1033,7 @@ function App() {
 
     if (currentView === 'MESSAGES') {
       return (
-        <motion.div key="messages" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition} className="min-h-screen bg-white">
+        <motion.div key="messages" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition} className="min-h-screen bg-dune">
           <Header 
               onSearch={handleSearch} 
               currentCity={city} 
@@ -1104,7 +1105,7 @@ function App() {
 
     if (currentView === 'EXPERIENCES') {
         return (
-            <motion.div key="experiences" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition} className="min-h-screen bg-white">
+            <motion.div key="experiences" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition} className="min-h-screen bg-dune">
                 <Header 
                     onSearch={handleSearch} 
                     currentCity={city} 
@@ -1354,8 +1355,8 @@ function App() {
     }
 
     return (
-      <motion.div key="search" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition} className="min-h-screen bg-white font-sans text-gray-900 selection:bg-[#0284C7]/20 selection:text-[#0284C7]">
-        <SEO title={`Stays in ${city} | Encho Stays`} description={`Find the perfect place to stay in ${city}.`} />
+      <motion.div key="search" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition} className="min-h-screen bg-dune font-sans text-canvas selection:bg-brand/20 selection:text-brand">
+        <SEO title={`Stays in ${city} | Amigove Stays`} description={`Find the perfect place to stay in ${city}.`} />
         {/* Global Fly Animation Overlay */}
         {flyAnimation && (
           <FlyToAnimation 
@@ -1427,7 +1428,9 @@ function App() {
             <div className={`flex-1 min-w-0 transition-opacity duration-300 ${showMap ? 'hidden opacity-0 xl:block xl:opacity-100' : 'block opacity-100'}`}>
                {!loading && (
                    <div className="mb-6 flex items-baseline gap-2">
-                      <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">Places to stay in {city}</h1>
+                      <h1 className="text-3xl md:text-5xl font-display font-extrabold text-canvas tracking-tight mb-2">
+                         {city === 'Anywhere' ? "Where are we going, friend?" : `Find somewhere worth going in ${city}`}
+                      </h1>
                       <span className="text-gray-500 font-medium text-sm border-l border-gray-300 pl-3 ml-1">{displayListings.length}+ stays</span>
                    </div>
                )}
@@ -1456,7 +1459,7 @@ function App() {
               
                {!loading && (
                   <div className="mt-12 flex flex-col items-center gap-4">
-                      <h3 className="text-lg font-bold text-gray-900">Continue exploring {city}</h3>
+                      <h3 className="text-lg font-bold text-canvas">Continue exploring {city}</h3>
                       <button className="px-8 py-3.5 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-all active:scale-95 shadow-lg">Show more</button>
                   </div>
               )}
@@ -1497,12 +1500,12 @@ function App() {
              {currentView === 'DETAILS' ? (
                 <ListingDetailsSkeleton />
              ) : (
-                <div className="min-h-screen bg-white flex items-center justify-center">
+                <div className="min-h-screen bg-dune flex items-center justify-center">
                    <div className="flex flex-col items-center gap-4">
                       <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-[#0284C7] animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                        <div className="w-3 h-3 rounded-full bg-[#0284C7] animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                        <div className="w-3 h-3 rounded-full bg-[#0284C7] animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                        <div className="w-3 h-3 rounded-full bg-[var(--color-brand)] animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                        <div className="w-3 h-3 rounded-full bg-[var(--color-brand)] animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                        <div className="w-3 h-3 rounded-full bg-[var(--color-brand)] animate-bounce" style={{ animationDelay: '300ms' }}></div>
                       </div>
                    </div>
                 </div>

@@ -51,28 +51,28 @@ const WishlistPage: React.FC<WishlistPageProps> = ({
 
   return (
     <>
-      <SEO title="Wishlists | Encho Space" description="Your saved places and experiences." />
+      <SEO title="Wishlists | Amigove" description="Your saved places and experiences." />
     <div className="min-h-screen bg-gray-50 animate-fade-in pb-20">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-40">
+      <div className="bg-dune border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 md:px-8 h-20 flex items-center justify-between">
             <button 
                 onClick={() => { uiAudio.playClick(); onBack(); }} 
-                className="flex items-center gap-2 text-gray-900 hover:bg-gray-100 px-3 py-2 rounded-full transition-all group font-semibold"
+                className="flex items-center gap-2 text-canvas hover:bg-gray-100 px-3 py-2 rounded-full transition-all group font-semibold"
             >
-                <div className="p-1.5 rounded-full bg-gray-100 group-hover:bg-white transition-colors border border-transparent group-hover:border-gray-200">
+                <div className="p-1.5 rounded-full bg-gray-100 group-hover:bg-dune transition-colors border border-transparent group-hover:border-gray-200">
                     <ChevronLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
                 </div>
                 <span>Back to explore</span>
             </button>
-            <h1 className="text-xl font-bold text-gray-900 hidden md:block">Your Wishlist</h1>
+            <h1 className="text-xl font-bold text-canvas hidden md:block">Your Wishlist</h1>
             <div className="w-10"></div> {/* Spacer for centering */}
         </div>
       </div>
 
       <main className="max-w-7xl mx-auto px-4 md:px-8 py-10">
         <div className="mb-8">
-            <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 mb-6">Wishlist</h1>
+            <h1 className="text-3xl md:text-4xl font-extrabold text-canvas mb-6">Wishlist</h1>
             
             {/* Tabs */}
             <div className="flex items-center gap-4 border-b border-gray-200 pb-px">
@@ -102,7 +102,7 @@ const WishlistPage: React.FC<WishlistPageProps> = ({
                 <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-6 text-gray-300">
                     <HeartIcon className="w-10 h-10" />
                 </div>
-                <h2 className="text-xl font-bold text-gray-900 mb-2">No {activeTab === 'stays' ? 'stays' : 'experiences'} saved yet</h2>
+                <h2 className="text-xl font-bold text-canvas mb-2">No {activeTab === 'stays' ? 'stays' : 'experiences'} saved yet</h2>
                 <p className="text-gray-500 max-w-sm mb-8">As you explore, click the heart icon to save your favorite {activeTab === 'stays' ? 'places' : 'trips'} and they will appear here.</p>
                 <button 
                     onClick={() => { uiAudio.playClick(); onBack(); }}
@@ -130,7 +130,7 @@ const WishlistPage: React.FC<WishlistPageProps> = ({
                             key={exp.id} 
                             onClick={() => onExperienceClick?.(exp)}
                             whileHover={{ y: -8 }}
-                            className="group cursor-pointer flex flex-col gap-4 relative bg-white p-4 rounded-3xl shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100"
+                            className="group cursor-pointer flex flex-col gap-4 relative bg-dune p-4 rounded-3xl shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100"
                         >
                             {/* Image */}
                             <div className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-gray-100">
@@ -151,19 +151,19 @@ const WishlistPage: React.FC<WishlistPageProps> = ({
                                     </svg>
                                 </button>
                                 
-                                <div className="absolute bottom-3 right-3 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full shadow-lg">
+                                <div className="absolute bottom-3 right-3 bg-dune/90 backdrop-blur-md px-3 py-1.5 rounded-full shadow-lg">
                                     <span className="text-black font-black text-sm">{formatPrice(Number(exp.price), 'INR')}</span>
                                 </div>
                             </div>
 
                             {/* Content */}
                             <div className="flex flex-col px-1">
-                                <div className="flex items-center text-blue-600 text-xs font-bold tracking-widest uppercase gap-1.5 mb-2">
+                                <div className="flex items-center text-brand-dark text-xs font-bold tracking-widest uppercase gap-1.5 mb-2">
                                     <MapPin className="w-4 h-4" />
                                     <span>{exp.destination}</span>
                                 </div>
                                 
-                                <h3 className="text-lg font-bold text-gray-900 leading-tight group-hover:text-blue-600 transition-colors line-clamp-2">
+                                <h3 className="text-lg font-bold text-canvas leading-tight group-hover:text-brand-dark transition-colors line-clamp-2">
                                     {exp.title}
                                 </h3>
                                 
@@ -172,7 +172,7 @@ const WishlistPage: React.FC<WishlistPageProps> = ({
                                         <Calendar className="w-4 h-4" />
                                         <span>{format(new Date(exp.start_date), 'MMM d')} - {format(new Date(exp.end_date), 'MMM d')}</span>
                                     </div>
-                                    <div className="w-8 h-8 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-400 group-hover:bg-blue-600 group-hover:text-white group-hover:border-transparent transition-all">
+                                    <div className="w-8 h-8 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-400 group-hover:bg-brand-dark group-hover:text-white group-hover:border-transparent transition-all">
                                         <ArrowRight className="w-4 h-4" />
                                     </div>
                                 </div>

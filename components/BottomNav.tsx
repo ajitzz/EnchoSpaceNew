@@ -70,7 +70,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           exit={{ y: 80, x: "-50%", opacity: 0 }}
           transition={{ type: "spring", stiffness: 350, damping: 30 }}
           style={{ left: "50%" }}
-          className="md:hidden fixed bottom-6 w-[88%] max-w-[340px] bg-white/45 dark:bg-zinc-950/45 backdrop-blur-3xl saturate-[160%] border border-white/30 dark:border-white/10 rounded-full shadow-[0_16px_40px_rgba(0,0,0,0.12)] z-[200] p-1.5"
+          className="md:hidden fixed bottom-6 w-[88%] max-w-[340px] bg-dune/45 dark:bg-zinc-950/45 backdrop-blur-3xl saturate-[160%] border border-white/30 dark:border-white/10 rounded-full shadow-[0_16px_40px_rgba(0,0,0,0.12)] z-[200] p-1.5"
         >
           <div className="flex items-center justify-between gap-1.5 w-full">
             {tabs.map(tab => {

@@ -94,7 +94,7 @@ export default function HostCalendar({ listings, reservations }: HostCalendarPro
   // Generate cells
   const cells = [];
   for (let i = 0; i < firstDayOfMonth; i++) {
-    cells.push(<div key={`empty-prev-${i}`} className="h-32 border border-transparent bg-white"></div>);
+    cells.push(<div key={`empty-prev-${i}`} className="h-32 border border-transparent bg-dune"></div>);
   }
 
   const handleSave = async () => {
@@ -177,20 +177,20 @@ export default function HostCalendar({ listings, reservations }: HostCalendarPro
       <div 
         key={`day-${day}`} 
         onClick={() => toggleDateSelection(day)}
-        className={`h-32 border ${isSelected ? 'border-gray-900 bg-gray-50 z-10 relative shadow-sm scale-[1.02]' : isBlocked ? 'border-gray-200 bg-gray-100 opacity-50' : 'border-gray-200 bg-white hover:bg-gray-50'} p-3 flex flex-col justify-between cursor-pointer transition-all rounded-2xl m-1 group`}
+        className={`h-32 border ${isSelected ? 'border-gray-900 bg-gray-50 z-10 relative shadow-sm scale-[1.02]' : isBlocked ? 'border-gray-200 bg-gray-100 opacity-50' : 'border-gray-200 bg-dune hover:bg-gray-50'} p-3 flex flex-col justify-between cursor-pointer transition-all rounded-2xl m-1 group`}
       >
-        <div className={`font-semibold text-lg flex justify-between ${isSelected ? 'text-gray-900' : 'text-gray-700 group-hover:text-gray-900'}`}>
+        <div className={`font-semibold text-lg flex justify-between ${isSelected ? 'text-canvas' : 'text-gray-700 group-hover:text-canvas'}`}>
             {day}
             {dayInfo && dayInfo.offer && <span className="text-xs bg-[#0284C7] text-white px-1.5 rounded flex items-center font-bold">-{dayInfo.offer.discount_percentage}%</span>}
         </div>
-        <div className={`text-sm font-medium ${isSelected ? 'text-gray-900' : isBlocked ? 'line-through text-gray-400' : 'text-gray-500'}`}>{formattedPrice}</div>
+        <div className={`text-sm font-medium ${isSelected ? 'text-canvas' : isBlocked ? 'line-through text-gray-400' : 'text-gray-500'}`}>{formattedPrice}</div>
       </div>
     );
   }
 
   const trailingEmptyCells = (7 - ((firstDayOfMonth + daysInMonth) % 7)) % 7;
   for (let i = 0; i < trailingEmptyCells; i++) {
-    cells.push(<div key={`empty-next-${i}`} className="h-32 border border-transparent bg-white"></div>);
+    cells.push(<div key={`empty-next-${i}`} className="h-32 border border-transparent bg-dune"></div>);
   }
 
   return (
@@ -209,7 +209,7 @@ export default function HostCalendar({ listings, reservations }: HostCalendarPro
                <img src={listing.imageUrl || 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=500'} alt={listing.title} className="w-full h-full object-cover" />
             </div>
             <div className="hidden lg:block overflow-hidden">
-                <div className="text-sm font-bold text-gray-900 truncate">{(listing as any).city}</div>
+                <div className="text-sm font-bold text-canvas truncate">{(listing as any).city}</div>
                 <div className="text-xs text-gray-500 truncate">{listing.title}</div>
             </div>
           </div>
@@ -223,17 +223,17 @@ export default function HostCalendar({ listings, reservations }: HostCalendarPro
       <div className="flex-1 flex flex-col overflow-y-auto pr-4">
          <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-4">
-                <h1 className="text-4xl font-bold text-gray-900 flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded-xl transition-colors">
+                <h1 className="text-4xl font-bold text-canvas flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded-xl transition-colors">
                     {monthName} <ChevronDown className="w-6 h-6" />
                 </h1>
             </div>
             <div className="flex items-center gap-4">
                 <div className="flex bg-gray-100 p-1 rounded-full">
-                    <button className="bg-white text-gray-900 px-4 py-1.5 rounded-full font-bold text-sm shadow-sm flex items-center gap-2">
+                    <button className="bg-dune text-canvas px-4 py-1.5 rounded-full font-bold text-sm shadow-sm flex items-center gap-2">
                         Month <ChevronDown className="w-4 h-4" />
                     </button>
                 </div>
-                <div className="flex items-center gap-2 border border-gray-200 rounded-full p-1 bg-white">
+                <div className="flex items-center gap-2 border border-gray-200 rounded-full p-1 bg-dune">
                     <button onClick={handlePrevMonth} className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 text-gray-700">
                         <ChevronLeft className="w-5 h-5" />
                     </button>
@@ -245,7 +245,7 @@ export default function HostCalendar({ listings, reservations }: HostCalendarPro
          </div>
 
          {/* Calendar Grid */}
-         <div className="w-full rounded-3xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+         <div className="w-full rounded-3xl border border-gray-200 bg-dune overflow-hidden shadow-sm">
             <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
                 {DAYS_OF_WEEK.map(day => (
                     <div key={day} className="py-4 text-center text-sm font-bold text-gray-500 uppercase tracking-wider">
@@ -265,24 +265,24 @@ export default function HostCalendar({ listings, reservations }: HostCalendarPro
             <div className="space-y-8 pb-10">
                 {selectedDates.length > 0 && (
                      <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 mb-4">
-                         <h3 className="font-bold text-gray-900 mb-1">{selectedDates.length} {selectedDates.length === 1 ? 'night' : 'nights'} selected</h3>
+                         <h3 className="font-bold text-canvas mb-1">{selectedDates.length} {selectedDates.length === 1 ? 'night' : 'nights'} selected</h3>
                          <div className="text-sm text-gray-500">{monthName} {Math.min(...selectedDates)} - {Math.max(...selectedDates)}</div>
                      </div>
                 )}
                 
                 {selectedDates.length > 0 && (
                 <div>
-                     <h3 className="text-xl font-bold text-gray-900 mb-4">Status</h3>
+                     <h3 className="text-xl font-bold text-canvas mb-4">Status</h3>
                      <div className="flex bg-gray-100 p-1 rounded-full w-full mb-6 relative">
-                         <button onClick={() => setStatus('available')} className={`flex-1 px-4 py-2 rounded-full font-bold text-sm shadow-sm transition-all z-10 text-center ${status === 'available' ? 'bg-white text-gray-900' : 'text-gray-500 hover:text-gray-900'}`}>Available</button>
-                         <button onClick={() => setStatus('blocked')} className={`flex-1 px-4 py-2 rounded-full font-bold text-sm shadow-sm transition-all z-10 text-center ${status === 'blocked' ? 'bg-white text-gray-900' : 'text-gray-500 hover:text-gray-900'}`}>Blocked</button>
+                         <button onClick={() => setStatus('available')} className={`flex-1 px-4 py-2 rounded-full font-bold text-sm shadow-sm transition-all z-10 text-center ${status === 'available' ? 'bg-dune text-canvas' : 'text-gray-500 hover:text-canvas'}`}>Available</button>
+                         <button onClick={() => setStatus('blocked')} className={`flex-1 px-4 py-2 rounded-full font-bold text-sm shadow-sm transition-all z-10 text-center ${status === 'blocked' ? 'bg-dune text-canvas' : 'text-gray-500 hover:text-canvas'}`}>Blocked</button>
                      </div>
                 </div>
                 )}
                 
                 <div>
                      <div className="flex items-center justify-between mb-4">
-                         <h3 className="text-xl font-bold text-gray-900">Pricing</h3>
+                         <h3 className="text-xl font-bold text-canvas">Pricing</h3>
                          <button 
                              onClick={async () => {
                                  if (!selectedListingId || selectedDates.length === 0) return;
@@ -310,14 +310,14 @@ export default function HostCalendar({ listings, reservations }: HostCalendarPro
                              ✨ Smart Pricing
                          </button>
                      </div>
-                     <div className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-2xl cursor-pointer transition-colors group mb-3 hover:border-gray-900">
+                     <div className="flex items-center justify-between p-4 bg-dune border border-gray-200 rounded-2xl cursor-pointer transition-colors group mb-3 hover:border-gray-900">
                          <div className="w-full">
                             <label className="text-sm text-gray-500 block mb-1">Nightly price</label>
                             <div className="flex items-center">
-                                <span className="font-bold text-gray-900 text-xl mr-1">{currency === 'USD' ? '$' : '₹'}</span>
+                                <span className="font-bold text-canvas text-xl mr-1">{currency === 'USD' ? '$' : '₹'}</span>
                                 <input 
                                     type="number" 
-                                    className="font-bold text-gray-900 text-xl focus:outline-none w-full bg-transparent"
+                                    className="font-bold text-canvas text-xl focus:outline-none w-full bg-transparent"
                                     value={customPrice}
                                     onChange={e => setCustomPrice(e.target.value)}
                                     disabled={selectedDates.length === 0}
@@ -332,7 +332,7 @@ export default function HostCalendar({ listings, reservations }: HostCalendarPro
 
                 <div>
                      <div className="flex items-center justify-between mb-4">
-                         <h3 className="text-xl font-bold text-gray-900">Platform Offers</h3>
+                         <h3 className="text-xl font-bold text-canvas">Platform Offers</h3>
                      </div>
                      {offers.length === 0 && (
                          <div className="text-sm text-gray-500 mb-4">No platform offers available currently. Admin can create offers.</div>
@@ -342,10 +342,10 @@ export default function HostCalendar({ listings, reservations }: HostCalendarPro
                              <div 
                                 key={offer.id}
                                 onClick={() => setSelectedDates.length > 0 && setSelectedOfferId(selectedOfferId === offer.id ? null : offer.id)}
-                                className={`flex items-center justify-between p-4 bg-white border ${selectedOfferId === offer.id ? 'border-[#0284C7] bg-[#0284C7]/5' : 'border-gray-200 hover:border-gray-900'} rounded-2xl cursor-pointer transition-colors group `}
+                                className={`flex items-center justify-between p-4 bg-dune border ${selectedOfferId === offer.id ? 'border-[#0284C7] bg-[#0284C7]/5' : 'border-gray-200 hover:border-gray-900'} rounded-2xl cursor-pointer transition-colors group `}
                              >
                                  <div>
-                                    <div className={`font-bold ${selectedOfferId === offer.id ? 'text-[#0284C7]' : 'text-gray-900'}`}>{offer.title}</div>
+                                    <div className={`font-bold ${selectedOfferId === offer.id ? 'text-[#0284C7]' : 'text-canvas'}`}>{offer.title}</div>
                                     <div className="text-sm text-gray-500 mt-1">{offer.discount_percentage}% discount on base price</div>
                                  </div>
                                  {selectedOfferId === offer.id && <Check className="w-5 h-5 text-[#0284C7]" />}
@@ -357,13 +357,13 @@ export default function HostCalendar({ listings, reservations }: HostCalendarPro
                 <div className="h-px bg-gray-100 w-full" />
 
                 <div>
-                     <h3 className="text-xl font-bold text-gray-900 mb-4">Availability</h3>
-                     <div className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-2xl hover:border-gray-900 cursor-pointer transition-colors group">
+                     <h3 className="text-xl font-bold text-canvas mb-4">Availability</h3>
+                     <div className="flex items-center justify-between p-4 bg-dune border border-gray-200 rounded-2xl hover:border-gray-900 cursor-pointer transition-colors group">
                          <div>
-                            <div className="font-bold text-gray-900">1–1 night stays</div>
+                            <div className="font-bold text-canvas">1–1 night stays</div>
                             <div className="text-sm text-gray-500 mt-1">Same-day advance notice</div>
                          </div>
-                         <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-gray-900 transition-colors" />
+                         <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-canvas transition-colors" />
                      </div>
                 </div>
             </div>
@@ -374,8 +374,8 @@ export default function HostCalendar({ listings, reservations }: HostCalendarPro
           )}
           
           {selectedDates.length > 0 && selectedListing && (
-              <div className="mt-8 pt-4 border-t border-gray-100 flex items-center justify-between pb-8 sticky bottom-0 bg-white">
-                  <button onClick={() => setSelectedDates([])} className="text-gray-900 font-bold underline hover:text-gray-700">Cancel</button>
+              <div className="mt-8 pt-4 border-t border-gray-100 flex items-center justify-between pb-8 sticky bottom-0 bg-dune">
+                  <button onClick={() => setSelectedDates([])} className="text-canvas font-bold underline hover:text-gray-700">Cancel</button>
                   <button onClick={handleSave} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-lg">Save Changes</button>
               </div>
           )}

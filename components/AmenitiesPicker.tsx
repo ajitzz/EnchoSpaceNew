@@ -115,14 +115,14 @@ export const AmenitiesPicker = ({ selected, onChange }: { selected: string[]; on
               placeholder="Search amenities..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-12 pr-4 py-4 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none text-gray-900 bg-white"
+              className="w-full pl-12 pr-4 py-4 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none text-canvas bg-dune"
             />
           </div>
 
           <div className="space-y-8 max-h-[400px] overflow-y-auto pr-2 scrollbar-hide">
             {categories.map(cat => (
               <div key={cat}>
-                <h4 className="font-bold text-gray-900 mb-4">{cat}</h4>
+                <h4 className="font-bold text-canvas mb-4">{cat}</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                   {filtered.filter(a => a.category === cat).map(amenity => {
                     const isSelected = selected.includes(amenity.label);
@@ -132,7 +132,7 @@ export const AmenitiesPicker = ({ selected, onChange }: { selected: string[]; on
                         type="button"
                         onClick={() => toggleAmenity(amenity.id, amenity.label)}
                         className={`flex items-center gap-3 p-3 text-left rounded-xl border transition-all ${
-                          isSelected ? 'border-gray-900 bg-white shadow-sm ring-1 ring-gray-900' : 'border-gray-200 bg-white hover:border-gray-400'
+                          isSelected ? 'border-gray-900 bg-dune shadow-sm ring-1 ring-gray-900' : 'border-gray-200 bg-dune hover:border-gray-400'
                         }`}
                       >
                         <div className={`w-6 h-6 flex-shrink-0 flex items-center justify-center rounded text-white ${isSelected ? 'bg-gray-900' : 'border border-gray-300'}`}>

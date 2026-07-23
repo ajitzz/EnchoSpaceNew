@@ -279,11 +279,11 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
                 </div>
                 <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start">
-                        <h4 className="font-semibold text-gray-900 truncate">{otherPartyName || 'Unknown'}</h4>
+                        <h4 className="font-semibold text-canvas truncate">{otherPartyName || 'Unknown'}</h4>
                         <span className="text-xs text-gray-400 whitespace-nowrap">{new Date(thread.updated_at).toLocaleDateString()}</span>
                     </div>
                     <p className="text-sm text-gray-500 truncate">{thread.listing_title}</p>
-                    <p className={`text-sm mt-1 truncate ${unreadCount > 0 ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
+                    <p className={`text-sm mt-1 truncate ${unreadCount > 0 ? 'font-semibold text-canvas' : 'text-gray-500'}`}>
                         {thread.last_message || 'No messages yet'}
                     </p>
                 </div>
@@ -302,7 +302,7 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
 
     return (
         <>
-            <SEO title="Messages" description="Your conversations on Encho Space" />
+            <SEO title="Messages" description="Your conversations on Amigove" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 h-[calc(100vh-80px)]">
             <div className="flex items-center gap-4 mb-6">
                 <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors xl:hidden">
@@ -311,7 +311,7 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
                 <h1 className="text-3xl font-bold tracking-tight">Messages</h1>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 h-[calc(100%-4rem)] flex overflow-hidden">
+            <div className="bg-dune rounded-2xl shadow-sm border border-gray-200 h-[calc(100%-4rem)] flex overflow-hidden">
                 {/* Threads List Sidebar */}
                 <div className={`${activeThread ? 'hidden md:flex' : 'flex'} w-full md:w-1/3 border-r border-gray-200 flex-col`}>
                     <div className="p-4 border-b border-gray-100 bg-gray-50">
@@ -331,7 +331,7 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
                     {activeThread ? (
                         <>
                             {/* Chat Header */}
-                            <div className="p-4 bg-white border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                            <div className="p-4 bg-dune border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                                 <div className="flex items-center gap-3">
                                     <button className="md:hidden p-2 hover:bg-gray-100 rounded-full" onClick={() => setActiveThread(null)}>
                                         <ArrowLeft className="w-5 h-5" />
@@ -384,7 +384,7 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
                                             transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                                             className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
                                         >
-                                            <div className={`max-w-[70%] xl:max-w-[60%] rounded-2xl px-5 py-3 shadow-sm relative group ${isMe ? 'bg-[#0284C7] text-white rounded-tr-sm' : 'bg-white border border-gray-100 text-gray-900 rounded-tl-sm'}`}>
+                                            <div className={`max-w-[70%] xl:max-w-[60%] rounded-2xl px-5 py-3 shadow-sm relative group ${isMe ? 'bg-[#0284C7] text-white rounded-tr-sm' : 'bg-dune border border-gray-100 text-canvas rounded-tl-sm'}`}>
                                                 {isTranslating ? (
                                                     <div className="flex items-center gap-1.5 py-1">
                                                         <div className="w-3 h-3 rounded-full border-2 border-zinc-200 border-t-zinc-600 animate-spin" />
@@ -405,7 +405,7 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
                                                         type="button"
                                                         onClick={() => handleTranslateMessage(msg.id, msg.content)}
                                                         className={`text-[9px] font-bold uppercase tracking-wider flex items-center gap-0.5 hover:underline opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-200 cursor-pointer ${
-                                                            isMe ? 'text-amber-300 hover:text-amber-200' : 'text-blue-600 hover:text-blue-500'
+                                                            isMe ? 'text-amber-300 hover:text-amber-200' : 'text-brand-dark hover:text-brand'
                                                         }`}
                                                     >
                                                         <Globe className="w-2.5 h-2.5" />
@@ -434,7 +434,7 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
                             </div>
 
                             {/* Input Area */}
-                            <div className="p-4 bg-white border-t border-gray-200">
+                            <div className="p-4 bg-dune border-t border-gray-200">
                                 {/* Suggestion Chips */}
                                 <div className="pb-3 overflow-x-auto flex gap-2 no-scrollbar scroll-smooth">
                                     <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider self-center mr-1 flex items-center gap-1 shrink-0 select-none">

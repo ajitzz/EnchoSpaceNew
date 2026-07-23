@@ -60,7 +60,7 @@ export const VideoReelsModal: React.FC<VideoReelsModalProps> = ({
     >
       <button
         onClick={onClose}
-        className="absolute top-6 left-6 z-[130] w-12 h-12 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-all hover:scale-110 active:scale-95 shadow-2xl"
+        className="absolute top-6 left-6 z-[130] w-12 h-12 rounded-full bg-dune/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white hover:bg-dune/20 transition-all hover:scale-110 active:scale-95 shadow-2xl"
       >
         <X className="w-5 h-5" />
       </button>
@@ -203,7 +203,7 @@ const VideoReelItem = ({ vid, onLike, isMuted, setIsMuted, containerRef }: { key
           <button
               className="group/btn flex flex-col items-center gap-1.5 active:scale-90 transition-all duration-300"
           >
-              <div className="w-12 h-12 rounded-full bg-black/40 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-xl group-hover/btn:bg-blue-500/20 group-hover/btn:border-blue-500/50 transition-colors">
+              <div className="w-12 h-12 rounded-full bg-black/40 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-xl group-hover/btn:bg-brand/20 group-hover/btn:border-brand/50 transition-colors">
                   <MessageCircle className="w-6 h-6 text-white group-hover/btn:fill-blue-500/50 transition-all" />
               </div>
               <span className="text-xs text-white font-bold drop-shadow-md">24</span>
@@ -222,7 +222,7 @@ const VideoReelItem = ({ vid, onLike, isMuted, setIsMuted, containerRef }: { key
               onClick={(e) => setIsMuted(!isMuted)}
               className="group/btn flex flex-col items-center gap-1.5 active:scale-90 transition-all duration-300 mt-2"
           >
-              <div className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-xl group-hover/btn:bg-white/20 transition-colors">
+              <div className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-xl group-hover/btn:bg-dune/20 transition-colors">
                   {isMuted ? <VolumeX className="w-4 h-4 text-white" /> : <Volume2 className="w-4 h-4 text-white" />}
               </div>
           </button>
@@ -231,7 +231,7 @@ const VideoReelItem = ({ vid, onLike, isMuted, setIsMuted, containerRef }: { key
       {/* Footer description overlay */}
       <div className="absolute bottom-6 left-5 right-20 text-left z-20 pointer-events-none">
           <div className="flex items-center gap-2 mb-3">
-              <span className="bg-white/20 backdrop-blur-md text-white text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border border-white/30 flex items-center gap-1.5 shadow-lg">
+              <span className="bg-dune/20 backdrop-blur-md text-white text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full border border-white/30 flex items-center gap-1.5 shadow-lg">
                   <MapPin className="w-3 h-3" />
                   Wayanad
               </span>
@@ -247,7 +247,7 @@ const VideoReelItem = ({ vid, onLike, isMuted, setIsMuted, containerRef }: { key
       </div>
       
       {/* Progress Bar */}
-      <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20 z-20">
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-dune/20 z-20">
           <div 
               className="h-full bg-emerald-500 transition-all duration-100 ease-linear shadow-[0_0_10px_rgba(16,185,129,0.8)]"
               style={{ width: `${progress}%` }}
