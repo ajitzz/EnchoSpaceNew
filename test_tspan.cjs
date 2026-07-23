@@ -1,0 +1,12 @@
+const fs = require('fs');
+
+const svg = `
+<svg viewBox="0 0 165 40" xmlns="http://www.w3.org/2000/svg">
+  <text x="0" y="32" style="font-family: Inter, sans-serif;">
+    <tspan font-weight="900" font-size="32" fill="#0F172A" letter-spacing="-0.03em">AMIGO</tspan>
+    <tspan font-weight="700" font-size="24" fill="#10B981" letter-spacing="-0.02em">ve</tspan>
+  </text>
+</svg>
+`;
+
+fs.writeFileSync('test_tspan.svg', svg);
