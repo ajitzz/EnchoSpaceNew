@@ -1,0 +1,41 @@
+const fs = require('fs');
+
+const svg = `
+<svg viewBox="0 0 160 40" xmlns="http://www.w3.org/2000/svg">
+  <!-- AMIGO Text -->
+  <text 
+    x="0" 
+    y="32" 
+    font-weight="900" 
+    font-size="32" 
+    fill="#0F172A" 
+    letter-spacing="-0.03em" 
+    style="font-family: Inter, system-ui, sans-serif;"
+  >
+    AMIGO
+  </text>
+  
+  <g transform="translate(100, 10)">
+    <!-- 'v' as a creative tick mark / checkmark -->
+    <path 
+      d="M 2,13 L 7,18 L 18,3 L 14,0 L 7,10 L 4,6 Z" 
+      fill="#10B981" 
+    />
+    
+    <!-- 'e' custom drawn -->
+    <path 
+      d="M 37,5 C 44,5 47,8 47,13 H 29 C 29,19 33,22 37,22 C 40,22 43,20 44,18 L 47,20 C 45,24 40,26 37,26 C 29,26 24,20 24,13 C 24,6 29,5 37,5 Z M 37,9 C 34,9 31,10 30,12 H 43 C 43,10 40,9 37,9 Z" 
+      fill="#10B981" 
+    />
+    
+    <!-- leaf projecting to the right top of 'e' -->
+    <!-- 'e' top right is around x=47, y=13. Let's put leaf at x=44, y=6 projecting to x=54, y=-2 -->
+    <path 
+      d="M 42,7 C 45,-2 55,-4 57,0 C 58,6 51,10 42,7 Z" 
+      fill="#10B981" 
+    />
+  </g>
+</svg>
+`;
+
+fs.writeFileSync('test_amigove.svg', svg);

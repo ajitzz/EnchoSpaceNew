@@ -29,27 +29,27 @@ export const EnchoWordmark: React.FC<EnchoWordmarkProps> = ({ className = "h-6 w
       >
         AMIGO
       </text>
-      <text 
-        x="103" 
-        y="32" 
-        fontWeight="700" 
-        fontSize="24" 
-        fill="#10B981" 
-        letterSpacing="-0.02em" 
-        style={{ fontFamily: 'inherit' }}
-      >
-        ve
-      </text>
       
-      {/* 
-        Floating leaf accent above the 'e'.
-        Positioned slightly detached so it looks elegant and remains 
-        structurally sound even if OS-level font rendering shifts the 'e' by 1-2px.
-      */}
-      <path 
-        d="M 124 17 C 127 8 135 4 138 6 C 139 12 133 17 124 17 Z" 
-        fill="#10B981" 
-      />
+      {/* Creative 've' with 'v' as a checkmark and leaf planted in 'e' */}
+      <g transform="translate(102, 10)">
+        {/* 'v' designed as a creative checkmark (tick) */}
+        <path 
+          d="M 2,11 L 8,23 L 23,0 L 19,-2 L 8,15 L 5,10 Z" 
+          fill="#10B981" 
+        />
+        
+        {/* 'e' drawn to match the typographic scale perfectly */}
+        <path 
+          d="M 37,5 C 44,5 49,9 49,15 H 31 C 31,21 35,24 39,24 C 42,24 45,22 47,19 L 51,22 C 48,25 43,28 39,28 C 30,28 25,22 25,14 C 25,7 30,5 37,5 Z M 37,9 C 32,9 30,11 29,13 H 45 C 44,11 41,9 37,9 Z" 
+          fill="#10B981" 
+        />
+        
+        {/* Small green leaf planted in 'e', projecting to the right side corner top */}
+        <path 
+          d="M 46,7 C 49,-1 59,-2 62,0 C 63,5 56,10 46,7 Z" 
+          fill="#10B981" 
+        />
+      </g>
     </svg>
   );
 };
