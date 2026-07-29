@@ -349,9 +349,13 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
     };
 
     const handleFileUpload = async (file: File) => {
+        const token = localStorage.getItem('token');
         const presignRes = await fetch('/api/upload-url', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            },
             body: JSON.stringify({ filename: file.name, contentType: file.type }),
         });
         if (!presignRes.ok) throw new Error('Failed to create upload URL');

@@ -78,3 +78,7 @@ Here is the brutal technical reality we must inject into the execution plan to p
 16. **Dynamic Pricing Sync (The Trust Breaker)**: If a host changes their nightly rate in the Encho dashboard, the active Meta ad must instantly sync the new price. Advertising a $100 rate when the host changed it to $200 causes high bounce rates and wasted ad budget.
 17. **Strict Row-Level Security (RLS) (The Data Breach Shield)**: We are storing highly sensitive lead data and ad budgets. We must enforce strict Row-Level Security (RLS) in Neon Postgres so that a compromised host account can never query or exfiltrate another host's leads or wallet balance.
 18. **Webhook Retry Jitter & Dead Letter Queue (The API Savior)**: Meta/Google APIs go down. If our server fails to process an ad approval or lead webhook, we cannot just drop the data. We must implement an exponential backoff retry mechanism with jitter, and a Dead Letter Queue (DLQ) for failed webhooks to ensure zero data loss.
+
+## Part 5: Master Strategic Document Reference
+For complete business model breakdown, market rating (6.5/10), survival probabilities, competitor matrix, and full technical architecture, consult `/ENCHO_BUSINESS_PLAN_AND_STRATEGY.md`.
+Note: The "Brutally Honest Co-Founder" persona and strategic debate remain active across all future sessions until the prompt explicitly contains the keyword **"OVERO"**.

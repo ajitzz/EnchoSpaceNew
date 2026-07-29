@@ -325,17 +325,25 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
       
       const success = await queueCustomMutation('upload_listing', payload);
       
-      if (!success && !navigator.onLine) {
-          addToast("Scheduled", "You are offline. Your property will be listed once you reconnect.", "info");
+      if (!success) {
+          if (!navigator.onLine) {
+              addToast("Scheduled", "You are offline. Your property will be listed once you reconnect.", "info");
+              setSubmitted(true);
+              setTimeout(() => {
+                  onSuccess();
+                  onBack();
+              }, 2000);
+          } else {
+              addToast("Publish Failed", "Failed to publish listing. Please try again.", "error");
+          }
       } else {
           addToast("Success", "Your property configuration has been fully synchronized.", "success");
+          setSubmitted(true);
+          setTimeout(() => {
+              onSuccess();
+              onBack();
+          }, 2000);
       }
-
-      setSubmitted(true);
-      setTimeout(() => {
-          onSuccess();
-          onBack();
-      }, 2000);
     } catch (error) {
       console.error('Failed to list space:', error);
       addToast("Upload Failed", "Failed to schedule property listing.", "error");

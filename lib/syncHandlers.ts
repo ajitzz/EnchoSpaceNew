@@ -1,7 +1,13 @@
 import { registerCustomSyncHandler } from './syncService';
 import { encodeImageToBlurhash } from './blurhash';
 
-async function uploadPhotoList(photoList: any[]) {
+async function uploadPhotoList(photoList: any[], token?: string) {
+    const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('token') : '') || '';
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
     const uploadPromises = photoList.map(async (photo) => {
         if (!photo.file && photo.previewUrl) {
             return photo.previewUrl;
@@ -25,12 +31,13 @@ async function uploadPhotoList(photoList: any[]) {
 
         const presignRes = await fetch('/api/upload-url', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({ filename, contentType: file.type }),
         });
         
         if (!presignRes.ok) {
-            throw new Error('Failed to create upload URL');
+            const errorText = await presignRes.text().catch(() => '');
+            throw new Error(`Failed to create upload URL (${presignRes.status}): ${errorText}`);
         }
         
         const { uploadUrl, fileUrl } = await presignRes.json();
@@ -53,13 +60,14 @@ export function initSyncHandlers() {
     registerCustomSyncHandler('upload_listing', async (item) => {
         try {
             const { existingListing, formData, photos, user } = item.body;
+            const token = user?.token || (typeof window !== 'undefined' ? localStorage.getItem('token') : '') || '';
             
-            const uploadedImageUrls = await uploadPhotoList(photos);
+            const uploadedImageUrls = await uploadPhotoList(photos, token);
             const mainImageUrl = uploadedImageUrls.length > 0 ? uploadedImageUrls[0] : (existingListing?.imageUrl || '');
 
             const updatedRooms = await Promise.all(
                 formData.rooms.map(async (room: any) => {
-                    const roomImageUrls = room.photos ? await uploadPhotoList(room.photos) : (room.imageUrls || []);
+                    const roomImageUrls = room.photos ? await uploadPhotoList(room.photos, token) : (room.imageUrls || []);
                     const { photos: _photos, ...roomData } = room;
                     return { ...roomData, imageUrls: roomImageUrls };
                 })
@@ -77,13 +85,21 @@ export function initSyncHandlers() {
             const endpoint = existingListing ? `/api/listings/${existingListing.id}` : '/api/listings';
             const method = existingListing ? 'PUT' : 'POST';
 
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
             const res = await fetch(endpoint, {
                 method,
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify(payload),
             });
 
-            if (!res.ok) throw new Error('Failed to save listing');
+            if (!res.ok) {
+                const errBody = await res.text().catch(() => '');
+                throw new Error(`Failed to save listing (${res.status}): ${errBody}`);
+            }
             
             return true;
         } catch (e) {
