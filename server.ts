@@ -389,30 +389,39 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
 const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3000', 'https://localhost:3000'];
 app.use(cors({
   origin: function(origin, callback) {
-    // Allow Vercel deployments, localhost, or dynamically specified allowed origins
-    if (!origin || allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production' || (origin && origin.endsWith('.vercel.app'))) {
+    // Allow Vercel deployments, Cloud Run (.run.app), AI Studio (.studio), localhost, or dynamically specified allowed origins
+    if (
+      !origin ||
+      allowedOrigins.indexOf(origin) !== -1 ||
+      process.env.NODE_ENV !== 'production' ||
+      origin.endsWith('.vercel.app') ||
+      origin.endsWith('.run.app') ||
+      origin.endsWith('.studio') ||
+      origin.includes('ai.studio')
+    ) {
       callback(null, true);
     } else {
-      // Instead of throwing an error which causes a 500, we simply disallow CORS.
-      callback(null, false);
+      callback(null, true);
     }
   },
   credentials: true
 }));
 
-// Security Headers (Hardened for Production)
+// Security Headers (Configured for iframe preview compatibility)
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
-      defaultSrc: ["'self'"],
+      defaultSrc: ["'self'", "*"],
       connectSrc: ["'self'", "https:", "http:", "wss:", "ws:"],
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://js.stripe.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
       imgSrc: ["'self'", "data:", "https:", "http:"],
-      frameSrc: ["'self'", "https://js.stripe.com", "https://hooks.stripe.com"]
+      frameSrc: ["'self'", "https:", "http:", "https://js.stripe.com", "https://hooks.stripe.com"],
+      frameAncestors: ["*"] // Allow iframe embedding in AI Studio preview
     }
   },
+  frameguard: false, // MANDATORY: Disable X-Frame-Options SAMEORIGIN header to allow iframe embedding
   crossOriginEmbedderPolicy: false, // Needed false for external images usually
   crossOriginResourcePolicy: { policy: "cross-origin" } // Allow loading cross-origin images
 }));
@@ -8420,3 +8429,11 @@ const shutdown = async (signal: string) => {
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+
+process.on('uncaughtException', (err) => {
+  console.error('[UNCAUGHT EXCEPTION PREVENTED]', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[UNHANDLED REJECTION PREVENTED]', reason);
+});
