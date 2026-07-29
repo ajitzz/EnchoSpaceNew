@@ -7,49 +7,43 @@ interface EnchoWordmarkProps {
 export const EnchoWordmark: React.FC<EnchoWordmarkProps> = ({ className = "h-6 w-auto" }) => {
   return (
     <svg 
-      viewBox="0 0 150 40" 
+      viewBox="0 0 152 40" 
       fill="none" 
       xmlns="http://www.w3.org/2000/svg"
       className={`${className} transition-all duration-300`}
-      aria-label="AMIGOve"
+      aria-label="ENCHO"
     >
-      {/* 
-        Using <text> with font-family: inherit ensures the logo 
-        perfectly matches the project's primary font (Inter) 
-        while retaining the flawless scaling of an SVG viewBox.
-      */}
-      <text 
-        x="0" 
-        y="32" 
-        fontWeight="900" 
-        fontSize="32" 
+      {/* E - Deep Midnight Black (#0F172A) */}
+      <path 
+        d="M 0,6 H 20 V 12 H 6.2 V 17 H 16.5 V 23 H 6.2 V 28 H 20 V 34 H 0 Z" 
         fill="#0F172A" 
-        letterSpacing="-0.03em" 
-        style={{ fontFamily: 'inherit' }}
-      >
-        AMIGO
-      </text>
+      />
       
-      {/* Creative 've' with 'v' as a checkmark and leaf planted in 'e' */}
-      <g transform="translate(102, 10)">
-        {/* 'v' designed as a creative checkmark (tick) */}
-        <path 
-          d="M 2,11 L 8,23 L 23,0 L 19,-2 L 8,15 L 5,10 Z" 
-          fill="#10B981" 
-        />
-        
-        {/* 'e' drawn to match the typographic scale perfectly */}
-        <path 
-          d="M 37,5 C 44,5 49,9 49,15 H 31 C 31,21 35,24 39,24 C 42,24 45,22 47,19 L 51,22 C 48,25 43,28 39,28 C 30,28 25,22 25,14 C 25,7 30,5 37,5 Z M 37,9 C 32,9 30,11 29,13 H 45 C 44,11 41,9 37,9 Z" 
-          fill="#10B981" 
-        />
-        
-        {/* Small green leaf planted in 'e', projecting to the right side corner top */}
-        <path 
-          d="M 46,7 C 49,-1 59,-2 62,0 C 63,5 56,10 46,7 Z" 
-          fill="#10B981" 
-        />
-      </g>
+      {/* N - Deep Midnight Black (#0F172A) */}
+      <path 
+        d="M 27,6 H 33.5 L 45.5,25 V 6 H 52 V 34 H 45.5 L 33.5,15 V 34 H 27 Z" 
+        fill="#0F172A" 
+      />
+      
+      {/* C - Deep Midnight Black (#0F172A) */}
+      <path 
+        d="M 83,11.5 A 14,14 0 1,0 83,28.5 L 78.2,24.2 A 7.8,7.8 0 1,1 78.2,15.8 Z" 
+        fill="#0F172A" 
+      />
+      
+      {/* H - Visual Anchor in Vibrant Horizon Orange (#FF5722)
+          Customized so the negative space beneath its middle crossbar forms a smooth, 
+          elegant gateway archway while remaining 100% instantly readable as a bold 'H'. */}
+      <path 
+        d="M 89,6 H 95.2 V 17 H 108.8 V 6 H 115 V 34 H 108.8 A 6.8,8.5 0 0,0 95.2,34 H 89 V 6 Z" 
+        fill="#FF5722" 
+      />
+      
+      {/* O - Deep Midnight Black (#0F172A) */}
+      <path 
+        d="M 135,6 A 14,14 0 1,0 135,34 A 14,14 0 1,0 135,6 Z M 135,12.2 A 7.8,7.8 0 1,1 135,27.8 A 7.8,7.8 0 1,1 135,12.2 Z" 
+        fill="#0F172A" 
+      />
     </svg>
   );
 };
