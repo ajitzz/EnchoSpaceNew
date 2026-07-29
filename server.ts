@@ -2234,13 +2234,18 @@ app.put('/api/listings/:id', authenticateToken, async (req: AuthRequest, res) =>
       if (oldCheck.rows.length > 0) oldPrice = oldCheck.rows[0].price;
     }
 
+    const safeImageUrls = typeof imageUrls === 'string' ? imageUrls : JSON.stringify(imageUrls || []);
+    const safeRooms = typeof rooms === 'string' ? rooms : JSON.stringify(rooms || []);
+    const safeAmenities = typeof amenities === 'string' ? amenities : JSON.stringify(amenities || []);
+    const safeDynamicPricing = typeof dynamicPricing === 'string' ? dynamicPricing : JSON.stringify(dynamicPricing || {});
+
     if (title) {
       await pool.query(`
         UPDATE listings
         SET title=$1, description=$2, price=$3, type=$4, address=$5, city=$6, image_url=$7, image_urls=$8, video_url=$9, rental_mode=$10, rooms=$11, max_guests=$12, bedrooms=$13, beds=$14, bathrooms=$15, amenities=$16, lat=$18, lng=$19, dynamic_pricing=$20, seo_title=$21, seo_description=$22, seo_keywords=$23, seo_image_url=$24
         WHERE id=$17
       `, [
-        title, description, price, type, address, city, imageUrl, JSON.stringify(imageUrls || []), videoUrl, rentalMode, JSON.stringify(rooms || []), maxGuests, bedrooms, beds, bathrooms, JSON.stringify(amenities || []), req.params.id as string, lat || null, lng || null, dynamicPricing ? JSON.stringify(dynamicPricing) : JSON.stringify({}), seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null
+        title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode, safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, req.params.id as string, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null
       ]);
       if (price) await syncDynamicPricingToMeta(req.params.id, oldPrice, price);
     } else if (videoUrl !== undefined) {
@@ -5136,11 +5141,17 @@ app.post('/api/listings', authenticateToken, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
+    // Format JSONB fields safely as valid JSON strings
+    const safeImageUrls = typeof imageUrls === 'string' ? imageUrls : JSON.stringify(imageUrls || []);
+    const safeRooms = typeof rooms === 'string' ? rooms : JSON.stringify(rooms || []);
+    const safeAmenities = typeof amenities === 'string' ? amenities : JSON.stringify(amenities || []);
+    const safeDynamicPricing = typeof dynamicPricing === 'string' ? dynamicPricing : JSON.stringify(dynamicPricing || {});
+
     // Insert into DB
     const result = await pool.query(
       `INSERT INTO listings (user_id, title, description, price, type, address, city, image_url, image_urls, video_url, rental_mode, rooms, max_guests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamic_pricing, seo_title, seo_description, seo_keywords, seo_image_url)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24) RETURNING *`,
-      [userId || null, title, description, price, type, address, city, imageUrl, imageUrls || [], videoUrl, rentalMode || 'entire_place', rooms ? JSON.stringify(rooms) : JSON.stringify([]), maxGuests, bedrooms, beds, bathrooms, amenities, lat || null, lng || null, dynamicPricing ? JSON.stringify(dynamicPricing) : JSON.stringify({}), seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null]
+      [userId || null, title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode || 'entire_place', safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null]
     );
 
     const newListing = result.rows[0];
