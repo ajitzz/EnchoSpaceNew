@@ -7890,10 +7890,19 @@ app.post('/api/checkout/razorpay/order', authenticateToken, async (req: AuthRequ
     let bookingType: 'listing' | 'experience' = 'listing';
 
     // Fetch system payment rates from DB (Never trust client total)
-    const rateRes = await pool.query('SELECT * FROM payment_settings LIMIT 1');
-    const commissionRate = rateRes.rows[0]?.commission_rate ?? 10;
-    const taxRate = rateRes.rows[0]?.tax_rate ?? 18;
-    const systemFee = rateRes.rows[0]?.system_fee ?? 150;
+    let commissionRate = 10;
+    let taxRate = 18;
+    let systemFee = 150;
+    try {
+      const rateRes = await pool.query('SELECT * FROM payment_settings LIMIT 1');
+      if (rateRes.rows.length > 0) {
+        commissionRate = Number(rateRes.rows[0].commission_rate) || 10;
+        taxRate = Number(rateRes.rows[0].tax_rate) || 18;
+        systemFee = Number(rateRes.rows[0].system_fee) || 150;
+      }
+    } catch (rateErr) {
+      console.warn('[PAYMENT SETTINGS WARNING] Defaulting to standard rates:', rateErr);
+    }
 
     if (listingId) {
       bookingType = 'listing';
@@ -7915,10 +7924,27 @@ app.post('/api/checkout/razorpay/order', authenticateToken, async (req: AuthRequ
       finalAmount = Math.round(baseRent + commissionFee + taxFee + systemFee);
       title = `Stay at ${listing.title}`;
 
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS bookings (
+          id SERIAL PRIMARY KEY,
+          user_id INT,
+          listing_id INT,
+          room_id VARCHAR(255),
+          move_in_date VARCHAR(255),
+          configuration TEXT,
+          name VARCHAR(255),
+          phone VARCHAR(255),
+          total_rent NUMERIC,
+          status VARCHAR(50) DEFAULT 'pending',
+          payment_intent_id VARCHAR(255),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
       const bookInsert = await pool.query(`
         INSERT INTO bookings (user_id, listing_id, room_id, move_in_date, configuration, name, phone, total_rent, status)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending') RETURNING id
-      `, [userId, listingId, roomId || null, moveInDate || new Date().toISOString(), configuration || '', name, phone, finalAmount]);
+      `, [userId, listingId, roomId || null, moveInDate || new Date().toISOString(), configuration || '', name || 'Guest', phone || '', finalAmount]);
       
       bookingId = bookInsert.rows[0].id;
     } else if (experienceId) {
@@ -7934,10 +7960,25 @@ app.post('/api/checkout/razorpay/order', authenticateToken, async (req: AuthRequ
       finalAmount = Math.round(basePrice + commissionFee + taxFee + systemFee);
       title = `${tickets}x Tickets for ${experience.title}`;
 
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS experience_bookings (
+          id SERIAL PRIMARY KEY,
+          user_id INT,
+          experience_id INT,
+          num_tickets INT,
+          total_amount NUMERIC,
+          name VARCHAR(255),
+          phone VARCHAR(255),
+          status VARCHAR(50) DEFAULT 'pending',
+          payment_intent_id VARCHAR(255),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
       const expBookInsert = await pool.query(`
         INSERT INTO experience_bookings (user_id, experience_id, num_tickets, total_amount, name, phone, status)
         VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id
-      `, [userId, experienceId, tickets, finalAmount, name, phone]);
+      `, [userId, experienceId, tickets, finalAmount, name || 'Guest', phone || '', status]);
 
       bookingId = expBookInsert.rows[0].id;
     } else {
