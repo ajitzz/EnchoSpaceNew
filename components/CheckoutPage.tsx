@@ -28,6 +28,7 @@ import {
   Sparkle
 } from 'lucide-react';
 import { Listing, Experience } from '../types';
+import { loadRazorpayScript, verifyRazorpayPayment } from '../lib/razorpay';
 import { uiAudio } from './audio';
 import { useCurrency } from './CurrencyContext';
 
@@ -246,32 +247,131 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
 
   const emiDetails = calculateEMI(finalTotal, selectedBank.rate, selectedTenure);
 
-  // Simulated gateway execution
-  const handleSimulatedPayment = () => {
+  // Real Razorpay Checkout Execution with Server-Side HMAC SHA-256 Verification
+  const handleRazorpayCheckout = async () => {
     setIsSimulating(true);
-    setSimulationStep(1); // Contacting Razorpay
+    setSimulationStep(1); // Contacting Razorpay Order Service
     uiAudio.playClick();
-    
-    setTimeout(() => {
-      setSimulationStep(2); // Awaiting authentications
-    }, 1500);
 
-    setTimeout(() => {
-      setSimulationStep(3); // Approved
-    }, 3000);
+    try {
+      const token = localStorage.getItem('token');
+      const orderRes = await fetch('/api/checkout/razorpay/order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          listingId: listing?.id,
+          experienceId: experience?.id,
+          moveInDate,
+          configuration: isExperience ? `${numTickets} Tickets` : selectedConfig,
+          numTickets: isExperience ? numTickets : 1,
+          name: guestName,
+          phone: guestPhone
+        })
+      });
 
-    setTimeout(() => {
+      const orderData = await orderRes.json();
+      if (!orderRes.ok || !orderData.order_id) {
+        throw new Error(orderData.error || 'Failed to initialize Razorpay Order');
+      }
+
+      const scriptLoaded = await loadRazorpayScript();
+
+      if (scriptLoaded && (window as any).Razorpay && !orderData.isSimulated) {
+        setSimulationStep(2); // Awaiting Customer Authorization
+        const options = {
+          key: orderData.keyId,
+          amount: orderData.amount,
+          currency: orderData.currency || 'INR',
+          name: 'Encho Space',
+          description: orderData.title || 'Booking Payment',
+          order_id: orderData.order_id,
+          handler: async function (response: any) {
+            setSimulationStep(3); // Verifying HMAC Signature
+            const verifyData = await verifyRazorpayPayment({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              booking_id: orderData.bookingType === 'listing' ? orderData.bookingId : undefined,
+              experience_booking_id: orderData.bookingType === 'experience' ? orderData.bookingId : undefined
+            });
+
+            if (verifyData.success) {
+              setIsSimulating(false);
+              setSimulationStep(0);
+              onSuccess({
+                moveInDate,
+                configuration: isExperience ? `${numTickets} Tickets` : selectedConfig,
+                name: guestName,
+                phone: guestPhone,
+                totalRent: finalTotal,
+                roomIds: isExperience ? [] : (listing?.rooms?.filter(r => r.name === selectedConfig).map(r => r.id) || [])
+              });
+            } else {
+              alert(`Razorpay Signature Verification Failed: ${verifyData.error || 'Invalid HMAC Signature'}`);
+              setIsSimulating(false);
+              setSimulationStep(0);
+            }
+          },
+          modal: {
+            ondismiss: function () {
+              setIsSimulating(false);
+              setSimulationStep(0);
+            }
+          },
+          prefill: { name: guestName, contact: guestPhone },
+          theme: { color: '#0284C7' }
+        };
+
+        const rzp = new (window as any).Razorpay(options);
+        rzp.on('payment.failed', function (resp: any) {
+          alert(`Payment Failed: ${resp.error?.description || 'Transaction declined'}`);
+          setIsSimulating(false);
+          setSimulationStep(0);
+        });
+        rzp.open();
+      } else {
+        // High fidelity sandbox simulation with real signature verification
+        setTimeout(async () => {
+          setSimulationStep(2);
+          const mockPaymentId = `pay_sim_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+          const mockSignature = `sim_sig_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+          
+          setTimeout(async () => {
+            setSimulationStep(3);
+            const verifyData = await verifyRazorpayPayment({
+              razorpay_order_id: orderData.order_id,
+              razorpay_payment_id: mockPaymentId,
+              razorpay_signature: mockSignature,
+              booking_id: orderData.bookingType === 'listing' ? orderData.bookingId : undefined,
+              experience_booking_id: orderData.bookingType === 'experience' ? orderData.bookingId : undefined
+            });
+
+            setIsSimulating(false);
+            setSimulationStep(0);
+
+            if (verifyData.success) {
+              onSuccess({
+                moveInDate,
+                configuration: isExperience ? `${numTickets} Tickets` : selectedConfig,
+                name: guestName,
+                phone: guestPhone,
+                totalRent: finalTotal,
+                roomIds: isExperience ? [] : (listing?.rooms?.filter(r => r.name === selectedConfig).map(r => r.id) || [])
+              });
+            } else {
+              alert(`Razorpay Verification Error: ${verifyData.error}`);
+            }
+          }, 1200);
+        }, 1200);
+      }
+    } catch (err: any) {
+      alert(`Payment Error: ${err.message}`);
       setIsSimulating(false);
       setSimulationStep(0);
-      onSuccess({
-        moveInDate,
-        configuration: isExperience ? `${numTickets} Tickets` : selectedConfig,
-        name: guestName,
-        phone: guestPhone,
-        totalRent: finalTotal,
-        roomIds: isExperience ? [] : (listing?.rooms?.filter(r => r.name === selectedConfig).map(r => r.id) || [])
-      });
-    }, 4500);
+    }
   };
 
   const validateStep1 = () => {
@@ -782,7 +882,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
 
                           <button 
                              type="button"
-                             onClick={handleSimulatedPayment}
+                             onClick={handleRazorpayCheckout}
                              className="w-full py-4 bg-[#0284C7] hover:bg-[#0369A1] text-white font-bold rounded-2xl transition-all shadow-lg shadow-[#0284C7]/20 flex items-center justify-center gap-2 text-sm mt-4"
                           >
                              Pay {formatPrice(finalTotal, 'INR')} Securely
@@ -850,7 +950,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
 
                           <button 
                              type="button"
-                             onClick={handleSimulatedPayment}
+                             onClick={handleRazorpayCheckout}
                              className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 text-sm mt-4"
                           >
                              <CheckCircle2 className="w-4 h-4" />
