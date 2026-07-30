@@ -89,10 +89,16 @@ const Header: React.FC<HeaderProps> = ({
 
   useEffect(() => {
     if (!placesLibrary) return;
-    
-    setAutocompleteService(new placesLibrary.AutocompleteService());
-    
-    setSessionToken(new placesLibrary.AutocompleteSessionToken());
+    try {
+      if ((placesLibrary as any).AutocompleteService) {
+        setAutocompleteService(new (placesLibrary as any).AutocompleteService());
+      }
+      if ((placesLibrary as any).AutocompleteSessionToken) {
+        setSessionToken(new (placesLibrary as any).AutocompleteSessionToken());
+      }
+    } catch (e) {
+      // Safely catch Google Maps API initialization errors or key missing warnings
+    }
   }, [placesLibrary]);
 
   useEffect(() => {

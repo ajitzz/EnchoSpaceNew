@@ -27,23 +27,10 @@ export const getOptimizedUrl = (url: string, width?: number) => {
         }
     }
     
-    // Edge-Network Image Transformation (Vercel Edge CDN for production, wsrv.nl Cloudflare edge for local)
+    // Edge-Network Image Transformation using wsrv.nl Cloudflare Edge CDN (works on Cloud Run, Vercel, and local)
     if (url.startsWith('http') && !url.includes('images.unsplash.com')) {
         try {
-            const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-            
-            // Production: Vercel's built-in Edge Network Image Optimization (Native Next.js level AVIF/WebP)
-            if (!isLocal && typeof window !== 'undefined') {
-                // Determine optimal width based on provided width, fallback to standard responsive sizes
-                const targetWidth = width || 1080;
-                // Find the closest supported width from vercel.json sizes: [320, 640, 768, 1024, 1536, 2048]
-                const supportedSizes = [320, 640, 768, 1024, 1536, 2048];
-                const optimalWidth = supportedSizes.find(s => s >= targetWidth) || 2048;
-                
-                return `/_vercel/image?url=${encodeURIComponent(url)}&w=${optimalWidth}&q=75`;
-            }
-            
-            // Local Development: Use Cloudflare-backed wsrv.nl Edge proxy to simulate production CDN
+            // Use wsrv.nl Cloudflare-backed edge proxy for reliable WebP transformation & scaling
             const proxyUrl = new URL('https://wsrv.nl');
             proxyUrl.searchParams.set('url', url);
             proxyUrl.searchParams.set('output', 'webp');

@@ -34,23 +34,31 @@ const API_KEY =
   (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY ||
   '';
 
+const renderApp = (
+  <HelmetProvider>
+    <AuthProvider>
+      <CurrencyProvider>
+        <ToastProvider>
+          <App />
+          <SpeedInsights />
+        </ToastProvider>
+      </CurrencyProvider>
+    </AuthProvider>
+  </HelmetProvider>
+);
+
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <ErrorBoundary>
       <GoogleOAuthProvider clientId={clientId}>
-        <APIProvider apiKey={API_KEY} version="weekly">
-          <HelmetProvider>
-            <AuthProvider>
-              <CurrencyProvider>
-                <ToastProvider>
-                  <App />
-                  <SpeedInsights />
-                </ToastProvider>
-              </CurrencyProvider>
-            </AuthProvider>
-          </HelmetProvider>
-        </APIProvider>
+        {API_KEY ? (
+          <APIProvider apiKey={API_KEY} version="weekly">
+            {renderApp}
+          </APIProvider>
+        ) : (
+          renderApp
+        )}
       </GoogleOAuthProvider>
     </ErrorBoundary>
   </React.StrictMode>
