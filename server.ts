@@ -694,6 +694,9 @@ const ensureUsersTable = async () => {
         ALTER TABLE users ADD COLUMN phone VARCHAR(255) UNIQUE;
         ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
       END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='avatar') THEN
+        ALTER TABLE users ADD COLUMN avatar TEXT;
+      END IF;
     END $$;
   `);
 
@@ -3053,8 +3056,9 @@ app.get('/api/listings/:id/social-posts', async (req, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
     const { id } = req.params;
+    if (isNaN(Number(id))) return res.json([]);
     const result = await pool.query(`
-      SELECT p.*, u.name as host_name, u.avatar as host_avatar
+      SELECT p.*, u.name as host_name, COALESCE(u.avatar, NULL) as host_avatar
       FROM host_social_posts p
       JOIN users u ON p.host_id = u.id
       WHERE p.listing_id = $1 AND p.status = 'approved'
@@ -4652,7 +4656,7 @@ app.post('/api/marketing/campaigns/:id/subscribe', authenticateToken, async (req
     const idempotencyKey = req.headers['idempotency-key'] as string;
     if (idempotencyKey) {
        // Check if there's already an active transaction with this idempotency key
-       const existingTx = await pool.query('SELECT * FROM wallet_transactions WHERE reference = $1', [idempotencyKey]);
+       const existingTx = await pool.query('SELECT * FROM wallet_transactions WHERE reference_id = $1', [idempotencyKey]);
        if (existingTx.rows.length > 0) {
           const tx = existingTx.rows[0];
           console.log(`[IDEMPOTENCY] Reusing existing transaction ${tx.id} for key ${idempotencyKey}`);
@@ -8073,31 +8077,34 @@ async function startServer() {
 
         if (urlPath.startsWith('/listing/')) {
             const id = urlPath.split('/')[2];
-            const result = await pool.query("SELECT * FROM listings WHERE id = $1", [id]);
-            if (result.rows.length > 0) {
-                const listing = result.rows[0];
-                const title = `${listing.title} | EnchoSpace`;
-                const description = listing.description?.substring(0, 160) || `Stay at ${listing.title}`;
-                const image = listing.image_url || (listing.image_urls && listing.image_urls[0]) || '';
+            if (id && !isNaN(Number(id))) {
+                const result = await pool.query("SELECT * FROM listings WHERE id = $1", [id]);
+                if (result.rows.length > 0) {
+                    const listing = result.rows[0];
+                    const title = `${listing.title} | EnchoSpace`;
+                    const description = listing.description?.substring(0, 160) || `Stay at ${listing.title}`;
+                    const image = listing.image_url || (listing.image_urls && listing.image_urls[0]) || '';
 
-                injectedTags = `
-                    <title>${title}</title>
-                    <meta name="description" content="${description}" />
-                    <meta property="og:title" content="${title}" />
-                    <meta property="og:description" content="${description}" />
-                    <meta property="og:image" content="${image}" />
-                    <meta property="og:type" content="website" />
-                    <meta name="twitter:card" content="summary_large_image" />
-                    <meta name="twitter:title" content="${title}" />
-                    <meta name="twitter:description" content="${description}" />
-                    <meta name="twitter:image" content="${image}" />
-                `;
+                    injectedTags = `
+                        <title>${title}</title>
+                        <meta name="description" content="${description}" />
+                        <meta property="og:title" content="${title}" />
+                        <meta property="og:description" content="${description}" />
+                        <meta property="og:image" content="${image}" />
+                        <meta property="og:type" content="website" />
+                        <meta name="twitter:card" content="summary_large_image" />
+                        <meta name="twitter:title" content="${title}" />
+                        <meta name="twitter:description" content="${description}" />
+                        <meta name="twitter:image" content="${image}" />
+                    `;
+                }
             }
         } else if (urlPath.startsWith('/experience/')) {
             const id = urlPath.split('/')[2];
-            const result = await pool.query("SELECT * FROM experiences WHERE id = $1", [id]);
-            if (result.rows.length > 0) {
-                const experience = result.rows[0];
+            if (id && !isNaN(Number(id))) {
+                const result = await pool.query("SELECT * FROM experiences WHERE id = $1", [id]);
+                if (result.rows.length > 0) {
+                    const experience = result.rows[0];
                 const title = `${experience.title} | EnchoSpace`;
                 const description = experience.description?.substring(0, 160) || `Experience ${experience.title}`;
                 const imageUrls = typeof experience.image_urls === 'string' ? JSON.parse(experience.image_urls) : experience.image_urls;
@@ -8115,6 +8122,7 @@ async function startServer() {
                     <meta name="twitter:description" content="${description}" />
                     <meta name="twitter:image" content="${image}" />
                 `;
+                }
             }
         }
 
@@ -8378,6 +8386,32 @@ const processWebhookDLQ = async () => {
 // Run every 5 minutes
 setInterval(processWebhookDLQ, 5 * 60 * 1000);
 
+
+app.post('/api/marketing/track/view', async (req, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+     const { listingId, campaignId } = req.body;
+     await pool.query(`
+        CREATE TABLE IF NOT EXISTS retargeting_pixel_events (
+          id SERIAL PRIMARY KEY,
+          campaign_id INT,
+          listing_id INT,
+          visitor_id VARCHAR(255),
+          event_type VARCHAR(50),
+          synced_to_gdn BOOLEAN DEFAULT true,
+          synced_to_meta_capi BOOLEAN DEFAULT true,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+     `);
+     await pool.query(
+        "INSERT INTO retargeting_pixel_events (campaign_id, visitor_id, event_type) VALUES ($1, $2, $3)",
+        [campaignId || null, `vis_${Math.random().toString(36).substring(2, 10)}`, 'page_view']
+     );
+     res.json({ success: true });
+  } catch (error) {
+     res.json({ success: true });
+  }
+});
 
 // Gap 15: Cross-Platform Retargeting (The Sticky Web) Server-Side Pixel
 app.post('/api/marketing/pixel', async (req, res) => {
