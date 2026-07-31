@@ -1,6 +1,6 @@
 {
-  "name": "Nestpick Clone",
-  "description": "A rental property finder application replicating the Nestpick UI with real-time search results.",
+  "name": "Encho",
+  "description": "Enterprise Property Hosting Platform & Walled Garden Marketing Engine",
   "requestFramePermissions": [
     "geolocation"
   ],

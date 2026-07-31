@@ -3,7 +3,7 @@ import { SEO } from './SEO';
 import { AdminSEOTab } from './AdminSEOTab';
 import { Listing } from '../types';
 import { HomeIcon, ListIcon,  TrashIcon, EditIcon, CheckCircle2Icon, UserIcon, XIcon } from './Icons';
-import { Map, Compass, MoreHorizontal, Edit3, Megaphone, Link, CreditCard, TrendingUp, Send, RefreshCw, Plus, Phone, Mail, Users, Globe, Building, Check, Search, Sparkles, Loader2, Upload, Zap } from 'lucide-react';
+import { Map, Compass, MoreHorizontal, Edit3, Megaphone, Link, CreditCard, TrendingUp, Send, RefreshCw, Plus, Phone, Mail, Users, Globe, Building, Check, Search, Sparkles, Loader2, Upload, Zap, Shield, FileText } from 'lucide-react';
 import { useAuth, User } from './AuthContext';
 import AdminInbox from './AdminInbox';
 import { useCurrency } from './CurrencyContext';
@@ -77,9 +77,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   const [outreachLeads, setOutreachLeads] = useState<any[]>([]);
   const [outreachSearch, setOutreachSearch] = useState('');
   const [outreachFilter, setOutreachFilter] = useState<'all' | 'discovered' | 'contacted' | 'negotiating' | 'onboarded' | 'ignored'>('all');
-  const [marketingSubTab, setMarketingSubTab] = useState<'moderation' | 'linkage' | 'outreach' | 'organic_social'>('moderation');
+  const [marketingSubTab, setMarketingSubTab] = useState<'moderation' | 'linkage' | 'outreach' | 'organic_social' | 'audit_logs' | 'geo_router'>('moderation');
   const [adminSocialPosts, setAdminSocialPosts] = useState<any[]>([]);
   const [loadingAdminSocialPosts, setLoadingAdminSocialPosts] = useState(false);
+  const [adminAuditLogs, setAdminAuditLogs] = useState<any[]>([]);
+  const [loadingAdminAuditLogs, setLoadingAdminAuditLogs] = useState(false);
+  const [adminPaymentOverview, setAdminPaymentOverview] = useState<any>({ metrics: {}, campaigns: [], processed_payments: [] });
+  const [loadingAdminPaymentOverview, setLoadingAdminPaymentOverview] = useState(false);
   const [rejectingSocialPostId, setRejectingSocialPostId] = useState<number | null>(null);
   const [socialRejectionFeedback, setSocialRejectionFeedback] = useState('');
   const [isAddingOutreach, setIsAddingOutreach] = useState(false);
@@ -199,10 +203,29 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
          setOutreachLeads(data);
       }
       fetchAdminSocialPosts();
+      fetchAdminAuditLogs();
+      fetchAdminPaymentOverview();
     } catch (e) {
       console.error("Failed to fetch admin data", e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAdminAuditLogs = async () => {
+    setLoadingAdminAuditLogs(true);
+    try {
+      const res = await fetch('/api/admin/audit-logs', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAdminAuditLogs(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch admin audit logs:', err);
+    } finally {
+      setLoadingAdminAuditLogs(false);
     }
   };
 
@@ -220,6 +243,45 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
       console.error('Failed to fetch admin social posts:', err);
     } finally {
       setLoadingAdminSocialPosts(false);
+    }
+  };
+
+  const fetchAdminPaymentOverview = async () => {
+    setLoadingAdminPaymentOverview(true);
+    try {
+      const res = await fetch('/api/admin/payments/overview', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAdminPaymentOverview(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch admin payment overview:', err);
+    } finally {
+      setLoadingAdminPaymentOverview(false);
+    }
+  };
+
+  const handleReleaseEscrow = async (campaignId: number) => {
+    try {
+      const res = await fetch('/api/admin/payments/escrow/release', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ campaign_id: campaignId })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        addToast("Escrow Force-Released", data.message, "success");
+        fetchAdminPaymentOverview();
+      } else {
+        addToast("Escrow Release Error", data.error || "Failed to release escrow", "error");
+      }
+    } catch (err: any) {
+      addToast("Error", err.message || "Failed to release escrow", "error");
     }
   };
 
@@ -1487,6 +1549,33 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                           <Sparkles className="w-4 h-4 text-amber-500" />
                           Social Moderation ({adminSocialPosts.filter(p => p.status === 'pending_approval').length} Pending)
                        </button>
+                       <button
+                          type="button"
+                          onClick={() => setMarketingSubTab('audit_logs')}
+                          className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+                             marketingSubTab === 'audit_logs'
+                                ? 'border-emerald-600 text-emerald-700 font-bold'
+                                : 'border-transparent text-gray-500 hover:text-gray-900'
+                          }`}
+                       >
+                          <Shield className="w-4 h-4 text-emerald-600" />
+                          Immutable Audit Trail ({adminAuditLogs.length})
+                       </button>
+                       <button
+                          type="button"
+                          onClick={() => {
+                             setMarketingSubTab('geo_router');
+                             fetchAdminPaymentOverview();
+                          }}
+                          className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+                             marketingSubTab === 'geo_router'
+                                ? 'border-indigo-600 text-indigo-700 font-bold'
+                                : 'border-transparent text-gray-500 hover:text-gray-900'
+                          }`}
+                       >
+                          <CreditCard className="w-4 h-4 text-indigo-600" />
+                          Payment Geo-Router & Escrow ({adminPaymentOverview.metrics?.escrow_holding_count || 0} Holding)
+                       </button>
                     </div>
 
                     {/* Tab Content 1: Moderation Queue */}
@@ -2595,6 +2684,327 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                    </table>
                                 </div>
                              )}
+                          </div>
+                       </div>
+                    )}
+
+                    {/* Tab Content 5: Immutable Audit Trail */}
+                    {marketingSubTab === 'audit_logs' && (
+                       <div className="space-y-6 text-left w-full">
+                          {/* Top Banner */}
+                          <div className="bg-gradient-to-r from-zinc-900 via-zinc-800 to-emerald-950 p-6 rounded-3xl text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                             <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                   <Shield className="w-5 h-5 text-emerald-400" />
+                                   <h3 className="text-lg font-black tracking-tight">Immutable System Audit Trail</h3>
+                                   <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                      {adminAuditLogs.length} EVENTS LOGGED
+                                   </span>
+                                </div>
+                                <p className="text-xs text-zinc-300 max-w-2xl leading-relaxed">
+                                   Enterprise-grade immutable ledger tracking all moderator state changes, campaign approvals, AI gatekeeper scans, financial refunds, and system events with IP verification.
+                                </p>
+                             </div>
+                             <button
+                                type="button"
+                                onClick={fetchAdminAuditLogs}
+                                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-2 self-start md:self-auto border border-white/10 shadow-sm"
+                             >
+                                <RefreshCw className={`w-3.5 h-3.5 ${loadingAdminAuditLogs ? 'animate-spin' : ''}`} />
+                                Refresh Audit Ledger
+                             </button>
+                          </div>
+
+                          {/* Audit Logs Table Card */}
+                          <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden">
+                             {loadingAdminAuditLogs ? (
+                                <div className="p-20 flex justify-center items-center">
+                                   <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+                                </div>
+                             ) : adminAuditLogs.length === 0 ? (
+                                <div className="p-16 text-center text-gray-500">
+                                   <Shield className="w-12 h-12 text-zinc-200 mx-auto mb-3" />
+                                   <p className="text-sm font-medium">No audit log entries captured yet.</p>
+                                   <p className="text-xs text-gray-400 mt-1">Actions performed by admins or automated gatekeepers will appear here immediately.</p>
+                                </div>
+                             ) : (
+                                <div className="overflow-x-auto">
+                                   <table className="w-full text-left text-xs border-collapse">
+                                      <thead>
+                                         <tr className="bg-gray-50 border-b border-gray-150 text-gray-400 uppercase tracking-wider font-bold text-[10px]">
+                                            <th className="px-6 py-4">Event Timestamp</th>
+                                            <th className="px-6 py-4">Operator / Admin</th>
+                                            <th className="px-6 py-4">Action Taken</th>
+                                            <th className="px-6 py-4">Entity Reference</th>
+                                            <th className="px-6 py-4">State Transition</th>
+                                            <th className="px-6 py-4 text-right">Security IP</th>
+                                         </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-gray-100 font-sans">
+                                         {adminAuditLogs.map((log: any) => {
+                                            let actionBadgeColor = 'bg-gray-100 text-gray-700 border-gray-200';
+                                            if (log.action.includes('approve')) actionBadgeColor = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                                            else if (log.action.includes('reject')) actionBadgeColor = 'bg-rose-50 text-rose-700 border-rose-200';
+                                            else if (log.action.includes('ai_gatekeeper')) actionBadgeColor = 'bg-purple-50 text-purple-700 border-purple-200';
+                                            else if (log.action.includes('refund') || log.action.includes('wallet')) actionBadgeColor = 'bg-amber-50 text-amber-700 border-amber-200';
+
+                                            return (
+                                               <tr key={log.id} className="hover:bg-gray-50/80 transition-colors">
+                                                  <td className="px-6 py-4 whitespace-nowrap font-mono text-gray-500 text-[11px]">
+                                                     {new Date(log.created_at).toLocaleString()}
+                                                  </td>
+                                                  <td className="px-6 py-4">
+                                                     <div className="font-bold text-gray-900">{log.admin_name || 'System Auto Gatekeeper'}</div>
+                                                     <div className="text-[10px] text-gray-400 font-mono">{log.admin_email || 'automated@encho.io'}</div>
+                                                  </td>
+                                                  <td className="px-6 py-4">
+                                                     <span className={`px-2.5 py-1 rounded-md text-[10px] font-mono font-extrabold uppercase tracking-wider border ${actionBadgeColor}`}>
+                                                        {log.action}
+                                                     </span>
+                                                  </td>
+                                                  <td className="px-6 py-4">
+                                                     <div className="font-mono text-xs text-gray-800 font-semibold">{log.entity_type}</div>
+                                                     <div className="text-[10px] text-gray-400 font-mono">ID: #{log.entity_id}</div>
+                                                  </td>
+                                                  <td className="px-6 py-4 max-w-xs">
+                                                     <div className="flex items-center gap-1.5 text-[10px] font-mono">
+                                                        <span className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 truncate max-w-[100px]">
+                                                           {log.previous_state || 'N/A'}
+                                                        </span>
+                                                        <span className="text-gray-400">→</span>
+                                                        <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded font-bold truncate max-w-[120px]">
+                                                           {log.new_state || 'N/A'}
+                                                        </span>
+                                                     </div>
+                                                  </td>
+                                                  <td className="px-6 py-4 text-right font-mono text-[11px] text-gray-500">
+                                                     <span className="inline-flex items-center gap-1 bg-zinc-100 px-2 py-1 rounded-md border text-[10px]">
+                                                        <Shield className="w-3 h-3 text-zinc-400" />
+                                                        {log.ip_address || '127.0.0.1'}
+                                                     </span>
+                                                  </td>
+                                               </tr>
+                                            );
+                                         })}
+                                      </tbody>
+                                   </table>
+                                </div>
+                             )}
+                          </div>
+                       </div>
+                    )}
+
+                    {/* Tab Content 6: Payment Geo-Router & Fraud Escrow Ledger */}
+                    {marketingSubTab === 'geo_router' && (
+                       <div className="space-y-6 text-left w-full">
+                          {/* Banner */}
+                          <div className="bg-gradient-to-r from-indigo-950 via-slate-900 to-blue-950 p-6 rounded-3xl text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                             <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                   <CreditCard className="w-5 h-5 text-indigo-400" />
+                                   <h3 className="text-lg font-black tracking-tight">Payment Geo-Router & Fraud Escrow Control Center</h3>
+                                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                      HYBRID STRIPE + RAZORPAY ENGINE
+                                   </span>
+                                </div>
+                                <p className="text-xs text-indigo-200/80 max-w-2xl leading-relaxed">
+                                   Dynamic location-aware payment router routing Indian hosts to Razorpay (UPI/compliance) and International hosts to Stripe 3DS. Enforces 15% Encho SaaS fee retention, double-spend idempotency keys, trapped-cash internal wallet ledger, and 24-hour fraud escrow holding.
+                                </p>
+                             </div>
+                             <button
+                                type="button"
+                                onClick={fetchAdminPaymentOverview}
+                                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-2 self-start md:self-auto border border-white/10 shadow-sm"
+                             >
+                                <RefreshCw className={`w-3.5 h-3.5 ${loadingAdminPaymentOverview ? 'animate-spin' : ''}`} />
+                                Sync Payment Ledger
+                             </button>
+                          </div>
+
+                          {/* Core Metrics Cards */}
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                             <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+                                <span className="text-xs font-bold uppercase tracking-wider text-gray-400 block mb-1">Total Processed Volume</span>
+                                <span className="text-2xl font-black font-mono text-gray-900">
+                                   ${(adminPaymentOverview.metrics?.total_volume || 0).toLocaleString()}
+                                </span>
+                                <div className="mt-2 text-[10px] text-gray-400 font-mono">
+                                   {adminPaymentOverview.metrics?.total_transactions || 0} Total Idempotent Txns
+                                </div>
+                             </div>
+
+                             <div className="bg-white p-5 rounded-2xl border border-emerald-100 shadow-sm bg-gradient-to-br from-emerald-50/30 to-white">
+                                <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 block mb-1">Encho 15% SaaS Revenue</span>
+                                <span className="text-2xl font-black font-mono text-emerald-600">
+                                   ${(adminPaymentOverview.metrics?.total_optimization_fees || 0).toLocaleString()}
+                                </span>
+                                <div className="mt-2 text-[10px] text-emerald-600/80 font-mono">
+                                   Pillar 3 SaaS Optimization Fee
+                                </div>
+                             </div>
+
+                             <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-sm">
+                                <span className="text-xs font-bold uppercase tracking-wider text-blue-600 block mb-1">Net Ad Spend Allocated (85%)</span>
+                                <span className="text-2xl font-black font-mono text-blue-600">
+                                   ${(adminPaymentOverview.metrics?.total_ad_spend_pool || 0).toLocaleString()}
+                                </span>
+                                <div className="mt-2 text-[10px] text-blue-500 font-mono">
+                                   Meta & Google Ad Budget
+                                </div>
+                             </div>
+
+                             <div className="bg-white p-5 rounded-2xl border border-amber-100 shadow-sm bg-gradient-to-br from-amber-50/30 to-white">
+                                <span className="text-xs font-bold uppercase tracking-wider text-amber-600 block mb-1">24h Fraud Escrow Holding</span>
+                                <span className="text-2xl font-black font-mono text-amber-600">
+                                   {adminPaymentOverview.metrics?.escrow_holding_count || 0} Campaigns
+                                </span>
+                                <div className="mt-2 text-[10px] text-amber-600/80 font-mono">
+                                   Stripe Radar / 3DS Chargeback Shield
+                                </div>
+                             </div>
+                          </div>
+
+                          {/* Gateway Distribution Breakdown */}
+                          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                             <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">Geo-Router Gateway Volume Breakdown</h4>
+                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div className="p-4 rounded-xl border border-blue-100 bg-blue-50/30 flex items-center justify-between">
+                                   <div>
+                                      <span className="text-xs font-bold text-blue-900 block">Stripe 3D Secure (Global)</span>
+                                      <span className="text-lg font-mono font-bold text-blue-700">${(adminPaymentOverview.metrics?.stripe_volume || 0).toLocaleString()}</span>
+                                   </div>
+                                   <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-[10px] font-mono font-bold">USD</span>
+                                </div>
+
+                                <div className="p-4 rounded-xl border border-indigo-100 bg-indigo-50/30 flex items-center justify-between">
+                                   <div>
+                                      <span className="text-xs font-bold text-indigo-900 block">Razorpay Smart Router (India)</span>
+                                      <span className="text-lg font-mono font-bold text-indigo-700">₹{(adminPaymentOverview.metrics?.razorpay_volume || 0).toLocaleString()}</span>
+                                   </div>
+                                   <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded text-[10px] font-mono font-bold">INR / UPI</span>
+                                </div>
+
+                                <div className="p-4 rounded-xl border border-emerald-100 bg-emerald-50/30 flex items-center justify-between">
+                                   <div>
+                                      <span className="text-xs font-bold text-emerald-900 block">Internal Wallet (Trapped Cash)</span>
+                                      <span className="text-lg font-mono font-bold text-emerald-700">${(adminPaymentOverview.metrics?.wallet_volume || 0).toLocaleString()}</span>
+                                   </div>
+                                   <span className="px-2 py-1 bg-emerald-100 text-emerald-800 rounded text-[10px] font-mono font-bold">0% Gateway Fee</span>
+                                </div>
+                             </div>
+                          </div>
+
+                          {/* Escrow Campaigns Queue */}
+                          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+                             <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                                <div>
+                                   <h4 className="text-sm font-black text-gray-900">24-Hour Fraud Escrow Queue</h4>
+                                   <p className="text-xs text-gray-400">Campaigns held in 24h risk assessment delay to protect Encho Master Ad Account against chargebacks</p>
+                                </div>
+                             </div>
+                             {adminPaymentOverview.campaigns?.filter((c: any) => c.escrow_status === 'holding').length === 0 ? (
+                                <div className="p-8 text-center text-gray-400 text-xs">
+                                   No active campaigns currently in 24-hour escrow hold. All campaigns released.
+                                </div>
+                             ) : (
+                                <div className="overflow-x-auto">
+                                   <table className="w-full text-left border-collapse text-xs">
+                                      <thead>
+                                         <tr className="bg-gray-50 border-b border-gray-100 font-mono text-[10px] text-gray-400 uppercase">
+                                            <th className="px-6 py-3">Campaign</th>
+                                            <th className="px-6 py-3">Host / Gateway</th>
+                                            <th className="px-6 py-3">Gross Budget</th>
+                                            <th className="px-6 py-3">Encho 15% Fee</th>
+                                            <th className="px-6 py-3">Net Ad Pool</th>
+                                            <th className="px-6 py-3">Escrow Release Date</th>
+                                            <th className="px-6 py-3 text-right">Action</th>
+                                         </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-gray-100">
+                                         {adminPaymentOverview.campaigns?.filter((c: any) => c.escrow_status === 'holding').map((c: any) => (
+                                            <tr key={c.id} className="hover:bg-gray-50/50 transition-all">
+                                               <td className="px-6 py-4">
+                                                  <div className="font-bold text-gray-900">{c.title}</div>
+                                                  <div className="text-[10px] font-mono text-gray-400">ID: #{c.id} | Listing #{c.listing_id}</div>
+                                               </td>
+                                               <td className="px-6 py-4 font-mono">
+                                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-100 text-slate-700">
+                                                     {c.payment_gateway || 'stripe'}
+                                                  </span>
+                                               </td>
+                                               <td className="px-6 py-4 font-mono font-bold text-gray-900">
+                                                  ${Number(c.budget || 0).toFixed(2)}
+                                               </td>
+                                               <td className="px-6 py-4 font-mono text-emerald-600 font-bold">
+                                                  ${Number(c.optimization_fee || (c.budget * 0.15)).toFixed(2)}
+                                               </td>
+                                               <td className="px-6 py-4 font-mono text-blue-600 font-bold">
+                                                  ${Number(c.ad_spend_pool || (c.budget * 0.85)).toFixed(2)}
+                                               </td>
+                                               <td className="px-6 py-4 font-mono text-amber-600 font-bold text-[11px]">
+                                                  {c.escrow_release_at ? new Date(c.escrow_release_at).toLocaleString() : 'In 24 Hours'}
+                                               </td>
+                                               <td className="px-6 py-4 text-right">
+                                                  <button
+                                                     type="button"
+                                                     onClick={() => handleReleaseEscrow(c.id)}
+                                                     className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] shadow-sm transition-all flex items-center gap-1 ml-auto"
+                                                  >
+                                                     <Check className="w-3.5 h-3.5" />
+                                                     Force Release Escrow
+                                                  </button>
+                                               </td>
+                                            </tr>
+                                         ))}
+                                      </tbody>
+                                   </table>
+                                </div>
+                             )}
+                          </div>
+
+                          {/* Idempotent Transaction Audit Ledger */}
+                          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+                             <div className="p-6 border-b border-gray-100">
+                                <h4 className="text-sm font-black text-gray-900">Processed Payment Idempotency Ledger</h4>
+                                <p className="text-xs text-gray-400">Double-spend replay protection record with payment intent IDs and idempotency keys</p>
+                             </div>
+                             <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse text-xs">
+                                   <thead>
+                                      <tr className="bg-gray-50 border-b border-gray-100 font-mono text-[10px] text-gray-400 uppercase">
+                                         <th className="px-6 py-3">Txn ID / Gateway</th>
+                                         <th className="px-6 py-3">Idempotency Key</th>
+                                         <th className="px-6 py-3">Type / Reference</th>
+                                         <th className="px-6 py-3">Amount</th>
+                                         <th className="px-6 py-3 text-right">Date</th>
+                                      </tr>
+                                   </thead>
+                                   <tbody className="divide-y divide-gray-100">
+                                      {adminPaymentOverview.processed_payments?.map((tx: any) => (
+                                         <tr key={tx.id} className="hover:bg-gray-50/50 font-mono text-[11px]">
+                                            <td className="px-6 py-4">
+                                               <div className="font-bold text-gray-900">{tx.razorpay_payment_id || `tx_${tx.id}`}</div>
+                                               <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-gray-100 text-gray-600">
+                                                  {tx.payment_gateway || 'system'}
+                                               </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-gray-500 font-mono text-[10px] truncate max-w-[150px]">
+                                               {tx.idempotency_key}
+                                            </td>
+                                            <td className="px-6 py-4 text-gray-700">
+                                               <span className="font-semibold text-gray-900">{tx.type}</span> (Ref #{tx.reference_id})
+                                            </td>
+                                            <td className="px-6 py-4 font-bold text-emerald-600">
+                                               {tx.currency === 'INR' ? `₹${Number(tx.amount).toLocaleString()}` : `$${Number(tx.amount).toFixed(2)}`}
+                                            </td>
+                                            <td className="px-6 py-4 text-right text-gray-400 text-[10px]">
+                                               {new Date(tx.created_at).toLocaleString()}
+                                            </td>
+                                         </tr>
+                                      ))}
+                                   </tbody>
+                                </table>
+                             </div>
                           </div>
                        </div>
                     )}
