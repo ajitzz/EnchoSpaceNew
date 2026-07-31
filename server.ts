@@ -102,7 +102,7 @@ const dbUrl = envDbUrl;
 
 
 // Gap 3: The "Smart Auto-Pause" Circuit Breaker
-async function triggerSmartAutoPause(listingId, bookingId) {
+async function triggerSmartAutoPause(listingId: any, bookingId: any) {
   if (!isDbConfigured) return;
   try {
      const campaigns = await pool.query("SELECT id, host_id, budget, spent FROM host_marketing_campaigns WHERE listing_id = $1 AND status IN ('active', 'pending')", [listingId]);
@@ -122,12 +122,32 @@ async function triggerSmartAutoPause(listingId, bookingId) {
            }
            // Credit wallet
            await pool.query('UPDATE host_wallets SET balance = balance + $1 WHERE host_id = $2', [remainingBudget, c.host_id]);
-           // Record transaction
-           await pool.query(`INSERT INTO wallet_transactions (wallet_id, amount, type, status, description) VALUES ($1, $2, 'refund', 'completed', $3)`,
+           // Record transaction with explicit double-entry audit type
+           await pool.query(`INSERT INTO wallet_transactions (wallet_id, amount, type, status, description) VALUES ($1, $2, 'campaign_cancellation_refund', 'completed', $3)`,
               [walletRes.rows[0].id, remainingBudget, `Auto-pause refund for Campaign #${c.id}`]
            );
            // Zero out remaining budget on campaign
            await pool.query('UPDATE host_marketing_campaigns SET budget = spent WHERE id = $1', [c.id]);
+        }
+
+        // Dispatch real-time Socket notifications to host UI
+        try {
+          const io = app.get('io');
+          if (io) {
+            io.to(`user_${c.host_id}`).emit('notification', {
+              type: 'campaign_auto_paused',
+              title: '⚡ Campaign Auto-Paused',
+              message: 'Campaign Auto-Paused: Property 100% Occupied for Target Dates to Save Ad Budget',
+              campaignId: c.id
+            });
+            io.to(`user_${c.host_id}`).emit('campaign_auto_paused', {
+              campaignId: c.id,
+              message: 'Campaign Auto-Paused: Property 100% Occupied for Target Dates to Save Ad Budget'
+            });
+            io.to(`user_${c.host_id}`).emit('db_changed', { type: 'marketing' });
+          }
+        } catch (sockErr) {
+          console.error('[SOCKET AUTO-PAUSE ERROR]', sockErr);
         }
      }
   } catch(e) {
@@ -3686,6 +3706,50 @@ app.get('/api/marketing/campaigns/:id/leads', authenticateToken, async (req: Aut
 
     // Generate stable leads list matched with real-time reservations
     const leads = [];
+
+    // Fetch persistent database leads from host_outreach_leads
+    try {
+      const dbLeadsRes = await pool.query(`
+        SELECT * FROM host_outreach_leads 
+        WHERE campaign_id = $1 OR host_id = $2
+        ORDER BY created_at DESC LIMIT 20
+      `, [id, req.user?.id]);
+      
+      for (const row of dbLeadsRes.rows) {
+        let msgHist = [];
+        try {
+          msgHist = typeof row.message_history === 'string' ? JSON.parse(row.message_history) : (row.message_history || []);
+        } catch (e) {
+          msgHist = [];
+        }
+        
+        leads.push({
+          id: `db_lead_${row.id}`,
+          name: row.guest_name || row.owner_name || 'Simulated Hot Lead',
+          city: row.location || 'Metropolitan Metro Area',
+          phone: '[REDACTED]',
+          email: '[REDACTED]',
+          intent_score: row.status === 'Booked' ? '🏆 CONVERTED' : '🔥 HOT LEAD',
+          source: 'Meta / Google Ad Network',
+          status: row.status || 'New Lead',
+          last_active: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+          touchpoints: [
+            'Clicked Meta/Google Ad',
+            `Delivered to Walled Garden CRM for ${campaign.listing_title}`
+          ],
+          attribution_trail: [
+            'Clicked Ad',
+            'Data Masked via Walled Garden Engine'
+          ],
+          message_history: msgHist.length > 0 ? msgHist : [
+            { timestamp: new Date(row.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), sender: 'Guest', text: 'Hi! I saw your resort ad on Instagram. Is it available next weekend?' }
+          ]
+        });
+      }
+    } catch (dbErr) {
+      console.warn('Failed to fetch persistent db leads:', dbErr);
+    }
+
     const numLeads = Math.max(3, (seed % 4) + 4); // 4 to 7 leads
     
     for (let i = 0; i < numLeads; i++) {
@@ -5162,7 +5226,7 @@ app.post('/api/admin/marketing/campaigns/:id/reject', authenticateToken, async (
     const { id } = req.params;
     const { feedback, rejected_fields } = req.body;
 
-    const prevCheck = await pool.query('SELECT status, admin_approved FROM host_marketing_campaigns WHERE id = $1', [id]);
+    const prevCheck = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [id]);
     const prevState = prevCheck.rows[0];
 
     await pool.query(`
@@ -5171,6 +5235,27 @@ app.post('/api/admin/marketing/campaigns/:id/reject', authenticateToken, async (
       WHERE id = $3
     `, [feedback || 'Ad does not meet media guidelines.', JSON.stringify(rejected_fields || {}), id]);
 
+    // Double-entry audit refund if campaign was already paid
+    if (prevState && (prevState.payment_status === 'paid' || prevState.status === 'active') && prevState.budget) {
+      const remainingBudget = Math.max(0, parseFloat(prevState.budget || 0) - parseFloat(prevState.spent || 0));
+      if (remainingBudget > 0) {
+        let walletRes = await pool.query('SELECT id FROM host_wallets WHERE host_id = $1', [prevState.host_id]);
+        if (walletRes.rows.length === 0) {
+          walletRes = await pool.query('INSERT INTO host_wallets (host_id, balance, encho_credits) VALUES ($1, 0, 0) RETURNING id', [prevState.host_id]);
+        }
+        const walletId = walletRes.rows[0].id;
+
+        await pool.query('UPDATE host_wallets SET balance = balance + $1 WHERE id = $2', [remainingBudget, walletId]);
+
+        await pool.query(`
+          INSERT INTO wallet_transactions (wallet_id, amount, type, reference_id, status, description)
+          VALUES ($1, $2, 'campaign_cancellation_refund', $3, 'completed', $4)
+        `, [walletId, remainingBudget, `campaign_reject_${id}`, `Double-entry audit refund for rejected campaign #${id}`]);
+
+        await pool.query("UPDATE host_marketing_campaigns SET payment_status = 'refunded' WHERE id = $1", [id]);
+      }
+    }
+
     // Gap 14: Immutable Admin Audit Trail
     await pool.query(`
       INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
@@ -5178,10 +5263,65 @@ app.post('/api/admin/marketing/campaigns/:id/reject', authenticateToken, async (
     `, [req.user.id, 'marketing_campaign', id, 'reject_campaign', JSON.stringify(prevState), JSON.stringify({status: 'rejected', admin_feedback: feedback}), req.ip || req.socket.remoteAddress]);
 
     broadcastDbEvent(req, 'marketing');
-    res.json({ success: true, message: 'Campaign rejected.' });
+    res.json({ success: true, message: 'Campaign rejected and unused budget refunded to host wallet.' });
   } catch (error) {
     console.error('Error rejecting campaign:', error);
     res.status(500).json({ error: 'Failed to reject campaign' });
+  }
+});
+
+app.post('/api/marketing/campaigns/:id/cancel', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const campaignRes = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [id]);
+    if (campaignRes.rows.length === 0) return res.status(404).json({ error: 'Campaign not found' });
+    const campaign = campaignRes.rows[0];
+
+    // Auth check: Host owner or admin
+    if (req.user?.role !== 'admin' && String(campaign.host_id) !== String(req.user?.id)) {
+      return res.status(403).json({ error: 'Unauthorized to cancel this campaign' });
+    }
+
+    const prevState = { ...campaign };
+    const remainingBudget = Math.max(0, parseFloat(campaign.budget || 0) - parseFloat(campaign.spent || 0));
+
+    await pool.query(`
+      UPDATE host_marketing_campaigns
+      SET status = 'cancelled', admin_feedback = 'Cancelled by user.'
+      WHERE id = $1
+    `, [id]);
+
+    if ((campaign.payment_status === 'paid' || campaign.status === 'active') && remainingBudget > 0) {
+      let walletRes = await pool.query('SELECT id FROM host_wallets WHERE host_id = $1', [campaign.host_id]);
+      if (walletRes.rows.length === 0) {
+        walletRes = await pool.query('INSERT INTO host_wallets (host_id, balance, encho_credits) VALUES ($1, 0, 0) RETURNING id', [campaign.host_id]);
+      }
+      const walletId = walletRes.rows[0].id;
+
+      await pool.query('UPDATE host_wallets SET balance = balance + $1 WHERE id = $2', [remainingBudget, walletId]);
+
+      // Double-entry transaction
+      await pool.query(`
+        INSERT INTO wallet_transactions (wallet_id, amount, type, reference_id, status, description)
+        VALUES ($1, $2, 'campaign_cancellation_refund', $3, 'completed', $4)
+      `, [walletId, remainingBudget, `campaign_cancel_${id}`, `Double-entry audit refund for cancelled campaign #${id}`]);
+
+      await pool.query("UPDATE host_marketing_campaigns SET payment_status = 'refunded' WHERE id = $1", [id]);
+    }
+
+    if (req.user?.role === 'admin') {
+      await pool.query(`
+        INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `, [req.user.id, 'marketing_campaign', id, 'cancel_campaign', JSON.stringify(prevState), JSON.stringify({status: 'cancelled'}), req.ip || req.socket.remoteAddress]);
+    }
+
+    broadcastDbEvent(req, 'marketing');
+    res.json({ success: true, message: 'Campaign cancelled successfully and unused budget refunded to wallet.' });
+  } catch (error) {
+    console.error('Error cancelling campaign:', error);
+    res.status(500).json({ error: 'Failed to cancel campaign' });
   }
 });
 

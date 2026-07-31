@@ -127,6 +127,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   const [campaignLeads, setCampaignLeads] = useState<any>(null);
   const [loadingLeads, setLoadingLeads] = useState(false);
   const [analyticsActiveTab, setAnalyticsActiveTab] = useState<'analytics' | 'crm'>('analytics');
+  const [crmLeadFilter, setCrmLeadFilter] = useState<'all' | 'hot' | 'converted'>('all');
   const [sendingLeadId, setSendingLeadId] = useState<string | null>(null);
   const [leadMessageDrafts, setLeadMessageDrafts] = useState<Record<string, string>>({});
   const [activeLeadTabs, setActiveLeadTabs] = useState<Record<string, 'chat' | 'booking'>>({});
@@ -535,6 +536,20 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         console.log('[SOCKET UPDATE] Marketing campaign updated, syncing...');
         fetchCampaigns();
       }
+    });
+
+    socket.on('notification', (data: any) => {
+      if (data.type === 'campaign_auto_paused') {
+        addToast('⚡ Campaign Auto-Paused', data.message || 'Campaign Auto-Paused: Property 100% Occupied for Target Dates to Save Ad Budget', 'warning');
+        fetchCampaigns();
+      } else if (data.type === 'new_lead') {
+        addToast('🔥 Hot Lead Alert', data.message || 'New Hot Lead delivered securely to Walled Garden CRM.', 'info');
+      }
+    });
+
+    socket.on('campaign_auto_paused', (data: any) => {
+      addToast('⚡ Campaign Auto-Paused', data.message || 'Campaign Auto-Paused: Property 100% Occupied for Target Dates to Save Ad Budget', 'warning');
+      fetchCampaigns();
     });
 
     // Quiet, low-frequency polling fallback to handle potential disconnections gracefully
@@ -2185,11 +2200,44 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
                         {/* Leads Feed List Section */}
                         <div className="space-y-3">
-                          <div className="flex justify-between items-center">
+                          <div className="flex flex-wrap justify-between items-center gap-2">
                             <span className="text-[10px] font-black uppercase text-zinc-400 tracking-wider">
                               Live Enquiry CRM Board
                             </span>
-                            <span className="text-[9px] text-zinc-500 font-light">Direct communications bridge connected</span>
+                            
+                            {/* CRM Category Filter Pills */}
+                            <div className="flex items-center gap-1.5 bg-zinc-100 p-1 rounded-xl border border-zinc-200">
+                              <button
+                                onClick={() => setCrmLeadFilter('all')}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                                  crmLeadFilter === 'all'
+                                    ? 'bg-white text-zinc-900 shadow-sm border border-zinc-200/60'
+                                    : 'text-zinc-500 hover:text-zinc-800'
+                                }`}
+                              >
+                                All Leads ({campaignLeads?.leads?.length || 0})
+                              </button>
+                              <button
+                                onClick={() => setCrmLeadFilter('hot')}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                                  crmLeadFilter === 'hot'
+                                    ? 'bg-orange-500 text-white shadow-sm'
+                                    : 'text-zinc-500 hover:text-orange-600'
+                                }`}
+                              >
+                                🔥 Hot Leads ({campaignLeads?.leads?.filter((l: any) => l.intent_score?.includes('HOT') || l.status === 'New Lead').length || 0})
+                              </button>
+                              <button
+                                onClick={() => setCrmLeadFilter('converted')}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                                  crmLeadFilter === 'converted'
+                                    ? 'bg-emerald-600 text-white shadow-sm'
+                                    : 'text-zinc-500 hover:text-emerald-700'
+                                }`}
+                              >
+                                🏆 Converted ({campaignLeads?.leads?.filter((l: any) => l.status === 'Booked' || l.intent_score?.includes('CONVERTED') || l.status === 'Contacted').length || 0})
+                              </button>
+                            </div>
                           </div>
 
                           {loadingLeads ? (
@@ -2199,7 +2247,17 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                             </div>
                           ) : campaignLeads?.leads && campaignLeads.leads.length > 0 ? (
                             <div className="space-y-3.5">
-                              {campaignLeads.leads.map((lead: any) => (
+                              {campaignLeads.leads
+                                .filter((lead: any) => {
+                                  if (crmLeadFilter === 'hot') {
+                                    return lead.intent_score?.includes('HOT') || lead.status === 'New Lead';
+                                  }
+                                  if (crmLeadFilter === 'converted') {
+                                    return lead.status === 'Booked' || lead.intent_score?.includes('CONVERTED') || lead.status === 'Contacted';
+                                  }
+                                  return true;
+                                })
+                                .map((lead: any) => (
                                 <div key={lead.id} className="bg-white border border-zinc-200 hover:border-zinc-300 rounded-2xl p-4 space-y-3.5 transition-all">
                                   {/* Lead Header */}
                                   <div className="flex items-start justify-between">
@@ -5149,24 +5207,62 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                  </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 mb-6">
+               {/* Geo-Router Smart Detection Badge */}
+               {geoRouteInfo && (
+                 <div className="mb-4 bg-slate-900 text-white p-3 rounded-2xl flex items-center justify-between text-xs shadow-sm">
+                   <div className="flex items-center gap-2">
+                     <span className="text-base">📍</span>
+                     <div>
+                       <span className="font-bold block text-[11px] leading-tight text-slate-100">
+                         Geo-Detected Location: {geoRouteInfo.country_name || geoRouteInfo.country}
+                       </span>
+                       <span className="text-[10px] text-slate-400 font-mono">
+                         Smart Router Selected: <strong className="text-emerald-400">{geoRouteInfo.recommended_gateway?.toUpperCase()} ({geoRouteInfo.currency})</strong>
+                       </span>
+                     </div>
+                   </div>
+                   <span className="px-2 py-0.5 rounded-full text-[9px] font-bold font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                     AUTO-ROUTED
+                   </span>
+                 </div>
+               )}
+
+               <div className="grid grid-cols-2 gap-3 mb-6">
                   <button
                     type="button"
                     onClick={() => handleRefuel('stripe')}
-                    className="flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all border-blue-600 bg-blue-50/40 text-blue-700 ring-2 ring-blue-600/10 font-bold hover:bg-blue-100"
+                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all relative ${
+                      geoRouteInfo?.recommended_gateway === 'stripe'
+                        ? 'border-blue-600 bg-blue-50/60 text-blue-700 ring-2 ring-blue-600/20 font-bold shadow-sm'
+                        : 'border-blue-200 bg-blue-50/20 text-blue-600 hover:bg-blue-50'
+                    }`}
                   >
-                    <span className="text-sm font-black font-sans">Stripe</span>
-                    <span className="text-[9px] opacity-75 mt-0.5">International</span>
+                    {geoRouteInfo?.recommended_gateway === 'stripe' && (
+                      <span className="absolute -top-2 bg-blue-600 text-white text-[8px] font-bold px-1.5 py-0.2 rounded-full uppercase tracking-wider shadow-xs">
+                        ⭐ Geo-Recommended
+                      </span>
+                    )}
+                    <span className="text-sm font-black font-sans">Stripe 3DS</span>
+                    <span className="text-[9px] opacity-75 mt-0.5">International / Cards</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => handleRefuel('razorpay')}
-                    className="flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all border-indigo-600 bg-indigo-50/40 text-indigo-700 ring-2 ring-indigo-600/10 font-bold hover:bg-indigo-100"
+                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all relative ${
+                      geoRouteInfo?.recommended_gateway === 'razorpay'
+                        ? 'border-indigo-600 bg-indigo-50/60 text-indigo-700 ring-2 ring-indigo-600/20 font-bold shadow-sm'
+                        : 'border-indigo-200 bg-indigo-50/20 text-indigo-600 hover:bg-indigo-50'
+                    }`}
                   >
+                    {geoRouteInfo?.recommended_gateway === 'razorpay' && (
+                      <span className="absolute -top-2 bg-indigo-600 text-white text-[8px] font-bold px-1.5 py-0.2 rounded-full uppercase tracking-wider shadow-xs">
+                        ⭐ Geo-Recommended
+                      </span>
+                    )}
                     <span className="text-sm font-black font-sans">Razorpay</span>
                     <span className="text-[9px] opacity-75 mt-0.5">India / UPI</span>
                   </button>
-              </div>
+               </div>
               
               <p className="text-center text-[10px] text-gray-400 font-light mt-4">
                 Payments are securely processed and protected against double-spending.
