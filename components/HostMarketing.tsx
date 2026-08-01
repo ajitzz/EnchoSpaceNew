@@ -544,11 +544,19 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         fetchCampaigns();
       } else if (data.type === 'new_lead') {
         addToast('🔥 Hot Lead Alert', data.message || 'New Hot Lead delivered securely to Walled Garden CRM.', 'info');
+      } else if (data.type === 'dynamic_price_sync') {
+        addToast('⚡ Dynamic Price Synced', data.message || 'Meta Ad Creative auto-updated with new rate to prevent bounce rates!', 'info');
+        fetchCampaigns();
       }
     });
 
     socket.on('campaign_auto_paused', (data: any) => {
       addToast('⚡ Campaign Auto-Paused', data.message || 'Campaign Auto-Paused: Property 100% Occupied for Target Dates to Save Ad Budget', 'warning');
+      fetchCampaigns();
+    });
+
+    socket.on('dynamic_price_sync', (data: any) => {
+      addToast('⚡ Dynamic Price Synced', data.message || 'Meta Ad Creative auto-updated with new rate to prevent bounce rates!', 'info');
       fetchCampaigns();
     });
 

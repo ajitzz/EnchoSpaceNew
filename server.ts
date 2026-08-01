@@ -48,6 +48,12 @@ import xss from 'xss';
 import compression from 'compression';
 import { idempotencyMiddleware } from './src/lib/idempotency.js';
 import { encryptPII, decryptPII } from './src/lib/cryptoUtils.js';
+import {
+  printStartupIntegrationReport,
+  checkIntegrationKeys,
+  integrationInspectionMiddleware,
+  runFullIntegrationAudit
+} from './src/lib/integrationInspector.js';
 
 dotenv.config({ override: true });
 
@@ -447,10 +453,22 @@ app.use(helmet({
 }));
 
 // HTTP Request Logging
-// app.use(pinoHttp({ logger })); // Replaced with morgan as per JS version
 app.use(morgan('combined', {
   skip: (req) => req.path === '/api/health' || req.path.startsWith('/assets/')
 }));
+
+// Real-time Integration Inspection Monitoring Middleware
+app.use(integrationInspectionMiddleware);
+
+// Admin API to fetch full integration audit report anytime
+app.get('/api/admin/integration-inspection', (req: Request, res: Response) => {
+  const auditReport = runFullIntegrationAudit();
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    auditReport
+  });
+});
 
 // Global Rate Limiting
 // Strict limiters for Auth
@@ -1327,6 +1345,39 @@ const ensureMarketingSchema = async () => {
       reference_id VARCHAR(255),
       status VARCHAR(50) DEFAULT 'completed',
       description TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // Blueprint Section 3: Double-Entry Ledger Chart of Accounts & Journal
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS wallet_accounts (
+      id SERIAL PRIMARY KEY,
+      user_id INT REFERENCES users(id) ON DELETE CASCADE,
+      account_type VARCHAR(50) NOT NULL,
+      currency VARCHAR(10) DEFAULT 'INR',
+      balance NUMERIC(15, 2) DEFAULT 0.00,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ledger_entries (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      transaction_ref VARCHAR(255) UNIQUE NOT NULL,
+      event_type VARCHAR(100) NOT NULL,
+      description TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ledger_lines (
+      id SERIAL PRIMARY KEY,
+      entry_id UUID REFERENCES ledger_entries(id) ON DELETE CASCADE,
+      account_id INT REFERENCES wallet_accounts(id) ON DELETE CASCADE,
+      entry_type VARCHAR(10) NOT NULL,
+      amount NUMERIC(15, 2) NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
@@ -2364,8 +2415,21 @@ app.put('/api/listings/:id', authenticateToken, async (req: AuthRequest, res) =>
           [req.params.id]
        );
        if (activeCampaigns.rows.length > 0) {
+          const io = app.get('io');
           for (const camp of activeCampaigns.rows) {
              console.log(`[DYNAMIC PRICING SYNC] Fired instant webhook to Meta API. Campaign #${camp.id} updated with new pricing/data to prevent bounce rates.`);
+             if (io && req.user?.id) {
+               io.to(`user_${req.user.id}`).emit('notification', {
+                 type: 'dynamic_price_sync',
+                 title: '⚡ Dynamic Price Synced',
+                 message: `Meta Ad Creative auto-updated with new rate ($${price || 'updated'}) to prevent bounce rates!`,
+                 campaignId: camp.id
+               });
+               io.to(`user_${req.user.id}`).emit('dynamic_price_sync', {
+                 campaignId: camp.id,
+                 message: `Meta Ad Creative auto-updated with new rate ($${price || 'updated'}) to prevent bounce rates!`
+               });
+             }
           }
        }
     }
@@ -5307,6 +5371,17 @@ app.post('/api/marketing/campaigns/:id/cancel', authenticateToken, async (req: A
         VALUES ($1, $2, 'campaign_cancellation_refund', $3, 'completed', $4)
       `, [walletId, remainingBudget, `campaign_cancel_${id}`, `Double-entry audit refund for cancelled campaign #${id}`]);
 
+      await recordLedgerTransaction(pool, {
+        txRef: `campaign_cancel_${id}_${Date.now()}`,
+        eventType: 'CAMPAIGN_CANCELLATION_REFUND',
+        description: `Double-entry audit refund for cancelled campaign #${id}`,
+        lines: [
+          { accountType: 'META_AD_ESCROW', entryType: 'DEBIT', amount: remainingBudget * 0.85 },
+          { accountType: 'ENCHO_REVENUE', entryType: 'DEBIT', amount: remainingBudget * 0.15 },
+          { accountType: 'HOST_WALLET', userId: campaign.host_id, entryType: 'CREDIT', amount: remainingBudget }
+        ]
+      });
+
       await pool.query("UPDATE host_marketing_campaigns SET payment_status = 'refunded' WHERE id = $1", [id]);
     }
 
@@ -8115,6 +8190,98 @@ app.post('/api/create-payment-intent', authenticateToken, async (req: AuthReques
 
 // ==========================================
 
+// Helper: Record Double-Entry Journal Lines (Blueprint Section 3)
+async function recordLedgerTransaction(executor: any, {
+  txRef,
+  eventType,
+  description,
+  lines
+}: {
+  txRef: string;
+  eventType: string;
+  description: string;
+  lines: Array<{ accountType: string; userId?: number; entryType: 'DEBIT' | 'CREDIT'; amount: number }>;
+}) {
+  try {
+    const entryRes = await executor.query(`
+      INSERT INTO ledger_entries (transaction_ref, event_type, description)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (transaction_ref) DO UPDATE SET description = EXCLUDED.description
+      RETURNING id
+    `, [txRef, eventType, description]);
+    
+    if (!entryRes.rows.length) return;
+    const entryId = entryRes.rows[0].id;
+
+    for (const line of lines) {
+      if (!line.amount || line.amount <= 0) continue;
+      let accountRes;
+      if (line.userId) {
+        accountRes = await executor.query(
+          `SELECT id FROM wallet_accounts WHERE user_id = $1 AND account_type = $2`,
+          [line.userId, line.accountType]
+        );
+        if (accountRes.rows.length === 0) {
+          accountRes = await executor.query(
+            `INSERT INTO wallet_accounts (user_id, account_type, balance) VALUES ($1, $2, 0) RETURNING id`,
+            [line.userId, line.accountType]
+          );
+        }
+      } else {
+        accountRes = await executor.query(
+          `SELECT id FROM wallet_accounts WHERE user_id IS NULL AND account_type = $1`,
+          [line.accountType]
+        );
+        if (accountRes.rows.length === 0) {
+          accountRes = await executor.query(
+            `INSERT INTO wallet_accounts (account_type, balance) VALUES ($1, 0) RETURNING id`,
+            [line.accountType]
+          );
+        }
+      }
+      const accountId = accountRes.rows[0].id;
+
+      const delta = line.entryType === 'CREDIT' ? line.amount : -line.amount;
+      await executor.query(`UPDATE wallet_accounts SET balance = balance + $1 WHERE id = $2`, [delta, accountId]);
+
+      await executor.query(`
+        INSERT INTO ledger_lines (entry_id, account_id, entry_type, amount)
+        VALUES ($1, $2, $3, $4)
+      `, [entryId, accountId, line.entryType, line.amount]);
+    }
+  } catch (err) {
+    console.error('[DOUBLE-ENTRY LEDGER ERROR]', err);
+  }
+}
+
+app.get('/api/marketing/ledger', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const hostId = req.user?.id;
+    if (!hostId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const entriesRes = await pool.query(`
+      SELECT e.*, 
+        json_agg(json_build_object('id', l.id, 'account_id', l.account_id, 'account_type', a.account_type, 'entry_type', l.entry_type, 'amount', l.amount)) as lines
+      FROM ledger_entries e
+      JOIN ledger_lines l ON e.id = l.entry_id
+      JOIN wallet_accounts a ON l.account_id = a.id
+      WHERE a.user_id = $1 OR a.user_id IS NULL
+      GROUP BY e.id
+      ORDER BY e.created_at DESC
+      LIMIT 100
+    `, [hostId]);
+
+    const accountsRes = await pool.query(`
+      SELECT * FROM wallet_accounts WHERE user_id = $1 OR user_id IS NULL
+    `, [hostId]);
+
+    res.json({ entries: entriesRes.rows, accounts: accountsRes.rows });
+  } catch (error) {
+    console.error('[LEDGER API] Error:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 app.get('/api/marketing/wallet', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const hostId = req.user?.id;
@@ -8226,6 +8393,16 @@ app.post('/api/marketing/wallet/refuel', authenticateToken, async (req: AuthRequ
          if (txCheck.rows.length > 0) {
            await client.query('UPDATE wallet_transactions SET status = $1 WHERE id = $2', ['completed', txId]);
            await client.query('UPDATE host_wallets SET balance = balance + $1 WHERE id = $2', [netAmount, walletId]);
+           await recordLedgerTransaction(client, {
+             txRef: idempotencyKey,
+             eventType: 'WALLET_REFUEL',
+             description: `Wallet Refuel via ${selectedGateway}`,
+             lines: [
+               { accountType: selectedGateway === 'stripe' ? 'STRIPE_CLEARING' : 'RAZORPAY_CLEARING', entryType: 'DEBIT', amount: Number(amount) },
+               { accountType: 'HOST_WALLET', userId: hostId, entryType: 'CREDIT', amount: netAmount },
+               { accountType: 'ENCHO_REVENUE', entryType: 'CREDIT', amount: Number(optimizationFee) }
+             ]
+           });
          }
          await client.query('COMMIT');
        } catch (err) {
@@ -8759,6 +8936,17 @@ app.post('/api/payments/geo-route/initiate', async (req: Request, res: Response)
           [`wtx_${txInsert.rows[0].id}`, `worder_${Date.now()}`, idempotencyKey, 'campaign_funding', String(campaign_id || ''), 'internal_wallet', grossAmount, 'USD']
         );
 
+        await recordLedgerTransaction(client, {
+          txRef: `campaign_fund_${campaign_id || Date.now()}_${Date.now()}`,
+          eventType: 'AD_BUDGET_DISPATCH',
+          description: `Campaign funding via internal wallet ($${netAdSpend} ad spend + $${optFee} 15% Encho fee)`,
+          lines: [
+            { accountType: 'HOST_WALLET', userId: hostId, entryType: 'DEBIT', amount: grossAmount },
+            { accountType: 'ENCHO_REVENUE', entryType: 'CREDIT', amount: optFee },
+            { accountType: 'META_AD_ESCROW', entryType: 'CREDIT', amount: netAdSpend }
+          ]
+        });
+
         await client.query('COMMIT');
         await logAdminAudit(hostId, 'campaign_payment', campaign_id || 0, 'internal_wallet_payment', {}, { grossAmount, optFee, netAdSpend, gateway: 'internal_wallet' });
         broadcastDbEvent(req, 'marketing');
@@ -9193,6 +9381,9 @@ async function startServer() {
 
   if (!process.env.VITEST && !process.env.VERCEL) httpServer.listen(PORT, '0.0.0.0', async () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    
+    // Print comprehensive Integration Inspection & Monitoring startup audit
+    printStartupIntegrationReport();
 
     // Auto-init DB schema
     if (isDbConfigured) {
