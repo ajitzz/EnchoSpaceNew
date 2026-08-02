@@ -336,10 +336,12 @@ const walletRefuelSchema = z.object({
 });
 
 const socialPostSchema = z.object({
-  listing_id: z.number().int().positive(),
+  listing_id: z.number().int().positive().optional().nullable(),
   media_type: z.enum(['post', 'reel', 'story', 'carousel']),
-  media_urls: z.array(z.string()),
+  media_urls: z.array(z.string()).min(1, 'At least one media item is required'),
+  hero_index: z.number().int().min(0).optional().default(0),
   caption: z.string().min(5),
+  hashtags: z.array(z.string()).optional().default([]),
   scheduled_at: z.string().optional().nullable(),
 });
 
@@ -1452,7 +1454,9 @@ const ensureMarketingSchema = async () => {
       listing_id INT REFERENCES listings(id) ON DELETE CASCADE,
       media_type VARCHAR(50) DEFAULT 'post', -- 'post', 'reel', 'story', 'carousel'
       media_urls JSONB DEFAULT '[]'::jsonb,
+      hero_index INT DEFAULT 0,
       caption TEXT,
+      hashtags JSONB DEFAULT '[]'::jsonb,
       status VARCHAR(50) DEFAULT 'draft', -- 'draft', 'pending_approval', 'approved', 'rejected'
       admin_feedback TEXT,
       scheduled_at TIMESTAMP,
@@ -1466,6 +1470,8 @@ const ensureMarketingSchema = async () => {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
+  await pool.query(`ALTER TABLE host_social_posts ADD COLUMN IF NOT EXISTS hero_index INT DEFAULT 0;`);
+  await pool.query(`ALTER TABLE host_social_posts ADD COLUMN IF NOT EXISTS hashtags JSONB DEFAULT '[]'::jsonb;`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_social_posts_host_id ON host_social_posts(host_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_social_posts_listing_id ON host_social_posts(listing_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_social_posts_status ON host_social_posts(status);`);
@@ -2881,7 +2887,7 @@ app.get('/api/host/social-posts', authenticateToken, async (req: AuthRequest, re
     const result = await pool.query(`
       SELECT p.*, l.title as listing_title, l.image_url as listing_image
       FROM host_social_posts p
-      JOIN listings l ON p.listing_id = l.id
+      LEFT JOIN listings l ON p.listing_id = l.id
       WHERE p.host_id = $1
       ORDER BY p.created_at DESC
     `, [req.user?.id]);
@@ -2896,38 +2902,50 @@ app.get('/api/host/social-posts', authenticateToken, async (req: AuthRequest, re
 app.post('/api/host/social-posts/generate-caption', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
-    const { listing_id, media_type, tone = 'luxurious' } = req.body;
-    
-    const listingCheck = await pool.query('SELECT title, description, city, price FROM listings WHERE id = $1 AND user_id = $2', [listing_id, req.user?.id]);
-    if (listingCheck.rows.length === 0) return res.status(404).json({ error: 'Listing not found' });
-    const l = listingCheck.rows[0];
+    const { listing_id, resort_name, media_type = 'reel', tone = 'luxurious' } = req.body;
+    let title = resort_name || 'Encho Luxury Resort';
+    let location = 'Exotic Sanctuary';
+
+    if (listing_id) {
+      const listingCheck = await pool.query('SELECT title, description, city, price FROM listings WHERE id = $1 AND user_id = $2', [listing_id, req.user?.id]);
+      if (listingCheck.rows.length > 0) {
+        title = listingCheck.rows[0].title;
+        location = listingCheck.rows[0].city || location;
+      }
+    }
 
     const prompt = `
-      You are the elite social media manager for @enchospace, a luxury property platform.
-      Write a captivating ${media_type} caption for this property:
-      Title: ${l.title}
-      Location: ${l.city}
-      Vibe: ${tone}
+      You are the elite social media growth manager for @enchospace, a luxury property & resort platform.
+      Write a highly engaging, viral ${media_type} caption for this property:
+      Title: ${title}
+      Location: ${location}
+      Tone/Vibe: ${tone}
       
-      Generate exactly 3 variations of captions, ending each with 5-7 highly optimized Instagram/TikTok hashtags.
-      Return the output as a clean JSON array of strings. 
-      Do NOT include markdown formatting like \`\`\`json. Just the array.
-      Example: ["Caption 1 #tag1", "Caption 2 #tag2", "Caption 3 #tag3"]
+      Requirements:
+      1. Provide a main caption with a strong hook, key luxury highlights, and clear Call-to-Action to book on Encho space.
+      2. Provide 10-15 high-performing Instagram & TikTok hashtags.
+      
+      Return as JSON with structure:
+      {
+        "caption": "Your compelling caption text here...",
+        "hashtags": ["#EnchoSpace", "#LuxuryResort", "#TravelVibes"]
+      }
+      Do NOT include markdown like \`\`\`json. Just the raw JSON object.
     `;
 
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3.6-flash',
             contents: prompt,
         });
-        const text = response.text || '[]';
-        let captions = [];
+        const text = response.text || '{}';
+        let parsed: any = {};
         try {
-           captions = JSON.parse(text.replace(/```json/g, '').replace(/```/g, '').trim());
+           parsed = JSON.parse(text.replace(/```json/g, '').replace(/```/g, '').trim());
         } catch(e) {
-           captions = [text];
+           parsed = { caption: text, hashtags: ['#EnchoSpace', '#LuxuryStay', '#ResortLife'] };
         }
-        res.json({ success: true, captions });
+        res.json({ success: true, caption: parsed.caption || text, hashtags: parsed.hashtags || [] });
     } catch (aiErr) {
         console.error('Gemini AI failed for caption generation:', aiErr);
         res.status(500).json({ error: 'AI engine temporarily unavailable' });
@@ -2946,17 +2964,19 @@ app.post('/api/host/social-posts', authenticateToken, async (req: AuthRequest, r
     if (!parseResult.success) {
       return res.status(400).json({ error: 'Invalid input', details: parseResult.error.issues || parseResult.error.errors });
     }
-    const { listing_id, media_type, media_urls, caption, scheduled_at } = parseResult.data;
+    const { listing_id, media_type, media_urls, hero_index, caption, hashtags, scheduled_at } = parseResult.data;
 
-    // Verify listing ownership
-    const listingCheck = await pool.query('SELECT 1 FROM listings WHERE id = $1 AND user_id = $2', [listing_id, req.user?.id]);
-    if (listingCheck.rows.length === 0) {
-      return res.status(403).json({ error: 'Unauthorized: Listing does not belong to you or does not exist.' });
+    // Verify listing ownership if listing_id is present
+    if (listing_id) {
+      const listingCheck = await pool.query('SELECT 1 FROM listings WHERE id = $1 AND user_id = $2', [listing_id, req.user?.id]);
+      if (listingCheck.rows.length === 0) {
+        return res.status(403).json({ error: 'Unauthorized: Listing does not belong to you or does not exist.' });
+      }
     }
 
     // AI Safety Check pre-validation
     const hasForbiddenWords = /crypto|scam|spam|casino|adult|unregulated|fast money/i.test(caption);
-    const hasIncompleteInfo = caption.length < 10;
+    const hasIncompleteInfo = caption.length < 5;
     
     let initialStatus = 'pending_approval';
     let feedback = null;
@@ -2966,20 +2986,22 @@ app.post('/api/host/social-posts', authenticateToken, async (req: AuthRequest, r
       feedback = 'AI Safety Engine: Post copy contains forbidden keywords violating master brand safety guidelines.';
     } else if (hasIncompleteInfo) {
       initialStatus = 'rejected';
-      feedback = 'AI Content Analyst: High-quality publishing requires detailed, descriptive copy (minimum 10 characters).';
+      feedback = 'AI Content Analyst: High-quality publishing requires detailed, descriptive copy (minimum 5 characters).';
     }
 
     const result = await pool.query(`
       INSERT INTO host_social_posts 
-      (host_id, listing_id, media_type, media_urls, caption, status, admin_feedback, scheduled_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      (host_id, listing_id, media_type, media_urls, hero_index, caption, hashtags, status, admin_feedback, scheduled_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
     `, [
       req.user?.id,
-      listing_id,
+      listing_id || null,
       media_type,
       JSON.stringify(media_urls || []),
+      hero_index || 0,
       caption,
+      JSON.stringify(hashtags || []),
       initialStatus,
       feedback,
       scheduled_at ? new Date(scheduled_at) : null
@@ -3102,7 +3124,7 @@ app.get('/api/admin/social-posts', authenticateToken, async (req: AuthRequest, r
     const result = await pool.query(`
       SELECT p.*, l.title as listing_title, l.image_url as listing_image, u.name as host_name
       FROM host_social_posts p
-      JOIN listings l ON p.listing_id = l.id
+      LEFT JOIN listings l ON p.listing_id = l.id
       JOIN users u ON p.host_id = u.id
       ORDER BY p.created_at DESC
     `);

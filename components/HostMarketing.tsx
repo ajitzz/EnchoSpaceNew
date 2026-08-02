@@ -71,9 +71,12 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   const [showCreatePostModal, setShowCreatePostModal] = useState(false);
   const [socialFormData, setSocialFormData] = useState({
     listing_id: '',
-    media_type: 'post' as 'post' | 'reel' | 'story' | 'carousel',
+    resort_name: '',
+    media_type: 'reel' as 'post' | 'reel' | 'story' | 'carousel',
     media_urls: [] as string[],
+    hero_index: 0,
     caption: '',
+    hashtags: [] as string[],
     scheduled_at: ''
   });
   const [newSocialMediaUrl, setNewSocialMediaUrl] = useState('');
@@ -83,6 +86,14 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   const [boostBudget, setBoostBudget] = useState(1500);
   const [boostPlatforms, setBoostPlatforms] = useState<string[]>(['meta']);
   const [isBoosting, setIsBoosting] = useState(false);
+
+  // Advanced Social Studio & Live Device Preview States
+  const [activePreviewDevice, setActivePreviewDevice] = useState<'instagram_feed' | 'instagram_reels' | 'facebook_feed'>('instagram_reels');
+  const [currentPreviewSlide, setCurrentPreviewSlide] = useState(0);
+  const [showListingMediaPicker, setShowListingMediaPicker] = useState(false);
+  const [isGeneratingAiCaption, setIsGeneratingAiCaption] = useState(false);
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const [viewingSocialPostPreview, setViewingSocialPostPreview] = useState<any | null>(null);
 
   // Form states for creating campaign
   const [formData, setFormData] = useState({
@@ -396,18 +407,115 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
     }
   };
 
+  const handleGenerateAiCaption = async () => {
+    setIsGeneratingAiCaption(true);
+    try {
+      const token = localStorage.getItem('token');
+      const selectedListing = listings.find((l) => String(l.id) === socialFormData.listing_id);
+      const res = await fetch('/api/host/social-posts/generate-caption', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          listing_id: socialFormData.listing_id ? Number(socialFormData.listing_id) : undefined,
+          resort_name: selectedListing ? selectedListing.title : socialFormData.resort_name || 'Encho Luxury Resort',
+          media_type: socialFormData.media_type,
+          tone: 'luxurious'
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'AI caption generation failed');
+      if (data.caption) {
+        setSocialFormData((prev) => ({
+          ...prev,
+          caption: data.caption,
+          hashtags: data.hashtags && Array.isArray(data.hashtags) ? data.hashtags : prev.hashtags
+        }));
+        addToast('AI Generation Complete', 'High-converting caption & viral hashtags crafted for @enchospace!', 'success');
+      }
+    } catch (err: any) {
+      addToast('AI Assistant Error', err.message || 'Could not generate caption.', 'error');
+    } finally {
+      setIsGeneratingAiCaption(false);
+    }
+  };
+
+  const handleDirectFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setIsUploadingFile(true);
+
+    try {
+      const newUrls: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const localUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+        newUrls.push(localUrl);
+      }
+      setSocialFormData((prev) => ({
+        ...prev,
+        media_urls: [...prev.media_urls, ...newUrls]
+      }));
+      addToast('Media Attached', `${newUrls.length} asset(s) added to post draft.`, 'success');
+    } catch (err) {
+      addToast('Upload Error', 'Failed to process selected file.', 'error');
+    } finally {
+      setIsUploadingFile(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const handleMoveMediaLeft = (index: number) => {
+    if (index === 0) return;
+    setSocialFormData((prev) => {
+      const copy = [...prev.media_urls];
+      const temp = copy[index - 1];
+      copy[index - 1] = copy[index];
+      copy[index] = temp;
+      let newHero = prev.hero_index;
+      if (prev.hero_index === index) newHero = index - 1;
+      else if (prev.hero_index === index - 1) newHero = index;
+      return { ...prev, media_urls: copy, hero_index: newHero };
+    });
+  };
+
+  const handleMoveMediaRight = (index: number) => {
+    if (index === socialFormData.media_urls.length - 1) return;
+    setSocialFormData((prev) => {
+      const copy = [...prev.media_urls];
+      const temp = copy[index + 1];
+      copy[index + 1] = copy[index];
+      copy[index] = temp;
+      let newHero = prev.hero_index;
+      if (prev.hero_index === index) newHero = index + 1;
+      else if (prev.hero_index === index + 1) newHero = index;
+      return { ...prev, media_urls: copy, hero_index: newHero };
+    });
+  };
+
+  const handleRemoveMedia = (index: number) => {
+    setSocialFormData((prev) => {
+      const copy = prev.media_urls.filter((_, i) => i !== index);
+      let newHero = prev.hero_index;
+      if (newHero >= copy.length) newHero = Math.max(0, copy.length - 1);
+      return { ...prev, media_urls: copy, hero_index: newHero };
+    });
+  };
+
   const handleCreateSocialPost = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!socialFormData.listing_id) {
-      addToast('Validation Error', 'Please select a listing.', 'warning');
-      return;
-    }
     if (socialFormData.media_urls.length === 0) {
-      addToast('Validation Error', 'Please add at least one media URL.', 'warning');
+      addToast('Validation Error', 'Please attach at least one photo or video.', 'warning');
       return;
     }
     if (!socialFormData.caption.trim()) {
-      addToast('Validation Error', 'Caption is required.', 'warning');
+      addToast('Validation Error', 'Caption copy is required.', 'warning');
       return;
     }
 
@@ -421,10 +529,12 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          listing_id: Number(socialFormData.listing_id),
+          listing_id: socialFormData.listing_id ? Number(socialFormData.listing_id) : null,
           media_type: socialFormData.media_type,
           media_urls: socialFormData.media_urls,
+          hero_index: socialFormData.hero_index,
           caption: socialFormData.caption,
+          hashtags: socialFormData.hashtags,
           scheduled_at: socialFormData.scheduled_at || null
         })
       });
@@ -435,15 +545,18 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       if (data.status === 'rejected') {
         addToast('AI Compliance Rejected', data.admin_feedback, 'warning');
       } else {
-        addToast('Social Post Submitted', 'Your media has been submitted to the official @enchospace brand publishing queue.', 'success');
+        addToast('Submitted to Master Brand Queue', 'Your post draft has been submitted to @enchospace brand moderators.', 'success');
       }
 
       setShowCreatePostModal(false);
       setSocialFormData({
         listing_id: '',
-        media_type: 'post',
+        resort_name: '',
+        media_type: 'reel',
         media_urls: [],
+        hero_index: 0,
         caption: '',
+        hashtags: [],
         scheduled_at: ''
       });
       fetchSocialPosts();
@@ -2765,6 +2878,17 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
                     {/* Actions footer */}
                     <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-100">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setViewingSocialPostPreview(post);
+                        }}
+                        className="flex items-center gap-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-[10px] font-bold px-3 py-1.5 rounded-lg transition-all"
+                      >
+                        <Tv className="w-3 h-3 text-amber-500" />
+                        <span>👁 Live Device Preview</span>
+                      </button>
                       {post.status === 'approved' && !post.is_boosted && (
                         <button
                           onClick={(e) => {
@@ -4613,182 +4737,694 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         )}
       </AnimatePresence>
 
-      {/* SOCIAL POST CREATION MODAL */}
+      {/* SOCIAL POST CREATION MODAL WITH LIVE DEVICE PREVIEW */}
       <AnimatePresence>
         {showCreatePostModal && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-50 p-2 sm:p-4 overflow-y-auto">
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.96, opacity: 0 }}
+              className="bg-white rounded-3xl max-w-6xl w-full p-6 md:p-8 shadow-2xl text-left my-auto max-h-[92vh] overflow-y-auto border border-zinc-200"
+            >
+              {/* Header */}
+              <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-150">
+                <div>
+                  <h3 className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-amber-500" />
+                    <span>Encho Master Social Media Studio</span>
+                  </h3>
+                  <p className="text-xs text-gray-500 font-light mt-0.5">
+                    Format-strict native uploads, AI copywriter & multi-platform live device previews for @enchospace
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCreatePostModal(false)}
+                  className="p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-all"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Split Content: Left Form (Col 7), Right Live Preview (Col 5) */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                
+                {/* LEFT FORM PANE */}
+                <form onSubmit={handleCreateSocialPost} className="lg:col-span-7 space-y-5">
+                  {/* Target Stay or Standalone Resort Branding */}
+                  <div>
+                    <label className="block text-[11px] font-extrabold uppercase text-gray-500 tracking-wider mb-1.5">
+                      Target Stay / Property Listing
+                    </label>
+                    <select
+                      value={socialFormData.listing_id}
+                      onChange={(e) => {
+                        const listId = e.target.value;
+                        const selected = listings.find((l) => String(l.id) === listId);
+                        setSocialFormData((prev) => ({
+                          ...prev,
+                          listing_id: listId,
+                          resort_name: selected ? selected.title : prev.resort_name,
+                          media_urls: selected ? [selected.imageUrl, ...(selected.images || [])] : prev.media_urls
+                        }));
+                      }}
+                      className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl p-3 text-sm focus:outline-none focus:border-gray-900 font-medium"
+                    >
+                      <option value="">Standalone Resort Branding (Master Account Reel)</option>
+                      {listings.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.title} ({l.city})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Media Format Selector & Release Scheduler */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-extrabold uppercase text-gray-500 tracking-wider mb-1.5">
+                        Native Media Format
+                      </label>
+                      <select
+                        value={socialFormData.media_type}
+                        onChange={(e: any) =>
+                          setSocialFormData((prev) => ({ ...prev, media_type: e.target.value }))
+                        }
+                        className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl p-3 text-sm focus:outline-none focus:border-gray-900 font-bold"
+                      >
+                        <option value="reel">🎬 Instagram Reel (9:16 Vertical)</option>
+                        <option value="carousel">🎠 Carousel Post (Multi-Slide Grid)</option>
+                        <option value="post">🖼️ Single Grid Post (1:1 / 4:5)</option>
+                        <option value="story">📱 Instagram Story (9:16 Format)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-extrabold uppercase text-gray-500 tracking-wider mb-1.5">
+                        Schedule Release (Optional)
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={socialFormData.scheduled_at}
+                        onChange={(e) =>
+                          setSocialFormData((prev) => ({ ...prev, scheduled_at: e.target.value }))
+                        }
+                        className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl p-3 text-sm focus:outline-none focus:border-gray-900"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Format Strict Upload & Listing Asset Reuse */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-[11px] font-extrabold uppercase text-gray-500 tracking-wider">
+                        Media Assets & Hero Cover
+                      </label>
+                      <span className="text-[10px] text-zinc-400 font-mono">
+                        {socialFormData.media_urls.length} attached
+                      </span>
+                    </div>
+
+                    {/* Action buttons for upload and listing reuse */}
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      <label className="cursor-pointer inline-flex items-center gap-1.5 bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-sm">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Upload Photo / Video</span>
+                        <input
+                          type="file"
+                          accept="image/*,video/*"
+                          multiple
+                          onChange={handleDirectFileUpload}
+                          className="hidden"
+                          disabled={isUploadingFile}
+                        />
+                      </label>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowListingMediaPicker(true)}
+                        className="inline-flex items-center gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-bold px-3.5 py-2 rounded-xl transition-all border border-zinc-200"
+                      >
+                        <Library className="w-3.5 h-3.5 text-zinc-600" />
+                        <span>Reuse Listing Assets</span>
+                      </button>
+                    </div>
+
+                    {/* Attached Media Asset Cards with Reorder & Hero Index */}
+                    {socialFormData.media_urls.length > 0 ? (
+                      <div className="space-y-2 max-h-48 overflow-y-auto p-2 bg-zinc-50 rounded-2xl border border-zinc-200">
+                        {socialFormData.media_urls.map((url, idx) => {
+                          const isHero = socialFormData.hero_index === idx;
+                          const isVideo = url.endsWith('.mp4') || url.includes('video');
+                          return (
+                            <div
+                              key={idx}
+                              className={`flex items-center justify-between gap-3 p-2 rounded-xl border bg-white transition-all ${
+                                isHero ? 'border-amber-400 ring-2 ring-amber-400/20 shadow-sm' : 'border-zinc-200'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="relative w-12 h-12 rounded-lg bg-gray-100 overflow-hidden shrink-0 border">
+                                  {isVideo ? (
+                                    <video src={url} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <img src={url} className="w-full h-full object-cover" alt="" />
+                                  )}
+                                  <span className="absolute top-0.5 left-0.5 bg-black/75 text-white text-[8px] font-mono font-bold px-1 rounded">
+                                    #{idx + 1}
+                                  </span>
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-bold text-gray-800 truncate max-w-[160px]">
+                                      Asset #{idx + 1}
+                                    </span>
+                                    {isHero && (
+                                      <span className="bg-amber-100 text-amber-800 text-[9px] font-black uppercase px-2 py-0.5 rounded tracking-wider">
+                                        ⭐ HERO COVER
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-[10px] text-gray-400 font-mono block truncate max-w-[200px]">
+                                    {url}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Control Actions: Move Left/Right, Set Hero, Delete */}
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleMoveMediaLeft(idx)}
+                                  disabled={idx === 0}
+                                  className="p-1 rounded hover:bg-zinc-100 text-zinc-500 disabled:opacity-30"
+                                  title="Move Up"
+                                >
+                                  <ChevronLeft className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleMoveMediaRight(idx)}
+                                  disabled={idx === socialFormData.media_urls.length - 1}
+                                  className="p-1 rounded hover:bg-zinc-100 text-zinc-500 disabled:opacity-30"
+                                  title="Move Down"
+                                >
+                                  <ChevronRight className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setSocialFormData((prev) => ({ ...prev, hero_index: idx }))
+                                  }
+                                  className={`px-2 py-1 rounded text-[10px] font-bold border transition-all ${
+                                    isHero
+                                      ? 'bg-amber-500 text-white border-amber-600'
+                                      : 'bg-zinc-50 text-zinc-600 border-zinc-200 hover:bg-zinc-100'
+                                  }`}
+                                >
+                                  {isHero ? 'Cover Set' : 'Set Cover'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveMedia(idx)}
+                                  className="p-1 rounded hover:bg-rose-50 text-rose-500 transition-colors"
+                                  title="Remove Media"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-6 text-center border border-dashed rounded-2xl bg-zinc-50 text-zinc-400">
+                        <Upload className="w-6 h-6 mx-auto mb-1.5 text-zinc-300" />
+                        <p className="text-xs font-medium">No media attached yet.</p>
+                        <p className="text-[10px] text-zinc-400">
+                          Upload high-res images or videos, or select from existing listing photos.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* AI Copywriter & Viral Hashtags Generator */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-[11px] font-extrabold uppercase text-gray-500 tracking-wider">
+                        Caption Copy & Viral Hashtags
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleGenerateAiCaption}
+                        disabled={isGeneratingAiCaption}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/60 px-3 py-1 rounded-xl transition-all shadow-xs"
+                      >
+                        {isGeneratingAiCaption ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                        ) : (
+                          <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                        )}
+                        <span>Generate AI Copy & Hashtags</span>
+                      </button>
+                    </div>
+
+                    <textarea
+                      rows={3}
+                      placeholder="Write captivating caption copy with luxury highlights and call-to-action..."
+                      value={socialFormData.caption}
+                      onChange={(e) =>
+                        setSocialFormData((prev) => ({ ...prev, caption: e.target.value }))
+                      }
+                      className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl p-3.5 text-sm focus:outline-none focus:border-gray-900 leading-relaxed font-light"
+                      required
+                    />
+
+                    {/* Hashtag Pills */}
+                    {socialFormData.hashtags.length > 0 && (
+                      <div className="mt-2.5 flex flex-wrap gap-1.5">
+                        {socialFormData.hashtags.map((tag, idx) => (
+                          <span
+                            key={idx}
+                            className="bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-mono font-bold px-2.5 py-1 rounded-lg flex items-center gap-1"
+                          >
+                            <span>{tag.startsWith('#') ? tag : `#${tag}`}</span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSocialFormData((prev) => ({
+                                  ...prev,
+                                  hashtags: prev.hashtags.filter((_, i) => i !== idx)
+                                }))
+                              }
+                              className="hover:text-rose-600"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Modal Action Buttons */}
+                  <div className="pt-4 border-t border-gray-100 flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowCreatePostModal(false)}
+                      className="px-5 py-3 text-zinc-500 hover:text-zinc-700 text-sm font-bold"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingPost}
+                      className="flex items-center gap-2 bg-gray-900 hover:bg-gray-800 disabled:opacity-50 text-white px-6 py-3 rounded-2xl font-bold text-sm shadow-md transition-all"
+                    >
+                      {isSubmittingPost && <Loader2 className="w-4 h-4 animate-spin" />}
+                      <span>Submit to Master Brand Queue</span>
+                    </button>
+                  </div>
+                </form>
+
+                {/* RIGHT PANE: PIXEL-PERFECT DEVICE LIVE PREVIEW */}
+                <div className="lg:col-span-5 bg-zinc-900 text-white rounded-3xl p-5 border border-zinc-800 shadow-xl space-y-4">
+                  <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                      <Tv className="w-4 h-4" /> Live Platform Preview
+                    </span>
+                    <span className="text-[10px] font-mono text-zinc-400">@enchospace</span>
+                  </div>
+
+                  {/* Device Platform Switcher Tabs */}
+                  <div className="grid grid-cols-3 gap-1 bg-zinc-800 p-1 rounded-xl text-[10px] font-bold uppercase tracking-wider text-center">
+                    <button
+                      type="button"
+                      onClick={() => setActivePreviewDevice('instagram_reels')}
+                      className={`py-1.5 rounded-lg transition-all ${
+                        activePreviewDevice === 'instagram_reels'
+                          ? 'bg-amber-500 text-white shadow-sm'
+                          : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      IG Reel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActivePreviewDevice('instagram_feed')}
+                      className={`py-1.5 rounded-lg transition-all ${
+                        activePreviewDevice === 'instagram_feed'
+                          ? 'bg-amber-500 text-white shadow-sm'
+                          : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      IG Feed
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActivePreviewDevice('facebook_feed')}
+                      className={`py-1.5 rounded-lg transition-all ${
+                        activePreviewDevice === 'facebook_feed'
+                          ? 'bg-amber-500 text-white shadow-sm'
+                          : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      FB Feed
+                    </button>
+                  </div>
+
+                  {/* DEVICE FRAME CONTAINER */}
+                  <div className="relative mx-auto max-w-[280px] sm:max-w-[300px] bg-black rounded-[36px] p-3 border-[6px] border-zinc-800 shadow-2xl overflow-hidden text-left">
+                    {/* Top Phone Speaker Notch */}
+                    <div className="w-20 h-3 bg-zinc-800 rounded-full mx-auto mb-2"></div>
+
+                    {/* VIEW 1: INSTAGRAM REELS (9:16 Vertical) */}
+                    {activePreviewDevice === 'instagram_reels' && (
+                      <div className="relative h-[420px] rounded-[24px] overflow-hidden bg-zinc-950 flex flex-col justify-between p-3 text-white">
+                        {/* Background Media */}
+                        {socialFormData.media_urls.length > 0 ? (
+                          <img
+                            src={socialFormData.media_urls[socialFormData.hero_index || 0] || socialFormData.media_urls[0]}
+                            className="absolute inset-0 w-full h-full object-cover"
+                            alt=""
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center text-zinc-600 bg-zinc-900">
+                            <Sparkles className="w-8 h-8 opacity-40" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/80"></div>
+
+                        {/* Top Overlay */}
+                        <div className="relative z-10 flex justify-between items-center text-xs font-bold">
+                          <span>Reels</span>
+                          <Tv className="w-4 h-4" />
+                        </div>
+
+                        {/* Right Reaction Sidebar */}
+                        <div className="absolute right-3 bottom-16 z-10 flex flex-col items-center gap-3 text-xs">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <Heart className="w-5 h-5 text-rose-500 fill-rose-500" />
+                            <span className="text-[9px] font-mono">18.4K</span>
+                          </div>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <MessageSquare className="w-5 h-5" />
+                            <span className="text-[9px] font-mono">642</span>
+                          </div>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <Share2 className="w-5 h-5" />
+                            <span className="text-[9px] font-mono">1.2K</span>
+                          </div>
+                          <Bookmark className="w-5 h-5" />
+                        </div>
+
+                        {/* Bottom Overlay Content */}
+                        <div className="relative z-10 space-y-2 pr-10">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-amber-500 text-black text-[9px] font-black flex items-center justify-center border border-white">
+                              E
+                            </div>
+                            <span className="text-xs font-bold">@enchospace</span>
+                            <span className="bg-white/20 text-[8px] font-bold px-1.5 py-0.5 rounded-full">Follow</span>
+                          </div>
+
+                          <p className="text-[10px] leading-snug line-clamp-2 text-zinc-200">
+                            {socialFormData.caption || 'Luxury stay getaway preview...'}
+                          </p>
+
+                          <div className="flex items-center gap-1.5 text-[9px] text-amber-300 font-mono">
+                            <Volume2 className="w-3 h-3 animate-pulse" />
+                            <span>@encho.original • Original Audio</span>
+                          </div>
+
+                          <div className="bg-amber-500 text-gray-950 font-black text-[10px] py-1.5 px-3 rounded-xl text-center shadow-lg uppercase tracking-wider">
+                            ⚡ Book Stay on Encho.space
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* VIEW 2: INSTAGRAM FEED */}
+                    {activePreviewDevice === 'instagram_feed' && (
+                      <div className="bg-white rounded-[24px] overflow-hidden text-gray-900 text-xs">
+                        {/* Profile Header */}
+                        <div className="flex items-center justify-between p-2.5 border-b border-gray-100">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-amber-500 to-rose-500 p-0.5">
+                              <div className="w-full h-full rounded-full bg-black text-white text-[8px] font-black flex items-center justify-center">
+                                E
+                              </div>
+                            </div>
+                            <div>
+                              <span className="font-extrabold text-[11px] block leading-tight">enchospace</span>
+                              <span className="text-[9px] text-gray-400 block leading-none">Sponsored</span>
+                            </div>
+                          </div>
+                          <MoreHorizontal className="w-4 h-4 text-gray-400" />
+                        </div>
+
+                        {/* Media Viewport */}
+                        <div className="relative aspect-square bg-gray-100 overflow-hidden">
+                          {socialFormData.media_urls.length > 0 ? (
+                            <img
+                              src={socialFormData.media_urls[currentPreviewSlide] || socialFormData.media_urls[0]}
+                              className="w-full h-full object-cover"
+                              alt=""
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-400">
+                              <Sparkles className="w-6 h-6" />
+                            </div>
+                          )}
+
+                          {socialFormData.media_urls.length > 1 && (
+                            <div className="absolute top-2 right-2 bg-black/70 text-white text-[9px] font-mono px-2 py-0.5 rounded-full">
+                              {currentPreviewSlide + 1}/{socialFormData.media_urls.length}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Action Bar */}
+                        <div className="p-2.5 space-y-1.5">
+                          <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-3">
+                              <Heart className="w-4 h-4 text-rose-500 fill-rose-500" />
+                              <MessageSquare className="w-4 h-4" />
+                              <Share2 className="w-4 h-4" />
+                            </div>
+                            <Bookmark className="w-4 h-4" />
+                          </div>
+
+                          <div className="text-[10px] font-bold">1,842 likes</div>
+
+                          <p className="text-[10px] leading-tight line-clamp-2">
+                            <span className="font-extrabold mr-1">enchospace</span>
+                            {socialFormData.caption || 'Experience unmatched luxury...'}
+                          </p>
+
+                          <div className="text-[9px] text-blue-600 font-mono line-clamp-1">
+                            {socialFormData.hashtags.map((t) => (t.startsWith('#') ? t : `#${t}`)).join(' ') ||
+                              '#EnchoSpace #LuxuryResort'}
+                          </div>
+                        </div>
+
+                        <div className="bg-gray-900 text-white text-[10px] font-bold p-2 text-center">
+                          Book Stay on Encho.space
+                        </div>
+                      </div>
+                    )}
+
+                    {/* VIEW 3: FACEBOOK FEED */}
+                    {activePreviewDevice === 'facebook_feed' && (
+                      <div className="bg-white rounded-[24px] overflow-hidden text-gray-900 text-xs">
+                        <div className="p-2.5 border-b border-gray-100 flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-blue-600 text-white font-black text-xs flex items-center justify-center">
+                            E
+                          </div>
+                          <div>
+                            <span className="font-bold text-[11px] block leading-tight">Encho Spaces</span>
+                            <span className="text-[9px] text-gray-400 block leading-none">Sponsored • 🌐</span>
+                          </div>
+                        </div>
+
+                        <div className="p-2.5 text-[10px] leading-snug line-clamp-2">
+                          {socialFormData.caption || 'Book your dream luxury resort stay directly with host guarantee...'}
+                        </div>
+
+                        <div className="aspect-video bg-gray-100 overflow-hidden">
+                          {socialFormData.media_urls.length > 0 ? (
+                            <img
+                              src={socialFormData.media_urls[0]}
+                              className="w-full h-full object-cover"
+                              alt=""
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-400">
+                              <Sparkles className="w-6 h-6" />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="bg-gray-50 p-2.5 border-t border-b border-gray-100 flex items-center justify-between">
+                          <div>
+                            <span className="text-[8px] uppercase tracking-wider text-gray-400 block font-mono">
+                              ENCHO.SPACE
+                            </span>
+                            <span className="text-[10px] font-bold block text-gray-900">
+                              Reserve Luxury Stay
+                            </span>
+                          </div>
+                          <span className="bg-blue-600 text-white text-[9px] font-bold px-2.5 py-1 rounded">
+                            Book Now
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* LISTING MEDIA PICKER OVERLAY MODAL */}
+      <AnimatePresence>
+        {showListingMediaPicker && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 shadow-2xl text-left"
+              className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl text-left max-h-[85vh] flex flex-col"
             >
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-amber-500" />
-                  <span>Draft Brand Social Post</span>
-                </h3>
+              <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+                <div>
+                  <h3 className="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2">
+                    <Library className="w-5 h-5 text-blue-600" />
+                    <span>Select Photos/Videos from Your Listings</span>
+                  </h3>
+                  <p className="text-xs text-gray-500 font-light">
+                    Click any media asset to attach it directly to your draft post.
+                  </p>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setShowCreatePostModal(false)}
+                  onClick={() => setShowListingMediaPicker(false)}
                   className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <form onSubmit={handleCreateSocialPost} className="space-y-5">
-                <div>
-                  <label className="block text-[11px] font-extrabold uppercase text-gray-500 tracking-wider mb-2">
-                    Target Stay / Listing
-                  </label>
-                  <select
-                    value={socialFormData.listing_id}
-                    onChange={(e) => {
-                      const listId = e.target.value;
-                      const selected = listings.find((l) => String(l.id) === listId);
-                      setSocialFormData({
-                        ...socialFormData,
-                        listing_id: listId,
-                        media_urls: selected ? [selected.imageUrl] : []
-                      });
-                    }}
-                    className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl p-3 text-sm focus:outline-none focus:border-gray-900"
-                    required
-                  >
-                    <option value="">Select a Stay</option>
-                    {listings.map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.title} ({l.city})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[11px] font-extrabold uppercase text-gray-500 tracking-wider mb-2">
-                      Media Format
-                    </label>
-                    <select
-                      value={socialFormData.media_type}
-                      onChange={(e: any) =>
-                        setSocialFormData({ ...socialFormData, media_type: e.target.value })
-                      }
-                      className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl p-3 text-sm focus:outline-none focus:border-gray-900"
-                    >
-                      <option value="post">Grid Post</option>
-                      <option value="reel">Instagram Reel</option>
-                      <option value="story">Instagram Story</option>
-                      <option value="carousel">Carousel Post</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-extrabold uppercase text-gray-500 tracking-wider mb-2">
-                      Schedule Release (Optional)
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={socialFormData.scheduled_at}
-                      onChange={(e) =>
-                        setSocialFormData({ ...socialFormData, scheduled_at: e.target.value })
-                      }
-                      className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl p-3 text-sm focus:outline-none focus:border-gray-900"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-extrabold uppercase text-gray-500 tracking-wider mb-2">
-                    Media URL / Image Asset
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Paste image/video URL"
-                      value={newSocialMediaUrl}
-                      onChange={(e) => setNewSocialMediaUrl(e.target.value)}
-                      className="flex-1 bg-zinc-50 border border-zinc-200 rounded-2xl p-3 text-sm focus:outline-none focus:border-gray-900"
-                    />
-                    <button
-                      type="button"
+              {/* Grid of All Host Listing Media Assets */}
+              <div className="flex-1 overflow-y-auto p-1 grid grid-cols-3 sm:grid-cols-4 gap-3">
+                {listings.flatMap((l) => [l.imageUrl, ...(l.images || [])]).map((mediaUrl, idx) => {
+                  const isSelected = socialFormData.media_urls.includes(mediaUrl);
+                  return (
+                    <div
+                      key={idx}
                       onClick={() => {
-                        if (newSocialMediaUrl.trim()) {
-                          setSocialFormData({
-                            ...socialFormData,
-                            media_urls: [...socialFormData.media_urls, newSocialMediaUrl]
-                          });
-                          setNewSocialMediaUrl('');
-                        }
+                        setSocialFormData((prev) => ({
+                          ...prev,
+                          media_urls: isSelected
+                            ? prev.media_urls.filter((u) => u !== mediaUrl)
+                            : [...prev.media_urls, mediaUrl]
+                        }));
                       }}
-                      className="bg-gray-900 text-white hover:bg-gray-800 text-xs font-bold px-4 rounded-xl"
+                      className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer border-2 transition-all ${
+                        isSelected ? 'border-amber-500 ring-4 ring-amber-500/20 scale-[0.98]' : 'border-gray-200 hover:border-gray-400'
+                      }`}
                     >
-                      Add
-                    </button>
-                  </div>
-                  
-                  {socialFormData.media_urls.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-3">
-                      {socialFormData.media_urls.map((url, idx) => (
-                        <div key={idx} className="relative w-12 h-12 rounded-xl overflow-hidden border">
-                          <img src={url} className="w-full h-full object-cover" alt="" />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setSocialFormData({
-                                ...socialFormData,
-                                media_urls: socialFormData.media_urls.filter((_, i) => i !== idx)
-                              })
-                            }
-                            className="absolute -top-1 -right-1 bg-rose-500 text-white rounded-full p-0.5 scale-75"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
+                      <img src={mediaUrl} className="w-full h-full object-cover" alt="" />
+                      {isSelected && (
+                        <div className="absolute inset-0 bg-amber-500/30 flex items-center justify-center text-white">
+                          <CheckCircle className="w-7 h-7 drop-shadow-md text-amber-400 fill-amber-400" />
                         </div>
-                      ))}
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="pt-4 border-t border-gray-100 flex justify-between items-center mt-4">
+                <span className="text-xs font-mono text-gray-500">
+                  {socialFormData.media_urls.length} media item(s) selected
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowListingMediaPicker(false)}
+                  className="bg-gray-900 text-white font-bold text-xs px-5 py-2.5 rounded-xl hover:bg-gray-800"
+                >
+                  Done Selection
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* DASHBOARD POST LIVE PREVIEW OVERLAY MODAL */}
+      <AnimatePresence>
+        {viewingSocialPostPreview && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-zinc-900 text-white rounded-3xl max-w-lg w-full p-6 shadow-2xl text-left border border-zinc-800"
+            >
+              <div className="flex justify-between items-center mb-4 pb-3 border-b border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <Tv className="w-5 h-5 text-amber-400" />
+                  <span className="font-black text-sm uppercase tracking-wider text-amber-400">
+                    Live Device Preview
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setViewingSocialPostPreview(null)}
+                  className="p-1.5 rounded-full hover:bg-zinc-800 text-zinc-400"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="bg-black rounded-2xl p-4 border border-zinc-800 space-y-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-amber-500 text-black font-black text-xs flex items-center justify-center">
+                    E
+                  </div>
+                  <div>
+                    <span className="font-bold text-xs block leading-tight">@enchospace</span>
+                    <span className="text-[10px] text-zinc-400 block leading-none">Official Brand Account</span>
+                  </div>
+                </div>
+
+                <div className="aspect-square bg-zinc-950 rounded-xl overflow-hidden border border-zinc-800 relative">
+                  {viewingSocialPostPreview.media_urls?.[0] ? (
+                    <img
+                      src={viewingSocialPostPreview.media_urls[0]}
+                      className="w-full h-full object-cover"
+                      alt=""
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-zinc-600">
+                      <Sparkles className="w-8 h-8" />
                     </div>
                   )}
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-extrabold uppercase text-gray-500 tracking-wider mb-2">
-                    Caption copy & hashtags
-                  </label>
-                  <textarea
-                    rows={4}
-                    placeholder="Write engaging copy to attract travelers. Feel free to use emojis!"
-                    value={socialFormData.caption}
-                    onChange={(e) =>
-                      setSocialFormData({ ...socialFormData, caption: e.target.value })
-                    }
-                    className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl p-3.5 text-sm focus:outline-none focus:border-gray-900 leading-relaxed font-light"
-                    required
-                  />
-                  <div className="text-[10px] text-zinc-400 mt-1 flex justify-between font-mono">
-                    <span>AI Safety Pre-Check scanning active.</span>
-                    <span>Min 10 chars.</span>
-                  </div>
-                </div>
+                <p className="text-xs text-zinc-200 leading-relaxed font-light">
+                  {viewingSocialPostPreview.caption}
+                </p>
 
-                <div className="pt-4 border-t border-gray-100 flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowCreatePostModal(false)}
-                    className="px-5 py-3 text-zinc-500 hover:text-zinc-700 text-sm font-bold"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmittingPost}
-                    className="flex items-center gap-2 bg-gray-900 hover:bg-gray-800 disabled:opacity-50 text-white px-6 py-3 rounded-2xl font-bold text-sm shadow-md transition-all"
-                  >
-                    {isSubmittingPost && <Loader2 className="w-4 h-4 animate-spin" />}
-                    <span>Submit to Brand Queue</span>
-                  </button>
+                <div className="bg-amber-500 text-gray-950 font-black text-xs p-2.5 rounded-xl text-center uppercase tracking-wider">
+                  ⚡ Book Stay on Encho.space
                 </div>
-              </form>
+              </div>
             </motion.div>
           </div>
         )}
