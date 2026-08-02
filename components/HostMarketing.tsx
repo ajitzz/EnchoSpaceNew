@@ -4,8 +4,8 @@ import {
   Sparkles, CheckCircle, AlertTriangle, Play, Pause, BarChart3, 
   Tv, Eye, MousePointerClick, TrendingUp, DollarSign, Target, Plus, 
   Trash2, Send, Check, ShieldCheck, HelpCircle, Loader2, CreditCard, ExternalLink,
-  Heart, MessageSquare, Bookmark, ChevronLeft, ChevronRight, Volume2, Share2, MoreHorizontal,
-  Library, Layers, PenTool, Sliders, MapPin, ArrowLeft, ArrowRight, Upload,
+  Heart, MessageSquare, Bookmark, ChevronLeft, ChevronRight, Volume2, VolumeX, Share2, MoreHorizontal, MoreVertical,
+  Library, Layers, PenTool, Sliders, MapPin, ArrowLeft, ArrowRight, Upload, ThumbsUp, Camera, Globe, Wifi, User, Compass, PlusCircle, Smartphone,
   Gauge, Zap, Clock, BatteryCharging, X, Search, Video, Image, Maximize2, Filter, Star, CheckSquare, Square
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -89,8 +89,12 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
   // Advanced Social Studio & Live Device Preview States
   const [activePreviewDevice, setActivePreviewDevice] = useState<'instagram_feed' | 'instagram_reels' | 'facebook_feed'>('instagram_reels');
+  const [modalPreviewDevice, setModalPreviewDevice] = useState<'instagram_feed' | 'instagram_reels' | 'facebook_feed'>('instagram_reels');
   const [currentPreviewSlide, setCurrentPreviewSlide] = useState(0);
   const [previewModalSlide, setPreviewModalSlide] = useState(0);
+  const [isPreviewMuted, setIsPreviewMuted] = useState(true);
+  const [previewLiked, setPreviewLiked] = useState(false);
+  const [previewSaved, setPreviewSaved] = useState(false);
   const [showListingMediaPicker, setShowListingMediaPicker] = useState(false);
   const [isGeneratingAiCaption, setIsGeneratingAiCaption] = useState(false);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
@@ -5071,11 +5075,22 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
                 {/* RIGHT PANE: PIXEL-PERFECT DEVICE LIVE PREVIEW */}
                 <div className="lg:col-span-5 bg-zinc-900 text-white rounded-3xl p-5 border border-zinc-800 shadow-xl space-y-4">
-                  <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                  <div className="flex items-center justify-between border-b border-zinc-800 pb-3 gap-2">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
                       <Tv className="w-4 h-4" /> Live Platform Preview
                     </span>
-                    <span className="text-[10px] font-mono text-zinc-400">@enchospace</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setViewingSocialPostPreview(socialFormData);
+                        setModalPreviewDevice(activePreviewDevice);
+                      }}
+                      className="text-[10px] font-bold bg-amber-500 hover:bg-amber-400 text-gray-950 px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all shadow-sm"
+                      title="Launch iPhone 17 Pro Modal Preview"
+                    >
+                      <Smartphone className="w-3 h-3" />
+                      <span>iPhone 17 Modal</span>
+                    </button>
                   </div>
 
                   {/* Device Platform Switcher Tabs */}
@@ -5118,7 +5133,9 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                   {/* DEVICE FRAME CONTAINER */}
                   <div className="relative mx-auto max-w-[280px] sm:max-w-[300px] bg-black rounded-[36px] p-3 border-[6px] border-zinc-800 shadow-2xl overflow-hidden text-left">
                     {/* Top Phone Speaker Notch */}
-                    <div className="w-20 h-3 bg-zinc-800 rounded-full mx-auto mb-2"></div>
+                    <div className="w-20 h-3 bg-zinc-800 rounded-full mx-auto mb-2 flex items-center justify-center">
+                      <div className="w-8 h-1 bg-zinc-700 rounded-full"></div>
+                    </div>
 
                     {/* VIEW 1: INSTAGRAM REELS (9:16 Vertical) */}
                     {activePreviewDevice === 'instagram_reels' && (
@@ -5132,7 +5149,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               src={activeUrl}
                               autoPlay
                               loop
-                              muted
+                              muted={isPreviewMuted}
                               playsInline
                               className="absolute inset-0 w-full h-full object-cover"
                             />
@@ -5149,6 +5166,19 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                           </div>
                         )}
                         <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/80"></div>
+
+                        {/* Sound Toggle Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsPreviewMuted(!isPreviewMuted);
+                          }}
+                          className="absolute top-12 right-3 z-30 p-1.5 rounded-full bg-black/60 backdrop-blur-md hover:bg-black/80 text-white border border-white/20 transition-all shadow-md"
+                          title={isPreviewMuted ? "Unmute Sound" : "Mute Sound"}
+                        >
+                          {isPreviewMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5 text-amber-400" />}
+                        </button>
 
                         {/* Carousel Swipe/Arrow Overlay for Desktop/Laptop */}
                         {socialFormData.media_urls.length > 1 && (
@@ -5197,25 +5227,43 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
                         {/* Top Overlay */}
                         <div className="relative z-10 flex justify-between items-center text-xs font-bold">
-                          <span className="bg-black/50 backdrop-blur-md px-2 py-0.5 rounded-md">Reels</span>
-                          <Tv className="w-4 h-4" />
+                          <span className="bg-black/50 backdrop-blur-md px-2 py-0.5 rounded-md flex items-center gap-1">
+                            <span>Reels</span>
+                          </span>
+                          <Tv className="w-4 h-4 text-amber-400" />
                         </div>
 
                         {/* Right Reaction Sidebar */}
                         <div className="absolute right-3 bottom-16 z-10 flex flex-col items-center gap-3 text-xs">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewLiked(!previewLiked);
+                            }}
+                            className="flex flex-col items-center gap-0.5 transition-transform active:scale-125"
+                          >
+                            <Heart className={`w-5 h-5 transition-colors ${previewLiked ? 'text-rose-500 fill-rose-500' : 'text-white'}`} />
+                            <span className="text-[9px] font-mono">{previewLiked ? '18.5K' : '18.4K'}</span>
+                          </button>
                           <div className="flex flex-col items-center gap-0.5">
-                            <Heart className="w-5 h-5 text-rose-500 fill-rose-500" />
-                            <span className="text-[9px] font-mono">18.4K</span>
-                          </div>
-                          <div className="flex flex-col items-center gap-0.5">
-                            <MessageSquare className="w-5 h-5" />
+                            <MessageSquare className="w-5 h-5 text-white" />
                             <span className="text-[9px] font-mono">642</span>
                           </div>
                           <div className="flex flex-col items-center gap-0.5">
-                            <Share2 className="w-5 h-5" />
+                            <Share2 className="w-5 h-5 text-white" />
                             <span className="text-[9px] font-mono">1.2K</span>
                           </div>
-                          <Bookmark className="w-5 h-5" />
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewSaved(!previewSaved);
+                            }}
+                            className="transition-transform active:scale-125"
+                          >
+                            <Bookmark className={`w-5 h-5 ${previewSaved ? 'text-amber-400 fill-amber-400' : 'text-white'}`} />
+                          </button>
                         </div>
 
                         {/* Bottom Overlay Content */}
@@ -5233,7 +5281,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                           </p>
 
                           <div className="flex items-center gap-1.5 text-[9px] text-amber-300 font-mono">
-                            <Volume2 className="w-3 h-3 animate-pulse" />
+                            <Volume2 className="w-3 h-3 animate-pulse text-amber-400" />
                             <span>@encho.original • Original Audio</span>
                           </div>
 
@@ -6055,131 +6103,601 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         )}
       </AnimatePresence>
 
-      {/* DASHBOARD POST LIVE PREVIEW OVERLAY MODAL */}
+      {/* DASHBOARD POST LIVE PREVIEW OVERLAY MODAL - IPHONE 17 PRO NATIVE FORMAT */}
       <AnimatePresence>
         {viewingSocialPostPreview && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-lg flex items-center justify-center z-50 p-3 sm:p-6 overflow-y-auto">
             <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-zinc-900 text-white rounded-3xl max-w-lg w-full p-6 shadow-2xl text-left border border-zinc-800"
+              initial={{ scale: 0.92, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.92, opacity: 0, y: 10 }}
+              className="relative max-w-md w-full text-left my-auto flex flex-col items-center"
             >
-              <div className="flex justify-between items-center mb-4 pb-3 border-b border-zinc-800">
+              {/* Modal Top Control Bar */}
+              <div className="w-full flex justify-between items-center mb-3 px-2 text-white">
                 <div className="flex items-center gap-2">
-                  <Tv className="w-5 h-5 text-amber-400" />
-                  <span className="font-black text-sm uppercase tracking-wider text-amber-400">
-                    Live Device Preview
+                  <Smartphone className="w-5 h-5 text-amber-400" />
+                  <span className="font-black text-xs uppercase tracking-widest text-amber-400">
+                    iPhone 17 Pro • Live Device Simulator
                   </span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setViewingSocialPostPreview(null)}
-                  className="p-1.5 rounded-full hover:bg-zinc-800 text-zinc-400"
+                  className="p-2 rounded-full bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors border border-zinc-700"
+                  title="Close Preview"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="bg-black rounded-2xl p-4 border border-zinc-800 space-y-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-full bg-amber-500 text-black font-black text-xs flex items-center justify-center">
-                    E
+              {/* IPHONE 17 PRO TITANIUM FRAME CONTAINER */}
+              <div className="relative w-full max-w-[360px] bg-black rounded-[52px] p-3.5 border-[10px] border-zinc-800 shadow-[0_25px_90px_-15px_rgba(0,0,0,0.95)] ring-1 ring-white/15 overflow-hidden text-left font-sans">
+                {/* Left Metallic Button Notch Accents */}
+                <div className="absolute -left-[13px] top-24 w-[3px] h-7 bg-zinc-700 rounded-l-md shadow-inner"></div>
+                <div className="absolute -left-[13px] top-36 w-[3px] h-11 bg-zinc-700 rounded-l-md shadow-inner"></div>
+                <div className="absolute -left-[13px] top-50 w-[3px] h-11 bg-zinc-700 rounded-l-md shadow-inner"></div>
+                {/* Right Action Key Notch Accent */}
+                <div className="absolute -right-[13px] top-32 w-[3px] h-14 bg-zinc-700 rounded-r-md shadow-inner"></div>
+
+                {/* iPhone 17 Dynamic Island */}
+                <div className="w-28 h-6 bg-black rounded-full border border-zinc-800 flex items-center justify-between px-2.5 text-[9px] text-zinc-400 mx-auto z-50 relative mb-1 shadow-inner">
+                  <div className="w-2.5 h-2.5 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center">
+                    <div className="w-1 h-1 rounded-full bg-blue-900/60"></div>
                   </div>
-                  <div>
-                    <span className="font-bold text-xs block leading-tight">@enchospace</span>
-                    <span className="text-[10px] text-zinc-400 block leading-none">Official Brand Account</span>
+                  <div className="w-2.5 h-2.5 rounded-full bg-zinc-900 border border-zinc-800"></div>
+                </div>
+
+                {/* iPhone Status Bar */}
+                <div className="flex justify-between items-center px-4 text-[11px] font-semibold text-white mb-2 z-40 relative">
+                  <span>9:41</span>
+                  <div className="flex items-center gap-1.5 text-zinc-300">
+                    <span className="text-[9px] font-mono font-bold">5G</span>
+                    <Wifi className="w-3 h-3" />
+                    <BatteryCharging className="w-3.5 h-3.5 text-emerald-400" />
                   </div>
                 </div>
 
-                <div className="aspect-square bg-zinc-950 rounded-xl overflow-hidden border border-zinc-800 relative group">
-                  {viewingSocialPostPreview.media_urls?.length > 0 ? (() => {
-                    const mediaList: string[] = viewingSocialPostPreview.media_urls || [];
-                    const activeUrl = mediaList[previewModalSlide] || mediaList[0];
-                    const isVid = activeUrl?.endsWith('.mp4') || activeUrl?.includes('video');
-                    return isVid ? (
-                      <video
-                        src={activeUrl}
-                        controls
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <img
-                        src={activeUrl}
-                        className="w-full h-full object-cover"
-                        alt=""
-                      />
-                    );
-                  })() : (
-                    <div className="w-full h-full flex items-center justify-center text-zinc-600">
-                      <Sparkles className="w-8 h-8" />
+                {/* Native Platform Switcher inside iPhone Screen */}
+                <div className="grid grid-cols-3 gap-1 bg-zinc-900/90 p-1 rounded-xl text-[9px] font-bold uppercase tracking-wider text-center mb-2 border border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={() => setModalPreviewDevice('instagram_reels')}
+                    className={`py-1 rounded-lg transition-all ${
+                      modalPreviewDevice === 'instagram_reels'
+                        ? 'bg-amber-500 text-gray-950 font-black shadow-sm'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    IG Reels
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalPreviewDevice('instagram_feed')}
+                    className={`py-1 rounded-lg transition-all ${
+                      modalPreviewDevice === 'instagram_feed'
+                        ? 'bg-amber-500 text-gray-950 font-black shadow-sm'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    IG Feed
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModalPreviewDevice('facebook_feed')}
+                    className={`py-1 rounded-lg transition-all ${
+                      modalPreviewDevice === 'facebook_feed'
+                        ? 'bg-amber-500 text-gray-950 font-black shadow-sm'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    FB Feed
+                  </button>
+                </div>
+
+                {/* ==================== FORMAT 1: INSTAGRAM REELS (9:16 VERTICAL) ==================== */}
+                {modalPreviewDevice === 'instagram_reels' && (
+                  <div className="relative h-[480px] rounded-[30px] overflow-hidden bg-zinc-950 flex flex-col justify-between p-3 text-white group border border-zinc-800/80">
+                    {/* Media Display */}
+                    {viewingSocialPostPreview.media_urls?.length > 0 ? (() => {
+                      const mediaList: string[] = viewingSocialPostPreview.media_urls || [];
+                      const activeUrl = mediaList[previewModalSlide] || mediaList[0];
+                      const isVid = activeUrl?.endsWith('.mp4') || activeUrl?.includes('video');
+                      return isVid ? (
+                        <video
+                          src={activeUrl}
+                          autoPlay
+                          loop
+                          muted={isPreviewMuted}
+                          playsInline
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
+                      ) : (
+                        <img
+                          src={activeUrl}
+                          className="absolute inset-0 w-full h-full object-cover"
+                          alt=""
+                        />
+                      );
+                    })() : (
+                      <div className="absolute inset-0 flex items-center justify-center text-zinc-600 bg-zinc-900">
+                        <Sparkles className="w-8 h-8 opacity-40" />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/85"></div>
+
+                    {/* Top Reels Bar */}
+                    <div className="relative z-20 flex justify-between items-center text-xs font-bold pt-1">
+                      <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10">
+                        <Camera className="w-3.5 h-3.5 text-amber-400" />
+                        <span className="text-[11px] tracking-wide">Reels</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsPreviewMuted(!isPreviewMuted);
+                        }}
+                        className="p-1.5 rounded-full bg-black/60 backdrop-blur-md hover:bg-black/80 text-white border border-white/20 transition-all shadow-md"
+                        title={isPreviewMuted ? "Unmute Sound" : "Mute Sound"}
+                      >
+                        {isPreviewMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5 text-amber-400" />}
+                      </button>
                     </div>
-                  )}
 
-                  {/* Interactive Carousel Chevron Controls for viewingSocialPostPreview */}
-                  {viewingSocialPostPreview.media_urls?.length > 1 && (() => {
-                    const mediaList: string[] = viewingSocialPostPreview.media_urls;
-                    return (
-                      <>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPreviewModalSlide((prev) => (prev === 0 ? mediaList.length - 1 : prev - 1));
-                          }}
-                          className="absolute left-2 top-1/2 -translate-y-1/2 z-20 p-2 rounded-full bg-black/70 hover:bg-black/95 text-white border border-white/20 shadow-lg transition-all"
-                          title="Previous slide"
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPreviewModalSlide((prev) => (prev === mediaList.length - 1 ? 0 : prev + 1));
-                          }}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 z-20 p-2 rounded-full bg-black/70 hover:bg-black/95 text-white border border-white/20 shadow-lg transition-all"
-                          title="Next slide"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
+                    {/* Desktop/Laptop Carousel Chevrons */}
+                    {viewingSocialPostPreview.media_urls?.length > 1 && (() => {
+                      const mediaList: string[] = viewingSocialPostPreview.media_urls;
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewModalSlide((prev) => (prev === 0 ? mediaList.length - 1 : prev - 1));
+                            }}
+                            className="absolute left-2 top-1/2 -translate-y-1/2 z-30 p-2 rounded-full bg-black/70 hover:bg-black/95 text-white border border-white/20 shadow-lg transition-all active:scale-110"
+                            title="Previous slide"
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewModalSlide((prev) => (prev === mediaList.length - 1 ? 0 : prev + 1));
+                            }}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 z-30 p-2 rounded-full bg-black/70 hover:bg-black/95 text-white border border-white/20 shadow-lg transition-all active:scale-110"
+                            title="Next slide"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
 
-                        <div className="absolute top-2 right-2 bg-black/75 text-white text-[10px] font-mono px-2.5 py-1 rounded-full border border-white/10 z-10">
-                          {previewModalSlide + 1}/{mediaList.length}
+                          {/* Dot Pagination */}
+                          <div className="absolute top-12 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
+                            {mediaList.map((_, dotIdx) => (
+                              <button
+                                key={dotIdx}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPreviewModalSlide(dotIdx);
+                                }}
+                                className={`h-1.5 rounded-full transition-all ${
+                                  dotIdx === previewModalSlide ? 'bg-amber-400 w-4' : 'bg-white/50 w-1.5 hover:bg-white'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
+
+                    {/* Right Interactive Sidebar */}
+                    <div className="absolute right-3 bottom-16 z-20 flex flex-col items-center gap-3.5 text-xs">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPreviewLiked(!previewLiked);
+                        }}
+                        className="flex flex-col items-center gap-0.5 group transition-transform active:scale-125"
+                      >
+                        <Heart className={`w-6 h-6 transition-colors ${previewLiked ? 'text-rose-500 fill-rose-500' : 'text-white'}`} />
+                        <span className="text-[9px] font-mono font-bold">{previewLiked ? '18.5K' : '18.4K'}</span>
+                      </button>
+
+                      <div className="flex flex-col items-center gap-0.5">
+                        <MessageSquare className="w-6 h-6 text-white" />
+                        <span className="text-[9px] font-mono font-bold">642</span>
+                      </div>
+
+                      <div className="flex flex-col items-center gap-0.5">
+                        <Share2 className="w-6 h-6 text-white" />
+                        <span className="text-[9px] font-mono font-bold">1.2K</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPreviewSaved(!previewSaved);
+                        }}
+                        className="transition-transform active:scale-125"
+                      >
+                        <Bookmark className={`w-6 h-6 ${previewSaved ? 'text-amber-400 fill-amber-400' : 'text-white'}`} />
+                      </button>
+
+                      {/* Rotating Vinyl Record for Reels Audio */}
+                      <div className="w-7 h-7 rounded-full bg-zinc-900 border-2 border-zinc-700 flex items-center justify-center animate-spin relative mt-1">
+                        <div className="w-2 h-2 rounded-full bg-amber-400"></div>
+                      </div>
+                    </div>
+
+                    {/* Bottom Overlay Content */}
+                    <div className="relative z-20 space-y-2 pr-12 text-left">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-amber-500 text-black text-[10px] font-black flex items-center justify-center border border-white shadow-md">
+                          E
                         </div>
+                        <div>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs font-bold leading-none">enchospace</span>
+                            <CheckCircle className="w-3 h-3 text-amber-400 fill-amber-400 text-black" />
+                          </div>
+                          <span className="text-[9px] text-zinc-300 block leading-tight">Joshua Tree, California</span>
+                        </div>
+                        <span className="bg-white/20 text-[9px] font-bold px-2 py-0.5 rounded-full border border-white/20 ml-1">Follow</span>
+                      </div>
 
-                        {/* Dot Pagination */}
-                        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 bg-black/70 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
-                          {mediaList.map((_, dotIdx) => (
+                      <p className="text-[11px] leading-snug line-clamp-2 text-zinc-100 font-light">
+                        {viewingSocialPostPreview.caption || 'Luxury stay getaway preview on Encho...'}
+                      </p>
+
+                      <div className="flex items-center gap-1.5 text-[9px] text-amber-300 font-mono">
+                        <Volume2 className="w-3 h-3 animate-pulse text-amber-400" />
+                        <span>@encho.original • Original Audio</span>
+                      </div>
+
+                      <div className="bg-amber-500 hover:bg-amber-400 text-gray-950 font-black text-xs py-2 px-3 rounded-xl text-center shadow-lg uppercase tracking-wider cursor-pointer transition-colors">
+                        ⚡ Book Stay on Encho.space
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ==================== FORMAT 2: INSTAGRAM FEED (1:1 NATIVE) ==================== */}
+                {modalPreviewDevice === 'instagram_feed' && (
+                  <div className="bg-white text-gray-900 rounded-[28px] overflow-hidden text-xs shadow-xl flex flex-col h-[480px]">
+                    {/* Instagram Header Bar */}
+                    <div className="flex items-center justify-between p-2.5 border-b border-gray-100 bg-white">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-amber-500 via-rose-500 to-purple-600 p-0.5">
+                          <div className="w-full h-full rounded-full bg-black text-white text-[9px] font-black flex items-center justify-center">
+                            E
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1">
+                            <span className="font-extrabold text-[11px] block leading-tight">enchospace</span>
+                            <CheckCircle className="w-3 h-3 text-blue-500 fill-blue-500 text-white" />
+                          </div>
+                          <span className="text-[9px] text-gray-400 block leading-none">Joshua Tree, CA</span>
+                        </div>
+                      </div>
+                      <MoreHorizontal className="w-4 h-4 text-gray-500" />
+                    </div>
+
+                    {/* Media Viewport */}
+                    <div className="relative aspect-square bg-black overflow-hidden group">
+                      {viewingSocialPostPreview.media_urls?.length > 0 ? (() => {
+                        const mediaList: string[] = viewingSocialPostPreview.media_urls || [];
+                        const activeUrl = mediaList[previewModalSlide] || mediaList[0];
+                        const isVid = activeUrl?.endsWith('.mp4') || activeUrl?.includes('video');
+                        return isVid ? (
+                          <video
+                            src={activeUrl}
+                            autoPlay
+                            loop
+                            muted={isPreviewMuted}
+                            playsInline
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <img
+                            src={activeUrl}
+                            className="w-full h-full object-cover"
+                            alt=""
+                          />
+                        );
+                      })() : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-500">
+                          <Sparkles className="w-6 h-6" />
+                        </div>
+                      )}
+
+                      {/* Sound Toggle Button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsPreviewMuted(!isPreviewMuted);
+                        }}
+                        className="absolute top-2 right-2 z-30 p-1.5 rounded-full bg-black/60 backdrop-blur-md hover:bg-black/80 text-white border border-white/20 transition-all shadow-md"
+                        title={isPreviewMuted ? "Unmute Sound" : "Mute Sound"}
+                      >
+                        {isPreviewMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3 text-amber-400" />}
+                      </button>
+
+                      {/* Carousel Chevrons for Multi-Media */}
+                      {viewingSocialPostPreview.media_urls?.length > 1 && (() => {
+                        const mediaList: string[] = viewingSocialPostPreview.media_urls;
+                        return (
+                          <>
                             <button
-                              key={dotIdx}
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setPreviewModalSlide(dotIdx);
+                                setPreviewModalSlide((prev) => (prev === 0 ? mediaList.length - 1 : prev - 1));
                               }}
-                              className={`h-2 rounded-full transition-all ${
-                                dotIdx === previewModalSlide ? 'bg-amber-400 w-4' : 'bg-white/50 w-2 hover:bg-white'
-                              }`}
-                            />
-                          ))}
+                              className="absolute left-2 top-1/2 -translate-y-1/2 z-20 p-1.5 rounded-full bg-black/70 hover:bg-black/95 text-white border border-white/20 shadow-md transition-all active:scale-110"
+                            >
+                              <ChevronLeft className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPreviewModalSlide((prev) => (prev === mediaList.length - 1 ? 0 : prev + 1));
+                              }}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 z-20 p-1.5 rounded-full bg-black/70 hover:bg-black/95 text-white border border-white/20 shadow-md transition-all active:scale-110"
+                            >
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+
+                            <div className="absolute top-2 left-2 bg-black/75 text-white text-[9px] font-mono px-2 py-0.5 rounded-full border border-white/10 z-10">
+                              {previewModalSlide + 1}/{mediaList.length}
+                            </div>
+
+                            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-black/70 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10">
+                              {mediaList.map((_, dotIdx) => (
+                                <button
+                                  key={dotIdx}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPreviewModalSlide(dotIdx);
+                                  }}
+                                  className={`h-1.5 rounded-full transition-all ${
+                                    dotIdx === previewModalSlide ? 'bg-amber-400 w-3' : 'bg-white/50 w-1.5 hover:bg-white'
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Action Bar & Caption Area */}
+                    <div className="p-2.5 space-y-1.5 flex-1 flex flex-col justify-between">
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <div className="flex items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setPreviewLiked(!previewLiked)}
+                              className="transition-transform active:scale-125"
+                            >
+                              <Heart className={`w-5 h-5 ${previewLiked ? 'text-rose-500 fill-rose-500' : 'text-gray-900'}`} />
+                            </button>
+                            <MessageSquare className="w-5 h-5 text-gray-900" />
+                            <Send className="w-5 h-5 text-gray-900 -rotate-45 -translate-y-0.5" />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewSaved(!previewSaved)}
+                            className="transition-transform active:scale-125"
+                          >
+                            <Bookmark className={`w-5 h-5 ${previewSaved ? 'text-gray-900 fill-gray-900' : 'text-gray-900'}`} />
+                          </button>
                         </div>
-                      </>
-                    );
-                  })()}
-                </div>
 
-                <p className="text-xs text-zinc-200 leading-relaxed font-light">
-                  {viewingSocialPostPreview.caption}
-                </p>
+                        <div className="text-[10px] font-bold text-gray-900">
+                          Liked by <span className="font-black">alex_traveler</span> and <span className="font-black">{previewLiked ? '1,843' : '1,842'} others</span>
+                        </div>
 
-                <div className="bg-amber-500 text-gray-950 font-black text-xs p-2.5 rounded-xl text-center uppercase tracking-wider">
-                  ⚡ Book Stay on Encho.space
-                </div>
+                        <p className="text-[10px] leading-tight line-clamp-2 text-gray-800 mt-1">
+                          <span className="font-extrabold mr-1 text-gray-900">enchospace</span>
+                          {viewingSocialPostPreview.caption || 'Unmatched luxury resort getaway in Joshua Tree...'}
+                        </p>
+                      </div>
+
+                      <div className="bg-gray-900 text-white text-[10px] font-bold p-2 text-center rounded-xl uppercase tracking-wider">
+                        ⚡ Book Stay on Encho.space
+                      </div>
+                    </div>
+
+                    {/* Instagram Bottom Nav Dock */}
+                    <div className="border-t border-gray-100 py-1.5 px-4 flex justify-between items-center text-gray-600 bg-white">
+                      <span className="font-black text-xs text-black">🏠</span>
+                      <Search className="w-4 h-4" />
+                      <PlusCircle className="w-4 h-4" />
+                      <Camera className="w-4 h-4" />
+                      <div className="w-4 h-4 rounded-full bg-amber-500 text-black text-[8px] font-bold flex items-center justify-center">E</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ==================== FORMAT 3: FACEBOOK FEED (NATIVE MOBILE) ==================== */}
+                {modalPreviewDevice === 'facebook_feed' && (
+                  <div className="bg-white text-gray-900 rounded-[28px] overflow-hidden text-xs shadow-xl flex flex-col h-[480px]">
+                    {/* Facebook App Bar */}
+                    <div className="bg-blue-600 text-white p-2.5 flex items-center justify-between">
+                      <span className="font-black text-sm tracking-tight">facebook</span>
+                      <div className="flex items-center gap-2">
+                        <Search className="w-4 h-4" />
+                        <MessageSquare className="w-4 h-4" />
+                      </div>
+                    </div>
+
+                    {/* Post Author Bar */}
+                    <div className="p-2.5 flex items-center justify-between border-b border-gray-100">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-black text-xs flex items-center justify-center border border-gray-200">
+                          E
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1">
+                            <span className="font-bold text-[11px] block leading-tight">Encho Spaces</span>
+                            <CheckCircle className="w-3.5 h-3.5 text-blue-600 fill-blue-600 text-white" />
+                          </div>
+                          <span className="text-[9px] text-gray-400 block leading-none flex items-center gap-1 mt-0.5">
+                            <span>Sponsored</span> • <Globe className="w-2.5 h-2.5" />
+                          </span>
+                        </div>
+                      </div>
+                      <MoreHorizontal className="w-4 h-4 text-gray-400" />
+                    </div>
+
+                    {/* Caption */}
+                    <div className="p-2.5 text-[10px] leading-relaxed text-gray-800 line-clamp-2">
+                      {viewingSocialPostPreview.caption || 'Book your dream luxury resort stay directly with host guarantee...'}
+                    </div>
+
+                    {/* Media Viewport */}
+                    <div className="relative aspect-video bg-black overflow-hidden group">
+                      {viewingSocialPostPreview.media_urls?.length > 0 ? (() => {
+                        const mediaList: string[] = viewingSocialPostPreview.media_urls || [];
+                        const activeUrl = mediaList[previewModalSlide] || mediaList[0];
+                        const isVid = activeUrl?.endsWith('.mp4') || activeUrl?.includes('video');
+                        return isVid ? (
+                          <video
+                            src={activeUrl}
+                            autoPlay
+                            loop
+                            muted={isPreviewMuted}
+                            playsInline
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <img
+                            src={activeUrl}
+                            className="w-full h-full object-cover"
+                            alt=""
+                          />
+                        );
+                      })() : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-400">
+                          <Sparkles className="w-6 h-6" />
+                        </div>
+                      )}
+
+                      {/* Sound Toggle Button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsPreviewMuted(!isPreviewMuted);
+                        }}
+                        className="absolute top-2 right-2 z-30 p-1.5 rounded-full bg-black/60 backdrop-blur-md hover:bg-black/80 text-white border border-white/20 transition-all shadow-md"
+                        title={isPreviewMuted ? "Unmute Sound" : "Mute Sound"}
+                      >
+                        {isPreviewMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3 text-amber-400" />}
+                      </button>
+
+                      {/* Multi-Media Chevrons */}
+                      {viewingSocialPostPreview.media_urls?.length > 1 && (() => {
+                        const mediaList: string[] = viewingSocialPostPreview.media_urls;
+                        return (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPreviewModalSlide((prev) => (prev === 0 ? mediaList.length - 1 : prev - 1));
+                              }}
+                              className="absolute left-2 top-1/2 -translate-y-1/2 z-20 p-1.5 rounded-full bg-black/70 hover:bg-black/95 text-white border border-white/20 shadow-md transition-all active:scale-110"
+                            >
+                              <ChevronLeft className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPreviewModalSlide((prev) => (prev === mediaList.length - 1 ? 0 : prev + 1));
+                              }}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 z-20 p-1.5 rounded-full bg-black/70 hover:bg-black/95 text-white border border-white/20 shadow-md transition-all active:scale-110"
+                            >
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+
+                            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-black/70 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10">
+                              {mediaList.map((_, dotIdx) => (
+                                <button
+                                  key={dotIdx}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPreviewModalSlide(dotIdx);
+                                  }}
+                                  className={`h-1.5 rounded-full transition-all ${
+                                    dotIdx === previewModalSlide ? 'bg-amber-400 w-3' : 'bg-white/50 w-1.5 hover:bg-white'
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Facebook Action Card CTA */}
+                    <div className="bg-gray-50 p-2.5 border-t border-b border-gray-100 flex items-center justify-between">
+                      <div>
+                        <span className="text-[8px] uppercase tracking-wider text-gray-400 block font-mono font-bold">
+                          ENCHO.SPACE
+                        </span>
+                        <span className="text-[10px] font-bold block text-gray-900">
+                          Reserve Luxury Stay
+                        </span>
+                      </div>
+                      <span className="bg-blue-600 text-white text-[10px] font-black px-3 py-1 rounded shadow-sm uppercase tracking-wider">
+                        Book Now
+                      </span>
+                    </div>
+
+                    {/* Interactive Facebook Reactions */}
+                    <div className="p-2 flex items-center justify-between text-gray-600 border-b border-gray-100 text-[10px] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewLiked(!previewLiked)}
+                        className={`flex items-center gap-1 py-1 px-2 rounded-lg hover:bg-gray-100 transition-colors ${
+                          previewLiked ? 'text-blue-600 font-black' : ''
+                        }`}
+                      >
+                        <ThumbsUp className={`w-3.5 h-3.5 ${previewLiked ? 'fill-blue-600' : ''}`} />
+                        <span>{previewLiked ? 'Liked' : 'Like'}</span>
+                      </button>
+                      <button type="button" className="flex items-center gap-1 py-1 px-2 rounded-lg hover:bg-gray-100">
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>Comment</span>
+                      </button>
+                      <button type="button" className="flex items-center gap-1 py-1 px-2 rounded-lg hover:bg-gray-100">
+                        <Share2 className="w-3.5 h-3.5" />
+                        <span>Share</span>
+                      </button>
+                    </div>
+
+                    {/* Facebook Bottom Dock */}
+                    <div className="mt-auto border-t border-gray-100 py-2 px-4 flex justify-between items-center text-gray-500 bg-white">
+                      <span className="text-blue-600 font-bold text-xs">📰</span>
+                      <Camera className="w-4 h-4" />
+                      <Globe className="w-4 h-4" />
+                      <User className="w-4 h-4" />
+                    </div>
+                  </div>
+                )}
               </div>
             </motion.div>
           </div>
