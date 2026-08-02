@@ -255,6 +255,14 @@ if (isDbConfigured) {
 
 // Initialize Redis (Upstash) - only if real credentials provided
 const isRedisConfigured = process.env.UPSTASH_REDIS_REST_URL && !process.env.UPSTASH_REDIS_REST_URL.includes('dummy');
+
+// Active inspection monitoring for Upstash Redis Integration Keys
+checkIntegrationKeys(
+  'Upstash Redis Cache',
+  ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN'],
+  'Upstash Redis Cache Initialization'
+);
+
 const redis = isRedisConfigured
   ? new Redis({
       url: process.env.UPSTASH_REDIS_REST_URL!,
@@ -4026,6 +4034,13 @@ async function dispatchGoogleAdsCampaign(campaignId: number, req: any) {
     const refreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN;
     const customerId = process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID;
 
+    // Perform active inspection monitoring for Google Ads integration keys
+    checkIntegrationKeys(
+      'Google Ads API',
+      ['GOOGLE_ADS_DEVELOPER_TOKEN', 'GOOGLE_ADS_CLIENT_ID', 'GOOGLE_ADS_CLIENT_SECRET', 'GOOGLE_ADS_REFRESH_TOKEN'],
+      `Campaign #${campaign.id} Google Ads Sync Dispatch`
+    );
+
     const hasRealGoogleCredentials = devToken && clientId && clientSecret && refreshToken && customerId && !devToken.includes('your_');
 
     if (hasRealGoogleCredentials) {
@@ -4161,6 +4176,13 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
     const pageId = process.env.META_PAGE_ID;
     const igAccountId = process.env.META_INSTAGRAM_ACCOUNT_ID;
     
+    // Perform active inspection logging for Meta Marketing integration keys
+    checkIntegrationKeys(
+      'Meta Marketing API',
+      ['META_ACCESS_TOKEN', 'META_AD_ACCOUNT_ID', 'META_PAGE_ID', 'META_INSTAGRAM_ACCOUNT_ID'],
+      `Campaign #${campaign.id} Meta Sync Dispatch`
+    );
+
     let cleanAdAccountId = String(rawAdAccountId || '').trim();
     if (cleanAdAccountId && !cleanAdAccountId.startsWith('act_') && cleanAdAccountId !== 'your_ad_account_id_here') {
       cleanAdAccountId = 'act_' + cleanAdAccountId;

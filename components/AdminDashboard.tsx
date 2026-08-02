@@ -1805,7 +1805,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                                            🛡️ Admin Real-time Telemetry & Fuel Gauge
                                                         </span>
                                                         <span className={`px-2 py-0.5 rounded border text-[10px] font-bold font-mono uppercase ${textBg}`}>
-                                                           {pct.toFixed(1)}% Spent
+                                                           {Number(pct || 0).toFixed(1)}% Spent
                                                         </span>
                                                      </div>
                                                      <div className="space-y-1">
@@ -1828,7 +1828,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                                         </div>
                                                         <div className="bg-white p-2 border rounded-lg">
                                                            <span className="text-gray-400 block mb-0.5">CTR</span>
-                                                           <strong className="text-gray-900 font-bold">{campaign.analytics?.ctr?.toFixed(2) || '0.00'}%</strong>
+                                                           <strong className="text-gray-900 font-bold">{Number(campaign.analytics?.ctr || 0).toFixed(2)}%</strong>
                                                         </div>
                                                         <div className="bg-white p-2 border rounded-lg">
                                                            <span className="text-gray-400 block mb-0.5">Pacing</span>

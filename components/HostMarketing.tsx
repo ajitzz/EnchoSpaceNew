@@ -1287,7 +1287,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
               <div className="flex items-baseline gap-3">
                 <h2 className="text-4xl sm:text-5xl font-black tracking-tight font-mono">{formatPrice(wallet?.balance || 0, 'USD')}</h2>
                 <span className="text-xs text-zinc-400 font-mono">
-                  {currency === 'INR' ? `(≈ $${((wallet?.balance || 0)).toFixed(2)} USD)` : `(≈ ₹${Math.round((wallet?.balance || 0) * 83.5).toLocaleString()} INR)`}
+                  {currency === 'INR' ? `(≈ $${Number(wallet?.balance || 0).toFixed(2)} USD)` : `(≈ ₹${Math.round(Number(wallet?.balance || 0) * 83.5).toLocaleString()} INR)`}
                 </span>
               </div>
               <p className="text-zinc-500 text-sm font-medium">Available Network Spend Budget</p>
@@ -1580,7 +1580,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               <span className="text-gray-500 flex items-center gap-1 uppercase tracking-wider font-semibold">
                                 <Gauge className="w-3.5 h-3.5" /> Fuel Gauge (Budget Burn)
                               </span>
-                              <span className="font-mono text-gray-900">{pct.toFixed(1)}% Depleted</span>
+                              <span className="font-mono text-gray-900">{Number(pct || 0).toFixed(1)}% Depleted</span>
                             </div>
                             <div className={`w-full h-3 rounded-full overflow-hidden ${barBg} border border-black/5 p-[1px]`}>
                               <div 
@@ -1784,7 +1784,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               <span className="text-[9px] font-black uppercase tracking-wider">CTR %</span>
                             </div>
                             <h4 className="text-xl font-black text-gray-900 font-mono">
-                              {selectedCampaignForAnalytics.analytics?.ctr.toFixed(2) || '0.00'}%
+                              {Number(selectedCampaignForAnalytics.analytics?.ctr || 0).toFixed(2)}%
                             </h4>
                           </div>
 
