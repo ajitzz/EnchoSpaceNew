@@ -1530,9 +1530,9 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                     )}
 
                     {(campaign.status === 'active' || campaign.status === 'completed') && (() => {
-                      const spent = campaign.analytics?.spent || 0;
-                      const budget = campaign.budget || 2500;
-                      const pct = Math.min(100, (spent / budget) * 100);
+                      const spent = Number(campaign.analytics?.spent ?? campaign.accumulated_spent ?? 0);
+                      const budget = Number(campaign.budget || 2500);
+                      const pct = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
                       const remaining = Math.max(0, budget - spent);
                       const isDepleted = campaign.status === 'completed' || pct >= 100;
 
@@ -1589,8 +1589,8 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               />
                             </div>
                             <div className="flex items-center justify-between text-[11px] font-mono text-gray-500">
-                              <span>Burnt: <strong className="text-gray-900 font-bold">₹{spent.toLocaleString()}</strong></span>
-                              <span>Remaining: <strong className="text-gray-900 font-bold">₹{remaining.toLocaleString()}</strong></span>
+                              <span>Burnt: <strong className="text-gray-900 font-bold">{formatPrice(spent, campaign.currency || 'INR')}</strong></span>
+                              <span>Remaining: <strong className="text-gray-900 font-bold">{formatPrice(remaining, campaign.currency || 'INR')}</strong></span>
                             </div>
                           </div>
 

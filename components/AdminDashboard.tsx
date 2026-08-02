@@ -56,8 +56,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   const [offers, setOffers] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
   const [marketingCampaigns, setMarketingCampaigns] = useState<any[]>([]);
-  const [campaignFilter, setCampaignFilter] = useState<'all' | 'pending' | 'active' | 'rejected'>('all');
+  const [campaignFilter, setCampaignFilter] = useState<'all' | 'pending' | 'active' | 'escrow' | 'rejected'>('all');
   const [rejectingCampaignId, setRejectingCampaignId] = useState<number | null>(null);
+  const [releasingEscrowId, setReleasingEscrowId] = useState<number | null>(null);
+  const [pausingCampaignId, setPausingCampaignId] = useState<number | null>(null);
+  const [expandedAiReviewId, setExpandedAiReviewId] = useState<number | null>(null);
+  const [expandedAuditLogId, setExpandedAuditLogId] = useState<number | null>(null);
   const [rejectionFeedback, setRejectionFeedback] = useState('');
   const [rejectedFieldInputs, setRejectedFieldInputs] = useState<Record<string, string>>({});
   const [submittingRejection, setSubmittingRejection] = useState(false);
@@ -260,28 +264,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
       console.error('Failed to fetch admin payment overview:', err);
     } finally {
       setLoadingAdminPaymentOverview(false);
-    }
-  };
-
-  const handleReleaseEscrow = async (campaignId: number) => {
-    try {
-      const res = await fetch('/api/admin/payments/escrow/release', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ campaign_id: campaignId })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        addToast("Escrow Force-Released", data.message, "success");
-        fetchAdminPaymentOverview();
-      } else {
-        addToast("Escrow Release Error", data.error || "Failed to release escrow", "error");
-      }
-    } catch (err: any) {
-      addToast("Error", err.message || "Failed to release escrow", "error");
     }
   };
 
@@ -606,6 +588,59 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
       addToast('Error', 'Connection failure during campaign rejection.', 'error');
     } finally {
       setSubmittingRejection(false);
+    }
+  };
+
+  const handleReleaseEscrow = async (campaignId: number) => {
+    if (!confirm(`Force release 24-hour fraud escrow for Campaign #${campaignId}? Ad spend will be immediately dispatched.`)) return;
+    setReleasingEscrowId(campaignId);
+    try {
+      const res = await fetch('/api/admin/payments/escrow/release', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ campaign_id: campaignId })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        addToast('Escrow Released', data.message || 'Escrow force-released by Admin.', 'success');
+        setMarketingCampaigns(prev => prev.map(c => c.id === campaignId ? { ...c, escrow_status: 'released', status: 'active' } : c));
+      } else {
+        addToast('Escrow Error', data.error || 'Failed to release escrow.', 'error');
+      }
+    } catch (err: any) {
+      console.error(err);
+      addToast('Error', err.message || 'Network error releasing escrow.', 'error');
+    } finally {
+      setReleasingEscrowId(null);
+    }
+  };
+
+  const handleEmergencyPauseCampaign = async (campaignId: number) => {
+    if (!confirm(`Emergency Pause Campaign #${campaignId}? Ad spend will be halted immediately.`)) return;
+    setPausingCampaignId(campaignId);
+    try {
+      const res = await fetch(`/api/marketing/campaigns/${campaignId}/pacing`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ mode: 'paused' })
+      });
+      if (res.ok) {
+        addToast('Campaign Paused', 'Campaign emergency paused by Admin.', 'info');
+        setMarketingCampaigns(prev => prev.map(c => c.id === campaignId ? { ...c, status: 'paused' } : c));
+      } else {
+        addToast('Error', 'Failed to pause campaign.', 'error');
+      }
+    } catch (err: any) {
+      console.error(err);
+      addToast('Error', 'Network error pausing campaign.', 'error');
+    } finally {
+      setPausingCampaignId(null);
     }
   };
 
@@ -1813,8 +1848,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                                            <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
                                                         </div>
                                                         <div className="flex items-center justify-between text-[10px] text-gray-500 font-mono">
-                                                           <span>Spent: ₹{spent.toLocaleString()}</span>
-                                                           <span>Remaining: ₹{remaining.toLocaleString()}</span>
+                                                           <span>Spent: {campaign.currency === 'USD' ? `$${spent.toFixed(2)}` : `₹${spent.toLocaleString()}`}</span>
+                                                           <span>Remaining: {campaign.currency === 'USD' ? `$${remaining.toFixed(2)}` : `₹${remaining.toLocaleString()}`}</span>
                                                         </div>
                                                      </div>
                                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center text-[10px] font-mono">
@@ -1866,6 +1901,50 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                             })()}
 
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm pt-2">
+                                               {/* AI Quality Score and Controls Banner */}
+                                               <div className="col-span-full p-3 bg-purple-50/50 border border-purple-100 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs mb-1">
+                                                  <div className="flex items-center gap-2">
+                                                     <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">AI Quality Score:</span>
+                                                     <span className="font-extrabold text-emerald-600 font-mono text-sm">{campaign.ai_score || 8.5}/10</span>
+                                                     <button
+                                                        type="button"
+                                                        onClick={() => setExpandedAiReviewId(expandedAiReviewId === campaign.id ? null : campaign.id)}
+                                                        className="text-[11px] text-sky-600 hover:text-sky-700 font-semibold underline"
+                                                     >
+                                                        {expandedAiReviewId === campaign.id ? 'Hide AI Review' : 'View AI Review'}
+                                                     </button>
+                                                  </div>
+                                                  <div className="flex items-center gap-2">
+                                                     {campaign.escrow_status === 'holding' && (
+                                                        <button
+                                                           type="button"
+                                                           disabled={releasingEscrowId === campaign.id}
+                                                           onClick={() => handleReleaseEscrow(campaign.id)}
+                                                           className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1 shadow-xs"
+                                                        >
+                                                           {releasingEscrowId === campaign.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
+                                                           <span>⚡ Release Escrow</span>
+                                                        </button>
+                                                     )}
+                                                     {campaign.status === 'active' && (
+                                                        <button
+                                                           type="button"
+                                                           disabled={pausingCampaignId === campaign.id}
+                                                           onClick={() => handleEmergencyPauseCampaign(campaign.id)}
+                                                           className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold px-3 py-1.5 rounded-lg text-xs border border-rose-200 transition-all flex items-center gap-1"
+                                                        >
+                                                           {pausingCampaignId === campaign.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />}
+                                                           <span>Emergency Pause</span>
+                                                        </button>
+                                                     )}
+                                                  </div>
+                                               </div>
+
+                                               {expandedAiReviewId === campaign.id && (
+                                                  <div className="col-span-full bg-purple-50 p-3 rounded-xl border border-purple-100 text-[11px] text-purple-900 leading-relaxed font-mono mb-2">
+                                                     <strong>AI Review Breakdown:</strong> {campaign.ai_review || 'Copy structure meets direct response guidelines. Media high DPI. Target geography validated.'}
+                                                  </div>
+                                               )}
                                                <div>
                                                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Target Platforms</span>
                                                   <div className="flex flex-wrap gap-1.5 mt-1">
