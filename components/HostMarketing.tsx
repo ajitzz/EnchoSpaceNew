@@ -90,6 +90,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   // Advanced Social Studio & Live Device Preview States
   const [activePreviewDevice, setActivePreviewDevice] = useState<'instagram_feed' | 'instagram_reels' | 'facebook_feed'>('instagram_reels');
   const [currentPreviewSlide, setCurrentPreviewSlide] = useState(0);
+  const [previewModalSlide, setPreviewModalSlide] = useState(0);
   const [showListingMediaPicker, setShowListingMediaPicker] = useState(false);
   const [isGeneratingAiCaption, setIsGeneratingAiCaption] = useState(false);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
@@ -4852,11 +4853,25 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                       </span>
                     </div>
 
+                    {/* Pro Hybrid Asset Engine Info Banner */}
+                    <div className="mb-3 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-900 space-y-1">
+                      <div className="font-extrabold text-[11px] flex items-center gap-1.5 text-amber-800 uppercase tracking-wider">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600 fill-amber-500" />
+                        <span>Hybrid Content Studio Capabilities</span>
+                      </div>
+                      <p className="text-[11px] text-zinc-700 leading-snug">
+                        <strong>Situation 1 (Drone/New Media):</strong> Upload fresh 4K aerial footage or unlisted photos anytime.
+                      </p>
+                      <p className="text-[11px] text-zinc-700 leading-snug">
+                        <strong>Situation 2 (Multi-Source Carousel):</strong> Pick photos/videos from your listing media vault AND mix them with local drone uploads in one single carousel!
+                      </p>
+                    </div>
+
                     {/* Action buttons for upload and listing reuse */}
                     <div className="flex flex-wrap gap-2 mb-3">
-                      <label className="cursor-pointer inline-flex items-center gap-1.5 bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-sm">
-                        <Upload className="w-3.5 h-3.5" />
-                        <span>Upload Photo / Video</span>
+                      <label className="cursor-pointer inline-flex items-center gap-1.5 bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl transition-all shadow-sm">
+                        <Upload className="w-4 h-4 text-amber-400" />
+                        <span>Upload Drone / Local Media</span>
                         <input
                           type="file"
                           accept="image/*,video/*"
@@ -4870,10 +4885,10 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                       <button
                         type="button"
                         onClick={() => setShowListingMediaPicker(true)}
-                        className="inline-flex items-center gap-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-bold px-3.5 py-2 rounded-xl transition-all border border-zinc-200"
+                        className="inline-flex items-center gap-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs font-bold px-3.5 py-2.5 rounded-xl transition-all border border-amber-200/80 shadow-xs"
                       >
-                        <Library className="w-3.5 h-3.5 text-zinc-600" />
-                        <span>Reuse Listing Assets</span>
+                        <Library className="w-4 h-4 text-amber-700" />
+                        <span>Pick Listing Media Vault Assets</span>
                       </button>
                     </div>
 
@@ -5107,24 +5122,82 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
                     {/* VIEW 1: INSTAGRAM REELS (9:16 Vertical) */}
                     {activePreviewDevice === 'instagram_reels' && (
-                      <div className="relative h-[420px] rounded-[24px] overflow-hidden bg-zinc-950 flex flex-col justify-between p-3 text-white">
+                      <div className="relative h-[420px] rounded-[24px] overflow-hidden bg-zinc-950 flex flex-col justify-between p-3 text-white group">
                         {/* Background Media */}
-                        {socialFormData.media_urls.length > 0 ? (
-                          <img
-                            src={socialFormData.media_urls[socialFormData.hero_index || 0] || socialFormData.media_urls[0]}
-                            className="absolute inset-0 w-full h-full object-cover"
-                            alt=""
-                          />
-                        ) : (
+                        {socialFormData.media_urls.length > 0 ? (() => {
+                          const activeUrl = socialFormData.media_urls[currentPreviewSlide] || socialFormData.media_urls[socialFormData.hero_index || 0] || socialFormData.media_urls[0];
+                          const isVid = activeUrl?.endsWith('.mp4') || activeUrl?.includes('video');
+                          return isVid ? (
+                            <video
+                              src={activeUrl}
+                              autoPlay
+                              loop
+                              muted
+                              playsInline
+                              className="absolute inset-0 w-full h-full object-cover"
+                            />
+                          ) : (
+                            <img
+                              src={activeUrl}
+                              className="absolute inset-0 w-full h-full object-cover"
+                              alt=""
+                            />
+                          );
+                        })() : (
                           <div className="absolute inset-0 flex items-center justify-center text-zinc-600 bg-zinc-900">
                             <Sparkles className="w-8 h-8 opacity-40" />
                           </div>
                         )}
                         <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/80"></div>
 
+                        {/* Carousel Swipe/Arrow Overlay for Desktop/Laptop */}
+                        {socialFormData.media_urls.length > 1 && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCurrentPreviewSlide((prev) => (prev === 0 ? socialFormData.media_urls.length - 1 : prev - 1));
+                              }}
+                              className="absolute left-2 top-1/2 -translate-y-1/2 z-30 p-1.5 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 transition-all shadow-lg"
+                              title="Previous slide"
+                            >
+                              <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCurrentPreviewSlide((prev) => (prev === socialFormData.media_urls.length - 1 ? 0 : prev + 1));
+                              }}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 z-30 p-1.5 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 transition-all shadow-lg"
+                              title="Next slide"
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+
+                            {/* Clickable Dot Pagination */}
+                            <div className="absolute top-10 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 bg-black/60 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10">
+                              {socialFormData.media_urls.map((_, dotIdx) => (
+                                <button
+                                  key={dotIdx}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCurrentPreviewSlide(dotIdx);
+                                  }}
+                                  className={`h-1.5 rounded-full transition-all ${
+                                    dotIdx === currentPreviewSlide ? 'bg-amber-400 w-3' : 'bg-white/50 w-1.5 hover:bg-white'
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                          </>
+                        )}
+
                         {/* Top Overlay */}
                         <div className="relative z-10 flex justify-between items-center text-xs font-bold">
-                          <span>Reels</span>
+                          <span className="bg-black/50 backdrop-blur-md px-2 py-0.5 rounded-md">Reels</span>
                           <Tv className="w-4 h-4" />
                         </div>
 
@@ -5191,23 +5264,80 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                         </div>
 
                         {/* Media Viewport */}
-                        <div className="relative aspect-square bg-gray-100 overflow-hidden">
-                          {socialFormData.media_urls.length > 0 ? (
-                            <img
-                              src={socialFormData.media_urls[currentPreviewSlide] || socialFormData.media_urls[0]}
-                              className="w-full h-full object-cover"
-                              alt=""
-                            />
-                          ) : (
+                        <div className="relative aspect-square bg-gray-100 overflow-hidden group">
+                          {socialFormData.media_urls.length > 0 ? (() => {
+                            const activeUrl = socialFormData.media_urls[currentPreviewSlide] || socialFormData.media_urls[0];
+                            const isVid = activeUrl?.endsWith('.mp4') || activeUrl?.includes('video');
+                            return isVid ? (
+                              <video
+                                src={activeUrl}
+                                autoPlay
+                                loop
+                                muted
+                                playsInline
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <img
+                                src={activeUrl}
+                                className="w-full h-full object-cover"
+                                alt=""
+                              />
+                            );
+                          })() : (
                             <div className="w-full h-full flex items-center justify-center text-gray-400">
                               <Sparkles className="w-6 h-6" />
                             </div>
                           )}
 
+                          {/* Desktop/Laptop Interactive Carousel Chevrons */}
                           {socialFormData.media_urls.length > 1 && (
-                            <div className="absolute top-2 right-2 bg-black/70 text-white text-[9px] font-mono px-2 py-0.5 rounded-full">
-                              {currentPreviewSlide + 1}/{socialFormData.media_urls.length}
-                            </div>
+                            <>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCurrentPreviewSlide((prev) => (prev === 0 ? socialFormData.media_urls.length - 1 : prev - 1));
+                                }}
+                                className="absolute left-2 top-1/2 -translate-y-1/2 z-20 p-1.5 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 shadow-md transition-all"
+                                title="Previous slide"
+                              >
+                                <ChevronLeft className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCurrentPreviewSlide((prev) => (prev === socialFormData.media_urls.length - 1 ? 0 : prev + 1));
+                                }}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 z-20 p-1.5 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 shadow-md transition-all"
+                                title="Next slide"
+                              >
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Slide counter badge */}
+                              <div className="absolute top-2 right-2 bg-black/70 text-white text-[9px] font-mono px-2 py-0.5 rounded-full border border-white/10 z-10">
+                                {currentPreviewSlide + 1}/{socialFormData.media_urls.length}
+                              </div>
+
+                              {/* Clickable Dot Pagination */}
+                              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10">
+                                {socialFormData.media_urls.map((_, dotIdx) => (
+                                  <button
+                                    key={dotIdx}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setCurrentPreviewSlide(dotIdx);
+                                    }}
+                                    className={`h-1.5 rounded-full transition-all ${
+                                      dotIdx === currentPreviewSlide ? 'bg-amber-400 w-3' : 'bg-white/50 w-1.5 hover:bg-white'
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                            </>
                           )}
                         </div>
 
@@ -5258,17 +5388,75 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                           {socialFormData.caption || 'Book your dream luxury resort stay directly with host guarantee...'}
                         </div>
 
-                        <div className="aspect-video bg-gray-100 overflow-hidden">
-                          {socialFormData.media_urls.length > 0 ? (
-                            <img
-                              src={socialFormData.media_urls[0]}
-                              className="w-full h-full object-cover"
-                              alt=""
-                            />
-                          ) : (
+                        <div className="relative aspect-video bg-gray-100 overflow-hidden group">
+                          {socialFormData.media_urls.length > 0 ? (() => {
+                            const activeUrl = socialFormData.media_urls[currentPreviewSlide] || socialFormData.media_urls[0];
+                            const isVid = activeUrl?.endsWith('.mp4') || activeUrl?.includes('video');
+                            return isVid ? (
+                              <video
+                                src={activeUrl}
+                                autoPlay
+                                loop
+                                muted
+                                playsInline
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <img
+                                src={activeUrl}
+                                className="w-full h-full object-cover"
+                                alt=""
+                              />
+                            );
+                          })() : (
                             <div className="w-full h-full flex items-center justify-center text-gray-400">
                               <Sparkles className="w-6 h-6" />
                             </div>
+                          )}
+
+                          {/* Desktop Carousel Chevrons for FB Feed */}
+                          {socialFormData.media_urls.length > 1 && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCurrentPreviewSlide((prev) => (prev === 0 ? socialFormData.media_urls.length - 1 : prev - 1));
+                                }}
+                                className="absolute left-2 top-1/2 -translate-y-1/2 z-20 p-1.5 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 shadow-md transition-all"
+                                title="Previous slide"
+                              >
+                                <ChevronLeft className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCurrentPreviewSlide((prev) => (prev === socialFormData.media_urls.length - 1 ? 0 : prev + 1));
+                                }}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 z-20 p-1.5 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 shadow-md transition-all"
+                                title="Next slide"
+                              >
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Clickable Dot Pagination */}
+                              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/10">
+                                {socialFormData.media_urls.map((_, dotIdx) => (
+                                  <button
+                                    key={dotIdx}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setCurrentPreviewSlide(dotIdx);
+                                    }}
+                                    className={`h-1.5 rounded-full transition-all ${
+                                      dotIdx === currentPreviewSlide ? 'bg-amber-400 w-3' : 'bg-white/50 w-1.5 hover:bg-white'
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                            </>
                           )}
                         </div>
 
@@ -5904,18 +6092,85 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                   </div>
                 </div>
 
-                <div className="aspect-square bg-zinc-950 rounded-xl overflow-hidden border border-zinc-800 relative">
-                  {viewingSocialPostPreview.media_urls?.[0] ? (
-                    <img
-                      src={viewingSocialPostPreview.media_urls[0]}
-                      className="w-full h-full object-cover"
-                      alt=""
-                    />
-                  ) : (
+                <div className="aspect-square bg-zinc-950 rounded-xl overflow-hidden border border-zinc-800 relative group">
+                  {viewingSocialPostPreview.media_urls?.length > 0 ? (() => {
+                    const mediaList: string[] = viewingSocialPostPreview.media_urls || [];
+                    const activeUrl = mediaList[previewModalSlide] || mediaList[0];
+                    const isVid = activeUrl?.endsWith('.mp4') || activeUrl?.includes('video');
+                    return isVid ? (
+                      <video
+                        src={activeUrl}
+                        controls
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <img
+                        src={activeUrl}
+                        className="w-full h-full object-cover"
+                        alt=""
+                      />
+                    );
+                  })() : (
                     <div className="w-full h-full flex items-center justify-center text-zinc-600">
                       <Sparkles className="w-8 h-8" />
                     </div>
                   )}
+
+                  {/* Interactive Carousel Chevron Controls for viewingSocialPostPreview */}
+                  {viewingSocialPostPreview.media_urls?.length > 1 && (() => {
+                    const mediaList: string[] = viewingSocialPostPreview.media_urls;
+                    return (
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewModalSlide((prev) => (prev === 0 ? mediaList.length - 1 : prev - 1));
+                          }}
+                          className="absolute left-2 top-1/2 -translate-y-1/2 z-20 p-2 rounded-full bg-black/70 hover:bg-black/95 text-white border border-white/20 shadow-lg transition-all"
+                          title="Previous slide"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewModalSlide((prev) => (prev === mediaList.length - 1 ? 0 : prev + 1));
+                          }}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 z-20 p-2 rounded-full bg-black/70 hover:bg-black/95 text-white border border-white/20 shadow-lg transition-all"
+                          title="Next slide"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+
+                        <div className="absolute top-2 right-2 bg-black/75 text-white text-[10px] font-mono px-2.5 py-1 rounded-full border border-white/10 z-10">
+                          {previewModalSlide + 1}/{mediaList.length}
+                        </div>
+
+                        {/* Dot Pagination */}
+                        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 bg-black/70 backdrop-blur-md px-3 py-1 rounded-full border border-white/10">
+                          {mediaList.map((_, dotIdx) => (
+                            <button
+                              key={dotIdx}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPreviewModalSlide(dotIdx);
+                              }}
+                              className={`h-2 rounded-full transition-all ${
+                                dotIdx === previewModalSlide ? 'bg-amber-400 w-4' : 'bg-white/50 w-2 hover:bg-white'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <p className="text-xs text-zinc-200 leading-relaxed font-light">
