@@ -9,5 +9,5 @@ export function getRatingWord(rating: number): string {
 
 export function formatRating(rating: number | undefined | null): string {
     if (!rating) return 'New';
-    return rating.toFixed(1);
+    return Number(rating).toFixed(1);
 }
