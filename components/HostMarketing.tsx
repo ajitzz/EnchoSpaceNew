@@ -6,7 +6,7 @@ import {
   Trash2, Send, Check, ShieldCheck, HelpCircle, Loader2, CreditCard, ExternalLink,
   Heart, MessageSquare, Bookmark, ChevronLeft, ChevronRight, Volume2, Share2, MoreHorizontal,
   Library, Layers, PenTool, Sliders, MapPin, ArrowLeft, ArrowRight, Upload,
-  Gauge, Zap, Clock, BatteryCharging, X
+  Gauge, Zap, Clock, BatteryCharging, X, Search, Video, Image, Maximize2, Filter, Star, CheckSquare, Square
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from './ToastContext';
@@ -94,6 +94,12 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   const [isGeneratingAiCaption, setIsGeneratingAiCaption] = useState(false);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
   const [viewingSocialPostPreview, setViewingSocialPostPreview] = useState<any | null>(null);
+
+  // Advanced Listing Media Vault Picker States
+  const [pickerActivePropertyId, setPickerActivePropertyId] = useState<string>('all');
+  const [pickerAssetFilter, setPickerAssetFilter] = useState<'all' | 'hero' | 'videos' | 'photos'>('all');
+  const [pickerSearchQuery, setPickerSearchQuery] = useState('');
+  const [lightboxMediaUrl, setLightboxMediaUrl] = useState<string | null>(null);
 
   // Form states for creating campaign
   const [formData, setFormData] = useState({
@@ -5290,75 +5296,570 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         )}
       </AnimatePresence>
 
-      {/* LISTING MEDIA PICKER OVERLAY MODAL */}
+      {/* ADVANCED ENCHO MEDIA VAULT & LISTING ASSET HUB MODAL */}
       <AnimatePresence>
-        {showListingMediaPicker && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl text-left max-h-[85vh] flex flex-col"
-            >
-              <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
-                <div>
-                  <h3 className="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2">
-                    <Library className="w-5 h-5 text-blue-600" />
-                    <span>Select Photos/Videos from Your Listings</span>
-                  </h3>
-                  <p className="text-xs text-gray-500 font-light">
-                    Click any media asset to attach it directly to your draft post.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowListingMediaPicker(false)}
-                  className="p-1.5 rounded-full hover:bg-gray-100 text-gray-400"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+        {showListingMediaPicker && (() => {
+          // Extract & process structured listing media items
+          const studioDemoAssets = [
+            {
+              id: 'demo-video-1',
+              url: 'https://assets.mixkit.co/videos/preview/mixkit-swimming-pool-in-a-luxurious-resort-41484-large.mp4',
+              type: 'video' as const,
+              listingId: 'demo',
+              listingTitle: 'Encho Studio Master Library',
+              listingCity: 'Global',
+              category: 'Video Tour' as const,
+              aspectRatio: '9:16' as const,
+              aiTag: '🎬 4K Vertical Pool Loop',
+              score: 9.9
+            },
+            {
+              id: 'demo-video-2',
+              url: 'https://assets.mixkit.co/videos/preview/mixkit-aerial-view-of-a-resort-and-the-ocean-41584-large.mp4',
+              type: 'video' as const,
+              listingId: 'demo',
+              listingTitle: 'Encho Studio Master Library',
+              listingCity: 'Global',
+              category: 'Video Tour' as const,
+              aspectRatio: '9:16' as const,
+              aiTag: '🚁 4K Ocean Aerial Drone Shot',
+              score: 9.8
+            }
+          ];
 
-              {/* Grid of All Host Listing Media Assets */}
-              <div className="flex-1 overflow-y-auto p-1 grid grid-cols-3 sm:grid-cols-4 gap-3">
-                {listings.flatMap((l) => [l.imageUrl, ...(l.images || [])]).map((mediaUrl, idx) => {
-                  const isSelected = socialFormData.media_urls.includes(mediaUrl);
-                  return (
-                    <div
-                      key={idx}
-                      onClick={() => {
-                        setSocialFormData((prev) => ({
-                          ...prev,
-                          media_urls: isSelected
-                            ? prev.media_urls.filter((u) => u !== mediaUrl)
-                            : [...prev.media_urls, mediaUrl]
-                        }));
-                      }}
-                      className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer border-2 transition-all ${
-                        isSelected ? 'border-amber-500 ring-4 ring-amber-500/20 scale-[0.98]' : 'border-gray-200 hover:border-gray-400'
+          const allVaultMedia: any[] = [];
+          listings.forEach((l) => {
+            if (l.imageUrl) {
+              allVaultMedia.push({
+                id: `${l.id}-hero`,
+                url: l.imageUrl,
+                type: 'photo',
+                listingId: String(l.id),
+                listingTitle: l.title,
+                listingCity: l.city,
+                category: 'Hero Cover',
+                aspectRatio: '16:9',
+                aiTag: '⭐ Primary Hero Photo',
+                score: 9.8
+              });
+            }
+
+            let extraImages: string[] = [];
+            if (Array.isArray(l.imageUrls)) extraImages = l.imageUrls;
+            else if (Array.isArray((l as any).images)) extraImages = (l as any).images;
+            else if (typeof (l as any).images === 'string') {
+              try { extraImages = JSON.parse((l as any).images); } catch (e) { void e; }
+            } else if (typeof l.imageUrls === 'string') {
+              try { extraImages = JSON.parse(l.imageUrls); } catch (e) { void e; }
+            }
+
+            extraImages.forEach((imgUrl, idx) => {
+              if (imgUrl && imgUrl !== l.imageUrl) {
+                allVaultMedia.push({
+                  id: `${l.id}-gallery-${idx}`,
+                  url: imgUrl,
+                  type: 'photo',
+                  listingId: String(l.id),
+                  listingTitle: l.title,
+                  listingCity: l.city,
+                  category: 'Listing Gallery',
+                  aspectRatio: '1:1',
+                  aiTag: `📸 High-Res Asset #${idx + 1}`,
+                  score: 9.4
+                });
+              }
+            });
+
+            if (l.video_url) {
+              allVaultMedia.push({
+                id: `${l.id}-video`,
+                url: l.video_url,
+                type: 'video',
+                listingId: String(l.id),
+                listingTitle: l.title,
+                listingCity: l.city,
+                category: 'Video Tour',
+                aspectRatio: '9:16',
+                aiTag: '🎬 Vertical Video Tour',
+                score: 9.9
+              });
+            }
+
+            if (l.rooms && Array.isArray(l.rooms)) {
+              l.rooms.forEach((r, rIdx) => {
+                if (r.imageUrls && Array.isArray(r.imageUrls)) {
+                  r.imageUrls.forEach((rUrl, rImgIdx) => {
+                    if (rUrl) {
+                      allVaultMedia.push({
+                        id: `${l.id}-room-${rIdx}-${rImgIdx}`,
+                        url: rUrl,
+                        type: 'photo',
+                        listingId: String(l.id),
+                        listingTitle: l.title,
+                        listingCity: l.city,
+                        category: 'Room Suite',
+                        aspectRatio: '1:1',
+                        aiTag: `🛏️ ${r.name || 'Suite Interior'}`,
+                        score: 9.3
+                      });
+                    }
+                  });
+                }
+                if (r.video_url) {
+                  allVaultMedia.push({
+                    id: `${l.id}-room-video-${rIdx}`,
+                    url: r.video_url,
+                    type: 'video',
+                    listingId: String(l.id),
+                    listingTitle: l.title,
+                    listingCity: l.city,
+                    category: 'Video Tour',
+                    aspectRatio: '9:16',
+                    aiTag: `🎬 ${r.name} Video Tour`,
+                    score: 9.7
+                  });
+                }
+              });
+            }
+          });
+
+          const fullVaultList = [...allVaultMedia, ...studioDemoAssets];
+
+          // Filter by property, asset filter & search
+          const filteredVault = fullVaultList.filter((item) => {
+            if (pickerActivePropertyId !== 'all' && item.listingId !== pickerActivePropertyId) {
+              return false;
+            }
+            if (pickerAssetFilter === 'hero' && item.category !== 'Hero Cover') return false;
+            if (pickerAssetFilter === 'videos' && item.type !== 'video') return false;
+            if (pickerAssetFilter === 'photos' && item.type !== 'photo') return false;
+            if (pickerSearchQuery.trim()) {
+              const q = pickerSearchQuery.toLowerCase();
+              const match = item.listingTitle.toLowerCase().includes(q) ||
+                            (item.listingCity && item.listingCity.toLowerCase().includes(q)) ||
+                            item.aiTag.toLowerCase().includes(q) ||
+                            item.category.toLowerCase().includes(q);
+              if (!match) return false;
+            }
+            return true;
+          });
+
+          const isListingSelected = (url: string) => socialFormData.media_urls.includes(url);
+
+          const toggleMediaUrl = (url: string) => {
+            setSocialFormData((prev) => ({
+              ...prev,
+              media_urls: prev.media_urls.includes(url)
+                ? prev.media_urls.filter((u) => u !== url)
+                : [...prev.media_urls, url]
+            }));
+          };
+
+          const handleSelectAllFiltered = () => {
+            const urlsToSelect = filteredVault.map((item) => item.url);
+            const merged = Array.from(new Set([...socialFormData.media_urls, ...urlsToSelect]));
+            setSocialFormData((prev) => ({ ...prev, media_urls: merged }));
+            addToast(`Selected all ${urlsToSelect.length} assets from current view`, 'info');
+          };
+
+          const handleClearAllFiltered = () => {
+            const urlsToRemove = new Set(filteredVault.map((item) => item.url));
+            setSocialFormData((prev) => ({
+              ...prev,
+              media_urls: prev.media_urls.filter((u) => !urlsToRemove.has(u))
+            }));
+            addToast('Deselected assets from current view', 'info');
+          };
+
+          return (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-3 sm:p-6">
+              <motion.div
+                initial={{ scale: 0.96, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.96, opacity: 0 }}
+                className="bg-white rounded-3xl max-w-5xl w-full p-5 sm:p-7 shadow-2xl text-left max-h-[90vh] flex flex-col overflow-hidden border border-zinc-100"
+              >
+                {/* MODAL HEADER */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-zinc-150">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-amber-500/10 text-amber-600 rounded-xl">
+                        <Library className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+                          <span>Encho Media Vault & Asset Hub</span>
+                          <span className="bg-amber-100 text-amber-800 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full">
+                            PRO STUDIO
+                          </span>
+                        </h3>
+                        <p className="text-xs text-gray-500 font-light mt-0.5">
+                          Browse photos, 9:16 vertical videos, and room tours across your property listings.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <span className="text-xs font-mono font-bold bg-zinc-100 px-3 py-1.5 rounded-xl text-zinc-800 border border-zinc-200">
+                      {socialFormData.media_urls.length} Selected
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowListingMediaPicker(false)}
+                      className="p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* SEARCH & FILTER BAR */}
+                <div className="py-3 border-b border-zinc-100 space-y-3 bg-zinc-50/50 -mx-5 px-5 sm:-mx-7 sm:px-7">
+                  {/* Property Tabs Switcher */}
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+                    <button
+                      type="button"
+                      onClick={() => setPickerActivePropertyId('all')}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
+                        pickerActivePropertyId === 'all'
+                          ? 'bg-gray-900 text-white border-gray-900 shadow-sm'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
                       }`}
                     >
-                      <img src={mediaUrl} className="w-full h-full object-cover" alt="" />
-                      {isSelected && (
-                        <div className="absolute inset-0 bg-amber-500/30 flex items-center justify-center text-white">
-                          <CheckCircle className="w-7 h-7 drop-shadow-md text-amber-400 fill-amber-400" />
-                        </div>
-                      )}
+                      All Properties ({fullVaultList.length})
+                    </button>
+
+                    {listings.map((l) => {
+                      const count = fullVaultList.filter((m) => m.listingId === String(l.id)).length;
+                      return (
+                        <button
+                          key={l.id}
+                          type="button"
+                          onClick={() => setPickerActivePropertyId(String(l.id))}
+                          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border flex items-center gap-1.5 ${
+                            pickerActivePropertyId === String(l.id)
+                              ? 'bg-gray-900 text-white border-gray-900 shadow-sm'
+                              : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <MapPin className="w-3 h-3 text-amber-500" />
+                          <span>{l.title}</span>
+                          <span className="text-[10px] font-mono opacity-60">({count})</span>
+                        </button>
+                      );
+                    })}
+
+                    <button
+                      type="button"
+                      onClick={() => setPickerActivePropertyId('demo')}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border flex items-center gap-1.5 ${
+                        pickerActivePropertyId === 'demo'
+                          ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                          : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                      }`}
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      <span>4K Studio Demo Library</span>
+                    </button>
+                  </div>
+
+                  {/* Category Pills + Search + Selection Controls */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                      <button
+                        type="button"
+                        onClick={() => setPickerAssetFilter('all')}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                          pickerAssetFilter === 'all'
+                            ? 'bg-amber-500 text-white shadow-xs'
+                            : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
+                        }`}
+                      >
+                        All Assets
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPickerAssetFilter('hero')}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
+                          pickerAssetFilter === 'hero'
+                            ? 'bg-amber-500 text-white shadow-xs'
+                            : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
+                        }`}
+                      >
+                        <Star className="w-3 h-3" /> Hero Covers
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPickerAssetFilter('videos')}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
+                          pickerAssetFilter === 'videos'
+                            ? 'bg-amber-500 text-white shadow-xs'
+                            : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
+                        }`}
+                      >
+                        <Video className="w-3 h-3" /> 9:16 Video Clips
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPickerAssetFilter('photos')}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
+                          pickerAssetFilter === 'photos'
+                            ? 'bg-amber-500 text-white shadow-xs'
+                            : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
+                        }`}
+                      >
+                        <Image className="w-3 h-3" /> High-Res Photos
+                      </button>
                     </div>
-                  );
-                })}
+
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1 sm:w-48">
+                        <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="text"
+                          placeholder="Filter assets..."
+                          value={pickerSearchQuery}
+                          onChange={(e) => setPickerSearchQuery(e.target.value)}
+                          className="w-full bg-white border border-gray-200 rounded-xl pl-8 pr-3 py-1 text-xs outline-none focus:border-amber-500"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleSelectAllFiltered}
+                        className="text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-200 flex items-center gap-1 whitespace-nowrap"
+                      >
+                        <CheckSquare className="w-3 h-3" /> Select View ({filteredVault.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleClearAllFiltered}
+                        className="text-[11px] font-bold text-gray-500 hover:text-gray-800 bg-white border border-gray-200 px-2.5 py-1 rounded-lg flex items-center gap-1 whitespace-nowrap"
+                      >
+                        <Square className="w-3 h-3" /> Clear
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* FORMAT RECOMMENDATION TIP */}
+                {socialFormData.media_type === 'reel' && (
+                  <div className="mt-3 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 rounded-2xl p-2.5 text-xs text-amber-900 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>
+                        <strong>Reels Optimization:</strong> Select 9:16 vertical video tours or high-dynamic range hero covers for maximum reach algorithm boost.
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono font-bold bg-amber-200/60 text-amber-900 px-2 py-0.5 rounded-full shrink-0">
+                      9:16 RECOMMENDED
+                    </span>
+                  </div>
+                )}
+
+                {/* MEDIA ASSET GRID GALLERY */}
+                <div className="flex-1 overflow-y-auto my-3 p-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5">
+                  {filteredVault.length === 0 ? (
+                    <div className="col-span-full py-12 text-center text-gray-400 space-y-2">
+                      <Library className="w-10 h-10 mx-auto opacity-30" />
+                      <p className="text-sm font-bold">No media assets match your active filters</p>
+                      <p className="text-xs">Try selecting 'All Properties' or clearing search terms.</p>
+                    </div>
+                  ) : (
+                    filteredVault.map((item, idx) => {
+                      const selected = isListingSelected(item.url);
+                      const selectedIndex = socialFormData.media_urls.indexOf(item.url);
+
+                      return (
+                        <div
+                          key={item.id}
+                          className={`group relative rounded-2xl overflow-hidden border-2 transition-all cursor-pointer bg-zinc-900 ${
+                            selected
+                              ? 'border-amber-500 ring-4 ring-amber-500/25 scale-[0.98]'
+                              : 'border-zinc-200 hover:border-zinc-400 shadow-sm hover:shadow-md'
+                          }`}
+                        >
+                          {/* Media Thumbnail */}
+                          <div
+                            className="relative aspect-square w-full overflow-hidden"
+                            onClick={() => toggleMediaUrl(item.url)}
+                          >
+                            {item.type === 'video' ? (
+                              <div className="relative w-full h-full">
+                                <video
+                                  src={item.url}
+                                  className="w-full h-full object-cover"
+                                  muted
+                                  loop
+                                  onMouseOver={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
+                                  onMouseOut={(e) => (e.target as HTMLVideoElement).pause()}
+                                />
+                                <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                                  <div className="w-8 h-8 rounded-full bg-white/80 text-gray-900 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                                    <Play className="w-4 h-4 fill-gray-900 ml-0.5" />
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <img
+                                src={item.url}
+                                alt=""
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              />
+                            )}
+
+                            {/* Gradient Overlay */}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 opacity-90"></div>
+
+                            {/* Selection Order / Indicator Badge */}
+                            <div className="absolute top-2 left-2 z-10">
+                              {selected ? (
+                                <div className="bg-amber-500 text-white font-mono font-black text-xs w-6 h-6 rounded-full flex items-center justify-center shadow-md">
+                                  #{selectedIndex + 1}
+                                </div>
+                              ) : (
+                                <div className="w-6 h-6 rounded-full border-2 border-white/80 bg-black/30 group-hover:border-amber-400 transition-colors"></div>
+                              )}
+                            </div>
+
+                            {/* Lightbox Fullscreen Button */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setLightboxMediaUrl(item.url);
+                              }}
+                              className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-black/60 text-white hover:bg-amber-500 transition-colors opacity-80 hover:opacity-100"
+                              title="Zoom Preview"
+                            >
+                              <Maximize2 className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Aspect Ratio Badge */}
+                            <div className="absolute bottom-2 left-2 z-10 flex flex-wrap gap-1">
+                              <span className="bg-black/70 backdrop-blur-md text-amber-300 text-[9px] font-mono font-bold px-2 py-0.5 rounded-md border border-amber-500/30">
+                                {item.aspectRatio}
+                              </span>
+                              <span className="bg-black/70 backdrop-blur-md text-white text-[9px] font-bold px-2 py-0.5 rounded-md border border-white/10">
+                                {item.aiTag}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Footer Info Card */}
+                          <div
+                            className="p-2.5 bg-white text-left"
+                            onClick={() => toggleMediaUrl(item.url)}
+                          >
+                            <span className="text-[10px] font-bold text-gray-900 block truncate leading-tight">
+                              {item.listingTitle}
+                            </span>
+                            <div className="flex items-center justify-between text-[9px] text-gray-500 mt-1">
+                              <span className="text-amber-600 font-bold">{item.category}</span>
+                              <span className="font-mono text-emerald-600 font-bold">Score: {item.score}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* MODAL FOOTER ACTIONS */}
+                <div className="pt-4 border-t border-zinc-150 flex flex-col sm:flex-row justify-between items-center gap-3 mt-auto">
+                  <div className="flex items-center gap-2 text-xs text-gray-600">
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    <span>
+                      Selected <strong className="text-gray-900 font-mono">{socialFormData.media_urls.length}</strong> asset(s) ready for brand publishing
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setSocialFormData((prev) => ({ ...prev, media_urls: [] }))}
+                      className="px-4 py-2.5 text-xs font-bold text-gray-500 hover:text-gray-800"
+                    >
+                      Clear Selection
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowListingMediaPicker(false)}
+                      className="bg-gray-900 hover:bg-gray-800 text-white font-bold text-xs px-6 py-2.5 rounded-2xl shadow-md transition-all flex items-center gap-2"
+                    >
+                      <CheckCircle className="w-4 h-4 text-amber-400" />
+                      <span>Confirm & Attach ({socialFormData.media_urls.length})</span>
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
+      </AnimatePresence>
+
+      {/* LIGHTBOX FULL-RESOLUTION ZOOM MODAL */}
+      <AnimatePresence>
+        {lightboxMediaUrl && (
+          <div className="fixed inset-0 bg-black/90 backdrop-blur-xl z-[60] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center justify-center"
+            >
+              <button
+                type="button"
+                onClick={() => setLightboxMediaUrl(null)}
+                className="absolute -top-12 right-0 p-2 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+
+              <div className="rounded-3xl overflow-hidden border border-zinc-800 max-h-[75vh] flex items-center justify-center bg-black shadow-2xl">
+                {lightboxMediaUrl.endsWith('.mp4') || lightboxMediaUrl.includes('video') ? (
+                  <video src={lightboxMediaUrl} controls autoPlay className="max-h-[75vh] w-auto object-contain" />
+                ) : (
+                  <img src={lightboxMediaUrl} alt="" className="max-h-[75vh] w-auto object-contain" />
+                )}
               </div>
 
-              <div className="pt-4 border-t border-gray-100 flex justify-between items-center mt-4">
-                <span className="text-xs font-mono text-gray-500">
-                  {socialFormData.media_urls.length} media item(s) selected
-                </span>
+              <div className="mt-4 flex items-center gap-4">
                 <button
                   type="button"
-                  onClick={() => setShowListingMediaPicker(false)}
-                  className="bg-gray-900 text-white font-bold text-xs px-5 py-2.5 rounded-xl hover:bg-gray-800"
+                  onClick={() => {
+                    const selected = socialFormData.media_urls.includes(lightboxMediaUrl);
+                    setSocialFormData((prev) => ({
+                      ...prev,
+                      media_urls: selected
+                        ? prev.media_urls.filter((u) => u !== lightboxMediaUrl)
+                        : [...prev.media_urls, lightboxMediaUrl]
+                    }));
+                  }}
+                  className={`px-6 py-3 rounded-2xl text-xs font-bold transition-all shadow-lg flex items-center gap-2 ${
+                    socialFormData.media_urls.includes(lightboxMediaUrl)
+                      ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                      : 'bg-amber-500 hover:bg-amber-600 text-gray-950 font-black'
+                  }`}
                 >
-                  Done Selection
+                  {socialFormData.media_urls.includes(lightboxMediaUrl) ? (
+                    <>
+                      <X className="w-4 h-4" /> Remove from Post
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4 fill-gray-950 text-amber-500" /> Attach to Post
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setLightboxMediaUrl(null)}
+                  className="px-5 py-3 rounded-2xl text-xs font-bold text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700"
+                >
+                  Close Lightbox
                 </button>
               </div>
             </motion.div>
