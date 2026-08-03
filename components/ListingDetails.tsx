@@ -1902,7 +1902,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                     id="booking-card" 
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6, cubicBezier: [0.16, 1, 0.3, 1] }}
+                    transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
                     className="sticky top-28 bg-white rounded-3xl border border-zinc-200/80 shadow-[0_12px_40px_rgba(0,0,0,0.03)] p-7 overflow-hidden"
                 >
                     {/* Header: Price & Rating */}

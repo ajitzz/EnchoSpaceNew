@@ -3,7 +3,7 @@ import { SEO } from './SEO';
 import { AdminSEOTab } from './AdminSEOTab';
 import { Listing } from '../types';
 import { HomeIcon, ListIcon,  TrashIcon, EditIcon, CheckCircle2Icon, UserIcon, XIcon } from './Icons';
-import { Map, Compass, MoreHorizontal, Edit3, Megaphone, Link, CreditCard, TrendingUp, Send, RefreshCw, Plus, Phone, Mail, Users, Globe, Building, Check, Search, Sparkles, Loader2, Upload, Zap, Shield, FileText } from 'lucide-react';
+import { Map, Compass, MoreHorizontal, Edit3, Megaphone, Link, CreditCard, TrendingUp, Send, RefreshCw, Plus, Phone, Mail, Users, Globe, Building, Check, Search, Sparkles, Loader2, Upload, Zap, Shield, FileText, ChevronRight, AlertTriangle } from 'lucide-react';
 import { useAuth, User } from './AuthContext';
 import AdminInbox from './AdminInbox';
 import { useCurrency } from './CurrencyContext';
@@ -135,7 +135,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
       
       const [listingsRes, metricsRes, usersRes, whatsappRes, callRes, demoRes, offersRes, reviewsRes, expRes, expBookingsRes, expHostsRes, ratesRes, campaignsRes, outreachRes] = await Promise.all([
         fetch('/api/listings?city=all'),
-        fetch(`/api/admin/metrics?type=${adminMode}`),
+        fetch(`/api/admin/metrics?type=${adminMode}`, { headers }),
         fetch(`/api/admin/users?type=${adminMode}`, { headers }),
         fetch('/api/settings/whatsapp'),
         fetch('/api/settings/call'),

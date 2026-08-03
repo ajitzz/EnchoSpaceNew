@@ -4788,7 +4788,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                     <label className="block text-[11px] font-extrabold uppercase text-gray-500 tracking-wider mb-1.5">
                       Target Stay / Property Listing
                     </label>
-                    <select
+                      <select
                       value={socialFormData.listing_id}
                       onChange={(e) => {
                         const listId = e.target.value;
@@ -4797,7 +4797,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                           ...prev,
                           listing_id: listId,
                           resort_name: selected ? selected.title : prev.resort_name,
-                          media_urls: selected ? [selected.imageUrl, ...(selected.images || [])] : prev.media_urls
+                          media_urls: selected ? [selected.imageUrl, ...(selected.imageUrls || [])] : prev.media_urls
                         }));
                       }}
                       className="w-full bg-zinc-50 border border-zinc-200 rounded-2xl p-3 text-sm focus:outline-none focus:border-gray-900 font-medium"

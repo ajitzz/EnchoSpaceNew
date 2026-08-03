@@ -1016,7 +1016,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                       </div>
 
                       <button 
-                         onClick={handleSimulatedPayment}
+                         onClick={handleRazorpayCheckout}
                          className="w-full py-4 bg-[#0284C7] hover:bg-[#0369A1] text-white font-bold rounded-2xl transition-all shadow-lg shadow-[#0284C7]/20 flex items-center justify-center gap-2 text-sm mt-4"
                       >
                          Pay {formatPrice(emiDetails.monthly, 'INR')}/mo EMI Securely

@@ -38,7 +38,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                  headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
              })
              .then(res => res.json())
-             .then(data => setUnreadCount(data.unread || 0));
+             .then(data => setUnreadCount(data.unread || 0))
+             .catch(err => console.debug('Unread counts fetch error:', err));
          }, 30000);
          return () => clearInterval(interval);
      } else {

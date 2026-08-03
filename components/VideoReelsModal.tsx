@@ -88,7 +88,7 @@ export const VideoReelsModal: React.FC<VideoReelsModalProps> = ({
   );
 };
 
-const VideoReelItem = ({ vid, onLike, isMuted, setIsMuted, containerRef }: { key?: React.Key, vid: ExperienceVideo, onLike: (id: number, e: React.MouseEvent) => void, isMuted: boolean, setIsMuted: (val: boolean) => void, containerRef: React.RefObject<HTMLDivElement> }) => {
+const VideoReelItem = ({ vid, onLike, isMuted, setIsMuted, containerRef }: { key?: React.Key, vid: ExperienceVideo, onLike: (id: number, e: React.MouseEvent) => void, isMuted: boolean, setIsMuted: (val: boolean) => void, containerRef: React.RefObject<HTMLDivElement | null> }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);

@@ -196,6 +196,7 @@ export interface MarketingCampaign {
   media_urls: string[];
   platforms: string[];
   budget: number;
+  currency?: string;
   status: 'draft' | 'pending' | 'active' | 'rejected' | 'completed';
   admin_feedback?: string;
   created_at: string;

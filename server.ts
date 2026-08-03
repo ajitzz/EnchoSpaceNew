@@ -1268,6 +1268,11 @@ const ensureListingsTable = async () => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
+  
+  await pool.query(`ALTER TABLE processed_payments ADD COLUMN IF NOT EXISTS payment_gateway VARCHAR(50);`);
+  await pool.query(`ALTER TABLE processed_payments ADD COLUMN IF NOT EXISTS amount DECIMAL DEFAULT 0;`);
+  await pool.query(`ALTER TABLE processed_payments ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'USD';`);
+  await pool.query(`ALTER TABLE processed_payments ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(255) UNIQUE;`);
 
   // Create async_webhook_queue table before index setup
   await pool.query(`
@@ -2025,7 +2030,7 @@ app.get('/api/admin/users', authenticateToken, async (req: AuthRequest, res) => 
       SELECT DISTINCT u.id, u.email, u.name, u.role, u.created_at
       FROM users u
       LEFT JOIN bookings b ON u.id = b.user_id
-      LEFT JOIN listings l ON u.id = l.host_id
+      LEFT JOIN listings l ON u.id = l.user_id
       WHERE b.id IS NOT NULL OR l.id IS NOT NULL OR u.role = 'admin'
       ORDER BY u.created_at DESC
     `);
@@ -7524,6 +7529,41 @@ app.post('/api/settings/call', authenticateToken, async (req: AuthRequest, res) 
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to update call settings:', error);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+app.get('/api/settings/demo_properties', async (req, res) => {
+  if (!isDbConfigured) {
+    return res.status(503).json({ enabled: false });
+  }
+  try {
+    await ensureListingsTable();
+    const result = await pool.query('SELECT value FROM settings WHERE key = $1', ['demo_properties']);
+    if (result.rows.length > 0) {
+      res.json(result.rows[0].value);
+    } else {
+      res.json({ enabled: false });
+    }
+  } catch (error) {
+    console.error('Failed to get demo properties settings:', error);
+    res.status(500).json({ error: 'Failed to fetch settings' });
+  }
+});
+
+app.post('/api/settings/demo_properties', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    await ensureListingsTable();
+    const { enabled } = req.body;
+    await pool.query(`
+      INSERT INTO settings (key, value)
+      VALUES ($1, $2)
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+    `, ['demo_properties', JSON.stringify({ enabled })]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to update demo properties settings:', error);
     res.status(500).json({ error: 'Failed to update settings' });
   }
 });
