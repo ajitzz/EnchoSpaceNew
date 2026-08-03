@@ -3,7 +3,7 @@ import { SEO } from './SEO';
 import { AdminSEOTab } from './AdminSEOTab';
 import { Listing } from '../types';
 import { HomeIcon, ListIcon,  TrashIcon, EditIcon, CheckCircle2Icon, UserIcon, XIcon } from './Icons';
-import { Map, Activity, Clock, CheckCircle2, XCircle, AlertTriangle, AlertCircle, Compass, MoreHorizontal, Edit3, Megaphone, Link, CreditCard, TrendingUp, Send, RefreshCw, Plus, Phone, Mail, Users, Globe, Building, Check, Search, Sparkles, Loader2, Upload, Zap, Shield, FileText } from 'lucide-react';
+import { Map, Compass, MoreHorizontal, Edit3, Megaphone, Link, CreditCard, TrendingUp, Send, RefreshCw, Plus, Phone, Mail, Users, Globe, Building, Check, Search, Sparkles, Loader2, Upload, Zap, Shield, FileText } from 'lucide-react';
 import { useAuth, User } from './AuthContext';
 import AdminInbox from './AdminInbox';
 import { useCurrency } from './CurrencyContext';
@@ -2646,158 +2646,176 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
 
                     {/* Tab Content 4: Organic Social Media Moderation */}
                     {marketingSubTab === 'organic_social' && (
-                       <div className="space-y-8 text-left w-full">
-                          {/* Master Brand Queue - Synchronization Health & Status Dashboard */}
-                          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 p-6 rounded-3xl text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4 border border-slate-700">
-                             <div className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                   <Activity className="w-5 h-5 text-amber-400" />
-                                   <h3 className="text-lg font-black tracking-tight">Master Brand Queue Status Dashboard</h3>
-                                   <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                                      {adminSocialPosts.filter(p => p.status === 'pending_approval' || p.status === 'pending').length} STALE/PENDING DRAFTS
-                                   </span>
-                                </div>
-                                <p className="text-xs text-slate-400 max-w-2xl leading-relaxed">
-                                   Real-time synchronization health of host draft submissions for the master platform. Timestamped drafts that fail to appear in standard queues are audited here for visibility.
-                                </p>
-                             </div>
-                             <button
-                                type="button"
-                                onClick={fetchAdminSocialPosts}
-                                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-2 self-start md:self-auto border border-white/10 shadow-sm"
-                             >
-                                <RefreshCw className={`w-3.5 h-3.5 ${loadingAdminSocialPosts ? 'animate-spin' : ''}`} />
-                                Sync Queue
-                             </button>
-                          </div>
-
+                       <div className="space-y-6 text-left w-full">
                           {/* Stats Overview */}
-                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                             <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                                <span className="text-gray-500 text-[10px] font-black uppercase tracking-wider block mb-2 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Pending Pipeline</span>
-                                <span className="text-3xl font-black text-amber-500">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                                <span className="text-gray-500 text-xs font-bold uppercase tracking-wider block mb-1">Pending Approval</span>
+                                <span className="text-3xl font-bold text-amber-500">
                                    {adminSocialPosts.filter(p => p.status === 'pending_approval' || p.status === 'pending').length}
                                 </span>
                              </div>
-                             <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                                <span className="text-gray-500 text-[10px] font-black uppercase tracking-wider block mb-2 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> Published/Approved</span>
-                                <span className="text-3xl font-black text-emerald-500">
+                             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                                <span className="text-gray-500 text-xs font-bold uppercase tracking-wider block mb-1">Approved Posts</span>
+                                <span className="text-3xl font-bold text-emerald-500">
                                    {adminSocialPosts.filter(p => p.status === 'approved').length}
                                 </span>
                              </div>
-                             <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                                <span className="text-gray-500 text-[10px] font-black uppercase tracking-wider block mb-2 flex items-center gap-1.5"><XCircle className="w-3.5 h-3.5" /> Rejected Drafts</span>
-                                <span className="text-3xl font-black text-rose-500">
+                             <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                                <span className="text-gray-500 text-xs font-bold uppercase tracking-wider block mb-1">AI/Admin Rejected</span>
+                                <span className="text-3xl font-bold text-rose-500">
                                    {adminSocialPosts.filter(p => p.status === 'rejected').length}
-                                </span>
-                             </div>
-                             <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                                <span className="text-slate-500 text-[10px] font-black uppercase tracking-wider block mb-2 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> Stale (24h+)</span>
-                                <span className="text-3xl font-black text-slate-700">
-                                   {adminSocialPosts.filter(p => (p.status === 'pending_approval' || p.status === 'pending') && (new Date().getTime() - new Date(p.created_at).getTime() > 24 * 60 * 60 * 1000)).length}
                                 </span>
                              </div>
                           </div>
 
-                          {/* Explicit Admin Audit View - Grouped by Status */}
-                          <div className="space-y-6">
+                          {/* Posts Table */}
+                          <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden">
+                             <div className="p-6 border-b border-gray-150 flex items-center justify-between">
+                                <h3 className="text-base font-extrabold text-gray-900 uppercase">
+                                   Organic Publishing Request Pipeline
+                                </h3>
+                                <button
+                                   type="button"
+                                   onClick={fetchAdminSocialPosts}
+                                   className="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition-all"
+                                   title="Refresh queue"
+                                >
+                                   <RefreshCw className={`w-4 h-4 ${loadingAdminSocialPosts ? 'animate-spin' : ''}`} />
+                                </button>
+                             </div>
+
                              {loadingAdminSocialPosts ? (
-                                <div className="p-20 flex justify-center items-center bg-white rounded-3xl border border-gray-200 shadow-sm">
+                                <div className="p-20 flex justify-center items-center">
                                    <Loader2 className="w-8 h-8 animate-spin text-sky-600" />
                                 </div>
                              ) : adminSocialPosts.length === 0 ? (
-                                <div className="p-16 text-center text-gray-500 bg-white rounded-3xl border border-gray-200 shadow-sm">
+                                <div className="p-16 text-center text-gray-500">
                                    <Sparkles className="w-12 h-12 text-zinc-200 mx-auto mb-3" />
-                                   <p className="text-sm font-medium">No organic social media publishing requests in the pipeline.</p>
+                                   <p className="text-sm font-medium">No organic social media publishing requests.</p>
                                 </div>
                              ) : (
-                                <>
-                                   {/* 1. Action Required: Pending Approval Queue */}
-                                   <div className="bg-white rounded-3xl border-2 border-amber-200 shadow-sm overflow-hidden">
-                                      <div className="p-5 border-b border-gray-150 bg-amber-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                         <div>
-                                            <h3 className="text-sm font-black text-amber-900 uppercase tracking-tight flex items-center gap-2">
-                                               <AlertCircle className="w-4 h-4 text-amber-500" />
-                                               Action Required: Pending Drafts
-                                            </h3>
-                                            <p className="text-[11px] text-amber-700 font-medium mt-1">
-                                               Drafts submitted by hosts waiting for master brand publishing approval. These must be reviewed.
-                                            </p>
-                                         </div>
-                                         <div className="px-3 py-1 bg-amber-100 text-amber-800 rounded-lg text-xs font-bold shrink-0">
-                                            {adminSocialPosts.filter(p => p.status === 'pending_approval' || p.status === 'pending').length} Items
-                                         </div>
-                                      </div>
-                                      
-                                      <div className="divide-y divide-gray-150 text-xs">
-                                         {adminSocialPosts.filter(p => p.status === 'pending_approval' || p.status === 'pending').length === 0 ? (
-                                            <div className="p-8 text-center text-gray-400 font-medium italic text-[11px]">
-                                               No pending drafts requiring action.
-                                            </div>
-                                         ) : (
-                                            adminSocialPosts.filter(p => p.status === 'pending_approval' || p.status === 'pending').map((post) => (
-                                               <SocialPostRow 
-                                                  key={post.id} 
-                                                  post={post} 
-                                                  onApprove={() => handleApproveSocialPost(post.id)}
-                                                  onReject={() => {
-                                                     setRejectingSocialPostId(post.id);
-                                                     setSocialRejectionFeedback('');
-                                                  }}
-                                               />
-                                            ))
-                                         )}
-                                      </div>
-                                   </div>
-
-                                   {/* 2. Processed: Approved & Live */}
-                                   <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden opacity-90">
-                                      <div className="p-4 border-b border-gray-150 flex items-center justify-between bg-gray-50/50">
-                                         <h3 className="text-xs font-black text-emerald-800 uppercase tracking-tight flex items-center gap-2">
-                                            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                                            Live / Approved
-                                         </h3>
-                                      </div>
-                                      <div className="divide-y divide-gray-150 text-xs">
-                                         {adminSocialPosts.filter(p => p.status === 'approved').length === 0 ? (
-                                            <div className="p-6 text-center text-gray-400 font-medium italic text-[11px]">
-                                               No approved posts.
-                                            </div>
-                                         ) : (
-                                            adminSocialPosts.filter(p => p.status === 'approved').map((post) => (
-                                               <SocialPostRow key={post.id} post={post} />
-                                            ))
-                                         )}
-                                      </div>
-                                   </div>
-
-                                   {/* 3. Processed: Rejected */}
-                                   <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden opacity-75">
-                                      <div className="p-4 border-b border-gray-150 flex items-center justify-between bg-gray-50/50">
-                                         <h3 className="text-xs font-black text-rose-800 uppercase tracking-tight flex items-center gap-2">
-                                            <XCircle className="w-4 h-4 text-rose-500" />
-                                            Rejected (Feedback Sent)
-                                         </h3>
-                                      </div>
-                                      <div className="divide-y divide-gray-150 text-xs">
-                                         {adminSocialPosts.filter(p => p.status === 'rejected').length === 0 ? (
-                                            <div className="p-6 text-center text-gray-400 font-medium italic text-[11px]">
-                                               No rejected posts.
-                                            </div>
-                                         ) : (
-                                            adminSocialPosts.filter(p => p.status === 'rejected').map((post) => (
-                                               <SocialPostRow key={post.id} post={post} />
-                                            ))
-                                         )}
-                                      </div>
-                                   </div>
-                                </>
+                                <div className="overflow-x-auto">
+                                   <table className="w-full text-left border-collapse">
+                                      <thead>
+                                         <tr className="bg-gray-50/75 border-b border-gray-150 text-[10px] font-black uppercase tracking-wider text-gray-400">
+                                            <th className="px-6 py-4">Property Stay</th>
+                                            <th className="px-6 py-4">Author Host</th>
+                                            <th className="px-6 py-4">Content Copy & Media</th>
+                                            <th className="px-6 py-4">Status</th>
+                                            <th className="px-6 py-4">Scheduled Release</th>
+                                            <th className="px-6 py-4 text-right">Moderation Actions</th>
+                                         </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-gray-150 text-xs">
+                                         {adminSocialPosts.map((post) => {
+                                            const isPending = post.status === 'pending_approval' || post.status === 'pending';
+                                            return (
+                                               <tr key={post.id} className="hover:bg-gray-50/50 transition-colors">
+                                                  <td className="px-6 py-4 font-bold text-gray-900">
+                                                     {post.listing_title || 'General Master Platform Post'}
+                                                  </td>
+                                                  <td className="px-6 py-4 text-gray-500 font-mono">
+                                                     <div className="font-sans font-bold text-gray-900">{post.host_name || 'Encho Host'}</div>
+                                                     <div className="text-[11px] text-gray-500">{post.host_email || `Host ID: ${post.host_id}`}</div>
+                                                  </td>
+                                                  <td className="px-6 py-4 max-w-sm">
+                                                     <div className="flex gap-3 items-start">
+                                                        <div className="w-12 h-12 rounded bg-gray-100 border shrink-0 overflow-hidden relative">
+                                                           {post.media_urls?.[0] ? (
+                                                              <img
+                                                                 src={post.media_urls[0]}
+                                                                 referrerPolicy="no-referrer"
+                                                                 className="w-full h-full object-cover"
+                                                                 alt=""
+                                                              />
+                                                           ) : (
+                                                              <Upload className="w-5 h-5 text-gray-400 mx-auto mt-3.5" />
+                                                           )}
+                                                           <span className="absolute bottom-0 right-0 bg-black/75 text-[7px] font-bold text-white px-1 uppercase leading-none">
+                                                              {post.media_type}
+                                                           </span>
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                           <p className="font-light text-gray-700 line-clamp-3 leading-relaxed">
+                                                              {post.caption}
+                                                           </p>
+                                                           {post.is_boosted && (
+                                                              <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 text-[9px] px-2 py-0.5 rounded font-black tracking-wider uppercase">
+                                                                 <Zap className="w-2.5 h-2.5 fill-amber-800" />
+                                                                 BOOSTED ₹{post.boost_budget}
+                                                              </span>
+                                                           )}
+                                                        </div>
+                                                     </div>
+                                                  </td>
+                                                  <td className="px-6 py-4">
+                                                     <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
+                                                        post.status === 'approved' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
+                                                        post.status === 'rejected' ? 'bg-rose-50 text-rose-700 border border-rose-100' :
+                                                        'bg-amber-50 text-amber-700 border border-amber-100'
+                                                     }`}>
+                                                        {isPending ? 'PENDING APPROVAL' : post.status}
+                                                     </span>
+                                                     {post.admin_feedback && (
+                                                        <p className="text-[10px] text-rose-600 mt-1 italic font-medium max-w-[180px] line-clamp-2">
+                                                           Feedback: {post.admin_feedback}
+                                                        </p>
+                                                     )}
+                                                  </td>
+                                                  <td className="px-6 py-4 text-gray-500 font-mono">
+                                                     {post.scheduled_at ? new Date(post.scheduled_at).toLocaleString() : 'Immediate Release'}
+                                                  </td>
+                                                  <td className="px-6 py-4 text-right">
+                                                     {isPending ? (
+                                                        <div className="flex items-center justify-end gap-2">
+                                                           <button
+                                                              type="button"
+                                                              onClick={() => handleApproveSocialPost(post.id)}
+                                                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg transition-all text-[11px] shadow-sm flex items-center gap-1"
+                                                           >
+                                                              <Check className="w-3.5 h-3.5" />
+                                                              <span>Approve & Publish</span>
+                                                           </button>
+                                                           <button
+                                                              type="button"
+                                                              onClick={() => {
+                                                                 setRejectingSocialPostId(post.id);
+                                                                 setSocialRejectionFeedback('');
+                                                              }}
+                                                              className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold px-3 py-1.5 rounded-lg transition-all text-[11px]"
+                                                           >
+                                                              Reject
+                                                           </button>
+                                                        </div>
+                                                     ) : post.status === 'approved' ? (
+                                                        <div className="text-right">
+                                                           <span className="inline-flex items-center gap-1 text-emerald-700 font-bold text-xs">
+                                                              <Check className="w-3.5 h-3.5" />
+                                                              <span>Live on Feeds</span>
+                                                           </span>
+                                                           <div className="text-[10px] text-gray-400 font-mono mt-0.5">
+                                                              ❤️ {post.likes || 0} • 💬 {post.comments || 0}
+                                                           </div>
+                                                        </div>
+                                                     ) : (
+                                                        <span className="text-rose-500 font-medium italic text-[11px]">
+                                                           Rejected (Feedback Sent)
+                                                        </span>
+                                                     )}
+                                                  </td>
+                                               </tr>
+                                            );
+                                         })}
+                                      </tbody>
+                                   </table>
+                                </div>
                              )}
                           </div>
                        </div>
                     )}
-                    
-{/* Tab Content 5: Immutable Audit Trail */}
+
+                    {/* Tab Content 5: Immutable Audit Trail */}
                     {marketingSubTab === 'audit_logs' && (
                        <div className="space-y-6 text-left w-full">
                           {/* Top Banner */}
@@ -3369,102 +3387,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
       </main>
     </div>
     </>
-  );
-};
-
-
-const SocialPostRow = ({ post, onApprove, onReject }: { post: any, onApprove?: () => void, onReject?: () => void }) => {
-  const isPending = post.status === 'pending_approval' || post.status === 'pending';
-  return (
-    <div className="p-4 hover:bg-gray-50/50 transition-colors flex flex-col sm:flex-row sm:items-start justify-between gap-6">
-      <div className="flex gap-4 items-start max-w-2xl">
-         <div className="w-16 h-16 rounded-xl bg-gray-100 border shrink-0 overflow-hidden relative shadow-sm">
-            {post.media_urls?.[0] ? (
-               <img
-                  src={post.media_urls[0]}
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover"
-                  alt=""
-               />
-            ) : (
-               <Upload className="w-6 h-6 text-gray-400 mx-auto mt-5" />
-            )}
-            <span className="absolute bottom-0 right-0 bg-black/75 text-[8px] font-bold text-white px-1.5 py-0.5 uppercase leading-none rounded-tl-md">
-               {post.media_type}
-            </span>
-         </div>
-         <div className="space-y-1.5">
-            <h4 className="font-bold text-gray-900 text-sm">
-               {post.listing_title || 'General Master Platform Post'}
-            </h4>
-            <div className="text-xs text-gray-500 font-mono flex items-center gap-2">
-               <span className="font-sans font-bold text-gray-700">{post.host_name || 'Encho Host'}</span>
-               <span>&bull;</span>
-               <span>{post.host_email || `Host ID: ${post.host_id}`}</span>
-               <span>&bull;</span>
-               <span className="text-gray-400">
-                 {post.scheduled_at ? new Date(post.scheduled_at).toLocaleString() : 'Immediate Release'}
-               </span>
-            </div>
-            <p className="font-light text-gray-700 line-clamp-3 leading-relaxed text-xs mt-1 bg-gray-50 p-2 border border-gray-100 rounded-lg">
-               {post.caption}
-            </p>
-            {post.is_boosted && (
-               <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 text-[9px] px-2 py-0.5 rounded font-black tracking-wider uppercase mt-1">
-                  <Zap className="w-2.5 h-2.5 fill-amber-800" />
-                  BOOSTED ₹{post.boost_budget}
-               </span>
-            )}
-            {post.admin_feedback && !isPending && (
-               <p className="text-[10px] text-rose-600 mt-1 italic font-medium">
-                  Feedback: {post.admin_feedback}
-               </p>
-            )}
-         </div>
-      </div>
-      
-      <div className="flex flex-col items-end gap-3 shrink-0">
-         <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider ${
-            post.status === 'approved' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
-            post.status === 'rejected' ? 'bg-rose-50 text-rose-700 border border-rose-100' :
-            'bg-amber-50 text-amber-700 border border-amber-100'
-         }`}>
-            {isPending ? 'PENDING APPROVAL' : post.status}
-         </span>
-         
-         {isPending && onApprove && onReject && (
-            <div className="flex items-center justify-end gap-2 mt-2">
-               <button
-                  type="button"
-                  onClick={onApprove}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl transition-all text-xs shadow-sm flex items-center gap-1.5"
-               >
-                  <Check className="w-4 h-4" />
-                  <span>Approve & Publish</span>
-               </button>
-               <button
-                  type="button"
-                  onClick={onReject}
-                  className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold px-4 py-2 rounded-xl transition-all text-xs"
-               >
-                  Reject
-               </button>
-            </div>
-         )}
-         
-         {post.status === 'approved' && (
-            <div className="text-right mt-2">
-               <span className="inline-flex items-center gap-1 text-emerald-700 font-bold text-xs bg-emerald-50 px-2 py-1 rounded-md">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Live on Feeds</span>
-               </span>
-               <div className="text-[10px] text-gray-400 font-mono mt-1">
-                  ❤️ {post.likes || 0} • 💬 {post.comments || 0}
-               </div>
-            </div>
-         )}
-      </div>
-    </div>
   );
 };
 

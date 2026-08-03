@@ -3144,6 +3144,123 @@ app.get('/api/admin/social-posts', authenticateToken, async (req: AuthRequest, r
   }
 });
 
+// Meta Graph API Integration for Instagram Publishing
+const publishToInstagram = async (post: any) => {
+  const token = process.env.META_ACCESS_TOKEN;
+  const igAccountId = process.env.META_INSTAGRAM_ACCOUNT_ID;
+  
+  if (!token || !igAccountId || token === 'dummy') {
+    console.warn('[SOCIAL STUDIO PUBLISHER] META_ACCESS_TOKEN or META_INSTAGRAM_ACCOUNT_ID missing/dummy. Simulating publish.');
+    return { success: true, simulated: true };
+  }
+
+  try {
+    const { media_type, media_urls, caption } = post;
+    let urls: string[] = [];
+    if (typeof media_urls === 'string') {
+        urls = JSON.parse(media_urls);
+    } else if (Array.isArray(media_urls)) {
+        urls = media_urls;
+    }
+
+    if (!urls || urls.length === 0) {
+        throw new Error('No media URLs provided for the post');
+    }
+
+    const version = 'v19.0';
+    const baseUrl = `https://graph.facebook.com/${version}/${igAccountId}`;
+    let creationId = null;
+
+    if (media_type === 'carousel' && urls.length > 1) {
+        const childrenIds: string[] = [];
+        for (const url of urls) {
+            const isVideo = url.match(/\.(mp4|mov|webm)$/i);
+            const body = new URLSearchParams({
+                access_token: token,
+                is_carousel_item: 'true'
+            });
+            if (isVideo) {
+                body.append('media_type', 'VIDEO');
+                body.append('video_url', url);
+            } else {
+                body.append('image_url', url);
+            }
+
+            const res = await fetch(`${baseUrl}/media`, { method: 'POST', body });
+            const data = await res.json();
+            if (data.error) throw new Error(`Meta API Error (Carousel Item): ${data.error.message}`);
+            childrenIds.push(data.id);
+        }
+
+        const carouselBody = new URLSearchParams({
+            access_token: token,
+            media_type: 'CAROUSEL',
+            children: childrenIds.join(','),
+            caption: caption || ''
+        });
+        const res2 = await fetch(`${baseUrl}/media`, { method: 'POST', body: carouselBody });
+        const data2 = await res2.json();
+        if (data2.error) throw new Error(`Meta API Error (Carousel Container): ${data2.error.message}`);
+        creationId = data2.id;
+    } else {
+        const url = urls[0];
+        const isVideo = url.match(/\.(mp4|mov|webm)$/i) || media_type === 'reel';
+        const body = new URLSearchParams({
+            access_token: token,
+            caption: caption || ''
+        });
+
+        if (isVideo) {
+            body.append('media_type', media_type === 'reel' ? 'REELS' : 'VIDEO');
+            body.append('video_url', url);
+        } else {
+            body.append('image_url', url);
+            if (media_type === 'story') {
+                body.append('media_type', 'STORIES');
+            }
+        }
+
+        const res = await fetch(`${baseUrl}/media`, { method: 'POST', body });
+        const data = await res.json();
+        if (data.error) throw new Error(`Meta API Error (Media Container): ${data.error.message}`);
+        creationId = data.id;
+    }
+
+    if (creationId) {
+        // Wait and retry for video processing if needed
+        const maxRetries = 12;
+        let lastError = null;
+
+        for (let i = 0; i < maxRetries; i++) {
+            const publishBody = new URLSearchParams({
+                creation_id: creationId,
+                access_token: token
+            });
+            const res3 = await fetch(`${baseUrl}/media_publish`, { method: 'POST', body: publishBody });
+            const data3 = await res3.json();
+            
+            if (data3.error) {
+                lastError = data3.error.message;
+                // Codes 9007 or 2207027 mean "media not ready for publishing"
+                if (data3.error.code === 9007 || data3.error.code === 2207027 || data3.error.message.toLowerCase().includes('not ready')) {
+                     await new Promise(resolve => setTimeout(resolve, 5000));
+                     continue;
+                }
+                throw new Error(`Meta API Error (Publish): ${data3.error.message}`);
+            }
+            
+            console.log(`[SOCIAL STUDIO PUBLISHER] Successfully published to Instagram! IG Media ID: ${data3.id}`);
+            return { success: true, ig_media_id: data3.id };
+        }
+        throw new Error(`Timeout waiting for Instagram to process video. Last error: ${lastError}`);
+    }
+
+  } catch (error: any) {
+    console.error('[SOCIAL STUDIO PUBLISHER] Instagram Publish Failed:', error.message);
+    throw error;
+  }
+};
+
 // Admin Approve Social Post
 app.post('/api/admin/social-posts/:id/approve', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
@@ -3161,12 +3278,43 @@ app.post('/api/admin/social-posts/:id/approve', authenticateToken, async (req: A
       return res.status(404).json({ error: 'Social post not found' });
     }
 
-    const result = await pool.query(`
-      UPDATE host_social_posts
-      SET status = 'approved', published_at = CURRENT_TIMESTAMP, admin_feedback = NULL
-      WHERE id = $1
-      RETURNING *
-    `, [id]);
+    const post = previous.rows[0];
+    const isFuture = post.scheduled_at && new Date(post.scheduled_at) > new Date();
+
+    let result;
+    if (isFuture) {
+      // Just approve it, let the scheduler publish it later
+      result = await pool.query(`
+        UPDATE host_social_posts
+        SET status = 'approved', admin_feedback = NULL
+        WHERE id = $1
+        RETURNING *
+      `, [id]);
+    } else {
+      // Immediate release. Try to publish synchronously so admin gets immediate feedback.
+      try {
+        const publishResult = await publishToInstagram(post);
+        if (publishResult.success) {
+           result = await pool.query(`
+             UPDATE host_social_posts
+             SET status = 'approved', published_at = CURRENT_TIMESTAMP, admin_feedback = NULL
+             WHERE id = $1
+             RETURNING *
+           `, [id]);
+        }
+      } catch (pubErr: any) {
+        // If it fails to publish, we still approve it but leave published_at as NULL 
+        // so the background worker can retry it, OR we can return an error. 
+        // Since it's an admin action, let's approve it and let the worker retry it.
+        console.error('[ADMIN APPROVE] Failed to publish immediately, falling back to worker:', pubErr.message);
+        result = await pool.query(`
+          UPDATE host_social_posts
+          SET status = 'approved', admin_feedback = NULL
+          WHERE id = $1
+          RETURNING *
+        `, [id]);
+      }
+    }
 
     // Seed mock visual metrics
     await pool.query(`
@@ -9611,27 +9759,41 @@ const processScheduledSocialPosts = async () => {
   if (!isDbConfigured) return;
   try {
      const res = await pool.query(
-        "SELECT id, media_type FROM host_social_posts WHERE status = 'approved' AND scheduled_at <= NOW() AND published_at IS NULL"
+        "SELECT * FROM host_social_posts WHERE status = 'approved' AND (scheduled_at <= NOW() OR scheduled_at IS NULL) AND published_at IS NULL"
      );
      for (const row of res.rows) {
         console.log(`[SOCIAL STUDIO PUBLISHER] Scheduled post ID ${row.id} (${row.media_type}) is due. Dispatching to Instagram/Facebook...`);
-        // Simulate Meta API dispatch
-        await pool.query(
-          "UPDATE host_social_posts SET published_at = NOW(), likes = 0, comments = 0, shares = 0 WHERE id = $1",
-          [row.id]
-        );
-        console.log(`[SOCIAL STUDIO PUBLISHER] Post ID ${row.id} successfully published to @enchospace feed.`);
-        // Simulate async engagement webhook arriving later
-        const delayMs = 2 * 60 * 1000; // 2 minutes later
-        setTimeout(async () => {
-             const likes = Math.floor(Math.random() * 500) + 50;
-             const comments = Math.floor(Math.random() * 50) + 5;
-             await pool.query(
-                 "UPDATE host_social_posts SET likes = $1, comments = $2, shares = $3 WHERE id = $4 AND published_at IS NOT NULL",
-                 [likes, comments, Math.floor(likes * 0.1), row.id]
-             );
-             console.log(`[ASYNC WEBHOOK] Simulated engagement received for Social Post #${row.id}: ${likes} Likes, ${comments} Comments`);
-        }, delayMs);
+        
+        try {
+            // Attempt to publish to Meta
+            const publishResult = await publishToInstagram(row);
+            
+            if (publishResult.success) {
+                await pool.query(
+                  "UPDATE host_social_posts SET published_at = NOW(), likes = 0, comments = 0, shares = 0 WHERE id = $1",
+                  [row.id]
+                );
+                console.log(`[SOCIAL STUDIO PUBLISHER] Post ID ${row.id} successfully published to @enchospace feed.`);
+                
+                // Simulate async engagement webhook arriving later
+                const delayMs = 2 * 60 * 1000; // 2 minutes later
+                setTimeout(async () => {
+                     const likes = Math.floor(Math.random() * 500) + 50;
+                     const comments = Math.floor(Math.random() * 50) + 5;
+                     await pool.query(
+                         "UPDATE host_social_posts SET likes = $1, comments = $2, shares = $3 WHERE id = $4 AND published_at IS NOT NULL",
+                         [likes, comments, Math.floor(likes * 0.1), row.id]
+                     );
+                     console.log(`[ASYNC WEBHOOK] Simulated engagement received for Social Post #${row.id}: ${likes} Likes, ${comments} Comments`);
+                }, delayMs);
+            }
+        } catch (publishErr: any) {
+            console.error(`[SOCIAL STUDIO PUBLISHER ERROR] Failed to publish post ${row.id}:`, publishErr.message);
+            // Optionally update the status to failed or add a retry mechanism, 
+            // but keeping it as is will let it retry on the next interval.
+            // If it's a permanent error, maybe we should reject it.
+            // For now, let's just log it and it will retry next time.
+        }
      }
   } catch (err) {
     console.error('[SOCIAL STUDIO PUBLISHER ERROR]', err);
