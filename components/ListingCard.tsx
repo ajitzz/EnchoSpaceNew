@@ -6,7 +6,7 @@ import { ChevronRight, ChevronLeft, ShieldCheck, StarIcon, HeartIcon, InfoIcon, 
 import { OptimizedImage } from './OptimizedImage';
 import { useCurrency } from './CurrencyContext';
 import { getRatingWord, formatRating } from '../lib/ratingUtils';
-import { Home, Layers, Users, HelpCircle, ShieldAlert, Check } from 'lucide-react';
+import { Home, Layers, Users, HelpCircle, ShieldAlert, Check, Share2 } from 'lucide-react';
 
 export const getTaxonomyDetails = (listing: Listing) => {
   const isChild = !!listing.isChild;
@@ -358,6 +358,37 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
   const { formatPrice } = useCurrency();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    uiAudio.playPop();
+
+    const shareUrl = `${window.location.origin}/#listing-${listing.id}`;
+    const shareData = {
+      title: listing.displayTitle || listing.title,
+      text: `Check out ${listing.displayTitle || listing.title} on Encho!`,
+      url: shareUrl,
+    };
+
+    if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+      try {
+        await navigator.share(shareData);
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.error('Error sharing listing:', err);
+        }
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (err) {
+        console.error('Clipboard copy failed:', err);
+      }
+    }
+  };
 
   // Real uploaded images or fallback to deterministic placeholders if no array exists
   const baseImageUrl = listing.imageUrl || 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6';
@@ -450,22 +481,57 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
         {/* Gradient Overlay for Text Readability */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
 
-        {/* Favorite Button */}
-        <motion.button 
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.8 }}
-            transition={{ type: "spring", stiffness: 400, damping: 17 }}
-            animate={isFavorite ? { scale: [1, 1.3, 1], transition: { duration: 0.3, type: "spring", stiffness: 400 } } : {}}
-            onPointerDown={(e) => { e.stopPropagation(); }}
-            onClick={(e) => { 
-                e.stopPropagation();
-                uiAudio.playPop();
-                onToggleFavorite?.(listing);
-            }}
-            className="absolute top-4 right-4 p-2.5 rounded-full bg-white/90 hover:bg-white border border-zinc-200/50 shadow-sm backdrop-blur-md transition-all z-20 group/heart"
-        >
-            <HeartIcon className={`w-4.5 h-4.5 transition-colors ${isFavorite ? 'text-[#e51d53] fill-[#e51d53]' : 'text-zinc-600 hover:text-[#e51d53]'}`} filled={isFavorite} />
-        </motion.button>
+        {/* Action Buttons (Share & Favorite) */}
+        <div className="absolute top-4 right-4 flex items-center gap-2 z-20">
+            {/* Share Button */}
+            <div className="relative">
+                <motion.button 
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.8 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                    onPointerDown={(e) => { e.stopPropagation(); }}
+                    onClick={handleShare}
+                    title="Share property"
+                    aria-label="Share property"
+                    className="p-2.5 rounded-full bg-white/90 hover:bg-white border border-zinc-200/50 shadow-sm backdrop-blur-md transition-all text-zinc-600 hover:text-[#003B95] flex items-center justify-center group/share"
+                >
+                    {copied ? (
+                        <Check className="w-4.5 h-4.5 text-emerald-600" />
+                    ) : (
+                        <Share2 className="w-4.5 h-4.5" />
+                    )}
+                </motion.button>
+                {copied && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 5 }}
+                        className="absolute right-0 top-full mt-1 px-2.5 py-1 bg-zinc-900 text-white text-[10px] font-bold rounded-lg shadow-lg whitespace-nowrap z-30"
+                    >
+                        Link copied!
+                    </motion.div>
+                )}
+            </div>
+
+            {/* Favorite Button */}
+            <motion.button 
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.8 }}
+                transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                animate={isFavorite ? { scale: [1, 1.3, 1], transition: { duration: 0.3, type: "spring", stiffness: 400 } } : {}}
+                onPointerDown={(e) => { e.stopPropagation(); }}
+                onClick={(e) => { 
+                    e.stopPropagation();
+                    uiAudio.playPop();
+                    onToggleFavorite?.(listing);
+                }}
+                title={isFavorite ? "Remove from favorites" : "Save to favorites"}
+                aria-label={isFavorite ? "Remove from favorites" : "Save to favorites"}
+                className="p-2.5 rounded-full bg-white/90 hover:bg-white border border-zinc-200/50 shadow-sm backdrop-blur-md transition-all group/heart"
+            >
+                <HeartIcon className={`w-4.5 h-4.5 transition-colors ${isFavorite ? 'text-[#e51d53] fill-[#e51d53]' : 'text-zinc-600 hover:text-[#e51d53]'}`} filled={isFavorite} />
+            </motion.button>
+        </div>
 
         {/* Tags */}
         <div className="absolute top-4 left-4 flex flex-col gap-2 z-20">

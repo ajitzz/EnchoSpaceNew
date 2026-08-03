@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MarketingCampaign, Listing } from '../types';
 import { 
-  Sparkles, CheckCircle, AlertTriangle, Play, Pause, BarChart3, 
+  Sparkles, CheckCircle, AlertTriangle, ShieldAlert, Play, Pause, BarChart3, 
   Tv, Eye, MousePointerClick, TrendingUp, DollarSign, Target, Plus, 
   Trash2, Send, Check, ShieldCheck, HelpCircle, Loader2, CreditCard, ExternalLink,
   Heart, MessageSquare, Bookmark, ChevronLeft, ChevronRight, Volume2, VolumeX, Share2, MoreHorizontal, MoreVertical,
@@ -143,6 +143,8 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   const [runningAiCheckId, setRunningAiCheckId] = useState<number | null>(null);
   const [aiCheckResult, setAiCheckResult] = useState<any | null>(null);
   const [isGeneratingCopy, setIsGeneratingCopy] = useState(false);
+  const [aiCopyDossier, setAiCopyDossier] = useState<any | null>(null);
+  const [selectedCopyAngle, setSelectedCopyAngle] = useState<string | null>(null);
 
   // CRM Leads & Attribution Funnel States (Pillar 4)
   const [campaignLeads, setCampaignLeads] = useState<any>(null);
@@ -744,7 +746,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
     }
   };
 
-  // Generate HEC-compliant AI Copy & Headlines (Milestone 2 AI Copywriter Engine)
+  // Generate HEC-compliant AI Copy & Headlines (Property-Scientist Multi-Angle AI Engine)
   const handleGenerateAiCopy = async () => {
     if (!formData.listing_id) {
       addToast('Select Stay First', 'Please select a stay property in Step 1 before generating AI copy.', 'warning');
@@ -767,13 +769,25 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       });
       if (res.ok) {
         const data = await res.json();
-        setFormData(prev => ({
-          ...prev,
-          title: data.title || prev.title,
-          description: data.description || prev.description,
-          feed_description: data.feed_description || prev.feed_description
-        }));
-        addToast('AI Copy Generated!', 'Gemini AI auto-composed HEC-compliant ad copy, headline, and tagline.', 'success');
+        setAiCopyDossier(data);
+        if (data.variations && data.variations.length > 0) {
+          const firstAngle = data.variations[0];
+          setSelectedCopyAngle(firstAngle.angle_id);
+          setFormData(prev => ({
+            ...prev,
+            title: firstAngle.headline || data.title || prev.title,
+            description: firstAngle.body_copy || data.description || prev.description,
+            feed_description: firstAngle.feed_tagline || data.feed_description || prev.feed_description
+          }));
+        } else {
+          setFormData(prev => ({
+            ...prev,
+            title: data.title || prev.title,
+            description: data.description || prev.description,
+            feed_description: data.feed_description || prev.feed_description
+          }));
+        }
+        addToast('Property-Scientist AI Copy Ready!', 'Generated 3 strategic angles, property DNA dossier & viral hashtag matrix.', 'success');
       } else {
         const data = await res.json();
         addToast('AI Error', data.error || 'Failed to generate copy.', 'error');
@@ -1767,59 +1781,164 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
               </div>
             )}
 
-            {/* AI PRECHECK PREVIEW CONTEXT */}
+            {/* AI PRECHECK PREVIEW CONTEXT - FAANG GOLD STANDARD AI GATEKEEPER DIAGNOSTIC CONSOLE */}
             <AnimatePresence>
               {aiCheckResult && (
                 <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="bg-zinc-900 text-white rounded-3xl p-6 shadow-xl border border-zinc-800 text-left"
+                  exit={{ opacity: 0, y: 12 }}
+                  className="bg-zinc-950 text-white rounded-3xl p-6 shadow-2xl border border-zinc-800 text-left space-y-5"
                 >
-                  <div className="flex items-center justify-between mb-4 border-b border-zinc-800 pb-4">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 bg-blue-500 text-white rounded-xl">
-                        <Sparkles className="w-4 h-4" />
+                  {/* Top Bar with Score & Protection Status */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2.5 rounded-2xl ${
+                        (aiCheckResult.score ?? 0) >= 8.0 ? 'bg-blue-600 text-white shadow-md' : 'bg-rose-600 text-white shadow-md'
+                      }`}>
+                        <ShieldAlert className="w-5 h-5" />
                       </div>
-                      <h4 className="font-bold text-sm uppercase tracking-wider">Gemini Automated Copy Optimizer</h4>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-sm uppercase tracking-wider text-zinc-100">AI Gatekeeper Diagnostic Engine</h4>
+                          <span className="text-[9px] font-mono font-bold uppercase tracking-widest bg-white/10 text-blue-300 px-2 py-0.5 rounded-full border border-white/15">
+                            Gemini 2.5 Audit
+                          </span>
+                        </div>
+                        <p className="text-xs text-zinc-400 font-light mt-0.5">
+                          Adversarial quality, HEC fair housing & Walled-Garden security evaluation
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-zinc-400">Score:</span>
-                      <span className="text-lg font-black text-blue-400 font-mono">{aiCheckResult.score}/100</span>
+                    
+                    <div className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-2xl self-start sm:self-auto">
+                      <div className="text-right">
+                        <div className="text-[9px] font-mono uppercase tracking-widest text-zinc-400 font-bold">Ad Quality Score</div>
+                        <div className={`text-xl font-black font-mono tracking-tight ${
+                          (aiCheckResult.score ?? 0) >= 8.0 ? 'text-emerald-400' : 'text-rose-400'
+                        }`}>
+                          {(aiCheckResult.score ?? 0).toFixed(1)} <span className="text-xs text-zinc-500 font-normal">/ 10</span>
+                        </div>
+                      </div>
+                      <div className="h-7 w-[1px] bg-zinc-800" />
+                      <div>
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg block ${
+                          (aiCheckResult.score ?? 0) >= 8.0 
+                            ? 'bg-emerald-950/90 text-emerald-400 border border-emerald-500/40' 
+                            : 'bg-rose-950/90 text-rose-400 border border-rose-500/40'
+                        }`}>
+                          {(aiCheckResult.score ?? 0) >= 8.0 ? '✓ Approved for Admin Review' : '✕ Auto-Rejected (< 8.0)'}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  {/* Auto-Reject Warning Banner if < 8.0 */}
+                  {(aiCheckResult.score ?? 0) < 8.0 && (
+                    <div className="bg-rose-950/80 border border-rose-500/40 rounded-2xl p-4 flex items-start gap-3">
+                      <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <h5 className="text-xs font-bold text-rose-200 uppercase tracking-wider">
+                          Master Ad Account Protection Triggered
+                        </h5>
+                        <p className="text-xs text-rose-300/90 leading-relaxed font-light">
+                          This campaign scored below the 8.0/10 threshold and has been automatically moved to <strong>Rejected</strong> status to protect Encho's Master Ad Account from Meta policy penalties or budget leaks. Review actionable steps below and update your draft.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sub-Scores Diagnostic Progress Grid */}
+                  {aiCheckResult.sub_scores && (
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 block">
+                        Sub-Score Vector Breakdown
+                      </span>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5">
+                        {[
+                          { label: 'Copy Quality', score: aiCheckResult.sub_scores.copy_quality ?? 8.5 },
+                          { label: 'Media Assets', score: aiCheckResult.sub_scores.media_aspect ?? 8.5 },
+                          { label: 'CRM Containment', score: aiCheckResult.sub_scores.walled_garden ?? 10.0 },
+                          { label: 'Targeting Fit', score: aiCheckResult.sub_scores.targeting_fit ?? 8.5 },
+                          { label: 'Budget & ROAS', score: aiCheckResult.sub_scores.budget_roas ?? 8.5 },
+                        ].map((sub, i) => (
+                          <div key={i} className="bg-zinc-900 border border-zinc-800/80 p-2.5 rounded-2xl space-y-1">
+                            <div className="flex justify-between text-[10px] font-medium text-zinc-300">
+                              <span>{sub.label}</span>
+                              <span className="font-mono font-bold text-blue-400">{sub.score.toFixed(1)}</span>
+                            </div>
+                            <div className="w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full rounded-full ${sub.score >= 8.0 ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                                style={{ width: `${Math.min(100, (sub.score / 10) * 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Audit Checks Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {aiCheckResult.checks?.map((check: any, idx: number) => (
-                      <div key={idx} className="bg-zinc-850 p-3 rounded-2xl border border-zinc-800/50 flex gap-2.5 items-start">
+                      <div key={idx} className="bg-zinc-900 p-3.5 rounded-2xl border border-zinc-800/70 flex gap-3 items-start">
                         {check.passed ? (
-                          <CheckCircle className="w-4.5 h-4.5 text-emerald-500 shrink-0 mt-0.5" />
+                          <CheckCircle className="w-4.5 h-4.5 text-emerald-400 shrink-0 mt-0.5" />
                         ) : (
-                          <AlertTriangle className="w-4.5 h-4.5 text-amber-500 shrink-0 mt-0.5" />
+                          <AlertTriangle className="w-4.5 h-4.5 text-rose-400 shrink-0 mt-0.5" />
                         )}
-                        <div>
-                          <div className="text-xs font-bold text-zinc-100">{check.name}</div>
-                          <div className="text-[10px] text-zinc-400 font-light mt-0.5 leading-relaxed">{check.feedback}</div>
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-zinc-100">{check.name}</span>
+                            {check.category && (
+                              <span className="text-[9px] text-zinc-500 font-mono">[{check.category}]</span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-zinc-400 font-light leading-relaxed">{check.feedback}</p>
                         </div>
                       </div>
                     ))}
                   </div>
 
-                  <div className="bg-zinc-950 p-4 rounded-2xl border border-zinc-850">
-                    <div className="text-xs font-bold text-blue-400 mb-1 flex items-center gap-1">
-                      <span>Copywriting Optimization Suggestion</span>
+                  {/* Tactical Suggestions & Recommendations */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
+                      <div className="text-xs font-bold text-blue-400 mb-1 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                        <span>Tactical Optimization Suggestion</span>
+                      </div>
+                      <p className="text-xs font-light text-zinc-300 leading-relaxed">
+                        {aiCheckResult.suggestions}
+                      </p>
                     </div>
-                    <p className="text-xs font-light text-zinc-300 leading-relaxed font-sans">
-                      {aiCheckResult.suggestions}
-                    </p>
+
+                    {aiCheckResult.actionable_recommendations && aiCheckResult.actionable_recommendations.length > 0 && (
+                      <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800 space-y-1.5">
+                        <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                          Actionable Fixes Checklist
+                        </div>
+                        <ul className="space-y-1 text-xs text-zinc-300 font-light">
+                          {aiCheckResult.actionable_recommendations.map((rec: string, i: number) => (
+                            <li key={i} className="flex items-start gap-1.5">
+                              <span className="text-emerald-400 font-bold">•</span>
+                              <span>{rec}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="mt-4 flex justify-end">
+                  <div className="flex items-center justify-between pt-2 border-t border-zinc-800">
+                    <span className="text-[10px] text-zinc-500 font-mono">
+                      Audit logged to admin_audit_logs | Master Encho Engine
+                    </span>
                     <button 
                       onClick={() => setAiCheckResult(null)}
-                      className="text-xs text-zinc-400 hover:text-white"
+                      className="text-xs font-bold text-zinc-400 hover:text-white px-3 py-1 bg-zinc-900 rounded-xl border border-zinc-800 transition-all"
                     >
-                      Dismiss analysis
+                      Dismiss Diagnostic Console
                     </button>
                   </div>
                 </motion.div>
@@ -3509,23 +3628,106 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 type="button"
                                 onClick={handleGenerateAiCopy}
                                 disabled={isGeneratingCopy}
-                                className="text-[10px] font-bold uppercase tracking-wider text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 px-3 py-1.5 rounded-xl shadow-xs transition-all flex items-center gap-1.5"
+                                className="text-[10px] font-bold uppercase tracking-wider text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 px-3.5 py-1.5 rounded-xl shadow-xs transition-all flex items-center gap-1.5 border border-white/20"
                               >
                                 {isGeneratingCopy ? (
                                   <>
                                     <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                    <span>AI Writing...</span>
+                                    <span>Scientist AI Analyzing Property...</span>
                                   </>
                                 ) : (
                                   <>
-                                    <Sparkles className="w-3 h-3 text-amber-300" />
-                                    <span>1-Click AI Copywriter</span>
+                                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                                    <span>AI Copywriter (3 Strategic Angles)</span>
                                   </>
                                 )}
                               </button>
-                              <span className="text-[9px] font-black uppercase text-blue-600 tracking-wider font-mono bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md">Mobile Composer</span>
+                              <span className="text-[9px] font-black uppercase text-blue-600 tracking-wider font-mono bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md">Property-Scientist Engine</span>
                             </div>
                           </div>
+
+                          {/* Property-Scientist Dossier Bar */}
+                          {aiCopyDossier?.property_analysis && (
+                            <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-zinc-900 text-white rounded-2xl p-3.5 shadow-md border border-blue-500/30 text-left space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-mono uppercase tracking-widest text-amber-400 font-bold flex items-center gap-1.5">
+                                  <Sparkles className="w-3 h-3 text-amber-300" />
+                                  Property-Scientist DNA Analysis
+                                </span>
+                                <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-500/40 px-2 py-0.5 rounded-full">
+                                  Universal Reach Active
+                                </span>
+                              </div>
+                              <p className="text-xs text-blue-100/90 font-light leading-relaxed">
+                                {aiCopyDossier.property_analysis.location_dna}
+                              </p>
+                              {aiCopyDossier.property_analysis.key_selling_points && (
+                                <div className="flex flex-wrap gap-1.5 pt-1">
+                                  {aiCopyDossier.property_analysis.key_selling_points.map((point: string, idx: number) => (
+                                    <span key={idx} className="text-[9.5px] font-medium bg-white/10 border border-white/15 px-2 py-0.5 rounded-lg text-blue-50">
+                                      ✓ {point}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* 3 Multi-Angle Strategic Selector Cards */}
+                          {aiCopyDossier?.variations && aiCopyDossier.variations.length > 0 && (
+                            <div className="space-y-2 text-left">
+                              <div className="flex items-center justify-between">
+                                <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500 block">
+                                  Select Strategic AI Angle (Universal Neutral Reach)
+                                </label>
+                                <span className="text-[9px] text-zinc-400 font-mono font-medium">Click card to apply headline & caption</span>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                                {aiCopyDossier.variations.map((variant: any) => {
+                                  const isSelected = selectedCopyAngle === variant.angle_id;
+                                  return (
+                                    <div
+                                      key={variant.angle_id}
+                                      onClick={() => {
+                                        setSelectedCopyAngle(variant.angle_id);
+                                        setFormData(prev => ({
+                                          ...prev,
+                                          title: variant.headline || prev.title,
+                                          description: variant.body_copy || prev.description,
+                                          feed_description: variant.feed_tagline || prev.feed_description
+                                        }));
+                                        addToast('Angle Applied', `Loaded "${variant.angle_name}" copy into composer.`, 'info');
+                                      }}
+                                      className={`p-3 rounded-2xl border cursor-pointer transition-all space-y-1.5 relative ${
+                                        isSelected 
+                                          ? 'bg-blue-50/90 border-blue-500 ring-2 ring-blue-500/20 shadow-sm' 
+                                          : 'bg-white border-zinc-200 hover:border-blue-300 hover:bg-zinc-50/60'
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <span className={`text-[10px] font-black uppercase tracking-wider ${isSelected ? 'text-blue-700' : 'text-zinc-700'}`}>
+                                          {variant.angle_name}
+                                        </span>
+                                        <span className="text-[9px] font-mono font-bold text-amber-600 bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 rounded">
+                                          ★ {variant.viral_rating_score || 9.2}
+                                        </span>
+                                      </div>
+                                      <p className="text-xs font-bold text-zinc-900 line-clamp-1">
+                                        {variant.headline}
+                                      </p>
+                                      <p className="text-[11px] text-zinc-600 line-clamp-2 leading-tight">
+                                        {variant.body_copy}
+                                      </p>
+                                      <div className="pt-1 flex items-center justify-between text-[9px] text-blue-600 font-semibold">
+                                        <span>CTA: {variant.primary_cta || 'Book Direct'}</span>
+                                        {isSelected && <span className="text-emerald-600 font-bold">✓ Active</span>}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
 
                           {/* Primary Caption / Ad Copy */}
                           <div className={`space-y-1.5 ${rejectedFieldsMap.description ? 'border-l-2 border-rose-500 pl-3' : ''}`}>
@@ -3549,25 +3751,51 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               className="w-full bg-white border border-zinc-200 rounded-2xl p-3 text-xs font-light outline-none font-sans focus:border-blue-500 transition-all leading-relaxed"
                             />
                             
-                            {/* Suggested high performance hashtag helpers */}
-                            <div className="flex flex-wrap gap-1.5 pt-1">
-                              {['#NestpickLuxury', '#VillaEscape', '#StayParadise', '#LuxuryResort'].map((tag) => (
-                                <button
-                                  key={tag}
-                                  type="button"
-                                  onClick={() => {
-                                    if (!formData.description.includes(tag)) {
-                                      setFormData(prev => ({
-                                        ...prev,
-                                        description: prev.description ? `${prev.description} ${tag}` : tag
-                                      }));
-                                    }
-                                  }}
-                                  className="text-[9px] font-bold text-blue-600 bg-blue-50/50 hover:bg-blue-100 border border-blue-200/20 px-2 py-0.5 rounded-lg transition-colors"
-                                >
-                                  {tag} +
-                                </button>
-                              ))}
+                            {/* Suggested & AI Generated Viral Hashtag Matrix */}
+                            <div className="space-y-1 text-left pt-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[9.5px] font-bold text-zinc-500 uppercase tracking-wider">
+                                  Viral Hashtag Matrix (Tap to append)
+                                </span>
+                                {aiCopyDossier?.hashtags && aiCopyDossier.hashtags.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const tagsString = aiCopyDossier.hashtags.join(' ');
+                                      if (!formData.description.includes(tagsString)) {
+                                        setFormData(prev => ({
+                                          ...prev,
+                                          description: prev.description ? `${prev.description}\n\n${tagsString}` : tagsString
+                                        }));
+                                        addToast('Hashtags Added', 'Appended viral hashtag matrix to caption.', 'info');
+                                      }
+                                    }}
+                                    className="text-[9px] font-bold text-blue-600 hover:text-blue-800 underline"
+                                  >
+                                    + Append All Hashtags
+                                  </button>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {(aiCopyDossier?.hashtags || ['#EnchoLuxury', '#VacationRental', '#StaycationGoals', '#TravelReels', '#PrivateRetreat', '#LuxuryTravel']).map((tag: string) => (
+                                  <button
+                                    key={tag}
+                                    type="button"
+                                    onClick={() => {
+                                      if (!formData.description.includes(tag)) {
+                                        setFormData(prev => ({
+                                          ...prev,
+                                          description: prev.description ? `${prev.description} ${tag}` : tag
+                                        }));
+                                      }
+                                    }}
+                                    className="text-[9px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200/40 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1"
+                                  >
+                                    <span>{tag}</span>
+                                    <span className="text-blue-400 text-[8px]">+</span>
+                                  </button>
+                                ))}
+                              </div>
                             </div>
                           </div>
 

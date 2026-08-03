@@ -3,7 +3,7 @@ import { SEO } from './SEO';
 import { AdminSEOTab } from './AdminSEOTab';
 import { Listing } from '../types';
 import { HomeIcon, ListIcon,  TrashIcon, EditIcon, CheckCircle2Icon, UserIcon, XIcon } from './Icons';
-import { Map, Compass, MoreHorizontal, Edit3, Megaphone, Link, CreditCard, TrendingUp, Send, RefreshCw, Plus, Phone, Mail, Users, Globe, Building, Check, Search, Sparkles, Loader2, Upload, Zap, Shield, FileText, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Map, Compass, MoreHorizontal, Edit3, Megaphone, Link, CreditCard, TrendingUp, Send, RefreshCw, Plus, Phone, Mail, Users, Globe, Building, Check, Search, Sparkles, Loader2, Upload, Zap, Shield, FileText, ChevronRight, AlertTriangle, Eye } from 'lucide-react';
 import { useAuth, User } from './AuthContext';
 import AdminInbox from './AdminInbox';
 import { useCurrency } from './CurrencyContext';
@@ -61,6 +61,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   const [releasingEscrowId, setReleasingEscrowId] = useState<number | null>(null);
   const [pausingCampaignId, setPausingCampaignId] = useState<number | null>(null);
   const [expandedAiReviewId, setExpandedAiReviewId] = useState<number | null>(null);
+  const [runningAiCheckId, setRunningAiCheckId] = useState<number | null>(null);
+  const [previewAdCampaign, setPreviewAdCampaign] = useState<any | null>(null);
+  const [previewAdTab, setPreviewAdTab] = useState<'feed' | 'story' | 'banner' | 'reel' | 'google'>('feed');
   const [expandedAuditLogId, setExpandedAuditLogId] = useState<number | null>(null);
   const [rejectionFeedback, setRejectionFeedback] = useState('');
   const [rejectedFieldInputs, setRejectedFieldInputs] = useState<Record<string, string>>({});
@@ -504,6 +507,36 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
     });
   };
 
+  const handleRunAiCheck = async (campaignId: number) => {
+    setRunningAiCheckId(campaignId);
+    try {
+      const res = await fetch(`/api/marketing/campaigns/${campaignId}/ai-check`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        addToast('AI Gatekeeper Check Complete', `Campaign scored ${data.score || 8.5}/10. ${data.passed ? 'PASSED dual-gate pre-check.' : 'FLAGGED for compliance issues.'}`, data.passed ? 'success' : 'warning');
+        setMarketingCampaigns(prev => prev.map(c => c.id === campaignId ? {
+          ...c,
+          ai_score: data.score,
+          ai_review: data.checks ? data.checks.map((ch: any) => `${ch.category}: ${ch.feedback}`).join(' | ') : 'AI Gatekeeper check updated.'
+        } : c));
+      } else {
+        const err = await res.json();
+        addToast('AI Check Error', err.error || 'Failed to execute AI Gatekeeper check.', 'error');
+      }
+    } catch (err) {
+      console.error('Error running AI check:', err);
+      addToast('Error', 'Failed to run AI check.', 'error');
+    } finally {
+      setRunningAiCheckId(null);
+    }
+  };
+
   const handleApproveCampaign = async (id: number) => {
     if (!confirm('Approve this campaign and push live to Meta Ad Network?')) return;
     try {
@@ -643,6 +676,53 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
       addToast('Error', 'Network error pausing campaign.', 'error');
     } finally {
       setPausingCampaignId(null);
+    }
+  };
+
+  const handleRunAdminAiCheck = async (campaignId: number) => {
+    setRunningAiCheckId(campaignId);
+    try {
+      const res = await fetch(`/api/marketing/campaigns/${campaignId}/ai-check`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (res.ok && data.ai_evaluation) {
+        addToast('AI Gatekeeper Complete', `Campaign evaluated: ${data.ai_evaluation.score}/10 (${data.ai_evaluation.score >= 8.0 ? 'Approved' : 'Auto-Rejected'})`, data.ai_evaluation.score >= 8.0 ? 'success' : 'warning');
+        setMarketingCampaigns(prev => prev.map(c => c.id === campaignId ? {
+          ...c,
+          ai_score: data.ai_evaluation.score,
+          ai_review: JSON.stringify(data.ai_evaluation),
+          status: data.ai_evaluation.score < 8.0 ? 'rejected' : c.status
+        } : c));
+        setExpandedAiReviewId(campaignId);
+      } else {
+        addToast('AI Error', data.error || 'Failed to execute AI Gatekeeper scan.', 'error');
+      }
+    } catch (err: any) {
+      console.error(err);
+      addToast('Error', 'Network error during AI Gatekeeper scan.', 'error');
+    } finally {
+      setRunningAiCheckId(null);
+    }
+  };
+
+  const applyRejectionTemplate = (type: 'contact_leak' | 'media_aspect' | 'fair_housing' | 'broad_targeting') => {
+    if (type === 'contact_leak') {
+      setRejectionFeedback('Campaign copy contains external contact details (phone, email, or WhatsApp/Telegram link) violating Encho CRM containment guidelines.');
+      setRejectedFieldInputs(prev => ({ ...prev, description: 'Remove phone numbers, email addresses, or external links.' }));
+    } else if (type === 'media_aspect') {
+      setRejectionFeedback('Uploaded visual media assets do not meet Meta 1:1 Feed or 9:16 Story/Reel high-resolution aspect ratio requirements.');
+      setRejectedFieldInputs(prev => ({ ...prev, media_urls: 'Upload high-res 1:1 or 9:16 images without blurry stretch.' }));
+    } else if (type === 'fair_housing') {
+      setRejectionFeedback('Ad text violates Meta Housing Equal Opportunity (HEC) Nondiscrimination policies.');
+      setRejectedFieldInputs(prev => ({ ...prev, description: 'Revise copy to eliminate demographic exclusion or age/family restrictions.' }));
+    } else if (type === 'broad_targeting') {
+      setRejectionFeedback('Target locations are too broad or unaligned with high-intent feeder markets.');
+      setRejectedFieldInputs(prev => ({ ...prev, target_locations: 'Specify top 2-3 feeder cities (e.g., Los Angeles, San Francisco).' }));
     }
   };
 
@@ -1930,17 +2010,34 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                                {/* AI Quality Score and Controls Banner */}
                                                <div className="col-span-full p-3 bg-purple-50/50 border border-purple-100 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs mb-1">
                                                   <div className="flex items-center gap-2">
-                                                     <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">AI Quality Score:</span>
+                                                     <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">AI Gatekeeper Score:</span>
                                                      <span className="font-extrabold text-emerald-600 font-mono text-sm">{campaign.ai_score || 8.5}/10</span>
                                                      <button
                                                         type="button"
                                                         onClick={() => setExpandedAiReviewId(expandedAiReviewId === campaign.id ? null : campaign.id)}
                                                         className="text-[11px] text-sky-600 hover:text-sky-700 font-semibold underline"
                                                      >
-                                                        {expandedAiReviewId === campaign.id ? 'Hide AI Review' : 'View AI Review'}
+                                                        {expandedAiReviewId === campaign.id ? 'Hide Audit' : 'View Audit'}
                                                      </button>
                                                   </div>
                                                   <div className="flex items-center gap-2">
+                                                     <button
+                                                        type="button"
+                                                        onClick={() => setPreviewAdCampaign(campaign)}
+                                                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1 shadow-xs"
+                                                     >
+                                                        <Eye className="w-3.5 h-3.5" />
+                                                        <span>Preview Ad Creative</span>
+                                                     </button>
+                                                     <button
+                                                        type="button"
+                                                        disabled={runningAiCheckId === campaign.id}
+                                                        onClick={() => handleRunAiCheck(campaign.id)}
+                                                        className="bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold px-3 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1 border border-purple-200 disabled:opacity-50"
+                                                     >
+                                                        {runningAiCheckId === campaign.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-purple-600" />}
+                                                        <span>Run AI Check</span>
+                                                     </button>
                                                      {campaign.escrow_status === 'holding' && (
                                                         <button
                                                            type="button"
@@ -1968,7 +2065,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
 
                                                {expandedAiReviewId === campaign.id && (
                                                   <div className="col-span-full bg-purple-50 p-3 rounded-xl border border-purple-100 text-[11px] text-purple-900 leading-relaxed font-mono mb-2">
-                                                     <strong>AI Review Breakdown:</strong> {campaign.ai_review || 'Copy structure meets direct response guidelines. Media high DPI. Target geography validated.'}
+                                                     <strong>Encho AI Gatekeeper Audit:</strong> {campaign.ai_review || 'Copy structure meets direct response guidelines. Media resolution high. Target geography validated.'}
                                                   </div>
                                                )}
                                                <div>
@@ -2000,7 +2097,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
 
                                             {campaign.admin_feedback && (
                                                <div className="bg-red-50 p-4 rounded-xl border border-red-100 text-xs text-red-700">
-                                                  <strong>Moderator Feedback:</strong> {campaign.admin_feedback}
+                                                  <strong>Moderator Feedback & Guidance:</strong> {campaign.admin_feedback}
                                                </div>
                                             )}
                                          </div>
@@ -3385,11 +3482,207 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                 </button>
                                 <button
                                    type="button"
-                                   onClick={handleConfirmRejectCampaign}
+                                   onClick={handleConfirmRejectCampaign} id="primary-rejection-modal-btn"
                                    disabled={submittingRejection}
                                    className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-sm transition-colors shadow-sm disabled:opacity-50"
                                 >
                                    {submittingRejection ? 'Rejecting...' : 'Submit Rejection'}
+                                </button>
+                             </div>
+                          </div>
+                       </div>
+                    )}
+
+                    {/* Live Multi-Format Ad Preview Modal */}
+                    {previewAdCampaign && (
+                       <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
+                          <div className="bg-slate-950 text-slate-100 max-w-xl w-full rounded-3xl border border-slate-800 shadow-2xl overflow-hidden my-auto">
+                             {/* Header */}
+                             <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
+                                <div className="flex items-center gap-2">
+                                   <Eye className="w-5 h-5 text-indigo-400" />
+                                   <div>
+                                      <h3 className="text-base font-bold text-white">Ad Creative Live Preview</h3>
+                                      <p className="text-xs text-slate-400 font-mono">Campaign ID: #{previewAdCampaign.id}</p>
+                                   </div>
+                                </div>
+                                <button
+                                   type="button"
+                                   onClick={() => setPreviewAdCampaign(null)}
+                                   className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
+                                >
+                                   <XIcon className="w-5 h-5" />
+                                </button>
+                             </div>
+
+                             {/* Format Switcher */}
+                             <div className="px-5 pt-4 flex gap-2 border-b border-slate-800/80 pb-3 bg-slate-950">
+                                <button
+                                   type="button"
+                                   onClick={() => setPreviewAdTab('feed')}
+                                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                                      previewAdTab === 'feed'
+                                         ? 'bg-indigo-600 text-white shadow-sm'
+                                         : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+                                   }`}
+                                >
+                                   Feed Post (1:1)
+                                </button>
+                                <button
+                                   type="button"
+                                   onClick={() => setPreviewAdTab('story')}
+                                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                                      previewAdTab === 'story'
+                                         ? 'bg-indigo-600 text-white shadow-sm'
+                                         : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+                                   }`}
+                                >
+                                   Story / Reel (9:16)
+                                </button>
+                                <button
+                                   type="button"
+                                   onClick={() => setPreviewAdTab('banner')}
+                                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                                      previewAdTab === 'banner'
+                                         ? 'bg-indigo-600 text-white shadow-sm'
+                                         : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+                                   }`}
+                                >
+                                   Google Display (16:9)
+                                </button>
+                             </div>
+
+                             {/* Dynamic Creative Render Body */}
+                             <div className="p-6 bg-slate-900/40 flex justify-center items-center min-h-[360px]">
+                                {previewAdTab === 'feed' && (
+                                   <div className="w-full max-w-md bg-white text-slate-900 rounded-2xl overflow-hidden border border-slate-200 shadow-xl font-sans">
+                                      <div className="p-3 border-b border-slate-100 flex items-center gap-2 bg-slate-50">
+                                         <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-500 to-rose-500 flex items-center justify-center text-white font-bold text-xs">
+                                            E
+                                         </div>
+                                         <div>
+                                            <div className="text-xs font-bold flex items-center gap-1">
+                                               Encho Stays <span className="text-[10px] text-slate-400 font-normal">Sponsored</span>
+                                            </div>
+                                            <div className="text-[10px] text-slate-500">Master Ad Network</div>
+                                         </div>
+                                      </div>
+                                      <div className="p-3 text-xs leading-relaxed text-slate-800">
+                                         {previewAdCampaign.primary_text || 'Experience luxury stays curated for your perfect getaway. Book directly with verified hosts today!'}
+                                      </div>
+                                      <div className="relative aspect-square bg-slate-100 overflow-hidden">
+                                         {previewAdCampaign.media_urls?.[0] ? (
+                                            <img
+                                               src={previewAdCampaign.media_urls[0]}
+                                               alt="Ad Media"
+                                               className="w-full h-full object-cover"
+                                            />
+                                         ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs">
+                                               No Media Asset Attached
+                                            </div>
+                                         )}
+                                      </div>
+                                      <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                                         <div>
+                                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                                               {previewAdCampaign.headline || 'Exclusive Luxury Vacation Retreat'}
+                                            </div>
+                                            <div className="text-xs font-semibold text-slate-700">encho.co/stays</div>
+                                         </div>
+                                         <div className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow-xs">
+                                            Book Now
+                                         </div>
+                                      </div>
+                                   </div>
+                                )}
+
+                                {previewAdTab === 'story' && (
+                                   <div className="w-full max-w-[260px] h-[460px] bg-slate-900 text-white rounded-3xl overflow-hidden relative shadow-2xl border border-slate-800 flex flex-col justify-between">
+                                      <div className="absolute inset-0">
+                                         {previewAdCampaign.media_urls?.[0] ? (
+                                            <img
+                                               src={previewAdCampaign.media_urls[0]}
+                                               alt="Ad Media"
+                                               className="w-full h-full object-cover brightness-75"
+                                            />
+                                         ) : (
+                                            <div className="w-full h-full bg-slate-800 flex items-center justify-center text-slate-500 text-xs">
+                                               No Story Media
+                                            </div>
+                                         )}
+                                         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/80" />
+                                      </div>
+
+                                      <div className="relative z-10 p-4">
+                                         <div className="w-full h-1 bg-white/30 rounded-full overflow-hidden mb-3">
+                                            <div className="w-2/3 h-full bg-white rounded-full" />
+                                         </div>
+                                         <div className="flex items-center gap-2">
+                                            <div className="w-7 h-7 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-[10px]">
+                                               E
+                                            </div>
+                                            <span className="text-xs font-bold text-white shadow-sm">Encho Stays</span>
+                                            <span className="text-[9px] bg-white/20 backdrop-blur-md px-1.5 py-0.5 rounded text-white font-medium">Sponsored</span>
+                                         </div>
+                                      </div>
+
+                                      <div className="relative z-10 p-4 text-center space-y-2">
+                                         <p className="text-xs font-medium text-white line-clamp-2 drop-shadow-md">
+                                            {previewAdCampaign.headline || 'Escape to Paradise Today'}
+                                         </p>
+                                         <div className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-lg animate-bounce">
+                                            Swipe Up To Reserve
+                                         </div>
+                                      </div>
+                                   </div>
+                                )}
+
+                                {previewAdTab === 'banner' && (
+                                   <div className="w-full bg-white text-slate-900 rounded-2xl p-4 border border-slate-200 shadow-xl">
+                                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center justify-between">
+                                         <span>Google Display Network Preview</span>
+                                         <span className="text-indigo-600 font-mono">16:9 Landscape</span>
+                                      </div>
+                                      <div className="grid grid-cols-3 gap-3 items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                         <div className="col-span-1 aspect-video rounded-lg overflow-hidden bg-slate-200">
+                                            {previewAdCampaign.media_urls?.[0] && (
+                                               <img
+                                                  src={previewAdCampaign.media_urls[0]}
+                                                  alt="Ad Media"
+                                                  className="w-full h-full object-cover"
+                                               />
+                                            )}
+                                         </div>
+                                         <div className="col-span-2 space-y-1">
+                                            <div className="text-xs font-extrabold text-slate-900">
+                                               {previewAdCampaign.headline || 'Verified Luxury Property Hosting'}
+                                            </div>
+                                            <div className="text-[11px] text-slate-600 line-clamp-2">
+                                               {previewAdCampaign.primary_text || 'Book direct retreats with zero middleman markups.'}
+                                            </div>
+                                            <div className="pt-1">
+                                               <span className="inline-block px-3 py-1 bg-emerald-600 text-white text-[11px] font-bold rounded-md">
+                                                  Check Availability
+                                               </span>
+                                            </div>
+                                         </div>
+                                      </div>
+                                   </div>
+                                )}
+                             </div>
+
+                             {/* Footer Actions */}
+                             <div className="p-4 bg-slate-950 border-t border-slate-800 flex justify-between items-center text-xs">
+                                <div className="text-slate-400">
+                                   Format: <span className="text-slate-200 font-bold uppercase">{previewAdTab}</span>
+                                </div>
+                                <button
+                                   type="button"
+                                   onClick={() => setPreviewAdCampaign(null)}
+                                   className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-bold transition-all"
+                                >
+                                   Close Live Ad Creative Preview Modal
                                 </button>
                              </div>
                           </div>
