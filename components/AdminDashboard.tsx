@@ -2790,13 +2790,31 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                                         </div>
                                                      ) : post.status === 'approved' ? (
                                                         <div className="text-right">
-                                                           <span className="inline-flex items-center gap-1 text-emerald-700 font-bold text-xs">
-                                                              <Check className="w-3.5 h-3.5" />
-                                                              <span>Live on Feeds</span>
-                                                           </span>
-                                                           <div className="text-[10px] text-gray-400 font-mono mt-0.5">
-                                                              ❤️ {post.likes || 0} • 💬 {post.comments || 0}
-                                                           </div>
+                                                           {post.published_at ? (
+                                                              <>
+                                                                <span className="inline-flex items-center gap-1 text-emerald-700 font-bold text-xs">
+                                                                   <Check className="w-3.5 h-3.5" />
+                                                                   <span>Live on Feeds</span>
+                                                                </span>
+                                                                <div className="text-[10px] text-gray-400 font-mono mt-0.5">
+                                                                   ❤️ {post.likes || 0} • 💬 {post.comments || 0}
+                                                                </div>
+                                                              </>
+                                                           ) : (post.scheduled_at && new Date(post.scheduled_at) > new Date()) ? (
+                                                              <span className="text-[10px] text-sky-600 font-bold tracking-wider uppercase">Scheduled</span>
+                                                           ) : (
+                                                              <div className="flex flex-col items-end gap-1">
+                                                                 <span className="text-[10px] text-amber-600 font-bold tracking-wider uppercase">Pending Sync</span>
+                                                                 <button
+                                                                    type="button"
+                                                                    onClick={() => handleApproveSocialPost(post.id)}
+                                                                    className="bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 font-bold px-3 py-1.5 rounded-lg transition-all text-[10px] flex items-center gap-1"
+                                                                 >
+                                                                    <RefreshCw className="w-3 h-3" />
+                                                                    Retry Sync
+                                                                 </button>
+                                                              </div>
+                                                           )}
                                                         </div>
                                                      ) : (
                                                         <span className="text-rose-500 font-medium italic text-[11px]">
@@ -2896,11 +2914,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                                   <td className="px-6 py-4 max-w-xs">
                                                      <div className="flex items-center gap-1.5 text-[10px] font-mono">
                                                         <span className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 truncate max-w-[100px]">
-                                                           {log.previous_state || 'N/A'}
+                                                           {typeof log.previous_state === 'object' && log.previous_state !== null ? (log.previous_state.status || 'Object') : (log.previous_state || 'N/A')}
                                                         </span>
                                                         <span className="text-gray-400">→</span>
                                                         <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded font-bold truncate max-w-[120px]">
-                                                           {log.new_state || 'N/A'}
+                                                           {typeof log.new_state === 'object' && log.new_state !== null ? (log.new_state.status || 'Object') : (log.new_state || 'N/A')}
                                                         </span>
                                                      </div>
                                                   </td>
