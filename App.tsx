@@ -922,7 +922,7 @@ function App() {
   };
 
   const pageTransition = {
-    type: 'spring',
+    type: 'spring' as const,
     damping: 28,
     stiffness: 280,
     mass: 0.9,
@@ -946,7 +946,7 @@ function App() {
     if (appMode === 'host') {
         return (
           <div className="min-h-screen bg-white font-sans text-gray-900 selection:bg-[#0284C7]/20 selection:text-[#0284C7]">
-            <div style={{ display: (currentView === 'HOST_DASHBOARD' || currentView === 'SEARCH') ? 'block' : 'none' }}>
+            <div style={{ display: (currentView === 'HOSTING' || currentView === 'SEARCH') ? 'block' : 'none' }}>
               <motion.div key="host-dashboard" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition}>
                 <Header 
                   onSearch={handleSearch} 
@@ -995,12 +995,12 @@ function App() {
                   existingListing={editingListing}
                   onBack={() => {
                     setEditingListing(null);
-                    setCurrentView('HOST_DASHBOARD');
+                    setCurrentView('HOSTING');
                   }}
                   onSuccess={() => {
                       handleSearch(city);
                       setHostDashboardRefresh(prev => prev + 1);
-                      setCurrentView('HOST_DASHBOARD');
+                      setCurrentView('HOSTING');
                   }} 
                 />
                </motion.div>
@@ -1012,12 +1012,12 @@ function App() {
                   existingExperience={editingExperience || undefined}
                   onBack={() => {
                     setEditingExperience(null);
-                    setCurrentView('HOST_DASHBOARD');
+                    setCurrentView('HOSTING');
                   }}
                   onSuccess={() => {
                       handleSearch(city);
                       setHostDashboardRefresh(prev => prev + 1);
-                      setCurrentView('HOST_DASHBOARD');
+                      setCurrentView('HOSTING');
                   }} 
                 />
                </motion.div>
@@ -1198,7 +1198,7 @@ function App() {
                                 });
                                 if (res.ok) {
                                     handleSearch(city); // Refresh experiences
-                                    setCurrentView('HOST_DASHBOARD');
+                                    setCurrentView('HOSTING');
                                 }
                             } catch (e) {
                                 console.error(e);
@@ -1387,7 +1387,7 @@ function App() {
           hostView={hostView}
           onHostViewChange={setHostView}
           isOnline={isOnline}
-          activeTab={currentView === 'EXPERIENCES' || currentView === 'EXPERIENCE_DETAILS' ? 'experiences' : 'stays'}
+          activeTab={(currentView as string) === 'EXPERIENCES' || currentView === 'EXPERIENCE_DETAILS' ? 'experiences' : 'stays'}
           onExperiencesClick={() => setCurrentView('EXPERIENCES')}
           onStaysClick={() => setCurrentView('SEARCH')}
           onProfileClick={() => setShowProfileSheet(true)}
@@ -1473,7 +1473,7 @@ function App() {
                  onToggleFavorite={toggleFavorite}
                  isFavorite={isFavorite}
                  onSelectListing={handleListingClick}
-                 onNavigate={setCurrentView}
+                 onNavigate={(v) => setCurrentView(v as ViewState)}
                  currentView={currentView}
                  className="w-full h-full" 
                />
@@ -1516,7 +1516,7 @@ function App() {
         <BottomNav 
           currentView={currentView}
           appMode={appMode}
-          onNavigate={setCurrentView}
+          onNavigate={(v) => setCurrentView(v as ViewState)}
           onProfileClick={() => setShowProfileSheet(true)}
           isVisible={isBottomNavVisible}
         />
@@ -1528,7 +1528,7 @@ function App() {
         onHostClick={() => {
           if (user) {
             setAppMode('host');
-            setCurrentView('HOST_DASHBOARD');
+            setCurrentView('HOSTING');
           } else {
             setShowAuthModal(true);
           }

@@ -1511,9 +1511,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
               ) : activeTab === 'seo' ? (
                   <div className="space-y-6 max-w-6xl">
                      <AdminSEOTab items={adminMode === 'stays' ? listings : experiences} type={adminMode === 'stays' ? 'listing' : 'experience'} onSuccess={fetchData} />
-                  </div>
-              ) : activeTab === 'seo' ? (
-                  <div className="space-y-6 max-w-6xl">
                      <AdminSEOTab items={adminMode === 'stays' ? listings : experiences} type={adminMode === 'stays' ? 'listing' : 'experience'} onSuccess={fetchData} />
                   </div>
               ) : activeTab === 'marketing' ? (
@@ -1917,7 +1914,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                                      <div className="space-y-1">
                                                         <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Campaign Visual Assets ({mediaList.length})</span>
                                                         <div className="flex gap-2 pb-1 overflow-x-auto scrollbar-thin">
-                                                           {mediaList.map((url, idx) => (
+                                                           {mediaList.map((url: string, idx: number) => (
                                                               <div key={url + idx} className="relative group w-16 h-16 rounded-xl overflow-hidden border border-gray-200 shrink-0 bg-gray-50">
                                                                  <img src={url} alt={`Campaign visual ${idx + 1}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                                               </div>
@@ -1977,9 +1974,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                                <div>
                                                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Target Platforms</span>
                                                   <div className="flex flex-wrap gap-1.5 mt-1">
-                                                     {campaign.platforms && (typeof campaign.platforms === 'string' ? JSON.parse(campaign.platforms) : campaign.platforms).map((plat, index) => (
+                                                     {campaign.platforms && (typeof campaign.platforms === 'string' ? JSON.parse(campaign.platforms) : campaign.platforms).map((plat: string, index: number) => (
                                                         <span key={index} className="bg-sky-50 text-sky-700 text-xs font-semibold px-2 py-0.5 rounded-md border border-sky-100">
-                                                           {plat.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                                                           {plat.replace('_', ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}
                                                         </span>
                                                      ))}
                                                   </div>
@@ -2914,11 +2911,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                                   <td className="px-6 py-4 max-w-xs">
                                                      <div className="flex items-center gap-1.5 text-[10px] font-mono">
                                                         <span className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 truncate max-w-[100px]">
-                                                           {typeof log.previous_state === 'object' && log.previous_state !== null ? (log.previous_state.status || 'Object') : (log.previous_state || 'N/A')}
+                                                           {typeof log.previous_state === 'object' && log.previous_state !== null ? (typeof log.previous_state.status === 'string' ? log.previous_state.status : JSON.stringify(log.previous_state)) : String(log.previous_state || 'N/A')}
                                                         </span>
                                                         <span className="text-gray-400">→</span>
                                                         <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded font-bold truncate max-w-[120px]">
-                                                           {typeof log.new_state === 'object' && log.new_state !== null ? (log.new_state.status || 'Object') : (log.new_state || 'N/A')}
+                                                           {typeof log.new_state === 'object' && log.new_state !== null ? (typeof log.new_state.status === 'string' ? log.new_state.status : JSON.stringify(log.new_state)) : String(log.new_state || 'N/A')}
                                                         </span>
                                                      </div>
                                                   </td>

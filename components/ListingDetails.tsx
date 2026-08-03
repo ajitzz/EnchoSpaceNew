@@ -48,7 +48,7 @@ interface ListingDetailsProps {
   similarListings: Listing[];
   isFavorite: boolean;
   onToggleFavorite: (listing: Listing) => void;
-  onBook?: (data: Record<string, unknown>) => void;
+  onBook?: (data: any) => void;
   onContactHost?: () => void;
   onRequestAuth?: () => void;
 }

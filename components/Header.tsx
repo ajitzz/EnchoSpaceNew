@@ -184,7 +184,7 @@ const Header: React.FC<HeaderProps> = ({
       }
       autocompleteService.getPlacePredictions({
          input: inputValue,
-         sessionToken,
+         sessionToken: sessionToken || undefined,
          types: ['(cities)']
       }, (results, status) => {
          if (status === google.maps.places.PlacesServiceStatus.OK && results && results.length > 0) {

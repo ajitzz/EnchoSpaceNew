@@ -744,7 +744,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                     <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Audience Segment</label>
                                                     <select 
                                                         value={formData.target_audience}
-                                                        onChange={e => setFormData({ ...formData, target_audience: e.target.value })}
+                                                        onChange={e => setFormData({ ...formData, target_audience: e.target.value as any })}
                                                         className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs font-semibold text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
                                                     >
                                                         {AUDIENCE_OPTIONS.map(opt => (
@@ -829,7 +829,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                                                 <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Upload high-resolution landscape images. Drag and drop to re-order. The first photo will act as primary hero banner.</p>
                                             </div>
 
-                                            <PhotoUpload photos={photos} setPhotos={setPhotos} maxPhotos={10} />
+                                            <PhotoUpload photos={photos} setPhotos={setPhotos}  />
                                         </div>
 
                                          {/* Video stream URL */}
@@ -1771,7 +1771,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                           <div className="scale-[0.9] origin-top">
                             <ExperienceDetails 
                               experience={draftExperience} 
-                              onBack={() => {}} 
+                              onBack={() => {}} onRequestAuth={() => {}} 
                             />
                           </div>
                         </div>
@@ -1795,7 +1795,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                             <div className="scale-[0.75] origin-top-left w-[133%] h-auto pb-10">
                               <ExperienceDetails 
                                 experience={draftExperience} 
-                                onBack={() => {}} 
+                                onBack={() => {}} onRequestAuth={() => {}} 
                               />
                             </div>
                           </div>

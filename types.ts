@@ -7,6 +7,9 @@ export interface RoomTier {
 }
 
 export interface Room {
+  features?: string[];
+  isAvailable?: boolean;
+  sqft?: number;
   id: string;
   name: string;
   price: number;
@@ -90,6 +93,7 @@ export interface Listing {
   seo_description?: string;
   seo_keywords?: string;
   seo_image_url?: string;
+  wishlist_count?: number;
   
   // Detailed fields
   description?: string;
@@ -144,11 +148,12 @@ export interface Experience {
   itinerary: ItineraryItem[];
   includes: string[];
   image_urls: string[];
-  target_audience?: 'all' | 'students' | 'women_only' | 'corporate' | 'couples';
+  target_audience?: 'all' | 'students' | 'women_only' | 'corporate' | 'couples' | 'solo' | 'family';
   seo_title?: string;
   seo_description?: string;
   seo_keywords?: string;
   seo_image_url?: string;
+  wishlist_count?: number;
   
   host_id: number;
   status: 'upcoming' | 'sold_out' | 'completed';

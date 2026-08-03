@@ -301,7 +301,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
             title: experience.title + " Highlight",
             video_url: url,
             thumbnail_url: experience.image_urls?.[0] || 'https://images.unsplash.com/photo-1546182990-dffeafbe841d?auto=format&fit=crop&q=80&w=300',
-            author_name: experience.host_name || "Host",
+            author_name: experience.host_id || "Host",
             likes: Math.floor(Math.random() * 100) + 10
         }));
       } else {
@@ -325,7 +325,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
               title: experience.title + " Highlight",
               video_url: url,
               thumbnail_url: experience.image_urls?.[0] || 'https://images.unsplash.com/photo-1546182990-dffeafbe841d?auto=format&fit=crop&q=80&w=300',
-              author_name: experience.host_name || "Host",
+              author_name: experience.host_id || "Host",
               likes: Math.floor(Math.random() * 100) + 10
           }))
           : DEFAULT_VIDEOS);
@@ -511,14 +511,14 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
       : PACKAGE_DESTINATIONS;
 
   const hasIncludedStay = experience.included_stay && (experience.included_stay.title || experience.included_stay.image || experience.included_stay.description || (experience.included_stay.gallery && experience.included_stay.gallery.length > 0));
-  const includedStay = hasIncludedStay ? experience.included_stay : INCLUDED_STAY;
+  const includedStay = hasIncludedStay ? experience.included_stay! : INCLUDED_STAY;
 
   return (
     <>
       <SEO 
         title={experience.seo_title || `${experience.title} | Encho Space Experiences`} 
         description={experience.seo_description || experience.description?.substring(0, 160) || `Join ${experience.title} in ${experience.destination}`}
-        image={experience.seo_image_url || experience.imageUrls?.[0] || experience.imageUrl}
+        image={experience.seo_image_url || experience.image_urls?.[0] || experience.image_urls?.[0]}
         keywords={experience.seo_keywords || `experience, ${experience.destination}, ${experience.title}`}
       />
     <div className="bg-[#0a0a0a] min-h-screen text-gray-200 font-sans selection:bg-blue-500/30">

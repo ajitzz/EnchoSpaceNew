@@ -511,7 +511,7 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
                     <div className="space-y-6">
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-4">Gallery Images</label>
-                            <PhotoUpload photos={photos} setPhotos={setPhotos} maxPhotos={10} />
+                            <PhotoUpload photos={photos} setPhotos={setPhotos}  />
                         </div>
                         <div>
                             <label className="block text-sm font-bold text-gray-700 mb-2">Video URLs / Local Uploads (Optional)</label>

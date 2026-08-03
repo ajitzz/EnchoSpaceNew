@@ -163,7 +163,7 @@ export default function HostCalendar({ listings, reservations }: HostCalendarPro
     
     // If offer is applied
     if (dayInfo && dayInfo.offer) {
-        displayPrice = Math.round(displayPrice * (1 - dayInfo.offer.discount_percentage / 100));
+        displayPrice = Math.round(displayPrice * (1 - dayInfo.offer.discountPercentage / 100));
     }
     
     const formattedPrice = displayPrice >= 1000 
@@ -181,7 +181,7 @@ export default function HostCalendar({ listings, reservations }: HostCalendarPro
       >
         <div className={`font-semibold text-lg flex justify-between ${isSelected ? 'text-gray-900' : 'text-gray-700 group-hover:text-gray-900'}`}>
             {day}
-            {dayInfo && dayInfo.offer && <span className="text-xs bg-[#0284C7] text-white px-1.5 rounded flex items-center font-bold">-{dayInfo.offer.discount_percentage}%</span>}
+            {dayInfo && dayInfo.offer && <span className="text-xs bg-[#0284C7] text-white px-1.5 rounded flex items-center font-bold">-{dayInfo.offer.discountPercentage}%</span>}
         </div>
         <div className={`text-sm font-medium ${isSelected ? 'text-gray-900' : isBlocked ? 'line-through text-gray-400' : 'text-gray-500'}`}>{formattedPrice}</div>
       </div>
@@ -346,7 +346,7 @@ export default function HostCalendar({ listings, reservations }: HostCalendarPro
                              >
                                  <div>
                                     <div className={`font-bold ${selectedOfferId === offer.id ? 'text-[#0284C7]' : 'text-gray-900'}`}>{offer.title}</div>
-                                    <div className="text-sm text-gray-500 mt-1">{offer.discount_percentage}% discount on base price</div>
+                                    <div className="text-sm text-gray-500 mt-1">{offer.discountPercentage}% discount on base price</div>
                                  </div>
                                  {selectedOfferId === offer.id && <Check className="w-5 h-5 text-[#0284C7]" />}
                              </div>

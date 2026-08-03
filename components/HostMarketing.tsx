@@ -121,8 +121,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
     meta_pixel_id: '',
     meta_capi_token: '',
     google_conversion_id: '',
-    google_conversion_label: '',
-    pacing_mode: 'standard' as 'conservative' | 'standard' | 'accelerated' | 'paused'
+    google_conversion_label: '', pacing_mode: 'standard' as 'standard' | 'accelerated' | 'conservative' | 'paused',
   });
 
   // Track layout & alignment options (Scenario 1 advanced design!)
@@ -1102,8 +1101,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           meta_pixel_id: '',
           meta_capi_token: '',
           google_conversion_id: '',
-          google_conversion_label: '',
-          pacing_mode: 'standard'
+          google_conversion_label: '', pacing_mode: 'standard' as 'standard' | 'accelerated' | 'conservative' | 'paused',
         });
         fetchCampaigns();
       } else {
@@ -1300,7 +1298,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
               meta_pixel_id: '',
               meta_capi_token: '',
               google_conversion_id: '',
-              google_conversion_label: ''
+              google_conversion_label: '', pacing_mode: 'standard' as 'standard' | 'accelerated' | 'conservative' | 'paused'
             });
             setShowCreateModal(true);
           }}
@@ -1641,7 +1639,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 meta_pixel_id: campaign.meta_pixel_id || '',
                                 meta_capi_token: campaign.meta_capi_token || '',
                                 google_conversion_id: campaign.google_conversion_id || '',
-                                google_conversion_label: campaign.google_conversion_label || ''
+                                google_conversion_label: campaign.google_conversion_label || '', pacing_mode: (campaign.pacing_mode || 'standard') as any
                               });
                               setShowCreateModal(true);
                             }}

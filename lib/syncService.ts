@@ -11,7 +11,7 @@ export async function fetchWithCache<T>(url: string, cacheKey: string, options?:
     let cachedData: T | null = null;
     
     try {
-        cachedData = await get(cacheKey);
+        cachedData = (await get(cacheKey)) || null;
     } catch (e) {
         console.warn('IDB get failed', e);
     }
