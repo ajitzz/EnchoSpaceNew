@@ -1747,8 +1747,13 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                   <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
                                   Meta Campaign ID: {campaign.meta_campaign_id || `act_8849203_camp_${campaign.id}`}
                                 </span>
-                                <span className="text-emerald-800 font-bold text-[10px] flex items-center gap-1 bg-emerald-100/50 px-2 py-0.5 rounded-md">
-                                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Dispatched to Meta Ads
+                                <span className={`font-bold text-[10px] flex items-center gap-1 px-2 py-0.5 rounded-md ${
+                                  campaign.meta_campaign_id?.startsWith('act_8849203_')
+                                    ? 'text-amber-800 bg-amber-100/60'
+                                    : 'text-emerald-800 bg-emerald-100/50'
+                                }`}>
+                                  <CheckCircle className={`w-3.5 h-3.5 ${campaign.meta_campaign_id?.startsWith('act_8849203_') ? 'text-amber-600' : 'text-emerald-600'}`} />
+                                  {campaign.meta_campaign_id?.startsWith('act_8849203_') ? 'Simulated Sandbox Dispatch (Missing META_ACCESS_TOKEN)' : 'Live Meta Ads Dispatched'}
                                 </span>
                               </div>
                             )}

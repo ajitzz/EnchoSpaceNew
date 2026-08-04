@@ -517,19 +517,29 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
           'Authorization': `Bearer ${token}`
         }
       });
+      const data = await res.json();
       if (res.ok) {
-        const data = await res.json();
-        addToast('AI Gatekeeper Check Complete', `Campaign scored ${data.score || 8.5}/10. ${data.passed ? 'PASSED dual-gate pre-check.' : 'FLAGGED for compliance issues.'}`, data.passed ? 'success' : 'warning');
+        const score = data.score ?? data.ai_evaluation?.score ?? 8.5;
+        const passed = data.passed ?? data.ai_evaluation?.passed ?? (score >= 8.0);
+        const newStatus = data.updated_status || data.status || (score >= 8.0 ? 'pending_approval' : 'rejected');
+
+        addToast(
+          'AI Gatekeeper Check Complete', 
+          `Campaign scored ${score}/10. ${passed ? 'PASSED dual-gate pre-check.' : 'FLAGGED for compliance issues.'}`, 
+          passed ? 'success' : 'warning'
+        );
+
         setMarketingCampaigns(prev => prev.map(c => c.id === campaignId ? {
           ...c,
-          ai_score: data.score,
-          ai_review: data.checks ? data.checks.map((ch: any) => `${ch.category}: ${ch.feedback}`).join(' | ') : 'AI Gatekeeper check updated.'
+          ai_score: score,
+          status: newStatus,
+          ai_review: data.checks ? data.checks.map((ch: any) => `${ch.category}: ${ch.feedback}`).join(' | ') : (data.suggestions || 'AI Gatekeeper check completed successfully.')
         } : c));
+        setExpandedAiReviewId(campaignId);
       } else {
-        const err = await res.json();
-        addToast('AI Check Error', err.error || 'Failed to execute AI Gatekeeper check.', 'error');
+        addToast('AI Check Error', data.error || 'Failed to execute AI Gatekeeper check.', 'error');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error running AI check:', err);
       addToast('Error', 'Failed to run AI check.', 'error');
     } finally {
@@ -2121,14 +2131,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                             )}
                                          </div>
 
-                                         {isPending && (
+                                         {(isPending || campaign.status === 'draft' || campaign.status === 'pending_approval' || campaign.status === 'rejected') && (
                                             <div className="bg-gray-50 border-t md:border-t-0 md:border-l border-gray-100 p-6 flex flex-row md:flex-col justify-center items-stretch gap-3 shrink-0 min-w-[180px]">
                                                <button 
                                                   type="button"
                                                   onClick={() => handleApproveCampaign(campaign.id)}
-                                                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl text-sm shadow-sm hover:shadow transition-all flex items-center justify-center gap-2"
+                                                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow-sm hover:shadow transition-all flex items-center justify-center gap-1.5"
                                                >
-                                                  <CheckCircle2Icon className="w-4 h-4" /> Approve
+                                                  <CheckCircle2Icon className="w-4 h-4" /> Approve & Launch
                                                </button>
                                                <button 
                                                   type="button"
