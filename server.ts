@@ -5735,9 +5735,62 @@ app.post('/api/marketing/campaigns/:id/subscribe', authenticateToken, async (req
        if (existingTx.rows.length > 0) {
           const tx = existingTx.rows[0];
           console.log(`[IDEMPOTENCY] Reusing existing transaction ${tx.id} for key ${idempotencyKey}`);
-          // We could return the existing checkout URL, but we just want to prevent a double charge.
-          // To be safe, we'll continue using the key with Stripe so Stripe handles the duplicate checkout session idempotently.
        }
+    }
+
+    // Handle internal_wallet launch (Master Fuel Tank balance)
+    if (selectedGateway === 'internal_wallet') {
+      let walletRes = await pool.query('SELECT * FROM host_wallets WHERE host_id = $1', [req.user?.id]);
+      if (walletRes.rows.length === 0) {
+        walletRes = await pool.query(
+          'INSERT INTO host_wallets (host_id, balance, encho_credits) VALUES ($1, 0, 0) RETURNING *',
+          [req.user?.id]
+        );
+      }
+      const wallet = walletRes.rows[0];
+      const currentBalance = Number(wallet.balance) || 0;
+
+      if (currentBalance < finalAmount) {
+        return res.status(400).json({
+          error: `Insufficient Master Fuel Tank balance. Available: ₹${currentBalance.toLocaleString()}, Required: ₹${finalAmount.toLocaleString()}`
+        });
+      }
+
+      // Deduct wallet balance
+      await pool.query('UPDATE host_wallets SET balance = balance - $1 WHERE id = $2', [finalAmount, wallet.id]);
+
+      const optFee = Math.round((finalAmount * 0.15) * 100) / 100;
+      const netAdSpend = Math.round((finalAmount * 0.85) * 100) / 100;
+
+      // Insert wallet transaction
+      const txRes = await pool.query(`
+        INSERT INTO wallet_transactions (wallet_id, amount, type, reference_id, status, description)
+        VALUES ($1, $2, 'campaign_funding', $3, 'completed', $4) RETURNING id
+      `, [wallet.id, -finalAmount, String(campaign.id), `Campaign funding via Master Fuel Tank (₹${netAdSpend} ad spend + ₹${optFee} 15% Encho fee)`]);
+
+      // Update campaign status to pending admin review
+      await pool.query(`
+        UPDATE host_marketing_campaigns
+        SET subscription_active = true,
+            status = 'pending',
+            payment_status = 'paid',
+            payment_gateway = 'internal_wallet',
+            payment_intent_id = $1,
+            optimization_fee = $2,
+            ad_spend_pool = $3,
+            escrow_status = 'holding',
+            escrow_release_at = NOW() + INTERVAL '24 hours',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $4
+      `, [`wtx_${txRes.rows[0].id}`, optFee, netAdSpend, campaign.id]);
+
+      broadcastDbEvent(req, 'marketing');
+
+      return res.json({
+        success: true,
+        paid_via_wallet: true,
+        message: `Campaign launched! ₹${finalAmount.toLocaleString()} deducted from Master Fuel Tank. Submitted for Admin Quality Control.`
+      });
     }
 
     // Check if real Stripe is configured and selected

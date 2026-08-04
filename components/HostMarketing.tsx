@@ -1296,6 +1296,47 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
     }
   };
 
+  const handleLaunchFromWallet = async (campaign: MarketingCampaign) => {
+    setIsPaying(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/marketing/campaigns/${campaign.id}/subscribe`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'Idempotency-Key': `${campaign.id}-internal_wallet-${campaign.budget}-${Math.floor(Date.now() / 10000)}`
+        },
+        body: JSON.stringify({
+          gateway: 'internal_wallet',
+          amount: campaign.budget
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        addToast('Campaign Launched!', data.message || `Deducted ₹${campaign.budget.toLocaleString()} from Master Fuel Tank. Submitted for Admin Quality Control.`, 'success');
+        setShowPayModal(null);
+        fetchCampaigns();
+        fetchWallet();
+      } else {
+        const errorData = await res.json();
+        if (errorData.gatekeeper_score) {
+          addToast('Gatekeeper Auto-Reject', `Score: ${errorData.gatekeeper_score}/10. ${errorData.gatekeeper_feedback}`, 'error');
+          setShowPayModal(null);
+          fetchCampaigns();
+        } else {
+          addToast('Launch Error', errorData.error || 'Failed to launch using Master Fuel Tank balance.', 'error');
+        }
+      }
+    } catch (err: any) {
+      console.error(err);
+      addToast('Error', 'Unable to process wallet transaction.', 'error');
+    } finally {
+      setIsPaying(false);
+    }
+  };
+
   const getStatusStyle = (status: string) => {
     switch (status) {
       case 'active':
@@ -1629,16 +1670,31 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                             )}
                             <span>AI Check</span>
                           </button>
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setShowPayModal(campaign);
-                            }}
-                            className="text-xs font-bold bg-gray-900 hover:bg-gray-800 text-white px-3 py-1.5 rounded-xl flex items-center gap-1.5"
-                          >
-                            <CreditCard className="w-3 h-3" />
-                            <span>Pay & Launch</span>
-                          </button>
+                          {Number(wallet?.balance || 0) >= campaign.budget ? (
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleLaunchFromWallet(campaign);
+                              }}
+                              disabled={isPaying}
+                              className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
+                              title={`Launch using ₹${campaign.budget.toLocaleString()} from your ₹${Number(wallet?.balance || 0).toLocaleString()} Master Fuel Tank`}
+                            >
+                              {isPaying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />}
+                              <span>Launch from Fuel Tank</span>
+                            </button>
+                          ) : (
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowPayModal(campaign);
+                              }}
+                              className="text-xs font-bold bg-gray-900 hover:bg-gray-800 text-white px-3 py-1.5 rounded-xl flex items-center gap-1.5"
+                            >
+                              <CreditCard className="w-3 h-3" />
+                              <span>Pay & Launch</span>
+                            </button>
+                          )}
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
@@ -7427,6 +7483,59 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                   </div>
                   <span className="text-[10px] text-zinc-400 uppercase font-mono">Setup budget</span>
                 </div>
+              </div>
+
+              {/* Master Fuel Tank Integrated Option */}
+              <div className="mb-6 bg-gradient-to-br from-zinc-900 via-gray-900 to-zinc-950 text-white p-4 rounded-2xl border border-zinc-800 shadow-md space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-amber-400 fill-amber-400 animate-pulse" />
+                    <div>
+                      <span className="text-[9px] font-mono uppercase text-zinc-400 block tracking-wider">Master Fuel Tank Balance</span>
+                      <span className="font-extrabold text-base text-white font-mono">₹{Number(wallet?.balance || 0).toLocaleString()}</span>
+                    </div>
+                  </div>
+                  {Number(wallet?.balance || 0) >= showPayModal.budget ? (
+                    <span className="text-[9px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-full uppercase font-mono">
+                      ✓ Covered
+                    </span>
+                  ) : (
+                    <span className="text-[9px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-full uppercase font-mono">
+                      Low Fuel
+                    </span>
+                  )}
+                </div>
+
+                {Number(wallet?.balance || 0) >= showPayModal.budget ? (
+                  <div className="pt-2 border-t border-zinc-800/80 space-y-2">
+                    <p className="text-[10.5px] text-zinc-300 font-light leading-relaxed">
+                      You have sufficient pre-funded budget in your Master Fuel Tank. No external payment needed!
+                    </p>
+                    <button
+                      type="button"
+                      disabled={isPaying}
+                      onClick={() => handleLaunchFromWallet(showPayModal)}
+                      className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-zinc-950 font-black py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider shadow-md flex items-center justify-center gap-2 transition-all"
+                    >
+                      {isPaying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4 fill-zinc-950" />}
+                      <span>Launch using Fuel Tank (Deduct ₹{showPayModal.budget.toLocaleString()})</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between text-[10px] text-zinc-400">
+                    <span>Available ₹{Number(wallet?.balance || 0).toLocaleString()} is less than budget ₹{showPayModal.budget.toLocaleString()}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowPayModal(null);
+                        setShowRefuelModal(true);
+                      }}
+                      className="text-amber-400 hover:underline font-bold uppercase font-mono text-[9.5px]"
+                    >
+                      Refuel Tank ↗
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Gateway Selection Tabs */}
