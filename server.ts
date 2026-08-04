@@ -5748,16 +5748,18 @@ app.post('/api/marketing/campaigns/:id/subscribe', authenticateToken, async (req
         );
       }
       const wallet = walletRes.rows[0];
-      const currentBalance = Number(wallet.balance) || 0;
+      const currentBalanceUSD = Number(wallet.balance) || 0;
+      const currentBalanceINR = Math.round(currentBalanceUSD * 83.5);
 
-      if (currentBalance < finalAmount) {
+      if (currentBalanceINR < finalAmount && currentBalanceUSD < finalAmount) {
         return res.status(400).json({
-          error: `Insufficient Master Fuel Tank balance. Available: ₹${currentBalance.toLocaleString()}, Required: ₹${finalAmount.toLocaleString()}`
+          error: `Insufficient Master Fuel Tank balance. Available: ₹${currentBalanceINR.toLocaleString()} ($${currentBalanceUSD.toFixed(2)} USD), Required: ₹${finalAmount.toLocaleString()}`
         });
       }
 
-      // Deduct wallet balance
-      await pool.query('UPDATE host_wallets SET balance = balance - $1 WHERE id = $2', [finalAmount, wallet.id]);
+      // Deduct wallet balance in USD base
+      const usdDeduction = finalAmount > currentBalanceUSD ? Math.round((finalAmount / 83.5) * 100) / 100 : finalAmount;
+      await pool.query('UPDATE host_wallets SET balance = balance - $1 WHERE id = $2', [usdDeduction, wallet.id]);
 
       const optFee = Math.round((finalAmount * 0.15) * 100) / 100;
       const netAdSpend = Math.round((finalAmount * 0.85) * 100) / 100;
@@ -5766,7 +5768,7 @@ app.post('/api/marketing/campaigns/:id/subscribe', authenticateToken, async (req
       const txRes = await pool.query(`
         INSERT INTO wallet_transactions (wallet_id, amount, type, reference_id, status, description)
         VALUES ($1, $2, 'campaign_funding', $3, 'completed', $4) RETURNING id
-      `, [wallet.id, -finalAmount, String(campaign.id), `Campaign funding via Master Fuel Tank (₹${netAdSpend} ad spend + ₹${optFee} 15% Encho fee)`]);
+      `, [wallet.id, -usdDeduction, String(campaign.id), `Campaign funding via Master Fuel Tank (₹${netAdSpend} ad spend + ₹${optFee} 15% Encho fee)`]);
 
       // Update campaign status to pending admin review
       await pool.query(`
@@ -9761,23 +9763,25 @@ app.post('/api/payments/geo-route/initiate', async (req: Request, res: Response)
           );
         }
         const wallet = walletRes.rows[0];
-        const currentBalance = Number(wallet.balance) || 0;
+        const currentBalanceUSD = Number(wallet.balance) || 0;
+        const currentBalanceINR = Math.round(currentBalanceUSD * 83.5);
 
-        if (currentBalance < grossAmount) {
+        if (currentBalanceINR < grossAmount && currentBalanceUSD < grossAmount) {
           await client.query('ROLLBACK');
           return res.status(400).json({
-            error: `Insufficient wallet balance. Available: $${currentBalance.toFixed(2)}, Required: $${grossAmount.toFixed(2)}`
+            error: `Insufficient Master Fuel Tank balance. Available: ₹${currentBalanceINR.toLocaleString()} ($${currentBalanceUSD.toFixed(2)} USD), Required: ₹${grossAmount.toLocaleString()}`
           });
         }
 
-        // Deduct wallet balance
-        await client.query('UPDATE host_wallets SET balance = balance - $1 WHERE id = $2', [grossAmount, wallet.id]);
+        // Deduct wallet balance in USD base
+        const usdDeduction = grossAmount > currentBalanceUSD ? Math.round((grossAmount / 83.5) * 100) / 100 : grossAmount;
+        await client.query('UPDATE host_wallets SET balance = balance - $1 WHERE id = $2', [usdDeduction, wallet.id]);
 
         // Insert wallet transaction
         const txInsert = await client.query(
           `INSERT INTO wallet_transactions (wallet_id, amount, type, reference_id, status, description)
            VALUES ($1, $2, 'campaign_funding', $3, 'completed', $4) RETURNING id`,
-          [wallet.id, -grossAmount, String(campaign_id || ''), `Campaign funding via internal wallet ($${netAdSpend} ad spend + $${optFee} 15% Encho fee)`]
+          [wallet.id, -usdDeduction, String(campaign_id || ''), `Campaign funding via internal wallet (₹${netAdSpend} ad spend + ₹${optFee} 15% Encho fee)`]
         );
 
         // Update campaign if campaign_id provided

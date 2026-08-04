@@ -1670,7 +1670,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                             )}
                             <span>AI Check</span>
                           </button>
-                          {Number(wallet?.balance || 0) >= campaign.budget ? (
+                          {((Number(wallet?.balance) || 0) > 1000 ? Number(wallet?.balance) : Math.round((Number(wallet?.balance) || 0) * 83.5)) >= campaign.budget ? (
                             <button 
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1678,7 +1678,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               }}
                               disabled={isPaying}
                               className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
-                              title={`Launch using ₹${campaign.budget.toLocaleString()} from your ₹${Number(wallet?.balance || 0).toLocaleString()} Master Fuel Tank`}
+                              title={`Launch using ₹${campaign.budget.toLocaleString()} from your ₹${((Number(wallet?.balance) || 0) > 1000 ? Number(wallet?.balance) : Math.round((Number(wallet?.balance) || 0) * 83.5)).toLocaleString()} Master Fuel Tank`}
                             >
                               {isPaying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />}
                               <span>Launch from Fuel Tank</span>
@@ -7492,10 +7492,10 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                     <Zap className="w-5 h-5 text-amber-400 fill-amber-400 animate-pulse" />
                     <div>
                       <span className="text-[9px] font-mono uppercase text-zinc-400 block tracking-wider">Master Fuel Tank Balance</span>
-                      <span className="font-extrabold text-base text-white font-mono">₹{Number(wallet?.balance || 0).toLocaleString()}</span>
+                      <span className="font-extrabold text-base text-white font-mono">₹{((Number(wallet?.balance) || 0) > 1000 ? Number(wallet?.balance) : Math.round((Number(wallet?.balance) || 0) * 83.5)).toLocaleString()}</span>
                     </div>
                   </div>
-                  {Number(wallet?.balance || 0) >= showPayModal.budget ? (
+                  {((Number(wallet?.balance) || 0) > 1000 ? Number(wallet?.balance) : Math.round((Number(wallet?.balance) || 0) * 83.5)) >= showPayModal.budget ? (
                     <span className="text-[9px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-full uppercase font-mono">
                       ✓ Covered
                     </span>
@@ -7506,7 +7506,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                   )}
                 </div>
 
-                {Number(wallet?.balance || 0) >= showPayModal.budget ? (
+                {((Number(wallet?.balance) || 0) > 1000 ? Number(wallet?.balance) : Math.round((Number(wallet?.balance) || 0) * 83.5)) >= showPayModal.budget ? (
                   <div className="pt-2 border-t border-zinc-800/80 space-y-2">
                     <p className="text-[10.5px] text-zinc-300 font-light leading-relaxed">
                       You have sufficient pre-funded budget in your Master Fuel Tank. No external payment needed!
@@ -7523,7 +7523,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                   </div>
                 ) : (
                   <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between text-[10px] text-zinc-400">
-                    <span>Available ₹{Number(wallet?.balance || 0).toLocaleString()} is less than budget ₹{showPayModal.budget.toLocaleString()}</span>
+                    <span>Available ₹{((Number(wallet?.balance) || 0) > 1000 ? Number(wallet?.balance) : Math.round((Number(wallet?.balance) || 0) * 83.5)).toLocaleString()} is less than budget ₹{showPayModal.budget.toLocaleString()}</span>
                     <button
                       type="button"
                       onClick={() => {
