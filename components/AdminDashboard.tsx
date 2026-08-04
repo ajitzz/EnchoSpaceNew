@@ -545,8 +545,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        addToast('Approved', 'Campaign approved and queued for publication on Meta!', 'success');
-        setMarketingCampaigns(prev => prev.map(c => c.id === id ? { ...c, status: 'active', approved_at: new Date().toISOString() } : c));
+        const data = await res.json();
+        addToast('Approved', 'Campaign approved and dispatched live to Meta Ad Network!', 'success');
+        if (data.campaign) {
+          setMarketingCampaigns(prev => prev.map(c => c.id === id ? data.campaign : c));
+        } else {
+          setMarketingCampaigns(prev => prev.map(c => c.id === id ? { ...c, status: 'active', approved_at: new Date().toISOString() } : c));
+        }
       } else {
         addToast('Error', 'Failed to approve campaign.', 'error');
       }

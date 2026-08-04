@@ -202,7 +202,12 @@ export interface MarketingCampaign {
   platforms: string[];
   budget: number;
   currency?: string;
-  status: 'draft' | 'pending' | 'active' | 'rejected' | 'completed';
+  status: 'draft' | 'pending' | 'active' | 'rejected' | 'completed' | 'paused';
+  payment_status?: string;
+  payment_gateway?: string;
+  payment_intent_id?: string;
+  escrow_status?: string;
+  admin_approved?: boolean;
   admin_feedback?: string;
   created_at: string;
   approved_at?: string;
@@ -211,10 +216,19 @@ export interface MarketingCampaign {
   ad_format?: 'post' | 'reel' | 'carousel' | 'story';
   feed_description?: string;
   rejected_fields?: Record<string, string>;
+  meta_campaign_id?: string;
+  meta_dispatched_at?: string;
   meta_pixel_id?: string;
   meta_capi_token?: string;
+  google_campaign_id?: string;
+  google_dispatched_at?: string;
   google_conversion_id?: string;
   google_conversion_label?: string;
+  listing_title?: string;
+  listing_image?: string;
+  listing_city?: string;
+  host_name?: string;
+  host_email?: string;
   pacing_mode?: 'conservative' | 'standard' | 'accelerated' | 'paused';
   accumulated_spent?: number;
   accumulated_impressions?: number;
@@ -228,8 +242,5 @@ export interface MarketingCampaign {
     conversions: number;
     spent: number;
   };
-  // joined fields
-  listing_title?: string;
-  listing_image?: string;
 }
 

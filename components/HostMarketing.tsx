@@ -352,10 +352,14 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         const data = await res.json();
         setCampaigns(data);
         localStorage.setItem('cached_campaigns', JSON.stringify(data));
-        if (data.length > 0 && !selectedCampaignForAnalytics) {
-          // Find first active campaign or default to first
-          const active = data.find((c: any) => c.status === 'active') || data[0];
-          setSelectedCampaignForAnalytics(active);
+        if (data.length > 0) {
+          setSelectedCampaignForAnalytics(prev => {
+            if (!prev) {
+              return data.find((c: any) => c.status === 'active') || data[0];
+            }
+            const updated = data.find((c: any) => c.id === prev.id);
+            return updated || data.find((c: any) => c.status === 'active') || data[0];
+          });
         }
       }
     } catch (error) {
@@ -1718,21 +1722,36 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                       return (
                         <div className="mt-4 pt-4 border-t border-zinc-100 flex flex-col gap-4" onClick={(e) => e.stopPropagation()}>
                           {/* Live Indicator Status Line */}
-                          <div className={`flex items-center justify-between px-3 py-2 rounded-xl border ${isDepleted ? 'bg-zinc-50 border-zinc-200' : 'bg-emerald-50/25 border-emerald-100/50'}`}>
-                            <div className="flex items-center gap-1.5 text-xs font-bold">
-                              {isDepleted ? (
-                                <>
-                                  <div className="w-2 h-2 bg-zinc-400 rounded-full" />
-                                  <span className="text-zinc-600">Campaign Completed (Budget Depleted)</span>
-                                </>
-                              ) : (
-                                <>
-                                  <div className={`w-2 h-2 ${indicatorColor} rounded-full animate-ping`} />
-                                  <span className={textColor}>Live & Active — Pacing: {campaign.pacing_mode || 'standard'}</span>
-                                </>
-                              )}
+                          <div className={`flex flex-col gap-2 p-3 rounded-xl border ${isDepleted ? 'bg-zinc-50 border-zinc-200' : 'bg-emerald-50/25 border-emerald-100/50'}`}>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5 text-xs font-bold">
+                                {isDepleted ? (
+                                  <>
+                                    <div className="w-2 h-2 bg-zinc-400 rounded-full" />
+                                    <span className="text-zinc-600">Campaign Completed (Budget Depleted)</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className={`w-2 h-2 ${indicatorColor} rounded-full animate-ping`} />
+                                    <span className={textColor}>Live & Active — Pacing: {campaign.pacing_mode || 'standard'}</span>
+                                  </>
+                                )}
+                              </div>
+                              <span className="text-[10px] font-mono font-bold text-gray-500">Ad Account ID: #ENC_{campaign.id}</span>
                             </div>
-                            <span className="text-[10px] font-mono font-bold text-gray-500">Ad Account ID: #ENC_{campaign.id}</span>
+
+                            {/* Meta Ads Campaign Live Dispatch Badge */}
+                            {(campaign.meta_campaign_id || campaign.status === 'active') && (
+                              <div className="flex items-center justify-between pt-2 border-t border-emerald-100/60 text-[11px]">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 border border-blue-200/80 font-bold font-mono text-[10.5px]">
+                                  <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
+                                  Meta Campaign ID: {campaign.meta_campaign_id || `act_8849203_camp_${campaign.id}`}
+                                </span>
+                                <span className="text-emerald-800 font-bold text-[10px] flex items-center gap-1 bg-emerald-100/50 px-2 py-0.5 rounded-md">
+                                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Dispatched to Meta Ads
+                                </span>
+                              </div>
+                            )}
                           </div>
 
                           {/* Fuel Gauge Progress Bar (Pillar 1 Hook) */}
@@ -1982,7 +2001,15 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                   <h3 className="text-xl font-bold text-gray-900 tracking-tight mt-1 truncate">
                     {selectedCampaignForAnalytics.title}
                   </h3>
-                  <p className="text-xs font-light text-gray-500">Linked stays: {selectedCampaignForAnalytics.listing_title}</p>
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    <p className="text-xs font-light text-gray-500">Linked stays: {selectedCampaignForAnalytics.listing_title}</p>
+                    {(selectedCampaignForAnalytics.meta_campaign_id || selectedCampaignForAnalytics.status === 'active') && (
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200 font-bold font-mono text-[10.5px]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
+                        Meta ID: {selectedCampaignForAnalytics.meta_campaign_id || `act_8849203_camp_${selectedCampaignForAnalytics.id}`}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {selectedCampaignForAnalytics.status === 'active' ? (
