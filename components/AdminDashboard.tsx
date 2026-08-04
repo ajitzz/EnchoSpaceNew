@@ -1726,16 +1726,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                                 <span className="text-gray-500 text-xs font-bold uppercase tracking-wider block mb-1">Pending Review</span>
-                                <span className="text-3xl font-bold text-amber-500">{marketingCampaigns.filter(c => c.status === 'pending').length}</span>
+                                <span className="text-3xl font-bold text-amber-500">
+                                   {marketingCampaigns.filter(c => c.status === 'pending' || c.status === 'pending_approval' || c.status === 'PENDING_APPROVAL').length}
+                                </span>
                              </div>
                              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                                 <span className="text-gray-500 text-xs font-bold uppercase tracking-wider block mb-1">Active Ad Sets</span>
-                                <span className="text-3xl font-bold text-emerald-500">{marketingCampaigns.filter(c => c.status === 'active').length}</span>
+                                <span className="text-3xl font-bold text-emerald-500">
+                                   {marketingCampaigns.filter(c => c.status === 'active' || c.status === 'approved').length}
+                                </span>
                              </div>
                              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                                 <span className="text-gray-500 text-xs font-bold uppercase tracking-wider block mb-1">Total Active Ad Budget</span>
                                 <span className="text-3xl font-bold text-gray-900">
-                                   ₹{marketingCampaigns.reduce((sum, c) => sum + (c.status === 'active' ? Number(c.budget) : 0), 0).toLocaleString()}
+                                   ₹{marketingCampaigns.reduce((sum, c) => sum + ((c.status === 'active' || c.status === 'approved') ? Number(c.budget) : 0), 0).toLocaleString()}
                                 </span>
                              </div>
                           </div>
@@ -1752,8 +1756,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                 <div className="flex flex-wrap items-center gap-1.5 bg-gray-50 p-1 rounded-xl border border-gray-150">
                                    {[
                                       { id: 'all', label: 'All', count: marketingCampaigns.length },
-                                      { id: 'pending', label: 'Pending', count: marketingCampaigns.filter(c => c.status === 'pending').length },
-                                      { id: 'active', label: 'Active', count: marketingCampaigns.filter(c => c.status === 'active').length },
+                                      { id: 'pending', label: 'Pending', count: marketingCampaigns.filter(c => c.status === 'pending' || c.status === 'pending_approval' || c.status === 'PENDING_APPROVAL').length },
+                                      { id: 'active', label: 'Active', count: marketingCampaigns.filter(c => c.status === 'active' || c.status === 'approved').length },
                                       { id: 'rejected', label: 'Rejected', count: marketingCampaigns.filter(c => c.status === 'rejected').length }
                                    ].map((tab) => (
                                       <button
@@ -1786,7 +1790,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                    <p className="text-xs text-gray-400 mt-1">Host-submitted campaigns will appear here for review.</p>
                                 </div>
                              ) : (() => {
-                                const filteredCampaigns = marketingCampaigns.filter(c => campaignFilter === 'all' || c.status === campaignFilter);
+                                const filteredCampaigns = marketingCampaigns.filter(c => {
+                                   if (campaignFilter === 'all') return true;
+                                   if (campaignFilter === 'pending') return c.status === 'pending' || c.status === 'pending_approval' || c.status === 'PENDING_APPROVAL';
+                                   if (campaignFilter === 'active') return c.status === 'active' || c.status === 'approved';
+                                   if (campaignFilter === 'rejected') return c.status === 'rejected';
+                                   return true;
+                                });
                                 if (filteredCampaigns.length === 0) {
                                    return (
                                       <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-200 shadow-sm w-full">
@@ -1798,7 +1808,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                 }
                                 return (
                                    <div className="grid grid-cols-1 gap-6 w-full">
-                                      {filteredCampaigns.map((campaign) => (
+                                      {filteredCampaigns.map((campaign) => {
+                                         const isPending = campaign.status === 'pending' || campaign.status === 'pending_approval' || campaign.status === 'PENDING_APPROVAL';
+                                         const isActive = campaign.status === 'active' || campaign.status === 'approved';
+                                         const isRejected = campaign.status === 'rejected';
+                                         return (
                                       <div key={campaign.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow flex flex-col md:flex-row text-left">
                                          <div className="p-6 flex-1 space-y-4">
                                             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1806,9 +1820,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                                   <div className="flex items-center gap-2">
                                                      <h4 className="text-lg font-bold text-gray-900">{campaign.title}</h4>
                                                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                                                        campaign.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                                                        campaign.status === 'active' ? 'bg-emerald-100 text-emerald-700' :
-                                                        campaign.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                                        isPending ? 'bg-amber-100 text-amber-700' :
+                                                        isActive ? 'bg-emerald-100 text-emerald-700' :
+                                                        isRejected ? 'bg-red-100 text-red-700' :
                                                         'bg-gray-100 text-gray-700'
                                                      }`}>
                                                         {campaign.status.toUpperCase()}
@@ -2102,7 +2116,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                             )}
                                          </div>
 
-                                         {campaign.status === 'pending' && (
+                                         {isPending && (
                                             <div className="bg-gray-50 border-t md:border-t-0 md:border-l border-gray-100 p-6 flex flex-row md:flex-col justify-center items-stretch gap-3 shrink-0 min-w-[180px]">
                                                <button 
                                                   type="button"
@@ -2121,7 +2135,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                             </div>
                                          )}
                                       </div>
-                                      ))}
+                                      );
+                                      })}
                                    </div>
                                 );
                              })()}
@@ -3673,17 +3688,49 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                              </div>
 
                              {/* Footer Actions */}
-                             <div className="p-4 bg-slate-950 border-t border-slate-800 flex justify-between items-center text-xs">
-                                <div className="text-slate-400">
-                                   Format: <span className="text-slate-200 font-bold uppercase">{previewAdTab}</span>
+                             <div className="p-4 bg-slate-950 border-t border-slate-800 flex flex-wrap justify-between items-center text-xs gap-3">
+                                <div className="text-slate-400 flex items-center gap-2">
+                                   <span>Format: <strong className="text-slate-200 uppercase font-mono">{previewAdTab}</strong></span>
+                                   <span className="text-slate-600">•</span>
+                                   <span className="text-slate-400">Campaign #{previewAdCampaign.id}</span>
                                 </div>
-                                <button
-                                   type="button"
-                                   onClick={() => setPreviewAdCampaign(null)}
-                                   className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-bold transition-all"
-                                >
-                                   Close Live Ad Creative Preview Modal
-                                </button>
+                                <div className="flex items-center gap-2">
+                                   {(previewAdCampaign.status === 'pending' || previewAdCampaign.status === 'pending_approval' || previewAdCampaign.status === 'PENDING_APPROVAL') && (
+                                      <>
+                                         <button
+                                            type="button"
+                                            onClick={() => {
+                                               const id = previewAdCampaign.id;
+                                               setPreviewAdCampaign(null);
+                                               handleApproveCampaign(id);
+                                            }}
+                                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all shadow-sm flex items-center gap-1.5"
+                                         >
+                                            <CheckCircle2Icon className="w-4 h-4" />
+                                            <span>Single-Click Approve</span>
+                                         </button>
+                                         <button
+                                            type="button"
+                                            onClick={() => {
+                                               const id = previewAdCampaign.id;
+                                               setPreviewAdCampaign(null);
+                                               handleOpenRejectModal(id);
+                                            }}
+                                            className="px-4 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-bold rounded-xl border border-rose-500/30 transition-all flex items-center gap-1.5"
+                                         >
+                                            <XIcon className="w-4 h-4" />
+                                            <span>Surgical Reject</span>
+                                         </button>
+                                      </>
+                                   )}
+                                   <button
+                                      type="button"
+                                      onClick={() => setPreviewAdCampaign(null)}
+                                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-bold transition-all"
+                                   >
+                                      Close
+                                   </button>
+                                </div>
                              </div>
                           </div>
                        </div>
