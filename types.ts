@@ -234,6 +234,10 @@ export interface MarketingCampaign {
   accumulated_impressions?: number;
   accumulated_clicks?: number;
   accumulated_conversions?: number;
+  target_audience_persona?: 'couples' | 'families' | 'friends' | 'digital_nomads' | 'everyone';
+  audience_interests?: string[];
+  ai_generated_ad_copies?: any;
+  meta_sync_logs?: any;
   last_pacing_calc_at?: string;
   analytics?: {
     impressions: number;

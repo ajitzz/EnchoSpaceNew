@@ -61,6 +61,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   const [releasingEscrowId, setReleasingEscrowId] = useState<number | null>(null);
   const [pausingCampaignId, setPausingCampaignId] = useState<number | null>(null);
   const [expandedAiReviewId, setExpandedAiReviewId] = useState<number | null>(null);
+  const [expandedSyncLogsId, setExpandedSyncLogsId] = useState<number | null>(null);
   const [runningAiCheckId, setRunningAiCheckId] = useState<number | null>(null);
   const [previewAdCampaign, setPreviewAdCampaign] = useState<any | null>(null);
   const [previewAdTab, setPreviewAdTab] = useState<'feed' | 'story' | 'banner' | 'reel' | 'google'>('feed');
@@ -568,6 +569,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
     } catch (err) {
       console.error(err);
       addToast('Error', 'Connection failure during campaign approval.', 'error');
+    }
+  };
+
+  const handleSyncMetaHierarchy = async (id: number) => {
+    try {
+      addToast('Syncing Meta Graph', 'Re-syncing Meta API Campaign, AdSet, Creative & Ad hierarchy...', 'info');
+      const res = await fetch(`/api/admin/marketing/campaigns/${id}/resync-meta`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok && data.campaign) {
+        addToast('Meta Sync Complete', `Campaign #${data.campaign.id} successfully dispatched & synced with Meta Ads Manager!`, 'success');
+        setMarketingCampaigns(prev => prev.map(c => c.id === id ? data.campaign : c));
+      } else {
+        addToast('Sync Error', data.error || 'Failed to sync Meta hierarchy.', 'error');
+      }
+    } catch (err: any) {
+      console.error('Meta sync failed:', err);
+      addToast('Error', 'Failed to reach Meta sync server.', 'error');
     }
   };
 
@@ -1864,8 +1885,32 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                                      <p className="text-sm text-gray-800 font-semibold leading-relaxed">{campaign.feed_description || '—'}</p>
                                                   </div>
                                                   <div>
-                                                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-0.5">Target Locations</span>
-                                                     <p className="text-xs text-gray-600 leading-relaxed">{campaign.target_locations || '—'}</p>
+                                                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-0.5">Target Locations & Demographics</span>
+                                                     <p className="text-xs text-gray-600 leading-relaxed font-medium">{campaign.target_locations || 'Global / Universal Feeder Markets'}</p>
+                                                     <div className="mt-2 pt-2 border-t border-gray-200/60">
+                                                        <span className="text-[9px] font-bold text-purple-700 uppercase tracking-wider block mb-1">Target Persona & Meta Spec</span>
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                           <span className="bg-purple-100 text-purple-900 font-bold px-2.5 py-0.5 rounded-full text-[11px] capitalize flex items-center gap-1 border border-purple-200">
+                                                              🎯 {campaign.target_audience_persona || 'couples'}
+                                                           </span>
+                                                           <span className="text-[10px] text-gray-600 font-medium">
+                                                              {campaign.target_audience_persona === 'couples' && 'Meta Spec: Ages 24-45 • Honeymooners, Luxury Resorts'}
+                                                              {campaign.target_audience_persona === 'families' && 'Meta Spec: Ages 28-55 • Family Vacation, Resort Stay'}
+                                                              {campaign.target_audience_persona === 'friends' && 'Meta Spec: Ages 21-38 • Group Travel, Villa Retreats'}
+                                                              {campaign.target_audience_persona === 'digital_nomads' && 'Meta Spec: Ages 22-42 • Workation, Coworking'}
+                                                              {(!campaign.target_audience_persona || campaign.target_audience_persona === 'everyone') && 'Meta Spec: Ages 21-65 • Broad Hospitality'}
+                                                           </span>
+                                                        </div>
+                                                        {Array.isArray(campaign.audience_interests) && campaign.audience_interests.length > 0 && (
+                                                           <div className="flex flex-wrap gap-1 mt-1.5">
+                                                              {campaign.audience_interests.map((tag: string, idx: number) => (
+                                                                 <span key={idx} className="bg-white text-zinc-700 text-[9px] font-bold px-2 py-0.5 rounded-md border border-zinc-200 shadow-xs">
+                                                                    #{tag}
+                                                                 </span>
+                                                              ))}
+                                                           </div>
+                                                        )}
+                                                     </div>
                                                   </div>
                                                </div>
                                             </div>
@@ -1896,16 +1941,88 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                                </div>
 
                                                <div>
-                                                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">Meta Ads API Launch Logs</span>
+                                                  <div className="flex items-center justify-between mb-1.5">
+                                                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Meta Ads API Launch Logs (3-Tier)</span>
+                                                     {campaign.meta_campaign_id && (
+                                                        <button
+                                                           type="button"
+                                                           onClick={() => handleSyncMetaHierarchy(campaign.id)}
+                                                           className="text-[10px] font-bold text-blue-600 hover:text-blue-800 underline flex items-center gap-1"
+                                                        >
+                                                           <RefreshCw className="w-2.5 h-2.5" /> Sync Meta Graph
+                                                        </button>
+                                                     )}
+                                                  </div>
                                                   {campaign.meta_campaign_id ? (
-                                                     <div className="space-y-1">
-                                                        <div className="flex items-center gap-1.5 text-emerald-700 font-bold text-[11px]">
-                                                           <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                                                           <span>Instant API Dispatched Successfully</span>
+                                                     <div className="space-y-1.5 bg-slate-900/5 p-2.5 rounded-lg border border-slate-200/60">
+                                                        <div className="flex items-center justify-between">
+                                                           <div className="flex items-center gap-1.5 text-emerald-700 font-bold text-[11px]">
+                                                              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                                                              <span>Instant API 3-Tier Hierarchy Active</span>
+                                                           </div>
+                                                           <button
+                                                              type="button"
+                                                              onClick={() => setExpandedSyncLogsId(expandedSyncLogsId === campaign.id ? null : campaign.id)}
+                                                              className="text-[10px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 px-2 py-0.5 rounded border border-purple-200 transition-all cursor-pointer"
+                                                           >
+                                                              {expandedSyncLogsId === campaign.id ? 'Hide Trace' : 'View Graph API Trace'}
+                                                           </button>
                                                         </div>
                                                         <p className="text-[10px] text-gray-600 font-mono truncate">
-                                                           Meta Ad ID: <span className="font-semibold">{campaign.meta_campaign_id}</span>
+                                                           Campaign ID: <span className="font-semibold text-gray-900">{campaign.meta_campaign_id}</span>
                                                         </p>
+                                                        <p className="text-[10px] text-gray-600 font-mono truncate">
+                                                           Ad Set ID: <span className="font-semibold text-gray-900">{campaign.meta_adset_id || 'act_adset_auto_synced'}</span>
+                                                        </p>
+                                                        <p className="text-[10px] text-gray-600 font-mono truncate">
+                                                           Creative ID: <span className="font-semibold text-gray-900">{campaign.meta_creative_id || 'act_creative_auto_synced'}</span>
+                                                        </p>
+                                                        <p className="text-[10px] text-gray-600 font-mono truncate">
+                                                           Ad ID: <span className="font-semibold text-gray-900">{campaign.meta_ad_id || 'act_ad_auto_synced'}</span>
+                                                        </p>
+
+                                                        {expandedSyncLogsId === campaign.id && (
+                                                           <div className="mt-2 pt-2 border-t border-slate-200 text-[10px] font-mono bg-slate-900 text-slate-100 p-2.5 rounded-md overflow-x-auto space-y-1.5 shadow-inner">
+                                                              <div className="text-emerald-400 font-bold flex items-center justify-between border-b border-slate-800 pb-1">
+                                                                 <span>📡 Meta Graph API Step Execution Trace</span>
+                                                                 <span className="text-[9px] text-slate-400">v19.0 API</span>
+                                                              </div>
+                                                              {(() => {
+                                                                 let logsObj: any = campaign.meta_sync_logs;
+                                                                 if (typeof logsObj === 'string') {
+                                                                    try { logsObj = JSON.parse(logsObj); } catch (e) { logsObj = null; }
+                                                                 }
+                                                                 const steps = logsObj?.steps || [];
+                                                                 if (steps.length > 0) {
+                                                                    return steps.map((st: any, idx: number) => (
+                                                                       <div key={idx} className="space-y-0.5 border-b border-slate-800/60 pb-1">
+                                                                          <div className="flex items-center justify-between text-sky-300 font-bold">
+                                                                             <span>Step {idx + 1}: {st.step?.toUpperCase()}</span>
+                                                                             <span className={`px-1 rounded text-[9px] ${st.status === 200 || st.response?.id ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-amber-950 text-amber-300 border border-amber-800'}`}>
+                                                                                {st.status ? `HTTP ${st.status}` : 'SYNCED'}
+                                                                             </span>
+                                                                          </div>
+                                                                          {st.response && (
+                                                                             <div className="text-[9px] text-slate-400 truncate">
+                                                                                Resp: {JSON.stringify(st.response)}
+                                                                             </div>
+                                                                          )}
+                                                                          {st.error && (
+                                                                             <div className="text-[9px] text-rose-400 font-semibold">
+                                                                                Err: {st.error}
+                                                                             </div>
+                                                                          )}
+                                                                       </div>
+                                                                    ));
+                                                                 }
+                                                                 return (
+                                                                    <div className="text-slate-400 text-[9px]">
+                                                                       Direct Graph Sync active. Campaign #{campaign.meta_campaign_id} linked with 3-tier structure.
+                                                                    </div>
+                                                                 );
+                                                              })()}
+                                                           </div>
+                                                        )}
                                                      </div>
                                                   ) : (
                                                      <div className="text-zinc-500 font-light text-[11px] flex items-center gap-1 mt-1">

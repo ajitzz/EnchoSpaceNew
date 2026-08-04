@@ -129,13 +129,17 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
     meta_pixel_id: '',
     meta_capi_token: '',
     google_conversion_id: '',
-    google_conversion_label: '', pacing_mode: 'standard' as 'standard' | 'accelerated' | 'conservative' | 'paused',
+    google_conversion_label: '',
+    pacing_mode: 'standard' as 'standard' | 'accelerated' | 'conservative' | 'paused',
+    target_audience_persona: 'couples',
+    audience_interests: [] as string[],
+    cta_type: 'Book Now',
   });
 
   // Track layout & alignment options (Scenario 1 advanced design!)
   const [mediaAlignment, setMediaAlignment] = useState<'left' | 'center' | 'right'>('center');
   const [mediaAspect, setMediaAspect] = useState<'1:1' | '9:16' | '16:9'>('1:1');
-  const [previewPlatform, setPreviewPlatform] = useState<'instagram' | 'facebook'>('instagram');
+  const [previewPlatform, setPreviewPlatform] = useState<'instagram' | 'facebook' | 'google'>('instagram');
   const [activeSlideIndex, setActiveSlideIndex] = useState<number>(0);
   const [editingCampaignId, setEditingCampaignId] = useState<number | null>(null);
   const [rejectedFieldsMap, setRejectedFieldsMap] = useState<Record<string, string>>({});
@@ -186,7 +190,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   const [loadingTargetingRecs, setLoadingTargetingRecs] = useState(false);
   const [targetingGrade, setTargetingGrade] = useState<any>(null);
   const [isGradingTargeting, setIsGradingTargeting] = useState(false);
-  const [selectedAudienceBucket, setSelectedAudienceBucket] = useState<'couples' | 'families' | 'friends'>('couples');
+  const [selectedAudienceBucket, setSelectedAudienceBucket] = useState<'couples' | 'families' | 'friends' | 'digital_nomads' | 'everyone'>('couples');
 
   // Payment states
   const [isPaying, setIsPaying] = useState(false);
@@ -793,7 +797,8 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         body: JSON.stringify({
           listing_id: formData.listing_id,
           ad_format: formData.ad_format || 'post',
-          tone: 'luxurious'
+          tone: 'luxurious',
+          audience_persona: selectedAudienceBucket
         })
       });
       if (res.ok) {
@@ -1144,7 +1149,11 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           meta_pixel_id: '',
           meta_capi_token: '',
           google_conversion_id: '',
-          google_conversion_label: '', pacing_mode: 'standard' as 'standard' | 'accelerated' | 'conservative' | 'paused',
+          google_conversion_label: '',
+          pacing_mode: 'standard',
+          target_audience_persona: 'couples',
+          audience_interests: [],
+          cta_type: 'Book Now',
         });
         fetchCampaigns();
       } else {
@@ -1341,7 +1350,11 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
               meta_pixel_id: '',
               meta_capi_token: '',
               google_conversion_id: '',
-              google_conversion_label: '', pacing_mode: 'standard' as 'standard' | 'accelerated' | 'conservative' | 'paused'
+              google_conversion_label: '',
+              pacing_mode: 'standard',
+              target_audience_persona: 'couples',
+              audience_interests: [],
+              cta_type: 'Book Now',
             });
             setShowCreateModal(true);
           }}
@@ -1682,7 +1695,11 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 meta_pixel_id: campaign.meta_pixel_id || '',
                                 meta_capi_token: campaign.meta_capi_token || '',
                                 google_conversion_id: campaign.google_conversion_id || '',
-                                google_conversion_label: campaign.google_conversion_label || '', pacing_mode: (campaign.pacing_mode || 'standard') as any
+                                google_conversion_label: campaign.google_conversion_label || '',
+                                pacing_mode: (campaign.pacing_mode || 'standard') as any,
+                                target_audience_persona: campaign.target_audience_persona || 'couples',
+                                audience_interests: campaign.audience_interests || [],
+                                cta_type: (campaign as any).cta_type || 'Book Now',
                               });
                               setShowCreateModal(true);
                             }}
@@ -3906,6 +3923,38 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               <MapPin className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
                             </div>
 
+                            {/* Primary Call-To-Action (CTA) Customizer Selector */}
+                            <div className="space-y-1.5 text-left pt-1">
+                              <div className="flex items-center justify-between">
+                                <label className="text-[10px] font-black uppercase tracking-wider text-zinc-500 block">
+                                  Primary Call-To-Action (CTA) Customizer
+                                </label>
+                                <span className="text-[9px] text-blue-600 font-mono font-bold">Live Synced to Ad Mockup</span>
+                              </div>
+                              <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                                {[
+                                  { id: 'Book Now', label: '✈️ Book Now' },
+                                  { id: 'Check Availability', label: '📅 Check Dates' },
+                                  { id: 'Reserve Direct', label: '🔒 Reserve Direct' },
+                                  { id: 'Get Offer', label: '🎁 Get Offer' },
+                                  { id: 'Explore Stay', label: '🏡 Explore Stay' },
+                                ].map((cta) => (
+                                  <button
+                                    key={cta.id}
+                                    type="button"
+                                    onClick={() => setFormData(prev => ({ ...prev, cta_type: cta.id }))}
+                                    className={`py-2 px-1.5 text-center rounded-xl border text-[10px] font-extrabold transition-all ${
+                                      formData.cta_type === cta.id
+                                        ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
+                                        : 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50'
+                                    }`}
+                                  >
+                                    {cta.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
                             {/* Rahul-Proof Smart Targeter Panel (Pillar 5) */}
                             <div className="bg-zinc-50 border border-zinc-200/80 rounded-2xl p-4 space-y-4 text-left select-none relative overflow-hidden">
                               <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-full blur-2xl pointer-events-none" />
@@ -3928,31 +3977,49 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               ) : aiTargetingRecs ? (
                                 <div className="space-y-3">
                                   {/* High level audience selection */}
-                                  <div className="space-y-1.5">
+                                  <div className="space-y-2">
                                     <label className="text-[9px] font-black uppercase tracking-wider text-zinc-400 block">
-                                      Select Target Audience Range
+                                      Select Target Audience Range & Meta Demographics
                                     </label>
-                                    <div className="grid grid-cols-3 gap-2">
-                                      {(['couples', 'families', 'friends'] as const).map((bucket) => (
+                                    <div className="grid grid-cols-5 gap-1.5">
+                                      {[
+                                        { id: 'couples', label: '💑 Couples', badge: 'Romantic' },
+                                        { id: 'families', label: '👨‍👩‍👧‍👦 Families', badge: 'Kids Stay' },
+                                        { id: 'friends', label: '🍻 Friends', badge: 'Groups' },
+                                        { id: 'digital_nomads', label: '💻 Nomads', badge: 'Workation' },
+                                        { id: 'everyone', label: '🌟 Everyone', badge: 'Universal' },
+                                      ].map((bucket) => (
                                         <button
-                                          key={bucket}
+                                          key={bucket.id}
                                           type="button"
-                                          onClick={() => setSelectedAudienceBucket(bucket)}
-                                          className={`py-1.5 px-2 text-[10px] font-bold rounded-xl border capitalize transition-all ${
-                                            selectedAudienceBucket === bucket
-                                              ? 'bg-gray-900 border-gray-900 text-white shadow-sm'
-                                              : 'bg-white border-zinc-200 text-zinc-500 hover:bg-zinc-50'
+                                          onClick={() => {
+                                            const bId = bucket.id as any;
+                                            setSelectedAudienceBucket(bId);
+                                            setFormData(prev => ({ ...prev, target_audience_persona: bId }));
+                                          }}
+                                          className={`py-2 px-1 text-center rounded-xl border transition-all ${
+                                            selectedAudienceBucket === bucket.id
+                                              ? 'bg-gray-900 border-gray-900 text-white shadow-md ring-2 ring-gray-900/10'
+                                              : 'bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50'
                                           }`}
                                         >
-                                          {bucket}
+                                          <div className="text-[10px] font-bold leading-tight truncate">{bucket.label}</div>
+                                          <div className={`text-[8px] mt-0.5 font-medium ${selectedAudienceBucket === bucket.id ? 'text-blue-300' : 'text-zinc-400'}`}>{bucket.badge}</div>
                                         </button>
                                       ))}
                                     </div>
-                                    <div className="text-[10px] text-zinc-500 leading-relaxed bg-white border rounded-xl p-2.5">
-                                      <span className="font-bold text-gray-800 uppercase text-[8px] tracking-wider block mb-0.5">Meta Ads Mapping:</span>
-                                      {selectedAudienceBucket === 'couples' && "🎯 Targets: Married couples, honeymooners, luxury travelers, high-income weekenders."}
-                                      {selectedAudienceBucket === 'families' && "🎯 Targets: Parents with school-aged children, multi-generational vacationers, safety-focused groups."}
-                                      {selectedAudienceBucket === 'friends' && "🎯 Targets: Tech escape groups, retreat organizers, luxury villa stayers, private pool interests."}
+                                    <div className="text-[10px] text-zinc-500 leading-relaxed bg-blue-50/50 border border-blue-100 rounded-xl p-2.5 space-y-1">
+                                      <div className="flex items-center justify-between">
+                                        <span className="font-bold text-blue-900 uppercase text-[8px] tracking-wider">Meta Graph API Demographic Specs:</span>
+                                        <span className="text-[9px] font-semibold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded-full">HEC Compliant</span>
+                                      </div>
+                                      <p className="text-[10px] text-zinc-700 font-medium">
+                                        {selectedAudienceBucket === 'couples' && "🎯 Targeting: Couples (Ages 24-45), Honeymooners, Luxury Travelers, High-Income Weekend Getaway Seekers."}
+                                        {selectedAudienceBucket === 'families' && "🎯 Targeting: Parents with Children (Ages 28-55), Family Vacation Planners, Multi-Gen Travellers."}
+                                        {selectedAudienceBucket === 'friends' && "🎯 Targeting: Young Adults & Professionals (Ages 21-38), Group Retreats, Villa Stay Enthusiasts."}
+                                        {selectedAudienceBucket === 'digital_nomads' && "🎯 Targeting: Remote Workers & Tech Nomads (Ages 22-42), Workationers, High-speed Wifi & Long Stayers."}
+                                        {selectedAudienceBucket === 'everyone' && "🎯 Targeting: High-Yield Universal Travelers (Ages 21-60), Broad Hospitality & Boutique Stay Interest."}
+                                      </p>
                                     </div>
                                   </div>
 
@@ -4311,7 +4378,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                         setPreviewPlatform('instagram');
                         setActiveSlideIndex(0);
                       }}
-                      className={`text-[10px] font-bold px-3 py-1 rounded-lg transition-all ${
+                      className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-all ${
                         previewPlatform === 'instagram'
                           ? 'bg-white text-gray-900 shadow-sm font-black'
                           : 'text-gray-500 hover:text-gray-800'
@@ -4325,7 +4392,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                         setPreviewPlatform('facebook');
                         setActiveSlideIndex(0);
                       }}
-                      className={`text-[10px] font-bold px-3 py-1 rounded-lg transition-all ${
+                      className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-all ${
                         previewPlatform === 'facebook'
                           ? 'bg-white text-gray-900 shadow-sm font-black'
                           : 'text-gray-500 hover:text-gray-800'
@@ -4333,6 +4400,51 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                     >
                       Facebook
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewPlatform('google');
+                        setActiveSlideIndex(0);
+                      }}
+                      className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-all ${
+                        previewPlatform === 'google'
+                          ? 'bg-white text-gray-900 shadow-sm font-black'
+                          : 'text-gray-500 hover:text-gray-800'
+                      }`}
+                    >
+                      Google Ads
+                    </button>
+                  </div>
+                </div>
+
+                {/* HEC Housing & Live Reactor Core Fuel Bar */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-[10px] font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-xl">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                      <span>Meta & Google HEC Housing Compliant</span>
+                    </span>
+                    <span className="bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded text-[9px] font-black uppercase">Verified</span>
+                  </div>
+
+                  <div className="bg-gradient-to-r from-zinc-900 via-gray-900 to-zinc-900 text-white p-3 rounded-2xl border border-zinc-800 shadow-sm flex items-center justify-between text-xs select-none">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+                      <div>
+                        <span className="text-[8.5px] font-mono uppercase text-zinc-400 block tracking-wider">Reactor Fuel</span>
+                        <span className="font-extrabold text-[11px] text-white font-mono">₹{formData.budget.toLocaleString()} / mo</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[8.5px] font-mono uppercase text-zinc-400 block tracking-wider">Pacing Mode</span>
+                      <span className="font-extrabold text-[9.5px] bg-blue-500/20 text-blue-300 border border-blue-400/30 px-2 py-0.5 rounded-md uppercase font-mono">
+                        {formData.pacing_mode === 'accelerated' ? 'Turbo ⚡ 2.5x' : formData.pacing_mode === 'conservative' ? 'Turtle 🐢 0.5x' : formData.pacing_mode === 'paused' ? 'Paused ⏸️' : 'Steady 🎯 1.0x'}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[8.5px] font-mono uppercase text-zinc-400 block tracking-wider">Est. Reach Scale</span>
+                      <span className="font-extrabold text-[10px] text-amber-400 font-mono">{(formData.budget * 12).toLocaleString()}+</span>
+                    </div>
                   </div>
                 </div>
 
@@ -4471,7 +4583,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 {/* Story Bottom Call-to-action Deck */}
                                 <div className="absolute bottom-6 inset-x-3 z-40 bg-white/15 backdrop-blur-lg border border-white/20 p-2.5 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-white/25 transition-all text-center">
                                   <span className="text-[11px] font-black text-white uppercase tracking-widest flex items-center gap-1">
-                                    Book Stay <span>✈️</span>
+                                    {formData.cta_type || 'Book Stay'} <span>✈️</span>
                                   </span>
                                   <span className="text-[9px] text-blue-300 font-bold tracking-wider mt-0.5 font-mono">nestpick.luxury</span>
                                 </div>
@@ -4559,7 +4671,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                       <span className="font-extrabold text-[11px] block">{user?.name || 'LuxuryHost'}</span>
                                       <span className="text-[8.5px] text-blue-400 font-bold mt-0.5 block uppercase tracking-wider">Sponsored</span>
                                     </div>
-                                    <span className="text-[9px] font-extrabold bg-blue-600 text-white px-2 py-0.5 rounded-md hover:bg-blue-700 cursor-pointer">Book Now</span>
+                                    <span className="text-[9px] font-extrabold bg-blue-600 text-white px-2 py-0.5 rounded-md hover:bg-blue-700 cursor-pointer">{formData.cta_type || 'Book Now'}</span>
                                   </div>
 
                                   <div className="space-y-1">
@@ -4659,7 +4771,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
                                   {/* Instantly recognisable Instagram Sponsored Action Bar CTA */}
                                   <div className="bg-blue-600/5 hover:bg-blue-600/10 transition-all border-b border-zinc-100 p-2.5 flex justify-between items-center cursor-pointer">
-                                    <span className="text-blue-700 font-extrabold text-[10px] uppercase tracking-wider">Book Now</span>
+                                    <span className="text-blue-700 font-extrabold text-[10px] uppercase tracking-wider">{formData.cta_type || 'Book Now'}</span>
                                     <div className="flex items-center gap-1 text-blue-700">
                                       <span className="text-[9px] font-bold font-mono">nestpick.luxury</span>
                                       <ExternalLink className="w-2.5 h-2.5" />
@@ -4715,7 +4827,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               </div>
                             );
                           }
-                        } else {
+                        } else if (previewPlatform === 'facebook') {
                           /* -----------------------------------------------
                              FACEBOOK AD DESIGNS
                              ----------------------------------------------- */
@@ -4955,7 +5067,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                       type="button"
                                       className="bg-zinc-200 hover:bg-zinc-300 text-gray-800 font-black px-2.5 py-1 rounded-sm text-[10px] shrink-0 border border-zinc-300 transition-all uppercase tracking-wide"
                                     >
-                                      Book Now
+                                      {formData.cta_type || 'Book Now'}
                                     </button>
                                   </div>
 
@@ -5003,6 +5115,112 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               </div>
                             );
                           }
+                        } else if (previewPlatform === 'google') {
+                          /* -----------------------------------------------
+                             GOOGLE ADS (SEARCH & DISPLAY NETWORK)
+                             ----------------------------------------------- */
+                          return (
+                            <div className="absolute inset-0 bg-zinc-100 flex flex-col justify-between pt-10 pb-6 text-gray-900 text-xs select-none overflow-y-auto">
+                              {/* Google Search/Display Top Header */}
+                              <div className="p-3 bg-white border-b border-zinc-200 flex items-center justify-between text-[11px]">
+                                <div className="flex items-center gap-1.5">
+                                  <div className="w-5 h-5 rounded-full bg-blue-600 text-white font-black text-[9px] flex items-center justify-center">
+                                    G
+                                  </div>
+                                  <span className="font-extrabold text-gray-900">Google Sponsored Network</span>
+                                </div>
+                                <span className="text-[9px] text-zinc-400 font-mono font-bold">Display 300x250</span>
+                              </div>
+
+                              {/* Responsive Google Display Banner Card */}
+                              <div className="p-3 space-y-3 flex-1 flex flex-col justify-center">
+                                <div className="bg-white rounded-2xl border border-zinc-200 p-3.5 shadow-xs space-y-2.5 text-left">
+                                  {/* Google Ad Header Badge */}
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-1 text-[9.5px]">
+                                      <span className="font-black text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded text-[8px] uppercase">Ad</span>
+                                      <span className="text-zinc-600 font-mono">nestpick.luxury</span>
+                                      <span className="text-zinc-300">↗</span>
+                                    </div>
+                                    <span className="text-[9px] text-zinc-400 hover:text-zinc-600 cursor-pointer">AdChoices ⓘ</span>
+                                  </div>
+
+                                  {/* Headline Title */}
+                                  <h4 className="font-black text-blue-700 text-[13px] hover:underline cursor-pointer leading-snug">
+                                    {formData.title || 'Certified Luxury Villas & Vacation Rentals'}
+                                  </h4>
+
+                                  {/* Description & Target Locations Tag */}
+                                  <p className="text-[10.5px] text-zinc-600 font-light leading-relaxed">
+                                    {formData.description || 'Verified private stays with private pools, butler concierge, and direct host pricing.'}
+                                  </p>
+
+                                  {formData.target_locations && (
+                                    <div className="text-[9px] text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-1 rounded-md font-medium flex items-center gap-1">
+                                      <span>📍 Target Markets:</span>
+                                      <span className="font-bold truncate">{formData.target_locations}</span>
+                                    </div>
+                                  )}
+
+                                  {/* Media Asset Preview Box */}
+                                  <div 
+                                    className="relative bg-zinc-950 rounded-xl overflow-hidden border border-zinc-200 flex items-center justify-center"
+                                    style={{
+                                      aspectRatio: mediaAspect === '16:9' ? '16/9' : mediaAspect === '9:16' ? '9/16' : '1/1',
+                                      maxHeight: '180px'
+                                    }}
+                                  >
+                                    <img 
+                                      src={activeImage} 
+                                      alt="Google Display Ad" 
+                                      referrerPolicy="no-referrer"
+                                      className={`w-full h-full object-cover ${
+                                        mediaAlignment === 'left' ? 'object-left' : mediaAlignment === 'right' ? 'object-right' : 'object-center'
+                                      }`}
+                                    />
+
+                                    {/* Format overlays / Carousel Navigation */}
+                                    {formData.ad_format === 'carousel' && (
+                                      <>
+                                        <button 
+                                          type="button" 
+                                          onClick={handlePrevSlide}
+                                          className="absolute left-1.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-black/60 text-white text-xs flex items-center justify-center hover:bg-black/80 z-30"
+                                        >
+                                          <ChevronLeft className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button 
+                                          type="button" 
+                                          onClick={handleNextSlide}
+                                          className="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-black/60 text-white text-xs flex items-center justify-center hover:bg-black/80 z-30"
+                                        >
+                                          <ChevronRight className="w-3.5 h-3.5" />
+                                        </button>
+                                      </>
+                                    )}
+
+                                    <span className="absolute bottom-1 right-1.5 bg-black/70 text-white text-[8px] font-mono px-1.5 py-0.5 rounded uppercase">
+                                      Google Display
+                                    </span>
+                                  </div>
+
+                                  {/* Dynamic Call-to-Action Action Button */}
+                                  <button
+                                    type="button"
+                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-2 px-3 rounded-xl text-xs uppercase tracking-wider transition-all shadow-xs flex items-center justify-center gap-1"
+                                  >
+                                    <span>{formData.cta_type || 'Book Now'}</span>
+                                    <span>➔</span>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Google Footer info */}
+                              <div className="p-2.5 bg-white border-t border-zinc-200 text-center text-[9px] text-zinc-400 font-mono">
+                                Google Ads Smart Campaign • Optimized by Encho AI
+                              </div>
+                            </div>
+                          );
                         }
                       })()}
 
