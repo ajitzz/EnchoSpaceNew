@@ -15,7 +15,13 @@ import {
   Layers, 
   ShieldCheck, 
   AlertCircle,
-  Maximize2
+  Maximize2,
+  SlidersHorizontal,
+  Navigation,
+  CheckCircle2,
+  Users,
+  Target,
+  Zap
 } from 'lucide-react';
 import L from 'leaflet';
 
@@ -32,11 +38,11 @@ const defaultPinIcon = new L.Icon({
 
 const dropPinIcon = new L.DivIcon({
   className: 'custom-div-icon',
-  html: `<div style="background-color: #0284c7; width: 28px; height: 28px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; color: white;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+  html: `<div style="background-color: #0284c7; width: 30px; height: 30px; border-radius: 50%; border: 3px solid white; box-shadow: 0 4px 14px rgba(2,132,199,0.5); display: flex; align-items: center; justify-content: center; color: white;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
          </div>`,
-  iconSize: [28, 28],
-  iconAnchor: [14, 14]
+  iconSize: [30, 30],
+  iconAnchor: [15, 15]
 });
 
 export interface MetaLocationItem {
@@ -47,6 +53,7 @@ export interface MetaLocationItem {
   lng: number;
   radius_km: number;
   mode: 'include' | 'exclude';
+  isOnlyCity?: boolean;
 }
 
 interface MetaLocationTargeterProps {
@@ -76,8 +83,11 @@ const KNOWN_COORDS: Record<string, { lat: number; lng: number; type: 'city' | 'r
   jaipur: { lat: 26.9124, lng: 75.7873, type: 'city' },
   chandigarh: { lat: 30.7333, lng: 76.7794, type: 'city' },
   kochi: { lat: 9.9312, lng: 76.2673, type: 'city' },
+  udaipur: { lat: 24.5854, lng: 73.7125, type: 'city' },
+  gurgaon: { lat: 28.4595, lng: 77.0266, type: 'city' },
+  noida: { lat: 28.5355, lng: 77.3910, type: 'city' },
   london: { lat: 51.5074, lng: -0.1278, type: 'city' },
-  'dubai': { lat: 25.2048, lng: 55.2708, type: 'city' },
+  dubai: { lat: 25.2048, lng: 55.2708, type: 'city' },
   'new york': { lat: 40.7128, lng: -74.0060, type: 'city' },
   'los angeles': { lat: 34.0522, lng: -118.2437, type: 'city' },
   singapore: { lat: 1.3521, lng: 103.8198, type: 'country' },
@@ -101,6 +111,9 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
   const [showBrowseMenu, setShowBrowseMenu] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkText, setBulkText] = useState('');
+  const [isBulkGeocoding, setIsBulkGeocoding] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
+  const [activeRadiusPopoverId, setActiveRadiusPopoverId] = useState<string | null>(null);
 
   // Structured list of active targeted locations
   const [locationList, setLocationList] = useState<MetaLocationItem[]>([]);
@@ -132,8 +145,8 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
           id: `loc_${Date.now()}_${idx}`,
           name: name,
           type: known ? known.type : 'city',
-          lat: known ? known.lat : 19.0760 + (idx * 0.5),
-          lng: known ? known.lng : 72.8777 + (idx * 0.5),
+          lat: known ? known.lat : 19.0760 + (idx * 0.4),
+          lng: known ? known.lng : 72.8777 + (idx * 0.4),
           radius_km: targetRadiusKm || 50,
           mode: 'include'
         });
@@ -149,6 +162,24 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
     onChangeLocations(namesStr, radius, newList);
   };
 
+  // Calculate dynamic bounding box including center lat/lng and radius circles
+  const calculateCombinedBounds = (list: MetaLocationItem[]) => {
+    if (!list || list.length === 0) return null;
+    const bounds = L.latLngBounds([]);
+
+    list.forEach(item => {
+      const radiusKm = item.isOnlyCity ? 10 : item.radius_km || 50;
+      // Convert km to approximate lat/lng offset (~111 km per degree lat, ~100 km per deg lng)
+      const latOffset = radiusKm / 111;
+      const lngOffset = radiusKm / (111 * Math.cos((item.lat * Math.PI) / 180));
+
+      bounds.extend([item.lat - latOffset, item.lng - lngOffset]);
+      bounds.extend([item.lat + latOffset, item.lng + lngOffset]);
+    });
+
+    return bounds;
+  };
+
   // Initialize Leaflet Map
   useEffect(() => {
     if (!mapContainerRef.current) return;
@@ -158,11 +189,9 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
         ? [locationList[0].lat, locationList[0].lng]
         : [20.5937, 78.9629]; // India default center
 
-      const zoomLevel = locationList.length === 1 ? 9 : locationList.length > 1 ? 5 : 4;
-
       const map = L.map(mapContainerRef.current, {
         center: defaultCenter,
-        zoom: zoomLevel,
+        zoom: 5,
         zoomControl: false, // Custom zoom buttons in Meta design
         attributionControl: false
       });
@@ -179,6 +208,11 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
       });
 
       leafletMapRef.current = map;
+
+      // Force size recalculation to prevent gray tiles
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 300);
     }
 
     return () => {
@@ -217,9 +251,14 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
     setLocationList(updated);
     notifyParent(updated);
     setIsDropPinMode(false);
+
+    // Smooth Fly To the newly dropped pin
+    if (leafletMapRef.current) {
+      leafletMapRef.current.flyTo([lat, lng], 10, { duration: 0.8 });
+    }
   };
 
-  // Render Markers and Radius Circles on Map whenever locationList or targetRadiusKm changes
+  // Dynamic Smooth Fly-To & Auto-Zoom bounds update when locations or radius change
   useEffect(() => {
     const map = leafletMapRef.current;
     if (!map) return;
@@ -232,21 +271,21 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
 
     if (locationList.length === 0) return;
 
-    const bounds = L.latLngBounds([]);
-
     locationList.forEach(loc => {
       const latLng: [number, number] = [loc.lat, loc.lng];
-      bounds.extend(latLng);
 
       // Create Marker
       const markerIcon = loc.type === 'pin' ? dropPinIcon : defaultPinIcon;
       const marker = L.marker(latLng, { icon: markerIcon }).addTo(map);
       
       marker.bindPopup(`
-        <div style="font-family: system-ui, sans-serif; padding: 4px; text-align: center;">
-          <strong style="color: #0f172a; font-size: 13px;">${loc.name}</strong>
-          <div style="font-size: 11px; color: #0284c7; font-weight: 700; margin-top: 2px;">
-            ${loc.mode.toUpperCase()}: +${loc.radius_km} km Radius
+        <div style="font-family: system-ui, sans-serif; padding: 6px; text-align: center; min-width: 140px;">
+          <strong style="color: #0f172a; font-size: 13px; display: block;">${loc.name}</strong>
+          <div style="font-size: 11px; color: ${loc.mode === 'exclude' ? '#dc2626' : '#0284c7'}; font-weight: 800; margin-top: 3px;">
+            ${loc.mode.toUpperCase()}: ${loc.isOnlyCity ? 'Current city only' : `+${loc.radius_km} km Radius`}
+          </div>
+          <div style="font-size: 10px; color: #64748b; margin-top: 2px;">
+            Lat: ${loc.lat.toFixed(4)}, Lng: ${loc.lng.toFixed(4)}
           </div>
         </div>
       `);
@@ -254,19 +293,24 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
       markersRef.current.push(marker);
 
       // Create Radius Circle Overlay
-      const color = loc.mode === 'exclude' ? '#ef4444' : '#0284c7'; // Blue for include, Red for exclude
-      const circle = L.circle(latLng, {
-        color: color,
-        fillColor: color,
-        fillOpacity: 0.15,
-        radius: (loc.radius_km || 50) * 1000 // meters
-      }).addTo(map);
+      if (!loc.isOnlyCity) {
+        const color = loc.mode === 'exclude' ? '#ef4444' : '#0284c7'; // Blue for include, Red for exclude
+        const circle = L.circle(latLng, {
+          color: color,
+          fillColor: color,
+          fillOpacity: 0.16,
+          weight: 2,
+          radius: (loc.radius_km || 50) * 1000 // meters
+        }).addTo(map);
 
-      circlesRef.current.push(circle);
+        circlesRef.current.push(circle);
+      }
     });
 
-    if (locationList.length > 0 && bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 12 });
+    // Dynamic Fly To Bounds calculation
+    const bounds = calculateCombinedBounds(locationList);
+    if (bounds && bounds.isValid()) {
+      map.flyToBounds(bounds, { padding: [45, 45], duration: 0.8, maxZoom: 12 });
     }
   }, [locationList, targetRadiusKm]);
 
@@ -318,6 +362,11 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
     notifyParent(updated);
     setSearchQuery('');
     setSearchResults([]);
+
+    // Smooth Fly to the added location
+    if (leafletMapRef.current) {
+      leafletMapRef.current.flyTo([result.lat, result.lng], 10, { duration: 0.8 });
+    }
   };
 
   // Remove a location
@@ -328,15 +377,22 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
   };
 
   // Change radius for a specific location
-  const handleLocationRadiusChange = (id: string, newRadiusKm: number) => {
+  const handleLocationRadiusChange = (id: string, newRadiusKm: number, isOnlyCity: boolean = false) => {
     const updated = locationList.map(loc => {
       if (loc.id === id) {
-        return { ...loc, radius_km: newRadiusKm };
+        return { ...loc, radius_km: newRadiusKm, isOnlyCity };
       }
       return loc;
     });
     setLocationList(updated);
     notifyParent(updated, newRadiusKm);
+  };
+
+  // Focus and Fly to a specific location in table
+  const handleFocusLocationOnMap = (item: MetaLocationItem) => {
+    if (leafletMapRef.current) {
+      leafletMapRef.current.flyTo([item.lat, item.lng], 10, { duration: 0.8 });
+    }
   };
 
   // Change mode (include/exclude) for a location
@@ -351,32 +407,72 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
     notifyParent(updated);
   };
 
-  // Handle Bulk Add Submit
-  const handleApplyBulk = () => {
+  // Async Multi-Geocoding Bulk Importer
+  const handleApplyBulk = async () => {
     if (!bulkText.trim()) return;
     const names = bulkText.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
-    const existingNames = locationList.map(l => l.name.toLowerCase());
-    
+    if (names.length === 0) return;
+
+    setIsBulkGeocoding(true);
+    setBulkProgress({ current: 0, total: names.length });
+
     const newItems: MetaLocationItem[] = [];
-    names.forEach((name, idx) => {
-      if (!existingNames.includes(name.toLowerCase())) {
-        const known = KNOWN_COORDS[name.toLowerCase()];
+
+    for (let i = 0; i < names.length; i++) {
+      const name = names[i];
+      setBulkProgress({ current: i + 1, total: names.length });
+
+      if (locationList.some(l => l.name.toLowerCase() === name.toLowerCase())) {
+        continue;
+      }
+
+      const known = KNOWN_COORDS[name.toLowerCase()];
+      if (known) {
         newItems.push({
-          id: `bulk_${Date.now()}_${idx}`,
+          id: `bulk_${Date.now()}_${i}`,
           name: name,
-          type: known ? known.type : 'city',
-          lat: known ? known.lat : 19.0760 + (idx * 0.2),
-          lng: known ? known.lng : 72.8777 + (idx * 0.2),
+          type: known.type,
+          lat: known.lat,
+          lng: known.lng,
           radius_km: targetRadiusKm || 50,
           mode: filterMode
         });
+      } else {
+        // Try Nominatim API
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(name)}&limit=1`);
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            newItems.push({
+              id: `bulk_${Date.now()}_${i}`,
+              name: data[0].display_name.split(',')[0] || name,
+              type: 'city',
+              lat: parseFloat(data[0].lat),
+              lng: parseFloat(data[0].lon),
+              radius_km: targetRadiusKm || 50,
+              mode: filterMode
+            });
+          }
+        } catch (e) {
+          // Fallback location offset
+          newItems.push({
+            id: `bulk_${Date.now()}_${i}`,
+            name: name,
+            type: 'city',
+            lat: 19.0760 + (i * 0.3),
+            lng: 72.8777 + (i * 0.3),
+            radius_km: targetRadiusKm || 50,
+            mode: filterMode
+          });
+        }
       }
-    });
+    }
 
     const updated = [...locationList, ...newItems];
     setLocationList(updated);
     notifyParent(updated);
     setBulkText('');
+    setIsBulkGeocoding(false);
     setShowBulkModal(false);
   };
 
@@ -385,26 +481,37 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
   const zoomOut = () => leafletMapRef.current?.zoomOut();
   const reCenterMap = () => {
     if (locationList.length > 0 && leafletMapRef.current) {
-      const bounds = L.latLngBounds(locationList.map(l => [l.lat, l.lng]));
-      leafletMapRef.current.fitBounds(bounds, { padding: [40, 40] });
+      const bounds = calculateCombinedBounds(locationList);
+      if (bounds) {
+        leafletMapRef.current.flyToBounds(bounds, { padding: [45, 45], duration: 0.8 });
+      }
     }
   };
+
+  // Estimated Potential Audience calculation
+  const totalTargetedCities = locationList.filter(l => l.mode === 'include').length;
+  const avgRadius = locationList.length > 0 ? Math.round(locationList.reduce((acc, curr) => acc + curr.radius_km, 0) / locationList.length) : 50;
+  const estimatedReachLow = Math.max(250000, totalTargetedCities * avgRadius * 12500);
+  const estimatedReachHigh = Math.round(estimatedReachLow * 1.25);
 
   return (
     <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden text-left font-sans transition-all">
       {/* Section Header: Meta Controls Notice */}
-      <div className="px-4 py-3 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between">
+      <div className="px-4 py-3 bg-slate-50/90 border-b border-slate-200 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-black text-slate-900 uppercase tracking-wide">Controls</span>
+          <span className="text-xs font-black text-slate-900 uppercase tracking-wide flex items-center gap-1.5">
+            <SlidersHorizontal className="w-3.5 h-3.5 text-sky-600" />
+            Meta Location Controls
+          </span>
           <div className="group relative cursor-pointer">
             <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 transition-colors" />
-            <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-64 p-2 bg-slate-900 text-white text-[10px] rounded-lg shadow-xl z-50 leading-tight">
-              Meta Advantage+ Budget Safeguard: We won't reach people beyond these boundary settings.
+            <div className="absolute left-0 bottom-full mb-1.5 hidden group-hover:block w-72 p-2.5 bg-slate-900 text-white text-[10px] rounded-xl shadow-2xl z-50 leading-relaxed">
+              <strong>Advantage+ Budget Safeguard:</strong> Meta will enforce strict geographic boundaries to ensure your campaign budget targets high-intent guest zones.
             </div>
           </div>
         </div>
-        <span className="text-[10px] text-slate-500 font-medium">
-          We won't reach people beyond these settings, even with Advantage+ on.
+        <span className="text-[10px] text-slate-500 font-medium hidden sm:inline-block">
+          Strict boundary limits active (Advantage+ safe)
         </span>
       </div>
 
@@ -416,9 +523,9 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
           className="w-full px-4 py-3 bg-slate-100/60 hover:bg-slate-100 flex items-center justify-between transition-colors cursor-pointer"
         >
           <div className="flex items-center gap-2">
-            <span className="text-xs font-extrabold text-slate-900">Locations</span>
-            <span className="bg-sky-100 text-sky-800 text-[9px] font-black px-2 py-0.5 rounded-full border border-sky-200">
-              {locationList.length} Selected
+            <span className="text-xs font-extrabold text-slate-900">Locations & Geographic Coverage</span>
+            <span className="bg-sky-100 text-sky-800 text-[9px] font-black px-2.5 py-0.5 rounded-full border border-sky-200">
+              {locationList.length} Active Targets
             </span>
           </div>
           {isAccordionOpen ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
@@ -426,10 +533,44 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
 
         {isAccordionOpen && (
           <div className="p-4 space-y-4 bg-white">
+            
+            {/* Meta Advantage+ Audience Definition Gauge Widget */}
+            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-3.5 rounded-2xl border border-slate-800 shadow-sm space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="font-extrabold text-slate-100">Meta Advantage+ Audience Definition</span>
+                </div>
+                <div className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-500/40 px-2.5 py-1 rounded-lg">
+                  <Users className="w-3 h-3" />
+                  <span>Est. Reach: {estimatedReachLow.toLocaleString()} - {estimatedReachHigh.toLocaleString()} accounts</span>
+                </div>
+              </div>
+
+              {/* Gauge Meter Line */}
+              <div className="space-y-1">
+                <div className="h-2 w-full bg-slate-700/80 rounded-full overflow-hidden relative flex">
+                  <div className="w-1/3 bg-amber-500/40" title="Specific" />
+                  <div className="w-1/3 bg-emerald-500" title="Balanced" />
+                  <div className="w-1/3 bg-sky-500/40" title="Broad" />
+                  {/* Gauge indicator needle dot */}
+                  <div 
+                    className="absolute top-0 bottom-0 w-3 bg-white border-2 border-emerald-400 rounded-full shadow-md transition-all duration-500" 
+                    style={{ left: `${Math.min(85, Math.max(15, locationList.length * 20))}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[9px] font-mono font-bold text-slate-400 pt-0.5">
+                  <span>Specific</span>
+                  <span className="text-emerald-400 font-extrabold">✓ Balanced & Optimal</span>
+                  <span>Broad</span>
+                </div>
+              </div>
+            </div>
+
             {/* Country Context Selector */}
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Target Country / Primary Territory</span>
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl shadow-2xs">
                 <div className="w-5 h-5 rounded-full bg-emerald-100 border border-emerald-300 flex items-center justify-center text-xs font-bold text-emerald-800">
                   🌐
                 </div>
@@ -447,14 +588,14 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
               </div>
             </div>
 
-            {/* Meta Control Action Bar: Include/Exclude Dropdown + Search Input + Browse Dropdown + Expand */}
+            {/* Meta Control Action Bar: Include/Exclude Dropdown + Search Input + Browse Dropdown */}
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
               {/* Include/Exclude Selector */}
               <div className="sm:col-span-3">
                 <select
                   value={filterMode}
                   onChange={(e) => setFilterMode(e.target.value as 'include' | 'exclude')}
-                  className={`w-full text-xs font-black rounded-xl p-2.5 border outline-none cursor-pointer transition-colors ${
+                  className={`w-full text-xs font-black rounded-xl p-2.5 border outline-none cursor-pointer transition-colors shadow-2xs ${
                     filterMode === 'include'
                       ? 'bg-sky-50 border-sky-300 text-sky-900'
                       : 'bg-rose-50 border-rose-300 text-rose-900'
@@ -472,7 +613,7 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search locations (cities, regions, zip codes)..."
+                    placeholder="Search locations (cities, regions, postal codes)..."
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 pl-8 text-xs font-medium text-slate-900 outline-none focus:border-sky-500 focus:bg-white transition-all shadow-2xs"
                   />
                   <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -501,26 +642,26 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
                 )}
               </div>
 
-              {/* Browse Menu & Drop Pin Toggle */}
+              {/* Browse Menu & Quick Belts Dropdown */}
               <div className="sm:col-span-3 flex items-center gap-1.5">
                 <div className="relative flex-1">
                   <button
                     type="button"
                     onClick={() => setShowBrowseMenu(!showBrowseMenu)}
-                    className="w-full bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-between transition-colors"
+                    className="w-full bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-between transition-colors shadow-2xs"
                   >
-                    <span>Browse</span>
+                    <span>Browse Belts</span>
                     <ChevronDown className="w-3.5 h-3.5" />
                   </button>
 
                   {/* Browse Preset Menu */}
                   {showBrowseMenu && (
-                    <div className="absolute right-0 top-full mt-1 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-2 space-y-1">
+                    <div className="absolute right-0 top-full mt-1 w-60 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 p-2 space-y-1">
                       <div className="text-[9px] font-black uppercase text-slate-400 px-2 py-1">Quick Target Belts</div>
                       {[
                         { label: '🏙️ Metro Feeder Hubs', cities: ['Mumbai', 'Delhi NCR', 'Bangalore', 'Pune'] },
                         { label: '🌴 Tourist Feeder Belts', cities: ['Goa', 'Jaipur', 'Udaipur', 'Kochi'] },
-                        { label: '💼 Corporate Tech Hubs', cities: ['Bangalore', 'Hyderabad', 'Gurgaon'] }
+                        { label: '💼 Corporate Tech Corridor', cities: ['Bangalore', 'Hyderabad', 'Gurgaon', 'Noida'] }
                       ].map((preset, pIdx) => (
                         <button
                           key={pIdx}
@@ -543,9 +684,10 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
                             notifyParent([...locationList]);
                             setShowBrowseMenu(false);
                           }}
-                          className="w-full text-left px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-sky-50 rounded-lg transition-colors"
+                          className="w-full text-left px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-sky-50 rounded-lg transition-colors flex items-center justify-between"
                         >
-                          {preset.label}
+                          <span>{preset.label}</span>
+                          <Plus className="w-3 h-3 text-sky-600" />
                         </button>
                       ))}
                     </div>
@@ -554,12 +696,12 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
               </div>
             </div>
 
-            {/* AI Feeder Recommendations Quick Bar (Rahul-Proof Guard) */}
+            {/* AI Target Feeder Recommendations Bar */}
             {aiRecommendations && (
-              <div className="bg-gradient-to-r from-sky-50 via-indigo-50 to-emerald-50 border border-sky-200/80 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="bg-gradient-to-r from-sky-50 via-indigo-50 to-emerald-50 border border-sky-200/80 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
                 <div className="flex items-center gap-1.5">
                   <Sparkles className="w-4 h-4 text-sky-600 animate-bounce" />
-                  <span className="text-xs font-black text-slate-900">AI Feeder High-Yield Target Markets:</span>
+                  <span className="text-xs font-black text-slate-900">AI Suggested Feeder Markets:</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5">
                   {(Array.isArray(aiRecommendations.recommended_locations)
@@ -588,7 +730,7 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
                           notifyParent(updated);
                         }
                       }}
-                      className="px-2.5 py-1 bg-white hover:bg-sky-100 border border-sky-300 text-sky-900 text-[10px] font-extrabold rounded-lg shadow-2xs transition-all flex items-center gap-1"
+                      className="px-2.5 py-1 bg-white hover:bg-sky-100 border border-sky-300 text-sky-900 text-[10px] font-extrabold rounded-lg shadow-2xs transition-all flex items-center gap-1 cursor-pointer"
                     >
                       <Plus className="w-3 h-3 text-sky-600" />
                       <span>{loc.trim()}</span>
@@ -598,24 +740,70 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
               </div>
             )}
 
+            {/* Active Location Filter Pill Chips */}
+            {locationList.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Active Filters:</span>
+                {locationList.map(item => (
+                  <div
+                    key={item.id}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-extrabold border shadow-2xs transition-all ${
+                      item.mode === 'include'
+                        ? 'bg-sky-50 border-sky-300 text-sky-900'
+                        : 'bg-rose-50 border-rose-300 text-rose-900'
+                    }`}
+                  >
+                    <span className="text-[10px]">
+                      {item.mode === 'include' ? '✓' : '✕'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleFocusLocationOnMap(item)}
+                      className="hover:underline cursor-pointer"
+                      title="Click to view on map"
+                    >
+                      {item.name} {item.isOnlyCity ? '(Current city)' : `(+${item.radius_km} km)`}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveLocation(item.id)}
+                      className="hover:text-rose-600 ml-1 text-slate-400 cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Active Tagged Locations Table (Meta Ads Manager exact layout) */}
             {locationList.length > 0 ? (
-              <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100">
-                <div className="bg-slate-50 px-3 py-2 grid grid-cols-12 text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                  <div className="col-span-5">Target Location</div>
+              <div className="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100 shadow-2xs">
+                <div className="bg-slate-50 px-3 py-2.5 grid grid-cols-12 text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                  <div className="col-span-4">Target Location</div>
                   <div className="col-span-2 text-center">Mode</div>
-                  <div className="col-span-4 text-center">Radius Coverage</div>
+                  <div className="col-span-5 text-center">Meta City Center Radius</div>
                   <div className="col-span-1 text-right">Action</div>
                 </div>
 
                 {locationList.map((item) => (
-                  <div key={item.id} className="px-3 py-2.5 grid grid-cols-12 items-center text-xs text-slate-800 hover:bg-slate-50/80 transition-colors">
+                  <div key={item.id} className="px-3 py-2.5 grid grid-cols-12 items-center text-xs text-slate-800 hover:bg-slate-50/90 transition-colors">
                     {/* Location name and type icon */}
-                    <div className="col-span-5 flex items-center gap-2">
-                      <span className="p-1 rounded bg-slate-100 text-slate-600 font-mono text-[10px]">
+                    <div className="col-span-4 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleFocusLocationOnMap(item)}
+                        className="p-1 rounded bg-slate-100 text-slate-600 font-mono text-[10px] hover:bg-sky-100 hover:text-sky-800 transition-colors cursor-pointer"
+                        title="Focus on map"
+                      >
                         {item.type === 'pin' ? '📍 Pin' : item.type === 'country' ? '🌐 Country' : '🏙️ City'}
+                      </button>
+                      <span 
+                        onClick={() => handleFocusLocationOnMap(item)}
+                        className="font-bold text-slate-900 truncate hover:text-sky-600 cursor-pointer"
+                      >
+                        {item.name}
                       </span>
-                      <span className="font-bold text-slate-900 truncate">{item.name}</span>
                     </div>
 
                     {/* Include / Exclude Badge */}
@@ -623,7 +811,7 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
                       <button
                         type="button"
                         onClick={() => handleToggleMode(item.id)}
-                        className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase border transition-colors cursor-pointer ${
+                        className={`text-[9px] font-extrabold px-2.5 py-1 rounded-full uppercase border transition-colors cursor-pointer ${
                           item.mode === 'include'
                             ? 'bg-sky-100 text-sky-800 border-sky-300 hover:bg-sky-200'
                             : 'bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-200'
@@ -633,20 +821,74 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
                       </button>
                     </div>
 
-                    {/* Radius Slider Control per location */}
-                    <div className="col-span-4 px-2 flex items-center gap-2">
-                      <input
-                        type="range"
-                        min={25}
-                        max={150}
-                        step={5}
-                        value={item.radius_km}
-                        onChange={(e) => handleLocationRadiusChange(item.id, Number(e.target.value))}
-                        className="w-full accent-sky-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
-                      />
-                      <span className="text-[10px] font-mono font-black text-sky-700 shrink-0 w-12 text-right">
-                        +{item.radius_km} km
-                      </span>
+                    {/* Meta City Radius Dropdown Selector */}
+                    <div className="col-span-5 px-2 flex items-center justify-center relative">
+                      <div className="relative inline-block text-left w-full max-w-xs">
+                        <button
+                          type="button"
+                          onClick={() => setActiveRadiusPopoverId(activeRadiusPopoverId === item.id ? null : item.id)}
+                          className="w-full bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 font-bold text-[11px] py-1.5 px-2.5 rounded-xl flex items-center justify-between gap-1 transition-all shadow-2xs"
+                        >
+                          <span className="truncate">
+                            {item.isOnlyCity 
+                              ? `City: ${item.name} (Current city only)` 
+                              : `City: ${item.name} + ${item.radius_km} km`
+                            }
+                          </span>
+                          <ChevronDown className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        </button>
+
+                        {/* Radius Dropdown Popover */}
+                        {activeRadiusPopoverId === item.id && (
+                          <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 p-3 space-y-2 text-left">
+                            <div className="text-[9px] font-black uppercase text-slate-400">Meta Radius Preset</div>
+                            
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleLocationRadiusChange(item.id, 0, true);
+                                setActiveRadiusPopoverId(null);
+                              }}
+                              className={`w-full text-left px-2 py-1.5 text-xs font-extrabold rounded-lg transition-colors flex items-center justify-between ${
+                                item.isOnlyCity ? 'bg-sky-100 text-sky-900' : 'hover:bg-slate-50 text-slate-700'
+                              }`}
+                            >
+                              <span>Current city only</span>
+                              {item.isOnlyCity && <Check className="w-3.5 h-3.5 text-sky-600" />}
+                            </button>
+
+                            {[25, 40, 50, 75, 100].map(r => (
+                              <button
+                                key={r}
+                                type="button"
+                                onClick={() => {
+                                  handleLocationRadiusChange(item.id, r, false);
+                                  setActiveRadiusPopoverId(null);
+                                }}
+                                className={`w-full text-left px-2 py-1 text-xs font-semibold rounded-lg transition-colors flex items-center justify-between ${
+                                  !item.isOnlyCity && item.radius_km === r ? 'bg-sky-100 text-sky-900 font-bold' : 'hover:bg-slate-50 text-slate-700'
+                                }`}
+                              >
+                                <span>+{r} km radius</span>
+                                {!item.isOnlyCity && item.radius_km === r && <Check className="w-3.5 h-3.5 text-sky-600" />}
+                              </button>
+                            ))}
+
+                            <div className="pt-1 border-t border-slate-100 space-y-1">
+                              <span className="text-[9px] font-bold text-slate-500 block">Custom Slider Range</span>
+                              <input
+                                type="range"
+                                min={25}
+                                max={150}
+                                step={5}
+                                value={item.radius_km || 50}
+                                onChange={(e) => handleLocationRadiusChange(item.id, Number(e.target.value), false)}
+                                className="w-full accent-sky-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* Remove Action Button */}
@@ -654,7 +896,7 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
                       <button
                         type="button"
                         onClick={() => handleRemoveLocation(item.id)}
-                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                         title="Remove location"
                       >
                         <X className="w-3.5 h-3.5" />
@@ -672,9 +914,17 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
             )}
 
             {/* REAL Leaflet Interactive Map Container */}
-            <div className="relative w-full h-80 rounded-2xl overflow-hidden border border-slate-300 shadow-inner group">
+            <div className={`relative w-full h-80 rounded-2xl overflow-hidden border border-slate-300 shadow-inner group transition-all ${isDropPinMode ? 'ring-4 ring-amber-400/50' : ''}`}>
               {/* Map Canvas Div */}
-              <div ref={mapContainerRef} className="w-full h-full z-0" />
+              <div ref={mapContainerRef} className={`w-full h-full z-0 ${isDropPinMode ? 'cursor-crosshair' : ''}`} />
+
+              {/* Floating Drop Pin Mode Active Indicator Banner */}
+              {isDropPinMode && (
+                <div className="absolute top-3 left-3 z-10 bg-amber-500 text-white text-xs font-black px-3 py-1.5 rounded-xl shadow-xl flex items-center gap-2 animate-bounce">
+                  <Target className="w-4 h-4 animate-spin" />
+                  <span>DROP PIN MODE ACTIVE — Click anywhere on map to add target</span>
+                </div>
+              )}
 
               {/* Top Control Overlay: Drop Pin Action & Zoom Buttons */}
               <div className="absolute top-3 right-3 z-10 flex flex-col gap-1.5">
@@ -684,12 +934,12 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
                   onClick={() => setIsDropPinMode(!isDropPinMode)}
                   className={`px-3 py-2 rounded-xl text-xs font-black shadow-lg flex items-center gap-1.5 transition-all cursor-pointer ${
                     isDropPinMode
-                      ? 'bg-amber-500 text-white animate-pulse ring-2 ring-amber-300'
+                      ? 'bg-amber-500 text-white ring-2 ring-amber-300'
                       : 'bg-white hover:bg-slate-100 text-slate-900 border border-slate-200'
                   }`}
                 >
                   <MapPin className={`w-3.5 h-3.5 ${isDropPinMode ? 'text-white' : 'text-sky-600'}`} />
-                  <span>{isDropPinMode ? 'Click Map to Drop Pin...' : '📍 Drop Pin'}</span>
+                  <span>{isDropPinMode ? 'Cancel Drop Pin' : '📍 Drop Pin'}</span>
                 </button>
 
                 {/* Zoom Controls */}
@@ -714,7 +964,7 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
                     type="button"
                     onClick={reCenterMap}
                     className="p-2 hover:bg-slate-100 text-slate-700 flex items-center justify-center transition-colors"
-                    title="Re-Center Map"
+                    title="Auto-Fit Map Bounds"
                   >
                     <Crosshair className="w-4 h-4 text-sky-600" />
                   </button>
@@ -757,46 +1007,74 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
         )}
       </div>
 
-      {/* Bulk Locations Modal */}
+      {/* Bulk Locations Modal with Async Multi-Geocoding */}
       {showBulkModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-5 space-y-4 shadow-2xl border border-slate-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h4 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
                 <Globe className="w-4 h-4 text-sky-600" />
-                <span>Add Locations in Bulk (Meta Controls)</span>
+                <span>Add Locations in Bulk (Meta Ads Controls)</span>
               </h4>
-              <button type="button" onClick={() => setShowBulkModal(false)} className="text-slate-400 hover:text-slate-600">
+              <button 
+                type="button" 
+                onClick={() => setShowBulkModal(false)} 
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                disabled={isBulkGeocoding}
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <p className="text-xs text-slate-600">
-              Paste a comma-separated or new-line list of cities, postal codes, or regions to add them all at once:
+              Paste a comma-separated or new-line list of cities, postal codes, or regions to plot them with automatic geocoding and auto-zoom bounds:
             </p>
 
             <textarea
-              rows={4}
+              rows={5}
               value={bulkText}
               onChange={(e) => setBulkText(e.target.value)}
-              placeholder="e.g. Mumbai, Delhi, Bangalore, Pune, Goa, Jaipur"
+              disabled={isBulkGeocoding}
+              placeholder="e.g.&#10;Mumbai&#10;Delhi&#10;Bangalore&#10;Pune&#10;Jaipur"
               className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-mono text-slate-900 outline-none focus:border-sky-500"
             />
+
+            {/* Bulk Geocoding Loader Status */}
+            {isBulkGeocoding && (
+              <div className="bg-sky-50 border border-sky-200 rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold text-sky-900">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-sky-600 animate-bounce" />
+                    <span>Geocoding cities & plotting map circles...</span>
+                  </div>
+                  <span className="font-mono text-[10px]">{bulkProgress.current} / {bulkProgress.total}</span>
+                </div>
+                <div className="h-1.5 w-full bg-sky-200 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-sky-600 transition-all duration-300" 
+                    style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setShowBulkModal(false)}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                disabled={isBulkGeocoding}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleApplyBulk}
-                className="px-4 py-2 rounded-xl bg-sky-600 text-white text-xs font-black hover:bg-sky-700 shadow-md"
+                disabled={isBulkGeocoding || !bulkText.trim()}
+                className="px-4 py-2 rounded-xl bg-sky-600 text-white text-xs font-black hover:bg-sky-700 shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
-                Apply Bulk Locations
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Import & Auto-Zoom Map</span>
               </button>
             </div>
           </div>
