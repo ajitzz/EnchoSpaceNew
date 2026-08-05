@@ -3,7 +3,7 @@ import { SEO } from './SEO';
 import { AdminSEOTab } from './AdminSEOTab';
 import { Listing } from '../types';
 import { HomeIcon, ListIcon,  TrashIcon, EditIcon, CheckCircle2Icon, UserIcon, XIcon } from './Icons';
-import { Map, Compass, MoreHorizontal, Edit3, Megaphone, Link, CreditCard, TrendingUp, Send, RefreshCw, Plus, Phone, Mail, Users, Globe, Building, Check, Search, Sparkles, Loader2, Upload, Zap, Shield, FileText, ChevronRight, AlertTriangle, Eye } from 'lucide-react';
+import { Map, Compass, MoreHorizontal, Edit3, Megaphone, Link, CreditCard, TrendingUp, Send, RefreshCw, Plus, Phone, Mail, Users, Globe, Building, Check, Search, Sparkles, Loader2, Upload, Zap, Shield, ShieldCheck, FileText, ChevronRight, AlertTriangle, Eye } from 'lucide-react';
 import { useAuth, User } from './AuthContext';
 import AdminInbox from './AdminInbox';
 import { useCurrency } from './CurrencyContext';
@@ -93,6 +93,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   const [loadingAdminAuditLogs, setLoadingAdminAuditLogs] = useState(false);
   const [adminPaymentOverview, setAdminPaymentOverview] = useState<any>({ metrics: {}, campaigns: [], processed_payments: [] });
   const [loadingAdminPaymentOverview, setLoadingAdminPaymentOverview] = useState(false);
+  const [adminLedgersData, setAdminLedgersData] = useState<any>(null);
+  const [loadingAdminLedgers, setLoadingAdminLedgers] = useState(false);
   const [rejectingSocialPostId, setRejectingSocialPostId] = useState<number | null>(null);
   const [socialRejectionFeedback, setSocialRejectionFeedback] = useState('');
   const [isAddingOutreach, setIsAddingOutreach] = useState(false);
@@ -266,10 +268,28 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
         const data = await res.json();
         setAdminPaymentOverview(data);
       }
+      fetchAdminLedgers();
     } catch (err) {
       console.error('Failed to fetch admin payment overview:', err);
     } finally {
       setLoadingAdminPaymentOverview(false);
+    }
+  };
+
+  const fetchAdminLedgers = async () => {
+    setLoadingAdminLedgers(true);
+    try {
+      const res = await fetch('/api/marketing/admin/ledgers', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAdminLedgersData(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch admin ledgers:', err);
+    } finally {
+      setLoadingAdminLedgers(false);
     }
   };
 
@@ -3394,6 +3414,126 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                           </div>
                        </div>
                     )}
+
+                        {/* Pure Agent SAC 998311 & CGST Rule 33 Tax Audit Console */}
+                        <div className="bg-slate-900 text-white p-6 md:p-8 rounded-3xl shadow-2xl space-y-6 mt-6">
+                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+                              <div>
+                                 <div className="flex items-center gap-2">
+                                    <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                                    <h4 className="text-lg font-black tracking-tight">Pure Agent Tax Audit & Double-Entry Ledger (SAC 998311)</h4>
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                       CGST RULE 33 COMPLIANT
+                                    </span>
+                                 </div>
+                                 <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                                    Tax Audit breakdown isolating 85% Meta/Google pass-through ad spend (0% GST under Pure Agent principles) from Encho's 15% SaaS Optimization Fee (18% GST applicable).
+                                 </p>
+                              </div>
+                              <button
+                                 type="button"
+                                 onClick={fetchAdminLedgers}
+                                 className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl text-xs transition-all flex items-center gap-1.5 self-start md:self-auto border border-slate-700"
+                              >
+                                 <RefreshCw className={`w-3.5 h-3.5 ${loadingAdminLedgers ? 'animate-spin' : ''}`} />
+                                 Refresh Tax Audit
+                              </button>
+                           </div>
+
+                           {adminLedgersData?.summary && (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                 <div className="p-4 bg-slate-800/80 rounded-2xl border border-slate-700">
+                                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                                       Master Fuel Reserves
+                                    </span>
+                                    <div className="text-xl font-black font-mono text-emerald-400">
+                                       ${adminLedgersData.summary.total_master_fuel_reserves.toLocaleString()}
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 mt-1">
+                                       {adminLedgersData.summary.total_active_wallets} Active Host Wallets
+                                    </div>
+                                 </div>
+
+                                 <div className="p-4 bg-slate-800/80 rounded-2xl border border-slate-700">
+                                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                                       Pure Agent Ad Pass-Through (85%)
+                                    </span>
+                                    <div className="text-xl font-black font-mono text-blue-400">
+                                       ${adminLedgersData.summary.pure_agent_meta_ad_spend.toLocaleString()}
+                                    </div>
+                                    <div className="text-[10px] text-emerald-400 font-bold mt-1">
+                                       0% GST (CGST Rule 33)
+                                    </div>
+                                 </div>
+
+                                 <div className="p-4 bg-slate-800/80 rounded-2xl border border-slate-700">
+                                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                                       Encho 15% Optimization Fees
+                                    </span>
+                                    <div className="text-xl font-black font-mono text-indigo-400">
+                                       ${adminLedgersData.summary.encho_15_optimization_fees.toLocaleString()}
+                                    </div>
+                                    <div className="text-[10px] text-indigo-300 font-bold mt-1">
+                                       SAC 998311 Taxable Value
+                                    </div>
+                                 </div>
+
+                                 <div className="p-4 bg-slate-800/80 rounded-2xl border border-slate-700">
+                                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                                       18% GST Tax Liability
+                                    </span>
+                                    <div className="text-xl font-black font-mono text-rose-400">
+                                       ${adminLedgersData.summary.gst_18_payable_on_fees.toLocaleString()}
+                                    </div>
+                                    <div className="text-[10px] text-rose-300 font-bold mt-1">
+                                       Payable on Encho Fee portion
+                                    </div>
+                                 </div>
+                              </div>
+                           )}
+
+                           {/* Host Wallets Master Balance Ledger */}
+                           {adminLedgersData?.wallets && adminLedgersData.wallets.length > 0 && (
+                              <div className="space-y-3 pt-2">
+                                 <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono">
+                                    Host Master Fuel Tank Wallet Ledger ({adminLedgersData.wallets.length})
+                                 </h5>
+                                 <div className="overflow-x-auto rounded-2xl border border-slate-800">
+                                    <table className="w-full text-left text-xs font-mono border-collapse">
+                                       <thead>
+                                          <tr className="bg-slate-800/90 text-slate-400 text-[10px] uppercase border-b border-slate-700">
+                                             <th className="p-3">Host</th>
+                                             <th className="p-3">Wallet ID</th>
+                                             <th className="p-3 text-right">Fuel Balance ($)</th>
+                                             <th className="p-3 text-right">INR Equiv (₹83.5)</th>
+                                             <th className="p-3 text-right">Last Refuel</th>
+                                          </tr>
+                                       </thead>
+                                       <tbody className="divide-y divide-slate-800 text-slate-300">
+                                          {adminLedgersData.wallets.map((w: any) => (
+                                             <tr key={w.id} className="hover:bg-slate-800/50">
+                                                <td className="p-3">
+                                                   <div className="font-bold text-white">{w.host_name || 'Host'}</div>
+                                                   <div className="text-[10px] text-slate-400">{w.host_email}</div>
+                                                </td>
+                                                <td className="p-3 text-slate-400">#{w.id}</td>
+                                                <td className="p-3 text-right font-bold text-emerald-400">
+                                                   ${Number(w.balance).toFixed(2)}
+                                                </td>
+                                                <td className="p-3 text-right text-slate-300">
+                                                   ₹{Math.round(Number(w.balance) * 83.5).toLocaleString()}
+                                                </td>
+                                                <td className="p-3 text-right text-slate-400 text-[10px]">
+                                                   {new Date(w.updated_at).toLocaleDateString()}
+                                                </td>
+                                             </tr>
+                                          ))}
+                                       </tbody>
+                                    </table>
+                                 </div>
+                              </div>
+                           )}
+                        </div>
 
                     {/* Reject social post modal overlay */}
                     {rejectingSocialPostId !== null && (

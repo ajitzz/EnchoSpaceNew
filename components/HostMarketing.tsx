@@ -41,6 +41,33 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   const [selectedCampaignForAnalytics, setSelectedCampaignForAnalytics] = useState<MarketingCampaign | null>(null);
   const [geoRouteInfo, setGeoRouteInfo] = useState<any>(null);
   const [loadingGeoRoute, setLoadingGeoRoute] = useState(false);
+  const [viewInvoiceModal, setViewInvoiceModal] = useState<any | null>(null);
+  const [loadingInvoiceId, setLoadingInvoiceId] = useState<number | string | null>(null);
+
+  const fetchAndShowInvoice = async (campaignId: number | string) => {
+    setLoadingInvoiceId(campaignId);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/marketing/campaigns/${campaignId}/invoice`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'x-host-gstin': user?.gstin || ''
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setViewInvoiceModal(data.invoice);
+      } else {
+        const err = await res.json();
+        addToast(err.error || 'Failed to fetch tax invoice', 'error');
+      }
+    } catch (err) {
+      console.error('Invoice error:', err);
+      addToast('Error fetching tax invoice', 'error');
+    } finally {
+      setLoadingInvoiceId(null);
+    }
+  };
 
   useEffect(() => {
     detectGeoRoute();
@@ -7862,6 +7889,53 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                   </button>
                </div>
               
+              <div className="mt-6 pt-5 border-t border-gray-100 text-left space-y-3">
+                 <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-gray-700">Recent Wallet Transactions</span>
+                    <span className="text-[10px] font-mono font-bold bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                       {walletTransactions.length} Logged
+                    </span>
+                 </div>
+                 {walletTransactions.length === 0 ? (
+                    <div className="text-center py-4 text-xs text-gray-400 bg-gray-50 rounded-xl">
+                       No prior fuel tank transactions recorded.
+                    </div>
+                 ) : (
+                    <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+                       {walletTransactions.map((tx: any) => (
+                          <div key={tx.id} className="p-3 bg-gray-50 hover:bg-gray-100/80 rounded-xl border border-gray-100 transition-all flex items-center justify-between text-xs">
+                             <div>
+                                <div className="font-bold text-gray-900 flex items-center gap-1.5">
+                                   <span>{tx.description || tx.type}</span>
+                                   <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold uppercase bg-emerald-100 text-emerald-800">
+                                      Pure Agent SAC 998311
+                                   </span>
+                                </div>
+                                <div className="text-[10px] text-gray-400 font-mono mt-0.5">
+                                   {new Date(tx.created_at).toLocaleDateString()} • Ref #{tx.reference_id || tx.id}
+                                </div>
+                             </div>
+                             <div className="text-right flex flex-col items-end gap-1">
+                                <span className={`font-mono font-bold ${Number(tx.amount) < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                   {Number(tx.amount) < 0 ? '-' : '+'}{currency === 'INR' ? `₹${Math.abs(Number(tx.amount) > 1000 ? Number(tx.amount) : Math.round(Number(tx.amount) * 83.5)).toLocaleString()}` : `$${Math.abs(Number(tx.amount)).toFixed(2)}`}
+                                </span>
+                                {tx.reference_id && (
+                                   <button
+                                      type="button"
+                                      onClick={() => fetchAndShowInvoice(tx.reference_id)}
+                                      disabled={loadingInvoiceId === tx.reference_id}
+                                      className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 underline flex items-center gap-1"
+                                   >
+                                      {loadingInvoiceId === tx.reference_id ? 'Loading...' : '📄 GST Invoice'}
+                                   </button>
+                                )}
+                             </div>
+                          </div>
+                       ))}
+                    </div>
+                 )}
+              </div>
+
               <p className="text-center text-[10px] text-gray-400 font-light mt-4">
                 Payments are securely processed and protected against double-spending.
               </p>
@@ -7869,6 +7943,147 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Pure Agent B2B GST Tax Invoice Modal (SAC 998311 & CGST Rule 33) */}
+      {viewInvoiceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 0 }}
+            className="bg-white rounded-3xl p-6 md:p-8 w-full max-w-2xl shadow-2xl relative overflow-hidden text-left max-h-[90vh] overflow-y-auto"
+          >
+            <button
+              onClick={() => setViewInvoiceModal(null)}
+              className="absolute top-4 right-4 p-2 bg-gray-100 hover:bg-gray-200 text-gray-500 rounded-full transition-colors z-10"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Invoice Top Brand Header */}
+            <div className="border-b border-gray-200 pb-5 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 bg-emerald-600 rounded-xl flex items-center justify-center text-white font-black text-sm">
+                    E
+                  </div>
+                  <span className="text-xl font-black tracking-tight text-gray-900">Encho Technologies</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    PURE AGENT TAX INVOICE
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1 font-mono">
+                  SAC Code: {viewInvoiceModal.sac_code} • {viewInvoiceModal.sac_description}
+                </p>
+              </div>
+              <div className="text-left sm:text-right font-mono">
+                <div className="text-xs text-gray-400 uppercase font-bold">Invoice #</div>
+                <div className="text-sm font-black text-gray-900">{viewInvoiceModal.invoice_number}</div>
+                <div className="text-[11px] text-gray-500">{new Date(viewInvoiceModal.date).toLocaleDateString()}</div>
+              </div>
+            </div>
+
+            {/* Legal Compliance Banner */}
+            <div className="mb-6 p-3.5 bg-emerald-50/80 border border-emerald-200/80 rounded-2xl flex items-start gap-3 text-xs text-emerald-900">
+              <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold block">Legal Tax Protection (CGST Rule 33)</span>
+                <p className="text-[11px] text-emerald-800/90 leading-relaxed mt-0.5">
+                  {viewInvoiceModal.rule_reference}. 85% of funding is direct Meta/Google Ad Spend pass-through (0% GST as Pure Agent). 15% is Encho AI Optimization & Campaign Management Fee (18% GST applicable).
+                </p>
+              </div>
+            </div>
+
+            {/* Issuer & Host Metadata Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 p-4 bg-gray-50 rounded-2xl border border-gray-100 text-xs font-mono">
+              <div>
+                <span className="text-gray-400 uppercase font-bold text-[10px] block mb-1">Issuer Details</span>
+                <div className="font-bold text-gray-900">{viewInvoiceModal.issuer.company}</div>
+                <div className="text-gray-600">GSTIN: {viewInvoiceModal.issuer.gstin}</div>
+                <div className="text-gray-600">PAN: {viewInvoiceModal.issuer.pan}</div>
+                <div className="text-gray-500 text-[10px] mt-1">{viewInvoiceModal.issuer.address}</div>
+              </div>
+              <div>
+                <span className="text-gray-400 uppercase font-bold text-[10px] block mb-1">Host Customer B2B Details</span>
+                <div className="font-bold text-gray-900">{viewInvoiceModal.host.name}</div>
+                <div className="text-gray-600">{viewInvoiceModal.host.email}</div>
+                <div className="text-indigo-600 font-bold mt-1">Host GSTIN: {viewInvoiceModal.host.gstin}</div>
+              </div>
+            </div>
+
+            {/* Financial Line Items Table */}
+            <div className="border border-gray-200 rounded-2xl overflow-hidden mb-6 text-xs">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-gray-100 border-b border-gray-200 font-mono text-[10px] text-gray-500 uppercase">
+                    <th className="p-3">Description</th>
+                    <th className="p-3">SAC / Rule</th>
+                    <th className="p-3 text-right">Taxable Value</th>
+                    <th className="p-3 text-right">GST Rate</th>
+                    <th className="p-3 text-right">Total Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 font-mono">
+                  <tr>
+                    <td className="p-3">
+                      <div className="font-bold text-gray-900">Direct Meta & Google Ad Spend Pass-Through</div>
+                      <div className="text-[10px] text-gray-400">Pure Agent reimbursement for campaign #{viewInvoiceModal.campaign.id}</div>
+                    </td>
+                    <td className="p-3 text-gray-500 text-[11px]">Rule 33</td>
+                    <td className="p-3 text-right font-bold text-gray-900">₹{viewInvoiceModal.financials.pure_agent_meta_ad_spend.toLocaleString()}</td>
+                    <td className="p-3 text-right text-emerald-600 font-bold">0% (Pure Agent)</td>
+                    <td className="p-3 text-right font-bold text-gray-900">₹{viewInvoiceModal.financials.pure_agent_meta_ad_spend.toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td className="p-3">
+                      <div className="font-bold text-gray-900">Encho AI Optimization & Campaign Management Fee (15%)</div>
+                      <div className="text-[10px] text-gray-400">Targeting algorithm DCO & multi-channel deployment</div>
+                    </td>
+                    <td className="p-3 text-gray-500 text-[11px]">998311</td>
+                    <td className="p-3 text-right font-bold text-gray-900">₹{viewInvoiceModal.financials.encho_taxable_value.toLocaleString()}</td>
+                    <td className="p-3 text-right text-indigo-600 font-bold">18% GST</td>
+                    <td className="p-3 text-right font-bold text-gray-900">₹{viewInvoiceModal.financials.encho_optimization_fee_gross.toLocaleString()}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* Tax Calculation Breakdown */}
+              <div className="p-4 bg-gray-50 border-t border-gray-200 space-y-1.5 font-mono text-xs text-gray-700">
+                <div className="flex justify-between">
+                  <span>CGST (9% on Encho Fee):</span>
+                  <span>₹{viewInvoiceModal.financials.cgst_amount.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>SGST (9% on Encho Fee):</span>
+                  <span>₹{viewInvoiceModal.financials.sgst_amount.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between font-bold text-gray-900 pt-2 border-t border-gray-200 text-sm">
+                  <span>Total Gross Amount Paid:</span>
+                  <span className="text-emerald-600">₹{viewInvoiceModal.financials.gross_amount_paid.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Footer */}
+            <div className="flex items-center justify-between gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-4 py-2.5 bg-gray-900 hover:bg-black text-white rounded-xl font-bold text-xs transition-all flex items-center gap-2 shadow-sm"
+              >
+                <span>🖨️ Print / Save PDF Tax Receipt</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewInvoiceModal(null)}
+                className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs transition-all"
+              >
+                Close Invoice
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
     </div>
   );

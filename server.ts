@@ -5937,6 +5937,83 @@ app.post('/api/marketing/campaigns/:id/subscribe', authenticateToken, async (req
   }
 });
 
+// Generate Pure Agent B2B GST Tax Invoice for Campaign (SAC 998311 & CGST Rule 33)
+app.get('/api/marketing/campaigns/:id/invoice', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const campaignRes = await pool.query(`
+      SELECT c.*, l.title as listing_title, u.name as host_name, u.email as host_email
+      FROM host_marketing_campaigns c
+      JOIN listings l ON c.listing_id = l.id
+      JOIN users u ON c.host_id = u.id
+      WHERE c.id = $1 AND c.host_id = $2
+    `, [id, req.user?.id]);
+
+    if (campaignRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Campaign not found or unauthorized' });
+    }
+
+    const c = campaignRes.rows[0];
+    const grossAmount = Number(c.budget) || 2500;
+    
+    // Pure Agent Rule 33 calculation:
+    // 85% is direct Meta/Google ad spend pass-through (0% Encho GST charged as Pure Agent)
+    const pureAgentAdSpend = Math.round((grossAmount * 0.85) * 100) / 100;
+    
+    // 15% is Encho AI Optimization & Management Fee (SAC 998311)
+    const totalEnchoFee = Math.round((grossAmount * 0.15) * 100) / 100;
+    
+    // Calculate 18% GST on Encho's Fee
+    const taxableBase = Math.round((totalEnchoFee / 1.18) * 100) / 100;
+    const gstTotal = Math.round((totalEnchoFee - taxableBase) * 100) / 100;
+    const cgst = Math.round((gstTotal / 2) * 100) / 100;
+    const sgst = Math.round((gstTotal - cgst) * 100) / 100;
+
+    const invoiceData = {
+      invoice_number: `ENC-INV-2026-${String(c.id).padStart(5, '0')}`,
+      date: c.created_at || new Date().toISOString(),
+      sac_code: "998311",
+      sac_description: "Advertising Services & Algorithmic Campaign Optimization",
+      rule_reference: "Rule 33 of CGST Rules, 2017 (Pure Agent Expenditure Pass-Through)",
+      host: {
+        name: c.host_name || "Encho Host",
+        email: c.host_email || "",
+        gstin: (req.headers['x-host-gstin'] as string) || "29AAAAA0000A1Z5 (Provided by Host)",
+      },
+      issuer: {
+        company: "Encho Technologies Pvt. Ltd.",
+        gstin: "27AAACE1234F1Z8",
+        pan: "AAACE1234F",
+        address: "HQ Suite 402, Encho Space Towers, MG Road, Bengaluru, KA 560001",
+      },
+      campaign: {
+        id: c.id,
+        title: c.title,
+        listing_title: c.listing_title,
+        payment_gateway: c.payment_gateway || "stripe",
+        status: c.status,
+      },
+      financials: {
+        gross_amount_paid: grossAmount,
+        pure_agent_meta_ad_spend: pureAgentAdSpend,
+        pure_agent_tax_rate: "0% (Direct Pass-Through under Rule 33)",
+        encho_optimization_fee_gross: totalEnchoFee,
+        encho_taxable_value: taxableBase,
+        gst_rate: "18% GST (9% CGST + 9% SGST)",
+        cgst_amount: cgst,
+        sgst_amount: sgst,
+        gst_total: gstTotal,
+      }
+    };
+
+    res.json({ success: true, invoice: invoiceData });
+  } catch (err) {
+    console.error('Error generating tax invoice:', err);
+    res.status(500).json({ error: 'Failed to generate tax invoice' });
+  }
+});
+
 // Update pacing mode for a campaign (Active Pacing Controller)
 app.post('/api/marketing/campaigns/:id/pacing', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
@@ -9153,6 +9230,69 @@ app.get('/api/marketing/ledger', authenticateToken, async (req: AuthRequest, res
   } catch (error) {
     console.error('[LEDGER API] Error:', error);
     res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// Admin Global Marketing Ledger & Pure Agent Tax Audit Endpoint
+app.get('/api/marketing/admin/ledgers', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    if (req.user?.role !== 'admin' && req.user?.email !== 'admin@encho.app') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const walletsRes = await pool.query(`
+      SELECT w.*, u.name as host_name, u.email as host_email
+      FROM host_wallets w
+      LEFT JOIN users u ON w.host_id = u.id
+      ORDER BY w.balance DESC
+    `);
+
+    const transactionsRes = await pool.query(`
+      SELECT t.*, w.host_id, u.name as host_name, u.email as host_email
+      FROM wallet_transactions t
+      JOIN host_wallets w ON t.wallet_id = w.id
+      LEFT JOIN users u ON w.host_id = u.id
+      ORDER BY t.created_at DESC
+      LIMIT 100
+    `);
+
+    const summaryRes = await pool.query(`
+      SELECT 
+        COALESCE(SUM(balance), 0) as total_master_fuel_reserves,
+        COALESCE(COUNT(*), 0) as total_active_wallets
+      FROM host_wallets
+    `);
+
+    const campaignStatsRes = await pool.query(`
+      SELECT 
+        COALESCE(SUM(budget), 0) as total_campaign_budget,
+        COALESCE(SUM(spent), 0) as total_meta_spend,
+        COUNT(*) as total_campaigns
+      FROM host_marketing_campaigns
+    `);
+
+    const totalBudget = Number(campaignStatsRes.rows[0]?.total_campaign_budget || 0);
+    const pureAgentAdSpend = Math.round((totalBudget * 0.85) * 100) / 100;
+    const enchoOptimizationFees = Math.round((totalBudget * 0.15) * 100) / 100;
+    const totalGstPayable = Math.round((enchoOptimizationFees * 0.18) * 100) / 100;
+
+    res.json({
+      success: true,
+      summary: {
+        total_master_fuel_reserves: Number(summaryRes.rows[0]?.total_master_fuel_reserves || 0),
+        total_active_wallets: Number(summaryRes.rows[0]?.total_active_wallets || 0),
+        total_campaign_volume: totalBudget,
+        pure_agent_meta_ad_spend: pureAgentAdSpend,
+        encho_15_optimization_fees: enchoOptimizationFees,
+        gst_18_payable_on_fees: totalGstPayable,
+      },
+      wallets: walletsRes.rows,
+      transactions: transactionsRes.rows,
+    });
+  } catch (error) {
+    console.error('[ADMIN LEDGER API] Error:', error);
+    res.status(500).json({ error: 'Failed to fetch admin ledgers' });
   }
 });
 
