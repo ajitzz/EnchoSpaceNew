@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MarketingCampaign, Listing } from '../types';
+import { MetaLocationTargeter } from './MetaLocationTargeter';
 import { 
   Sparkles, CheckCircle, AlertTriangle, ShieldAlert, Play, Pause, BarChart3, 
   Tv, Eye, MousePointerClick, TrendingUp, DollarSign, Target, Plus, 
@@ -4147,153 +4148,27 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                             />
                           </div>
 
-                          {/* Location Tag & Rahul-Proof Smart Targeter */}
+                          {/* Location Tag & Meta Ads Manager Controls Targeter */}
                           <div className={`space-y-3 ${rejectedFieldsMap.target_locations ? 'border-l-2 border-rose-500 pl-3' : ''}`}>
-                            <div className="flex justify-between items-center">
-                              <label className="text-[10px] font-black uppercase tracking-wider text-zinc-400 block flex items-center gap-1">
-                                <span>Tag Target Locations</span>
-                                {rejectedFieldsMap.target_locations && <span className="text-rose-600 text-[9px] font-mono font-bold">(Fix Flagged)</span>}
-                              </label>
-                              <span className="text-[9px] text-zinc-400 font-light font-mono">Comma separated</span>
-                            </div>
-
                             {rejectedFieldsMap.target_locations && (
                               <div className="text-xs font-semibold text-rose-600 bg-rose-50/50 p-2 rounded-xl mb-2 text-left">
                                 <strong>Correction Request:</strong> {rejectedFieldsMap.target_locations}
                               </div>
                             )}
 
-                            <div className="relative">
-                              <input 
-                                type="text" 
-                                placeholder="e.g. Goa, Mumbai, Delhi NCR, Bangalore"
-                                value={formData.target_locations}
-                                onChange={(e) => setFormData(prev => ({ ...prev, target_locations: e.target.value }))}
-                                className="w-full bg-white border border-zinc-200 rounded-xl p-3 pl-8 text-xs font-semibold outline-none focus:border-blue-500 transition-all"
-                              />
-                              <MapPin className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                            </div>
-
-                            {/* Meta Geo-Radius Targeter & Location Catchment Zone */}
-                            <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-2xl p-3.5 space-y-3 text-left">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-1.5">
-                                  <Compass className="w-4 h-4 text-emerald-600 animate-pulse" />
-                                  <span className="text-xs font-black text-gray-900 uppercase tracking-tight">Meta Geo-Radius Catchment (Km Radius)</span>
-                                </div>
-                                <span className="bg-emerald-100 text-emerald-800 text-[9px] font-extrabold font-mono px-2 py-0.5 rounded-full border border-emerald-200">
-                                  {formData.target_radius_km || 50} km Radius
-                                </span>
-                              </div>
-
-                              <p className="text-[10px] text-zinc-600 leading-relaxed font-light">
-                                Set the exact kilometer radius surrounding target city centres for Meta & Instagram ad distribution.
-                              </p>
-
-                              {/* Radius Slider Control */}
-                              <div className="space-y-1.5">
-                                <div className="flex justify-between items-center text-[10px] font-bold text-zinc-600">
-                                  <span className="font-mono text-zinc-400">Min 25 km (Meta Housing Limit)</span>
-                                  <span className="text-emerald-700 font-extrabold font-mono">{formData.target_radius_km || 50} km</span>
-                                  <span className="font-mono text-zinc-400">150 km (Regional Reach)</span>
-                                </div>
-                                <input
-                                  type="range"
-                                  min={25}
-                                  max={150}
-                                  step={5}
-                                  value={formData.target_radius_km || 50}
-                                  onChange={(e) => setFormData(prev => ({ ...prev, target_radius_km: Number(e.target.value) }))}
-                                  className="w-full accent-emerald-600 cursor-pointer h-1.5 bg-emerald-200 rounded-lg"
-                                />
-                              </div>
-
-                              {/* Quick Radius Presets */}
-                              <div className="flex flex-wrap gap-1.5 pt-0.5">
-                                {[
-                                  { radius: 25, label: '📍 25 km (Local Hub)' },
-                                  { radius: 50, label: '🎯 50 km (Metro Zone)' },
-                                  { radius: 75, label: '🌆 75 km (Suburban Belt)' },
-                                  { radius: 100, label: '🚀 100 km (Feeder Corridor)' },
-                                  { radius: 150, label: '🌐 150 km (Regional Max)' },
-                                ].map((preset) => (
-                                  <button
-                                    key={preset.radius}
-                                    type="button"
-                                    onClick={() => setFormData(prev => ({ ...prev, target_radius_km: preset.radius }))}
-                                    className={`px-2 py-1 text-[9.5px] font-bold rounded-lg border transition-all ${
-                                      formData.target_radius_km === preset.radius
-                                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs scale-105'
-                                        : 'bg-white text-zinc-700 border-zinc-200 hover:bg-emerald-50'
-                                    }`}
-                                  >
-                                    {preset.label}
-                                  </button>
-                                ))}
-                              </div>
-
-                              {/* Interactive Meta Geo-Radar Catchment Visualizer Canvas */}
-                              <div className="relative bg-zinc-950 rounded-2xl p-4 border border-zinc-800 text-white overflow-hidden shadow-inner space-y-3">
-                                <div className="flex items-center justify-between text-[10px] font-mono z-10 relative">
-                                  <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
-                                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                                    <span>LIVE META GEO-RADAR CATCHMENT MAP</span>
-                                  </div>
-                                  <span className="text-zinc-400 font-bold">
-                                    EST. AUDIENCE: {((formData.target_radius_km || 50) * 45000 * (formData.target_locations ? Math.max(1, formData.target_locations.split(',').filter(Boolean).length) : 1)).toLocaleString()} USERS
-                                  </span>
-                                </div>
-
-                                {/* Radar Display Area */}
-                                <div className="relative w-full h-44 bg-zinc-900/80 rounded-xl border border-zinc-800/80 flex items-center justify-center overflow-hidden">
-                                  {/* Concentric distance rings */}
-                                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                    <div className="w-12 h-12 rounded-full border border-emerald-500/20"></div>
-                                    <div className="w-24 h-24 rounded-full border border-emerald-500/30 absolute"></div>
-                                    <div className="w-36 h-36 rounded-full border border-emerald-500/40 absolute"></div>
-                                    <div className="w-44 h-44 rounded-full border border-dashed border-emerald-500/30 absolute"></div>
-                                    {/* Crosshair axes */}
-                                    <div className="w-full h-px bg-emerald-500/15 absolute"></div>
-                                    <div className="h-full w-px bg-emerald-500/15 absolute"></div>
-                                  </div>
-
-                                  {/* Dynamic Target Perimeter Ring (Scales with km slider) */}
-                                  <div 
-                                    className="rounded-full border-2 border-emerald-400 bg-emerald-500/10 shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all duration-300 ease-out flex items-center justify-center absolute pointer-events-none"
-                                    style={{
-                                      width: `${Math.min(100, Math.max(25, ((formData.target_radius_km || 50) / 150) * 100))}%`,
-                                      height: `${Math.min(100, Math.max(25, ((formData.target_radius_km || 50) / 150) * 100))}%`,
-                                      maxHeight: '160px',
-                                      maxWidth: '160px'
-                                    }}
-                                  >
-                                    <span className="text-[9px] font-mono font-extrabold text-emerald-300 bg-black/80 px-1.5 py-0.5 rounded border border-emerald-500/50">
-                                      {formData.target_radius_km || 50} km Perimeter
-                                    </span>
-                                  </div>
-
-                                  {/* Target City Pin Blips */}
-                                  <div className="relative z-10 flex flex-wrap items-center justify-center gap-2 p-2 max-w-[90%]">
-                                    {(formData.target_locations ? formData.target_locations.split(',').filter(Boolean) : ['Metropolitan Hub']).map((loc, idx) => (
-                                      <div key={idx} className="bg-zinc-900/90 border border-emerald-500/60 px-2 py-1 rounded-lg flex items-center gap-1.5 shadow-lg animate-bounce" style={{ animationDuration: `${2 + (idx % 3)}s` }}>
-                                        <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
-                                        <span className="text-[9.5px] font-mono font-black text-white">{loc.trim()}</span>
-                                        <span className="text-[8.5px] font-mono text-emerald-400 font-bold">±{formData.target_radius_km || 50}km</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Catchment zone math calculation badge */}
-                              <div className="bg-white/90 border border-emerald-200/60 p-2.5 rounded-xl flex items-start gap-2 text-[9.5px] text-zinc-600 leading-tight">
-                                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                                <div>
-                                  <strong className="text-gray-900 block font-bold">Meta Graph API HOUSING Category Policy Compliance:</strong>
-                                  Under Meta's Special Ad Category (HOUSING), a minimum radius of 25 km is enforced around target cities to satisfy non-discrimination rules. Coverage area: ~{Math.round(Math.PI * Math.pow(formData.target_radius_km || 50, 2) * (formData.target_locations ? formData.target_locations.split(',').filter(Boolean).length : 1)).toLocaleString()} km² ad distribution zone.
-                                </div>
-                              </div>
-                            </div>
+                            <MetaLocationTargeter
+                              targetLocations={formData.target_locations}
+                              targetRadiusKm={formData.target_radius_km || 50}
+                              onChangeLocations={(locationsStr, radiusKm) => {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  target_locations: locationsStr,
+                                  target_radius_km: radiusKm
+                                }));
+                              }}
+                              aiRecommendations={aiTargetingRecs}
+                            />
+                          </div>
 
                             {/* Primary Call-To-Action (CTA) Customizer Selector */}
                             <div className="space-y-1.5 text-left pt-1">
