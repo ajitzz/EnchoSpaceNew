@@ -213,10 +213,17 @@ export interface MarketingCampaign {
   approved_at?: string;
   subscription_active?: boolean;
   target_locations?: string;
+  target_radius_km?: number;
   ad_format?: 'post' | 'reel' | 'carousel' | 'story';
   feed_description?: string;
   rejected_fields?: Record<string, string>;
   meta_campaign_id?: string;
+  meta_adset_id?: string;
+  meta_creative_id?: string;
+  meta_ad_id?: string;
+  ad_medias?: any[];
+  adset_specifications?: any;
+  meta_specifications?: any;
   meta_dispatched_at?: string;
   meta_pixel_id?: string;
   meta_capi_token?: string;
