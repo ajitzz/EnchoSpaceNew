@@ -376,23 +376,61 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
     notifyParent(updated);
   };
 
+  // Focus and Fly to a specific location's circle on the map (occupying ~70% of map container)
+  const focusLocationCircleOnMap = (item: MetaLocationItem, radiusKmOverride?: number) => {
+    const map = leafletMapRef.current;
+    if (!map) return;
+
+    const radiusKm = item.isOnlyCity ? 15 : (radiusKmOverride ?? item.radius_km ?? 50);
+
+    // Calculate approximate lat/lng offset for circle radius (~111 km per degree lat)
+    const latOffset = Math.max(0.08, radiusKm / 111);
+    const lngOffset = Math.max(0.08, radiusKm / (111 * Math.cos((item.lat * Math.PI) / 180)));
+
+    const bounds = L.latLngBounds([
+      [item.lat - latOffset, item.lng - lngOffset],
+      [item.lat + latOffset, item.lng + lngOffset]
+    ]);
+
+    if (bounds.isValid()) {
+      // Padding of 15% on each axis leaves ~70% centered focus space for the circle
+      const containerHeight = map.getSize().y || 320;
+      const containerWidth = map.getSize().x || 600;
+
+      const padY = Math.round(containerHeight * 0.15);
+      const padX = Math.round(containerWidth * 0.15);
+
+      map.flyToBounds(bounds, {
+        padding: [padY, padX],
+        duration: 0.6,
+        maxZoom: 14
+      });
+    }
+  };
+
   // Change radius for a specific location
   const handleLocationRadiusChange = (id: string, newRadiusKm: number, isOnlyCity: boolean = false) => {
+    let updatedItem: MetaLocationItem | undefined;
+
     const updated = locationList.map(loc => {
       if (loc.id === id) {
-        return { ...loc, radius_km: newRadiusKm, isOnlyCity };
+        updatedItem = { ...loc, radius_km: newRadiusKm, isOnlyCity };
+        return updatedItem;
       }
       return loc;
     });
+
     setLocationList(updated);
     notifyParent(updated, newRadiusKm);
+
+    if (updatedItem) {
+      focusLocationCircleOnMap(updatedItem, newRadiusKm);
+    }
   };
 
   // Focus and Fly to a specific location in table
   const handleFocusLocationOnMap = (item: MetaLocationItem) => {
-    if (leafletMapRef.current) {
-      leafletMapRef.current.flyTo([item.lat, item.lng], 10, { duration: 0.8 });
-    }
+    focusLocationCircleOnMap(item);
   };
 
   // Change mode (include/exclude) for a location
@@ -493,6 +531,164 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
   const avgRadius = locationList.length > 0 ? Math.round(locationList.reduce((acc, curr) => acc + curr.radius_km, 0) / locationList.length) : 50;
   const estimatedReachLow = Math.max(250000, totalTargetedCities * avgRadius * 12500);
   const estimatedReachHigh = Math.round(estimatedReachLow * 1.25);
+
+  // Render Meta Ads Manager Radius Popover Card
+  const renderRadiusPopover = (item: MetaLocationItem) => {
+    return (
+      <div className="absolute left-0 top-full mt-2 w-80 bg-white border border-slate-200/90 rounded-2xl shadow-2xl z-50 p-4 space-y-3 text-left font-sans animate-in fade-in zoom-in-95 duration-150">
+        {/* Popover Header */}
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+          <span className="text-xs font-black text-slate-900 capitalize">
+            {item.mode === 'include' ? 'Include' : 'Exclude'}
+          </span>
+          <button
+            type="button"
+            onClick={() => setActiveRadiusPopoverId(null)}
+            className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* Option 1: Current City Only */}
+        <div 
+          onClick={() => {
+            handleLocationRadiusChange(item.id, item.radius_km || 50, true);
+          }}
+          className={`flex items-center gap-3 p-2.5 rounded-xl border transition-all cursor-pointer ${
+            item.isOnlyCity 
+              ? 'bg-sky-50/80 border-sky-300 text-sky-900 shadow-2xs' 
+              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+          }`}
+        >
+          <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+            item.isOnlyCity ? 'border-sky-600 bg-sky-600' : 'border-slate-300 bg-white'
+          }`}>
+            {item.isOnlyCity && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+          </div>
+          <span className="text-xs font-bold">Current city only</span>
+        </div>
+
+        {/* Option 2: Cities within radius */}
+        <div className="space-y-2">
+          <div 
+            onClick={() => {
+              if (item.isOnlyCity) {
+                handleLocationRadiusChange(item.id, item.radius_km || 50, false);
+              }
+            }}
+            className={`flex items-center justify-between p-2.5 rounded-xl border transition-all cursor-pointer ${
+              !item.isOnlyCity 
+                ? 'bg-sky-50/80 border-sky-300 text-sky-900 shadow-2xs' 
+                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                !item.isOnlyCity ? 'border-sky-600 bg-sky-600' : 'border-slate-300 bg-white'
+              }`}>
+                {!item.isOnlyCity && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+              </div>
+              <span className="text-xs font-bold">Cities within radius</span>
+            </div>
+            <Info className="w-3.5 h-3.5 text-slate-400" />
+          </div>
+
+          {/* Draggable Slider & Number Box (when Cities within radius is selected) */}
+          {!item.isOnlyCity && (
+            <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl space-y-3">
+              <div className="flex items-center gap-2.5">
+                {/* Range slider */}
+                <input
+                  type="range"
+                  min={17}
+                  max={150}
+                  step={1}
+                  value={item.radius_km || 50}
+                  onChange={(e) => {
+                    const newKm = Number(e.target.value);
+                    handleLocationRadiusChange(item.id, newKm, false);
+                  }}
+                  className="flex-1 accent-sky-600 cursor-pointer h-2 bg-slate-200 rounded-lg"
+                />
+
+                {/* Number box with spinners */}
+                <div className="flex items-center border border-slate-300 rounded-xl bg-white overflow-hidden shadow-2xs">
+                  <input
+                    type="number"
+                    min={17}
+                    max={150}
+                    value={item.radius_km || 50}
+                    onChange={(e) => {
+                      const val = Math.max(17, Math.min(150, Number(e.target.value) || 17));
+                      handleLocationRadiusChange(item.id, val, false);
+                    }}
+                    className="w-12 h-8 text-center text-xs font-black text-slate-900 outline-none"
+                  />
+                  <div className="flex flex-col border-l border-slate-200 bg-slate-100/80">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newR = Math.min(150, (item.radius_km || 50) + 1);
+                        handleLocationRadiusChange(item.id, newR, false);
+                      }}
+                      className="px-1 py-0.5 hover:bg-slate-200 text-slate-600 cursor-pointer"
+                    >
+                      <ChevronUp className="w-2.5 h-2.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newR = Math.max(17, (item.radius_km || 50) - 1);
+                        handleLocationRadiusChange(item.id, newR, false);
+                      }}
+                      className="px-1 py-0.5 hover:bg-slate-200 text-slate-600 cursor-pointer"
+                    >
+                      <ChevronDown className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <span className="text-xs font-black text-slate-700">km</span>
+              </div>
+
+              {/* Quick Presets */}
+              <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 pt-1 border-t border-slate-200/60">
+                <span>Quick presets:</span>
+                <div className="flex gap-1">
+                  {[17, 25, 40, 50, 80, 100].map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => handleLocationRadiusChange(item.id, r, false)}
+                      className={`px-1.5 py-0.5 rounded-md text-[10px] font-black transition-all cursor-pointer ${
+                        item.radius_km === r 
+                          ? 'bg-sky-600 text-white shadow-2xs' 
+                          : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      {r}km
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Done button */}
+        <div className="pt-1 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setActiveRadiusPopoverId(null)}
+            className="w-full py-2 bg-slate-900 text-white text-xs font-extrabold rounded-xl hover:bg-slate-800 transition-colors cursor-pointer shadow-md"
+          >
+            Apply
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden text-left font-sans transition-all">
@@ -827,7 +1023,7 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
                         <button
                           type="button"
                           onClick={() => setActiveRadiusPopoverId(activeRadiusPopoverId === item.id ? null : item.id)}
-                          className="w-full bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 font-bold text-[11px] py-1.5 px-2.5 rounded-xl flex items-center justify-between gap-1 transition-all shadow-2xs"
+                          className="w-full bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 font-bold text-[11px] py-1.5 px-2.5 rounded-xl flex items-center justify-between gap-1 transition-all shadow-2xs cursor-pointer"
                         >
                           <span className="truncate">
                             {item.isOnlyCity 
@@ -838,56 +1034,8 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
                           <ChevronDown className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                         </button>
 
-                        {/* Radius Dropdown Popover */}
-                        {activeRadiusPopoverId === item.id && (
-                          <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 p-3 space-y-2 text-left">
-                            <div className="text-[9px] font-black uppercase text-slate-400">Meta Radius Preset</div>
-                            
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleLocationRadiusChange(item.id, 0, true);
-                                setActiveRadiusPopoverId(null);
-                              }}
-                              className={`w-full text-left px-2 py-1.5 text-xs font-extrabold rounded-lg transition-colors flex items-center justify-between ${
-                                item.isOnlyCity ? 'bg-sky-100 text-sky-900' : 'hover:bg-slate-50 text-slate-700'
-                              }`}
-                            >
-                              <span>Current city only</span>
-                              {item.isOnlyCity && <Check className="w-3.5 h-3.5 text-sky-600" />}
-                            </button>
-
-                            {[25, 40, 50, 75, 100].map(r => (
-                              <button
-                                key={r}
-                                type="button"
-                                onClick={() => {
-                                  handleLocationRadiusChange(item.id, r, false);
-                                  setActiveRadiusPopoverId(null);
-                                }}
-                                className={`w-full text-left px-2 py-1 text-xs font-semibold rounded-lg transition-colors flex items-center justify-between ${
-                                  !item.isOnlyCity && item.radius_km === r ? 'bg-sky-100 text-sky-900 font-bold' : 'hover:bg-slate-50 text-slate-700'
-                                }`}
-                              >
-                                <span>+{r} km radius</span>
-                                {!item.isOnlyCity && item.radius_km === r && <Check className="w-3.5 h-3.5 text-sky-600" />}
-                              </button>
-                            ))}
-
-                            <div className="pt-1 border-t border-slate-100 space-y-1">
-                              <span className="text-[9px] font-bold text-slate-500 block">Custom Slider Range</span>
-                              <input
-                                type="range"
-                                min={25}
-                                max={150}
-                                step={5}
-                                value={item.radius_km || 50}
-                                onChange={(e) => handleLocationRadiusChange(item.id, Number(e.target.value), false)}
-                                className="w-full accent-sky-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
-                              />
-                            </div>
-                          </div>
-                        )}
+                        {/* Exact Meta Ads Manager Radius Popover */}
+                        {activeRadiusPopoverId === item.id && renderRadiusPopover(item)}
                       </div>
                     </div>
 
@@ -917,6 +1065,37 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
             <div className={`relative w-full h-80 rounded-2xl overflow-hidden border border-slate-300 shadow-inner group transition-all ${isDropPinMode ? 'ring-4 ring-amber-400/50' : ''}`}>
               {/* Map Canvas Div */}
               <div ref={mapContainerRef} className={`w-full h-full z-0 ${isDropPinMode ? 'cursor-crosshair' : ''}`} />
+
+              {/* Floating Meta Location Pill Over Map (Exact Meta Ads Manager layout) */}
+              {!isDropPinMode && locationList.length > 0 && (
+                <div className="absolute top-3 left-3 z-10">
+                  <div className="flex items-center gap-2 bg-white/95 backdrop-blur-md px-3 py-2 rounded-xl border border-slate-200 shadow-xl">
+                    <div className="w-5 h-5 rounded-md bg-emerald-600 text-white flex items-center justify-center text-[10px] font-black shrink-0">
+                      <MapPin className="w-3.5 h-3.5" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const primary = locationList[0];
+                        setActiveRadiusPopoverId(activeRadiusPopoverId === primary.id ? null : primary.id);
+                      }}
+                      className="text-xs font-black text-slate-800 hover:text-sky-600 flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>
+                        {locationList[0].name} {locationList[0].isOnlyCity ? '(Current city only)' : `+ ${locationList[0].radius_km} km`}
+                      </span>
+                      <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+                    </button>
+                  </div>
+
+                  {/* Floating Popover when clicked */}
+                  {activeRadiusPopoverId === locationList[0].id && (
+                    <div className="mt-1">
+                      {renderRadiusPopover(locationList[0])}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Floating Drop Pin Mode Active Indicator Banner */}
               {isDropPinMode && (
