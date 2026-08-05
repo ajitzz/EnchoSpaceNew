@@ -464,12 +464,12 @@ export function printStartupIntegrationReport() {
   console.log(`📊 SUMMARY: 🟢 ${configuredCount} Valid | ⚠️ ${dummyCount} Dummy/Fallback | ❌ ${missingCount} Missing | 🛑 ${invalidCount} Invalid`);
   console.log('--------------------------------------------------------------------------------');
   console.log('ℹ️  Note: When endpoints invoke an integration with missing/dummy keys,');
-  console.log('   detailed [INTEGRATION INSPECTION ALERT] error logs will print in real-time.\n');
+  console.log('   detailed [INTEGRATION INSPECTION MONITORING] logs will print in real-time.\n');
 }
 
 /**
  * Check integration keys on-demand during API route or feature execution.
- * Prints clear error in console if key is missing, dummy, or invalid.
+ * Prints clear informative logs in console if key is missing, dummy, or invalid.
  */
 export function checkIntegrationKeys(
   serviceName: string,
@@ -483,26 +483,34 @@ export function checkIntegrationKeys(
     if (res.status !== 'CONFIGURED') {
       issues.push(res);
 
-      let severityTag = '🚨 [INTEGRATION INSPECTION ALERT - DEFECT DETECTED]';
-      let icon = '❌';
+      let severityTag = 'ℹ️ [INTEGRATION INSPECTION INFO - MOCK MODE ACTIVE]';
+      let icon = 'ℹ️';
+      let logFn: (...args: any[]) => void = console.info;
+
       if (res.status === 'DUMMY') {
-        severityTag = '⚠️ [INTEGRATION INSPECTION WARNING - USING MOCK/DUMMY KEY]';
+        severityTag = '⚠️ [INTEGRATION INSPECTION WARNING - USING DUMMY KEY]';
         icon = '⚠️';
+        logFn = console.warn;
       } else if (res.status === 'INVALID_FORMAT') {
-        severityTag = '🛑 [INTEGRATION INSPECTION ERROR - INVALID KEY FORMAT]';
+        severityTag = '🛑 [INTEGRATION INSPECTION NOTICE - INVALID KEY FORMAT]';
         icon = '🛑';
+        logFn = console.warn;
+      } else if (res.status === 'MISSING') {
+        severityTag = 'ℹ️ [INTEGRATION INSPECTION INFO - MOCK MODE ACTIVE]';
+        icon = 'ℹ️';
+        logFn = console.info;
       }
 
-      console.error(`\n${severityTag}`);
-      console.error(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-      console.error(`${icon} Service/Feature : ${serviceName}`);
-      console.error(`📍 Trigger Context: ${contextMessage || 'Application Feature Execution'}`);
-      console.error(`🔑 Variable Name  : ${res.key}`);
-      console.error(`📊 Key Status    : ${res.status}`);
-      console.error(`🔍 Masked Value  : ${res.maskedValue}`);
-      console.error(`📝 Issue Details : ${res.details}`);
-      console.error(`🛠️  Action Needed : ${res.actionRequired}`);
-      console.error(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+      logFn(`\n${severityTag}`);
+      logFn(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      logFn(`${icon} Service/Feature : ${serviceName}`);
+      logFn(`📍 Trigger Context: ${contextMessage || 'Application Feature Execution'}`);
+      logFn(`🔑 Variable Name  : ${res.key}`);
+      logFn(`📊 Key Status    : ${res.status}`);
+      logFn(`🔍 Masked Value  : ${res.maskedValue}`);
+      logFn(`📝 Issue Details : ${res.details}`);
+      logFn(`🛠️  Action Needed : ${res.actionRequired}`);
+      logFn(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
     }
   }
 

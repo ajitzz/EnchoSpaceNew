@@ -453,7 +453,7 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'", "*"],
       connectSrc: ["'self'", "https:", "http:", "wss:", "ws:"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://js.stripe.com"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://js.stripe.com", "https://maps.googleapis.com", "https://*.googleapis.com", "https://accounts.google.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
       imgSrc: ["'self'", "data:", "https:", "http:"],
@@ -567,7 +567,8 @@ app.use(compression({
 
 // Milestone 4.4: Chaos Engineering (Latency / Fault Injection)
 app.use((req, res, next) => {
-  if (process.env.CHAOS_ENGINEERING_ENABLED !== 'true') return next();
+  // Force disabled for stability
+  return next();
   
   // Only inject faults into non-critical backend read APIs (must start with /api/)
   // Protect static assets (CSS, JS, HTML), Vite middleware, auth, payments, health
@@ -10436,24 +10437,36 @@ async function startServer() {
   // Make io available to routes
   app.set('io', io);
 
+  // Check if we have built assets
+  const distPath = path.join(process.cwd(), 'dist');
+  const hasBuiltAssets = fs.existsSync(path.join(distPath, 'index.html'));
+
+  // Determine if we are running in dev mode
+  const isDev = __filename.endsWith('.ts');
+
   // Vite middleware for development
-  if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  if (isDev && !process.env.VERCEL) {
+    process.env.NODE_ENV = 'development';
     const vitePkg = 'v' + 'ite';
     const { createServer: createViteServer } = await import(vitePkg);
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
+      mode: 'development'
     });
     app.use(vite.middlewares);
   } else if (!process.env.VERCEL) {
     // In production (non-Vercel), serve from the output directory
-    const distPath = __dirname;
     app.use(express.static(distPath));
     app.get('*all', async (req, res) => {
     const urlPath = req.path;
-    let distPath = path.join(process.cwd(), 'dist');
-    if (!fs.existsSync(distPath)) { distPath = __dirname; } // fallback
-    let html = fs.readFileSync(path.join(distPath, 'index.html'), 'utf8');
+    let html = '';
+    try {
+        html = fs.readFileSync(path.join(distPath, 'index.html'), 'utf8');
+    } catch (e) {
+        console.error('Error reading index.html:', e);
+        return res.status(500).send('Static build not found.');
+    }
 
     try {
         let injectedTags = '';

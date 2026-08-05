@@ -26,11 +26,11 @@ if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
 
-const clientId = process.env.VITE_GOOGLE_CLIENT_ID || (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || '977982063830-0eq4c0i2oassrdmj71aevnktr17hasa7.apps.googleusercontent.com';
+const clientId = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || (typeof process !== 'undefined' ? process.env.VITE_GOOGLE_CLIENT_ID : undefined) || '977982063830-0eq4c0i2oassrdmj71aevnktr17hasa7.apps.googleusercontent.com';
 
 const API_KEY =
-  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
   (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+  (typeof process !== 'undefined' ? process.env.GOOGLE_MAPS_PLATFORM_KEY : undefined) ||
   (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY ||
   '';
 
@@ -52,14 +52,19 @@ root.render(
   <React.StrictMode>
     <ErrorBoundary>
       <GoogleOAuthProvider clientId={clientId}>
-        {API_KEY ? (
-          <APIProvider apiKey={API_KEY} version="weekly">
-            {renderApp}
-          </APIProvider>
-        ) : (
-          renderApp
-        )}
+        <APIProvider apiKey={API_KEY || ''} version="weekly">
+          {renderApp}
+        </APIProvider>
       </GoogleOAuthProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );
+
+// Dismiss splash screen once mounted
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    (window as any).hideNativeSplash?.();
+    const splash = document.getElementById('native-splash');
+    if (splash) splash.remove();
+  }, 100);
+}

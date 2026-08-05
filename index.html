@@ -60,13 +60,21 @@
           var splash = document.getElementById('native-splash');
           if (splash) {
             splash.classList.add('hidden');
-            setTimeout(function() { if (splash && splash.parentNode) splash.parentNode.removeChild(splash); }, 400);
+            splash.style.pointerEvents = 'none';
+            splash.style.display = 'none';
+            if (splash.parentNode) splash.parentNode.removeChild(splash);
           }
         }
+        window.hideNativeSplash = hideSplash;
+        window.addEventListener('error', hideSplash);
+        window.addEventListener('unhandledrejection', hideSplash);
+        window.addEventListener('load', hideSplash);
+        // Immediate auto-dismiss timer safety (max 300ms)
+        setTimeout(hideSplash, 300);
         if (document.readyState === 'complete' || document.readyState === 'interactive') {
-          setTimeout(hideSplash, 300);
+          setTimeout(hideSplash, 100);
         } else {
-          window.addEventListener('DOMContentLoaded', function() { setTimeout(hideSplash, 300); });
+          window.addEventListener('DOMContentLoaded', function() { setTimeout(hideSplash, 100); });
         }
       })();
     </script>

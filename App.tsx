@@ -22,19 +22,41 @@ import { ListingCardSkeleton, ListingDetailsSkeleton } from './components/Skelet
 
 initSyncHandlers();
 
-const MapSidebar = lazy(() => import('./components/MapSidebar'));
-const ListingDetails = lazy(() => import('./components/ListingDetails'));
-const WishlistPage = lazy(() => import('./components/WishlistPage'));
-const BookingPage = lazy(() => import('./components/BookingPage'));
-const CheckoutPage = lazy(() => import('./components/CheckoutPage').then(module => ({ default: module.CheckoutPage })));
-const ReservationsPage = lazy(() => import('./components/ReservationsPage'));
-const HostForm = lazy(() => import('./components/HostForm'));
-const HostExperienceForm = lazy(() => import('./components/HostExperienceForm').then(module => ({ default: module.HostExperienceForm })));
-const HostDashboard = lazy(() => import('./components/HostDashboard'));
-const AdminDashboard = lazy(() => import('./components/AdminDashboard'));
-const InboxPage = lazy(() => import('./components/InboxPage'));
-const ExperiencesPage = lazy(() => import('./components/ExperiencesPage').then(module => ({ default: module.ExperiencesPage })));
-const ExperienceDetails = lazy(() => import('./components/ExperienceDetails').then(module => ({ default: module.ExperienceDetails })));
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  componentImport: () => Promise<any>
+) {
+  return lazy(async () => {
+    try {
+      const module = await componentImport();
+      if (module && typeof module === 'object' && 'default' in module) {
+        return module;
+      }
+      return { default: module };
+    } catch (error) {
+      console.error('Lazy loading chunk error, attempting auto recovery:', error);
+      const pageRefreshed = sessionStorage.getItem('lazy_retry_refreshed');
+      if (!pageRefreshed) {
+        sessionStorage.setItem('lazy_retry_refreshed', 'true');
+        window.location.reload();
+      }
+      throw error;
+    }
+  });
+}
+
+const MapSidebar = lazyWithRetry(() => import('./components/MapSidebar'));
+const ListingDetails = lazyWithRetry(() => import('./components/ListingDetails'));
+const WishlistPage = lazyWithRetry(() => import('./components/WishlistPage'));
+const BookingPage = lazyWithRetry(() => import('./components/BookingPage'));
+const CheckoutPage = lazyWithRetry(() => import('./components/CheckoutPage').then(module => ({ default: module.CheckoutPage })));
+const ReservationsPage = lazyWithRetry(() => import('./components/ReservationsPage'));
+const HostForm = lazyWithRetry(() => import('./components/HostForm'));
+const HostExperienceForm = lazyWithRetry(() => import('./components/HostExperienceForm').then(module => ({ default: module.HostExperienceForm })));
+const HostDashboard = lazyWithRetry(() => import('./components/HostDashboard'));
+const AdminDashboard = lazyWithRetry(() => import('./components/AdminDashboard'));
+const InboxPage = lazyWithRetry(() => import('./components/InboxPage'));
+const ExperiencesPage = lazyWithRetry(() => import('./components/ExperiencesPage').then(module => ({ default: module.ExperiencesPage })));
+const ExperienceDetails = lazyWithRetry(() => import('./components/ExperienceDetails').then(module => ({ default: module.ExperienceDetails })));
 import { BottomNav } from './components/BottomNav';
 import { MobileProfileSheet } from './components/MobileProfileSheet';
 

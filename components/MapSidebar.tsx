@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { uiAudio } from './audio';
 import { Listing } from '../types';
-import { APIProvider, Map, AdvancedMarker, InfoWindow, useAdvancedMarkerRef, useMap } from '@vis.gl/react-google-maps';
+import { APIProvider, Map, AdvancedMarker, InfoWindow, useAdvancedMarkerRef, useMap, useMapsLibrary } from '@vis.gl/react-google-maps';
 import { MarkerClusterer } from '@googlemaps/markerclusterer';
 import { useCurrency } from './CurrencyContext';
 import { 
@@ -25,8 +25,8 @@ import {
 } from 'lucide-react';
 
 const API_KEY =
-  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
   (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+  (typeof process !== 'undefined' ? process.env.GOOGLE_MAPS_PLATFORM_KEY : undefined) ||
   (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY ||
   '';
 const hasValidKey = Boolean(API_KEY) && API_KEY !== 'YOUR_API_KEY';
@@ -227,6 +227,7 @@ const MapInner = ({
   getActivePrice
 }: any) => {
     const map = useMap();
+    const markerLibrary = useMapsLibrary('marker');
     const { formatPrice } = useCurrency();
     const formatPriceRef = useRef(formatPrice);
     
@@ -250,7 +251,7 @@ const MapInner = ({
     }, []);
 
     useEffect(() => {
-        if (!map) return;
+        if (!map || !markerLibrary) return;
         if (!clusterer.current) {
             clusterer.current = new MarkerClusterer({ 
                 map,
@@ -318,7 +319,7 @@ const MapInner = ({
     }, [map, searchAsIMove, onBoundsChanged]);
     
     const fitBounds = () => {
-        if (!map || !listings || listings.length === 0) return;
+        if (!map || !markerLibrary || !listings || listings.length === 0) return;
         uiAudio.playSuccess();
         const bounds = new google.maps.LatLngBounds();
         listings.forEach((listing: Listing) => {

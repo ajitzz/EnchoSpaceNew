@@ -20,7 +20,7 @@ import {
   ShieldAlert
 } from 'lucide-react';
 
-const stripePromise = loadStripe(process.env.VITE_STRIPE_PUBLIC_KEY || 'pk_dummy');
+const stripePromise = loadStripe((import.meta as any).env?.VITE_STRIPE_PUBLIC_KEY || 'pk_dummy');
 
 // EMI Bank Options with interest rates (per annum)
 const EMI_BANKS = [
@@ -45,7 +45,7 @@ const CheckoutForm = ({ amount, onPaymentSuccess, onCancel }: { amount: number, 
 
     setProcessing(true);
 
-    if (process.env.VITE_STRIPE_PUBLIC_KEY) {
+    if ((import.meta as any).env?.VITE_STRIPE_PUBLIC_KEY) {
         const { error: submitError } = await elements.submit();
         if (submitError) {
           setError(submitError.message || 'An error occurred.');
