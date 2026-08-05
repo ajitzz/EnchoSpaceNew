@@ -569,14 +569,21 @@ app.use(compression({
 app.use((req, res, next) => {
   if (process.env.CHAOS_ENGINEERING_ENABLED !== 'true') return next();
   
-  // Only inject faults into non-critical read APIs (don't break payments/auth)
-  if (req.method !== 'GET' || req.path.includes('/api/auth') || req.path.includes('/api/payments')) {
+  // Only inject faults into non-critical backend read APIs (must start with /api/)
+  // Protect static assets (CSS, JS, HTML), Vite middleware, auth, payments, health
+  if (
+    !req.path.startsWith('/api/') ||
+    req.method !== 'GET' ||
+    req.path.startsWith('/api/auth') ||
+    req.path.startsWith('/api/payments') ||
+    req.path === '/api/health'
+  ) {
      return next();
   }
 
   const rand = Math.random();
   if (rand < 0.05) {
-     // 5% chance of network partition/500 error
+     // 5% chance of network partition/500 error on non-critical API GETs
      console.error(`[CHAOS MONKEY] Injecting 500 Error for ${req.path}`);
      return res.status(500).json({ error: 'Chaos Engineering: Simulated Backend Failure' });
   } else if (rand < 0.15) {
