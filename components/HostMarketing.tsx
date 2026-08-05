@@ -4381,7 +4381,6 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 </div>
                               )}
                             </div>
-                          </div>
 
                           {/* Bottom tagline */}
                           <div className={`space-y-1.5 ${rejectedFieldsMap.feed_description ? 'border-l-2 border-rose-500 pl-3' : ''}`}>
