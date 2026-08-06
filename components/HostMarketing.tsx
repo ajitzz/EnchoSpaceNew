@@ -5004,7 +5004,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                       <span>#NestpickLuxury</span>
                                       <span>#VillaGetaway</span>
                                       {formData.target_locations && (
-                                        formData.target_locations.split(',').slice(0, 2).map((loc, i) => (
+                                        formData.target_locations.split(/,(?![^(]*\))/).slice(0, 2).map((loc, i) => (
                                           <span key={i}>#{loc.trim().replace(/\s+/g, '')}</span>
                                         ))
                                       )}

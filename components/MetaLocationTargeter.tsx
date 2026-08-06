@@ -339,7 +339,7 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
     }
 
     const currentLocations = locationListRef.current;
-    const rawNames = targetLocations.split(',').map(s => s.trim()).filter(Boolean);
+    const rawNames = targetLocations.split(/,(?![^(]*\))/).map(s => s.trim()).filter(Boolean);
     const updatedList: MetaLocationItem[] = [];
     const usedLocationIndices = new Set<number>();
 
@@ -1359,7 +1359,7 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
                   {(Array.isArray(aiRecommendations.recommended_locations)
                     ? aiRecommendations.recommended_locations
                     : typeof aiRecommendations.recommended_locations === 'string'
-                    ? aiRecommendations.recommended_locations.split(',')
+                    ? aiRecommendations.recommended_locations.split(/,(?![^(]*\))/)
                     : calculatedFeederHubs.feeders
                   ).slice(0, 4).map((loc, idx) => (
                     <button
