@@ -405,7 +405,7 @@ export function runFullIntegrationAudit() {
   }
 
   const serviceResults: ServiceInspectionResult[] = [];
-  for (const [service, data] of serviceMap.entries()) {
+  for (const [service, data] of Array.from(serviceMap.entries())) {
     const isFullyOperational = data.keys.every((k) => k.status === 'CONFIGURED');
     serviceResults.push({
       service,

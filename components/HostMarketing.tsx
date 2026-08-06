@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Grid } from 'lucide-react';
 import { MarketingCampaign, Listing } from '../types';
 import { MetaLocationTargeter } from './MetaLocationTargeter';
 import { 
@@ -125,6 +126,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   const [previewSaved, setPreviewSaved] = useState(false);
   const [showListingMediaPicker, setShowListingMediaPicker] = useState(false);
   const [isGeneratingAiCaption, setIsGeneratingAiCaption] = useState(false);
+  const [showSafeZoneOverlay, setShowSafeZoneOverlay] = useState(true);
   const [captionInspectionResult, setCaptionInspectionResult] = useState<{
     initial_score?: number;
     initial_passed?: boolean;
@@ -388,10 +390,10 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         if (data.length > 0) {
           setSelectedCampaignForAnalytics(prev => {
             if (!prev) {
-              return data.find((c: any) => c.status === 'active') || data[0];
+              return data.find((c: any) => ['active', 'CAMPAIGN_LIVE'].includes(c.status)) || data[0];
             }
             const updated = data.find((c: any) => c.id === prev.id);
-            return updated || data.find((c: any) => c.status === 'active') || data[0];
+            return updated || data.find((c: any) => ['active', 'CAMPAIGN_LIVE'].includes(c.status)) || data[0];
           });
         }
       }
@@ -403,7 +405,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           const data = JSON.parse(cached);
           setCampaigns(data);
           if (data.length > 0 && !selectedCampaignForAnalytics) {
-            const active = data.find((c: any) => c.status === 'active') || data[0];
+            const active = data.find((c: any) => ['active', 'CAMPAIGN_LIVE'].includes(c.status)) || data[0];
             setSelectedCampaignForAnalytics(active);
           }
         } catch (e) {
@@ -994,7 +996,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
   // Auto-fetch leads when selected active campaign changes
   useEffect(() => {
-    if (selectedCampaignForAnalytics?.id && selectedCampaignForAnalytics.status === 'active') {
+    if (selectedCampaignForAnalytics?.id && ['active', 'CAMPAIGN_LIVE'].includes(selectedCampaignForAnalytics.status)) {
       fetchCampaignLeads(selectedCampaignForAnalytics.id);
     } else {
       setCampaignLeads(null);
@@ -1023,6 +1025,10 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           if (url && !existingMedia.includes(url)) existingMedia.push(url);
         });
       }
+
+      const indianCities = ['Mumbai', 'Delhi', 'Bangalore', 'Pune', 'Goa', 'Jaipur', 'Udaipur', 'Kochi', 'Chennai', 'Kolkata'];
+      const isIndia = (listing.currency === 'INR') || (listing.city && indianCities.some(c => listing.city?.toLowerCase().includes(c.toLowerCase()))) || (listing.address && indianCities.some(c => listing.address?.toLowerCase().includes(c.toLowerCase())));
+      setSelectedGateway(isIndia ? 'razorpay' : 'stripe');
 
       setFormData(prev => ({
         ...prev,
@@ -1799,7 +1805,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                       </div>
                     )}
 
-                    {(campaign.status === 'active' || campaign.status === 'completed') && (() => {
+                    {(['active', 'CAMPAIGN_LIVE'].includes(campaign.status) || campaign.status === 'completed') && (() => {
                       const spent = Number(campaign.analytics?.spent ?? campaign.accumulated_spent ?? 0);
                       const budget = Number(campaign.budget || 2500);
                       const pct = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
@@ -1846,7 +1852,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                             </div>
 
                             {/* Meta Ads Campaign Live Dispatch Badge */}
-                            {(campaign.meta_campaign_id || campaign.status === 'active') && (
+                            {(campaign.meta_campaign_id || ['active', 'CAMPAIGN_LIVE'].includes(campaign.status)) && (
                               <div className="flex items-center justify-between pt-2 border-t border-emerald-100/60 text-[11px]">
                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 border border-blue-200/80 font-bold font-mono text-[10.5px]">
                                   <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
@@ -2113,7 +2119,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                   </h3>
                   <div className="flex flex-wrap items-center gap-2 mt-1">
                     <p className="text-xs font-light text-gray-500">Linked stays: {selectedCampaignForAnalytics.listing_title}</p>
-                    {(selectedCampaignForAnalytics.meta_campaign_id || selectedCampaignForAnalytics.status === 'active') && (
+                    {(selectedCampaignForAnalytics.meta_campaign_id || ['active', 'CAMPAIGN_LIVE'].includes(selectedCampaignForAnalytics.status)) && (
                       <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200 font-bold font-mono text-[10.5px]">
                         <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
                         Meta ID: {selectedCampaignForAnalytics.meta_campaign_id || `act_8849203_camp_${selectedCampaignForAnalytics.id}`}
@@ -2122,7 +2128,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                   </div>
                 </div>
 
-                {selectedCampaignForAnalytics.status === 'active' ? (
+                {['active', 'CAMPAIGN_LIVE'].includes(selectedCampaignForAnalytics.status) ? (
                   <div className="space-y-6">
                     {/* Visual Segment Tabs */}
                     <div className="flex border-b border-zinc-150 pb-1.5 gap-5">
@@ -2747,10 +2753,10 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                           
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-[10px]">
                             {[
-                              { label: '1. Ad Impressions', val: selectedCampaignForAnalytics.analytics?.impressions || 15000, desc: 'Metropolitan Reach', color: 'from-blue-500 to-indigo-500' },
-                              { label: '2. Page Link Clicks', val: selectedCampaignForAnalytics.analytics?.clicks || 650, desc: 'Active Property Visits', color: 'from-indigo-500 to-violet-500' },
-                              { label: '3. CRM Leads', val: campaignLeads?.leads?.length || 12, desc: `${Math.round(((campaignLeads?.leads?.length || 12) / (selectedCampaignForAnalytics.analytics?.clicks || 650)) * 100)}% Conversion`, color: 'from-violet-500 to-fuchsia-500' },
-                              { label: '4. Direct Bookings', val: selectedCampaignForAnalytics.analytics?.conversions || 2, desc: 'Closed Nights', color: 'from-emerald-400 to-emerald-600' },
+                              { label: '1. Ad Impressions', val: selectedCampaignForAnalytics.analytics?.impressions || 15000, desc: 'Advantage+ Reach', color: 'from-blue-500 to-indigo-500' },
+                              { label: '2. Native Form Opens', val: selectedCampaignForAnalytics.analytics?.clicks || 650, desc: 'Instant Meta Forms', color: 'from-indigo-500 to-violet-500' },
+                              { label: '3. CRM Native Leads', val: campaignLeads?.leads?.length || 12, desc: `${Math.round(((campaignLeads?.leads?.length || 12) / (selectedCampaignForAnalytics.analytics?.clicks || 650)) * 100)}% Conv. Rate`, color: 'from-violet-500 to-fuchsia-500' },
+                              { label: '4. Direct Bookings', val: selectedCampaignForAnalytics.analytics?.conversions || 2, desc: 'Closed CRM Deals', color: 'from-emerald-400 to-emerald-600' },
                             ].map((step, idx) => (
                               <motion.div 
                                 initial={{ opacity: 0, y: 20 }}
@@ -3964,7 +3970,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 ) : (
                                   <>
                                     <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                                    <span>AI Copywriter (3 Strategic Angles)</span>
+                                    <span>AI AIDA Copywriter (3 Strategic Angles)</span>
                                   </>
                                 )}
                               </button>
@@ -3994,6 +4000,51 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                       ✓ {point}
                                     </span>
                                   ))}
+                                </div>
+                              )}
+                              
+                              {/* Milestone 9.2: Dynamic Creative API Payload Structure (FAANG-Standard DCO Engine) */}
+                              <div className="mt-2 border-t border-blue-500/30 pt-2 flex flex-col gap-1.5">
+                                <div className="flex items-center gap-1.5">
+                                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-400">FAANG DCO Engine Active</span>
+                                </div>
+                                <p className="text-[9.5px] text-blue-100/70 font-mono">
+                                  Multi-variant payload architecture loaded. Encho will automatically cycle elements to optimize ROAS.
+                                </p>
+                                <div className="flex flex-wrap gap-1 mt-0.5">
+                                  <span className="text-[8.5px] font-mono bg-blue-950/50 border border-blue-500/20 text-blue-200 px-1.5 py-0.5 rounded-md">
+                                    3x Image Formats (1:1, 9:16, 16:9)
+                                  </span>
+                                  <span className="text-[8.5px] font-mono bg-blue-950/50 border border-blue-500/20 text-blue-200 px-1.5 py-0.5 rounded-md">
+                                    2x AI Copy Variations
+                                  </span>
+                                  <span className="text-[8.5px] font-mono bg-blue-950/50 border border-blue-500/20 text-blue-200 px-1.5 py-0.5 rounded-md">
+                                    3x CTAs (Book, Learn, Sign Up)
+                                  </span>
+                                </div>
+                              </div>
+                              
+                              {/* Milestone 9.1: Policy Evasion Engine Display */}
+                              {aiCopyDossier.property_analysis.policy_evasion_engine && (
+                                <div className="mt-2 border-t border-blue-500/30 pt-2 flex flex-col gap-1.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <ShieldAlert className="w-3.5 h-3.5 text-emerald-400" />
+                                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">Meta HEC Evasion Engine Active</span>
+                                  </div>
+                                  <p className="text-[9.5px] text-blue-100/70 font-mono">
+                                    {aiCopyDossier.property_analysis.policy_evasion_engine.evasion_strategy}
+                                  </p>
+                                  {aiCopyDossier.property_analysis.policy_evasion_engine.sanitized_terms?.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-0.5">
+                                      <span className="text-[8.5px] text-red-300 font-bold uppercase mr-1">Sanitized Terms:</span>
+                                      {aiCopyDossier.property_analysis.policy_evasion_engine.sanitized_terms.map((term: string, i: number) => (
+                                        <span key={i} className="text-[8.5px] font-mono bg-red-950/50 border border-red-500/20 text-red-200 px-1.5 py-0.5 rounded-md line-through opacity-70">
+                                          {term}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -4031,9 +4082,12 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                       }`}
                                     >
                                       <div className="flex items-center justify-between">
-                                        <span className={`text-[10px] font-black uppercase tracking-wider ${isSelected ? 'text-blue-700' : 'text-zinc-700'}`}>
-                                          {variant.angle_name}
-                                        </span>
+                                        <div className="flex flex-col">
+                                          <span className={`text-[10px] font-black uppercase tracking-wider ${isSelected ? 'text-blue-700' : 'text-zinc-700'}`}>
+                                            {variant.angle_name}
+                                          </span>
+                                          <span className="text-[8px] font-mono uppercase text-emerald-600 font-bold mt-0.5">AIDA Framework Optimized</span>
+                                        </div>
                                         <span className="text-[9px] font-mono font-bold text-amber-600 bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 rounded">
                                           ★ {variant.viral_rating_score || 9.2}
                                         </span>
@@ -4159,11 +4213,12 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                             <MetaLocationTargeter
                               targetLocations={formData.target_locations}
                               targetRadiusKm={formData.target_radius_km || 50}
-                              onChangeLocations={(locationsStr, radiusKm) => {
+                              onChangeLocations={(locationsStr, radiusKm, structuredLocations) => {
                                 setFormData(prev => ({
                                   ...prev,
                                   target_locations: locationsStr,
-                                  target_radius_km: radiusKm
+                                  target_radius_km: radiusKm,
+                                  target_locations_json: structuredLocations
                                 }));
                               }}
                               aiRecommendations={aiTargetingRecs}
@@ -5851,6 +5906,26 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                     </button>
                   </div>
 
+                  {/* Milestone 8.4: Visual Safe-Zone Protection Toggle */}
+                  {activePreviewDevice === 'instagram_reels' && (
+                    <div className="flex items-center justify-between bg-emerald-950/30 border border-emerald-500/20 p-2 rounded-lg mb-2">
+                      <div className="flex items-center gap-2">
+                        <Grid className="w-4 h-4 text-emerald-400" />
+                        <div>
+                           <p className="text-[10px] font-bold text-emerald-300">Safe-Zone Engine Active</p>
+                           <p className="text-[8px] text-emerald-500/80">Protect UI overlaps for Reels/TikTok</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowSafeZoneOverlay(!showSafeZoneOverlay)}
+                        className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${showSafeZoneOverlay ? 'bg-emerald-500' : 'bg-zinc-600'}`}
+                      >
+                        <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${showSafeZoneOverlay ? 'translate-x-4' : 'translate-x-1'}`} />
+                      </button>
+                    </div>
+                  )}
+
                   {/* Device Platform Switcher Tabs */}
                   <div className="grid grid-cols-3 gap-1 bg-zinc-800 p-1 rounded-xl text-[10px] font-bold uppercase tracking-wider text-center">
                     <button
@@ -5924,6 +5999,30 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                           </div>
                         )}
                         <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/80"></div>
+                        
+                        {/* Milestone 8.4: Safe-Zone Overlay (Red Hatches on Danger Zones) */}
+                        {showSafeZoneOverlay && (
+                          <div className="absolute inset-0 z-20 pointer-events-none overflow-hidden rounded-[24px]">
+                             {/* Top Safe Zone (System UI) */}
+                             <div className="absolute top-0 left-0 right-0 h-[60px] bg-red-500/20 border-b border-red-500 border-dashed flex items-start justify-center pt-2">
+                                <span className="text-[8px] font-black text-red-300 tracking-widest drop-shadow-md">DANGER ZONE (TOP UI)</span>
+                             </div>
+                             {/* Right Safe Zone (Engagement Icons) */}
+                             <div className="absolute right-0 top-[180px] bottom-[120px] w-[50px] bg-red-500/20 border-l border-red-500 border-dashed flex items-center justify-center">
+                                <span className="text-[8px] font-black text-red-300 -rotate-90 whitespace-nowrap tracking-widest drop-shadow-md">DANGER ZONE (ICONS)</span>
+                             </div>
+                             {/* Bottom Safe Zone (Caption & Audio) */}
+                             <div className="absolute bottom-0 left-0 right-0 h-[100px] bg-red-500/20 border-t border-red-500 border-dashed flex items-end justify-center pb-2">
+                                <span className="text-[8px] font-black text-red-300 tracking-widest drop-shadow-md">DANGER ZONE (CAPTION)</span>
+                             </div>
+                             {/* Center Safe Zone (Green) */}
+                             <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="border-2 border-emerald-500/50 rounded-lg w-[calc(100%-60px)] h-[calc(100%-180px)] -ml-[10px] -mt-[20px] flex items-center justify-center bg-emerald-500/10">
+                                   <span className="text-emerald-400/80 font-black text-lg rotate-[-20deg] border-2 border-emerald-400/80 px-3 py-1 rounded-md drop-shadow-lg">SAFE ZONE</span>
+                                </div>
+                             </div>
+                          </div>
+                        )}
 
                         {/* Sound Toggle Button */}
                         <button
@@ -6952,6 +7051,25 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                     FB Feed
                   </button>
                 </div>
+                
+                {/* Milestone 8.4: Modal Visual Safe-Zone Protection Toggle */}
+                {modalPreviewDevice === 'instagram_reels' && (
+                  <div className="flex items-center justify-between bg-emerald-950/30 border border-emerald-500/20 p-2 rounded-lg mb-2">
+                    <div className="flex items-center gap-2">
+                      <Grid className="w-3 h-3 text-emerald-400" />
+                      <div>
+                         <p className="text-[9px] font-bold text-emerald-300">Safe-Zone Engine</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowSafeZoneOverlay(!showSafeZoneOverlay)}
+                      className={`relative inline-flex h-3 w-6 items-center rounded-full transition-colors ${showSafeZoneOverlay ? 'bg-emerald-500' : 'bg-zinc-600'}`}
+                    >
+                      <span className={`inline-block h-2 w-2 transform rounded-full bg-white transition-transform ${showSafeZoneOverlay ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                    </button>
+                  </div>
+                )}
 
                 {/* ==================== FORMAT 1: INSTAGRAM REELS (9:16 VERTICAL) ==================== */}
                 {modalPreviewDevice === 'instagram_reels' && (
@@ -7669,34 +7787,31 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                 )}
               </div>
 
-              {/* Gateway Selection Tabs */}
-              <div className="mb-5">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-2">Choose Payment Gateway</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedGateway('stripe')}
-                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all ${
-                      selectedGateway === 'stripe'
-                        ? 'border-blue-600 bg-blue-50/40 text-blue-700 ring-2 ring-blue-600/10 font-bold'
-                        : 'border-zinc-200 hover:border-zinc-300 bg-white text-zinc-600'
-                    }`}
-                  >
-                    <span className="text-sm font-black font-sans">Stripe</span>
-                    <span className="text-[9px] opacity-75 mt-0.5">International Cards</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedGateway('razorpay')}
-                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all ${
-                      selectedGateway === 'razorpay'
-                        ? 'border-indigo-600 bg-indigo-50/40 text-indigo-700 ring-2 ring-indigo-600/10 font-bold'
-                        : 'border-zinc-200 hover:border-zinc-300 bg-white text-zinc-600'
-                    }`}
-                  >
-                    <span className="text-sm font-black font-sans">Razorpay</span>
-                    <span className="text-[9px] opacity-75 mt-0.5">UPI, Cards, Netbanking</span>
-                  </button>
+              {/* Milestone 8.4: Hybrid Geo-Router Detection UI */}
+              <div className="mb-5 bg-gradient-to-r from-emerald-900 to-zinc-900 border border-emerald-500/30 rounded-xl p-4 text-white">
+                <div className="flex justify-between items-start mb-2">
+                   <div className="flex items-center gap-2">
+                     <Globe className="w-4 h-4 text-emerald-400" />
+                     <span className="font-bold text-sm tracking-tight">Geo-Router Engine Active</span>
+                   </div>
+                   <span className="text-[8px] bg-emerald-500/20 text-emerald-300 font-mono font-bold uppercase px-2 py-0.5 rounded-full border border-emerald-500/30">
+                     Smart Routing
+                   </span>
+                </div>
+                <p className="text-[10px] text-emerald-100/80 leading-relaxed font-light mb-3">
+                  Encho automatically detects your listing region and routes transactions via our optimized payment layer to ensure compliance and lowest processing fees.
+                </p>
+                <div className="bg-black/40 rounded-lg p-2 flex items-center justify-between border border-white/5">
+                   <span className="text-[10px] text-zinc-400 font-mono">Optimization Fee</span>
+                   <span className="text-[10px] font-bold text-amber-400">15% Encho Margin</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3 mt-3 opacity-50 pointer-events-none">
+                  <div className={`flex flex-col items-center justify-center p-2 rounded-xl border text-center transition-all ${selectedGateway === 'stripe' ? 'border-emerald-500 bg-emerald-500/20' : 'border-zinc-700 bg-zinc-800'}`}>
+                    <span className="text-xs font-black font-sans">Stripe</span>
+                  </div>
+                  <div className={`flex flex-col items-center justify-center p-2 rounded-xl border text-center transition-all ${selectedGateway === 'razorpay' ? 'border-emerald-500 bg-emerald-500/20' : 'border-zinc-700 bg-zinc-800'}`}>
+                    <span className="text-xs font-black font-sans">Razorpay</span>
+                  </div>
                 </div>
               </div>
 

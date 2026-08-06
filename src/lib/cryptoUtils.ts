@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 
 // Phase 4.1: Field-Level Encryption for PII at Rest
 // Note: In a real FAANG system, ENCRYPTION_KEY would be loaded from AWS KMS or HashiCorp Vault.
