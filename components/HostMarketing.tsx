@@ -4321,66 +4321,6 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 </p>
                               )}
 
-                              {/* Target Grading widget */}
-                              {formData.target_locations && (
-                                <div className="border-t border-zinc-200/80 pt-3 mt-1">
-                                  {isGradingTargeting ? (
-                                    <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 font-mono">
-                                      <Loader2 className="w-3 h-3 animate-spin text-zinc-400" />
-                                      <span>Evaluating target selection grade...</span>
-                                    </div>
-                                  ) : targetingGrade ? (
-                                    <div className="space-y-2.5 text-left">
-                                      <div className="flex items-center justify-between">
-                                        <span className="text-[9px] font-black uppercase tracking-wider text-zinc-400 block">Target Quality Grade</span>
-                                        <span className={`text-xs font-black font-mono px-2 py-0.5 rounded-lg border ${
-                                          targetingGrade.grade >= 7 
-                                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
-                                            : 'bg-rose-50 border-rose-150 text-rose-800'
-                                        }`}>
-                                          GRADE: {targetingGrade.grade}/10
-                                        </span>
-                                      </div>
-
-                                      {/* Trap Warning alert if local trap detected */}
-                                      {targetingGrade.is_trap ? (
-                                        <div className="bg-rose-50/50 border border-rose-100 rounded-xl p-3 space-y-2 text-left border-l-4 border-l-rose-500">
-                                          <div className="flex items-center gap-1.5 text-rose-800">
-                                            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                                            <span className="text-[10px] font-black uppercase tracking-tight">Local Target Trap Detected!</span>
-                                          </div>
-                                          <p className="text-[10.5px] text-rose-700 leading-relaxed font-light">
-                                            {targetingGrade.feedback}
-                                          </p>
-                                          {targetingGrade.alternative && (
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                setFormData(prev => ({
-                                                  ...prev,
-                                                  target_locations: targetingGrade.alternative
-                                                }));
-                                                addToast('Trap Avoided!', 'Targeting corrected to prime feeder metropolitan centers.', 'success');
-                                              }}
-                                              className="bg-rose-600 hover:bg-rose-700 text-white text-[9px] font-black px-2.5 py-1.5 rounded-lg transition-all shadow-sm flex items-center gap-1 mt-1"
-                                            >
-                                              <Check className="w-3 h-3" />
-                                              <span>Switch to Feeder: {targetingGrade.alternative}</span>
-                                            </button>
-                                          )}
-                                        </div>
-                                      ) : (
-                                        <div className="bg-emerald-50/20 border border-emerald-100 rounded-xl p-2.5 text-[10.5px] text-emerald-800 leading-relaxed font-light text-left flex items-start gap-2">
-                                          <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                                          <div>
-                                            <strong>Targeting Grade Approved:</strong> {targetingGrade.feedback}
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              )}
                             </div>
 
                           {/* Bottom tagline */}

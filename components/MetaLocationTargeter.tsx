@@ -211,6 +211,12 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
   const markersRef = useRef<L.Marker[]>([]);
   const circlesRef = useRef<L.Circle[]>([]);
 
+  // Ref to track Drop Pin state inside event listener callbacks
+  const isDropPinModeRef = useRef(isDropPinMode);
+  useEffect(() => {
+    isDropPinModeRef.current = isDropPinMode;
+  }, [isDropPinMode]);
+
   // Calculate Origin-to-Destination Feeder Markets based on selected property or location list
   const calculatedFeederHubs = useMemo(() => {
     const propName = (selectedProperty?.title || selectedProperty?.address || targetLocations || '').toLowerCase();
@@ -404,7 +410,9 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
       }).addTo(map);
 
       map.on('click', (e: L.LeafletMouseEvent) => {
-        handleMapClick(e.latlng.lat, e.latlng.lng);
+        if (isDropPinModeRef.current) {
+          handleMapClick(e.latlng.lat, e.latlng.lng);
+        }
       });
 
       leafletMapRef.current = map;
@@ -1611,22 +1619,7 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
                 </div>
               </div>
 
-              {/* Bottom Info Banner on Map */}
-              <div className="absolute bottom-3 left-3 right-3 z-10 bg-slate-900/90 backdrop-blur-md text-white p-2.5 rounded-xl border border-white/10 flex items-center justify-between text-[10px] font-mono">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  <span>
-                    Meta Housing Rule: Min 25 km radius enforced | Active Zone: ~{Math.round(Math.PI * Math.pow(targetRadiusKm || 50, 2) * Math.max(1, locationList.length)).toLocaleString()} km²
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowBulkModal(true)}
-                  className="text-sky-300 hover:text-white font-bold underline cursor-pointer"
-                >
-                  Add locations in bulk
-                </button>
-              </div>
+
             </div>
 
             {/* Add Locations in Bulk Trigger */}
