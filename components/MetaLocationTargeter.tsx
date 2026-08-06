@@ -217,6 +217,12 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
     isDropPinModeRef.current = isDropPinMode;
   }, [isDropPinMode]);
 
+  // Ref to track latest locationList inside async callbacks & event handlers
+  const locationListRef = useRef<MetaLocationItem[]>(locationList);
+  useEffect(() => {
+    locationListRef.current = locationList;
+  }, [locationList]);
+
   // Calculate Origin-to-Destination Feeder Markets based on selected property or location list
   const calculatedFeederHubs = useMemo(() => {
     const propName = (selectedProperty?.title || selectedProperty?.address || targetLocations || '').toLowerCase();
@@ -332,16 +338,35 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
       return;
     }
 
+    const currentLocations = locationListRef.current;
     const rawNames = targetLocations.split(',').map(s => s.trim()).filter(Boolean);
     const updatedList: MetaLocationItem[] = [];
+    const usedLocationIndices = new Set<number>();
 
     rawNames.forEach((name, idx) => {
-      const existing = locationList.find(l => l.name.toLowerCase() === name.toLowerCase());
-      if (existing) {
-        updatedList.push(existing);
+      // Find unused matching location in current locationList
+      const existingIdx = currentLocations.findIndex((l, i) => !usedLocationIndices.has(i) && l.name.toLowerCase() === name.toLowerCase());
+
+      if (existingIdx !== -1) {
+        usedLocationIndices.add(existingIdx);
+        updatedList.push(currentLocations[existingIdx]);
       } else {
         const key = name.toLowerCase();
         const known = KNOWN_COORDS[key];
+
+        // Parse coordinates from name if present: e.g. "Goa (15.299, 74.124)"
+        const coordMatch = name.match(/\(([-+]?\d+\.\d+),\s*([-+]?\d+\.\d+)\)/);
+        let parsedLat = known ? known.lat : 19.0760 + (idx * 0.4);
+        let parsedLng = known ? known.lng : 72.8777 + (idx * 0.4);
+
+        if (coordMatch) {
+          const latVal = parseFloat(coordMatch[1]);
+          const lngVal = parseFloat(coordMatch[2]);
+          if (!isNaN(latVal) && !isNaN(lngVal)) {
+            parsedLat = latVal;
+            parsedLng = lngVal;
+          }
+        }
         
         // Match belt membership
         const matchedBelts = QUICK_TARGET_BELTS
@@ -351,9 +376,9 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
         updatedList.push({
           id: `loc_${Date.now()}_${idx}`,
           name: name,
-          type: known ? known.type : 'city',
-          lat: known ? known.lat : 19.0760 + (idx * 0.4),
-          lng: known ? known.lng : 72.8777 + (idx * 0.4),
+          type: coordMatch ? 'pin' : (known ? known.type : 'city'),
+          lat: parsedLat,
+          lng: parsedLng,
           radius_km: targetRadiusKm || 50,
           mode: 'include',
           beltIds: matchedBelts.length > 0 ? matchedBelts : ['metro'],
@@ -432,19 +457,22 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
 
   // Handle map click when Drop Pin mode is active
   const handleMapClick = async (lat: number, lng: number) => {
-    let placeName = `Dropped Pin (${lat.toFixed(3)}, ${lng.toFixed(3)})`;
+    const coordLabel = `(${lat.toFixed(3)}, ${lng.toFixed(3)})`;
+    let cityName = '';
     try {
       const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
       const data = await res.json();
       if (data && data.address) {
-        placeName = data.address.city || data.address.town || data.address.state || data.address.county || data.display_name.split(',')[0];
+        cityName = data.address.city || data.address.town || data.address.suburb || data.address.village || data.address.state || data.address.county || data.display_name.split(',')[0] || '';
       }
     } catch (err) {
       console.warn("Reverse geocode warning:", err);
     }
 
+    const placeName = cityName ? `${cityName} ${coordLabel}` : `Dropped Pin ${coordLabel}`;
+
     const newItem: MetaLocationItem = {
-      id: `pin_${Date.now()}`,
+      id: `pin_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       name: placeName,
       type: 'pin',
       lat: lat,
@@ -455,7 +483,8 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
       isManual: true
     };
 
-    const updated = [...locationList, newItem];
+    const currentList = locationListRef.current;
+    const updated = [...currentList, newItem];
     setLocationList(updated);
     notifyParent(updated);
     setIsDropPinMode(false);
@@ -846,9 +875,9 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
   const estimatedReachHigh = Math.round(estimatedReachLow * 1.25);
 
   // Render Meta Ads Manager Radius Popover Card
-  const renderRadiusPopover = (item: MetaLocationItem) => {
+  const renderRadiusPopover = (item: MetaLocationItem, alignClass: string = 'right-0') => {
     return (
-      <div className="absolute left-0 top-full mt-2 w-80 bg-white border border-slate-200/90 rounded-2xl shadow-2xl z-50 p-4 space-y-3 text-left font-sans animate-in fade-in zoom-in-95 duration-150">
+      <div className={`absolute ${alignClass} top-full mt-2 w-80 max-w-[calc(100vw-2rem)] bg-white border border-slate-200/90 rounded-2xl shadow-2xl z-50 p-4 space-y-3 text-left font-sans animate-in fade-in zoom-in-95 duration-150`}>
         <div className="flex items-center justify-between border-b border-slate-100 pb-2">
           <span className="text-xs font-black text-slate-900 capitalize">
             {item.mode === 'include' ? 'Include' : 'Exclude'}
@@ -998,10 +1027,10 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
   };
 
   return (
-    <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden text-left font-sans transition-all space-y-0">
+    <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xs overflow-visible text-left font-sans transition-all space-y-0">
       
       {/* 1. Origin-to-Destination Feeder Engine Visual Header */}
-      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 text-white p-4 border-b border-slate-800 relative overflow-hidden">
+      <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 text-white p-4 border-b border-slate-800 relative overflow-hidden rounded-t-2xl">
         <div className="absolute top-0 right-0 w-64 h-64 bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
         
         <div className="flex flex-wrap items-center justify-between gap-3 relative z-10">
@@ -1425,8 +1454,8 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
 
             {/* Active Tagged Locations Table (Meta Ads Manager exact layout with Belt colors) */}
             {locationList.length > 0 ? (
-              <div className="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100 shadow-2xs">
-                <div className="bg-slate-50 px-3 py-2.5 grid grid-cols-12 text-[10px] font-black text-slate-500 uppercase tracking-wider">
+              <div className="border border-slate-200 rounded-2xl overflow-visible divide-y divide-slate-100 shadow-2xs">
+                <div className="bg-slate-50 px-3 py-2.5 grid grid-cols-12 text-[10px] font-black text-slate-500 uppercase tracking-wider rounded-t-2xl">
                   <div className="col-span-4">Target Location & Belts</div>
                   <div className="col-span-2 text-center">Mode</div>
                   <div className="col-span-5 text-center">Meta City Center Radius</div>
@@ -1437,9 +1466,15 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
                   const belts = (item.beltIds || [])
                     .map(bId => QUICK_TARGET_BELTS.find(b => b.id === bId))
                     .filter(Boolean) as BeltOption[];
+                  const isActivePopover = activeRadiusPopoverId === item.id;
 
                   return (
-                    <div key={item.id} className="px-3 py-2.5 grid grid-cols-12 items-center text-xs text-slate-800 hover:bg-slate-50/90 transition-colors">
+                    <div 
+                      key={item.id} 
+                      className={`px-3 py-2.5 grid grid-cols-12 items-center text-xs text-slate-800 hover:bg-slate-50/90 transition-colors relative ${
+                        isActivePopover ? 'z-30 bg-slate-50' : 'z-10'
+                      }`}
+                    >
                       {/* Location name, type icon & belt tags */}
                       <div className="col-span-4 flex items-center gap-2">
                         <button
@@ -1507,7 +1542,7 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
                             <ChevronDown className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                           </button>
 
-                          {activeRadiusPopoverId === item.id && renderRadiusPopover(item)}
+                          {activeRadiusPopoverId === item.id && renderRadiusPopover(item, 'right-0')}
                         </div>
                       </div>
 
@@ -1562,7 +1597,7 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
 
                   {activeRadiusPopoverId === locationList[0].id && (
                     <div className="mt-1">
-                      {renderRadiusPopover(locationList[0])}
+                      {renderRadiusPopover(locationList[0], 'left-0')}
                     </div>
                   )}
                 </div>
