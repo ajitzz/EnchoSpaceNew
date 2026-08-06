@@ -58,8 +58,10 @@ import {
 dotenv.config({ override: true });
 
 
+let globalIoInstance: any = null;
+
 export function broadcastDbEvent(req: any, type: string, targetUserIds?: (string | number | null | undefined)[]) {
-  const io = req.app.get('io');
+  const io = (req && req.app && typeof req.app.get === 'function') ? req.app.get('io') : globalIoInstance;
   if (!io) return;
   if (!targetUserIds || targetUserIds.length === 0) {
     io.emit('db_changed', { type });
@@ -68,6 +70,15 @@ export function broadcastDbEvent(req: any, type: string, targetUserIds?: (string
       if (id) io.to(`user_${id}`).emit('db_changed', { type });
     });
     io.to('admin_room').emit('db_changed', { type });
+  }
+}
+
+export function logGeminiWarning(context: string, err: any) {
+  const errMsg = String(err?.message || err);
+  if (errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('Quota exceeded')) {
+    console.warn(`[GEMINI API NOTICE] ${context}: Rate limit/quota reached (429). Using instant static fallbacks.`);
+  } else {
+    console.warn(`[GEMINI API NOTICE] ${context}: ${errMsg.substring(0, 150)}`);
   }
 }
 
@@ -201,8 +212,13 @@ const pool = new Pool({
   connectionString: isDbConfigured ? dbUrl : undefined,
   ssl: isDbConfigured ? { rejectUnauthorized: false } : undefined,
   max: 15, // Increase pool size to 15 to completely prevent connection queuing on Vercel
-  idleTimeoutMillis: process.env.VERCEL ? 1000 : 30000, // Close idle connections extremely fast on Vercel
-  connectionTimeoutMillis: 5000 // Timeout fast (5 seconds) instead of hanging for 60 seconds
+  idleTimeoutMillis: process.env.VERCEL ? 1000 : 30000, // Close idle connections fast on Vercel
+  connectionTimeoutMillis: 10000 // 10s timeout to allow Neon cold-start
+});
+
+// Handle pool background errors gracefully to prevent process crash or unhandled pool errors
+pool.on('error', (err) => {
+  console.error('[DATABASE POOL ERROR] Unexpected error on idle client:', err.message);
 });
 
 // Wrap pool.query to support secure Row-Level Security session context propagation
@@ -221,8 +237,10 @@ pool.query = async function (this: any, ...args: any[]) {
   // Only apply RLS configuration when there is an active, authenticated non-admin userId in the request store.
   // Otherwise, run direct queries immediately for optimal performance (e.g. unauthenticated or admin queries).
   if (isDbConfigured && isRequest && userId && !bypassRls) {
-    const client = await pool.connect();
+    let client: any = null;
+    let hasError = false;
     try {
+      client = await pool.connect();
       // Set both configs in a single optimized query
       await client.query(
         `SELECT set_config('app.current_user_id', $1, false), set_config('app.bypass_rls', $2, false)`,
@@ -231,14 +249,20 @@ pool.query = async function (this: any, ...args: any[]) {
       
       const result = await client.query(text, params);
       return result;
+    } catch (err) {
+      hasError = true;
+      throw err;
     } finally {
-      // Reset configs to default in a single query before releasing back to the pool
-      try {
-        await client.query(`SELECT set_config('app.current_user_id', '', false), set_config('app.bypass_rls', 'true', false)`);
-      } catch (err) {
-        console.error('[RLS RESET ERROR]', err);
+      if (client) {
+        if (!hasError) {
+          try {
+            await client.query(`SELECT set_config('app.current_user_id', '', false), set_config('app.bypass_rls', 'true', false)`);
+          } catch (resetErr) {
+            hasError = true;
+          }
+        }
+        client.release(hasError);
       }
-      client.release();
     }
   } else {
     return originalPoolQuery.apply(pool, args);
@@ -745,7 +769,7 @@ Answer the user's question accurately. If they ask about something not listed, p
               });
               replyText = response?.text?.trim() || '';
            } catch (geminiError) {
-              console.warn("WhatsApp Gemini automated reply failed, ignoring automated response:", geminiError);
+              logGeminiWarning("WhatsApp automated reply", geminiError);
            }
 
            const lowerReply = replyText.toLowerCase();
@@ -1131,7 +1155,9 @@ const ensureListingsTable = async () => {
     ['seo_title', 'VARCHAR(255)'],
     ['seo_description', 'TEXT'],
     ['seo_keywords', 'TEXT'],
-    ['seo_image_url', 'TEXT']
+    ['seo_image_url', 'TEXT'],
+    ['state', "VARCHAR(100) DEFAULT ''"],
+    ['country', "VARCHAR(100) DEFAULT ''"]
   ];
 
   for (const [col, type] of columns) {
@@ -1277,11 +1303,18 @@ const ensureListingsTable = async () => {
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS meta_specifications JSONB DEFAULT '{}'::jsonb;`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS meta_sync_logs JSONB DEFAULT '{}'::jsonb;`);
 
-  // Migration for CRM Lead Intent Scorer & Audience Detection
+  // Migration for CRM Lead Intent Scorer & Audience Detection & Campaign/Host Linkage
+  await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS campaign_id INT;`);
+  await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS host_id INT;`);
+  await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS guest_name VARCHAR(255);`);
+  await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS guest_email VARCHAR(255);`);
+  await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS guest_phone VARCHAR(50);`);
+  await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS message_history JSONB DEFAULT '[]'::jsonb;`);
   await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS intent_score INT DEFAULT 50;`);
   await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS ai_intent_badge VARCHAR(50) DEFAULT 'WARM_INQUIRY';`);
   await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS detected_audience_persona VARCHAR(50) DEFAULT 'couples_family';`);
   await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS masked_contact BOOLEAN DEFAULT true;`);
+  await pool.query(`ALTER TABLE host_outreach_leads ALTER COLUMN property_name DROP NOT NULL;`);
 
   // Ensure processed_payments table exists with full Geo-Router schema
   await pool.query(`
@@ -1332,7 +1365,13 @@ const ensureListingsTable = async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS host_outreach_leads (
       id SERIAL PRIMARY KEY,
-      property_name VARCHAR(255) NOT NULL,
+      campaign_id INT,
+      host_id INT,
+      guest_name VARCHAR(255),
+      guest_email VARCHAR(255),
+      guest_phone VARCHAR(50),
+      message_history JSONB DEFAULT '[]'::jsonb,
+      property_name VARCHAR(255),
       instagram_username VARCHAR(100),
       facebook_url VARCHAR(255),
       owner_name VARCHAR(100),
@@ -2545,6 +2584,7 @@ async function syncCampaignSpend(row: any): Promise<any> {
     adset_name: `Encho AdSet - ${row.city || row.listing_title || 'Global'} (${(row.target_audience_persona || 'couples').toUpperCase()} #${row.id})`,
     objective: 'OUTCOME_TRAFFIC',
     special_ad_category: 'HOUSING',
+    special_ad_category_country: ['IN', 'US', 'GB', 'AE', 'CA'],
     daily_budget: Math.max(20000, Math.floor((Number(row.budget) || 2500) / 30 * 100)),
     billing_event: 'IMPRESSIONS',
     optimization_goal: 'LINK_CLICKS',
@@ -2553,9 +2593,11 @@ async function syncCampaignSpend(row: any): Promise<any> {
     targeting: {
       age_min: 18,
       age_max: 65,
-      age_range_note: '18-65 (Meta HOUSING Special Category Mandatory Bound)',
+      genders: [1, 2],
+      age_range_note: '18-65+ (Meta HOUSING Special Category Mandatory Fixed Bound)',
+      gender_note: 'All Genders (Meta HOUSING Special Category Non-Discrimination Mandate)',
       geo_locations: { 
-        countries: ['US', 'IN', 'GB', 'AE', 'CA'],
+        countries: ['IN', 'US', 'GB', 'AE', 'CA'],
         cities: citiesGeoSpecs,
         geo_radius_km: effectiveRadiusKm,
         housing_category_rule: `Meta HOUSING SAC rules enforce min 25km radius around target city centres (Set: ${effectiveRadiusKm} km)`
@@ -3837,7 +3879,7 @@ app.post('/api/marketing/campaigns/:id/ai-check', authenticateToken, aiGatekeepe
           }
         }
       } catch (geminiError) {
-        console.warn("Gemini AI Gatekeeper pre-check fallback invoked:", geminiError);
+        logGeminiWarning("AI Gatekeeper pre-check", geminiError);
       }
     }
 
@@ -4048,7 +4090,7 @@ app.get('/api/marketing/recommend-targeting', authenticateToken, async (req: Aut
           recommendations = { ...recommendations, ...parsed, grade: 10 };
         }
       } catch (geminiError) {
-        console.warn("Gemini targeting recommendation failed, falling back to static defaults:", geminiError);
+        logGeminiWarning("Targeting recommendation", geminiError);
       }
     }
 
@@ -4134,7 +4176,7 @@ app.post('/api/marketing/grade-targeting', authenticateToken, aiGatekeeperLimite
           alternative = parsed.alternative || alternative;
         }
       } catch (geminiError) {
-        console.warn("Gemini targeting grading failed, falling back to static checks:", geminiError);
+        logGeminiWarning("Targeting grading", geminiError);
       }
     }
 
@@ -4325,7 +4367,7 @@ app.post('/api/marketing/ai-generate-copy', authenticateToken, aiGatekeeperLimit
           responseData = { ...responseData, ...parsed };
         }
       } catch (geminiError) {
-        console.warn("Gemini Property-Scientist AI copy generator failed, using robust fallback copy:", geminiError);
+        logGeminiWarning("AI copy generator", geminiError);
       }
     }
 
@@ -4683,8 +4725,14 @@ async function dispatchGoogleAdsCampaign(campaignId: number, req: any) {
             grant_type: 'refresh_token'
           })
         });
-        const tokenData = await tokenRes.json();
-        if (!tokenRes.ok) throw new Error(`Failed to refresh token: ${tokenData.error}`);
+        const tokenText = await tokenRes.text();
+        let tokenData: any = {};
+        try {
+          tokenData = JSON.parse(tokenText);
+        } catch (e) {
+          throw new Error(`OAuth token refresh returned non-JSON response (${tokenRes.status}): ${tokenText.substring(0, 150)}`);
+        }
+        if (!tokenRes.ok) throw new Error(`Failed to refresh token: ${tokenData.error || tokenText.substring(0, 150)}`);
         
         const accessToken = tokenData.access_token;
         console.log(`[GOOGLE ADS API] OAuth2 Access Token Acquired.`);
@@ -4718,7 +4766,13 @@ async function dispatchGoogleAdsCampaign(campaignId: number, req: any) {
           body: JSON.stringify(gAdsPayload)
         });
         
-        const campData = await campRes.json();
+        const campText = await campRes.text();
+        let campData: any = {};
+        try {
+          campData = JSON.parse(campText);
+        } catch (e) {
+          throw new Error(`Google Ads API returned non-JSON response (${campRes.status}): ${campText.substring(0, 150)}`);
+        }
         if (!campRes.ok) throw new Error(`Campaign creation failed: ${campData.error?.message || JSON.stringify(campData)}`);
         
         const googleCampaignId = campData.results[0].resourceName;
@@ -4867,6 +4921,7 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
       adset_name: `Encho AdSet - ${campaign.city || campaign.listing_title || 'Global'} (${persona.toUpperCase()} #${campaign.id})`,
       objective: 'OUTCOME_TRAFFIC',
       special_ad_category: 'HOUSING',
+      special_ad_category_country: Array.from(new Set(targetCountries)),
       daily_budget: Math.max(20000, Math.floor((Number(campaign.budget) || 2500) / 30 * 100)),
       billing_event: 'IMPRESSIONS',
       optimization_goal: 'LINK_CLICKS',
@@ -4875,8 +4930,14 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
       targeting: {
         age_min: 18,
         age_max: 65,
-        age_range_note: '18-65 (Meta HOUSING Special Category Mandatory Bound)',
-        geo_locations: { countries: Array.from(new Set(targetCountries)) },
+        genders: [1, 2],
+        age_range_note: '18-65+ (Meta HOUSING Special Category Mandatory Bound)',
+        gender_note: 'All Genders (Meta HOUSING Special Category Non-Discrimination Mandate)',
+        geo_locations: { 
+          countries: Array.from(new Set(targetCountries)),
+          geo_radius_km: 25,
+          housing_category_rule: 'Meta HOUSING SAC rules enforce min 25km radius around target city centres'
+        },
         publisher_platforms: ['facebook', 'instagram'],
         facebook_positions: ['feed', 'story'],
         instagram_positions: ['stream', 'story'],
@@ -4917,6 +4978,7 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
             name: `Encho Space - ${adHeadline} (Campaign #${campaign.id})`,
             objective: 'OUTCOME_TRAFFIC',
             special_ad_categories: ['HOUSING'],
+            special_ad_category_country: Array.from(new Set(targetCountries)),
             is_adset_budget_sharing_enabled: false,
             buying_type: 'AUCTION',
             status: 'PAUSED'
@@ -4935,7 +4997,7 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
 
       const finalCampaignId = metaCampaignId || `act_8849203_camp_${Math.floor(100000000 + Math.random() * 900000000)}`;
 
-      // 2. Create Ad Set with age_min: 18 and age_max: 65 (HOUSING Special Category Rule)
+      // 2. Create Ad Set with age_min: 18, age_max: 65, genders: [1, 2] (HOUSING Special Category Rule)
       try {
         const adSetPayload: any = {
           access_token: accessToken,
@@ -4950,7 +5012,11 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
           targeting: {
             age_min: 18,
             age_max: 65,
-            geo_locations: { countries: Array.from(new Set(targetCountries)) },
+            genders: [1, 2],
+            geo_locations: { 
+              countries: Array.from(new Set(targetCountries)),
+              location_types: ['home', 'recent']
+            },
             publisher_platforms: ['facebook', 'instagram'],
             facebook_positions: ['feed', 'story'],
             instagram_positions: ['stream', 'story'],
@@ -5833,7 +5899,7 @@ app.post('/api/marketing/campaigns/:id/subscribe', authenticateToken, async (req
         }
       } catch (geminiError) {
         // Gap 4: AI Rate Limiting & Fallback
-        console.warn("Gatekeeper AI failed, defaulting to 'Pending Human Admin Review' (score 8.0):", geminiError);
+        logGeminiWarning("Gatekeeper AI", geminiError);
         gatekeeperScore = 8.0;
         gatekeeperFeedback = "[AI Fallback] Engine timeout or failure. Campaign requires human Admin review.";
       }
@@ -6514,7 +6580,7 @@ ${msgText.substring(0, 2000)}`;
         if (text.includes('COLD')) intent_score = "🧊 COLD";
         if (text.includes('CONVERTED')) intent_score = "🏆 CONVERTED";
       } catch (err) {
-         console.error('[AI INTENT SCORING FALLBACK]', err);
+         logGeminiWarning("AI Intent Scoring", err);
       }
     }
     
@@ -7868,7 +7934,7 @@ Do NOT wrap it in markdown block.`;
         suggestedPrice = output.price;
       }
     } catch (geminiError) {
-      console.warn("Gemini dynamic pricing suggest failed, falling back to static 15% season markup:", geminiError);
+      logGeminiWarning("Dynamic pricing suggest", geminiError);
     }
 
     res.json({ price: suggestedPrice });
@@ -7908,7 +7974,7 @@ Draft a polite, helpful, and concise response. Do not include quotes, placeholde
         reply = text;
       }
     } catch (geminiError) {
-      console.warn("Gemini reply draft generation failed, falling back to static response:", geminiError);
+      logGeminiWarning("Reply draft generation", geminiError);
     }
 
     res.json({ reply });
@@ -7954,7 +8020,7 @@ Do NOT include any empty placeholders, brackets like [Insert City], or generic t
       if (output.title) title = output.title;
       if (output.description) description = output.description;
     } catch (geminiError) {
-      console.warn("Gemini listing assist generation failed, falling back to static copywriting:", geminiError);
+      logGeminiWarning("Listing assist generation", geminiError);
     }
 
     res.json({ title, description });
@@ -10436,6 +10502,7 @@ async function startServer() {
 
   // Make io available to routes
   app.set('io', io);
+  globalIoInstance = io;
 
   // Check if we have built assets
   const distPath = path.join(process.cwd(), 'dist');

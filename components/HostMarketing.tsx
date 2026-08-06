@@ -4167,6 +4167,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 }));
                               }}
                               aiRecommendations={aiTargetingRecs}
+                              selectedProperty={listings.find(l => String(l.id) === String(formData.listing_id))}
                             />
                           </div>
 
@@ -4261,11 +4262,11 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                         <span className="text-[9px] font-semibold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded-full">HEC Compliant</span>
                                       </div>
                                       <p className="text-[10px] text-zinc-700 font-medium">
-                                        {selectedAudienceBucket === 'couples' && "🎯 Targeting: Couples (Ages 24-45), Honeymooners, Luxury Travelers, High-Income Weekend Getaway Seekers."}
-                                        {selectedAudienceBucket === 'families' && "🎯 Targeting: Parents with Children (Ages 28-55), Family Vacation Planners, Multi-Gen Travellers."}
-                                        {selectedAudienceBucket === 'friends' && "🎯 Targeting: Young Adults & Professionals (Ages 21-38), Group Retreats, Villa Stay Enthusiasts."}
-                                        {selectedAudienceBucket === 'digital_nomads' && "🎯 Targeting: Remote Workers & Tech Nomads (Ages 22-42), Workationers, High-speed Wifi & Long Stayers."}
-                                        {selectedAudienceBucket === 'everyone' && "🎯 Targeting: High-Yield Universal Travelers (Ages 21-60), Broad Hospitality & Boutique Stay Interest."}
+                                        {selectedAudienceBucket === 'couples' && "🎯 Targeting: Honeymooners & Luxury Seekers • Meta Housing Special Category Enforced (Ages 18–65+, All Genders, Min 25km Radius)"}
+                                        {selectedAudienceBucket === 'families' && "🎯 Targeting: Family Vacation & Resort Stays • Meta Housing Special Category Enforced (Ages 18–65+, All Genders, Min 25km Radius)"}
+                                        {selectedAudienceBucket === 'friends' && "🎯 Targeting: Group Travel & Villa Retreats • Meta Housing Special Category Enforced (Ages 18–65+, All Genders, Min 25km Radius)"}
+                                        {selectedAudienceBucket === 'digital_nomads' && "🎯 Targeting: Workationers & Long Stay Seekers • Meta Housing Special Category Enforced (Ages 18–65+, All Genders, Min 25km Radius)"}
+                                        {selectedAudienceBucket === 'everyone' && "🎯 Targeting: Broad Hospitality & Travel Seekers • Meta Housing Special Category Enforced (Ages 18–65+, All Genders, Min 25km Radius)"}
                                       </p>
                                     </div>
                                   </div>
