@@ -3431,7 +3431,7 @@ app.post('/api/host/social-posts/:id/boost', authenticateToken, async (req: Auth
       'boost_social_post',
       JSON.stringify({ is_boosted: false }),
       JSON.stringify({ is_boosted: true, campaign_id: newCampaign.id }),
-      req.ip || req.socket.remoteAddress
+      req.ip || req.socket?.remoteAddress || null
     ]);
 
     broadcastDbEvent(req, 'marketing');
