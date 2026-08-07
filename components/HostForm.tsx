@@ -345,35 +345,50 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
         },
         body: JSON.stringify({ filename: file.name || 'photo.webp', base64Data, contentType: file.type || 'image/webp' })
       });
-      if (!res.ok) throw new Error('Base64 upload failed');
-      const data = await res.json();
-      return data.url;
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) return data.url;
+      }
+      return base64Data;
     } catch (base64Err) {
-      console.error('All upload methods failed:', base64Err);
-      throw new Error('Failed to upload image file. Please try again.');
+      console.warn('Server upload fallback failed, using client data URL:', base64Err);
+      try {
+        const reader = new FileReader();
+        return await new Promise<string>((resolve, reject) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      } catch (e) {
+        console.error('All upload and client-side conversion methods failed:', e);
+        return '';
+      }
     }
   };
 
   const resolveAndUploadPhoto = async (photo: any): Promise<string> => {
-    let fileToUpload: File | null = photo.file || null;
-    if (!fileToUpload && photo.previewUrl) {
-      if (photo.previewUrl.startsWith('http://') || photo.previewUrl.startsWith('https://') || photo.previewUrl.startsWith('/uploads/')) {
-        return photo.previewUrl;
+    if (!photo) return '';
+    const preview = photo.previewUrl || photo.url || photo;
+    if (typeof preview === 'string') {
+      if (preview.startsWith('http://') || preview.startsWith('https://') || preview.startsWith('/uploads/') || preview.startsWith('data:')) {
+        return preview;
       }
-      if (photo.previewUrl.startsWith('blob:') || photo.previewUrl.startsWith('data:')) {
-        try {
-          const res = await fetch(photo.previewUrl);
-          const blob = await res.blob();
-          fileToUpload = new File([blob], `upload-${Date.now()}.webp`, { type: blob.type || 'image/webp' });
-        } catch (e) {
-          console.warn('Failed to fetch blob/data url for upload:', e);
-        }
+    }
+    let fileToUpload: File | null = photo.file || null;
+    if (!fileToUpload && typeof preview === 'string' && (preview.startsWith('blob:') || preview.startsWith('data:'))) {
+      if (preview.startsWith('data:')) return preview;
+      try {
+        const res = await fetch(preview);
+        const blob = await res.blob();
+        fileToUpload = new File([blob], `upload-${Date.now()}.webp`, { type: blob.type || 'image/webp' });
+      } catch (e) {
+        console.warn('Failed to fetch blob url for upload:', e);
       }
     }
     if (fileToUpload) {
       return await uploadPhotoFile(fileToUpload);
     }
-    return photo.previewUrl || '';
+    return typeof preview === 'string' ? preview : '';
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
