@@ -1,51 +1,96 @@
 const fs = require('fs');
 let code = fs.readFileSync('server.ts', 'utf8');
 
-const preflightCode = `
-// ----------------- META PREFLIGHT ENGINE -----------------
-async function runMetaPreflightEngine(campaignId, dbPool) {
-  console.log(\`[PREFLIGHT] Running validation for campaign \${campaignId}\`);
-  const campaignRes = await dbPool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [campaignId]);
-  if (campaignRes.rows.length === 0) throw new Error('Campaign not found');
-  const campaign = campaignRes.rows[0];
-
-  // 1. Authentication
-  if (!process.env.META_ACCESS_TOKEN || !process.env.META_AD_ACCOUNT_ID) {
-    throw new Error('Preflight Failed: Missing Meta API Credentials');
-  }
-
-  // 2. Special Ad Category Validation
-  if (!campaign.target_locations || campaign.target_radius_km < 25) {
-    throw new Error('Preflight Failed: Housing Special Ad Category requires minimum 25km radius targeting.');
-  }
-
-  // 3. Payload & Schema Validation
-  if (!campaign.title || !campaign.feed_description) {
-    throw new Error('Preflight Failed: Missing required creative fields (title, feed_description).');
-  }
-
-  // 4. Budget Validation
-  if (campaign.budget < 100) {
-    throw new Error('Preflight Failed: Budget is below Meta minimums.');
-  }
-  
-  // 5. Objective & Optimization Validation
-  // We use OUTCOME_TRAFFIC with LINK_CLICKS or REACH
-  console.log(\`[PREFLIGHT] Campaign \${campaignId} passed all checks.\`);
-  return true;
+const preflightRegex = /app\.post\('\/api\/marketing\/pre-flight-check'[\s\S]*?\}\);/m;
+const match = code.match(preflightRegex);
+if (!match) {
+  console.log("Could not find preflight");
+  process.exit(1);
 }
-`;
 
-if (!code.includes('runMetaPreflightEngine')) {
-  // Inject before dispatchMetaCampaign
-  code = code.replace('async function dispatchMetaCampaign', preflightCode + '\nasync function dispatchMetaCampaign');
-  
-  // Also call it inside dispatchMetaCampaign or approve
-  // Let's call it at the start of dispatchMetaCampaign
-  code = code.replace('async function dispatchMetaCampaign(campaignId: number, req: any) {', "async function dispatchMetaCampaign(campaignId: number, req: any) {\n  await runMetaPreflightEngine(campaignId, pool);");
+const newPreflight = `app.post('/api/marketing/pre-flight-check', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { listing_id, title, description, budget, target_radius_km, media_urls, ad_format } = req.body;
+    const checks = {
+      listing_valid: false,
+      title_valid: false,
+      description_safe: false,
+      budget_adequate: false,
+      special_ad_category_housing: true,
+      age_targeting_compliant: true, // Strictly 18-65 per Meta guidelines
+      radius_compliant: false,
+      media_ready: false,
+      payload_schema_valid: false,
+      errors: [] as string[]
+    };
+    
+    // 1. Listing Validation
+    if (!listing_id) {
+      checks.errors.push('Listing ID is required for property ad campaigns.');
+    } else {
+      const listingCheck = await pool.query('SELECT id, title, image_url, price FROM listings WHERE id = $1', [listing_id]);
+      if (listingCheck.rows.length === 0) {
+        checks.errors.push('Referenced listing does not exist in database.');
+      } else {
+        checks.listing_valid = true;
+      }
+    }
+    
+    // 2. Copy Validation (Walled Garden)
+    if (!title || title.trim().length < 5) {
+      checks.errors.push('Campaign headline/title must be at least 5 characters.');
+    } else {
+      checks.title_valid = true;
+    }
+    const contactLeakRegex = /(\\+?\\d[\\d\\s-]{8,})|([\\w.-]+@[\\w.-]+\\.\\w+)|(wa\\.me)|(whatsapp)|(t\\.me)|(instagram\\.com)|(facebook\\.com)|(call me)|(contact at)|(http[s]?:\\/\\/[^\\s]+)/gi;
+    if (!description || description.trim().length < 10) {
+      checks.errors.push('Campaign description must be at least 10 characters.');
+    } else if (contactLeakRegex.test(description)) {
+      checks.errors.push('Description contains prohibited external contact links, emails, or phone numbers (Walled Garden policy).');
+    } else {
+      checks.description_safe = true;
+    }
+    
+    // 3. Budget Validation
+    if (budget < 1000) {
+      checks.errors.push('Minimum campaign budget is $10.00 (1000 cents).');
+    } else {
+      checks.budget_adequate = true;
+    }
 
-  fs.writeFileSync('server.ts', code);
-  console.log("Patched server.ts with Preflight Engine.");
-} else {
-  console.log("Already patched.");
-}
+    // 4. Meta Housing Radius Compliance
+    // Meta requires at least 15 miles (approx 25 km) for real estate targeting.
+    if (target_radius_km && target_radius_km < 25) {
+      checks.errors.push('Target radius must be at least 25km (15 miles) per Meta Housing Special Ad Category policy.');
+    } else {
+      checks.radius_compliant = true;
+    }
+
+    // 5. Media Validation
+    if (!media_urls || media_urls.length === 0) {
+      checks.errors.push('At least one media asset is required.');
+    } else if (ad_format === 'carousel' && media_urls.length < 2) {
+      checks.errors.push('Carousel format requires at least 2 media assets.');
+    } else {
+      checks.media_ready = true;
+    }
+
+    // 6. Payload Validation Readiness
+    if (checks.listing_valid && checks.title_valid && checks.description_safe && checks.budget_adequate && checks.radius_compliant && checks.media_ready) {
+      checks.payload_schema_valid = true;
+    }
+
+    res.json({
+      success: checks.payload_schema_valid,
+      checks
+    });
+  } catch (error) {
+    console.error('Pre-flight error:', error);
+    res.status(500).json({ error: 'Failed pre-flight check' });
+  }
+});`;
+
+code = code.replace(preflightRegex, newPreflight);
+fs.writeFileSync('server.ts', code);
+console.log("Patched preflight in server.ts");

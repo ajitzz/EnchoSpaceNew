@@ -1,13 +1,7 @@
 const fs = require('fs');
-
-let host = fs.readFileSync('components/HostForm.tsx', 'utf-8');
-
-if (!host.includes('Trees,') && host.includes('Trees')) {
-    // it was already added or something else
-}
-
-if (!host.includes('Trees')) {
-    host = host.replace("import { Building2, Home", "import { Trees, Building2, Home");
-    fs.writeFileSync('components/HostForm.tsx', host);
-}
-
+let code = fs.readFileSync('components/HostMarketing.tsx', 'utf8');
+code = code.replace(/<MessageSquare, Wand2 /g, '<MessageSquare ');
+code = code.replace(/<CheckSquare, Wand2 /g, '<CheckSquare ');
+code = code.replace(/<Square, Wand2 /g, '<Square ');
+fs.writeFileSync('components/HostMarketing.tsx', code);
+console.log("Fixed icons in HostMarketing.tsx");

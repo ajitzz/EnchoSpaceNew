@@ -6,7 +6,7 @@ import {
   Sparkles, CheckCircle, AlertTriangle, ShieldAlert, Play, Pause, BarChart3, 
   Tv, Eye, MousePointerClick, TrendingUp, DollarSign, Target, Plus, 
   Trash2, Send, Check, ShieldCheck, HelpCircle, Loader2, CreditCard, ExternalLink,
-  Heart, MessageSquare, Bookmark, ChevronLeft, ChevronRight, Volume2, VolumeX, Share2, MoreHorizontal, MoreVertical,
+  Heart, MessageSquare, Wand2, Bookmark, ChevronLeft, ChevronRight, Volume2, VolumeX, Share2, MoreHorizontal, MoreVertical,
   Library, Layers, PenTool, Sliders, MapPin, ArrowLeft, ArrowRight, Upload, ThumbsUp, Camera, Globe, Wifi, User, Compass, PlusCircle, Smartphone,
   Gauge, Zap, Clock, BatteryCharging, X, Search, Video, Image, Maximize2, Filter, Star, CheckSquare, Square
 } from 'lucide-react';
@@ -208,7 +208,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
     return () => clearTimeout(timeout);
   }, [formData, showCreateModal]);
 
-  const applyFix = (field: string, suggestion: string) => {
+  const applyFix = (field: keyof typeof formData, suggestion: any) => {
     setFormData(prev => ({ ...prev, [field]: suggestion }));
     addToast(`Applied AI fix to ${field}`, 'success');
   };
@@ -1464,71 +1464,159 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           
 {/* AI CAMPAIGN COPILOT SIDEBAR */}
 {showCreateModal && (
-  <div className="fixed right-0 top-0 bottom-0 w-96 bg-gray-50 border-l border-gray-200 shadow-2xl z-[100] p-6 overflow-y-auto flex flex-col">
-    <div className="flex items-center space-x-2 mb-6 text-indigo-600">
+  <div className="fixed right-0 top-0 bottom-0 w-[450px] bg-slate-50 border-l border-slate-200 shadow-2xl z-[100] p-6 overflow-y-auto flex flex-col">
+    <div className="flex items-center space-x-2 mb-4 text-indigo-600">
       <Sparkles className="w-6 h-6" />
-      <h2 className="text-xl font-bold">AI Campaign Copilot</h2>
+      <h2 className="text-xl font-bold">Meta Campaign Engineer</h2>
     </div>
     
     {isCopilotLoading ? (
-      <div className="flex flex-col items-center justify-center flex-1 space-y-4 text-gray-500">
+      <div className="flex flex-col items-center justify-center flex-1 space-y-4 text-slate-500">
         <Loader2 className="w-8 h-8 animate-spin" />
-        <p>Analyzing campaign...</p>
+        <p>Analyzing Meta Policies & Performance...</p>
       </div>
     ) : copilotData ? (
       <div className="space-y-6">
-        <div className="bg-white p-4 rounded-xl border shadow-sm">
+        
+        {/* Core Health Score */}
+        <div className="bg-white p-5 rounded-xl border shadow-sm">
           <div className="flex justify-between items-end mb-2">
-            <span className="text-sm font-medium text-gray-500">Campaign Score</span>
-            <span className={`text-2xl font-bold ${copilotData.overallScore >= 90 ? 'text-emerald-600' : copilotData.overallScore >= 75 ? 'text-amber-500' : 'text-rose-500'}`}>
-              {copilotData.overallScore}/100
+            <span className="text-sm font-medium text-slate-600">ENCHO Campaign Health</span>
+            <span className={`text-3xl font-black ${copilotData.overallScore >= 90 ? 'text-emerald-600' : copilotData.overallScore >= 75 ? 'text-amber-500' : 'text-rose-500'}`}>
+              {copilotData.overallScore}
             </span>
           </div>
-          <div className="w-full bg-gray-100 rounded-full h-2">
+          <div className="w-full bg-slate-100 rounded-full h-2 mb-4">
             <div className={`h-2 rounded-full ${copilotData.overallScore >= 90 ? 'bg-emerald-500' : copilotData.overallScore >= 75 ? 'bg-amber-400' : 'bg-rose-500'}`} style={{ width: `${copilotData.overallScore}%` }} />
+          </div>
+          
+          <div className="grid grid-cols-2 gap-3 text-sm">
+             <div><span className="text-slate-500">Copy</span> <span className="font-semibold float-right">{copilotData.breakdown.copy}/100</span></div>
+             <div><span className="text-slate-500">Media</span> <span className="font-semibold float-right">{copilotData.breakdown.media}/100</span></div>
+             <div><span className="text-slate-500">Compliance</span> <span className="font-semibold float-right">{copilotData.breakdown.metaCompliance}/100</span></div>
+             <div><span className="text-slate-500">Targeting</span> <span className="font-semibold float-right">{copilotData.breakdown.targeting}/100</span></div>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          {Object.entries(copilotData.breakdown).map(([key, val]: any) => (
-            <div key={key} className="bg-white p-2 rounded border flex flex-col">
-              <span className="text-gray-500 capitalize text-xs">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-              <span className="font-semibold">{val}/100</span>
+        {/* Confidence Engine */}
+        <div className="bg-slate-900 text-white p-4 rounded-xl shadow-inner">
+          <h3 className="text-xs uppercase tracking-wider text-slate-400 mb-3 font-semibold">Confidence Engine</h3>
+          <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-sm">
+            <div>
+              <div className="text-slate-400 text-xs">Meta Approval</div>
+              <div className="font-medium text-emerald-400">{copilotData.confidenceEngine?.approval || copilotData.expectedApprovalConfidence}%</div>
             </div>
-          ))}
+            <div>
+              <div className="text-slate-400 text-xs">Expected CTR</div>
+              <div className="font-medium text-blue-400">{copilotData.predictedCTR}</div>
+            </div>
+            <div>
+              <div className="text-slate-400 text-xs">Lead Quality</div>
+              <div className="font-medium text-purple-400">{copilotData.confidenceEngine?.leadQuality || 85}%</div>
+            </div>
+            <div>
+              <div className="text-slate-400 text-xs">Expected CPC</div>
+              <div className="font-medium text-amber-400">{copilotData.predictedCPC}</div>
+            </div>
+          </div>
         </div>
 
+        {/* AI Rewrite Engine */}
+        {copilotData.aiRewrite && (
+          <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
+             <div className="flex items-center space-x-2 mb-3">
+               <Wand2 className="w-4 h-4 text-indigo-600" />
+               <h3 className="font-semibold text-indigo-900 text-sm">AI Rewrite Engine</h3>
+             </div>
+             <p className="text-xs text-indigo-700 mb-3">{copilotData.aiRewrite.explanation}</p>
+             <div className="space-y-2">
+               {copilotData.aiRewrite.headline && (
+                 <div className="flex justify-between items-start">
+                   <div className="text-xs font-medium text-slate-700 w-3/4">"{copilotData.aiRewrite.headline}"</div>
+                   <button onClick={() => applyFix('title', copilotData.aiRewrite.headline)} className="text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700">Apply</button>
+                 </div>
+               )}
+               {copilotData.aiRewrite.primaryText && (
+                 <div className="flex justify-between items-start pt-2 border-t border-indigo-200">
+                   <div className="text-xs text-slate-700 w-3/4 line-clamp-2">{copilotData.aiRewrite.primaryText}</div>
+                   <button onClick={() => applyFix('description', copilotData.aiRewrite.primaryText)} className="text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700">Apply</button>
+                 </div>
+               )}
+             </div>
+          </div>
+        )}
+
+        {/* Audience & Budget Engineering */}
+        <div className="grid grid-cols-1 gap-4">
+          {copilotData.audienceEngineering && (
+            <div className="bg-white border rounded-xl p-4 relative group">
+              <h3 className="font-semibold text-sm mb-2 text-slate-800">Audience Engineering</h3>
+              <div className="text-xs text-slate-600 space-y-1">
+                <p><span className="font-medium text-slate-900">Est. Size:</span> {copilotData.audienceEngineering.estimatedSize}</p>
+                <p><span className="font-medium text-slate-900">Est. CPM:</span> {copilotData.audienceEngineering.expectedCPM}</p>
+                <p className="pt-2 text-indigo-600">{copilotData.audienceEngineering.recommendation}</p>
+              </div>
+              {copilotData.aiRewrite?.audience && (
+                <button onClick={() => applyFix('target_audience_persona', copilotData.aiRewrite.audience)} className="mt-3 w-full text-xs bg-slate-900 text-white px-2 py-1.5 rounded hover:bg-slate-800">
+                  Apply Audience Fix
+                </button>
+              )}
+            </div>
+          )}
+          {copilotData.budgetEngineering && (
+            <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="font-semibold text-sm text-emerald-900">Budget Engineering</h3>
+                {copilotData.budgetEngineering.budgetQualityScore && (
+                  <span className="text-[10px] font-bold bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full">Score: {copilotData.budgetEngineering.budgetQualityScore}</span>
+                )}
+              </div>
+              <div className="text-xs text-emerald-800 space-y-1 grid grid-cols-2 gap-2">
+                <div><span className="block text-emerald-600/70">Rec. Daily</span> <span className="font-semibold">${copilotData.budgetEngineering.recommendedDailyBudget}</span></div>
+                <div><span className="block text-emerald-600/70">Est. Leads</span> <span className="font-semibold">{copilotData.budgetEngineering.expectedLeads}</span></div>
+                <div><span className="block text-emerald-600/70">Est. CPL</span> <span className="font-semibold">{copilotData.budgetEngineering.expectedCPL}</span></div>
+                <div><span className="block text-emerald-600/70">Learning</span> <span className="font-semibold">{copilotData.budgetEngineering.learningDays} days</span></div>
+              </div>
+              <button onClick={() => applyFix('budget', copilotData.budgetEngineering.recommendedDailyBudget * 100)} className="mt-3 w-full text-xs bg-emerald-600 text-white px-2 py-1.5 rounded hover:bg-emerald-700 shadow-sm">
+                Apply Recommended Budget
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Policy Issues */}
         {copilotData.issues?.length > 0 && (
           <div className="space-y-3">
-            <h3 className="font-semibold text-gray-900 border-b pb-2">Issues & Suggestions</h3>
+            <h3 className="font-semibold text-slate-900 border-b pb-2 text-sm">Policy & Compliance Violations</h3>
             {copilotData.issues.map((issue: any, idx: number) => (
-              <div key={idx} className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm space-y-2">
+              <div key={idx} className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-sm space-y-2">
                 <div className="flex items-start justify-between">
-                  <span className="font-medium text-amber-900">{issue.field}</span>
-                  <span className="text-xs uppercase px-1.5 py-0.5 rounded bg-amber-200 text-amber-800">{issue.severity}</span>
+                  <span className="font-medium text-rose-900">{issue.field}</span>
+                  <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-rose-200 text-rose-800 font-bold">{issue.severity}</span>
                 </div>
-                <p className="text-amber-800 text-xs">{issue.message}</p>
+                <p className="text-rose-800 text-xs font-medium">{issue.message}</p>
+                <div className="bg-white/50 p-2 rounded text-[10px] text-rose-700 space-y-1">
+                   <p><span className="font-bold">Policy Ref:</span> {issue.policyReference}</p>
+                   <p><span className="font-bold">Why:</span> {issue.expectedBenefit}</p>
+                </div>
                 {issue.autoFixSuggestion && (
                   <button
                     onClick={() => applyFix(issue.field, issue.autoFixSuggestion)}
-                    className="w-full mt-2 bg-amber-600 text-white py-1.5 rounded-md text-xs font-medium hover:bg-amber-700 transition"
+                    className="w-full mt-2 bg-rose-600 text-white py-1.5 rounded-md text-xs font-medium hover:bg-rose-700 transition shadow-sm"
                   >
-                    Apply Fix
+                    Auto-Fix Issue
                   </button>
                 )}
               </div>
             ))}
           </div>
         )}
-
-        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-           <h4 className="font-semibold text-blue-900 text-sm mb-1">Expected Approval Confidence</h4>
-           <div className="text-2xl font-bold text-blue-700">{copilotData.expectedApprovalConfidence}%</div>
-           <p className="text-xs text-blue-600 mt-2">Predicted Reach: {copilotData.predictedReach}</p>
-           <p className="text-xs text-blue-600">Predicted CTR: {copilotData.predictedCTR}</p>
-        </div>
       </div>
-    ) : null}
+    ) : (
+      <div className="flex-1 flex items-center justify-center text-slate-400 text-sm text-center">
+        Enter campaign details to activate<br/>Meta Campaign Engineer
+      </div>
+    )}
   </div>
 )}
 

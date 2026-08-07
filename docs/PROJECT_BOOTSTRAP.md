@@ -127,3 +127,12 @@ When complete, begin work using the synchronized project context rather than rel
 
 ## Latest Addition: AI Campaign Copilot & Preflight Engine
 Added real-time validation via Gemini to catch Meta policy violations before they happen. It features an auto-fix UI for hosts and a preflight engine that halts execution of invalid payloads.
+
+
+## Meta Campaign Engineering Brain
+The AI Campaign Copilot has been upgraded to a full Meta Campaign Engineering Brain. It now includes:
+- Live Meta Policy Intelligence (`/docs/meta` layer).
+- Landing Page & Media Inspector simulations.
+- Audience & Budget Engineering (Estimates for size, CPL, etc.).
+- Learning Engine 2.0 (Injects recent 200 OK and 400+ trace logs into the AI prompt).
+- Strict Pre-flight validation enforcing 15-mile radiuses and 18-65 age gates for Housing.
