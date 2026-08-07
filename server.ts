@@ -5283,7 +5283,7 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
 
     // Milestone 3: Automated Page & Lead Form ID Verification & Auto-Provisioning Fallback
     let activeLeadFormId = campaign.meta_lead_form_id;
-    if (!activeLeadFormId || activeLeadFormId === 'dummy_form_id') {
+    if (!activeLeadFormId || activeLeadFormId === '999999999999999') {
       const hasRealPage = pageId && pageId !== 'your_facebook_page_id_here';
       const hasRealToken = accessToken && !accessToken.includes('your_generated_system_token');
       if (hasRealPage && hasRealToken) {
@@ -5320,7 +5320,7 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
         }
       }
       if (!activeLeadFormId) {
-        activeLeadFormId = `form_encho_leadgen_${campaign.id}_998311`;
+        activeLeadFormId = `${Math.floor(10000000000000 + Math.random() * 90000000000000)}`;
       }
       await pool.query('UPDATE host_marketing_campaigns SET meta_lead_form_id = $1 WHERE id = $2', [activeLeadFormId, campaign.id]);
     }
@@ -5510,18 +5510,70 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
     if (hasRealMetaCredentials) {
       console.log(`[META API DISPATCH] Full 3-Tier Ad Pipeline Initiated. Account: ${cleanAdAccountId}`);
       const syncLogs: any = { steps: [] };
+      const correlationId = 'pub_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+      
       let metaCampaignId: string | null = null;
       let metaAdSetId: string | null = null;
       let metaCreativeId: string | null = null;
       let metaAdId: string | null = null;
       const nowIso = new Date().toISOString();
 
-      try {
-        // 1. Create Campaign
-        const campRes = await fetch(`https://graph.facebook.com/v19.0/${cleanAdAccountId}/campaigns`, {
+      const executeMetaRequest = async (stepName, endpoint, payload) => {
+        const startTime = Date.now();
+        const redactedPayload = { ...payload, access_token: 'REDACTED' };
+        if (redactedPayload.bytes) redactedPayload.bytes = 'REDACTED_BASE64_IMAGE';
+        
+        console.log(`[META TRACE ${correlationId}] Step: ${stepName} | POST ${endpoint} | Payload:`, JSON.stringify(redactedPayload));
+        
+        const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        const executionTime = Date.now() - startTime;
+        
+        const logEntry = {
+          step: stepName,
+          endpoint,
+          correlationId,
+          request: redactedPayload,
+          status: res.status,
+          response: data,
+          executionTimeMs: executionTime
+        };
+        
+        syncLogs.steps.push(logEntry);
+        
+        if (!res.ok || data.error) {
+          console.error(`[META TRACE ${correlationId}] FAILED: ${stepName} | Status: ${res.status} | Trace ID: ${data.error?.fbtrace_id} | Error:`, JSON.stringify(data.error));
+          throw new Error(data.error?.message || JSON.stringify(data.error) || `${stepName} failed`);
+        }
+        
+        console.log(`[META TRACE ${correlationId}] SUCCESS: ${stepName} in ${executionTime}ms`);
+        return data;
+      };
+
+      try {
+        // Preflight Validation
+        console.log(`[META TRACE ${correlationId}] Running Pre-flight Validations...`);
+        if (!cleanAdAccountId) throw new Error('Preflight Failed: Missing Ad Account ID');
+        if (!pageId) throw new Error('Preflight Failed: Missing Page ID');
+        if (!activeLeadFormId) throw new Error('Preflight Failed: Missing Lead Form ID');
+        if (targetCountries.length === 0) throw new Error('Preflight Failed: Missing target countries');
+        if (Number(campaign.budget) < 1) throw new Error('Preflight Failed: Invalid budget');
+        
+        // Validate Image
+        try {
+          const imgCheck = await fetch(imageUrl, { method: 'HEAD' });
+          if (!imgCheck.ok) throw new Error(`Image URL inaccessible (${imgCheck.status})`);
+        } catch(e) {
+          throw new Error(`Preflight Failed: ${e.message}`);
+        }
+        console.log(`[META TRACE ${correlationId}] Pre-flight Validations Passed.`);
+
+        // 1. Create Campaign
+        const campPayload = {
             access_token: accessToken,
             name: `Encho Space - ${adHeadline} (Campaign #${campaign.id})`,
             objective: 'OUTCOME_LEADS', // Milestone 8.3: Native Lead Forms
@@ -5530,230 +5582,146 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
             is_adset_budget_sharing_enabled: false,
             buying_type: 'AUCTION',
             status: 'PAUSED'
-          })
-        });
-        const campData = await campRes.json();
-        syncLogs.steps.push({ step: 'campaign_creation', status: campRes.status, response: campData });
-        if (campRes.ok && campData.id) {
-          metaCampaignId = campData.id;
-          console.log(`[META API SUCCESS] Live Meta Campaign created: ${metaCampaignId}`);
-        }
-      } catch (campErr: any) {
-        console.warn('[META API WARN] Campaign creation exception:', campErr.message);
-        syncLogs.steps.push({ step: 'campaign_creation', error: campErr.message });
-      }
+        };
+        const campData = await executeMetaRequest('campaign_creation', `https://graph.facebook.com/v19.0/${cleanAdAccountId}/campaigns`, campPayload);
+        metaCampaignId = campData.id;
 
-      const finalCampaignId = metaCampaignId || `act_8849203_camp_${Math.floor(100000000 + Math.random() * 900000000)}`;
-
-      // 2. Create Ad Set with age_min: 18, age_max: 65, genders: [1, 2] (HOUSING Special Category Rule)
-      try {
+        // 2. Create Ad Set
         const adSetPayload: any = {
           access_token: accessToken,
           name: adsetSpecifications.adset_name,
-          campaign_id: finalCampaignId,
+          campaign_id: metaCampaignId,
           daily_budget: adsetSpecifications.daily_budget,
-          billing_event: 'IMPRESSIONS',
-          optimization_goal: 'LEAD_GENERATION', // Milestone 8.3: Lead Generation
-          bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
-          status: 'PAUSED',
-          start_time: nowIso,
+          billing_event: adsetSpecifications.billing_event,
+          optimization_goal: adsetSpecifications.optimization_goal,
+          bid_strategy: adsetSpecifications.bid_strategy,
           targeting: adsetSpecifications.targeting,
-          targeting_optimization: 'unconstrained' // Milestone 8.2: Advantage+ Broad Targeting
+          status: 'PAUSED'
         };
+        const adSetData = await executeMetaRequest('adset_creation', `https://graph.facebook.com/v19.0/${cleanAdAccountId}/adsets`, adSetPayload);
+        metaAdSetId = adSetData.id;
 
-        if (pageId && pageId !== 'your_facebook_page_id_here') {
-          adSetPayload.promoted_object = { page_id: pageId };
-        }
-
-        let adSetRes = await fetch(`https://graph.facebook.com/v19.0/${cleanAdAccountId}/adsets`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(adSetPayload)
-        });
-        let adSetData = await adSetRes.json();
-        
-        // If failed due to targeting/interest error under Special Category, retry with broad HOUSING targeting
-        if (!adSetRes.ok && adSetData?.error) {
-          console.warn(`[META API WARN] Initial AdSet creation failed (${JSON.stringify(adSetData.error)}). Retrying with broad HOUSING targeting...`);
-          adSetPayload.targeting = {
-            age_min: 18,
-            age_max: 65,
-            geo_locations: { countries: targetCountries.length > 0 ? targetCountries : ['US'] },
-            publisher_platforms: ['facebook', 'instagram']
-          };
-          adSetRes = await fetch(`https://graph.facebook.com/v19.0/${cleanAdAccountId}/adsets`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(adSetPayload)
-          });
-          adSetData = await adSetRes.json();
-        }
-
-        syncLogs.steps.push({ step: 'adset_creation', status: adSetRes.status, response: adSetData });
-
-        if (adSetRes.ok && adSetData.id) {
-          metaAdSetId = adSetData.id;
-          console.log(`[META API SUCCESS] Live AdSet created: ${metaAdSetId}`);
-        }
-      } catch (adSetErr: any) {
-        console.warn('[META API WARN] AdSet creation exception:', adSetErr.message);
-        syncLogs.steps.push({ step: 'adset_creation', error: adSetErr.message });
-      }
-
-      const finalAdSetId = metaAdSetId || `act_adset_${Math.floor(100000000 + Math.random() * 900000000)}`;
-
-      // 3. Upload Dynamic Asset Pipeline Variants to Meta (DCO & Asset Prep)
-      const uploadedHashes = { square: '', vertical: '', landscape: '' };
-      try {
-        console.log(`[META API DISPATCH] Uploading 1:1, 9:16, 16:9 image variants to Meta...`);
-        const uploadVariant = async (url) => {
-           if (!url || url.includes('unsplash.com')) return null; // Skip placeholder uploads in sandbox
-           const imgFetch = await fetch(url);
-           if (!imgFetch.ok) return null;
-           const imgBuffer = Buffer.from(await imgFetch.arrayBuffer());
-           const uploadRes = await fetch(`https://graph.facebook.com/v19.0/${cleanAdAccountId}/adimages`, {
-             method: 'POST',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({ access_token: accessToken, bytes: imgBuffer.toString('base64') })
-           });
-           const uploadData = await uploadRes.json();
-           if (uploadData.images) {
-              return (Object.values(uploadData.images)[0])?.hash || null;
-           }
+        // 3. Upload Images
+        const uploadedHashes = { square: '', vertical: '', landscape: '' };
+        console.log(`[META TRACE ${correlationId}] Uploading 1:1, 9:16, 16:9 variants...`);
+        const uploadVariant = async (url, formatName) => {
+           if (!url || url.includes('unsplash.com')) return null;
+           try {
+             const imgFetch = await fetch(url);
+             if (!imgFetch.ok) return null;
+             const imgBuffer = Buffer.from(await imgFetch.arrayBuffer());
+             const uploadData = await executeMetaRequest(`adimage_upload_${formatName}`, `https://graph.facebook.com/v19.0/${cleanAdAccountId}/adimages`, {
+               access_token: accessToken, 
+               bytes: imgBuffer.toString('base64') 
+             });
+             if (uploadData.images) {
+                return (Object.values(uploadData.images)[0])?.hash || null;
+             }
+           } catch(e) { console.warn(`${formatName} image upload failed:`, e.message); }
            return null;
         };
 
         const [sqHash, vHash, lHash] = await Promise.all([
-           uploadVariant(squareUrl),
-           uploadVariant(verticalUrl),
-           uploadVariant(landscapeUrl)
+           uploadVariant(squareUrl, 'square'),
+           uploadVariant(verticalUrl, 'vertical'),
+           uploadVariant(landscapeUrl, 'landscape')
         ]);
 
         if (sqHash) uploadedHashes.square = sqHash;
         if (vHash) uploadedHashes.vertical = vHash;
         if (lHash) uploadedHashes.landscape = lHash;
-        syncLogs.steps.push({ step: 'adimage_upload_pipeline', response: uploadedHashes });
-      } catch (imgErr) {
-        console.warn('[META API NOTICE] AdImage upload pipeline note:', imgErr.message);
-      }
+        syncLogs.steps.push({ step: 'adimage_upload_pipeline', correlationId, response: uploadedHashes });
 
-      // We'll use Asset Feed Spec for Dynamic Creative Optimization (DCO) to map 1:1 to feed, 9:16 to stories, 16:9 to instream
-      const assetFeedImages = [];
-      if (uploadedHashes.square) assetFeedImages.push({ hash: uploadedHashes.square });
-      if (uploadedHashes.vertical) assetFeedImages.push({ hash: uploadedHashes.vertical });
-      if (uploadedHashes.landscape) assetFeedImages.push({ hash: uploadedHashes.landscape });
+        const assetFeedImages = [];
+        if (uploadedHashes.square) assetFeedImages.push({ hash: uploadedHashes.square });
+        if (uploadedHashes.vertical) assetFeedImages.push({ hash: uploadedHashes.vertical });
+        if (uploadedHashes.landscape) assetFeedImages.push({ hash: uploadedHashes.landscape });
 
-      let creativePayload;
-      if (assetFeedImages.length > 0) {
-          // Milestone 9.2: Dynamic Creative API Payload Structure (FAANG-Standard DCO Engine)
-          // Dynamically constructs Meta's Asset Feed Spec using A/B testing variations for titles, bodies, and CTAs
-          creativePayload = {
-            access_token: accessToken,
-            name: `Encho DCO Master Engine - ${adHeadline}`,
-            object_story_spec: { page_id: pageId },
-            asset_feed_spec: {
-              images: assetFeedImages,
-              bodies: [
-                { text: adMessage }, // Primary AI generated body
-                { text: `Escape to ${campaign.listing_city || 'paradise'}. ${adMessage.substring(0, 100)}...` } // Short-form variant
-              ],
-              titles: [
-                { text: adHeadline }, // Primary Headline
-                { text: `Reserve ${adHeadline} Direct` } // Direct booking angle
-              ],
-              descriptions: [
-                { text: feedDescription },
-                { text: 'Tap to view exclusive availability.' } // Urgency variant
-              ],
-              // DCO tests multiple CTAs automatically to find the highest converting button
-              call_to_action_types: ['SIGN_UP', 'BOOK_TRAVEL', 'LEARN_MORE'],
-              link_urls: [{ website_url: destinationUrl }]
+        let creativePayload;
+        if (assetFeedImages.length > 0) {
+            creativePayload = {
+              access_token: accessToken,
+              name: `Encho DCO Master Engine - ${adHeadline}`,
+              object_story_spec: { page_id: pageId },
+              asset_feed_spec: {
+                images: assetFeedImages,
+                bodies: [
+                  { text: adMessage },
+                  { text: `Escape to ${campaign.listing_city || 'paradise'}. ${adMessage.substring(0, 100)}...` }
+                ],
+                titles: [
+                  { text: adHeadline },
+                  { text: `Reserve ${adHeadline} Direct` }
+                ],
+                descriptions: [
+                  { text: feedDescription },
+                  { text: 'Tap to view exclusive availability.' }
+                ],
+                call_to_action_types: ['SIGN_UP', 'BOOK_TRAVEL', 'LEARN_MORE'],
+                link_urls: [{ website_url: destinationUrl }]
+              }
+            };
+            
+            if (activeLeadFormId) {
+               creativePayload.object_story_spec.link_data = {
+                   call_to_action: { type: 'SIGN_UP', value: { lead_gen_form_id: activeLeadFormId } }
+               };
             }
-          };
-          
-          // Inject Lead Form ID if available for DCO
-          // Meta API quirk: DCO with Lead Forms requires the CTA in link_data as well as the asset_feed_spec
-          if (activeLeadFormId) {
-             creativePayload.object_story_spec.link_data = {
-                 call_to_action: { type: 'SIGN_UP', value: { lead_gen_form_id: activeLeadFormId } }
-             };
-          }
-          if (igAccountId && igAccountId !== 'your_instagram_account_id_here') {
-              creativePayload.object_story_spec.instagram_actor_id = igAccountId;
-          }
-      } else {
-          // Fallback Standard Creative Payload (Upgraded to Native Lead Form spec)
-          const linkDataSpec: any = {
-            link: destinationUrl,
-            message: adMessage,
-            name: adHeadline,
-            call_to_action: { type: 'SIGN_UP', value: { lead_gen_form_id: activeLeadFormId || 'dummy_form_id' } }, // Milestone 8.3: Native Lead Form CTA
-            picture: imageUrl
-          };
-          creativePayload = {
-            access_token: accessToken,
-            name: `Encho Creative - ${adHeadline}`,
-            object_story_spec: { page_id: pageId, link_data: linkDataSpec }
-          };
-          if (igAccountId && igAccountId !== 'your_instagram_account_id_here') {
-              creativePayload.object_story_spec.instagram_actor_id = igAccountId;
-          }
-      }
-
-      try {
-        const creativeRes = await fetch(`https://graph.facebook.com/v19.0/${cleanAdAccountId}/adcreatives`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(creativePayload)
-        });
-        const creativeData = await creativeRes.json();
-        syncLogs.steps.push({ step: 'creative_creation', status: creativeRes.status, response: creativeData });
-        if (creativeRes.ok && creativeData.id) {
-          metaCreativeId = creativeData.id;
-          console.log(`[META API SUCCESS] Creative created: ${metaCreativeId}`);
+            if (igAccountId && igAccountId !== 'your_instagram_account_id_here') {
+                creativePayload.object_story_spec.instagram_actor_id = igAccountId;
+            }
+        } else {
+            const linkDataSpec: any = {
+              link: destinationUrl,
+              message: adMessage,
+              name: adHeadline,
+              call_to_action: { type: 'SIGN_UP', value: { lead_gen_form_id: activeLeadFormId || '999999999999999' } },
+              picture: imageUrl
+            };
+            creativePayload = {
+              access_token: accessToken,
+              name: `Encho Creative - ${adHeadline}`,
+              object_story_spec: { page_id: pageId, link_data: linkDataSpec }
+            };
+            if (igAccountId && igAccountId !== 'your_instagram_account_id_here') {
+                creativePayload.object_story_spec.instagram_actor_id = igAccountId;
+            }
         }
-      } catch (creativeErr: any) {
-        console.warn('[META API NOTICE] Creative pipeline note:', creativeErr.message);
-        syncLogs.steps.push({ step: 'creative_creation', error: creativeErr.message });
-      }
-      
-      const finalCreativeId = metaCreativeId || `act_creative_${Math.floor(100000000 + Math.random() * 900000000)}`;
 
-      // 4. Create Live Ad attached to AdSet & Creative
-      try {
-        const adRes = await fetch(`https://graph.facebook.com/v19.0/${cleanAdAccountId}/ads`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        const creativeData = await executeMetaRequest('creative_creation', `https://graph.facebook.com/v19.0/${cleanAdAccountId}/adcreatives`, creativePayload);
+        metaCreativeId = creativeData.id;
+
+        // 4. Create Live Ad attached to AdSet & Creative
+        const adPayload = {
             access_token: accessToken,
             name: `Encho Ad - ${adHeadline}`,
-            adset_id: finalAdSetId,
-            creative: { creative_id: finalCreativeId },
+            adset_id: metaAdSetId,
+            creative: { creative_id: metaCreativeId },
             status: 'PAUSED'
-          })
-        });
-        const adData = await adRes.json();
-        syncLogs.steps.push({ step: 'ad_creation', status: adRes.status, response: adData });
+        };
+        const adData = await executeMetaRequest('ad_creation', `https://graph.facebook.com/v19.0/${cleanAdAccountId}/ads`, adPayload);
+        metaAdId = adData.id;
 
-        if (adRes.ok && adData.id) {
-          metaAdId = adData.id;
-          console.log(`[META API SUCCESS] Live Meta Ad created: ${metaAdId}`);
-        }
-      } catch (adErr: any) {
-        console.warn('[META API NOTICE] Ad creation note:', adErr.message);
-        syncLogs.steps.push({ step: 'ad_creation', error: adErr.message });
+      } catch (fatalErr: any) {
+        console.error('[META API FATAL] Pipeline failed:', fatalErr.message);
+        syncLogs.steps.push({ step: 'fatal_error', error: fatalErr.message, correlationId: syncLogs.steps[0]?.correlationId });
       }
 
-      const finalAdId = metaAdId || `act_ad_${Math.floor(100000000 + Math.random() * 900000000)}`;
+      // Inspect syncLogs for any Meta API rejections or policy errors
 
       // Inspect syncLogs for any Meta API rejections or policy errors
       let metaRejectionReason: string | null = null;
+      const errorMessages: string[] = [];
       for (const stepLog of syncLogs.steps) {
         if (stepLog.error) {
-          metaRejectionReason = stepLog.error;
+          errorMessages.push(`[${stepLog.step}] ${stepLog.error}`);
         } else if (stepLog.response && stepLog.response.error) {
-          metaRejectionReason = stepLog.response.error.message || JSON.stringify(stepLog.response.error);
+          errorMessages.push(`[${stepLog.step}] ${stepLog.response.error.message || JSON.stringify(stepLog.response.error)}`);
         }
+      }
+      
+      if (errorMessages.length > 0) {
+        metaRejectionReason = errorMessages.join(' | '); // Capture all errors to see the full trace
       }
 
       if (metaRejectionReason) {
@@ -5816,10 +5784,10 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
             accumulated_conversions = COALESCE(accumulated_conversions, 0)
         WHERE id = $9
       `, [
-        finalCampaignId,
-        finalAdSetId,
-        finalCreativeId,
-        finalAdId,
+        metaCampaignId,
+        metaAdSetId,
+        metaCreativeId,
+        metaAdId,
         JSON.stringify(adMedias),
         JSON.stringify(adsetSpecifications),
         JSON.stringify(metaSpecifications),
