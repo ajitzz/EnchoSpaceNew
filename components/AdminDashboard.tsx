@@ -116,6 +116,29 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   });
   const [stripeLiveMode, setStripeLiveMode] = useState(false);
   const [savingOutreach, setSavingOutreach] = useState(false);
+  const [traceModalOpen, setTraceModalOpen] = useState(false);
+  const [currentTraces, setCurrentTraces] = useState<any[]>([]);
+  const [loadingTraces, setLoadingTraces] = useState(false);
+
+  const fetchMetaTraces = async (campaignId: number) => {
+    setTraceModalOpen(true);
+    setLoadingTraces(true);
+    setCurrentTraces([]);
+    try {
+      const res = await fetch(`/api/admin/marketing/campaigns/${campaignId}/traces`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentTraces(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch traces', e);
+    } finally {
+      setLoadingTraces(false);
+    }
+  };
+
 
   useEffect(() => {
     fetchData();

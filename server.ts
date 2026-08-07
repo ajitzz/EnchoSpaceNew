@@ -5537,6 +5537,35 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
         };
         
         syncLogs.steps.push(logEntry);
+        // Enterprise Meta Debug Recorder Insert
+        try {
+          await pool.query(`
+            INSERT INTO meta_api_traces (
+              correlation_id, campaign_id, host_id, step, endpoint, request_payload, response_payload, http_status, fbtrace_id, meta_error_code, meta_error_subcode, meta_error_message, meta_error_type, meta_error_is_transient, meta_error_user_title, meta_error_user_msg, latency_ms
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+          `, [
+            correlationId,
+            campaignId,
+            req.user.id,
+            stepName,
+            endpoint,
+            JSON.stringify(redactedPayload),
+            JSON.stringify(data),
+            res.status,
+            data.error?.fbtrace_id || null,
+            data.error?.code || null,
+            data.error?.error_subcode || null,
+            data.error?.message || null,
+            data.error?.type || null,
+            data.error?.is_transient || null,
+            data.error?.error_user_title || null,
+            data.error?.error_user_msg || null,
+            executionTime
+          ]);
+        } catch(e) {
+          fs.appendFileSync('meta_db_error.txt', e.message + '\n' + e.stack + '\n'); console.error('[META API TRACES] Failed to save trace', e.message, e.stack);
+        }
+
         
         if (!res.ok || data.error) {
           console.error(`[META TRACE ${correlationId}] FAILED: ${stepName} | Status: ${res.status} | Trace ID: ${data.error?.fbtrace_id} | Error:`, JSON.stringify(data.error));
@@ -6930,6 +6959,24 @@ app.post('/api/marketing/campaigns/:id/pacing', authenticateToken, async (req: A
 });
 
 // Admin endpoints for campaigns
+
+app.get('/api/admin/marketing/campaigns/:id/traces', authenticateToken, async (req: AuthRequest, res) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+  const campaignId = req.params.id;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM meta_api_traces WHERE campaign_id = $1 ORDER BY created_at ASC',
+      [campaignId]
+    );
+    res.json(result.rows);
+  } catch (error: any) {
+    console.error('Error fetching meta traces:', error);
+    res.status(500).json({ error: 'Failed to fetch traces' });
+  }
+});
+
 app.get('/api/admin/marketing/campaigns', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
