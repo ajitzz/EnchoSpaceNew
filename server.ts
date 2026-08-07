@@ -2497,7 +2497,7 @@ app.post('/api/upload-url', authenticateToken, async (req, res) => {
     // Validate AWS Configuration (Fallback to local storage if AWS S3 is not configured)
     if (!process.env.AWS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID === 'dummy' || !process.env.AWS_S3_BUCKET_NAME) {
       const uniqueName = Date.now() + '-' + (filename ? filename.replace(/[^a-zA-Z0-9.-]/g, '_') : 'file.bin');
-      const uploadUrl = `/api/upload-local?filename=${encodeURIComponent(uniqueName)}`;
+      const uploadUrl = `${req.protocol}://${req.get('host')}/api/upload-local?filename=${encodeURIComponent(uniqueName)}`;
       const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${uniqueName}`;
       return res.json({ uploadUrl, fileUrl });
     }
@@ -8393,7 +8393,6 @@ app.get('/api/admin/threads/:id/messages', authenticateToken, async (req: AuthRe
 });
 
 app.post('/api/ai/suggest-price', authenticateToken, async (req: AuthRequest, res) => {
-  if (!ai) return res.status(503).json({ error: 'AI not configured' });
   try {
     const { listingId, dates } = req.body;
     // We fetch the listing details to give AI context
@@ -8401,8 +8400,12 @@ app.post('/api/ai/suggest-price', authenticateToken, async (req: AuthRequest, re
     if (listingRes.rowCount === 0) return res.status(404).json({ error: 'Not found' });
 
     const listing = listingRes.rows[0];
-    const systemInstruction = `You are a dynamic intelligent pricing engine for a property rental platform.
-Provide an optimal nightly price for the following property for the dates: ${dates.join(', ')}.
+    let suggestedPrice = Math.round(listing.price * 1.15); // Static 15% fallback
+
+    if (ai) {
+      try {
+        const systemInstruction = `You are a dynamic intelligent pricing engine for a property rental platform.
+Provide an optimal nightly price for the following property for the dates: ${(dates || []).join(', ')}.
 
 Property Details:
 Title: ${listing.title}
@@ -8414,26 +8417,24 @@ Consider weekends and general seasonality. Output ONLY a valid JSON object in th
 {"price": number}
 Do NOT wrap it in markdown block.`;
 
-    let suggestedPrice = Math.round(listing.price * 1.15); // Static 15% fallback
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: "Suggest optimal price in JSON.",
+          config: {
+            systemInstruction,
+            temperature: 0.5,
+            responseMimeType: "application/json"
+          }
+        });
 
-    try {
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: "Suggest optimal price in JSON.",
-        config: {
-          systemInstruction,
-          temperature: 0.5,
-          responseMimeType: "application/json"
+        const text = response?.text || '';
+        const output = JSON.parse(text);
+        if (output && typeof output.price === 'number') {
+          suggestedPrice = output.price;
         }
-      });
-
-      const text = response?.text || '';
-      const output = JSON.parse(text);
-      if (output && typeof output.price === 'number') {
-        suggestedPrice = output.price;
+      } catch (geminiError) {
+        logGeminiWarning("Dynamic pricing suggest", geminiError);
       }
-    } catch (geminiError) {
-      logGeminiWarning("Dynamic pricing suggest", geminiError);
     }
 
     res.json({ price: suggestedPrice });
@@ -8444,36 +8445,37 @@ Do NOT wrap it in markdown block.`;
 });
 
 app.post('/api/ai/suggest-reply', authenticateToken, async (req: AuthRequest, res) => {
-  if (!ai) return res.status(503).json({ error: 'AI not configured' });
   try {
     const { history, propertyTitle, isHost } = req.body;
-    const role = isHost ? 'a property host' : 'a platform administrator';
-    const systemInstruction = `You are an AI assistant helping ${role} write a reply to a guest.
+    let reply = 'Hello! How can I help you regarding your booking today?';
+
+    if (ai) {
+      try {
+        const role = isHost ? 'a property host' : 'a platform administrator';
+        const systemInstruction = `You are an AI assistant helping ${role} write a reply to a guest.
 The conversation is about the property: "${propertyTitle}".
 Here is the recent conversation:
 ${history}
 
 Draft a polite, helpful, and concise response. Do not include quotes, placeholders, empty messages, '[Admin]', '[Host]', or any 'Replace this sample message' tags in the response text. The response must be a fully complete, ready-to-send message. Do not leave any blanks for the user to fill in.`;
 
-    let reply = 'Hello! How can I help you regarding your booking today?';
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: "Draft a reply to the guest based on the conversation.",
+          config: {
+            systemInstruction,
+            temperature: 0.7
+          }
+        });
 
-    try {
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: "Draft a reply to the guest based on the conversation.",
-        config: {
-          systemInstruction,
-          temperature: 0.7
+        const text = response?.text?.trim() || '';
+        const lowerReply = text.toLowerCase();
+        if (text !== '' && !lowerReply.includes('replace this') && !lowerReply.includes('sample message') && !lowerReply.includes('[insert') && !lowerReply.includes('placeholder')) {
+          reply = text;
         }
-      });
-
-      const text = response?.text?.trim() || '';
-      const lowerReply = text.toLowerCase();
-      if (text !== '' && !lowerReply.includes('replace this') && !lowerReply.includes('sample message') && !lowerReply.includes('[insert') && !lowerReply.includes('placeholder')) {
-        reply = text;
+      } catch (geminiError) {
+        logGeminiWarning("Reply draft generation", geminiError);
       }
-    } catch (geminiError) {
-      logGeminiWarning("Reply draft generation", geminiError);
     }
 
     res.json({ reply });
@@ -8484,10 +8486,14 @@ Draft a polite, helpful, and concise response. Do not include quotes, placeholde
 });
 
 app.post('/api/ai/suggest-listing', authenticateToken, async (req: AuthRequest, res) => {
-  if (!ai) return res.status(503).json({ error: 'AI not configured' });
   try {
     const { type, city, amenities, rooms, rentalMode } = req.body;
-    const systemInstruction = `You are a professional real-estate listing assistant.
+    let title = `Beautiful ${type || 'Property'} in ${city || 'Prime Location'}`;
+    let description = `Enjoy a comfortable and fully equipped ${type || 'property'} located in ${city || 'a fantastic destination'}. Perfect for short or long-term stays, this space offers excellent amenities including ${(amenities || []).slice(0, 3).join(', ')} for a cozy home-away-from-home experience.`;
+
+    if (ai) {
+      try {
+        const systemInstruction = `You are a professional real-estate listing assistant.
 Create a short, catchy title and a warm, inviting, 2-3 paragraph description for a property listing.
 
 Details provided by host:
@@ -8501,25 +8507,22 @@ Return ONLY a valid JSON object in this exact format, with no markdown code bloc
 {"title": "your suggested title", "description": "your suggested description"}
 Do NOT include any empty placeholders, brackets like [Insert City], or generic tags. The output must be fully formed and ready to publish without requiring any edits.`;
 
-    let title = `Beautiful ${type} in ${city}`;
-    let description = `Enjoy a comfortable and fully equipped ${type} located in ${city}. Perfect for short or long-term stays, this space offers excellent amenities including ${(amenities || []).slice(0, 3).join(', ')} for a cozy home-away-from-home experience.`;
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: "Generate title and description based on the details.",
+          config: {
+            systemInstruction,
+            temperature: 0.7,
+            responseMimeType: "application/json"
+          }
+        });
 
-    try {
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: "Generate title and description based on the details.",
-        config: {
-          systemInstruction,
-          temperature: 0.7,
-          responseMimeType: "application/json"
-        }
-      });
-
-      const output = JSON.parse(response?.text || '{}');
-      if (output.title) title = output.title;
-      if (output.description) description = output.description;
-    } catch (geminiError) {
-      logGeminiWarning("Listing assist generation", geminiError);
+        const output = JSON.parse(response?.text || '{}');
+        if (output.title) title = output.title;
+        if (output.description) description = output.description;
+      } catch (geminiError) {
+        logGeminiWarning("Listing assist generation", geminiError);
+      }
     }
 
     res.json({ title, description });
