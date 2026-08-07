@@ -5441,12 +5441,30 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
           adSetPayload.promoted_object = { page_id: pageId };
         }
 
-        const adSetRes = await fetch(`https://graph.facebook.com/v19.0/${cleanAdAccountId}/adsets`, {
+        let adSetRes = await fetch(`https://graph.facebook.com/v19.0/${cleanAdAccountId}/adsets`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(adSetPayload)
         });
-        const adSetData = await adSetRes.json();
+        let adSetData = await adSetRes.json();
+        
+        // If failed due to targeting/interest error under Special Category, retry with broad HOUSING targeting
+        if (!adSetRes.ok && adSetData?.error) {
+          console.warn(`[META API WARN] Initial AdSet creation failed (${JSON.stringify(adSetData.error)}). Retrying with broad HOUSING targeting...`);
+          adSetPayload.targeting = {
+            age_min: 18,
+            age_max: 65,
+            geo_locations: { countries: targetCountries.length > 0 ? targetCountries : ['US'] },
+            publisher_platforms: ['facebook', 'instagram']
+          };
+          adSetRes = await fetch(`https://graph.facebook.com/v19.0/${cleanAdAccountId}/adsets`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(adSetPayload)
+          });
+          adSetData = await adSetRes.json();
+        }
+
         syncLogs.steps.push({ step: 'adset_creation', status: adSetRes.status, response: adSetData });
 
         if (adSetRes.ok && adSetData.id) {
