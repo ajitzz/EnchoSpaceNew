@@ -1151,6 +1151,28 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
     try {
       const token = localStorage.getItem('token');
+
+      // Milestone 1: Strict Pre-Flight Validation & Error Surface Elimination
+      const preFlightRes = await fetch('/api/marketing/pre-flight-check', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          listing_id: formData.listing_id,
+          title: formData.title,
+          description: formData.description,
+          budget: formData.budget
+        })
+      });
+      const preFlightData = await preFlightRes.json();
+      if (!preFlightData.success) {
+        const errorList = preFlightData.pre_flight_checks?.errors?.join(' ') || 'Pre-flight validation failed.';
+        addToast('Pre-Flight Validation Failed', errorList, 'error');
+        return;
+      }
+
       const method = editingCampaignId ? 'PUT' : 'POST';
       const url = editingCampaignId 
         ? `/api/marketing/campaigns/${editingCampaignId}`
