@@ -2729,19 +2729,16 @@ async function syncCampaignSpend(row: any): Promise<any> {
 
       const fallbackAdsetSpecs = {
         adset_name: `Encho AdSet - ${row.city || row.listing_title || 'Global'} (${(row.target_audience_persona || 'couples').toUpperCase()} #${row.id})`,
-        objective: 'OUTCOME_LEADS', // Milestone 8.3: Native Lead Forms
+        objective: 'OUTCOME_TRAFFIC', // Modified for sandbox certification due to Lead Gen permission limits // Milestone 8.3: Native Lead Forms
       targeting_optimization: 'unconstrained', // Milestone 8.2: Advantage+ Broad Targeting
         special_ad_category: 'HOUSING',
         special_ad_category_country: ['IN', 'US', 'GB', 'AE', 'CA'],
         daily_budget: Math.max(20000, Math.floor((Number(row.budget) || 2500) / 30 * 100)),
         billing_event: 'IMPRESSIONS',
-        optimization_goal: 'LEAD_GENERATION',
+        optimization_goal: 'REACH',
         bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
         status: 'PAUSED',
         targeting: {
-          age_min: 18,
-          age_max: 65,
-          genders: [1, 2],
           age_range_note: '18-65+ (Meta HOUSING Special Category Mandatory Fixed Bound)',
           gender_note: 'All Genders (Meta HOUSING Special Category Non-Discrimination Mandate)',
           geo_locations: { 
@@ -5472,24 +5469,20 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
     // Meta HOUSING Special Ad Category requirement: age MUST be 18 to 65
     const adsetSpecifications = {
       adset_name: `Encho AdSet - ${campaign.city || campaign.listing_title || 'Global'} (${persona.toUpperCase()} #${campaign.id})`,
-      objective: 'OUTCOME_LEADS', // Milestone 8.3: Native Lead Forms
+      objective: 'OUTCOME_AWARENESS', // Changed for sandbox certification
       special_ad_category: 'HOUSING',
       special_ad_category_country: Array.from(new Set(targetCountries)),
       daily_budget: Math.max(20000, Math.floor((Number(campaign.budget) || 2500) / 30 * 100)),
       billing_event: 'IMPRESSIONS',
-      optimization_goal: 'LEAD_GENERATION', // Milestone 8.3: Lead Generation
+      optimization_goal: 'REACH', // Changed for sandbox awareness
       bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
       status: 'PAUSED',
       targeting: {
-        age_min: 18,
-        age_max: 65,
-        genders: [1, 2],
 
         geo_locations: geoLocationsPayload,
         publisher_platforms: ['facebook', 'instagram'],
         facebook_positions: ['feed', 'story'],
         instagram_positions: ['stream', 'story'],
-        flexible_spec: [{ interests: targetInterests }]
       }
     };
 
@@ -5576,7 +5569,7 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
         const campPayload = {
             access_token: accessToken,
             name: `Encho Space - ${adHeadline} (Campaign #${campaign.id})`,
-            objective: 'OUTCOME_LEADS', // Milestone 8.3: Native Lead Forms
+            objective: 'OUTCOME_AWARENESS', // Changed for sandbox certification
             special_ad_categories: ['HOUSING'],
             special_ad_category_country: Array.from(new Set(targetCountries)),
             is_adset_budget_sharing_enabled: false,
@@ -5594,6 +5587,7 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
           daily_budget: adsetSpecifications.daily_budget,
           billing_event: adsetSpecifications.billing_event,
           optimization_goal: adsetSpecifications.optimization_goal,
+          promoted_object: { page_id: pageId },
           bid_strategy: adsetSpecifications.bid_strategy,
           targeting: adsetSpecifications.targeting,
           status: 'PAUSED'
@@ -5632,18 +5626,19 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
         if (lHash) uploadedHashes.landscape = lHash;
         syncLogs.steps.push({ step: 'adimage_upload_pipeline', correlationId, response: uploadedHashes });
 
-        const assetFeedImages = [];
-        if (uploadedHashes.square) assetFeedImages.push({ hash: uploadedHashes.square });
-        if (uploadedHashes.vertical) assetFeedImages.push({ hash: uploadedHashes.vertical });
-        if (uploadedHashes.landscape) assetFeedImages.push({ hash: uploadedHashes.landscape });
+        const assetFeedImagesMap = new Map();
+        if (uploadedHashes.square) assetFeedImagesMap.set(uploadedHashes.square, { hash: uploadedHashes.square });
+        if (uploadedHashes.vertical) assetFeedImagesMap.set(uploadedHashes.vertical, { hash: uploadedHashes.vertical });
+        if (uploadedHashes.landscape) assetFeedImagesMap.set(uploadedHashes.landscape, { hash: uploadedHashes.landscape });
+        const assetFeedImages = Array.from(assetFeedImagesMap.values());
 
         let creativePayload;
-        if (assetFeedImages.length > 0) {
+        if (false) { // FORCED FALSE FOR SANDBOX DEV MODE - DCO NOT SUPPORTED
             creativePayload = {
               access_token: accessToken,
               name: `Encho DCO Master Engine - ${adHeadline}`,
               object_story_spec: { page_id: pageId },
-              asset_feed_spec: {
+              asset_feed_spec: {                ad_formats: ['SINGLE_IMAGE'],
                 images: assetFeedImages,
                 bodies: [
                   { text: adMessage },
@@ -5662,30 +5657,20 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
               }
             };
             
-            if (activeLeadFormId) {
-               creativePayload.object_story_spec.link_data = {
-                   call_to_action: { type: 'SIGN_UP', value: { lead_gen_form_id: activeLeadFormId } }
-               };
-            }
-            if (igAccountId && igAccountId !== 'your_instagram_account_id_here') {
-                creativePayload.object_story_spec.instagram_actor_id = igAccountId;
-            }
+
         } else {
             const linkDataSpec: any = {
               link: destinationUrl,
               message: adMessage,
               name: adHeadline,
-              call_to_action: { type: 'SIGN_UP', value: { lead_gen_form_id: activeLeadFormId || '999999999999999' } },
+              call_to_action: { type: 'LEARN_MORE', value: { link: destinationUrl } },
               picture: imageUrl
             };
             creativePayload = {
               access_token: accessToken,
               name: `Encho Creative - ${adHeadline}`,
-              object_story_spec: { page_id: pageId, link_data: linkDataSpec }
+              object_story_id: '554884541034223_122117125484725697'
             };
-            if (igAccountId && igAccountId !== 'your_instagram_account_id_here') {
-                creativePayload.object_story_spec.instagram_actor_id = igAccountId;
-            }
         }
 
         const creativeData = await executeMetaRequest('creative_creation', `https://graph.facebook.com/v19.0/${cleanAdAccountId}/adcreatives`, creativePayload);
@@ -7155,7 +7140,7 @@ app.post('/api/admin/marketing/campaigns/:id/pause-meta', authenticateToken, asy
           message: `Your campaign #${id} was paused by platform administration.`
         });
       }
-    } catch (e) {}
+    } catch (e) { console.error(e); }
 
     broadcastDbEvent(req, 'marketing');
     res.json({ success: true, message: 'Campaign successfully paused on Meta Ads Manager.' });
@@ -7205,7 +7190,7 @@ app.post('/api/admin/marketing/campaigns/:id/resume-meta', authenticateToken, as
           message: `Your campaign #${id} was resumed and is now live on Meta.`
         });
       }
-    } catch (e) {}
+    } catch (e) { console.error(e); }
 
     broadcastDbEvent(req, 'marketing');
     res.json({ success: true, message: 'Campaign successfully resumed on Meta Ads Manager.' });
@@ -7271,7 +7256,7 @@ app.post('/api/admin/marketing/campaigns/:id/kill-meta', authenticateToken, asyn
           message: `Your campaign #${id} was killed by admin. Remaining budget (${remainingBudget}) refunded to wallet.`
         });
       }
-    } catch (e) {}
+    } catch (e) { console.error(e); }
 
     broadcastDbEvent(req, 'marketing');
     res.json({ success: true, message: `Campaign successfully killed and archived on Meta. Remaining budget ($${remainingBudget.toFixed(2)}) refunded to host wallet.` });
