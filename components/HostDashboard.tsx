@@ -252,7 +252,7 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
                                   <div className="aspect-square w-full relative mb-3 overflow-hidden rounded-2xl bg-gray-200">
                                       <img src={listing.imageUrl || 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=500'} alt={listing.title} className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500" />
                                   </div>
-                                  <div className="flex justify-between items-start">
+                                  <div className="flex justify-between items-start gap-2">
                                       <div>
                                           <h3 className="font-semibold text-gray-900">{listing.city}</h3>
                                           <p className="text-sm text-gray-500 truncate w-full">{listing.title}</p>
@@ -261,7 +261,7 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
                                               <span className="text-gray-900">night</span>
                                           </div>
                                       </div>
-                                      <div className="flex">
+                                      <div className="flex shrink-0">
                                           <button onClick={(e) => {
                                               e.stopPropagation();
                                               onEditListing?.(listing);

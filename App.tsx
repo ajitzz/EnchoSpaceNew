@@ -966,84 +966,90 @@ function App() {
     }
 
     if (appMode === 'host') {
-        return (
-          <div className="min-h-screen bg-white font-sans text-gray-900 selection:bg-[#0284C7]/20 selection:text-[#0284C7]">
-            <div style={{ display: (currentView === 'HOSTING' || currentView === 'SEARCH') ? 'block' : 'none' }}>
-              <motion.div key="host-dashboard" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition}>
-                <Header 
-                  onSearch={handleSearch} 
-                  currentCity={city} 
-                  onWishlistClick={() => setCurrentView('WISHLIST')}
-                  onReservesClick={() => setCurrentView('RESERVATIONS')}
-                  onHostClick={() => {}}
-                  onLoginClick={() => setShowAuthModal(true)}
-                  highlightReserves={highlightReserves}
-                  highlightWishlist={highlightWishlist}
-                  reservesCount={reservations.length}
-                  wishlistCount={favorites.length}
-                  appMode="host"
-                  onModeSwitch={setAppMode}
-                  hostView={hostView}
-                  onHostViewChange={setHostView}
-                  isOnline={isOnline}
-                />
-                <HostDashboard 
-                  view={hostView} 
-                  user={user} 
-                  refreshTrigger={hostDashboardRefresh}
-                  onNavigateToHostForm={() => {
-                    setEditingListing(null);
-                    setCurrentView('HOSTING');
-                  }} 
-                  onEditListing={(listing) => {
-                    setEditingListing(listing);
-                    setCurrentView('HOSTING');
-                  }}
-                  onNavigateToExperienceForm={() => {
-                    setEditingExperience(null);
-                    setCurrentView('HOSTING_EXPERIENCE');
-                  }}
-                  onEditExperience={(exp) => {
-                    setEditingExperience(exp);
-                    setCurrentView('HOSTING_EXPERIENCE');
-                  }}
-                />
-              </motion.div>
-            </div>
-            
-            {currentView === 'HOSTING' && (
-               <motion.div key="hosting" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition}>
+        if (currentView === 'HOSTING') {
+            return (
+              <motion.div key="hosting" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition} className="min-h-screen bg-white">
                 <HostForm 
                   existingListing={editingListing}
                   onBack={() => {
                     setEditingListing(null);
-                    setCurrentView('HOSTING');
+                    setCurrentView('SEARCH');
+                    setHostView('listings');
                   }}
                   onSuccess={() => {
                       handleSearch(city);
                       setHostDashboardRefresh(prev => prev + 1);
-                      setCurrentView('HOSTING');
+                      setHostView('listings');
+                      setCurrentView('SEARCH');
                   }} 
                 />
-               </motion.div>
-            )}
+              </motion.div>
+            );
+        }
 
-            {currentView === 'HOSTING_EXPERIENCE' && (
-               <motion.div key="hosting-experience" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition}>
+        if (currentView === 'HOSTING_EXPERIENCE') {
+            return (
+              <motion.div key="hosting-experience" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition} className="min-h-screen bg-white">
                 <HostExperienceForm 
                   existingExperience={editingExperience || undefined}
                   onBack={() => {
                     setEditingExperience(null);
-                    setCurrentView('HOSTING');
+                    setCurrentView('SEARCH');
+                    setHostView('listings');
                   }}
                   onSuccess={() => {
                       handleSearch(city);
                       setHostDashboardRefresh(prev => prev + 1);
-                      setCurrentView('HOSTING');
+                      setHostView('listings');
+                      setCurrentView('SEARCH');
                   }} 
                 />
-               </motion.div>
-            )}
+              </motion.div>
+            );
+        }
+
+        return (
+          <div className="min-h-screen bg-white font-sans text-gray-900 selection:bg-[#0284C7]/20 selection:text-[#0284C7]">
+            <motion.div key="host-dashboard" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition}>
+              <Header 
+                onSearch={handleSearch} 
+                currentCity={city} 
+                onWishlistClick={() => setCurrentView('WISHLIST')}
+                onReservesClick={() => setCurrentView('RESERVATIONS')}
+                onHostClick={() => {}}
+                onLoginClick={() => setShowAuthModal(true)}
+                highlightReserves={highlightReserves}
+                highlightWishlist={highlightWishlist}
+                reservesCount={reservations.length}
+                wishlistCount={favorites.length}
+                appMode="host"
+                onModeSwitch={setAppMode}
+                hostView={hostView}
+                onHostViewChange={setHostView}
+                isOnline={isOnline}
+              />
+              <HostDashboard 
+                view={hostView} 
+                user={user} 
+                refreshTrigger={hostDashboardRefresh}
+                onNavigateToHostForm={() => {
+                  setEditingListing(null);
+                  setCurrentView('HOSTING');
+                }} 
+                onEditListing={(listing) => {
+                  setEditingListing(listing);
+                  setCurrentView('HOSTING');
+                }}
+                onNavigateToExperienceForm={() => {
+                  setEditingExperience(null);
+                  setCurrentView('HOSTING_EXPERIENCE');
+                }}
+                onEditExperience={(exp) => {
+                  setEditingExperience(exp);
+                  setCurrentView('HOSTING_EXPERIENCE');
+                }}
+              />
+            </motion.div>
             
             {showAuthModal && (
               <AuthModal onClose={() => setShowAuthModal(false)} />
