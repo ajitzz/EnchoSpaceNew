@@ -303,56 +303,173 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
     setCurrentStep(prev => Math.max(1, prev - 1));
   };
 
+  const uploadPhotoFile = async (file: File): Promise<string> => {
+    const token = localStorage.getItem('token');
+    try {
+      const presignRes = await fetch('/api/upload-url', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ filename: file.name || 'photo.webp', contentType: file.type || 'image/webp' }),
+      });
+      if (presignRes.ok) {
+        const { uploadUrl, fileUrl } = await presignRes.json();
+        const uploadRes = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': file.type || 'image/webp' },
+          body: file,
+        });
+        if (uploadRes.ok) {
+          return fileUrl;
+        }
+      }
+    } catch (err) {
+      console.warn('PUT upload failed, attempting base64 upload fallback:', err);
+    }
+
+    try {
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const base64Data = await base64Promise;
+      const res = await fetch('/api/upload-base64', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ filename: file.name || 'photo.webp', base64Data, contentType: file.type || 'image/webp' })
+      });
+      if (!res.ok) throw new Error('Base64 upload failed');
+      const data = await res.json();
+      return data.url;
+    } catch (base64Err) {
+      console.error('All upload methods failed:', base64Err);
+      throw new Error('Failed to upload image file. Please try again.');
+    }
+  };
+
+  const resolveAndUploadPhoto = async (photo: any): Promise<string> => {
+    let fileToUpload: File | null = photo.file || null;
+    if (!fileToUpload && photo.previewUrl) {
+      if (photo.previewUrl.startsWith('http://') || photo.previewUrl.startsWith('https://') || photo.previewUrl.startsWith('/uploads/')) {
+        return photo.previewUrl;
+      }
+      if (photo.previewUrl.startsWith('blob:') || photo.previewUrl.startsWith('data:')) {
+        try {
+          const res = await fetch(photo.previewUrl);
+          const blob = await res.blob();
+          fileToUpload = new File([blob], `upload-${Date.now()}.webp`, { type: blob.type || 'image/webp' });
+        } catch (e) {
+          console.warn('Failed to fetch blob/data url for upload:', e);
+        }
+      }
+    }
+    if (fileToUpload) {
+      return await uploadPhotoFile(fileToUpload);
+    }
+    return photo.previewUrl || '';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Final check for all steps
     for (let i = 1; i <= 5; i++) {
       if (!validateStep(i)) {
         setCurrentStep(i);
         return;
       }
     }
-
     setLoading(true);
     try {
-      const payload = {
-          existingListing,
-          formData,
-          photos,
-          user
-      };
-      
-      const success = await queueCustomMutation('upload_listing', payload);
-      
-      if (!success) {
-          if (!navigator.onLine) {
-              addToast("Scheduled", "You are offline. Your property will be listed once you reconnect.", "info");
-              setSubmitted(true);
-              setTimeout(() => {
-                  onSuccess();
-                  onBack();
-              }, 2000);
-          } else {
-              addToast("Publish Failed", "Failed to publish listing. Please try again.", "error");
-          }
-      } else {
-          addToast("Success", "Your property configuration has been fully synchronized.", "success");
-          setSubmitted(true);
-          setTimeout(() => {
-              onSuccess();
-              onBack();
-          }, 2000);
+      const token = localStorage.getItem('token');
+      const uploadedImageUrls: string[] = [];
+      for (const photo of photos) {
+        const url = await resolveAndUploadPhoto(photo);
+        if (url && !url.startsWith('blob:')) {
+          uploadedImageUrls.push(url);
+        }
       }
-    } catch (error) {
+
+      const processedRooms = await Promise.all(
+        formData.rooms.map(async (room: any) => {
+          const roomPhotoUrls: string[] = [];
+          if (room.photos && Array.isArray(room.photos)) {
+            for (const rp of room.photos) {
+              const url = await resolveAndUploadPhoto(rp);
+              if (url && !url.startsWith('blob:')) {
+                roomPhotoUrls.push(url);
+              }
+            }
+          } else if (room.imageUrls && Array.isArray(room.imageUrls)) {
+            roomPhotoUrls.push(...room.imageUrls);
+          }
+          return {
+            ...room,
+            imageUrls: roomPhotoUrls,
+            imageUrl: roomPhotoUrls[0] || ''
+          };
+        })
+      );
+
+      const payload = {
+        title: formData.title,
+        description: formData.description,
+        price: parseFloat(formData.price) || 0,
+        type: formData.type,
+        address: formData.address,
+        city: formData.city,
+        imageUrl: uploadedImageUrls[0] || '',
+        imageUrls: uploadedImageUrls,
+        videoUrl: formData.videoUrl || '',
+        rentalMode: formData.rentalMode,
+        rooms: processedRooms,
+        maxGuests: formData.maxGuests,
+        bedrooms: formData.bedrooms,
+        beds: formData.beds,
+        bathrooms: formData.bathrooms,
+        amenities: formData.amenities,
+        lat: formData.lat,
+        lng: formData.lng,
+        dynamicPricing: formData.dynamicPricing
+      };
+
+      const endpoint = existingListing?.id ? `/api/listings/${existingListing.id}` : '/api/listings';
+      const method = existingListing?.id ? 'PUT' : 'POST';
+
+      const res = await fetch(endpoint, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to save listing');
+      }
+
+      addToast("Success", existingListing ? "Property successfully updated!" : "Property successfully published!", "success");
+      setSubmitted(true);
+      setTimeout(() => {
+        onSuccess();
+        onBack();
+      }, 2000);
+    } catch (error: any) {
       console.error('Failed to list space:', error);
-      addToast("Upload Failed", "Failed to schedule property listing.", "error");
+      addToast("Upload Failed", error.message || 'Failed to publish property listing.', "error");
     } finally {
       setLoading(false);
     }
   };
 
-  if (submitted) {
+    if (submitted) {
       return (
           <div className="min-h-screen bg-neutral-900 flex flex-col items-center justify-center p-6 text-center text-zinc-100">
               <motion.div 

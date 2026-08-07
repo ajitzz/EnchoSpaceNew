@@ -348,25 +348,78 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
         setPlacesToVisit(placesToVisit.filter((_, idx) => idx !== index));
     };
 
-    const handleFileUpload = async (file: File) => {
+    const handleFileUpload = async (file: File): Promise<string> => {
         const token = localStorage.getItem('token');
-        const presignRes = await fetch('/api/upload-url', {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-            },
-            body: JSON.stringify({ filename: file.name, contentType: file.type }),
-        });
-        if (!presignRes.ok) throw new Error('Failed to create upload URL');
-        const { uploadUrl, fileUrl } = await presignRes.json();
-        const uploadRes = await fetch(uploadUrl, {
-            method: 'PUT',
-            headers: { 'Content-Type': file.type },
-            body: file,
-        });
-        if (!uploadRes.ok) throw new Error('Failed to upload file');
-        return fileUrl;
+        try {
+            const presignRes = await fetch('/api/upload-url', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                },
+                body: JSON.stringify({ filename: file.name || 'photo.webp', contentType: file.type || 'image/webp' }),
+            });
+            if (presignRes.ok) {
+                const { uploadUrl, fileUrl } = await presignRes.json();
+                const uploadRes = await fetch(uploadUrl, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': file.type || 'image/webp' },
+                    body: file,
+                });
+                if (uploadRes.ok) {
+                    return fileUrl;
+                }
+            }
+        } catch (err) {
+            console.warn('PUT upload failed, attempting base64 fallback:', err);
+        }
+
+        try {
+            const reader = new FileReader();
+            const base64Promise = new Promise<string>((resolve, reject) => {
+                reader.onload = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+            const base64Data = await base64Promise;
+            const res = await fetch('/api/upload-base64', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                },
+                body: JSON.stringify({ filename: file.name || 'photo.webp', base64Data, contentType: file.type || 'image/webp' })
+            });
+            if (!res.ok) throw new Error('Base64 upload failed');
+            const data = await res.json();
+            return data.url;
+        } catch (base64Err) {
+            console.error('All upload methods failed:', base64Err);
+            throw new Error('Failed to upload image file. Please try again.');
+        }
+    };
+
+    const resolveAndUploadPhoto = async (photo: any): Promise<string> => {
+        let fileToUpload: File | null = photo.file || null;
+        const targetUrl = photo.url || photo.previewUrl;
+        if (!fileToUpload && targetUrl) {
+            if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://') || targetUrl.startsWith('/uploads/')) {
+                return targetUrl;
+            }
+            if (targetUrl.startsWith('blob:') || targetUrl.startsWith('data:')) {
+                try {
+                    const res = await fetch(targetUrl);
+                    const blob = await res.blob();
+                    fileToUpload = new File([blob], `upload-${Date.now()}.webp`, { type: blob.type || 'image/webp' });
+                } catch (e) {
+                    console.warn('Failed to fetch blob/data url for upload:', e);
+                }
+            }
+        }
+        if (fileToUpload) {
+            return await handleFileUpload(fileToUpload);
+        }
+        return targetUrl || '';
     };
 
     const validateStep = (stepNum: number) => {
@@ -425,11 +478,9 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
         try {
             const uploadedUrls = [];
             for (const photo of photos) {
-                if (photo.file) {
-                    const fileUrl = await handleFileUpload(photo.file);
-                    uploadedUrls.push(fileUrl);
-                } else {
-                    uploadedUrls.push(photo.url || photo.previewUrl);
+                const url = await resolveAndUploadPhoto(photo);
+                if (url && !url.startsWith('blob:')) {
+                    uploadedUrls.push(url);
                 }
             }
 

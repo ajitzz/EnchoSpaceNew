@@ -2440,6 +2440,46 @@ app.put('/api/mock-upload', (req, res) => {
   res.status(200).send('Mock upload successful');
 });
 
+app.put('/api/upload-local', express.raw({ type: '*/*', limit: '50mb' }), (req, res) => {
+  try {
+    const filename = (req.query.filename as string) || `file-${Date.now()}`;
+    const cleanFilename = filename.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const filePath = path.join(process.cwd(), 'public', 'uploads', cleanFilename);
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(filePath, req.body);
+    return res.status(200).json({ status: 'success', url: `/uploads/${cleanFilename}` });
+  } catch (err) {
+    console.error('[LOCAL UPLOAD ERROR]', err);
+    return res.status(500).json({ error: 'Failed to save uploaded file locally' });
+  }
+});
+
+app.post('/api/upload-base64', authenticateToken, express.json({ limit: '50mb' }), (req: AuthRequest, res) => {
+  try {
+    const { filename, base64Data, contentType } = req.body;
+    if (!base64Data) {
+      return res.status(400).json({ error: 'base64Data required' });
+    }
+    const cleanFilename = (filename || 'file.webp').replace(/[^a-zA-Z0-9.-]/g, '_');
+    const uniqueName = Date.now() + '-' + cleanFilename;
+    const filePath = path.join(process.cwd(), 'public', 'uploads', uniqueName);
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const buffer = Buffer.from(base64Data.replace(/^data:.*;base64,/, ''), 'base64');
+    fs.writeFileSync(filePath, buffer);
+    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${uniqueName}`;
+    return res.json({ url: fileUrl });
+  } catch (err) {
+    console.error('[BASE64 UPLOAD ERROR]', err);
+    return res.status(500).json({ error: 'Failed to save base64 file' });
+  }
+});
+
 app.post('/api/upload-url', authenticateToken, async (req, res) => {
   try {
     const { filename, contentType } = req.body;
@@ -2454,12 +2494,11 @@ app.post('/api/upload-url', authenticateToken, async (req, res) => {
        return res.status(400).json({ error: 'Invalid content type. Only images and videos are allowed.' });
     }
 
-    // Validate AWS Configuration
+    // Validate AWS Configuration (Fallback to local storage if AWS S3 is not configured)
     if (!process.env.AWS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID === 'dummy' || !process.env.AWS_S3_BUCKET_NAME) {
-      console.warn('AWS S3 Configuration is missing or invalid. Returning a mock URL for development.');
-      // Return a simulated URL so frontend does not crash if S3 env variables are missing in Vercel
-      const fileUrl = `https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=800&q=80`;
-      const uploadUrl = `/api/mock-upload`;
+      const uniqueName = Date.now() + '-' + (filename ? filename.replace(/[^a-zA-Z0-9.-]/g, '_') : 'file.bin');
+      const uploadUrl = `/api/upload-local?filename=${encodeURIComponent(uniqueName)}`;
+      const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${uniqueName}`;
       return res.json({ uploadUrl, fileUrl });
     }
 
