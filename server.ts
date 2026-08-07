@@ -2441,9 +2441,9 @@ app.put('/api/mock-upload', (req, res) => {
 });
 
 app.put('/api/upload-local', express.raw({ type: '*/*', limit: '50mb' }), (req, res) => {
+  const filename = (req.query.filename as string) || `file-${Date.now()}`;
+  const cleanFilename = filename.replace(/[^a-zA-Z0-9.-]/g, '_');
   try {
-    const filename = (req.query.filename as string) || `file-${Date.now()}`;
-    const cleanFilename = filename.replace(/[^a-zA-Z0-9.-]/g, '_');
     const filePath = path.join(process.cwd(), 'public', 'uploads', cleanFilename);
     const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) {
@@ -2452,8 +2452,10 @@ app.put('/api/upload-local', express.raw({ type: '*/*', limit: '50mb' }), (req, 
     fs.writeFileSync(filePath, req.body);
     return res.status(200).json({ status: 'success', url: `/uploads/${cleanFilename}` });
   } catch (err) {
-    console.error('[LOCAL UPLOAD ERROR]', err);
-    return res.status(500).json({ error: 'Failed to save uploaded file locally' });
+    console.warn('[LOCAL UPLOAD WARNING - read-only FS, returning data uri]:', err);
+    const base64Str = Buffer.isBuffer(req.body) ? req.body.toString('base64') : Buffer.from(req.body || '').toString('base64');
+    const dataUri = `data:image/webp;base64,${base64Str}`;
+    return res.status(200).json({ status: 'success', url: dataUri });
   }
 });
 
@@ -2465,15 +2467,20 @@ app.post('/api/upload-base64', authenticateToken, express.json({ limit: '50mb' }
     }
     const cleanFilename = (filename || 'file.webp').replace(/[^a-zA-Z0-9.-]/g, '_');
     const uniqueName = Date.now() + '-' + cleanFilename;
-    const filePath = path.join(process.cwd(), 'public', 'uploads', uniqueName);
-    const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+    try {
+      const filePath = path.join(process.cwd(), 'public', 'uploads', uniqueName);
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      const buffer = Buffer.from(base64Data.replace(/^data:.*;base64,/, ''), 'base64');
+      fs.writeFileSync(filePath, buffer);
+      const fileUrl = `/uploads/${uniqueName}`;
+      return res.json({ url: fileUrl });
+    } catch (diskErr) {
+      console.warn('[BASE64 UPLOAD WARNING - read-only FS, returning base64 data uri]:', diskErr);
+      return res.json({ url: base64Data });
     }
-    const buffer = Buffer.from(base64Data.replace(/^data:.*;base64,/, ''), 'base64');
-    fs.writeFileSync(filePath, buffer);
-    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${uniqueName}`;
-    return res.json({ url: fileUrl });
   } catch (err) {
     console.error('[BASE64 UPLOAD ERROR]', err);
     return res.status(500).json({ error: 'Failed to save base64 file' });
@@ -2486,19 +2493,17 @@ app.post('/api/upload-url', authenticateToken, async (req, res) => {
     if (!filename || !contentType) {
       return res.status(400).json({ error: 'filename and contentType are required' });
     }
-
     // Security: Restrict allowed content types
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/quicktime', 'video/webm'];
     const isAllowed = contentType.startsWith('image/') || contentType.startsWith('video/') || allowedTypes.includes(contentType);
     if (!isAllowed) {
        return res.status(400).json({ error: 'Invalid content type. Only images and videos are allowed.' });
     }
-
-    // Validate AWS Configuration (Fallback to local storage if AWS S3 is not configured)
+    // Validate AWS Configuration (Fallback to local storage / base64 if AWS S3 is not configured)
     if (!process.env.AWS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID === 'dummy' || !process.env.AWS_S3_BUCKET_NAME) {
       const uniqueName = Date.now() + '-' + (filename ? filename.replace(/[^a-zA-Z0-9.-]/g, '_') : 'file.bin');
-      const uploadUrl = `${req.protocol}://${req.get('host')}/api/upload-local?filename=${encodeURIComponent(uniqueName)}`;
-      const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${uniqueName}`;
+      const uploadUrl = `/api/upload-local?filename=${encodeURIComponent(uniqueName)}`;
+      const fileUrl = `/uploads/${uniqueName}`;
       return res.json({ uploadUrl, fileUrl });
     }
 
