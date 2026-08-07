@@ -3540,7 +3540,29 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                          {adminPaymentOverview.campaigns?.filter((c: any) => c.escrow_status === 'holding').map((c: any) => (
                                             <tr key={c.id} className="hover:bg-gray-50/50 transition-all">
                                                <td className="px-6 py-4">
-                                                  <div className="font-bold text-gray-900">{c.title}</div>
+                                                  <div className="font-bold text-gray-900">{c.title}
+{c.ai_copilot_data && c.ai_copilot_data.overallScore && (
+  <div className="mt-2 p-3 bg-indigo-50 border border-indigo-100 rounded-lg">
+    <div className="flex items-center justify-between">
+      <span className="text-sm font-semibold text-indigo-900">AI Pre-Flight Risk Report</span>
+      <span className={`text-lg font-bold ${c.ai_copilot_data.overallScore >= 90 ? 'text-emerald-600' : 'text-amber-500'}`}>
+        Score: {c.ai_copilot_data.overallScore}/100
+      </span>
+    </div>
+    <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
+      <div><span className="text-gray-500">Predicted Approval:</span> <span className="font-medium">{c.ai_copilot_data.expectedApprovalConfidence}%</span></div>
+      <div><span className="text-gray-500">Copy Quality:</span> <span className="font-medium">{c.ai_copilot_data.breakdown.copy}/100</span></div>
+      <div><span className="text-gray-500">Meta Compliance:</span> <span className="font-medium">{c.ai_copilot_data.breakdown.metaCompliance}/100</span></div>
+      <div><span className="text-gray-500">Targeting Precision:</span> <span className="font-medium">{c.ai_copilot_data.breakdown.targeting}/100</span></div>
+    </div>
+    {c.ai_copilot_data.issues?.length > 0 && (
+      <div className="mt-2 pt-2 border-t border-indigo-200">
+        <span className="text-xs font-semibold text-rose-700">Flagged Issues ({c.ai_copilot_data.issues.length})</span>
+      </div>
+    )}
+  </div>
+)}
+</div>
                                                   <div className="text-[10px] font-mono text-gray-400">ID: #{c.id} | Listing #{c.listing_id}</div>
                                                </td>
                                                <td className="px-6 py-4 font-mono">

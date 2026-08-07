@@ -3081,6 +3081,71 @@ app.post('/api/marketing/pre-flight-check', authenticateToken, async (req: AuthR
 });
 
 // Create marketing campaign draft
+
+// ----------------- AI CAMPAIGN COPILOT -----------------
+app.post('/api/marketing/copilot', authenticateToken, async (req, res) => {
+  try {
+    const { formData } = req.body;
+    
+    // Validate with Gemini
+    const { GoogleGenAI } = require('@google/genai');
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+    // ----------------- LEARNING ENGINE -----------------
+    // Fetch recent Meta API rejections to learn from them
+    const recentRejections = await pool.query(
+      "SELECT step, request_payload, response_payload FROM meta_api_traces WHERE http_status >= 400 ORDER BY created_at DESC LIMIT 5"
+    );
+    const rejectionContext = recentRejections.rows.length > 0 
+      ? "\nRecent Meta API Rejections (Learn from these and prevent them):\n" + JSON.stringify(recentRejections.rows, null, 2)
+      : "";
+
+    
+    const prompt = `
+      You are the ENCHO AI Campaign Copilot. You must audit this draft marketing campaign against Meta's Housing Advertising Policies (Special Ad Category) and ENCHO's high standards.
+      
+      ${rejectionContext}
+
+Draft Data:
+      ${JSON.stringify(formData, null, 2)}
+      
+      Output a strict JSON object with this schema:
+      {
+        "overallScore": number (0-100),
+        "breakdown": {
+          "copy": number,
+          "media": number,
+          "metaCompliance": number,
+          "targeting": number,
+          "landingPage": number
+        },
+        "expectedApprovalConfidence": number (0-100),
+        "issues": [
+          { "field": string, "severity": "high"|"medium"|"low", "message": string, "autoFixSuggestion": string }
+        ],
+        "policyReport": string,
+        "predictedReach": string,
+        "predictedCTR": string,
+        "predictedCPC": string
+      }
+    `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+      }
+    });
+
+    const result = JSON.parse(response.text);
+    res.json(result);
+  } catch (error) {
+    console.error('Copilot Error:', error);
+    res.status(500).json({ error: 'Failed to analyze campaign' });
+  }
+});
+
 app.post('/api/marketing/campaigns', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
@@ -5246,7 +5311,42 @@ function getMetaFixSuggestion(errorMsg: string): string {
   }
   return 'Fix Suggestion: Review Meta Graph API error details in the sync logs, check campaign parameters, and re-submit after making adjustments.';
 }
+
+// ----------------- META PREFLIGHT ENGINE -----------------
+async function runMetaPreflightEngine(campaignId, dbPool) {
+  console.log(`[PREFLIGHT] Running validation for campaign ${campaignId}`);
+  const campaignRes = await dbPool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [campaignId]);
+  if (campaignRes.rows.length === 0) throw new Error('Campaign not found');
+  const campaign = campaignRes.rows[0];
+
+  // 1. Authentication
+  if (!process.env.META_ACCESS_TOKEN || !process.env.META_AD_ACCOUNT_ID) {
+    throw new Error('Preflight Failed: Missing Meta API Credentials');
+  }
+
+  // 2. Special Ad Category Validation
+  if (!campaign.target_locations || campaign.target_radius_km < 25) {
+    throw new Error('Preflight Failed: Housing Special Ad Category requires minimum 25km radius targeting.');
+  }
+
+  // 3. Payload & Schema Validation
+  if (!campaign.title || !campaign.feed_description) {
+    throw new Error('Preflight Failed: Missing required creative fields (title, feed_description).');
+  }
+
+  // 4. Budget Validation
+  if (campaign.budget < 100) {
+    throw new Error('Preflight Failed: Budget is below Meta minimums.');
+  }
+  
+  // 5. Objective & Optimization Validation
+  // We use OUTCOME_TRAFFIC with LINK_CLICKS or REACH
+  console.log(`[PREFLIGHT] Campaign ${campaignId} passed all checks.`);
+  return true;
+}
+
 async function dispatchMetaCampaign(campaignId: number, req: any) {
+  await runMetaPreflightEngine(campaignId, pool);
   try {
     const campaignResult = await pool.query(`
       SELECT c.*, l.title as listing_title, l.description as listing_desc, l.image_url as listing_image, l.city

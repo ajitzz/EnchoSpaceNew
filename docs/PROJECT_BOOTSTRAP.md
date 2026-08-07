@@ -122,3 +122,8 @@ No architectural change is complete until documentation matches the implementati
 At the beginning of each engineering session, silently execute this bootstrap internally.
 
 When complete, begin work using the synchronized project context rather than relying on conversational memory.
+
+
+
+## Latest Addition: AI Campaign Copilot & Preflight Engine
+Added real-time validation via Gemini to catch Meta policy violations before they happen. It features an auto-fix UI for hosts and a preflight engine that halts execution of invalid payloads.
