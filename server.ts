@@ -7041,6 +7041,174 @@ app.post('/api/admin/marketing/campaigns/:id/reject', authenticateToken, async (
   }
 });
 
+// Admin Meta Campaign Control: Pause, Resume, Kill/Archive directly from Dashboard
+app.post('/api/admin/marketing/campaigns/:id/pause-meta', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+    const { id } = req.params;
+
+    const campRes = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [id]);
+    if (campRes.rows.length === 0) return res.status(404).json({ error: 'Campaign not found' });
+    const campaign = campRes.rows[0];
+
+    const accessToken = process.env.META_ACCESS_TOKEN || '';
+    if (campaign.meta_campaign_id && !campaign.meta_campaign_id.startsWith('act_mock_') && accessToken) {
+      try {
+        const metaRes = await fetch(`https://graph.facebook.com/v19.0/${campaign.meta_campaign_id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'PAUSED', access_token: accessToken })
+        });
+        const metaData = await metaRes.json();
+        console.log(`[META ADMIN PAUSE] Campaign #${id} Meta API response:`, metaData);
+      } catch (metaErr) {
+        console.warn(`[META ADMIN PAUSE WARN] Failed to pause on Meta Graph API:`, metaErr);
+      }
+    }
+
+    await pool.query("UPDATE host_marketing_campaigns SET status = 'paused', admin_feedback = 'Admin manually paused campaign on Meta.' WHERE id = $1", [id]);
+
+    await pool.query(`
+      INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [req.user.id, 'marketing_campaign', id, 'pause_meta_campaign', JSON.stringify({status: campaign.status}), JSON.stringify({status: 'paused'}), req.ip || req.socket.remoteAddress]);
+
+    try {
+      if (global.io) {
+        global.io.to(`user_${campaign.host_id}`).emit('notification', {
+          type: 'campaign_paused',
+          campaignId: id,
+          message: `Your campaign #${id} was paused by platform administration.`
+        });
+      }
+    } catch (e) {}
+
+    broadcastDbEvent(req, 'marketing');
+    res.json({ success: true, message: 'Campaign successfully paused on Meta Ads Manager.' });
+  } catch (error) {
+    console.error('Error pausing Meta campaign:', error);
+    res.status(500).json({ error: 'Failed to pause campaign on Meta' });
+  }
+});
+
+app.post('/api/admin/marketing/campaigns/:id/resume-meta', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+    const { id } = req.params;
+
+    const campRes = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [id]);
+    if (campRes.rows.length === 0) return res.status(404).json({ error: 'Campaign not found' });
+    const campaign = campRes.rows[0];
+
+    const accessToken = process.env.META_ACCESS_TOKEN || '';
+    if (campaign.meta_campaign_id && !campaign.meta_campaign_id.startsWith('act_mock_') && accessToken) {
+      try {
+        const metaRes = await fetch(`https://graph.facebook.com/v19.0/${campaign.meta_campaign_id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'ACTIVE', access_token: accessToken })
+        });
+        const metaData = await metaRes.json();
+        console.log(`[META ADMIN RESUME] Campaign #${id} Meta API response:`, metaData);
+      } catch (metaErr) {
+        console.warn(`[META ADMIN RESUME WARN] Failed to resume on Meta Graph API:`, metaErr);
+      }
+    }
+
+    await pool.query("UPDATE host_marketing_campaigns SET status = 'active', admin_feedback = NULL WHERE id = $1", [id]);
+
+    await pool.query(`
+      INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [req.user.id, 'marketing_campaign', id, 'resume_meta_campaign', JSON.stringify({status: campaign.status}), JSON.stringify({status: 'active'}), req.ip || req.socket.remoteAddress]);
+
+    try {
+      if (global.io) {
+        global.io.to(`user_${campaign.host_id}`).emit('notification', {
+          type: 'campaign_resumed',
+          campaignId: id,
+          message: `Your campaign #${id} was resumed and is now live on Meta.`
+        });
+      }
+    } catch (e) {}
+
+    broadcastDbEvent(req, 'marketing');
+    res.json({ success: true, message: 'Campaign successfully resumed on Meta Ads Manager.' });
+  } catch (error) {
+    console.error('Error resuming Meta campaign:', error);
+    res.status(500).json({ error: 'Failed to resume campaign on Meta' });
+  }
+});
+
+app.post('/api/admin/marketing/campaigns/:id/kill-meta', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+    const { id } = req.params;
+
+    const campRes = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [id]);
+    if (campRes.rows.length === 0) return res.status(404).json({ error: 'Campaign not found' });
+    const campaign = campRes.rows[0];
+
+    const accessToken = process.env.META_ACCESS_TOKEN || '';
+    if (campaign.meta_campaign_id && !campaign.meta_campaign_id.startsWith('act_mock_') && accessToken) {
+      try {
+        const metaRes = await fetch(`https://graph.facebook.com/v19.0/${campaign.meta_campaign_id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'ARCHIVED', access_token: accessToken })
+        });
+        const metaData = await metaRes.json();
+        console.log(`[META ADMIN KILL/ARCHIVE] Campaign #${id} Meta API response:`, metaData);
+      } catch (metaErr) {
+        console.warn(`[META ADMIN KILL WARN] Failed to archive on Meta Graph API:`, metaErr);
+      }
+    }
+
+    await pool.query("UPDATE host_marketing_campaigns SET status = 'killed', admin_feedback = 'Killed and archived by Administrator. Unused budget refunded.' WHERE id = $1", [id]);
+
+    // Refund remaining unused budget to host wallet
+    const remainingBudget = Math.max(0, parseFloat(campaign.budget || 0) - parseFloat(campaign.spent || 0));
+    if (remainingBudget > 0 && campaign.payment_status === 'paid') {
+      let walletRes = await pool.query('SELECT id FROM host_wallets WHERE host_id = $1', [campaign.host_id]);
+      if (walletRes.rows.length === 0) {
+        walletRes = await pool.query('INSERT INTO host_wallets (host_id, balance, encho_credits) VALUES ($1, 0, 0) RETURNING id', [campaign.host_id]);
+      }
+      const walletId = walletRes.rows[0].id;
+      await pool.query('UPDATE host_wallets SET balance = balance + $1 WHERE id = $2', [remainingBudget, walletId]);
+      await pool.query(`
+        INSERT INTO wallet_transactions (wallet_id, amount, type, reference_id, status, description)
+        VALUES ($1, $2, 'campaign_cancellation_refund', $3, 'completed', $4)
+      `, [walletId, remainingBudget, `admin_kill_campaign_${id}`, `Admin kill-switch refund for campaign #${id}`]);
+      await pool.query("UPDATE host_marketing_campaigns SET payment_status = 'refunded' WHERE id = $1", [id]);
+    }
+
+    await pool.query(`
+      INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [req.user.id, 'marketing_campaign', id, 'kill_meta_campaign', JSON.stringify({status: campaign.status}), JSON.stringify({status: 'killed', refund: remainingBudget}), req.ip || req.socket.remoteAddress]);
+
+    try {
+      if (global.io) {
+        global.io.to(`user_${campaign.host_id}`).emit('notification', {
+          type: 'campaign_killed',
+          campaignId: id,
+          message: `Your campaign #${id} was killed by admin. Remaining budget (${remainingBudget}) refunded to wallet.`
+        });
+      }
+    } catch (e) {}
+
+    broadcastDbEvent(req, 'marketing');
+    res.json({ success: true, message: `Campaign successfully killed and archived on Meta. Remaining budget ($${remainingBudget.toFixed(2)}) refunded to host wallet.` });
+  } catch (error) {
+    console.error('Error killing Meta campaign:', error);
+    res.status(500).json({ error: 'Failed to kill campaign on Meta' });
+  }
+});
+
+
 app.post('/api/marketing/campaigns/:id/cancel', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {

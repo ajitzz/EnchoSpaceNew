@@ -3,7 +3,7 @@ import { SEO } from './SEO';
 import { AdminSEOTab } from './AdminSEOTab';
 import { Listing } from '../types';
 import { HomeIcon, ListIcon,  TrashIcon, EditIcon, CheckCircle2Icon, UserIcon, XIcon } from './Icons';
-import { Map, Compass, MoreHorizontal, Edit3, Megaphone, Link, CreditCard, TrendingUp, Send, RefreshCw, Plus, Phone, Mail, Users, Globe, Building, Check, Search, Sparkles, Loader2, Upload, Zap, Shield, ShieldCheck, FileText, ChevronRight, AlertTriangle, Eye } from 'lucide-react';
+import { Map, Compass, MoreHorizontal, Edit3, Megaphone, Link, CreditCard, TrendingUp, Send, RefreshCw, Plus, Phone, Mail, Users, Globe, Building, Check, Search, Sparkles, Loader2, Upload, Zap, Shield, ShieldCheck, FileText, ChevronRight, AlertTriangle, Eye, CheckCircle, XCircle } from 'lucide-react';
 import { useAuth, User } from './AuthContext';
 import AdminInbox from './AdminInbox';
 import { useCurrency } from './CurrencyContext';
@@ -60,6 +60,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   const [rejectingCampaignId, setRejectingCampaignId] = useState<number | null>(null);
   const [releasingEscrowId, setReleasingEscrowId] = useState<number | null>(null);
   const [pausingCampaignId, setPausingCampaignId] = useState<number | null>(null);
+  const [resumingCampaignId, setResumingCampaignId] = useState<number | null>(null);
+  const [killingCampaignId, setKillingCampaignId] = useState<number | null>(null);
   const [expandedAiReviewId, setExpandedAiReviewId] = useState<number | null>(null);
   const [expandedSyncLogsId, setExpandedSyncLogsId] = useState<number | null>(null);
   const [expandedAdSpecId, setExpandedAdSpecId] = useState<number | null>(null);
@@ -711,28 +713,80 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   };
 
   const handleEmergencyPauseCampaign = async (campaignId: number) => {
-    if (!confirm(`Emergency Pause Campaign #${campaignId}? Ad spend will be halted immediately.`)) return;
+    if (!confirm(`Emergency Pause Campaign #${campaignId} on Meta Ads? Ad spend will be halted immediately.`)) return;
     setPausingCampaignId(campaignId);
     try {
-      const res = await fetch(`/api/marketing/campaigns/${campaignId}/pacing`, {
+      const res = await fetch(`/api/admin/marketing/campaigns/${campaignId}/pause-meta`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ mode: 'paused' })
+        }
       });
+      const data = await res.json();
       if (res.ok) {
-        addToast('Campaign Paused', 'Campaign emergency paused by Admin.', 'info');
+        addToast('Campaign Paused', data.message || 'Campaign paused successfully on Meta.', 'success');
         setMarketingCampaigns(prev => prev.map(c => c.id === campaignId ? { ...c, status: 'paused' } : c));
       } else {
-        addToast('Error', 'Failed to pause campaign.', 'error');
+        addToast('Error', data.error || 'Failed to pause campaign on Meta.', 'error');
       }
     } catch (err: any) {
       console.error(err);
       addToast('Error', 'Network error pausing campaign.', 'error');
     } finally {
       setPausingCampaignId(null);
+    }
+  };
+
+  const handleResumeMetaCampaign = async (campaignId: number) => {
+    if (!confirm(`Resume Campaign #${campaignId} on Meta Ads? Ads will go live again.`)) return;
+    setResumingCampaignId(campaignId);
+    try {
+      const res = await fetch(`/api/admin/marketing/campaigns/${campaignId}/resume-meta`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        addToast('Campaign Resumed', data.message || 'Campaign resumed successfully on Meta.', 'success');
+        setMarketingCampaigns(prev => prev.map(c => c.id === campaignId ? { ...c, status: 'active' } : c));
+      } else {
+        addToast('Error', data.error || 'Failed to resume campaign on Meta.', 'error');
+      }
+    } catch (err: any) {
+      console.error(err);
+      addToast('Error', 'Network error resuming campaign.', 'error');
+    } finally {
+      setResumingCampaignId(null);
+    }
+  };
+
+  const handleKillMetaCampaign = async (campaignId: number) => {
+    if (!confirm(`⚠️ KILL SWITCH: Are you sure you want to permanently kill and archive Campaign #${campaignId} on Meta? Unused budget will be automatically refunded to host wallet.`)) return;
+    setKillingCampaignId(campaignId);
+    try {
+      const res = await fetch(`/api/admin/marketing/campaigns/${campaignId}/kill-meta`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        addToast('Campaign Killed & Archived', data.message || 'Campaign killed and archived on Meta.', 'success');
+        setMarketingCampaigns(prev => prev.map(c => c.id === campaignId ? { ...c, status: 'killed', payment_status: 'refunded' } : c));
+      } else {
+        addToast('Error', data.error || 'Failed to kill campaign on Meta.', 'error');
+      }
+    } catch (err: any) {
+      console.error(err);
+      addToast('Error', 'Network error killing campaign.', 'error');
+    } finally {
+      setKillingCampaignId(null);
     }
   };
 
@@ -2316,16 +2370,38 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                                         </button>
                                                      )}
                                                      {campaign.status === 'active' && (
-                                                        <button
-                                                           type="button"
-                                                           disabled={pausingCampaignId === campaign.id}
-                                                           onClick={() => handleEmergencyPauseCampaign(campaign.id)}
-                                                           className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold px-3 py-1.5 rounded-lg text-xs border border-rose-200 transition-all flex items-center gap-1"
-                                                        >
-                                                           {pausingCampaignId === campaign.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />}
-                                                           <span>Emergency Pause</span>
-                                                        </button>
-                                                     )}
+                                                         <button
+                                                            type="button"
+                                                            disabled={pausingCampaignId === campaign.id}
+                                                            onClick={() => handleEmergencyPauseCampaign(campaign.id)}
+                                                            className="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold px-3 py-1.5 rounded-lg text-xs border border-rose-200 transition-all flex items-center gap-1"
+                                                         >
+                                                            {pausingCampaignId === campaign.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />}
+                                                            <span>Pause on Meta</span>
+                                                         </button>
+                                                      )}
+                                                      {campaign.status === 'paused' && (
+                                                         <button
+                                                            type="button"
+                                                            disabled={resumingCampaignId === campaign.id}
+                                                            onClick={() => handleResumeMetaCampaign(campaign.id)}
+                                                            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold px-3 py-1.5 rounded-lg text-xs border border-emerald-200 transition-all flex items-center gap-1"
+                                                         >
+                                                            {resumingCampaignId === campaign.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />}
+                                                            <span>Resume on Meta</span>
+                                                         </button>
+                                                      )}
+                                                      {(campaign.status === 'active' || campaign.status === 'paused') && (
+                                                         <button
+                                                            type="button"
+                                                            disabled={killingCampaignId === campaign.id}
+                                                            onClick={() => handleKillMetaCampaign(campaign.id)}
+                                                            className="bg-red-600 hover:bg-red-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-all flex items-center gap-1 shadow-xs"
+                                                         >
+                                                            {killingCampaignId === campaign.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5 text-white" />}
+                                                            <span>⚡ Kill & Archive</span>
+                                                         </button>
+                                                      )}
                                                   </div>
                                                </div>
 
