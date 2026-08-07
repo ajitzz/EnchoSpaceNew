@@ -5169,6 +5169,25 @@ async function executeCampaignStateMachine(campaignId: number, triggerEvent: str
         console.error(`[STATE MACHINE ERROR]`, e);
     }
 }
+function getMetaFixSuggestion(errorMsg: string): string {
+  const msg = (errorMsg || '').toLowerCase();
+  if (msg.includes('housing') || msg.includes('special ad category') || msg.includes('discriminatory')) {
+    return 'Fix Suggestion: Ensure Special Ad Category is set strictly to "HOUSING", remove restricted demographic targeting (age 18-65+, broad geography), and verify compliance with Meta Housing ad policies.';
+  }
+  if (msg.includes('budget') || msg.includes('minimum') || msg.includes('spend')) {
+    return 'Fix Suggestion: Increase the daily budget or campaign lifetime budget to meet Meta\'s minimum currency threshold (typically $1.00 - $5.00 USD equivalent).';
+  }
+  if (msg.includes('token') || msg.includes('permission') || msg.includes('auth') || msg.includes('access_token')) {
+    return 'Fix Suggestion: Re-authenticate or update META_ACCESS_TOKEN in environment variables with a valid long-lived system user token having ads_management and pages_manage_ads permissions.';
+  }
+  if (msg.includes('creative') || msg.includes('image') || msg.includes('media') || msg.includes('hash')) {
+    return 'Fix Suggestion: Verify that the listing image URL is publicly accessible, correctly formatted (JPEG/PNG), and meets Meta aspect ratio specs (1:1 or 9:16).';
+  }
+  if (msg.includes('page') || msg.includes('instagram') || msg.includes('ig')) {
+    return 'Fix Suggestion: Verify that META_PAGE_ID and META_INSTAGRAM_ACCOUNT_ID are correctly linked and authorized in your Meta Business Manager.';
+  }
+  return 'Fix Suggestion: Review Meta Graph API error details in the sync logs, check campaign parameters, and re-submit after making adjustments.';
+}
 async function dispatchMetaCampaign(campaignId: number, req: any) {
   try {
     const campaignResult = await pool.query(`
@@ -5621,6 +5640,51 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
       }
 
       const finalAdId = metaAdId || `act_ad_${Math.floor(100000000 + Math.random() * 900000000)}`;
+
+      // Inspect syncLogs for any Meta API rejections or policy errors
+      let metaRejectionReason: string | null = null;
+      for (const stepLog of syncLogs.steps) {
+        if (stepLog.error) {
+          metaRejectionReason = stepLog.error;
+        } else if (stepLog.response && stepLog.response.error) {
+          metaRejectionReason = stepLog.response.error.message || JSON.stringify(stepLog.response.error);
+        }
+      }
+
+      if (metaRejectionReason) {
+        const fixSuggestion = getMetaFixSuggestion(metaRejectionReason);
+        const fullFeedback = `Meta Rejection: ${metaRejectionReason}. ${fixSuggestion}`;
+        console.warn(`[META API REJECTION] Campaign #${campaignId} rejected: ${fullFeedback}`);
+        await pool.query(`
+          UPDATE host_marketing_campaigns
+          SET status = 'rejected',
+              admin_feedback = $1,
+              meta_sync_logs = $2,
+              admin_approved = false
+          WHERE id = $3
+        `, [fullFeedback, JSON.stringify(syncLogs), campaignId]);
+
+        // Broadcast real-time rejection notification with exact reason and fix suggestion to Admin Room and Host
+        try {
+          if (global.io) {
+            global.io.to('admin_room').emit('notification', {
+              type: 'meta_campaign_rejected',
+              campaignId,
+              message: `Meta rejected Campaign #${campaignId} (${adHeadline}): ${metaRejectionReason}. Fix: ${fixSuggestion}`
+            });
+            global.io.to(`user_${campaign.host_id}`).emit('notification', {
+              type: 'meta_campaign_rejected',
+              campaignId,
+              message: `Your campaign #${campaignId} was rejected by Meta: ${metaRejectionReason}. Fix: ${fixSuggestion}`
+            });
+          }
+        } catch (notifErr) {
+          console.warn('Failed to emit meta rejection notification:', notifErr);
+        }
+
+        broadcastDbEvent(req, 'marketing');
+        return false;
+      }
 
       // Write complete 3-tier hierarchy, ad_medias, adset_specifications, and meta_specifications to database
       await pool.query(`
