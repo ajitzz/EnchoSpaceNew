@@ -1976,7 +1976,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                           <span>Pending Quality Control Approval. Admin analyst team is reviewing.</span>
                         </div>
                         <p className="text-[10px] text-gray-500 font-light pl-1">
-                          Ad review guarantees brand safety, copyright-compliant background music, and optimal visual formats.
+                          Ad review verifies brand safety, copyright-compliant background music, and optimal visual formats.
                         </p>
                       </div>
                     )}

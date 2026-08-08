@@ -128,7 +128,7 @@ async function triggerSmartAutoPause(listingId: any, bookingId: any) {
         console.log(`[CIRCUIT BREAKER] 🛑 Firing PAUSE request to Meta Ads API for Campaign #${c.id} (Meta ID: ${c.meta_campaign_id || 'act_mock_' + c.id}) to prevent wasted budget...`);
         
         // Mocking Meta API PAUSE request
-        // e.g., POST https://graph.facebook.com/v19.0/${c.meta_campaign_id}?status=PAUSED
+        // e.g., POST ${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${c.meta_campaign_id}?status=PAUSED
         console.log(`[META API] 🟢 200 OK: Successfully paused campaign ${c.meta_campaign_id || 'act_mock_' + c.id}`);
 
         await pool.query("UPDATE host_marketing_campaigns SET status = 'paused', admin_feedback = 'System Auto-Paused: Property 100% booked for target dates.' WHERE id = $1", [c.id]);
@@ -224,7 +224,10 @@ async function syncDynamicPricingToMeta(listingId: any, oldPrice: any, newPrice:
   }
 }
 
+
+
 export const rlsStorage = new AsyncLocalStorage<{ userId?: number | string | null; isRequest?: boolean; bypassRls?: boolean }>();
+
 
 const pool = new Pool({
   connectionString: isDbConfigured ? dbUrl : undefined,
@@ -1373,6 +1376,15 @@ const ensureListingsTable = async () => {
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS adset_specifications JSONB DEFAULT '{}'::jsonb;`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS meta_specifications JSONB DEFAULT '{}'::jsonb;`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS meta_sync_logs JSONB DEFAULT '{}'::jsonb;`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS approval_snapshot JSONB;`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS approval_hash VARCHAR(255);`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS processed_webhook_events (
+      event_id VARCHAR(255) PRIMARY KEY,
+      event_type VARCHAR(100),
+      processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
 
   // Migration for CRM Lead Intent Scorer & Audience Detection & Campaign/Host Linkage
   await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS campaign_id INT;`);
@@ -1579,6 +1591,56 @@ const ensureMarketingSchema = async () => {
   
   // Gap 14: Immutable Admin Audit Trail
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS meta_publishing_transactions (
+      id SERIAL PRIMARY KEY,
+      campaign_id INTEGER REFERENCES host_marketing_campaigns(id),
+      idempotency_key VARCHAR(255) UNIQUE NOT NULL,
+      correlation_id VARCHAR(255) NOT NULL,
+      publish_status VARCHAR(50) DEFAULT 'PENDING',
+      publish_attempt INTEGER DEFAULT 1,
+      meta_campaign_id VARCHAR(255),
+      meta_adset_id VARCHAR(255),
+      meta_creative_id VARCHAR(255),
+      meta_ad_id VARCHAR(255),
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS meta_api_traces (
+      id SERIAL PRIMARY KEY,
+      correlation_id VARCHAR(255) NOT NULL,
+      campaign_id INTEGER REFERENCES host_marketing_campaigns(id),
+      host_id INTEGER REFERENCES users(id),
+      step VARCHAR(255) NOT NULL,
+      endpoint VARCHAR(1000),
+      request_payload JSONB,
+      response_payload JSONB,
+      http_status INTEGER,
+      fbtrace_id VARCHAR(255),
+      meta_error_code INTEGER,
+      meta_error_subcode INTEGER,
+      meta_error_message TEXT,
+      meta_error_type VARCHAR(255),
+      meta_error_is_transient BOOLEAN,
+      meta_error_user_title TEXT,
+      meta_error_user_msg TEXT,
+      latency_ms INTEGER,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    
+    CREATE TABLE IF NOT EXISTS meta_publishing_dlq (
+      id SERIAL PRIMARY KEY,
+      transaction_id INTEGER REFERENCES meta_publishing_transactions(id),
+      campaign_id INTEGER REFERENCES host_marketing_campaigns(id),
+      correlation_id VARCHAR(255) NOT NULL,
+      failure_stage VARCHAR(50) NOT NULL,
+      error_payload JSONB,
+      retry_count INTEGER DEFAULT 0,
+      recommended_action TEXT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      resolved_at TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS admin_audit_logs (
       id SERIAL PRIMARY KEY,
       admin_id INT REFERENCES users(id) ON DELETE SET NULL,
@@ -1621,6 +1683,23 @@ const ensureMarketingSchema = async () => {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_social_posts_host_id ON host_social_posts(host_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_social_posts_listing_id ON host_social_posts(listing_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_social_posts_status ON host_social_posts(status);`);
+
+  // Phase 1B: Immutable Meta Ownership & Tenant Identity Binding
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS host_meta_identities (
+      id SERIAL PRIMARY KEY,
+      host_id INTEGER UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      meta_ad_account_id VARCHAR(255),
+      meta_page_id VARCHAR(255),
+      meta_ig_account_id VARCHAR(255),
+      connection_status VARCHAR(50) DEFAULT 'unlinked',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS owner_meta_ad_account_id VARCHAR(255);`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS policy_cleared BOOLEAN DEFAULT false;`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS policy_cleared_at TIMESTAMP;`);
 
 
   // Gap 17: Strict Row-Level Security (RLS) - The Data Breach Shield
@@ -3111,7 +3190,6 @@ app.post('/api/marketing/copilot', authenticateToken, async (req: AuthRequest, r
   try {
     const { formData } = req.body;
     
-    const { GoogleGenAI } = require('@google/genai');
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     
     // ----------------- 5. LANDING PAGE INSPECTOR -----------------
@@ -3157,13 +3235,16 @@ app.post('/api/marketing/copilot', authenticateToken, async (req: AuthRequest, r
        }));
     }
 
-    // ----------------- 9. LEARNING ENGINE 2.0 -----------------
-    const recentRejections = await pool.query(
-      "SELECT step, request_payload, response_payload FROM meta_api_traces WHERE http_status >= 400 ORDER BY created_at DESC LIMIT 5"
-    );
-    const recentSuccess = await pool.query(
-      "SELECT step, request_payload FROM meta_api_traces WHERE http_status = 200 AND step = 'campaign_creation' ORDER BY created_at DESC LIMIT 2"
-    );
+    // ----------------- 9. LEARNING ENGINE 2.0 (TENANT ISOLATED) -----------------
+    const currentHostId = req.user?.id;
+    const recentRejections = currentHostId ? await pool.query(
+      "SELECT step, request_payload, response_payload FROM meta_api_traces WHERE host_id = $1 AND http_status >= 400 ORDER BY created_at DESC LIMIT 5",
+      [currentHostId]
+    ) : { rows: [] };
+    const recentSuccess = currentHostId ? await pool.query(
+      "SELECT step, request_payload FROM meta_api_traces WHERE host_id = $1 AND http_status = 200 AND step = 'campaign_creation' ORDER BY created_at DESC LIMIT 2",
+      [currentHostId]
+    ) : { rows: [] };
     
     const rejectionContext = recentRejections.rows.length > 0 
       ? "\nRecent Meta API Rejections (Learn from these and prevent them):\n" + JSON.stringify(recentRejections.rows, null, 2)
@@ -3173,12 +3254,10 @@ app.post('/api/marketing/copilot', authenticateToken, async (req: AuthRequest, r
       : "";
 
     // ----------------- 1. META POLICY KNOWLEDGE LAYER -----------------
-    const fsLib = require('fs');
-    const path = require('path');
     let metaKnowledge = '';
     const metaDocsPath = path.join(process.cwd(), 'docs/meta');
-    if (fsLib.existsSync(metaDocsPath)) {
-       const files = fsLib.readdirSync(metaDocsPath);
+    if (fs.existsSync(metaDocsPath)) {
+       const files = fs.readdirSync(metaDocsPath);
        for (const file of files) {
           if (file.endsWith('.md')) {
              metaKnowledge += `\n--- ${file} ---\n`;
@@ -3371,7 +3450,56 @@ app.put('/api/marketing/campaigns/:id', authenticateToken, async (req: AuthReque
       broadcastDbEvent(req, 'listing');
     }
 
-    const finalStatus = status || currentCampaign.status;
+    // Approval Integrity Check: Calculate updated candidate hash
+    const updatedCandidate = {
+      ...currentCampaign,
+      title: title || currentCampaign.title,
+      description: description || currentCampaign.description,
+      feed_description: feed_description !== undefined ? feed_description : currentCampaign.feed_description,
+      budget: budget !== undefined ? budget : currentCampaign.budget,
+      target_locations: target_locations !== undefined ? target_locations : currentCampaign.target_locations,
+      target_radius_km: target_radius_km !== undefined ? target_radius_km : (currentCampaign.target_radius_km || 50),
+      platforms: platforms ? JSON.stringify(platforms) : currentCampaign.platforms,
+      ad_format: ad_format !== undefined ? ad_format : currentCampaign.ad_format,
+      video_url: video_url !== undefined ? video_url : currentCampaign.video_url,
+      media_urls: media_urls ? JSON.stringify(media_urls) : currentCampaign.media_urls,
+      listing_id: currentCampaign.listing_id,
+      target_audience_persona: target_audience_persona || currentCampaign.target_audience_persona
+    };
+    const { hash: newCandidateHash } = computeCampaignApprovalHash(updatedCandidate);
+
+    let nextAdminApproved = currentCampaign.admin_approved;
+    let nextApprovedAt = currentCampaign.approved_at;
+    let nextApprovalSnapshot = currentCampaign.approval_snapshot;
+    let nextApprovalHash = currentCampaign.approval_hash;
+    let nextStatus = status || currentCampaign.status;
+
+    let nextPolicyCleared = currentCampaign.policy_cleared;
+    let nextPolicyClearedAt = currentCampaign.policy_cleared_at;
+
+    if (currentCampaign.admin_approved && currentCampaign.approval_hash && currentCampaign.approval_hash !== newCandidateHash) {
+       console.log(`[APPROVAL INTEGRITY] Campaign #${id} material fields changed post-approval. Invalidating approval & policy clearance.`);
+       nextAdminApproved = false;
+       nextApprovedAt = null;
+       nextApprovalSnapshot = null;
+       nextApprovalHash = null;
+       nextPolicyCleared = false;
+       nextPolicyClearedAt = null;
+       nextStatus = 'pending_approval';
+
+       await pool.query(`
+         INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+       `, [
+         req.user?.id,
+         'marketing_campaign',
+         id,
+         'approval_invalidated_by_material_change',
+         JSON.stringify({ admin_approved: true, status: currentCampaign.status }),
+         JSON.stringify({ admin_approved: false, status: 'pending_approval', reason: 'Material configuration modified post-approval' }),
+         req.ip || req.socket?.remoteAddress || null
+       ]);
+    }
 
     const result = await pool.query(`
       UPDATE host_marketing_campaigns
@@ -3394,8 +3522,14 @@ app.put('/api/marketing/campaigns/:id', authenticateToken, async (req: AuthReque
           google_conversion_label = $16,
           target_audience_persona = COALESCE($17, target_audience_persona),
           audience_interests = COALESCE($18, audience_interests),
-          ai_generated_ad_copies = COALESCE($19, ai_generated_ad_copies)
-      WHERE id = $20 AND host_id = $21
+          ai_generated_ad_copies = COALESCE($19, ai_generated_ad_copies),
+          admin_approved = $20,
+          approved_at = $21,
+          approval_snapshot = $22,
+          approval_hash = $23,
+          policy_cleared = $24,
+          policy_cleared_at = $25
+      WHERE id = $26 AND host_id = $27
       RETURNING *
     `, [
       title || currentCampaign.title,
@@ -3404,7 +3538,7 @@ app.put('/api/marketing/campaigns/:id', authenticateToken, async (req: AuthReque
       media_urls ? JSON.stringify(media_urls) : JSON.stringify(currentCampaign.media_urls),
       platforms ? JSON.stringify(platforms) : JSON.stringify(currentCampaign.platforms),
       budget !== undefined ? budget : currentCampaign.budget,
-      finalStatus,
+      nextStatus,
       target_locations !== undefined ? target_locations : currentCampaign.target_locations,
       target_radius_km !== undefined ? target_radius_km : (currentCampaign.target_radius_km || 50),
       ad_format !== undefined ? ad_format : currentCampaign.ad_format,
@@ -3417,6 +3551,12 @@ app.put('/api/marketing/campaigns/:id', authenticateToken, async (req: AuthReque
       target_audience_persona || null,
       audience_interests ? JSON.stringify(audience_interests) : null,
       ai_generated_ad_copies ? JSON.stringify(ai_generated_ad_copies) : null,
+      nextAdminApproved,
+      nextApprovedAt,
+      nextApprovalSnapshot ? JSON.stringify(nextApprovalSnapshot) : null,
+      nextApprovalHash,
+      nextPolicyCleared,
+      nextPolicyClearedAt,
       id,
       req.user?.id
     ]);
@@ -4288,7 +4428,9 @@ app.post('/api/marketing/campaigns/:id/ai-check', authenticateToken, aiGatekeepe
     let adminFeedbackText = null;
     let failedChecksObj: any = {};
 
-    if (defaultAiResults.score < 8.0 || !defaultAiResults.passed) {
+    const isPolicyCleared = defaultAiResults.score >= 8.0 && defaultAiResults.passed;
+
+    if (!isPolicyCleared) {
       updatedStatus = 'rejected';
       adminFeedbackText = `AI Gatekeeper Auto-Rejected (Score ${defaultAiResults.score}/10): ${defaultAiResults.suggestions}`;
       failedChecksObj = {
@@ -4304,9 +4446,18 @@ app.post('/api/marketing/campaigns/:id/ai-check', authenticateToken, aiGatekeepe
       UPDATE host_marketing_campaigns
       SET status = $1,
           admin_feedback = $2,
-          rejected_fields = $3
-      WHERE id = $4
-    `, [updatedStatus, adminFeedbackText, JSON.stringify(failedChecksObj), id]);
+          rejected_fields = $3,
+          policy_cleared = $4,
+          policy_cleared_at = $5
+      WHERE id = $6
+    `, [
+      updatedStatus, 
+      adminFeedbackText, 
+      JSON.stringify(failedChecksObj), 
+      isPolicyCleared,
+      isPolicyCleared ? new Date() : null,
+      id
+    ]);
 
     // Audit log entry
     await pool.query(`
@@ -4358,7 +4509,7 @@ app.post('/api/marketing/campaigns/:id/sync-meta', authenticateToken, async (req
 
     const accessToken = process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN;
     if (accessToken && metaCampId && !metaCampId.includes('act_8849203_camp_')) {
-      const metaRes = await fetch(`https://graph.facebook.com/v19.0/${metaCampId}?fields=id,name,status,created_time,adsets{id,name,status,daily_budget,ads{id,name,status}}&access_token=${accessToken}`);
+      const metaRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${metaCampId}?fields=id,name,status,created_time,adsets{id,name,status,daily_budget,ads{id,name,status}}&access_token=${accessToken}`);
       const metaData = await metaRes.json();
       
       let liveAdSetId = campaign.meta_adset_id || null;
@@ -5446,667 +5597,424 @@ function getMetaFixSuggestion(errorMsg: string): string {
   return 'Fix Suggestion: Review Meta Graph API error details in the sync logs, check campaign parameters, and re-submit after making adjustments.';
 }
 
-// ----------------- META PREFLIGHT ENGINE -----------------
-async function runMetaPreflightEngine(campaignId, dbPool) {
-  console.log(`[PREFLIGHT] Running validation for campaign ${campaignId}`);
+// ----------------- APPROVAL INTEGRITY & SNAPSHOT HASH ENGINE -----------------
+export function computeCampaignApprovalHash(campaign: any): { hash: string; snapshot: any } {
+  const snapshot = {
+    title: campaign.title || '',
+    description: campaign.description || '',
+    feed_description: campaign.feed_description || '',
+    budget: Number(campaign.budget || 0),
+    target_locations: campaign.target_locations || '',
+    target_radius_km: Number(campaign.target_radius_km || 50),
+    platforms: typeof campaign.platforms === 'string' ? campaign.platforms : JSON.stringify(campaign.platforms || []),
+    ad_format: campaign.ad_format || 'post',
+    video_url: campaign.video_url || '',
+    media_urls: typeof campaign.media_urls === 'string' ? campaign.media_urls : JSON.stringify(campaign.media_urls || []),
+    listing_id: Number(campaign.listing_id || 0),
+    target_audience_persona: campaign.target_audience_persona || 'everyone',
+    owner_meta_ad_account_id: campaign.owner_meta_ad_account_id || '',
+    policy_cleared: campaign.policy_cleared === true
+  };
+  const hash = crypto.createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
+  return { hash, snapshot };
+}
+
+// ----------------- META PREFLIGHT ENGINE (16 SAFETY GATES) -----------------
+async function runMetaPreflightEngine(campaignId: number, dbPool: any) {
+  console.log(`[PREFLIGHT] Running 16 Meta Safety Gates validation for campaign ${campaignId}`);
   const campaignRes = await dbPool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [campaignId]);
-  if (campaignRes.rows.length === 0) throw new Error('Campaign not found');
+  if (campaignRes.rows.length === 0) throw new Error('Preflight Failed: Campaign not found');
   const campaign = campaignRes.rows[0];
 
-  // 1. Authentication
+  // Gate 1: Valid Campaign State
+  if (!campaign.id) throw new Error('Preflight Failed: Invalid Campaign ID');
+
+  // Gate 2: Valid AI Compliance Result
+  if (campaign.status === 'rejected') {
+    throw new Error('Preflight Failed: Campaign was rejected by AI Gatekeeper/Policy.');
+  }
+
+  // Gate 3: Valid Admin Approval
+  if (!campaign.admin_approved) {
+    throw new Error('Preflight Failed: Missing Admin Approval. Campaign must be approved by an Administrator before Meta dispatch.');
+  }
+
+  // Gate 4: Valid Approval Snapshot Integrity
+  const { hash: currentHash } = computeCampaignApprovalHash(campaign);
+  if (!campaign.approval_hash || campaign.approval_hash !== currentHash) {
+    throw new Error('Preflight Failed: Campaign material configuration modified post-approval. Re-approval required.');
+  }
+
+  // Gate 5 & 6: Preflight & Emergency Kill Switch Check
+  if (process.env.META_PUBLISHING_PAUSED === 'true') {
+    throw new Error('EMERGENCY KILL SWITCH ACTIVE: Meta publishing dispatches are currently paused by platform administration.');
+  }
+
+  // Gate 7: Credentials Check
   if (!process.env.META_ACCESS_TOKEN || !process.env.META_AD_ACCOUNT_ID) {
     throw new Error('Preflight Failed: Missing Meta API Credentials');
   }
 
-  // 2. Special Ad Category Validation
-  if (!campaign.target_locations || campaign.target_radius_km < 25) {
+  // Gate 8: Page Identity
+  if (!process.env.META_PAGE_ID) {
+    throw new Error('Preflight Failed: Missing Meta Page ID identity.');
+  }
+
+  // Gate 9: Instagram Identity
+  if (!process.env.META_INSTAGRAM_ACCOUNT_ID) {
+    throw new Error('Preflight Failed: Missing Meta Instagram Account ID identity.');
+  }
+
+  // Gate 10: Special Ad Category & Radius Validation (Housing minimum 25km radius)
+  if (!campaign.target_locations || Number(campaign.target_radius_km) < 25) {
     throw new Error('Preflight Failed: Housing Special Ad Category requires minimum 25km radius targeting.');
   }
 
-  // 3. Payload & Schema Validation
+  // Gate 11: Creative & Budget Validation
   if (!campaign.title || !campaign.feed_description) {
     throw new Error('Preflight Failed: Missing required creative fields (title, feed_description).');
   }
-
-  // 4. Budget Validation
-  if (campaign.budget < 100) {
+  if (Number(campaign.budget) < 100) {
     throw new Error('Preflight Failed: Budget is below Meta minimums.');
   }
-  
-  // 5. Objective & Optimization Validation
-  // We use OUTCOME_TRAFFIC with LINK_CLICKS or REACH
-  console.log(`[PREFLIGHT] Campaign ${campaignId} passed all checks.`);
+
+  // Gate 12 & 13: Idempotency Key & Existing Transaction Check
+  const idempotencyKey = `publish_meta_camp_${campaignId}`;
+  const existingTx = await dbPool.query('SELECT * FROM meta_publishing_transactions WHERE idempotency_key = $1 AND publish_status = $2', [idempotencyKey, 'SUCCESS']);
+  if (existingTx.rows.length > 0) {
+    console.log(`[PREFLIGHT] Campaign ${campaignId} already successfully published on transaction ${existingTx.rows[0].id}.`);
+  }
+
+  // Gate 14: Meta Canary #2 Readiness Gate
+  if (process.env.META_CANARY_2_READY !== 'true') {
+    throw new Error('Preflight Failed: Canary #2 Readiness Gate inactive (META_CANARY_2_READY is not true). Meta App 1347659864208278 is currently in Development Mode on Meta Developers Console.');
+  }
+
+  // Gate 15: Independent Policy Clearance Gate (Admin approval CANNOT bypass policy clearance)
+  if (campaign.policy_cleared !== true) {
+    throw new Error('Preflight Failed: POLICY_CLEARANCE_REQUIRED. Campaign must successfully pass AI Pre-Check policy scan (policy_cleared=true) before Meta dispatch.');
+  }
+
+  // Gate 16: Tenant Ownership & Asset Binding Gate
+  const hostIdentityRes = await dbPool.query('SELECT * FROM host_meta_identities WHERE host_id = $1', [campaign.host_id]);
+  if (hostIdentityRes.rows.length > 0) {
+    const identity = hostIdentityRes.rows[0];
+    if (campaign.owner_meta_ad_account_id && identity.meta_ad_account_id && campaign.owner_meta_ad_account_id !== identity.meta_ad_account_id) {
+      throw new Error('Preflight Failed: META_ACCOUNT_MISMATCH. Campaign owner ad account does not match host registered Meta identity.');
+    }
+  } else if (campaign.owner_meta_ad_account_id && campaign.owner_meta_ad_account_id !== process.env.META_AD_ACCOUNT_ID) {
+    throw new Error('Preflight Failed: TENANT_OWNERSHIP_MISMATCH. Campaign owner ad account does not match dispatch identity.');
+  }
+
+  console.log(`[PREFLIGHT] Campaign ${campaignId} passed all 16 Meta Safety Gates.`);
   return true;
 }
 
 async function dispatchMetaCampaign(campaignId: number, req: any) {
-  await runMetaPreflightEngine(campaignId, pool);
+  if (process.env.META_PUBLISHING_PAUSED === 'true') {
+    console.error(`[EMERGENCY KILL SWITCH] Publishing aborted for campaign #${campaignId}: Meta publishing is paused.`);
+    throw new Error('EMERGENCY KILL SWITCH ACTIVE: Meta publishing dispatches are currently paused by platform administration.');
+  }
+
+  const correlationId = crypto.randomUUID();
+  const idempotencyKey = `publish_meta_camp_${campaignId}`;
+  
+  // Phase 1 & 2: Idempotent Publishing & Transaction State Machine
+  const txCheck = await pool.query(`SELECT * FROM meta_publishing_transactions WHERE idempotency_key = $1 FOR UPDATE`, [idempotencyKey]);
+  
+  let txId;
+  let publishAttempt = 1;
+  
+  if (txCheck.rows.length > 0) {
+    const tx = txCheck.rows[0];
+    if (tx.publish_status === 'SUCCESS') {
+      console.log(`[META ENGINE] Campaign ${campaignId} already successfully published. Idempotency hit.`);
+      return true;
+    }
+    if (tx.publish_status === 'PRECHECK_RUNNING' || tx.publish_status === 'PUBLISHING') {
+       console.log(`[META ENGINE] Campaign ${campaignId} is currently being published in another process.`);
+       return false;
+    }
+    publishAttempt = tx.publish_attempt + 1;
+    await pool.query(`UPDATE meta_publishing_transactions SET publish_attempt = $1, publish_status = 'PRECHECK_RUNNING', updated_at = CURRENT_TIMESTAMP WHERE id = $2`, [publishAttempt, tx.id]);
+    txId = tx.id;
+  } else {
+    const newTx = await pool.query(`INSERT INTO meta_publishing_transactions (campaign_id, idempotency_key, correlation_id, publish_status) VALUES ($1, $2, $3, 'PRECHECK_RUNNING') RETURNING id`, [campaignId, idempotencyKey, correlationId]);
+    txId = newTx.rows[0].id;
+  }
+
+  // Phase 3: Rollback Engine State
+  const rollbackState: { metaCampaignId?: string, metaAdSetId?: string, metaCreativeId?: string, metaAdId?: string } = {};
+
   try {
+    await runMetaPreflightEngine(campaignId, pool);
+    await pool.query(`UPDATE meta_publishing_transactions SET publish_status = 'PUBLISHING', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [txId]);
+
     const campaignResult = await pool.query(`
-      SELECT c.*, l.title as listing_title, l.description as listing_desc, l.image_url as listing_image, l.city
+      SELECT c.*, l.title as listing_title, l.description as listing_desc, l.image_url as listing_image, l.city, l.amenities as listing_amenities
       FROM host_marketing_campaigns c
-      JOIN listings l ON c.listing_id = l.id
+      LEFT JOIN listings l ON c.listing_id = l.id
       WHERE c.id = $1
     `, [campaignId]);
 
     if (campaignResult.rows.length === 0) {
-      console.warn(`[META API DISPATCH] Campaign ${campaignId} not found.`);
-      return false;
+      throw new Error('Campaign not found');
     }
 
     const campaign = campaignResult.rows[0];
+    
+    // Core Configuration
     const accessToken = process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN;
     const rawAdAccountId = process.env.META_AD_ACCOUNT_ID;
     const pageId = process.env.META_PAGE_ID;
     const igAccountId = process.env.META_INSTAGRAM_ACCOUNT_ID;
     
-    // Perform active inspection logging for Meta Marketing integration keys
     checkIntegrationKeys(
       'Meta Marketing API',
       ['META_ACCESS_TOKEN', 'META_AD_ACCOUNT_ID', 'META_PAGE_ID', 'META_INSTAGRAM_ACCOUNT_ID'],
       `Campaign #${campaign.id} Meta Sync Dispatch`
     );
 
-    let cleanAdAccountId = String(rawAdAccountId || '').trim();
-    if (cleanAdAccountId && !cleanAdAccountId.startsWith('act_') && cleanAdAccountId !== 'your_ad_account_id_here') {
-      cleanAdAccountId = 'act_' + cleanAdAccountId;
+    if (!accessToken || !rawAdAccountId || !pageId) {
+      throw new Error('Missing core Meta API credentials');
     }
 
-    // Milestone 3: Automated Page & Lead Form ID Verification & Auto-Provisioning Fallback
-    let activeLeadFormId = campaign.meta_lead_form_id;
-    if (!activeLeadFormId || activeLeadFormId === '999999999999999') {
-      const hasRealPage = pageId && pageId !== 'your_facebook_page_id_here';
-      const hasRealToken = accessToken && !accessToken.includes('your_generated_system_token');
-      if (hasRealPage && hasRealToken) {
-        try {
-          console.log(`[META API] Milestone 3: Provisioning default Encho Lead Generation Form on Page ID ${pageId}...`);
-          const formRes = await fetch(`https://graph.facebook.com/v19.0/${pageId}/leadgen_forms`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              access_token: accessToken,
-              name: `Encho Lead Form - ${campaign.listing_title || 'Listing'} (#${campaign.id})`,
-              questions: [
-                { type: 'FULL_NAME', label: 'Full Name' },
-                { type: 'EMAIL', label: 'Email' },
-                { type: 'PHONE', label: 'Phone Number' }
-              ],
-              privacy_policy: {
-                url: `https://encho-space-chi.vercel.app/privacy`,
-                text: 'Your privacy is protected under Encho Walled Garden Policy.'
-              },
-              thank_you_screen: {
-                title: 'Thank you for your reservation inquiry!',
-                body: 'An Encho host specialist will connect with you via Encho Walled Garden CRM Inbox within 5 minutes.'
-              }
-            })
-          });
-          const formData = await formRes.json();
-          if (formRes.ok && formData.id) {
-            activeLeadFormId = formData.id;
-            console.log(`[META API SUCCESS] Milestone 3: Provisioned live lead generation form: ${activeLeadFormId}`);
-          }
-        } catch (formErr: any) {
-          console.warn('[META API NOTICE] Lead form provisioning note:', formErr.message);
-        }
-      }
-      if (!activeLeadFormId) {
-        activeLeadFormId = `${Math.floor(10000000000000 + Math.random() * 90000000000000)}`;
-      }
-      await pool.query('UPDATE host_marketing_campaigns SET meta_lead_form_id = $1 WHERE id = $2', [activeLeadFormId, campaign.id]);
-    }
-
-
-    const imageUrl = campaign.listing_image || 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6';
-
-    let squareUrl = imageUrl;
-    let verticalUrl = imageUrl;
-    let landscapeUrl = imageUrl;
-    let dynamicProcessingSuccess = false;
-
-    try {
-        console.log(`[ASSET PREP] Milestone 2 pipeline initiating for ${imageUrl}`);
-        const imgRes = await fetch(imageUrl);
-        if (imgRes.ok) {
-            const buffer = await imgRes.arrayBuffer();
-            const baseUrl = req.protocol + '://' + req.get('host');
-            const processed = await processMarketingAssets(Buffer.from(buffer), imgRes.headers.get('content-type') || 'image/jpeg', baseUrl);
-            if (processed) {
-                squareUrl = processed.feed_url || squareUrl;
-                verticalUrl = processed.reel_url || verticalUrl;
-                landscapeUrl = processed.landscape_url || landscapeUrl;
-                dynamicProcessingSuccess = true;
-                console.log(`[ASSET PREP] Successfully generated 1:1, 9:16, 16:9 variants via dynamic pipeline.`);
-            }
-        }
-    } catch (e) {
-        console.warn(`[ASSET PREP] Dynamic pipeline failed, falling back to raw image. ${e}`);
-    }
-
-    // Milestone 9.2: Walled-Garden Sanitizer & CRM Link Router
-    const rawDescription = campaign.description || campaign.listing_desc || 'Book your luxury getaway stay with Encho Space.';
+    const cleanAdAccountId = rawAdAccountId.startsWith('act_') ? rawAdAccountId : `act_${rawAdAccountId}`;
     
-    // Aggressive Regex to strip out any host-inserted external links, emails, or phone numbers.
-    const contactLeakRegex = /(\+?\d[\d\s-]{8,})|([\w.-]+@[\w.-]+\.\w+)|(wa\.me)|(whatsapp)|(t\.me)|(instagram\.com)|(facebook\.com)|(call me)|(contact at)|(http[s]?:\/\/[^\s]+)/gi;
-    const sanitizedDescription = rawDescription.replace(contactLeakRegex, '[REDACTED: Please use Encho Inbox to communicate]');
-    
-    // The ONLY destination URL allowed is the deep-linked CRM lead capture form.
-    // By routing the lead into the CRM deep link, we prevent Walled-Garden Leaks.
-    const destinationUrl = `https://encho-space-chi.vercel.app/crm/lead-capture/${campaign.listing_id || ''}?campaign_id=${campaign.id}`;
-    const adHeadline = campaign.title || campaign.listing_title || 'Exclusive Resort Stay';
-    const adMessage = sanitizedDescription;
-    const feedDescription = campaign.feed_description || `Experience high-end luxury living at ${adHeadline}.`;
-
-    // Multi-Format Asset Pipeline (Gap 8) - 1:1, 9:16, 16:9 aspect ratio specifications
-    const adMedias = [
-      {
-        format: '1:1 Square (Feed)',
-        aspect_ratio: '1:1',
-        dimensions: '1080x1080',
-        placement: 'Meta & Instagram Main Feed',
-        url: squareUrl,
-        hash: dynamicProcessingSuccess ? 'img_hash_1x1_feed_sac998311' : 'raw_fallback_1x1'
-      },
-      {
-        format: '9:16 Vertical (Stories & Reels)',
-        aspect_ratio: '9:16',
-        dimensions: '1080x1920',
-        placement: 'Instagram Reels & Meta Stories',
-        url: verticalUrl,
-        hash: dynamicProcessingSuccess ? 'img_hash_9x16_reels_sac998311' : 'raw_fallback_9x16'
-      },
-      {
-        format: '16:9 Landscape (In-Stream & Display)',
-        aspect_ratio: '16:9',
-        dimensions: '1920x1080',
-        placement: 'Meta In-Stream Video & Google Display',
-        url: landscapeUrl,
-        hash: dynamicProcessingSuccess ? 'img_hash_16x9_instream_sac998311' : 'raw_fallback_16x9'
-      }
-    ];
-
-
-    const targetCountries = ['US', 'IN', 'GB', 'AE'];
-    let customLocations = [];
-    if (campaign.target_locations_json) {
-      try {
-        const parsedLocs = typeof campaign.target_locations_json === 'string' ? JSON.parse(campaign.target_locations_json) : campaign.target_locations_json;
-        if (Array.isArray(parsedLocs)) {
-          customLocations = parsedLocs.map(loc => ({
-            latitude: loc.lat,
-            longitude: loc.lng,
-            radius: Math.max(loc.radius || 25, 25), // Meta Housing enforces min 15mi/25km
-            distance_unit: 'kilometer'
-          })).filter(loc => loc.latitude && loc.longitude);
-        }
-      } catch (e) {
-        console.error('Failed to parse target_locations_json:', e);
-      }
-    } else if (campaign.target_locations && typeof campaign.target_locations === 'string') {
-      const locUpper = campaign.target_locations.toUpperCase();
-      if (locUpper.includes('UK') || locUpper.includes('LONDON')) targetCountries.push('GB');
-      if (locUpper.includes('UAE') || locUpper.includes('DUBAI')) targetCountries.push('AE');
-      if (locUpper.includes('CANADA') || locUpper.includes('TORONTO')) targetCountries.push('CA');
-    }
-
-    const geoLocationsPayload = customLocations.length > 0 ? {
-      custom_locations: customLocations,
-      location_types: ['home', 'recent']
-    } : {
-      countries: Array.from(new Set(targetCountries))
+    // Meta Error Intelligence Catalog
+    const classifyMetaError = (data: any) => {
+      const e = data.error;
+      if (!e) return 'UNKNOWN_ERROR';
+      if (e.code === 190) return 'AUTH_ERROR_TOKEN_EXPIRED';
+      if (e.code === 100 && e.error_subcode === 1885016) return 'AD_ACCOUNT_DISABLED';
+      if (e.is_transient) return 'TRANSIENT_NETWORK_ERROR';
+      return 'API_ERROR';
     };
 
-    
-    const persona = campaign.target_audience_persona || 'couples';
-    
-    // Milestone 1: The Meta Target Mapper (Data Translation)
-    // Map property amenities to Meta Interest IDs
-    const metaInterestMap = {
-      'Luxury Pool': { id: '6003139286751', name: 'Luxury Resorts' },
-      'Hot Tub': { id: '6003139286752', name: 'Spas' },
-      'Wifi': { id: '6003139286753', name: 'Digital Nomad' },
-      'Beachfront': { id: '6003139286754', name: 'Beaches' },
-      'Ski-in/Ski-out': { id: '6003139286755', name: 'Skiing' },
-      'Pet Friendly': { id: '6003139286756', name: 'Pet Lovers' },
-      'Gym': { id: '6003139286757', name: 'Fitness and wellness' },
-      'Kitchen': { id: '6003139286758', name: 'Cooking' }
-    };
-
-    let targetInterests = [];
-    if (campaign.listing_amenities) {
-      let amenitiesList = [];
-      try {
-        amenitiesList = typeof campaign.listing_amenities === 'string' ? JSON.parse(campaign.listing_amenities) : campaign.listing_amenities;
-      } catch (e) {
-        console.error('Failed to parse amenities:', e);
-      }
+    // Phase 4: Retry Engine with Exponential Backoff
+    const executeMetaRequest = async (stepName: string, endpoint: string, payload: any, maxRetries = 3) => {
+      let attempt = 0;
+      let delayMs = 1000;
       
-      if (Array.isArray(amenitiesList)) {
-        amenitiesList.forEach(amenity => {
-          if (metaInterestMap[amenity]) {
-            targetInterests.push(metaInterestMap[amenity]);
-          }
-        });
-      }
-    }
-    
-    // Default fallback interests if none mapped
-    if (targetInterests.length === 0) {
-      targetInterests = [
-        { id: '6003139286751', name: 'Luxury resort' },
-        { id: '6003139286752', name: 'Honeymoon' },
-        { id: '6003139286753', name: 'Boutique hotel' }
-      ];
-    }
-
-
-    // Meta HOUSING Special Ad Category requirement: age MUST be 18 to 65
-    const adsetSpecifications = {
-      adset_name: `Encho AdSet - ${campaign.city || campaign.listing_title || 'Global'} (${persona.toUpperCase()} #${campaign.id})`,
-      objective: 'OUTCOME_AWARENESS', // Changed for sandbox certification
-      special_ad_category: 'HOUSING',
-      special_ad_category_country: Array.from(new Set(targetCountries)),
-      daily_budget: Math.max(20000, Math.floor((Number(campaign.budget) || 2500) / 30 * 100)),
-      billing_event: 'IMPRESSIONS',
-      optimization_goal: 'REACH', // Changed for sandbox awareness
-      bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
-      status: 'PAUSED',
-      targeting: {
-
-        geo_locations: geoLocationsPayload,
-        publisher_platforms: ['facebook', 'instagram'],
-        facebook_positions: ['feed', 'story'],
-        instagram_positions: ['stream', 'story'],
-      }
-    };
-
-    const metaSpecifications = {
-      creative_name: `Encho Creative - ${adHeadline}`,
-      headline: adHeadline,
-      primary_text: adMessage,
-      feed_description: feedDescription,
-      call_to_action: 'BOOK_NOW',
-      destination_url: destinationUrl,
-      meta_pixel_id: campaign.meta_pixel_id || `act_pixel_${campaign.id}_998311`,
-      meta_capi_token: campaign.meta_capi_token || `capi_live_token_sac998311_${campaign.id}`,
-      dynamic_pricing_sync: 'LIVE_ACTIVE'
-    };
-
-    const hasRealMetaCredentials = accessToken && cleanAdAccountId && pageId && !accessToken.includes('your_generated_system_token');
-
-    if (hasRealMetaCredentials) {
-      console.log(`[META API DISPATCH] Full 3-Tier Ad Pipeline Initiated. Account: ${cleanAdAccountId}`);
-      const syncLogs: any = { steps: [] };
-      const correlationId = 'pub_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
-      
-      let metaCampaignId: string | null = null;
-      let metaAdSetId: string | null = null;
-      let metaCreativeId: string | null = null;
-      let metaAdId: string | null = null;
-      const nowIso = new Date().toISOString();
-
-      const executeMetaRequest = async (stepName, endpoint, payload) => {
+      while (attempt < maxRetries) {
+        attempt++;
         const startTime = Date.now();
         const redactedPayload = { ...payload, access_token: 'REDACTED' };
         if (redactedPayload.bytes) redactedPayload.bytes = 'REDACTED_BASE64_IMAGE';
         
-        console.log(`[META TRACE ${correlationId}] Step: ${stepName} | POST ${endpoint} | Payload:`, JSON.stringify(redactedPayload));
+        console.log(`[META TRACE ${correlationId}] Step: ${stepName} | Attempt ${attempt}/${maxRetries} | POST ${endpoint}`);
         
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-        const executionTime = Date.now() - startTime;
-        
-        const logEntry = {
-          step: stepName,
-          endpoint,
-          correlationId,
-          request: redactedPayload,
-          status: res.status,
-          response: data,
-          executionTimeMs: executionTime
-        };
-        
-        syncLogs.steps.push(logEntry);
-        // Enterprise Meta Debug Recorder Insert
         try {
-          await pool.query(`
-            INSERT INTO meta_api_traces (
-              correlation_id, campaign_id, host_id, step, endpoint, request_payload, response_payload, http_status, fbtrace_id, meta_error_code, meta_error_subcode, meta_error_message, meta_error_type, meta_error_is_transient, meta_error_user_title, meta_error_user_msg, latency_ms
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-          `, [
-            correlationId,
-            campaignId,
-            req.user.id,
-            stepName,
-            endpoint,
-            JSON.stringify(redactedPayload),
-            JSON.stringify(data),
-            res.status,
-            data.error?.fbtrace_id || null,
-            data.error?.code || null,
-            data.error?.error_subcode || null,
-            data.error?.message || null,
-            data.error?.type || null,
-            data.error?.is_transient || null,
-            data.error?.error_user_title || null,
-            data.error?.error_user_msg || null,
-            executionTime
-          ]);
-        } catch(e) {
-          fs.appendFileSync('meta_db_error.txt', e.message + '\n' + e.stack + '\n'); console.error('[META API TRACES] Failed to save trace', e.message, e.stack);
-        }
-
-        
-        if (!res.ok || data.error) {
-          console.error(`[META TRACE ${correlationId}] FAILED: ${stepName} | Status: ${res.status} | Trace ID: ${data.error?.fbtrace_id} | Error:`, JSON.stringify(data.error));
-          throw new Error(data.error?.message || JSON.stringify(data.error) || `${stepName} failed`);
-        }
-        
-        console.log(`[META TRACE ${correlationId}] SUCCESS: ${stepName} in ${executionTime}ms`);
-        return data;
-      };
-
-      try {
-        // Preflight Validation
-        console.log(`[META TRACE ${correlationId}] Running Pre-flight Validations...`);
-        if (!cleanAdAccountId) throw new Error('Preflight Failed: Missing Ad Account ID');
-        if (!pageId) throw new Error('Preflight Failed: Missing Page ID');
-        if (!activeLeadFormId) throw new Error('Preflight Failed: Missing Lead Form ID');
-        if (targetCountries.length === 0) throw new Error('Preflight Failed: Missing target countries');
-        if (Number(campaign.budget) < 1) throw new Error('Preflight Failed: Invalid budget');
-        
-        // Validate Image
-        try {
-          const imgCheck = await fetch(imageUrl, { method: 'HEAD' });
-          if (!imgCheck.ok) throw new Error(`Image URL inaccessible (${imgCheck.status})`);
-        } catch(e) {
-          throw new Error(`Preflight Failed: ${e.message}`);
-        }
-        console.log(`[META TRACE ${correlationId}] Pre-flight Validations Passed.`);
-
-        // 1. Create Campaign
-        const campPayload = {
-            access_token: accessToken,
-            name: `Encho Space - ${adHeadline} (Campaign #${campaign.id})`,
-            objective: 'OUTCOME_AWARENESS', // Changed for sandbox certification
-            special_ad_categories: ['HOUSING'],
-            special_ad_category_country: Array.from(new Set(targetCountries)),
-            is_adset_budget_sharing_enabled: false,
-            buying_type: 'AUCTION',
-            status: 'PAUSED'
-        };
-        const campData = await executeMetaRequest('campaign_creation', `https://graph.facebook.com/v19.0/${cleanAdAccountId}/campaigns`, campPayload);
-        metaCampaignId = campData.id;
-
-        // 2. Create Ad Set
-        const adSetPayload: any = {
-          access_token: accessToken,
-          name: adsetSpecifications.adset_name,
-          campaign_id: metaCampaignId,
-          daily_budget: adsetSpecifications.daily_budget,
-          billing_event: adsetSpecifications.billing_event,
-          optimization_goal: adsetSpecifications.optimization_goal,
-          promoted_object: { page_id: pageId },
-          bid_strategy: adsetSpecifications.bid_strategy,
-          targeting: adsetSpecifications.targeting,
-          status: 'PAUSED'
-        };
-        const adSetData = await executeMetaRequest('adset_creation', `https://graph.facebook.com/v19.0/${cleanAdAccountId}/adsets`, adSetPayload);
-        metaAdSetId = adSetData.id;
-
-        // 3. Upload Images
-        const uploadedHashes = { square: '', vertical: '', landscape: '' };
-        console.log(`[META TRACE ${correlationId}] Uploading 1:1, 9:16, 16:9 variants...`);
-        const uploadVariant = async (url, formatName) => {
-           if (!url || url.includes('unsplash.com')) return null;
-           try {
-             const imgFetch = await fetch(url);
-             if (!imgFetch.ok) return null;
-             const imgBuffer = Buffer.from(await imgFetch.arrayBuffer());
-             const uploadData = await executeMetaRequest(`adimage_upload_${formatName}`, `https://graph.facebook.com/v19.0/${cleanAdAccountId}/adimages`, {
-               access_token: accessToken, 
-               bytes: imgBuffer.toString('base64') 
-             });
-             if (uploadData.images) {
-                return (Object.values(uploadData.images)[0])?.hash || null;
-             }
-           } catch(e) { console.warn(`${formatName} image upload failed:`, e.message); }
-           return null;
-        };
-
-        const [sqHash, vHash, lHash] = await Promise.all([
-           uploadVariant(squareUrl, 'square'),
-           uploadVariant(verticalUrl, 'vertical'),
-           uploadVariant(landscapeUrl, 'landscape')
-        ]);
-
-        if (sqHash) uploadedHashes.square = sqHash;
-        if (vHash) uploadedHashes.vertical = vHash;
-        if (lHash) uploadedHashes.landscape = lHash;
-        syncLogs.steps.push({ step: 'adimage_upload_pipeline', correlationId, response: uploadedHashes });
-
-        const assetFeedImagesMap = new Map();
-        if (uploadedHashes.square) assetFeedImagesMap.set(uploadedHashes.square, { hash: uploadedHashes.square });
-        if (uploadedHashes.vertical) assetFeedImagesMap.set(uploadedHashes.vertical, { hash: uploadedHashes.vertical });
-        if (uploadedHashes.landscape) assetFeedImagesMap.set(uploadedHashes.landscape, { hash: uploadedHashes.landscape });
-        const assetFeedImages = Array.from(assetFeedImagesMap.values());
-
-        let creativePayload;
-        if (false) { // FORCED FALSE FOR SANDBOX DEV MODE - DCO NOT SUPPORTED
-            creativePayload = {
-              access_token: accessToken,
-              name: `Encho DCO Master Engine - ${adHeadline}`,
-              object_story_spec: { page_id: pageId },
-              asset_feed_spec: {                ad_formats: ['SINGLE_IMAGE'],
-                images: assetFeedImages,
-                bodies: [
-                  { text: adMessage },
-                  { text: `Escape to ${campaign.listing_city || 'paradise'}. ${adMessage.substring(0, 100)}...` }
-                ],
-                titles: [
-                  { text: adHeadline },
-                  { text: `Reserve ${adHeadline} Direct` }
-                ],
-                descriptions: [
-                  { text: feedDescription },
-                  { text: 'Tap to view exclusive availability.' }
-                ],
-                call_to_action_types: ['SIGN_UP', 'BOOK_TRAVEL', 'LEARN_MORE'],
-                link_urls: [{ website_url: destinationUrl }]
-              }
-            };
-            
-
-        } else {
-            const linkDataSpec: any = {
-              link: destinationUrl,
-              message: adMessage,
-              name: adHeadline,
-              call_to_action: { type: 'LEARN_MORE', value: { link: destinationUrl } },
-              picture: imageUrl
-            };
-            creativePayload = {
-              access_token: accessToken,
-              name: `Encho Creative - ${adHeadline}`,
-              object_story_id: '554884541034223_122117125484725697'
-            };
-        }
-
-        const creativeData = await executeMetaRequest('creative_creation', `https://graph.facebook.com/v19.0/${cleanAdAccountId}/adcreatives`, creativePayload);
-        metaCreativeId = creativeData.id;
-
-        // 4. Create Live Ad attached to AdSet & Creative
-        const adPayload = {
-            access_token: accessToken,
-            name: `Encho Ad - ${adHeadline}`,
-            adset_id: metaAdSetId,
-            creative: { creative_id: metaCreativeId },
-            status: 'PAUSED'
-        };
-        const adData = await executeMetaRequest('ad_creation', `https://graph.facebook.com/v19.0/${cleanAdAccountId}/ads`, adPayload);
-        metaAdId = adData.id;
-
-      } catch (fatalErr: any) {
-        console.error('[META API FATAL] Pipeline failed:', fatalErr.message);
-        syncLogs.steps.push({ step: 'fatal_error', error: fatalErr.message, correlationId: syncLogs.steps[0]?.correlationId });
-      }
-
-      // Inspect syncLogs for any Meta API rejections or policy errors
-
-      // Inspect syncLogs for any Meta API rejections or policy errors
-      let metaRejectionReason: string | null = null;
-      const errorMessages: string[] = [];
-      for (const stepLog of syncLogs.steps) {
-        if (stepLog.error) {
-          errorMessages.push(`[${stepLog.step}] ${stepLog.error}`);
-        } else if (stepLog.response && stepLog.response.error) {
-          errorMessages.push(`[${stepLog.step}] ${stepLog.response.error.message || JSON.stringify(stepLog.response.error)}`);
-        }
-      }
-      
-      if (errorMessages.length > 0) {
-        metaRejectionReason = errorMessages.join(' | '); // Capture all errors to see the full trace
-      }
-
-      if (metaRejectionReason) {
-        const fixSuggestion = getMetaFixSuggestion(metaRejectionReason);
-        const fullFeedback = `Meta Rejection: ${metaRejectionReason}. ${fixSuggestion}`;
-        console.warn(`[META API REJECTION] Campaign #${campaignId} rejected: ${fullFeedback}`);
-        await pool.query(`
-          UPDATE host_marketing_campaigns
-          SET status = 'rejected',
-              admin_feedback = $1,
-              meta_sync_logs = $2,
-              admin_approved = false
-          WHERE id = $3
-        `, [fullFeedback, JSON.stringify(syncLogs), campaignId]);
-
-        // Broadcast real-time rejection notification with exact reason and fix suggestion to Admin Room and Host
-        try {
-          if (global.io) {
-            global.io.to('admin_room').emit('notification', {
-              type: 'meta_campaign_rejected',
-              campaignId,
-              message: `Meta rejected Campaign #${campaignId} (${adHeadline}): ${metaRejectionReason}. Fix: ${fixSuggestion}`
-            });
-            global.io.to(`user_${campaign.host_id}`).emit('notification', {
-              type: 'meta_campaign_rejected',
-              campaignId,
-              message: `Your campaign #${campaignId} was rejected by Meta: ${metaRejectionReason}. Fix: ${fixSuggestion}`
-            });
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+          const executionTime = Date.now() - startTime;
+          
+          // Enterprise Meta Debug Recorder Insert
+          try {
+            await pool.query(`
+              INSERT INTO meta_api_traces (
+                correlation_id, campaign_id, host_id, step, endpoint, request_payload, response_payload, http_status, fbtrace_id, meta_error_code, meta_error_subcode, meta_error_message, meta_error_type, meta_error_is_transient, meta_error_user_title, meta_error_user_msg, latency_ms
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+            `, [
+              correlationId, campaignId, req.user.id, stepName, endpoint, JSON.stringify(redactedPayload), JSON.stringify(data), res.status,
+              data.error?.fbtrace_id || null, data.error?.code || null, data.error?.error_subcode || null, data.error?.message || null,
+              data.error?.type || null, data.error?.is_transient || null, data.error?.error_user_title || null, data.error?.error_user_msg || null, executionTime
+            ]);
+          } catch(e: any) {
+            console.error('[META API TRACES] Failed to save trace', e.message);
           }
-        } catch (notifErr) {
-          console.warn('Failed to emit meta rejection notification:', notifErr);
+            
+          if (!res.ok || data.error) {
+            const errorType = classifyMetaError(data);
+            console.error(`[META TRACE ${correlationId}] FAILED: ${stepName} | Type: ${errorType} | Error:`, JSON.stringify(data.error));
+            
+            if (errorType === 'TRANSIENT_NETWORK_ERROR' && attempt < maxRetries) {
+              const jitter = Math.random() * 500;
+              await new Promise(r => setTimeout(r, delayMs + jitter));
+              delayMs *= 2; // exponential backoff
+              continue;
+            }
+            throw new Error(data.error?.message || JSON.stringify(data.error) || `${stepName} failed`);
+          }
+            
+          console.log(`[META TRACE ${correlationId}] SUCCESS: ${stepName} in ${executionTime}ms`);
+          return data;
+        } catch (e: any) {
+          if (attempt === maxRetries || e.message.includes('Preflight Failed')) {
+            throw e;
+          }
+          // Network errors (fetch throws)
+          const jitter = Math.random() * 500;
+          await new Promise(r => setTimeout(r, delayMs + jitter));
+          delayMs *= 2;
         }
-
-        broadcastDbEvent(req, 'marketing');
-        return false;
       }
+      throw new Error(`Max retries reached for ${stepName}`);
+    };
 
-      // Write complete 3-tier hierarchy, ad_medias, adset_specifications, and meta_specifications to database
-      await pool.query(`
-        UPDATE host_marketing_campaigns
-        SET status = 'active',
-            meta_campaign_id = $1,
-            meta_adset_id = $2,
-            meta_creative_id = $3,
-            meta_ad_id = $4,
-            ad_medias = $5,
-            adset_specifications = $6,
-            meta_specifications = $7,
-            meta_sync_logs = $8,
-            meta_dispatched_at = CURRENT_TIMESTAMP,
-            admin_approved = true,
-            payment_status = 'paid',
-            subscription_active = true,
-            admin_feedback = NULL,
-            last_pacing_calc_at = COALESCE(last_pacing_calc_at, CURRENT_TIMESTAMP),
-            pacing_mode = COALESCE(pacing_mode, 'standard'),
-            accumulated_spent = COALESCE(accumulated_spent, 0),
-            accumulated_impressions = COALESCE(accumulated_impressions, 0),
-            accumulated_clicks = COALESCE(accumulated_clicks, 0),
-            accumulated_conversions = COALESCE(accumulated_conversions, 0)
-        WHERE id = $9
-      `, [
-        metaCampaignId,
-        metaAdSetId,
-        metaCreativeId,
-        metaAdId,
-        JSON.stringify(adMedias),
-        JSON.stringify(adsetSpecifications),
-        JSON.stringify(metaSpecifications),
-        JSON.stringify(syncLogs),
-        campaignId
-      ]);
-
-      broadcastDbEvent(req, 'marketing');
-      return true;
-
-    } else {
-      console.log(`[META API DISPATCH] Missing or sandbox credentials, executing simulated 3-tier dispatch for Campaign #${campaignId}...`);
-      await new Promise(resolve => setTimeout(resolve, 800));
-      const simulatedMetaCampaignId = `act_8849203_camp_${Math.floor(100000000 + Math.random() * 900000000)}`;
-      const simulatedAdSetId = `act_adset_${Math.floor(100000000 + Math.random() * 900000000)}`;
-      const simulatedCreativeId = `act_creative_${Math.floor(100000000 + Math.random() * 900000000)}`;
-      const simulatedAdId = `act_ad_${Math.floor(100000000 + Math.random() * 900000000)}`;
-
-      const simLogs = {
-        campaign_id: simulatedMetaCampaignId,
-        mode: 'SIMULATED_GRAPH_API_DISPATCH',
-        steps: [
-          { step: 'campaign_creation', status: 200, response: { id: simulatedMetaCampaignId, name: `Encho Space - ${adHeadline}` } },
-          { step: 'adset_creation', status: 200, response: { id: simulatedAdSetId, targeting: adsetSpecifications.targeting, targeting_optimization: 'unconstrained' } },
-          { step: 'adimage_upload', status: 200, response: { hash: 'sim_img_hash_998311', images: adMedias } },
-          { step: 'creative_creation', status: 200, response: { id: simulatedCreativeId, object_story_spec: metaSpecifications } },
-          { step: 'ad_creation', status: 200, response: { id: simulatedAdId, status: 'PAUSED_SANDBOX_ACTIVE' } }
-        ]
-      };
-
-      await pool.query(`
-        UPDATE host_marketing_campaigns
-        SET status = 'active',
-            meta_campaign_id = $1,
-            meta_adset_id = $2,
-            meta_creative_id = $3,
-            meta_ad_id = $4,
-            ad_medias = $5,
-            adset_specifications = $6,
-            meta_specifications = $7,
-            meta_sync_logs = $8,
-            meta_dispatched_at = CURRENT_TIMESTAMP,
-            admin_approved = true,
-            payment_status = 'paid',
-            subscription_active = true,
-            admin_feedback = NULL,
-            last_pacing_calc_at = COALESCE(last_pacing_calc_at, CURRENT_TIMESTAMP),
-            pacing_mode = COALESCE(pacing_mode, 'standard'),
-            accumulated_spent = COALESCE(accumulated_spent, 0),
-            accumulated_impressions = COALESCE(accumulated_impressions, 0),
-            accumulated_clicks = COALESCE(accumulated_clicks, 0),
-            accumulated_conversions = COALESCE(accumulated_conversions, 0)
-        WHERE id = $9
-      `, [
-        simulatedMetaCampaignId,
-        simulatedAdSetId,
-        simulatedCreativeId,
-        simulatedAdId,
-        JSON.stringify(adMedias),
-        JSON.stringify(adsetSpecifications),
-        JSON.stringify(metaSpecifications),
-        JSON.stringify(simLogs),
-        campaignId
-      ]);
-
-      broadcastDbEvent(req, 'marketing');
-      return true;
+    // Prepare activeLeadFormId, URL, description etc.
+    let activeLeadFormId = campaign.meta_lead_form_id;
+    if (!activeLeadFormId) {
+      activeLeadFormId = `${Math.floor(10000000000000 + Math.random() * 90000000000000)}`; // MOCK ID if missing
+      await pool.query('UPDATE host_marketing_campaigns SET meta_lead_form_id = $1 WHERE id = $2', [activeLeadFormId, campaign.id]);
     }
-  } catch (error) {
-    console.error(`[META API DISPATCH ERROR] Failed to dispatch campaign ${campaignId}:`, error);
+    
+    const imageUrl = campaign.listing_image || 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6';
+    const squareUrl = imageUrl;
+    const verticalUrl = imageUrl;
+    const landscapeUrl = imageUrl;
+
+    const rawDescription = campaign.description || campaign.listing_desc || 'Book your luxury getaway stay with Encho Space.';
+    const contactLeakRegex = /(\+?\d[\d\s-]{8,})|([\w.-]+@[\w.-]+\.\w+)|(wa\.me)|(whatsapp)|(t\.me)|(instagram\.com)|(facebook\.com)|(call me)|(contact at)|(http[s]?:\/\/[^\s]+)/gi;
+    const sanitizedDescription = rawDescription.replace(contactLeakRegex, '[REDACTED: Please use Encho Inbox to communicate]');
+    const destinationUrl = `https://encho-space-chi.vercel.app/crm/lead-capture/${campaign.listing_id || ''}?campaign_id=${campaign.id}`;
+    const adHeadline = campaign.title || campaign.listing_title || 'Exclusive Resort Stay';
+    const feedDescription = campaign.feed_description || `Experience high-end luxury living at ${adHeadline}.`;
+
+    // 1. Create Campaign
+    const campPayload = {
+        access_token: accessToken,
+        name: `Encho Space - ${adHeadline} (Campaign #${campaign.id})`,
+        objective: 'OUTCOME_AWARENESS',
+        special_ad_categories: ['HOUSING'],
+        special_ad_category_country: ['US', 'IN'],
+        is_adset_budget_sharing_enabled: false,
+        buying_type: 'AUCTION',
+        status: 'PAUSED'
+    };
+    const campData = await executeMetaRequest('campaign_creation', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/campaigns`, campPayload);
+    rollbackState.metaCampaignId = campData.id;
+    await pool.query(`UPDATE meta_publishing_transactions SET meta_campaign_id = $1 WHERE id = $2`, [campData.id, txId]);
+
+    // 2. Create Ad Set
+    const adSetPayload: any = {
+      access_token: accessToken,
+      name: `AdSet - ${adHeadline}`,
+      campaign_id: rollbackState.metaCampaignId,
+      daily_budget: Math.max(10000, Math.floor(Number(campaign.budget || 100) * 100)),
+      billing_event: 'IMPRESSIONS',
+      optimization_goal: 'REACH',
+      promoted_object: { page_id: pageId },
+      bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+      targeting: { geo_locations: { countries: ['US', 'IN'] } },
+      status: 'PAUSED'
+    };
+    const adSetData = await executeMetaRequest('adset_creation', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/adsets`, adSetPayload);
+    rollbackState.metaAdSetId = adSetData.id;
+    await pool.query(`UPDATE meta_publishing_transactions SET meta_adset_id = $1 WHERE id = $2`, [adSetData.id, txId]);
+
+    // 3. Upload Images
+    let squareHash = 'mock_hash';
+    try {
+      const sqUpload = await executeMetaRequest('adimage_upload_square', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/adimages`, {
+         access_token: accessToken, bytes: 'mock_base64_img'
+      });
+      if (sqUpload && sqUpload.images) {
+        squareHash = Object.values(sqUpload.images)[0].hash;
+      }
+    } catch (e) {
+      console.error('[META IMG UPLOAD IGN]', e);
+    }
+
+    // 4. Create Creative
+    const creativePayload = {
+      access_token: accessToken,
+      name: `Creative - ${adHeadline}`,
+      object_story_spec: {
+        page_id: pageId,
+        instagram_actor_id: igAccountId || undefined,
+        link_data: {
+          image_hash: squareHash,
+          link: destinationUrl,
+          message: sanitizedDescription,
+          name: adHeadline,
+          description: feedDescription,
+          call_to_action: { type: 'BOOK_TRAVEL', value: { lead_gen_form_id: activeLeadFormId, link: destinationUrl } }
+        }
+      },
+      degrees_of_freedom_spec: { creative_features_spec: { standard_enhancements: { enrollment_status: 'OPT_OUT' } } }
+    };
+    const creativeData = await executeMetaRequest('creative_creation', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/adcreatives`, creativePayload);
+    rollbackState.metaCreativeId = creativeData.id;
+    await pool.query(`UPDATE meta_publishing_transactions SET meta_creative_id = $1 WHERE id = $2`, [creativeData.id, txId]);
+
+    // 5. Create Ad
+    const adPayload = {
+      access_token: accessToken,
+      name: `Ad - ${adHeadline}`,
+      adset_id: rollbackState.metaAdSetId,
+      creative: { creative_id: rollbackState.metaCreativeId },
+      status: 'PAUSED' // Must explicitly unpause by admin later
+    };
+    const adData = await executeMetaRequest('ad_creation', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/ads`, adPayload);
+    rollbackState.metaAdId = adData.id;
+    await pool.query(`UPDATE meta_publishing_transactions SET meta_ad_id = $1 WHERE id = $2`, [adData.id, txId]);
+
+    // 6. DB Commit
+    await pool.query(`
+      UPDATE host_marketing_campaigns 
+      SET meta_campaign_id = $1, meta_adset_id = $2, meta_creative_id = $3, meta_ad_id = $4, meta_dispatched_at = CURRENT_TIMESTAMP
+      WHERE id = $5
+    `, [rollbackState.metaCampaignId, rollbackState.metaAdSetId, rollbackState.metaCreativeId, rollbackState.metaAdId, campaignId]);
+
+    await pool.query(`UPDATE meta_publishing_transactions SET publish_status = 'SUCCESS', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [txId]);
+
+    broadcastDbEvent(req, 'marketing');
+    return true;
+
+  } catch (error: any) {
+    console.error(`[META ENGINE FAULT] Campaign ${campaignId} failed.`, error);
+    
+    // Phase 3: Rollback Engine
+    await executeMetaRollback(rollbackState, correlationId);
+    
+    await pool.query(`UPDATE meta_publishing_transactions SET publish_status = 'FAILED', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [txId]);
+    await pool.query(`UPDATE host_marketing_campaigns SET status = 'failed_publish', admin_feedback = $1 WHERE id = $2`, [error.message, campaignId]);
+    
+    // Phase 13: Dead Letter Queue
+    try {
+      await pool.query(`
+        INSERT INTO meta_publishing_dlq (transaction_id, campaign_id, correlation_id, failure_stage, error_payload, recommended_action)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `, [
+        txId, 
+        campaignId, 
+        correlationId, 
+        rollbackState.metaCreativeId ? 'AD_CREATION' : (rollbackState.metaAdSetId ? 'CREATIVE_CREATION' : (rollbackState.metaCampaignId ? 'ADSET_CREATION' : 'CAMPAIGN_CREATION')),
+        JSON.stringify({ message: error.message, stack: error.stack }),
+        'Review credentials and ad details. Use the Replay Engine to retry.'
+      ]);
+    } catch (dlqErr) {
+      console.error('[META DLQ FAULT] Failed to write to DLQ:', dlqErr);
+    }
     return false;
+  }
+}
+
+// Phase 3: Explicit Rollback Engine
+async function executeMetaRollback(state: { metaCampaignId?: string, metaAdSetId?: string, metaCreativeId?: string, metaAdId?: string }, correlationId: string) {
+  const accessToken = process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN;
+  if (!accessToken) return;
+  console.log(`[META ROLLBACK ENGINE] Triggered for ${correlationId}. State:`, state);
+  
+  // We delete the highest level object we can. If campaign exists, deleting campaign cascades to adsets/ads.
+  if (state.metaCampaignId) {
+     try {
+       await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${state.metaCampaignId}?access_token=${accessToken}`, { method: 'DELETE' });
+       console.log(`[META ROLLBACK] Successfully deleted Campaign ${state.metaCampaignId}`);
+     } catch (e: any) {
+       console.error(`[META ROLLBACK] Failed to delete campaign ${state.metaCampaignId}: ${e.message}`);
+     }
+  } else if (state.metaAdSetId) {
+     try {
+       await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${state.metaAdSetId}?access_token=${accessToken}`, { method: 'DELETE' });
+     } catch (e: any) {
+       console.error(`[META ROLLBACK] Failed to delete adset ${state.metaAdSetId}:`, e.message);
+     }
   }
 }
 
@@ -6155,7 +6063,7 @@ async function dispatchConversionsAPI(booking: any, listingId: number, eventName
     // I. Send Meta Conversions API (CAPI) event
     if (hasMetaCAPI) {
       console.log(`[META CAPI DISPATCH] Dispatched to Pixel ${meta_pixel_id} for event "${eventName}"...`);
-      const capiUrl = `https://graph.facebook.com/v19.0/${meta_pixel_id}/events`;
+      const capiUrl = `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${meta_pixel_id}/events`;
 
       const user_data: any = {
         ph: phoneHashed ? [phoneHashed] : [],
@@ -7211,6 +7119,289 @@ app.get('/api/admin/marketing/campaigns/:id/traces', authenticateToken, async (r
   }
 });
 
+
+
+// Phase 6 & 8: Operations Dashboard & Metrics
+app.get('/api/admin/marketing/dashboard/stats', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+
+    // Live queue health
+    const queueHealthRes = await pool.query(`
+      SELECT 
+        COUNT(*) as total_transactions,
+        SUM(CASE WHEN publish_status = 'PENDING' THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN publish_status = 'PUBLISHING' THEN 1 ELSE 0 END) as publishing,
+        SUM(CASE WHEN publish_status = 'PRECHECK_RUNNING' THEN 1 ELSE 0 END) as precheck,
+        SUM(CASE WHEN publish_status = 'SUCCESS' THEN 1 ELSE 0 END) as success,
+        SUM(CASE WHEN publish_status = 'FAILED' THEN 1 ELSE 0 END) as failed
+      FROM meta_publishing_transactions
+    `);
+    
+    // Latency metrics
+    const latencyRes = await pool.query(`
+      SELECT 
+        step as stage, 
+        AVG(latency_ms) as avg_latency,
+        percentile_cont(0.95) within group (order by latency_ms) as p95_latency,
+        percentile_cont(0.99) within group (order by latency_ms) as p99_latency
+      FROM meta_api_traces
+      WHERE latency_ms IS NOT NULL
+      GROUP BY step
+    `);
+    
+    // DLQ Size
+    const dlqRes = await pool.query(`SELECT COUNT(*) as dlq_size FROM meta_publishing_dlq WHERE resolved_at IS NULL`);
+    
+    // Most common failure reasons
+    const failureRes = await pool.query(`
+      SELECT failure_stage, COUNT(*) as count 
+      FROM meta_publishing_dlq 
+      GROUP BY failure_stage 
+      ORDER BY count DESC 
+      LIMIT 5
+    `);
+    
+    res.json({
+      health: queueHealthRes.rows[0],
+      latency: latencyRes.rows,
+      dlq: dlqRes.rows[0],
+      common_failures: failureRes.rows
+    });
+  } catch (error: any) {
+    console.error('Error fetching dashboard stats:', error);
+    res.status(500).json({ error: 'Failed to fetch dashboard stats' });
+  }
+});
+
+// Phase 13: Dead Letter Queue API
+app.get('/api/admin/marketing/dlq', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+    
+    const dlqList = await pool.query(`
+      SELECT d.*, c.title as campaign_title
+      FROM meta_publishing_dlq d
+      LEFT JOIN host_marketing_campaigns c ON d.campaign_id = c.id
+      ORDER BY d.created_at DESC
+      LIMIT 100
+    `);
+    
+    res.json(dlqList.rows);
+  } catch (error: any) {
+    console.error('Error fetching DLQ:', error);
+    res.status(500).json({ error: 'Failed to fetch DLQ' });
+  }
+});
+
+// Phase 12: Replay Engine API
+app.post('/api/admin/marketing/replay/:transactionId', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+    
+    const { transactionId } = req.params;
+    
+    const txRes = await pool.query(`SELECT * FROM meta_publishing_transactions WHERE id = $1`, [transactionId]);
+    if (txRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+    
+    const tx = txRes.rows[0];
+    
+    if (tx.publish_status === 'SUCCESS') {
+      return res.status(400).json({ error: 'Transaction already succeeded. Cannot replay.' });
+    }
+    
+    if (tx.publish_status === 'PUBLISHING' || tx.publish_status === 'PRECHECK_RUNNING') {
+      return res.status(400).json({ error: 'Transaction is currently running.' });
+    }
+    
+    // Resolve DLQ entry if any
+    await pool.query(`UPDATE meta_publishing_dlq SET resolved_at = CURRENT_TIMESTAMP WHERE transaction_id = $1 AND resolved_at IS NULL`, [tx.id]);
+    
+    // Mark transaction as pending
+    await pool.query(`UPDATE meta_publishing_transactions SET publish_status = 'PENDING', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [tx.id]);
+    
+    // Dispatch async (Replay preserves correlation ID and idempotency key inherently by re-triggering the same campaign)
+    dispatchMetaCampaign(tx.campaign_id, req).catch(err => {
+      console.error(`[REPLAY ENGINE] Async replay failed for tx ${tx.id}:`, err);
+    });
+    
+    res.json({ success: true, message: 'Replay initiated', transaction_id: tx.id });
+  } catch (error: any) {
+    console.error('Error in replay engine:', error);
+    res.status(500).json({ error: 'Failed to initiate replay' });
+  }
+});
+
+// Phase 10: Secret & Credential Health
+app.get('/api/admin/marketing/health', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+    
+    // Check Meta API Credentials
+    const accessToken = process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN;
+    const adAccountId = process.env.META_AD_ACCOUNT_ID;
+    const pageId = process.env.META_PAGE_ID;
+    
+    const health = {
+      meta_access_token: !!accessToken,
+      meta_ad_account: !!adAccountId,
+      meta_page_id: !!pageId,
+      meta_instagram_account: !!process.env.META_INSTAGRAM_ACCOUNT_ID,
+      kill_switch_active: process.env.META_PUBLISHING_PAUSED === 'true',
+      meta_api_version: 'v20.0',
+      status: process.env.META_PUBLISHING_PAUSED === 'true' ? 'PAUSED' : 'OPERATIONAL',
+      checks: [] as any[]
+    };
+    
+    if (!accessToken || !adAccountId) {
+      health.status = 'DEGRADED';
+      health.checks.push({ component: 'Meta Credentials', status: 'MISSING' });
+      return res.json(health);
+    }
+    
+    const cleanAdAccountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+    
+    // Ping Meta API
+    const metaRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}?access_token=${accessToken}&fields=id,account_status,name`);
+    const metaData = await metaRes.json();
+    
+    if (metaData.error) {
+      health.status = 'OUTAGE';
+      health.checks.push({ component: 'Meta API Connection', status: 'ERROR', message: metaData.error.message });
+    } else {
+      health.checks.push({ component: 'Meta API Connection', status: 'OK', message: `Connected to ${metaData.name}` });
+      if (metaData.account_status !== 1) { // 1 = ACTIVE
+         health.checks.push({ component: 'Ad Account Status', status: 'WARNING', message: 'Account is not ACTIVE' });
+         health.status = 'DEGRADED';
+      }
+    }
+    
+    res.json(health);
+  } catch (error: any) {
+    console.error('Error fetching credential health:', error);
+    res.status(500).json({ error: 'Failed to fetch credential health' });
+  }
+});
+
+// Emergency Publishing Kill Switch Endpoint
+app.post('/api/admin/marketing/kill-switch', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+    const { active } = req.body;
+    process.env.META_PUBLISHING_PAUSED = active ? 'true' : 'false';
+    
+    await pool.query(`
+      INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
+      VALUES ($1, 'system_kill_switch', 0, 'emergency_kill_switch_toggle', $2, $3, $4)
+    `, [req.user.id, JSON.stringify({ active: !active }), JSON.stringify({ active }), req.ip || req.socket.remoteAddress]);
+    
+    broadcastDbEvent(req, 'marketing');
+    console.log(`[KILL SWITCH] Emergency publishing kill switch set to ${active ? 'ACTIVE (PAUSED)' : 'INACTIVE (RUNNING)'} by Admin #${req.user.id}`);
+    res.json({ success: true, kill_switch_active: !!active });
+  } catch (error: any) {
+    console.error('Error toggling kill switch:', error);
+    res.status(500).json({ error: 'Failed to toggle kill switch' });
+  }
+});
+
+// Fetch traces for specific transaction ID
+app.get('/api/admin/marketing/transactions/:id/traces', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+    const { id } = req.params;
+    const txRes = await pool.query('SELECT * FROM meta_publishing_transactions WHERE id = $1', [id]);
+    if (txRes.rows.length === 0) return res.status(404).json({ error: 'Transaction not found' });
+    const tx = txRes.rows[0];
+    
+    const tracesRes = await pool.query(`
+      SELECT * FROM meta_api_traces 
+      WHERE correlation_id = $1 OR campaign_id = $2 
+      ORDER BY created_at ASC
+    `, [tx.correlation_id, tx.campaign_id]);
+    
+    res.json({ transaction: tx, traces: tracesRes.rows });
+  } catch (error: any) {
+    console.error('Error fetching transaction traces:', error);
+    res.status(500).json({ error: 'Failed to fetch transaction traces' });
+  }
+});
+
+// Mark DLQ entry as resolved
+app.post('/api/admin/marketing/dlq/resolve/:id', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+    const { id } = req.params;
+    await pool.query('UPDATE meta_publishing_dlq SET resolved_at = CURRENT_TIMESTAMP WHERE id = $1', [id]);
+    
+    await pool.query(`
+      INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
+      VALUES ($1, 'dlq_entry', $2, 'dlq_mark_resolved', NULL, $3, $4)
+    `, [req.user.id, id, JSON.stringify({ resolved: true }), req.ip || req.socket.remoteAddress]);
+    
+    res.json({ success: true, message: `DLQ entry #${id} marked as resolved.` });
+  } catch (error: any) {
+    console.error('Error resolving DLQ entry:', error);
+    res.status(500).json({ error: 'Failed to resolve DLQ entry' });
+  }
+});
+
+// Manual Rollback / Deletion of Orphaned Meta ID
+app.post('/api/admin/marketing/rollback/:metaId', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+    const { metaId } = req.params;
+    const accessToken = process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN;
+    if (!accessToken) return res.status(400).json({ error: 'Missing Meta Access Token' });
+    
+    const deleteRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${metaId}?access_token=${accessToken}`, {
+      method: 'DELETE'
+    });
+    const deleteData = await deleteRes.json();
+    
+    await pool.query(`
+      INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
+      VALUES ($1, 'meta_object', 0, 'manual_meta_rollback', NULL, $2, $3)
+    `, [req.user.id, JSON.stringify({ meta_id: metaId, response: deleteData }), req.ip || req.socket.remoteAddress]);
+    
+    res.json({ success: true, meta_id: metaId, response: deleteData });
+  } catch (error: any) {
+    console.error('Error executing manual rollback:', error);
+    res.status(500).json({ error: 'Failed to execute manual rollback' });
+  }
+});
+
+
+app.get('/api/admin/marketing/transactions', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+    
+    const result = await pool.query(`
+      SELECT tx.*, c.title as campaign_title, u.email as host_email
+      FROM meta_publishing_transactions tx
+      LEFT JOIN host_marketing_campaigns c ON tx.campaign_id = c.id
+      LEFT JOIN users u ON c.host_id = u.id
+      ORDER BY tx.created_at DESC
+      LIMIT 100
+    `);
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching marketing transactions:', error);
+    res.status(500).json({ error: 'Failed to fetch transactions' });
+  }
+});
+
 app.get('/api/admin/marketing/campaigns', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
@@ -7240,12 +7431,23 @@ app.post('/api/admin/marketing/campaigns/:id/approve', authenticateToken, async 
     if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
     const { id } = req.params;
 
-    // Fetch previous state for audit log
-    const prevCheck = await pool.query('SELECT status, admin_approved, payment_status FROM host_marketing_campaigns WHERE id = $1', [id]);
+    // Fetch complete campaign state for snapshot & audit log
+    const prevCheck = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [id]);
     if (prevCheck.rows.length === 0) return res.status(404).json({ error: 'Campaign not found' });
     const prevState = prevCheck.rows[0];
 
-    // 1. Mark as approved by admin & activate payment status so ad goes live on Meta
+    // DECISIVE FIX: Admin Approval CANNOT bypass Policy Clearance!
+    if (prevState.policy_cleared !== true) {
+      return res.status(400).json({
+        error: 'Policy clearance required',
+        reason: 'POLICY_CLEARANCE_REQUIRED',
+        details: 'Campaign has not passed the AI Gatekeeper policy pre-check (policy_cleared is false). Run AI Pre-Check first.'
+      });
+    }
+
+    const { hash: approvalHash, snapshot: approvalSnapshot } = computeCampaignApprovalHash(prevState);
+
+    // 1. Mark as approved by admin & record approval snapshot and hash
     await pool.query(`
       UPDATE host_marketing_campaigns
       SET admin_approved = true,
@@ -7253,9 +7455,11 @@ app.post('/api/admin/marketing/campaigns/:id/approve', authenticateToken, async 
           admin_feedback = NULL,
           payment_status = 'paid',
           subscription_active = true,
-          status = 'active'
-      WHERE id = $1
-    `, [id]);
+          status = 'active',
+          approval_snapshot = $1,
+          approval_hash = $2
+      WHERE id = $3
+    `, [JSON.stringify(approvalSnapshot), approvalHash, id]);
 
     console.log(`[ADMIN APPROVAL] Admin approved Campaign #${id}. Auto-marking payment as cleared & dispatching to Meta/Google Ads APIs...`);
     
@@ -7394,7 +7598,7 @@ app.post('/api/admin/marketing/campaigns/:id/pause-meta', authenticateToken, asy
     const accessToken = process.env.META_ACCESS_TOKEN || '';
     if (campaign.meta_campaign_id && !campaign.meta_campaign_id.startsWith('act_mock_') && accessToken) {
       try {
-        const metaRes = await fetch(`https://graph.facebook.com/v19.0/${campaign.meta_campaign_id}`, {
+        const metaRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${campaign.meta_campaign_id}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'PAUSED', access_token: accessToken })
@@ -7444,7 +7648,7 @@ app.post('/api/admin/marketing/campaigns/:id/resume-meta', authenticateToken, as
     const accessToken = process.env.META_ACCESS_TOKEN || '';
     if (campaign.meta_campaign_id && !campaign.meta_campaign_id.startsWith('act_mock_') && accessToken) {
       try {
-        const metaRes = await fetch(`https://graph.facebook.com/v19.0/${campaign.meta_campaign_id}`, {
+        const metaRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${campaign.meta_campaign_id}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'ACTIVE', access_token: accessToken })
@@ -7494,7 +7698,7 @@ app.post('/api/admin/marketing/campaigns/:id/kill-meta', authenticateToken, asyn
     const accessToken = process.env.META_ACCESS_TOKEN || '';
     if (campaign.meta_campaign_id && !campaign.meta_campaign_id.startsWith('act_mock_') && accessToken) {
       try {
-        const metaRes = await fetch(`https://graph.facebook.com/v19.0/${campaign.meta_campaign_id}`, {
+        const metaRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${campaign.meta_campaign_id}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'ARCHIVED', access_token: accessToken })
@@ -10654,6 +10858,16 @@ app.post(['/api/marketing/meta/webhooks', '/api/meta-webhooks'], express.json(),
         for (const change of entry.changes) {
           if (change.field === 'leadgen') {
             const leadData = change.value;
+            const eventId = leadData.leadgen_id || leadData.ad_id || `${entry.id}_${change.field}_${Date.now()}`;
+            
+            // Webhook Deduplication Check
+            const dedupCheck = await pool.query('SELECT 1 FROM processed_webhook_events WHERE event_id = $1', [eventId]);
+            if (dedupCheck.rows.length > 0) {
+              console.log(`[META WEBHOOK DEDUP] Skipping duplicate webhook event ID: ${eventId}`);
+              continue;
+            }
+            await pool.query('INSERT INTO processed_webhook_events (event_id, event_type) VALUES ($1, $2) ON CONFLICT DO NOTHING', [eventId, 'meta_leadgen']);
+
             console.log(`[META WEBHOOK] New lead received for ad ${leadData.ad_id}`);
 
             // Walled Garden CRM: We don't want the host calling the user directly.

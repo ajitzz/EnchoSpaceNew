@@ -1,4 +1,51 @@
 const fs = require('fs');
-let dash = fs.readFileSync('components/AdminDashboard.tsx', 'utf8');
-dash = dash.replace(/import \{ Map, Compass \} import \{ MoreHorizontal \} from 'lucide-react';/, "import { Map, Compass, MoreHorizontal } from 'lucide-react';");
-fs.writeFileSync('components/AdminDashboard.tsx', dash);
+const code = fs.readFileSync('server.ts', 'utf8');
+const lines = code.split('\n');
+const replacement = `  // Gap 14: Immutable Admin Audit Trail
+  await pool.query(\`
+    CREATE TABLE IF NOT EXISTS meta_publishing_transactions (
+      id SERIAL PRIMARY KEY,
+      campaign_id INTEGER REFERENCES host_marketing_campaigns(id),
+      idempotency_key VARCHAR(255) UNIQUE NOT NULL,
+      correlation_id VARCHAR(255) NOT NULL,
+      publish_status VARCHAR(50) DEFAULT 'PENDING',
+      publish_attempt INTEGER DEFAULT 1,
+      meta_campaign_id VARCHAR(255),
+      meta_adset_id VARCHAR(255),
+      meta_creative_id VARCHAR(255),
+      meta_ad_id VARCHAR(255),
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS meta_api_traces (
+      id SERIAL PRIMARY KEY,
+      campaign_id INTEGER REFERENCES host_marketing_campaigns(id),
+      correlation_id VARCHAR(255) NOT NULL,
+      stage VARCHAR(50) NOT NULL,
+      endpoint VARCHAR(500),
+      payload JSONB,
+      response JSONB,
+      latency_ms INTEGER,
+      is_error BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    
+    CREATE TABLE IF NOT EXISTS meta_publishing_dlq (
+      id SERIAL PRIMARY KEY,
+      transaction_id INTEGER REFERENCES meta_publishing_transactions(id),
+      campaign_id INTEGER REFERENCES host_marketing_campaigns(id),
+      correlation_id VARCHAR(255) NOT NULL,
+      failure_stage VARCHAR(50) NOT NULL,
+      error_payload JSONB,
+      retry_count INTEGER DEFAULT 0,
+      recommended_action TEXT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      resolved_at TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS admin_audit_logs (`.split('\n');
+
+lines.splice(1582, 51, ...replacement);
+fs.writeFileSync('server.ts', lines.join('\n'));
+console.log("Fixed");
