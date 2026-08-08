@@ -188,6 +188,7 @@ To proactively prevent Meta rejections, the AI Campaign Copilot evaluates host c
 | Incident ID | Date | Symptoms | Root Cause | Files Changed | Permanent Fix | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | INC-001 | 2026-08-07 | Campaign created, but Ad Set, Creative, Ad missing. Meta API Rejection. | TBD (Under Forensic Investigation) | `server.ts` | TBD | Investigating |
+| INC-002 | 2026-08-07 | SyntaxError: "[object Object]" is not valid JSON on opening Publishing Queue and Transaction Inspector. | `JSON.parse` called directly on `request_payload`/`response_payload` which were auto-parsed JavaScript objects returned by node-postgres. | `components/AdminOpsControlCenter.tsx` | Replaced direct `JSON.parse` with `safeJsonFormat` defensive formatter handling Objects, strings, and null values without throwing. | Resolved |
 
 ---
 

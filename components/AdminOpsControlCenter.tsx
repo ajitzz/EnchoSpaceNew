@@ -26,6 +26,25 @@ import {
   FileText
 } from 'lucide-react';
 
+const safeJsonFormat = (payload: any): string => {
+  if (payload === null || payload === undefined) return '{}';
+  if (typeof payload === 'object') {
+    try {
+      return JSON.stringify(payload, null, 2);
+    } catch {
+      return String(payload);
+    }
+  }
+  if (typeof payload === 'string') {
+    try {
+      return JSON.stringify(JSON.parse(payload), null, 2);
+    } catch {
+      return payload;
+    }
+  }
+  return String(payload);
+};
+
 interface AdminOpsControlCenterProps {
   onBack?: () => void;
 }
@@ -780,11 +799,11 @@ export const AdminOpsControlCenter: React.FC<AdminOpsControlCenterProps> = () =>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
                             <div className="p-2.5 bg-gray-900 text-gray-300 rounded-lg overflow-x-auto text-[10px]">
                               <div className="text-gray-500 font-bold uppercase mb-1">Request Payload</div>
-                              <pre>{JSON.stringify(JSON.parse(trace.request_payload || '{}'), null, 2)}</pre>
+                              <pre>{safeJsonFormat(trace.request_payload)}</pre>
                             </div>
                             <div className="p-2.5 bg-gray-900 text-gray-300 rounded-lg overflow-x-auto text-[10px]">
                               <div className="text-gray-500 font-bold uppercase mb-1">Meta API Response</div>
-                              <pre>{JSON.stringify(JSON.parse(trace.response_payload || '{}'), null, 2)}</pre>
+                              <pre>{safeJsonFormat(trace.response_payload)}</pre>
                             </div>
                           </div>
                         </div>
