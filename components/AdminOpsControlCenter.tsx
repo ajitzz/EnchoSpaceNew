@@ -642,11 +642,13 @@ export const AdminOpsControlCenter: React.FC<AdminOpsControlCenterProps> = () =>
                             className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
                               tx.publish_status === 'SUCCESS'
                                 ? 'bg-emerald-100 text-emerald-800'
-                                : tx.publish_status === 'FAILED'
+                                : (tx.publish_status === 'FAILED' || tx.publish_status === 'FAILED_PUBLISH' || tx.publish_status === 'ROLLBACK_FAILED')
                                 ? 'bg-rose-100 text-rose-800'
                                 : tx.publish_status === 'PUBLISHING'
                                 ? 'bg-blue-100 text-blue-800 animate-pulse'
-                                : 'bg-amber-100 text-amber-800'
+                                : tx.publish_status === 'ROLLBACK_SUCCESS'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-gray-100 text-gray-800'
                             }`}
                           >
                             {tx.publish_status}
@@ -741,21 +743,29 @@ export const AdminOpsControlCenter: React.FC<AdminOpsControlCenterProps> = () =>
                   </div>
 
                   {/* Failure Classification Alert Banner */}
-                  {(selectedTx.failure_code === 'META_APP_DEVELOPMENT_MODE_BLOCK' ||
-                    selectedTxTraces.some(t => t.meta_error_subcode === 1885183 || (t.meta_error_message && t.meta_error_message.includes('development mode')))) && (
+                  {selectedTx.failure_code && (
                     <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl space-y-2 font-sans">
                       <div className="flex items-center gap-2 text-rose-800 font-bold text-xs">
                         <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                        <span>META APP DEVELOPMENT MODE BLOCK (100 / 1885183)</span>
+                        <span>{selectedTx.failure_category || 'ERROR'} / {selectedTx.failure_code}</span>
                       </div>
                       <p className="text-[11px] text-rose-700 leading-relaxed">
-                        Ads creative post was created by an app that is in Development Mode and must be public/live to create the ad.
+                        {selectedTx.error_details?.error?.message || selectedTx.error_details?.error_user_msg || 'An error occurred during Meta API dispatch.'}
                       </p>
                       <div className="pt-2 border-t border-rose-200/60 font-mono text-[10px] space-y-1 text-rose-900">
-                        <div><strong className="text-rose-700">Meta App ID:</strong> 1347659864208278</div>
-                        <div><strong className="text-rose-700">Retry Status:</strong> <span className="px-1.5 py-0.5 bg-rose-200 text-rose-900 rounded font-bold">BLOCKED (Non-retryable)</span></div>
-                        <div><strong className="text-rose-700">Required Action:</strong> Switch Meta App 1347659864208278 from Development to Live/Public Mode in Meta Developers Console.</div>
-                        <div><strong className="text-rose-700">Cascade Rollback Status:</strong> <span className="text-emerald-700 font-bold">SUCCESS</span> (Orphaned Campaign & AdSet objects cleaned up).</div>
+                        {selectedTx.error_details?.error?.code && (
+                          <div><strong className="text-rose-700">Code/Subcode:</strong> {selectedTx.error_details?.error?.code} / {selectedTx.error_details?.error?.error_subcode || 'N/A'}</div>
+                        )}
+                        <div><strong className="text-rose-700">Required Action:</strong> Check configuration or correct external blockers before replaying.</div>
+                        <div>
+                          <strong className="text-rose-700">Cascade Rollback Status:</strong>{' '}
+                          <span className={selectedTx.rollback_status === 'SUCCESS' ? 'text-emerald-700 font-bold' : (selectedTx.rollback_status === 'NOT_REQUIRED' ? 'text-amber-700 font-bold' : 'text-rose-700 font-bold')}>
+                            {selectedTx.rollback_status || 'UNKNOWN'}
+                          </span>
+                        </div>
+                        {selectedTx.rollback_status === 'FAILED' && (
+                          <div className="text-rose-700 font-bold mt-1 bg-rose-200 p-1 rounded">WARNING: Meta objects may be orphaned! Action required.</div>
+                        )}
                       </div>
                     </div>
                   )}

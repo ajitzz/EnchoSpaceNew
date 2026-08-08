@@ -1,28 +1,32 @@
 const fs = require('fs');
 let code = fs.readFileSync('server.ts', 'utf8');
 
-// I need to remove the broken leftover of pre-flight check.
-// It starts right after the new pre-flight check ends.
-// Let's find "app.post('/api/marketing/pre-flight-check'"
-const preflightStart = code.indexOf("app.post('/api/marketing/pre-flight-check'");
-// Find the end of my NEW preflight function
-const myNewEnd = code.indexOf("});", code.indexOf("res.status(500).json({ error: 'Failed pre-flight check' });")) + 3;
+const startMarker = "export interface MetaErrorClassification {";
+const endMarker = "  return { success: allSucceeded, details };\n}";
+const gate14Marker = "  // Gate 14:";
 
-// Now from myNewEnd, the code has:
-//   try {
-//     const { listing_id, title, description, budget } = req.body;
-// ... until
-//     res.status(500).json({ error: error.message || 'Pre-flight check failed' });
-//   }
-// });
+const startIndex = code.indexOf(startMarker);
+const endIndex = code.indexOf(endMarker, startIndex) + endMarker.length;
+const gate14Index = code.indexOf(gate14Marker, endIndex);
 
-const oldEnd = code.indexOf("});", code.indexOf("res.status(500).json({ error: error.message || 'Pre-flight check failed' });")) + 3;
-
-if (preflightStart > -1 && myNewEnd > -1 && oldEnd > -1 && oldEnd > myNewEnd) {
-  code = code.slice(0, myNewEnd) + code.slice(oldEnd);
-  console.log("Fixed preflight");
-} else {
-  console.log("Could not fix preflight");
+if (startIndex === -1 || endIndex === -1 || gate14Index === -1) {
+  console.log("Could not find markers.");
+  process.exit(1);
 }
 
-fs.writeFileSync('server.ts', code);
+const extractedCode = code.substring(startIndex, endIndex);
+
+let newCode = code.substring(0, startIndex) + code.substring(endIndex);
+
+const evalEndMarker = "  };\n}";
+const evalEndIndex = newCode.indexOf(evalEndMarker, startIndex);
+if (evalEndIndex === -1) {
+  console.log("Could not find eval function end.");
+  process.exit(1);
+}
+
+// Insert extracted code right after evalEndMarker
+newCode = newCode.substring(0, evalEndIndex + evalEndMarker.length) + "\n\n" + extractedCode + "\n" + newCode.substring(evalEndIndex + evalEndMarker.length);
+
+fs.writeFileSync('server.ts', newCode);
+console.log("Fixed server.ts!");

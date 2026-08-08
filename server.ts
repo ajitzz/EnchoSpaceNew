@@ -5653,11 +5653,97 @@ export function computeCampaignApprovalHash(campaign: any): { hash: string; snap
   return { hash, snapshot };
 }
 
+// ----------------- EXTERNAL META READINESS VERIFIER -----------------
+async function checkExternalMetaReadiness(dbPool: any, correlationId: string) {
+  const accessToken = process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN;
+  const rawAdAccountId = process.env.META_AD_ACCOUNT_ID;
+  const appId = process.env.META_APP_ID || '1347659864208278'; // fallback
+  const baseUrl = process.env.META_BASE_URL || "https://graph.facebook.com/v20.0";
+  
+  const report = {
+    is_ready: false,
+    signals: [] as any[],
+    blockers: [] as string[]
+  };
+
+  if (!accessToken || !rawAdAccountId) {
+    report.blockers.push("Missing core Meta credentials (META_ACCESS_TOKEN or META_AD_ACCOUNT_ID)");
+    return report;
+  }
+
+  const cleanAdAccountId = rawAdAccountId.startsWith('act_') ? rawAdAccountId : `act_${rawAdAccountId}`;
+
+  // Signal 1: Token Validity & Permissions
+  try {
+    const tokenRes = await fetch(`${baseUrl}/me?fields=id,name&access_token=${accessToken}`);
+    const tokenData = await tokenRes.json();
+    if (tokenData.error) {
+      report.signals.push({ type: 'TOKEN', status: 'FAILED', error: tokenData.error });
+      report.blockers.push(`Token Invalid: ${tokenData.error.message}`);
+    } else {
+      report.signals.push({ type: 'TOKEN', status: 'PASSED', data: { id: tokenData.id, name: tokenData.name } });
+    }
+  } catch (e: any) {
+    report.signals.push({ type: 'TOKEN', status: 'UNVERIFIABLE', error: e.message });
+  }
+
+  // Signal 2: Ad Account Status
+  try {
+    const adRes = await fetch(`${baseUrl}/${cleanAdAccountId}?fields=account_status,disable_reason&access_token=${accessToken}`);
+    const adData = await adRes.json();
+    if (adData.error) {
+      report.signals.push({ type: 'AD_ACCOUNT', status: 'FAILED', error: adData.error });
+      report.blockers.push(`Ad Account Access Failed: ${adData.error.message}`);
+    } else {
+      if (adData.account_status !== 1) { // 1 = ACTIVE
+        report.signals.push({ type: 'AD_ACCOUNT', status: 'FAILED', data: adData });
+        report.blockers.push(`Ad Account is not active (status code: ${adData.account_status})`);
+      } else {
+        report.signals.push({ type: 'AD_ACCOUNT', status: 'PASSED', data: adData });
+      }
+    }
+  } catch (e: any) {
+    report.signals.push({ type: 'AD_ACCOUNT', status: 'UNVERIFIABLE', error: e.message });
+  }
+
+  // Signal 3: App Mode Verification (Requires App Token or Admin rights)
+  try {
+    const appRes = await fetch(`${baseUrl}/${appId}?fields=is_in_development_mode&access_token=${accessToken}`);
+    const appData = await appRes.json();
+    if (appData.error) {
+      // Often token doesn't have app read permissions
+      report.signals.push({ type: 'APP_MODE', status: 'EXTERNAL_UNVERIFIABLE', error: appData.error });
+      // We do not block here if it's unverifiable, but we rely on human DB flags
+    } else {
+      if (appData.is_in_development_mode) {
+        report.signals.push({ type: 'APP_MODE', status: 'FAILED', data: appData });
+        report.blockers.push(`Meta App ${appId} is currently in Development Mode.`);
+      } else {
+        report.signals.push({ type: 'APP_MODE', status: 'PASSED', data: appData });
+      }
+    }
+  } catch (e: any) {
+    report.signals.push({ type: 'APP_MODE', status: 'UNVERIFIABLE', error: e.message });
+  }
+
+  report.is_ready = report.blockers.length === 0;
+
+  // Log Trace
+  try {
+    await dbPool.query(`
+      INSERT INTO meta_api_traces (correlation_id, step, endpoint, response_payload, http_status, latency_ms)
+      VALUES ($1, 'external_readiness_check', 'multiple_endpoints', $2, 200, 0)
+    `, [correlationId, JSON.stringify(report)]);
+  } catch(e) { /* ignore */ }
+
+  return report;
+}
+
 // ----------------- META PREFLIGHT ENGINE (16 SAFETY GATES) -----------------
 async function evaluateMetaPreflightDiagnostics(
   campaignIdOrData: number | any,
   dbPool: any,
-  options: { isAdmin?: boolean; isDispatch?: boolean } = {}
+  options: { isAdmin?: boolean; isDispatch?: boolean; externalReport?: any } = {}
 ) {
   let campaign: any = null;
   let campaignId = 0;
@@ -6041,6 +6127,181 @@ async function evaluateMetaPreflightDiagnostics(
     });
   }
 
+
+
+  // Gate 14: Meta Canary #2 Readiness & Development Mode Restriction Gate
+  const appMode = (process.env.META_APP_MODE as 'development' | 'live') || 'development';
+  let devModeBlockedInDb = false;
+
+  try {
+    const devBlockCheck = await dbPool.query(`
+      SELECT id FROM meta_api_traces
+      WHERE meta_error_subcode = 1885183 OR meta_error_message LIKE '%development mode%'
+      ORDER BY created_at DESC LIMIT 1
+    `);
+    if (devBlockCheck.rows.length > 0) {
+      devModeBlockedInDb = true;
+    }
+  } catch(e) {
+    // Ignore db query error
+  }
+
+  if (options.externalReport && !options.externalReport.is_ready) {
+    let devModeFail = options.externalReport.blockers.find((b: string) => b.includes('Development Mode'));
+    let failureReason = devModeFail ? devModeFail : options.externalReport.blockers.join(' | ');
+    gateResults.push({
+      gate_id: 14,
+      gate_key: 'GATE_14_CANARY_2_READY',
+      gate_name: 'Meta App Canary #2 Readiness & Dev Mode Restriction',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: devModeFail ? 'META_APP_DEVELOPMENT_MODE_BLOCK' : 'META_EXTERNAL_PRODUCTION_READINESS_FAILED',
+      admin_only: true,
+      admin_details: `External Blockers: ${options.externalReport.blockers.join(', ')}`,
+      message: `Preflight Failed: Infrastructure Blocker — ${failureReason}`,
+      action_required: options.isAdmin
+        ? `Remediate external readiness blockers: ${failureReason}`
+        : 'Infrastructure Status: Meta Integration external readiness checks failed. Please contact administrator.'
+    });
+  } else if (process.env.META_CANARY_2_READY !== 'true' || appMode === 'development' || devModeBlockedInDb) {
+    let failureReason = 'Canary #2 Readiness Gate inactive (META_CANARY_2_READY is not true).';
+    if (devModeBlockedInDb || appMode === 'development') {
+      failureReason = 'Meta App 1347659864208278 is currently in Development Mode on Meta Developers Console (error 100/1885183).';
+    }
+
+    gateResults.push({
+      gate_id: 14,
+      gate_key: 'GATE_14_CANARY_2_READY',
+      gate_name: 'Meta App Canary #2 Readiness & Dev Mode Restriction',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: 'META_APP_DEVELOPMENT_MODE_BLOCK',
+      admin_only: true,
+      admin_details: `META_CANARY_2_READY=${process.env.META_CANARY_2_READY}, META_APP_MODE=${appMode}, devModeBlockedInDb=${devModeBlockedInDb}. Meta App ID: 1347659864208278.`,
+      message: `Preflight Failed: Infrastructure Blocker — ${failureReason}`,
+      action_required: options.isAdmin
+        ? 'Switch Meta App 1347659864208278 from Development to Live/Public Mode in Meta Developers Console, set META_APP_MODE=live and META_CANARY_2_READY=true.'
+        : 'Infrastructure Status: Meta Integration is currently in Canary Sandbox / Development mode. Your campaign draft configuration is valid and ready for Admin review once Meta App is switched to Live Mode.'
+    });
+  } else {
+    gateResults.push({
+      gate_id: 14,
+      gate_key: 'GATE_14_CANARY_2_READY',
+      gate_name: 'Meta App Canary #2 Readiness & Dev Mode Verification',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: 'Meta Canary #2 Readiness Gate engaged. Meta App verified in Live/Public mode' + (options.externalReport ? ' and external signals passed.' : '.'),
+      action_required: 'No action needed.'
+    });
+  }
+
+  // Gate 15: Independent Policy Clearance Gate
+  if (!campaign || campaign.policy_cleared !== true) {
+    gateResults.push({
+      gate_id: 15,
+      gate_key: 'GATE_15_POLICY_CLEARANCE',
+      gate_name: 'Independent AI Policy Clearance',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: 'POLICY_CLEARANCE_REQUIRED',
+      field_ref: 'policy_cleared',
+      message: 'Preflight Failed: POLICY_CLEARANCE_REQUIRED. Campaign must successfully pass AI Pre-Check policy scan (policy_cleared=true) before Meta dispatch.',
+      action_required: 'Run AI Pre-Check policy scan to obtain policy clearance (policy_cleared=true).'
+    });
+  } else {
+    gateResults.push({
+      gate_id: 15,
+      gate_key: 'GATE_15_POLICY_CLEARANCE',
+      gate_name: 'Independent AI Policy Clearance',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: 'Independent AI Policy Clearance verified (policy_cleared=true).',
+      action_required: 'No action needed.'
+    });
+  }
+
+  // Gate 16: Tenant Ownership & Asset Binding Gate
+  let gate16Passed = true;
+  let gate16Msg = 'Tenant Meta Ad Account asset binding verified.';
+  let gate16Action = 'No action needed.';
+
+  if (campaign && campaign.host_id) {
+    const hostIdentityRes = await dbPool.query('SELECT * FROM host_meta_identities WHERE host_id = $1', [campaign.host_id]);
+    if (hostIdentityRes.rows.length > 0) {
+      const identity = hostIdentityRes.rows[0];
+      if (campaign.owner_meta_ad_account_id && identity.meta_ad_account_id && campaign.owner_meta_ad_account_id !== identity.meta_ad_account_id) {
+        gate16Passed = false;
+        gate16Msg = 'Preflight Failed: META_ACCOUNT_MISMATCH. Campaign owner ad account does not match host registered Meta identity.';
+        gate16Action = 'Verify host registered Meta identity binding.';
+      }
+    } else if (campaign.owner_meta_ad_account_id && campaign.owner_meta_ad_account_id !== process.env.META_AD_ACCOUNT_ID) {
+      gate16Passed = false;
+      gate16Msg = 'Preflight Failed: TENANT_OWNERSHIP_MISMATCH. Campaign owner ad account does not match dispatch identity.';
+      gate16Action = 'Ensure campaign owner ad account matches master dispatch account.';
+    }
+  }
+
+  if (!gate16Passed) {
+    gateResults.push({
+      gate_id: 16,
+      gate_key: 'GATE_16_TENANT_OWNERSHIP',
+      gate_name: 'Tenant Ownership & Asset Binding',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: 'TENANT_OWNERSHIP_MISMATCH',
+      field_ref: 'owner_meta_ad_account_id',
+      message: gate16Msg,
+      action_required: gate16Action
+    });
+  } else {
+    gateResults.push({
+      gate_id: 16,
+      gate_key: 'GATE_16_TENANT_OWNERSHIP',
+      gate_name: 'Tenant Ownership & Asset Binding',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: gate16Msg,
+      action_required: gate16Action
+    });
+  }
+
+  const total_gates = 16;
+  const passed_gates = gateResults.filter(g => g.status === 'PASSED').length;
+  const failed_gates = gateResults.filter(g => g.status === 'FAILED').length;
+  const is_deployable = gateResults.filter(g => g.status === 'FAILED' && g.severity === 'BLOCKER').length === 0;
+
+  const canary_status = {
+    canary_2_ready: process.env.META_CANARY_2_READY === 'true',
+    publishing_paused: process.env.META_PUBLISHING_PAUSED === 'true',
+    app_id: options.isAdmin ? (process.env.META_APP_ID || '1347659864208278') : 'REDACTED',
+    mode: (process.env.META_APP_MODE as 'development' | 'live') || 'development'
+  };
+
+  const remediation_summary = gateResults
+    .filter(g => g.status === 'FAILED')
+    .map(g => `[Gate ${g.gate_id} - ${g.gate_name}]: ${g.action_required}`);
+
+  const sanitizedGateResults = gateResults.map(g => {
+    if (!options.isAdmin && g.admin_only) {
+      return {
+        ...g,
+        admin_details: undefined
+      };
+    }
+    return g;
+  });
+
+  return {
+    total_gates,
+    passed_gates,
+    failed_gates,
+    is_deployable,
+    canary_status,
+    gate_results: sanitizedGateResults,
+    remediation_summary
+  };
+}
+
 export interface MetaErrorClassification {
   code_name: string;
   category: 'AUTHENTICATION' | 'AUTHORIZATION' | 'APP_CONFIGURATION' | 'APP_REVIEW' | 'BUSINESS_ASSET' | 'AD_ACCOUNT' | 'PAGE' | 'INSTAGRAM' | 'CREATIVE' | 'CAMPAIGN_CONFIGURATION' | 'TARGETING' | 'BUDGET' | 'RATE_LIMIT' | 'TRANSIENT_META' | 'PLATFORM' | 'POLICY' | 'UNKNOWN';
@@ -6330,165 +6591,15 @@ export async function executeMetaRollback(
   return { success: allSucceeded, details };
 }
 
-  // Gate 14: Meta Canary #2 Readiness & Development Mode Restriction Gate
-  const appMode = (process.env.META_APP_MODE as 'development' | 'live') || 'development';
-  let devModeBlockedInDb = false;
 
-  try {
-    const devBlockCheck = await dbPool.query(`
-      SELECT id FROM meta_api_traces
-      WHERE meta_error_subcode = 1885183 OR meta_error_message LIKE '%development mode%'
-      ORDER BY created_at DESC LIMIT 1
-    `);
-    if (devBlockCheck.rows.length > 0) {
-      devModeBlockedInDb = true;
-    }
-  } catch(e) {
-    // Ignore db query error
-  }
-
-  if (process.env.META_CANARY_2_READY !== 'true' || appMode === 'development' || devModeBlockedInDb) {
-    let failureReason = 'Canary #2 Readiness Gate inactive (META_CANARY_2_READY is not true).';
-    if (devModeBlockedInDb || appMode === 'development') {
-      failureReason = 'Meta App 1347659864208278 is currently in Development Mode on Meta Developers Console (error 100/1885183).';
-    }
-
-    gateResults.push({
-      gate_id: 14,
-      gate_key: 'GATE_14_CANARY_2_READY',
-      gate_name: 'Meta App Canary #2 Readiness & Dev Mode Restriction',
-      status: 'FAILED',
-      severity: 'BLOCKER',
-      failure_code: 'META_APP_DEVELOPMENT_MODE_BLOCK',
-      admin_only: true,
-      admin_details: `META_CANARY_2_READY=${process.env.META_CANARY_2_READY}, META_APP_MODE=${appMode}, devModeBlockedInDb=${devModeBlockedInDb}. Meta App ID: 1347659864208278.`,
-      message: `Preflight Failed: Infrastructure Blocker — ${failureReason}`,
-      action_required: options.isAdmin
-        ? 'Switch Meta App 1347659864208278 from Development to Live/Public Mode in Meta Developers Console, set META_APP_MODE=live and META_CANARY_2_READY=true.'
-        : 'Infrastructure Status: Meta Integration is currently in Canary Sandbox / Development mode. Your campaign draft configuration is valid and ready for Admin review once Meta App is switched to Live Mode.'
-    });
-  } else {
-    gateResults.push({
-      gate_id: 14,
-      gate_key: 'GATE_14_CANARY_2_READY',
-      gate_name: 'Meta App Canary #2 Readiness & Dev Mode Verification',
-      status: 'PASSED',
-      severity: 'INFO',
-      message: 'Meta Canary #2 Readiness Gate engaged. Meta App verified in Live/Public mode.',
-      action_required: 'No action needed.'
-    });
-  }
-
-  // Gate 15: Independent Policy Clearance Gate
-  if (!campaign || campaign.policy_cleared !== true) {
-    gateResults.push({
-      gate_id: 15,
-      gate_key: 'GATE_15_POLICY_CLEARANCE',
-      gate_name: 'Independent AI Policy Clearance',
-      status: 'FAILED',
-      severity: 'BLOCKER',
-      failure_code: 'POLICY_CLEARANCE_REQUIRED',
-      field_ref: 'policy_cleared',
-      message: 'Preflight Failed: POLICY_CLEARANCE_REQUIRED. Campaign must successfully pass AI Pre-Check policy scan (policy_cleared=true) before Meta dispatch.',
-      action_required: 'Run AI Pre-Check policy scan to obtain policy clearance (policy_cleared=true).'
-    });
-  } else {
-    gateResults.push({
-      gate_id: 15,
-      gate_key: 'GATE_15_POLICY_CLEARANCE',
-      gate_name: 'Independent AI Policy Clearance',
-      status: 'PASSED',
-      severity: 'INFO',
-      message: 'Independent AI Policy Clearance verified (policy_cleared=true).',
-      action_required: 'No action needed.'
-    });
-  }
-
-  // Gate 16: Tenant Ownership & Asset Binding Gate
-  let gate16Passed = true;
-  let gate16Msg = 'Tenant Meta Ad Account asset binding verified.';
-  let gate16Action = 'No action needed.';
-
-  if (campaign && campaign.host_id) {
-    const hostIdentityRes = await dbPool.query('SELECT * FROM host_meta_identities WHERE host_id = $1', [campaign.host_id]);
-    if (hostIdentityRes.rows.length > 0) {
-      const identity = hostIdentityRes.rows[0];
-      if (campaign.owner_meta_ad_account_id && identity.meta_ad_account_id && campaign.owner_meta_ad_account_id !== identity.meta_ad_account_id) {
-        gate16Passed = false;
-        gate16Msg = 'Preflight Failed: META_ACCOUNT_MISMATCH. Campaign owner ad account does not match host registered Meta identity.';
-        gate16Action = 'Verify host registered Meta identity binding.';
-      }
-    } else if (campaign.owner_meta_ad_account_id && campaign.owner_meta_ad_account_id !== process.env.META_AD_ACCOUNT_ID) {
-      gate16Passed = false;
-      gate16Msg = 'Preflight Failed: TENANT_OWNERSHIP_MISMATCH. Campaign owner ad account does not match dispatch identity.';
-      gate16Action = 'Ensure campaign owner ad account matches master dispatch account.';
-    }
-  }
-
-  if (!gate16Passed) {
-    gateResults.push({
-      gate_id: 16,
-      gate_key: 'GATE_16_TENANT_OWNERSHIP',
-      gate_name: 'Tenant Ownership & Asset Binding',
-      status: 'FAILED',
-      severity: 'BLOCKER',
-      failure_code: 'TENANT_OWNERSHIP_MISMATCH',
-      field_ref: 'owner_meta_ad_account_id',
-      message: gate16Msg,
-      action_required: gate16Action
-    });
-  } else {
-    gateResults.push({
-      gate_id: 16,
-      gate_key: 'GATE_16_TENANT_OWNERSHIP',
-      gate_name: 'Tenant Ownership & Asset Binding',
-      status: 'PASSED',
-      severity: 'INFO',
-      message: gate16Msg,
-      action_required: gate16Action
-    });
-  }
-
-  const total_gates = 16;
-  const passed_gates = gateResults.filter(g => g.status === 'PASSED').length;
-  const failed_gates = gateResults.filter(g => g.status === 'FAILED').length;
-  const is_deployable = gateResults.filter(g => g.status === 'FAILED' && g.severity === 'BLOCKER').length === 0;
-
-  const canary_status = {
-    canary_2_ready: process.env.META_CANARY_2_READY === 'true',
-    publishing_paused: process.env.META_PUBLISHING_PAUSED === 'true',
-    app_id: options.isAdmin ? (process.env.META_APP_ID || '1347659864208278') : 'REDACTED',
-    mode: (process.env.META_APP_MODE as 'development' | 'live') || 'development'
-  };
-
-  const remediation_summary = gateResults
-    .filter(g => g.status === 'FAILED')
-    .map(g => `[Gate ${g.gate_id} - ${g.gate_name}]: ${g.action_required}`);
-
-  const sanitizedGateResults = gateResults.map(g => {
-    if (!options.isAdmin && g.admin_only) {
-      return {
-        ...g,
-        admin_details: undefined
-      };
-    }
-    return g;
-  });
-
-  return {
-    total_gates,
-    passed_gates,
-    failed_gates,
-    is_deployable,
-    canary_status,
-    gate_results: sanitizedGateResults,
-    remediation_summary
-  };
-}
-
-async function runMetaPreflightEngine(campaignId: number, dbPool: any, options: { isAdmin?: boolean } = {}) {
+async function runMetaPreflightEngine(campaignId: number, dbPool: any, options: { isAdmin?: boolean; correlationId?: string } = {}) {
   console.log(`[PREFLIGHT] Running 16 Meta Safety Gates validation for campaign ${campaignId}`);
-  const report = await evaluateMetaPreflightDiagnostics(campaignId, dbPool, options);
+  
+  const corrId = options.correlationId || crypto.randomUUID();
+  const externalReport = await checkExternalMetaReadiness(dbPool, corrId);
+  const fullOptions = { ...options, externalReport };
+  
+  const report = await evaluateMetaPreflightDiagnostics(campaignId, dbPool, fullOptions);
 
   if (!report.is_deployable) {
     const firstBlocker = report.gate_results.find(g => g.status === 'FAILED' && g.severity === 'BLOCKER');
@@ -6539,7 +6650,7 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
   const rollbackState: { metaCampaignId?: string, metaAdSetId?: string, metaCreativeId?: string, metaAdId?: string } = {};
 
   try {
-    await runMetaPreflightEngine(campaignId, pool);
+    await runMetaPreflightEngine(campaignId, pool, { correlationId });
     await pool.query(`UPDATE meta_publishing_transactions SET publish_status = 'PUBLISHING', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [txId]);
 
     const campaignResult = await pool.query(`
@@ -6767,8 +6878,16 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
     const classification = classifyMetaError(rawErrorPayload);
 
     // Phase 3: Trigger explicit reverse cascade rollback
-    const rollbackRes = await executeMetaRollback(rollbackState, correlationId);
-    const rollbackStatus = rollbackRes.success ? 'SUCCESS' : 'FAILED';
+    const rollbackRes = await executeMetaRollback(rollbackState, correlationId, pool);
+    let finalTxStatus = 'FAILED_PUBLISH';
+    let rollbackStatus = 'NOT_REQUIRED';
+
+    const hasCreatedObjects = !!(rollbackState.metaCampaignId || rollbackState.metaAdSetId || rollbackState.metaCreativeId || rollbackState.metaAdId);
+
+    if (hasCreatedObjects) {
+      rollbackStatus = rollbackRes.success ? 'SUCCESS' : 'FAILED';
+      finalTxStatus = rollbackRes.success ? 'ROLLBACK_SUCCESS' : 'ROLLBACK_FAILED';
+    }
 
     const stageName = rollbackState.metaCreativeId
       ? 'AD_CREATION'
@@ -6777,18 +6896,18 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
     // Update meta_publishing_transactions with full classification
     await pool.query(`
       UPDATE meta_publishing_transactions 
-      SET publish_status = 'FAILED', 
-          failure_code = $1, 
-          failure_category = $2, 
-          failure_stage = $3, 
-          rollback_status = $4,
-          error_details = $5,
+      SET publish_status = $1, 
+          failure_code = $2, 
+          failure_category = $3, 
+          failure_stage = $4, 
+          rollback_status = $5,
+          error_details = $6,
           updated_at = CURRENT_TIMESTAMP 
-      WHERE id = $6
-    `, [classification.code_name, classification.category, stageName, rollbackStatus, JSON.stringify(rawErrorPayload), txId]);
+      WHERE id = $7
+    `, [finalTxStatus, classification.code_name, classification.category, stageName, rollbackStatus, JSON.stringify(rawErrorPayload), txId]);
 
     // Update host_marketing_campaigns (NEVER MARK LIVE)
-    const feedbackMsg = `${classification.user_title}: ${classification.action_required}`;
+    const feedbackMsg = `${classification.user_title}: ${classification.recommended_action || classification.action_required || ''}`;
     await pool.query(`
       UPDATE host_marketing_campaigns 
       SET status = 'failed_publish', admin_feedback = $1 
@@ -13199,6 +13318,94 @@ const processWebhookDLQ = async () => {
 // Run every 5 minutes
 setInterval(processWebhookDLQ, 5 * 60 * 1000);
 
+
+// Phase 9: DB <-> Meta Reconciliation Engine
+const processMetaReconciliation = async () => {
+  if (!isDbConfigured) return;
+  const accessToken = process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN;
+  if (!accessToken) return;
+
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS meta_reconciliation_incidents (
+        id SERIAL PRIMARY KEY,
+        transaction_id INTEGER REFERENCES meta_publishing_transactions(id),
+        mismatch_type VARCHAR(100),
+        details JSONB,
+        resolved BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Fetch transactions that are in a final state and have meta IDs, process a batch of 20
+    const txRes = await pool.query(`
+      SELECT * FROM meta_publishing_transactions 
+      WHERE publish_status IN ('SUCCESS', 'ROLLBACK_SUCCESS', 'ROLLBACK_FAILED', 'FAILED', 'FAILED_PUBLISH', 'LIVE')
+      AND (meta_campaign_id IS NOT NULL OR meta_adset_id IS NOT NULL OR meta_creative_id IS NOT NULL OR meta_ad_id IS NOT NULL)
+      ORDER BY updated_at DESC LIMIT 20
+    `);
+
+    for (const tx of txRes.rows) {
+      // Helper to check object existence
+      const checkObject = async (objId: string | null) => {
+        if (!objId) return false;
+        try {
+          const res = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${objId}?access_token=${accessToken}`);
+          const data = await res.json();
+          return !data.error; // If no error, object exists
+        } catch (e) {
+          return false;
+        }
+      };
+
+      const [campExists, adsetExists, creativeExists, adExists] = await Promise.all([
+        checkObject(tx.meta_campaign_id),
+        checkObject(tx.meta_adset_id),
+        checkObject(tx.meta_creative_id),
+        checkObject(tx.meta_ad_id)
+      ]);
+
+      const mismatches: { type: string, details: string }[] = [];
+
+      const expectExists = (tx.publish_status === 'SUCCESS' || tx.publish_status === 'LIVE');
+      const expectDeleted = (tx.publish_status === 'ROLLBACK_SUCCESS' || tx.publish_status === 'FAILED' || tx.publish_status === 'FAILED_PUBLISH');
+
+      if (expectExists) {
+        if (tx.meta_campaign_id && !campExists) mismatches.push({ type: 'MISSING_CAMPAIGN', details: `DB says ${tx.publish_status} but Meta Campaign ${tx.meta_campaign_id} is missing.` });
+        if (tx.meta_adset_id && !adsetExists) mismatches.push({ type: 'MISSING_ADSET', details: `DB says ${tx.publish_status} but Meta AdSet ${tx.meta_adset_id} is missing.` });
+        if (tx.meta_creative_id && !creativeExists) mismatches.push({ type: 'MISSING_CREATIVE', details: `DB says ${tx.publish_status} but Meta Creative ${tx.meta_creative_id} is missing.` });
+        if (tx.meta_ad_id && !adExists) mismatches.push({ type: 'MISSING_AD', details: `DB says ${tx.publish_status} but Meta Ad ${tx.meta_ad_id} is missing.` });
+      }
+
+      if (expectDeleted || tx.publish_status === 'ROLLBACK_FAILED') {
+        // If it's supposed to be rolled back or failed, any existing object is orphaned
+        if (campExists) mismatches.push({ type: 'ORPHANED_CAMPAIGN', details: `DB says ${tx.publish_status} but Meta Campaign ${tx.meta_campaign_id} still exists.` });
+        if (adsetExists) mismatches.push({ type: 'ORPHANED_ADSET', details: `DB says ${tx.publish_status} but Meta AdSet ${tx.meta_adset_id} still exists.` });
+        if (creativeExists) mismatches.push({ type: 'ORPHANED_CREATIVE', details: `DB says ${tx.publish_status} but Meta Creative ${tx.meta_creative_id} still exists.` });
+        if (adExists) mismatches.push({ type: 'ORPHANED_AD', details: `DB says ${tx.publish_status} but Meta Ad ${tx.meta_ad_id} still exists.` });
+      }
+
+      for (const mismatch of mismatches) {
+        // Log incident if not already logged
+        const existing = await pool.query(
+          `SELECT id FROM meta_reconciliation_incidents WHERE transaction_id = $1 AND mismatch_type = $2 AND resolved = false`,
+          [tx.id, mismatch.type]
+        );
+        if (existing.rows.length === 0) {
+          console.warn(`[META RECONCILIATION INCIDENT] TX #${tx.id}: ${mismatch.type} - ${mismatch.details}`);
+          await pool.query(
+            `INSERT INTO meta_reconciliation_incidents (transaction_id, mismatch_type, details) VALUES ($1, $2, $3)`,
+            [tx.id, mismatch.type, JSON.stringify({ message: mismatch.details })]
+          );
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[META RECONCILIATION ERROR]', err);
+  }
+};
+// Run every 10 minutes
+setInterval(processMetaReconciliation, 10 * 60 * 1000);
 
 app.post('/api/marketing/track/view', async (req, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
