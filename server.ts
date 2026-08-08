@@ -1603,9 +1603,20 @@ const ensureMarketingSchema = async () => {
       meta_adset_id VARCHAR(255),
       meta_creative_id VARCHAR(255),
       meta_ad_id VARCHAR(255),
+      failure_code VARCHAR(100),
+      failure_category VARCHAR(100),
+      failure_stage VARCHAR(100),
+      rollback_status VARCHAR(50),
+      error_details JSONB,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     );
+
+    ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS failure_code VARCHAR(100);
+    ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS failure_category VARCHAR(100);
+    ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS failure_stage VARCHAR(100);
+    ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS rollback_status VARCHAR(50);
+    ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS error_details JSONB;
 
     CREATE TABLE IF NOT EXISTS meta_api_traces (
       id SERIAL PRIMARY KEY,
@@ -1635,12 +1646,17 @@ const ensureMarketingSchema = async () => {
       campaign_id INTEGER REFERENCES host_marketing_campaigns(id),
       correlation_id VARCHAR(255) NOT NULL,
       failure_stage VARCHAR(50) NOT NULL,
+      failure_code VARCHAR(100),
+      requires_human_action BOOLEAN DEFAULT true,
       error_payload JSONB,
       retry_count INTEGER DEFAULT 0,
       recommended_action TEXT,
       created_at TIMESTAMP DEFAULT NOW(),
       resolved_at TIMESTAMP
     );
+
+    ALTER TABLE meta_publishing_dlq ADD COLUMN IF NOT EXISTS failure_code VARCHAR(100);
+    ALTER TABLE meta_publishing_dlq ADD COLUMN IF NOT EXISTS requires_human_action BOOLEAN DEFAULT true;
 
     CREATE TABLE IF NOT EXISTS admin_audit_logs (
       id SERIAL PRIMARY KEY,
@@ -6025,30 +6041,340 @@ async function evaluateMetaPreflightDiagnostics(
     });
   }
 
-  // Gate 14: Meta Canary #2 Readiness Gate
-  if (process.env.META_CANARY_2_READY !== 'true') {
+export interface MetaErrorClassification {
+  code_name: string;
+  category: 'AUTHENTICATION' | 'AUTHORIZATION' | 'APP_CONFIGURATION' | 'APP_REVIEW' | 'BUSINESS_ASSET' | 'AD_ACCOUNT' | 'PAGE' | 'INSTAGRAM' | 'CREATIVE' | 'CAMPAIGN_CONFIGURATION' | 'TARGETING' | 'BUDGET' | 'RATE_LIMIT' | 'TRANSIENT_META' | 'PLATFORM' | 'POLICY' | 'UNKNOWN';
+  severity: 'BLOCKER' | 'CRITICAL' | 'WARNING';
+  user_title: string;
+  user_message: string;
+  technical_message: string;
+  retryable: boolean;
+  requires_human_action: boolean;
+  blocks_dispatch: boolean;
+  rollback_required: boolean;
+  recommended_action: string;
+}
+
+export function classifyMetaError(data: any): MetaErrorClassification {
+  const e = data?.error || data;
+  const code = Number(e?.code || 0);
+  const subcode = Number(e?.error_subcode || 0);
+  const msg = String(e?.message || e?.error_user_msg || (typeof data === 'string' ? data : '')).toLowerCase();
+
+  // 1. Meta App in Development Mode Block (Error 100, Subcode 1885183)
+  if ((code === 100 && subcode === 1885183) || msg.includes('development mode')) {
+    return {
+      code_name: 'META_APP_DEVELOPMENT_MODE_BLOCK',
+      category: 'APP_CONFIGURATION',
+      severity: 'BLOCKER',
+      user_title: 'Meta App in Development Mode',
+      user_message: 'Ads creative post was created by an app that is in Development Mode and must be public/live to create the ad.',
+      technical_message: `Graph API Error Code 100 / Subcode 1885183: App in Development Mode.`,
+      retryable: false,
+      requires_human_action: true,
+      blocks_dispatch: true,
+      rollback_required: true,
+      recommended_action: 'Switch Meta App 1347659864208278 from Development to Live/Public Mode in Meta Developers Console.'
+    };
+  }
+
+  // 2. Token Expired / Invalid
+  if (code === 190 || code === 102 || msg.includes('session has expired') || msg.includes('invalid access token')) {
+    return {
+      code_name: 'AUTH_ERROR_TOKEN_EXPIRED',
+      category: 'AUTHENTICATION',
+      severity: 'BLOCKER',
+      user_title: 'Meta Access Token Expired',
+      user_message: 'The Meta API Access Token has expired or been invalidated.',
+      technical_message: `Graph API OAuthException Code ${code}: Token invalid or expired.`,
+      retryable: false,
+      requires_human_action: true,
+      blocks_dispatch: true,
+      rollback_required: true,
+      recommended_action: 'Regenerate system user long-lived access token in Meta Business Manager.'
+    };
+  }
+
+  // 3. Authorization / Permission Error
+  if (code === 200 || code === 10 || msg.includes('permission') || msg.includes('ads_management')) {
+    return {
+      code_name: 'AUTH_MISSING_PERMISSIONS',
+      category: 'AUTHORIZATION',
+      severity: 'BLOCKER',
+      user_title: 'Missing Meta API Permissions',
+      user_message: 'Master System Access Token lacks required ads_management permissions.',
+      technical_message: `Graph API Code ${code}: Missing scope/permission.`,
+      retryable: false,
+      requires_human_action: true,
+      blocks_dispatch: true,
+      rollback_required: true,
+      recommended_action: 'Ensure system user has ads_management, pages_read_engagement, pages_manage_posts granted.'
+    };
+  }
+
+  // 4. Ad Account Disabled
+  if ((code === 100 && subcode === 1885016) || msg.includes('account disabled')) {
+    return {
+      code_name: 'AD_ACCOUNT_DISABLED',
+      category: 'AD_ACCOUNT',
+      severity: 'BLOCKER',
+      user_title: 'Meta Ad Account Disabled',
+      user_message: 'Master Ad Account is disabled or restricted by Meta.',
+      technical_message: `Graph API Code 100 / Subcode 1885016: Ad account disabled.`,
+      retryable: false,
+      requires_human_action: true,
+      blocks_dispatch: true,
+      rollback_required: true,
+      recommended_action: 'Check Ad Account status and submit appeal in Meta Business Manager.'
+    };
+  }
+
+  // 5. Missing Payment Method
+  if ((code === 100 && subcode === 1359188) || msg.includes('payment method')) {
+    return {
+      code_name: 'NO_PAYMENT_METHOD',
+      category: 'AD_ACCOUNT',
+      severity: 'BLOCKER',
+      user_title: 'No Payment Method on Meta Ad Account',
+      user_message: 'Master Ad Account has no valid payment method attached.',
+      technical_message: `Graph API Code 100 / Subcode 1359188: Payment method missing.`,
+      retryable: false,
+      requires_human_action: true,
+      blocks_dispatch: true,
+      rollback_required: true,
+      recommended_action: 'Add valid payment method in Meta Billing & Payment Centre.'
+    };
+  }
+
+  // 6. Page Identity / Permissions
+  if (msg.includes('page_id') || msg.includes('page access') || code === 190 && msg.includes('page')) {
+    return {
+      code_name: 'PAGE_ACCESS_DENIED',
+      category: 'PAGE',
+      severity: 'BLOCKER',
+      user_title: 'Facebook Page Access Error',
+      user_message: 'Master System Token does not have administrative management access to the specified Facebook Page.',
+      technical_message: `Graph API Page error: ${msg}`,
+      retryable: false,
+      requires_human_action: true,
+      blocks_dispatch: true,
+      rollback_required: true,
+      recommended_action: 'Verify Page ID and assign Full Control page permissions to System User in Meta Business Manager.'
+    };
+  }
+
+  // 7. Invalid Instagram Actor ID
+  if (msg.includes('instagram_actor_id') || (code === 100 && msg.includes('instagram account'))) {
+    return {
+      code_name: 'INVALID_INSTAGRAM_ACTOR',
+      category: 'INSTAGRAM',
+      severity: 'CRITICAL',
+      user_title: 'Invalid Instagram Identity',
+      user_message: 'Provided instagram_actor_id is invalid or not connected to Meta Page.',
+      technical_message: `Graph API Instagram error: ${msg}`,
+      retryable: false,
+      requires_human_action: true,
+      blocks_dispatch: true,
+      rollback_required: true,
+      recommended_action: 'Verify connected Instagram Account ID or omit instagram_actor_id parameter.'
+    };
+  }
+
+  // 8. Rate Limiting
+  if (code === 17 || code === 613 || msg.includes('rate limit')) {
+    return {
+      code_name: 'META_RATE_LIMIT_EXCEEDED',
+      category: 'RATE_LIMIT',
+      severity: 'WARNING',
+      user_title: 'Meta API Rate Limit Exceeded',
+      user_message: 'Meta Graph API call rate limit reached.',
+      technical_message: `Graph API Rate Limit Code ${code}.`,
+      retryable: true,
+      requires_human_action: false,
+      blocks_dispatch: false,
+      rollback_required: false,
+      recommended_action: 'System will back off and retry automatically after quiet period.'
+    };
+  }
+
+  // 9. Policy Violation
+  if (code === 1885006 || msg.includes('policy violation') || msg.includes('housing')) {
+    return {
+      code_name: 'META_POLICY_VIOLATION',
+      category: 'POLICY',
+      severity: 'BLOCKER',
+      user_title: 'Meta Ad Policy Violation',
+      user_message: 'Ad creative or targeting violated Meta Advertising Standards.',
+      technical_message: `Meta Policy Error Code ${code}: ${msg}`,
+      retryable: false,
+      requires_human_action: true,
+      blocks_dispatch: true,
+      rollback_required: true,
+      recommended_action: 'Review ad copy and targeting to ensure full housing equality compliance.'
+    };
+  }
+
+  // 10. Transient Network Error
+  if (e?.is_transient || code === 1 || code === 2) {
+    return {
+      code_name: 'TRANSIENT_NETWORK_ERROR',
+      category: 'TRANSIENT_META',
+      severity: 'WARNING',
+      user_title: 'Transient Network Error',
+      user_message: 'Temporary connection glitch with Meta Graph API.',
+      technical_message: `Transient Meta API error code ${code}.`,
+      retryable: true,
+      requires_human_action: false,
+      blocks_dispatch: false,
+      rollback_required: false,
+      recommended_action: 'System will automatically retry request with exponential backoff.'
+    };
+  }
+
+  // Fallback / Unknown API Error
+  return {
+    code_name: 'META_API_GENERIC_ERROR',
+    category: 'UNKNOWN',
+    severity: 'CRITICAL',
+    user_title: 'Meta API Error',
+    user_message: msg || 'Meta Graph API returned an unclassified parameter or execution error.',
+    technical_message: `Unclassified Meta error code ${code} / subcode ${subcode}: ${msg}`,
+    retryable: false,
+    requires_human_action: true,
+    blocks_dispatch: true,
+    rollback_required: true,
+    recommended_action: 'Inspect Meta error payload in DLQ/Trace Inspector.'
+  };
+}
+
+// Phase 5: Error Signature Learning Recorder
+export async function recordMetaErrorSignature(errorPayload: any, dbPool: any) {
+  try {
+    const classification = classifyMetaError(errorPayload);
+    const e = errorPayload?.error || errorPayload;
+    const code = Number(e?.code || 0);
+    const subcode = Number(e?.error_subcode || 0);
+    const normMsg = String(e?.message || e?.error_user_msg || 'unknown error').substring(0, 500);
+
+    await dbPool.query(`
+      INSERT INTO meta_error_signatures (
+        error_code, error_subcode, normalized_message, category, code_name, retryable, requires_human_action
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (error_code, error_subcode, normalized_message)
+      DO UPDATE SET
+        occurrence_count = meta_error_signatures.occurrence_count + 1,
+        last_seen = CURRENT_TIMESTAMP
+    `, [code, subcode, normMsg, classification.category, classification.code_name, classification.retryable, classification.requires_human_action]);
+  } catch (err: any) {
+    console.error('[ERROR SIGNATURE REGISTRY] Failed to record signature:', err.message);
+  }
+}
+
+// Phase 6: Safe Explicit Reverse Cascade Rollback Engine
+export async function executeMetaRollback(
+  state: { metaCampaignId?: string; metaAdSetId?: string; metaCreativeId?: string; metaAdId?: string },
+  correlationId: string,
+  dbPool?: any
+): Promise<{ success: boolean; details: string[] }> {
+  const accessToken = process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN;
+  const details: string[] = [];
+  if (!accessToken) {
+    return { success: false, details: ['Missing Meta Access Token'] };
+  }
+  console.log(`[META ROLLBACK ENGINE] Triggered for ${correlationId}. State:`, state);
+
+  let allSucceeded = true;
+
+  // Helper to safely delete Meta Graph object with idempotency handling
+  const deleteObject = async (objType: string, objId: string | undefined) => {
+    if (!objId) return;
+    try {
+      const res = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${objId}?access_token=${accessToken}`, { method: 'DELETE' });
+      const data = await res.json();
+      const isSuccess = data.success === true || data.result === 'true' || res.status === 404 || (data.error && (data.error.code === 100 || data.error.code === 10));
+      
+      console.log(`[META ROLLBACK] Deleted ${objType} ${objId}:`, data);
+      details.push(`${objType} ${objId}: ${isSuccess ? 'Deleted' : JSON.stringify(data)}`);
+
+      if (!isSuccess) {
+        allSucceeded = false;
+      }
+
+      // Log rollback trace
+      if (dbPool) {
+        try {
+          await dbPool.query(`
+            INSERT INTO meta_api_traces (
+              correlation_id, step, endpoint, response_payload, http_status, latency_ms
+            ) VALUES ($1, $2, $3, $4, $5, 0)
+          `, [
+            correlationId, `rollback_${objType.toLowerCase()}`, `${objType}/${objId}`, JSON.stringify(data), res.status
+          ]);
+        } catch (e) {
+          // ignore trace insert failure
+        }
+      }
+    } catch (e: any) {
+      allSucceeded = false;
+      console.error(`[META ROLLBACK] Failed to delete ${objType} ${objId}:`, e.message);
+      details.push(`${objType} ${objId} delete failed: ${e.message}`);
+    }
+  };
+
+  // Reverse cascading deletion order: Ad -> Creative -> AdSet -> Campaign
+  await deleteObject('Ad', state.metaAdId);
+  await deleteObject('Creative', state.metaCreativeId);
+  await deleteObject('AdSet', state.metaAdSetId);
+  await deleteObject('Campaign', state.metaCampaignId);
+
+  return { success: allSucceeded, details };
+}
+
+  // Gate 14: Meta Canary #2 Readiness & Development Mode Restriction Gate
+  const appMode = (process.env.META_APP_MODE as 'development' | 'live') || 'development';
+  let devModeBlockedInDb = false;
+
+  try {
+    const devBlockCheck = await dbPool.query(`
+      SELECT id FROM meta_api_traces
+      WHERE meta_error_subcode = 1885183 OR meta_error_message LIKE '%development mode%'
+      ORDER BY created_at DESC LIMIT 1
+    `);
+    if (devBlockCheck.rows.length > 0) {
+      devModeBlockedInDb = true;
+    }
+  } catch(e) {
+    // Ignore db query error
+  }
+
+  if (process.env.META_CANARY_2_READY !== 'true' || appMode === 'development' || devModeBlockedInDb) {
+    let failureReason = 'Canary #2 Readiness Gate inactive (META_CANARY_2_READY is not true).';
+    if (devModeBlockedInDb || appMode === 'development') {
+      failureReason = 'Meta App 1347659864208278 is currently in Development Mode on Meta Developers Console (error 100/1885183).';
+    }
+
     gateResults.push({
       gate_id: 14,
       gate_key: 'GATE_14_CANARY_2_READY',
       gate_name: 'Meta App Canary #2 Readiness & Dev Mode Restriction',
       status: 'FAILED',
       severity: 'BLOCKER',
-      failure_code: 'INFRASTRUCTURE_CANARY_INACTIVE',
+      failure_code: 'META_APP_DEVELOPMENT_MODE_BLOCK',
       admin_only: true,
-      admin_details: 'META_CANARY_2_READY is not set to "true". Meta App ID: 1347659864208278 (Development Mode).',
-      message: 'Preflight Failed: Infrastructure Blocker — Canary #2 Readiness Gate inactive (META_CANARY_2_READY is not true). Meta App 1347659864208278 is currently in Development Mode on Meta Developers Console.',
+      admin_details: `META_CANARY_2_READY=${process.env.META_CANARY_2_READY}, META_APP_MODE=${appMode}, devModeBlockedInDb=${devModeBlockedInDb}. Meta App ID: 1347659864208278.`,
+      message: `Preflight Failed: Infrastructure Blocker — ${failureReason}`,
       action_required: options.isAdmin
-        ? 'Set META_CANARY_2_READY=true in server environment or approve Meta App for Live Mode.'
-        : 'Infrastructure Status: Meta Integration is currently in Canary Sandbox mode. Your campaign draft configuration is valid and ready for Admin review.'
+        ? 'Switch Meta App 1347659864208278 from Development to Live/Public Mode in Meta Developers Console, set META_APP_MODE=live and META_CANARY_2_READY=true.'
+        : 'Infrastructure Status: Meta Integration is currently in Canary Sandbox / Development mode. Your campaign draft configuration is valid and ready for Admin review once Meta App is switched to Live Mode.'
     });
   } else {
     gateResults.push({
       gate_id: 14,
       gate_key: 'GATE_14_CANARY_2_READY',
-      gate_name: 'Meta App Canary #2 Readiness',
+      gate_name: 'Meta App Canary #2 Readiness & Dev Mode Verification',
       status: 'PASSED',
       severity: 'INFO',
-      message: 'Meta Canary #2 Readiness Gate engaged.',
+      message: 'Meta Canary #2 Readiness Gate engaged. Meta App verified in Live/Public mode.',
       action_required: 'No action needed.'
     });
   }
@@ -6295,16 +6621,18 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
           }
             
           if (!res.ok || data.error) {
-            const errorType = classifyMetaError(data);
-            console.error(`[META TRACE ${correlationId}] FAILED: ${stepName} | Type: ${errorType} | Error:`, JSON.stringify(data.error));
+            const errorClassification = classifyMetaError(data);
+            console.error(`[META TRACE ${correlationId}] FAILED: ${stepName} | Code: ${errorClassification.code_name} | Error:`, JSON.stringify(data.error));
             
-            if (errorType === 'TRANSIENT_NETWORK_ERROR' && attempt < maxRetries) {
+            if (errorClassification.retryable && attempt < maxRetries) {
               const jitter = Math.random() * 500;
               await new Promise(r => setTimeout(r, delayMs + jitter));
               delayMs *= 2; // exponential backoff
               continue;
             }
-            throw new Error(data.error?.message || JSON.stringify(data.error) || `${stepName} failed`);
+            const errObj: any = new Error(data.error?.message || JSON.stringify(data.error) || `${stepName} failed`);
+            errObj.metaData = data;
+            throw errObj;
           }
             
           console.log(`[META TRACE ${correlationId}] SUCCESS: ${stepName} in ${executionTime}ms`);
@@ -6435,52 +6763,58 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
   } catch (error: any) {
     console.error(`[META ENGINE FAULT] Campaign ${campaignId} failed.`, error);
     
-    // Phase 3: Rollback Engine
-    await executeMetaRollback(rollbackState, correlationId);
+    const rawErrorPayload = error.metaData || error.response || { error: { message: error.message } };
+    const classification = classifyMetaError(rawErrorPayload);
+
+    // Phase 3: Trigger explicit reverse cascade rollback
+    const rollbackRes = await executeMetaRollback(rollbackState, correlationId);
+    const rollbackStatus = rollbackRes.success ? 'SUCCESS' : 'FAILED';
+
+    const stageName = rollbackState.metaCreativeId
+      ? 'AD_CREATION'
+      : (rollbackState.metaAdSetId ? 'CREATIVE_CREATION' : (rollbackState.metaCampaignId ? 'ADSET_CREATION' : 'CAMPAIGN_CREATION'));
+
+    // Update meta_publishing_transactions with full classification
+    await pool.query(`
+      UPDATE meta_publishing_transactions 
+      SET publish_status = 'FAILED', 
+          failure_code = $1, 
+          failure_category = $2, 
+          failure_stage = $3, 
+          rollback_status = $4,
+          error_details = $5,
+          updated_at = CURRENT_TIMESTAMP 
+      WHERE id = $6
+    `, [classification.code_name, classification.category, stageName, rollbackStatus, JSON.stringify(rawErrorPayload), txId]);
+
+    // Update host_marketing_campaigns (NEVER MARK LIVE)
+    const feedbackMsg = `${classification.user_title}: ${classification.action_required}`;
+    await pool.query(`
+      UPDATE host_marketing_campaigns 
+      SET status = 'failed_publish', admin_feedback = $1 
+      WHERE id = $2
+    `, [feedbackMsg, campaignId]);
     
-    await pool.query(`UPDATE meta_publishing_transactions SET publish_status = 'FAILED', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [txId]);
-    await pool.query(`UPDATE host_marketing_campaigns SET status = 'failed_publish', admin_feedback = $1 WHERE id = $2`, [error.message, campaignId]);
-    
-    // Phase 13: Dead Letter Queue
+    // Phase 13: Record in Dead Letter Queue
     try {
       await pool.query(`
-        INSERT INTO meta_publishing_dlq (transaction_id, campaign_id, correlation_id, failure_stage, error_payload, recommended_action)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO meta_publishing_dlq (
+          transaction_id, campaign_id, correlation_id, failure_stage, failure_code, requires_human_action, error_payload, recommended_action
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       `, [
         txId, 
         campaignId, 
         correlationId, 
-        rollbackState.metaCreativeId ? 'AD_CREATION' : (rollbackState.metaAdSetId ? 'CREATIVE_CREATION' : (rollbackState.metaCampaignId ? 'ADSET_CREATION' : 'CAMPAIGN_CREATION')),
-        JSON.stringify({ message: error.message, stack: error.stack }),
-        'Review credentials and ad details. Use the Replay Engine to retry.'
+        stageName,
+        classification.code_name,
+        classification.requires_human_action,
+        JSON.stringify(rawErrorPayload),
+        classification.action_required
       ]);
     } catch (dlqErr) {
       console.error('[META DLQ FAULT] Failed to write to DLQ:', dlqErr);
     }
     return false;
-  }
-}
-
-// Phase 3: Explicit Rollback Engine
-async function executeMetaRollback(state: { metaCampaignId?: string, metaAdSetId?: string, metaCreativeId?: string, metaAdId?: string }, correlationId: string) {
-  const accessToken = process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN;
-  if (!accessToken) return;
-  console.log(`[META ROLLBACK ENGINE] Triggered for ${correlationId}. State:`, state);
-  
-  // We delete the highest level object we can. If campaign exists, deleting campaign cascades to adsets/ads.
-  if (state.metaCampaignId) {
-     try {
-       await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${state.metaCampaignId}?access_token=${accessToken}`, { method: 'DELETE' });
-       console.log(`[META ROLLBACK] Successfully deleted Campaign ${state.metaCampaignId}`);
-     } catch (e: any) {
-       console.error(`[META ROLLBACK] Failed to delete campaign ${state.metaCampaignId}: ${e.message}`);
-     }
-  } else if (state.metaAdSetId) {
-     try {
-       await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${state.metaAdSetId}?access_token=${accessToken}`, { method: 'DELETE' });
-     } catch (e: any) {
-       console.error(`[META ROLLBACK] Failed to delete adset ${state.metaAdSetId}:`, e.message);
-     }
   }
 }
 

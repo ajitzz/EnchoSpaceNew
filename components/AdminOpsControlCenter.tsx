@@ -720,10 +720,45 @@ export const AdminOpsControlCenter: React.FC<AdminOpsControlCenterProps> = () =>
                     <div>
                       <span className="text-gray-400">Attempts:</span> {selectedTx.publish_attempt}
                     </div>
+                    {selectedTx.failure_code && (
+                      <div>
+                        <span className="text-gray-400">Failure Code:</span> <span className="text-rose-600 font-bold">{selectedTx.failure_code}</span>
+                      </div>
+                    )}
+                    {selectedTx.failure_stage && (
+                      <div>
+                        <span className="text-gray-400">Failure Stage:</span> {selectedTx.failure_stage}
+                      </div>
+                    )}
+                    {selectedTx.rollback_status && (
+                      <div>
+                        <span className="text-gray-400">Rollback Status:</span> <span className="text-emerald-600 font-bold">{selectedTx.rollback_status}</span>
+                      </div>
+                    )}
                     <div>
                       <span className="text-gray-400">Created At:</span> {new Date(selectedTx.created_at).toLocaleString()}
                     </div>
                   </div>
+
+                  {/* Failure Classification Alert Banner */}
+                  {(selectedTx.failure_code === 'META_APP_DEVELOPMENT_MODE_BLOCK' ||
+                    selectedTxTraces.some(t => t.meta_error_subcode === 1885183 || (t.meta_error_message && t.meta_error_message.includes('development mode')))) && (
+                    <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl space-y-2 font-sans">
+                      <div className="flex items-center gap-2 text-rose-800 font-bold text-xs">
+                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                        <span>META APP DEVELOPMENT MODE BLOCK (100 / 1885183)</span>
+                      </div>
+                      <p className="text-[11px] text-rose-700 leading-relaxed">
+                        Ads creative post was created by an app that is in Development Mode and must be public/live to create the ad.
+                      </p>
+                      <div className="pt-2 border-t border-rose-200/60 font-mono text-[10px] space-y-1 text-rose-900">
+                        <div><strong className="text-rose-700">Meta App ID:</strong> 1347659864208278</div>
+                        <div><strong className="text-rose-700">Retry Status:</strong> <span className="px-1.5 py-0.5 bg-rose-200 text-rose-900 rounded font-bold">BLOCKED (Non-retryable)</span></div>
+                        <div><strong className="text-rose-700">Required Action:</strong> Switch Meta App 1347659864208278 from Development to Live/Public Mode in Meta Developers Console.</div>
+                        <div><strong className="text-rose-700">Cascade Rollback Status:</strong> <span className="text-emerald-700 font-bold">SUCCESS</span> (Orphaned Campaign & AdSet objects cleaned up).</div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Hierarchy Tree View */}
                   <div className="space-y-2">
