@@ -246,6 +246,7 @@ export interface MarketingCampaign {
   ai_generated_ad_copies?: any;
   meta_sync_logs?: any;
   last_pacing_calc_at?: string;
+  policy_cleared?: boolean;
   analytics?: {
     impressions: number;
     clicks: number;
@@ -253,5 +254,35 @@ export interface MarketingCampaign {
     conversions: number;
     spent: number;
   };
+}
+
+export interface MetaPreflightGateResult {
+  gate_id: number;
+  gate_key: string;
+  gate_name: string;
+  status: 'PASSED' | 'FAILED' | 'SKIPPED';
+  severity: 'BLOCKER' | 'WARNING' | 'INFO';
+  failure_code?: string;
+  message: string;
+  action_required: string;
+  field_ref?: string;
+  admin_only?: boolean;
+  admin_details?: string;
+}
+
+export interface MetaPreflightDiagnosticReport {
+  total_gates: number;
+  passed_gates: number;
+  failed_gates: number;
+  is_deployable: boolean;
+  canary_status: {
+    canary_2_ready: boolean;
+    publishing_paused: boolean;
+    app_id: string;
+    mode: 'development' | 'live';
+  };
+  gate_results: MetaPreflightGateResult[];
+  remediation_summary: string[];
+  correlation_id?: string;
 }
 

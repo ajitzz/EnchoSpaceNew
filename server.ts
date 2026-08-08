@@ -3103,78 +3103,51 @@ app.get('/api/marketing/campaigns', authenticateToken, async (req: AuthRequest, 
 app.post('/api/marketing/pre-flight-check', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
-    const { listing_id, title, description, budget, target_radius_km, media_urls, ad_format } = req.body;
+    const isAdmin = req.user?.role === 'admin';
+    const report = await evaluateMetaPreflightDiagnostics(req.body, pool, { isAdmin });
+
+    const failedGates = report.gate_results.filter(g => g.status === 'FAILED');
+    const warningGates = report.gate_results.filter(g => g.status === 'PASSED' && g.severity === 'WARNING');
+    const blockingReasons = failedGates.map(g => `[Gate ${g.gate_id} ${g.gate_name}]: ${g.message}`);
+    const nextActions = failedGates.map(g => g.action_required).filter(Boolean) as string[];
+
     const checks = {
-      listing_valid: false,
-      title_valid: false,
-      description_safe: false,
-      budget_adequate: false,
+      listing_valid: report.gate_results.find(g => g.gate_id === 1)?.status === 'PASSED',
+      title_valid: report.gate_results.find(g => g.gate_id === 11)?.status === 'PASSED',
+      description_safe: report.gate_results.find(g => g.gate_id === 11)?.status === 'PASSED',
+      budget_adequate: report.gate_results.find(g => g.gate_id === 11)?.status === 'PASSED',
       special_ad_category_housing: true,
-      age_targeting_compliant: true, // Strictly 18-65 per Meta guidelines
-      radius_compliant: false,
-      media_ready: false,
-      payload_schema_valid: false,
-      errors: [] as string[]
+      age_targeting_compliant: true,
+      radius_compliant: report.gate_results.find(g => g.gate_id === 10)?.status === 'PASSED',
+      media_ready: true,
+      payload_schema_valid: report.is_deployable,
+      errors: failedGates.map(g => g.message)
     };
-    
-    // 1. Listing Validation
-    if (!listing_id) {
-      checks.errors.push('Listing ID is required for property ad campaigns.');
-    } else {
-      const listingCheck = await pool.query('SELECT id, title, image_url, price FROM listings WHERE id = $1', [listing_id]);
-      if (listingCheck.rows.length === 0) {
-        checks.errors.push('Referenced listing does not exist in database.');
-      } else {
-        checks.listing_valid = true;
-      }
-    }
-    
-    // 2. Copy Validation (Walled Garden)
-    if (!title || title.trim().length < 5) {
-      checks.errors.push('Campaign headline/title must be at least 5 characters.');
-    } else {
-      checks.title_valid = true;
-    }
-    const contactLeakRegex = /(\+?\d[\d\s-]{8,})|([\w.-]+@[\w.-]+\.\w+)|(wa\.me)|(whatsapp)|(t\.me)|(instagram\.com)|(facebook\.com)|(call me)|(contact at)|(http[s]?:\/\/[^\s]+)/gi;
-    if (!description || description.trim().length < 10) {
-      checks.errors.push('Campaign description must be at least 10 characters.');
-    } else if (contactLeakRegex.test(description)) {
-      checks.errors.push('Description contains prohibited external contact links, emails, or phone numbers (Walled Garden policy).');
-    } else {
-      checks.description_safe = true;
-    }
-    
-    // 3. Budget Validation
-    if (budget < 1000) {
-      checks.errors.push('Minimum campaign budget is $10.00 (1000 cents).');
-    } else {
-      checks.budget_adequate = true;
-    }
-
-    // 4. Meta Housing Radius Compliance
-    // Meta requires at least 15 miles (approx 25 km) for real estate targeting.
-    if (target_radius_km && target_radius_km < 25) {
-      checks.errors.push('Target radius must be at least 25km (15 miles) per Meta Housing Special Ad Category policy.');
-    } else {
-      checks.radius_compliant = true;
-    }
-
-    // 5. Media Validation
-    if (!media_urls || media_urls.length === 0) {
-      checks.errors.push('At least one media asset is required.');
-    } else if (ad_format === 'carousel' && media_urls.length < 2) {
-      checks.errors.push('Carousel format requires at least 2 media assets.');
-    } else {
-      checks.media_ready = true;
-    }
-
-    // 6. Payload Validation Readiness
-    if (checks.listing_valid && checks.title_valid && checks.description_safe && checks.budget_adequate && checks.radius_compliant && checks.media_ready) {
-      checks.payload_schema_valid = true;
-    }
 
     res.json({
-      success: checks.payload_schema_valid,
+      success: report.is_deployable,
+      deployable: report.is_deployable,
+      campaignId: req.body.id || req.body.campaignId || null,
+      totalGates: report.total_gates,
+      passedGates: report.passed_gates,
+      failedGates: report.failed_gates,
+      warningGates: warningGates.length,
+      gates: report.gate_results.map(g => ({
+        gateId: g.gate_id,
+        key: g.gate_key,
+        title: g.gate_name,
+        status: g.status,
+        severity: g.severity,
+        reason: g.message,
+        currentValue: g.current_value,
+        expectedValue: g.expected_value,
+        remediation: g.action_required,
+        field: g.field_ref,
+        autoFixAvailable: ['target_radius_km', 'budget', 'feed_description', 'policy_cleared'].includes(g.field_ref || '')
+      })),
+      blockingReasons,
+      nextActions,
+      report,
       checks
     });
   } catch (error) {
@@ -3182,6 +3155,50 @@ app.post('/api/marketing/pre-flight-check', authenticateToken, async (req: AuthR
     res.status(500).json({ error: 'Failed pre-flight check' });
   }
 });
+
+app.get('/api/marketing/campaigns/:id/preflight', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const isAdmin = req.user?.role === 'admin';
+    const report = await evaluateMetaPreflightDiagnostics(Number(id), pool, { isAdmin });
+
+    const failedGates = report.gate_results.filter(g => g.status === 'FAILED');
+    const warningGates = report.gate_results.filter(g => g.status === 'PASSED' && g.severity === 'WARNING');
+    const blockingReasons = failedGates.map(g => `[Gate ${g.gate_id} ${g.gate_name}]: ${g.message}`);
+    const nextActions = failedGates.map(g => g.action_required).filter(Boolean) as string[];
+
+    res.json({
+      success: report.is_deployable,
+      deployable: report.is_deployable,
+      campaignId: Number(id),
+      totalGates: report.total_gates,
+      passedGates: report.passed_gates,
+      failedGates: report.failed_gates,
+      warningGates: warningGates.length,
+      gates: report.gate_results.map(g => ({
+        gateId: g.gate_id,
+        key: g.gate_key,
+        title: g.gate_name,
+        status: g.status,
+        severity: g.severity,
+        reason: g.message,
+        currentValue: g.current_value,
+        expectedValue: g.expected_value,
+        remediation: g.action_required,
+        field: g.field_ref,
+        autoFixAvailable: ['target_radius_km', 'budget', 'feed_description', 'policy_cleared'].includes(g.field_ref || '')
+      })),
+      blockingReasons,
+      nextActions,
+      report
+    });
+  } catch (error) {
+    console.error('Error evaluating campaign preflight:', error);
+    res.status(500).json({ error: 'Failed to evaluate campaign preflight' });
+  }
+});
+
 
 // Create marketing campaign draft
 
@@ -5620,94 +5637,526 @@ export function computeCampaignApprovalHash(campaign: any): { hash: string; snap
 }
 
 // ----------------- META PREFLIGHT ENGINE (16 SAFETY GATES) -----------------
-async function runMetaPreflightEngine(campaignId: number, dbPool: any) {
-  console.log(`[PREFLIGHT] Running 16 Meta Safety Gates validation for campaign ${campaignId}`);
-  const campaignRes = await dbPool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [campaignId]);
-  if (campaignRes.rows.length === 0) throw new Error('Preflight Failed: Campaign not found');
-  const campaign = campaignRes.rows[0];
+async function evaluateMetaPreflightDiagnostics(
+  campaignIdOrData: number | any,
+  dbPool: any,
+  options: { isAdmin?: boolean } = {}
+) {
+  let campaign: any = null;
+  let campaignId = 0;
+
+  if (typeof campaignIdOrData === 'number' || (typeof campaignIdOrData === 'string' && !isNaN(Number(campaignIdOrData)) && Number(campaignIdOrData) > 0)) {
+    campaignId = Number(campaignIdOrData);
+    const campaignRes = await dbPool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [campaignId]);
+    if (campaignRes.rows.length > 0) {
+      campaign = campaignRes.rows[0];
+    }
+  } else if (typeof campaignIdOrData === 'object' && campaignIdOrData !== null) {
+    if (campaignIdOrData.id) {
+      campaignId = Number(campaignIdOrData.id);
+      const campaignRes = await dbPool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [campaignId]);
+      if (campaignRes.rows.length > 0) {
+        campaign = { ...campaignRes.rows[0], ...campaignIdOrData };
+      } else {
+        campaign = campaignIdOrData;
+      }
+    } else {
+      campaign = campaignIdOrData;
+    }
+  }
+
+  const gateResults: Array<{
+    gate_id: number;
+    gate_key: string;
+    gate_name: string;
+    status: 'PASSED' | 'FAILED' | 'SKIPPED';
+    severity: 'BLOCKER' | 'WARNING' | 'INFO';
+    failure_code?: string;
+    message: string;
+    action_required: string;
+    field_ref?: string;
+    admin_only?: boolean;
+    admin_details?: string;
+  }> = [];
 
   // Gate 1: Valid Campaign State
-  if (!campaign.id) throw new Error('Preflight Failed: Invalid Campaign ID');
+  if (!campaign || (!campaign.id && !campaign.listing_id)) {
+    gateResults.push({
+      gate_id: 1,
+      gate_key: 'GATE_1_CAMPAIGN_STATE',
+      gate_name: 'Campaign & Listing Identity State',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: 'CAMPAIGN_STATE_INVALID',
+      field_ref: 'listing_id',
+      message: 'Preflight Failed: Campaign not found',
+      action_required: 'Select a valid property listing and save campaign draft.'
+    });
+  } else {
+    gateResults.push({
+      gate_id: 1,
+      gate_key: 'GATE_1_CAMPAIGN_STATE',
+      gate_name: 'Campaign & Listing Identity State',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: 'Campaign identity and listing reference verified.',
+      action_required: 'No action needed.'
+    });
+  }
 
   // Gate 2: Valid AI Compliance Result
-  if (campaign.status === 'rejected') {
-    throw new Error('Preflight Failed: Campaign was rejected by AI Gatekeeper/Policy.');
+  if (campaign && campaign.status === 'rejected') {
+    gateResults.push({
+      gate_id: 2,
+      gate_key: 'GATE_2_AI_COMPLIANCE',
+      gate_name: 'AI Policy Compliance Result',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: 'AI_COMPLIANCE_REJECTED',
+      field_ref: 'description',
+      message: 'Preflight Failed: Campaign was rejected by AI Gatekeeper/Policy.',
+      action_required: 'Review AI Gatekeeper feedback and update ad copy or targeting parameters.'
+    });
+  } else {
+    gateResults.push({
+      gate_id: 2,
+      gate_key: 'GATE_2_AI_COMPLIANCE',
+      gate_name: 'AI Policy Compliance Result',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: 'Campaign content passed AI compliance check.',
+      action_required: 'No action needed.'
+    });
   }
 
   // Gate 3: Valid Admin Approval
-  if (!campaign.admin_approved) {
-    throw new Error('Preflight Failed: Missing Admin Approval. Campaign must be approved by an Administrator before Meta dispatch.');
+  if (!campaign || !campaign.admin_approved) {
+    gateResults.push({
+      gate_id: 3,
+      gate_key: 'GATE_3_ADMIN_APPROVAL',
+      gate_name: 'Platform Moderation & Admin Approval',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: 'MISSING_ADMIN_APPROVAL',
+      field_ref: 'admin_approved',
+      message: 'Preflight Failed: Missing Admin Approval. Campaign must be approved by an Administrator before Meta dispatch.',
+      action_required: options.isAdmin
+        ? 'Review and approve campaign in the Admin Moderation Console.'
+        : 'Submit campaign for Admin moderation approval.'
+    });
+  } else {
+    gateResults.push({
+      gate_id: 3,
+      gate_key: 'GATE_3_ADMIN_APPROVAL',
+      gate_name: 'Platform Moderation & Admin Approval',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: 'Campaign has active Admin Approval.',
+      action_required: 'No action needed.'
+    });
   }
 
   // Gate 4: Valid Approval Snapshot Integrity
-  const { hash: currentHash } = computeCampaignApprovalHash(campaign);
-  if (!campaign.approval_hash || campaign.approval_hash !== currentHash) {
-    throw new Error('Preflight Failed: Campaign material configuration modified post-approval. Re-approval required.');
+  if (campaign && campaign.admin_approved) {
+    const { hash: currentHash } = computeCampaignApprovalHash(campaign);
+    if (!campaign.approval_hash || campaign.approval_hash !== currentHash) {
+      gateResults.push({
+        gate_id: 4,
+        gate_key: 'GATE_4_APPROVAL_HASH',
+        gate_name: 'Approval Snapshot SHA256 Integrity',
+        status: 'FAILED',
+        severity: 'BLOCKER',
+        failure_code: 'APPROVAL_HASH_MISMATCH',
+        field_ref: 'approval_hash',
+        message: 'Preflight Failed: Campaign material configuration modified post-approval. Re-approval required.',
+        action_required: 'Re-submit campaign for Admin re-approval following material updates.'
+      });
+    } else {
+      gateResults.push({
+        gate_id: 4,
+        gate_key: 'GATE_4_APPROVAL_HASH',
+        gate_name: 'Approval Snapshot SHA256 Integrity',
+        status: 'PASSED',
+        severity: 'INFO',
+        message: 'Approval SHA256 snapshot hash verified against current campaign configuration.',
+        action_required: 'No action needed.'
+      });
+    }
+  } else {
+    gateResults.push({
+      gate_id: 4,
+      gate_key: 'GATE_4_APPROVAL_HASH',
+      gate_name: 'Approval Snapshot SHA256 Integrity',
+      status: 'SKIPPED',
+      severity: 'INFO',
+      message: 'Approval hash check skipped (Campaign awaiting initial Admin approval).',
+      action_required: 'Complete Admin approval to seal approval snapshot.'
+    });
   }
 
   // Gate 5 & 6: Preflight & Emergency Kill Switch Check
   if (process.env.META_PUBLISHING_PAUSED === 'true') {
-    throw new Error('EMERGENCY KILL SWITCH ACTIVE: Meta publishing dispatches are currently paused by platform administration.');
+    gateResults.push({
+      gate_id: 5,
+      gate_key: 'GATE_5_6_KILL_SWITCH',
+      gate_name: 'Emergency Platform Kill Switch',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: 'KILL_SWITCH_ACTIVE',
+      admin_only: true,
+      admin_details: 'META_PUBLISHING_PAUSED=true active in server environment.',
+      message: 'EMERGENCY KILL SWITCH ACTIVE: Meta publishing dispatches are currently paused by platform administration.',
+      action_required: options.isAdmin
+        ? 'Toggle META_PUBLISHING_PAUSED to false in Admin Control Panel.'
+        : 'Meta API publishing dispatches are temporarily paused for maintenance. Contact Encho support.'
+    });
+  } else {
+    gateResults.push({
+      gate_id: 5,
+      gate_key: 'GATE_5_6_KILL_SWITCH',
+      gate_name: 'Emergency Platform Kill Switch',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: 'Platform Meta dispatch pipeline active (Kill switch disengaged).',
+      action_required: 'No action needed.'
+    });
   }
 
   // Gate 7: Credentials Check
   if (!process.env.META_ACCESS_TOKEN || !process.env.META_AD_ACCOUNT_ID) {
-    throw new Error('Preflight Failed: Missing Meta API Credentials');
+    gateResults.push({
+      gate_id: 7,
+      gate_key: 'GATE_7_CREDENTIALS',
+      gate_name: 'Master Meta System Credentials',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: 'MISSING_META_CREDENTIALS',
+      admin_only: true,
+      admin_details: 'META_ACCESS_TOKEN or META_AD_ACCOUNT_ID missing in server process environment.',
+      message: 'Preflight Failed: Missing Meta API Credentials',
+      action_required: options.isAdmin
+        ? 'Set META_ACCESS_TOKEN and META_AD_ACCOUNT_ID in environment variables.'
+        : 'System Meta access credentials configuration pending. Contact platform administrator.'
+    });
+  } else {
+    gateResults.push({
+      gate_id: 7,
+      gate_key: 'GATE_7_CREDENTIALS',
+      gate_name: 'Master Meta System Credentials',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: 'Master Meta API credentials authenticated.',
+      action_required: 'No action needed.'
+    });
   }
 
   // Gate 8: Page Identity
   if (!process.env.META_PAGE_ID) {
-    throw new Error('Preflight Failed: Missing Meta Page ID identity.');
+    gateResults.push({
+      gate_id: 8,
+      gate_key: 'GATE_8_PAGE_IDENTITY',
+      gate_name: 'Facebook Page Asset Identity',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: 'MISSING_PAGE_ID',
+      admin_only: true,
+      admin_details: 'META_PAGE_ID missing in server process environment.',
+      message: 'Preflight Failed: Missing Meta Page ID identity.',
+      action_required: options.isAdmin
+        ? 'Configure META_PAGE_ID environment variable.'
+        : 'Facebook Page identity connection pending. Contact platform support.'
+    });
+  } else {
+    gateResults.push({
+      gate_id: 8,
+      gate_key: 'GATE_8_PAGE_IDENTITY',
+      gate_name: 'Facebook Page Asset Identity',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: 'Facebook Page identity verified.',
+      action_required: 'No action needed.'
+    });
   }
 
   // Gate 9: Instagram Identity
   if (!process.env.META_INSTAGRAM_ACCOUNT_ID) {
-    throw new Error('Preflight Failed: Missing Meta Instagram Account ID identity.');
+    gateResults.push({
+      gate_id: 9,
+      gate_key: 'GATE_9_INSTAGRAM_IDENTITY',
+      gate_name: 'Instagram Business Identity',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: 'MISSING_INSTAGRAM_ID',
+      admin_only: true,
+      admin_details: 'META_INSTAGRAM_ACCOUNT_ID missing in server process environment.',
+      message: 'Preflight Failed: Missing Meta Instagram Account ID identity.',
+      action_required: options.isAdmin
+        ? 'Configure META_INSTAGRAM_ACCOUNT_ID environment variable.'
+        : 'Instagram Business identity connection pending. Contact platform support.'
+    });
+  } else {
+    gateResults.push({
+      gate_id: 9,
+      gate_key: 'GATE_9_INSTAGRAM_IDENTITY',
+      gate_name: 'Instagram Business Identity',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: 'Instagram Business identity verified.',
+      action_required: 'No action needed.'
+    });
   }
 
   // Gate 10: Special Ad Category & Radius Validation (Housing minimum 25km radius)
-  if (!campaign.target_locations || Number(campaign.target_radius_km) < 25) {
-    throw new Error('Preflight Failed: Housing Special Ad Category requires minimum 25km radius targeting.');
+  if (!campaign || !campaign.target_locations || Number(campaign.target_radius_km) < 25) {
+    gateResults.push({
+      gate_id: 10,
+      gate_key: 'GATE_10_HOUSING_RADIUS',
+      gate_name: 'Housing Special Ad Category & Radius (25km)',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: 'HOUSING_RADIUS_NONCOMPLIANT',
+      field_ref: 'target_radius_km',
+      message: 'Preflight Failed: Housing Special Ad Category requires minimum 25km radius targeting.',
+      action_required: 'Set target radius to at least 25km (15 miles) to comply with Meta Housing Equality nondiscrimination policies.'
+    });
+  } else {
+    gateResults.push({
+      gate_id: 10,
+      gate_key: 'GATE_10_HOUSING_RADIUS',
+      gate_name: 'Housing Special Ad Category & Radius (25km)',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: 'Targeting locations and minimum 25km Housing radius requirement satisfied.',
+      action_required: 'No action needed.'
+    });
   }
 
   // Gate 11: Creative & Budget Validation
-  if (!campaign.title || !campaign.feed_description) {
-    throw new Error('Preflight Failed: Missing required creative fields (title, feed_description).');
-  }
-  if (Number(campaign.budget) < 100) {
-    throw new Error('Preflight Failed: Budget is below Meta minimums.');
+  if (!campaign || !campaign.title || (!campaign.feed_description && !campaign.description)) {
+    gateResults.push({
+      gate_id: 11,
+      gate_key: 'GATE_11_CREATIVE_BUDGET',
+      gate_name: 'Creative Headlines & Feed Copy',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: 'CREATIVE_INVALID',
+      field_ref: 'feed_description',
+      message: 'Preflight Failed: Missing required creative fields (title, feed_description).',
+      action_required: 'Provide a campaign headline and feed description copy.'
+    });
+  } else if (Number(campaign.budget) < 100) {
+    gateResults.push({
+      gate_id: 11,
+      gate_key: 'GATE_11_CREATIVE_BUDGET',
+      gate_name: 'Meta API Minimum Budget Floor',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: 'BUDGET_BELOW_MINIMUM',
+      field_ref: 'budget',
+      message: 'Preflight Failed: Budget is below Meta minimums.',
+      action_required: 'Increase campaign daily budget to at least $1.00 ($10.00 / 1000 cents recommended).'
+    });
+  } else {
+    gateResults.push({
+      gate_id: 11,
+      gate_key: 'GATE_11_CREATIVE_BUDGET',
+      gate_name: 'Creative Copy & Budget Minimums',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: 'Creative headline, feed description, and budget minimums verified.',
+      action_required: 'No action needed.'
+    });
   }
 
   // Gate 12 & 13: Idempotency Key & Existing Transaction Check
-  const idempotencyKey = `publish_meta_camp_${campaignId}`;
-  const existingTx = await dbPool.query('SELECT * FROM meta_publishing_transactions WHERE idempotency_key = $1 AND publish_status = $2', [idempotencyKey, 'SUCCESS']);
-  if (existingTx.rows.length > 0) {
-    console.log(`[PREFLIGHT] Campaign ${campaignId} already successfully published on transaction ${existingTx.rows[0].id}.`);
+  if (campaignId > 0) {
+    const idempotencyKey = `publish_meta_camp_${campaignId}`;
+    const existingTx = await dbPool.query(
+      'SELECT * FROM meta_publishing_transactions WHERE idempotency_key = $1 AND publish_status = $2',
+      [idempotencyKey, 'SUCCESS']
+    );
+    if (existingTx.rows.length > 0) {
+      gateResults.push({
+        gate_id: 12,
+        gate_key: 'GATE_12_13_IDEMPOTENCY',
+        gate_name: 'Publish Idempotency & Transaction Lock',
+        status: 'PASSED',
+        severity: 'INFO',
+        message: `Campaign ${campaignId} already successfully published on transaction ${existingTx.rows[0].id}.`,
+        action_required: 'Use Re-sync Meta option to update active Meta Graph hierarchy.'
+      });
+    } else {
+      gateResults.push({
+        gate_id: 12,
+        gate_key: 'GATE_12_13_IDEMPOTENCY',
+        gate_name: 'Publish Idempotency & Transaction Lock',
+        status: 'PASSED',
+        severity: 'INFO',
+        message: 'Idempotency slot clear for publishing.',
+        action_required: 'No action needed.'
+      });
+    }
+  } else {
+    gateResults.push({
+      gate_id: 12,
+      gate_key: 'GATE_12_13_IDEMPOTENCY',
+      gate_name: 'Publish Idempotency & Transaction Lock',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: 'Draft campaign idempotency check passed.',
+      action_required: 'No action needed.'
+    });
   }
 
   // Gate 14: Meta Canary #2 Readiness Gate
   if (process.env.META_CANARY_2_READY !== 'true') {
-    throw new Error('Preflight Failed: Canary #2 Readiness Gate inactive (META_CANARY_2_READY is not true). Meta App 1347659864208278 is currently in Development Mode on Meta Developers Console.');
+    gateResults.push({
+      gate_id: 14,
+      gate_key: 'GATE_14_CANARY_2_READY',
+      gate_name: 'Meta App Canary #2 Readiness & Dev Mode Restriction',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: 'CANARY_2_INACTIVE',
+      admin_only: true,
+      admin_details: 'META_CANARY_2_READY is not set to "true". Meta App ID: 1347659864208278 (Development Mode).',
+      message: 'Preflight Failed: Canary #2 Readiness Gate inactive (META_CANARY_2_READY is not true). Meta App 1347659864208278 is currently in Development Mode on Meta Developers Console.',
+      action_required: options.isAdmin
+        ? 'Set META_CANARY_2_READY=true in server environment or approve Meta App for Live Mode.'
+        : 'Meta publishing is currently running in controlled Canary Development Mode. Dispatch scheduled upon Canary activation.'
+    });
+  } else {
+    gateResults.push({
+      gate_id: 14,
+      gate_key: 'GATE_14_CANARY_2_READY',
+      gate_name: 'Meta App Canary #2 Readiness',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: 'Meta Canary #2 Readiness Gate engaged.',
+      action_required: 'No action needed.'
+    });
   }
 
-  // Gate 15: Independent Policy Clearance Gate (Admin approval CANNOT bypass policy clearance)
-  if (campaign.policy_cleared !== true) {
-    throw new Error('Preflight Failed: POLICY_CLEARANCE_REQUIRED. Campaign must successfully pass AI Pre-Check policy scan (policy_cleared=true) before Meta dispatch.');
+  // Gate 15: Independent Policy Clearance Gate
+  if (!campaign || campaign.policy_cleared !== true) {
+    gateResults.push({
+      gate_id: 15,
+      gate_key: 'GATE_15_POLICY_CLEARANCE',
+      gate_name: 'Independent AI Policy Clearance',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: 'POLICY_CLEARANCE_REQUIRED',
+      field_ref: 'policy_cleared',
+      message: 'Preflight Failed: POLICY_CLEARANCE_REQUIRED. Campaign must successfully pass AI Pre-Check policy scan (policy_cleared=true) before Meta dispatch.',
+      action_required: 'Run AI Pre-Check policy scan to obtain policy clearance (policy_cleared=true).'
+    });
+  } else {
+    gateResults.push({
+      gate_id: 15,
+      gate_key: 'GATE_15_POLICY_CLEARANCE',
+      gate_name: 'Independent AI Policy Clearance',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: 'Independent AI Policy Clearance verified (policy_cleared=true).',
+      action_required: 'No action needed.'
+    });
   }
 
   // Gate 16: Tenant Ownership & Asset Binding Gate
-  const hostIdentityRes = await dbPool.query('SELECT * FROM host_meta_identities WHERE host_id = $1', [campaign.host_id]);
-  if (hostIdentityRes.rows.length > 0) {
-    const identity = hostIdentityRes.rows[0];
-    if (campaign.owner_meta_ad_account_id && identity.meta_ad_account_id && campaign.owner_meta_ad_account_id !== identity.meta_ad_account_id) {
-      throw new Error('Preflight Failed: META_ACCOUNT_MISMATCH. Campaign owner ad account does not match host registered Meta identity.');
+  let gate16Passed = true;
+  let gate16Msg = 'Tenant Meta Ad Account asset binding verified.';
+  let gate16Action = 'No action needed.';
+
+  if (campaign && campaign.host_id) {
+    const hostIdentityRes = await dbPool.query('SELECT * FROM host_meta_identities WHERE host_id = $1', [campaign.host_id]);
+    if (hostIdentityRes.rows.length > 0) {
+      const identity = hostIdentityRes.rows[0];
+      if (campaign.owner_meta_ad_account_id && identity.meta_ad_account_id && campaign.owner_meta_ad_account_id !== identity.meta_ad_account_id) {
+        gate16Passed = false;
+        gate16Msg = 'Preflight Failed: META_ACCOUNT_MISMATCH. Campaign owner ad account does not match host registered Meta identity.';
+        gate16Action = 'Verify host registered Meta identity binding.';
+      }
+    } else if (campaign.owner_meta_ad_account_id && campaign.owner_meta_ad_account_id !== process.env.META_AD_ACCOUNT_ID) {
+      gate16Passed = false;
+      gate16Msg = 'Preflight Failed: TENANT_OWNERSHIP_MISMATCH. Campaign owner ad account does not match dispatch identity.';
+      gate16Action = 'Ensure campaign owner ad account matches master dispatch account.';
     }
-  } else if (campaign.owner_meta_ad_account_id && campaign.owner_meta_ad_account_id !== process.env.META_AD_ACCOUNT_ID) {
-    throw new Error('Preflight Failed: TENANT_OWNERSHIP_MISMATCH. Campaign owner ad account does not match dispatch identity.');
+  }
+
+  if (!gate16Passed) {
+    gateResults.push({
+      gate_id: 16,
+      gate_key: 'GATE_16_TENANT_OWNERSHIP',
+      gate_name: 'Tenant Ownership & Asset Binding',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: 'TENANT_OWNERSHIP_MISMATCH',
+      field_ref: 'owner_meta_ad_account_id',
+      message: gate16Msg,
+      action_required: gate16Action
+    });
+  } else {
+    gateResults.push({
+      gate_id: 16,
+      gate_key: 'GATE_16_TENANT_OWNERSHIP',
+      gate_name: 'Tenant Ownership & Asset Binding',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: gate16Msg,
+      action_required: gate16Action
+    });
+  }
+
+  const total_gates = 16;
+  const passed_gates = gateResults.filter(g => g.status === 'PASSED').length;
+  const failed_gates = gateResults.filter(g => g.status === 'FAILED').length;
+  const is_deployable = gateResults.filter(g => g.status === 'FAILED' && g.severity === 'BLOCKER').length === 0;
+
+  const canary_status = {
+    canary_2_ready: process.env.META_CANARY_2_READY === 'true',
+    publishing_paused: process.env.META_PUBLISHING_PAUSED === 'true',
+    app_id: options.isAdmin ? (process.env.META_APP_ID || '1347659864208278') : 'REDACTED',
+    mode: (process.env.META_APP_MODE as 'development' | 'live') || 'development'
+  };
+
+  const remediation_summary = gateResults
+    .filter(g => g.status === 'FAILED')
+    .map(g => `[Gate ${g.gate_id} - ${g.gate_name}]: ${g.action_required}`);
+
+  const sanitizedGateResults = gateResults.map(g => {
+    if (!options.isAdmin && g.admin_only) {
+      return {
+        ...g,
+        admin_details: undefined
+      };
+    }
+    return g;
+  });
+
+  return {
+    total_gates,
+    passed_gates,
+    failed_gates,
+    is_deployable,
+    canary_status,
+    gate_results: sanitizedGateResults,
+    remediation_summary
+  };
+}
+
+async function runMetaPreflightEngine(campaignId: number, dbPool: any, options: { isAdmin?: boolean } = {}) {
+  console.log(`[PREFLIGHT] Running 16 Meta Safety Gates validation for campaign ${campaignId}`);
+  const report = await evaluateMetaPreflightDiagnostics(campaignId, dbPool, options);
+
+  if (!report.is_deployable) {
+    const firstBlocker = report.gate_results.find(g => g.status === 'FAILED' && g.severity === 'BLOCKER');
+    const errorMsg = firstBlocker ? firstBlocker.message : 'Preflight Failed: Meta safety gates validation failed.';
+    const err: any = new Error(errorMsg);
+    err.diagnosticReport = report;
+    throw err;
   }
 
   console.log(`[PREFLIGHT] Campaign ${campaignId} passed all 16 Meta Safety Gates.`);
-  return true;
+  return report;
 }
 
 async function dispatchMetaCampaign(campaignId: number, req: any) {

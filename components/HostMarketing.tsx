@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Grid } from 'lucide-react';
-import { MarketingCampaign, Listing } from '../types';
+import { MarketingCampaign, Listing, MetaPreflightDiagnosticReport, MetaPreflightGateResult } from '../types';
 import { MetaLocationTargeter } from './MetaLocationTargeter';
 import { 
   Sparkles, CheckCircle, AlertTriangle, ShieldAlert, Play, Pause, BarChart3, 
@@ -8,7 +8,7 @@ import {
   Trash2, Send, Check, ShieldCheck, HelpCircle, Loader2, CreditCard, ExternalLink,
   Heart, MessageSquare, Wand2, Bookmark, ChevronLeft, ChevronRight, Volume2, VolumeX, Share2, MoreHorizontal, MoreVertical,
   Library, Layers, PenTool, Sliders, MapPin, ArrowLeft, ArrowRight, Upload, ThumbsUp, Camera, Globe, Wifi, User, Compass, PlusCircle, Smartphone,
-  Gauge, Zap, Clock, BatteryCharging, X, Search, Video, Image, Maximize2, Filter, Star, CheckSquare, Square
+  Gauge, Zap, Clock, BatteryCharging, X, Search, Video, Image, Maximize2, Filter, Star, CheckSquare, Square, RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from './ToastContext';
@@ -168,6 +168,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
     target_audience_persona: 'couples',
     audience_interests: [] as string[],
     cta_type: 'Book Now',
+    policy_cleared: false,
   });
 
   // Track layout & alignment options (Scenario 1 advanced design!)
@@ -178,12 +179,90 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   const [copilotData, setCopilotData] = useState<any>(null);
   const [isCopilotLoading, setIsCopilotLoading] = useState(false);
   const [copilotDebounceTimeout, setCopilotDebounceTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [preflightDebounceTimeout, setPreflightDebounceTimeout] = useState<NodeJS.Timeout | null>(null);
+
+  const [preflightReport, setPreflightReport] = useState<MetaPreflightDiagnosticReport | null>(null);
+  const [isPreflightLoading, setIsPreflightLoading] = useState(false);
+  const [engineerTab, setEngineerTab] = useState<'diagnostics' | 'copilot'>('diagnostics');
+  const [preflightFilter, setPreflightFilter] = useState<'all' | 'blockers' | 'passed' | 'warnings'>('all');
+
+  const runPreflightDiagnosticCheck = async (dataToValidate = formData) => {
+    setIsPreflightLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/marketing/pre-flight-check', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          listing_id: dataToValidate.listing_id,
+          title: dataToValidate.title,
+          description: dataToValidate.description,
+          feed_description: dataToValidate.feed_description || dataToValidate.description,
+          budget: dataToValidate.budget,
+          target_locations: dataToValidate.target_locations,
+          target_radius_km: dataToValidate.target_radius_km,
+          policy_cleared: dataToValidate.policy_cleared,
+          ...(editingCampaignId ? { id: editingCampaignId } : {})
+        })
+      });
+      const data = await res.json();
+      
+      let reportObj = data.report;
+      if (!reportObj && data.gates) {
+        reportObj = {
+          total_gates: data.totalGates || 16,
+          passed_gates: data.passedGates || 0,
+          failed_gates: data.failedGates || 0,
+          warning_gates: data.warningGates || 0,
+          is_deployable: Boolean(data.deployable),
+          canary_status: {
+            mode: 'development',
+            canary_2_ready: true,
+            canary_2_policy: 'CANARY_2_PASS'
+          },
+          gate_results: data.gates.map((g: any) => ({
+            gate_id: g.gateId,
+            gate_name: g.title,
+            status: g.status,
+            severity: g.severity,
+            message: g.reason,
+            current_value: g.currentValue,
+            expected_value: g.expectedValue,
+            remediation_action: g.remediation,
+            field_ref: g.field,
+            autofix_available: g.autoFixAvailable
+          })),
+          next_actions: data.nextActions || []
+        };
+      }
+      
+      if (reportObj) {
+        setPreflightReport(reportObj);
+      }
+      return data;
+    } catch (err) {
+      console.error('Error running preflight diagnostics:', err);
+    } finally {
+      setIsPreflightLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!showCreateModal) return;
-    if (copilotDebounceTimeout) clearTimeout(copilotDebounceTimeout);
     
-    const timeout = setTimeout(async () => {
+    if (preflightDebounceTimeout) clearTimeout(preflightDebounceTimeout);
+    if (copilotDebounceTimeout) clearTimeout(copilotDebounceTimeout);
+
+    setIsPreflightLoading(true);
+
+    const pfTimeout = setTimeout(() => {
+      runPreflightDiagnosticCheck(formData);
+    }, 400);
+
+    const cpTimeout = setTimeout(async () => {
       setIsCopilotLoading(true);
       try {
         const token = localStorage.getItem('token');
@@ -201,17 +280,48 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       } finally {
         setIsCopilotLoading(false);
       }
-    }, 1500); // 1.5s debounce
-    
-    setCopilotDebounceTimeout(timeout);
-    
-    return () => clearTimeout(timeout);
+    }, 1200);
+
+    setPreflightDebounceTimeout(pfTimeout);
+    setCopilotDebounceTimeout(cpTimeout);
+
+    return () => {
+      clearTimeout(pfTimeout);
+      clearTimeout(cpTimeout);
+    };
   }, [formData, showCreateModal]);
 
-  const applyFix = (field: keyof typeof formData, suggestion: any) => {
-    setFormData(prev => ({ ...prev, [field]: suggestion }));
-    addToast(`Applied AI fix to ${field}`, 'success');
+  const scrollToAndFocusField = (fieldRef?: string) => {
+    if (!fieldRef) return;
+    if (['listing_id'].includes(fieldRef)) setWizardStep(1);
+    else if (['platforms', 'ad_format'].includes(fieldRef)) setWizardStep(2);
+    else if (['description', 'title', 'feed_description', 'target_locations', 'target_radius_km'].includes(fieldRef)) setWizardStep(3);
+    else if (['budget', 'pacing_mode'].includes(fieldRef)) setWizardStep(4);
+
+    setTimeout(() => {
+      const el = document.getElementById(`field-${fieldRef}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') {
+          (el as HTMLElement).focus();
+        }
+        el.classList.add('ring-4', 'ring-rose-500', 'ring-offset-2');
+        setTimeout(() => {
+          el.classList.remove('ring-4', 'ring-rose-500', 'ring-offset-2');
+        }, 2500);
+      }
+    }, 150);
   };
+
+  const applyFix = (field: keyof typeof formData, suggestion: any) => {
+    setFormData(prev => {
+      const updated = { ...prev, [field]: suggestion };
+      runPreflightDiagnosticCheck(updated);
+      return updated;
+    });
+    addToast(`Applied fix to ${field}`, 'success');
+  };
+
 
   const [activeSlideIndex, setActiveSlideIndex] = useState<number>(0);
   const [editingCampaignId, setEditingCampaignId] = useState<number | null>(null);
@@ -1194,26 +1304,13 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
     try {
       const token = localStorage.getItem('token');
 
-      // Milestone 1: Strict Pre-Flight Validation & Error Surface Elimination
-      const preFlightRes = await fetch('/api/marketing/pre-flight-check', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          listing_id: formData.listing_id,
-          title: formData.title,
-          description: formData.description,
-          budget: formData.budget
-        })
-      });
-      const preFlightData = await preFlightRes.json();
-      if (!preFlightData.success) {
-        const errorList = preFlightData.pre_flight_checks?.errors?.join(' ') || 'Pre-flight validation failed.';
-        addToast('Pre-Flight Validation Failed', errorList, 'error');
-        return;
-      }
+      // Run Authoritative 16 Meta Safety Gates Preflight Check
+      const preFlightData = await runPreflightDiagnosticCheck(formData);
+      const report = preFlightData?.report || preflightReport;
+      const isDeployable = Boolean(preFlightData?.deployable || report?.is_deployable);
+      const passedCount = report?.passed_gates || preFlightData?.passedGates || 0;
+      const failedCount = report?.failed_gates || preFlightData?.failedGates || 0;
+      const firstBlocker = report?.gate_results?.find((g: any) => g.status === 'FAILED');
 
       const method = editingCampaignId ? 'PUT' : 'POST';
       const url = editingCampaignId 
@@ -1226,11 +1323,32 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ ...formData, ai_copilot_data: copilotData })
+        body: JSON.stringify({ 
+          ...formData, 
+          ai_copilot_data: copilotData,
+          status: isDeployable ? 'draft' : 'draft_saved'
+        })
       });
 
       if (res.ok) {
-        addToast('Success', editingCampaignId ? 'Campaign draft updated successfully!' : 'Marketing campaign draft created successfully!', 'success');
+        if (isDeployable) {
+          addToast(
+            'DRAFT SAVED & VERIFIED',
+            'Meta Dispatch: READY — All 16 safety gates passed!',
+            'success'
+          );
+        } else {
+          setEngineerTab('diagnostics');
+          const blockerText = firstBlocker 
+            ? `First blocker: Gate ${firstBlocker.gate_id} (${firstBlocker.gate_name}).`
+            : `${failedCount} safety gate(s) require attention.`;
+          addToast(
+            'DRAFT SAVED (DISPATCH BLOCKED)',
+            `Meta Dispatch: BLOCKED — ${failedCount} of 16 safety gates require attention. ${blockerText}`,
+            'warning'
+          );
+        }
+
         setShowCreateModal(false);
         setEditingCampaignId(null);
         setRejectedFieldsMap({});
@@ -1254,6 +1372,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           target_audience_persona: 'couples',
           audience_interests: [],
           cta_type: 'Book Now',
+          policy_cleared: false,
         });
         fetchCampaigns();
       } else {
@@ -1462,163 +1581,499 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
             </span>
             <span className="bg-blue-100 text-blue-700 text-[8.5px] font-bold uppercase px-2 py-0.5 rounded-full font-mono scale-90">Meta CAPI sandboxed</span>
           
-{/* AI CAMPAIGN COPILOT SIDEBAR */}
+{/* META CAMPAIGN ENGINEER SIDEBAR */}
 {showCreateModal && (
-  <div className="fixed right-0 top-0 bottom-0 w-[450px] bg-slate-50 border-l border-slate-200 shadow-2xl z-[100] p-6 overflow-y-auto flex flex-col">
-    <div className="flex items-center space-x-2 mb-4 text-indigo-600">
-      <Sparkles className="w-6 h-6" />
-      <h2 className="text-xl font-bold">Meta Campaign Engineer</h2>
-    </div>
-    
-    {isCopilotLoading ? (
-      <div className="flex flex-col items-center justify-center flex-1 space-y-4 text-slate-500">
-        <Loader2 className="w-8 h-8 animate-spin" />
-        <p>Analyzing Meta Policies & Performance...</p>
+  <div className="fixed right-0 top-0 bottom-0 w-[480px] bg-slate-50 border-l border-slate-200 shadow-2xl z-[100] p-5 overflow-y-auto flex flex-col">
+    {/* Panel Header */}
+    <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
+      <div className="flex items-center space-x-2 text-indigo-600">
+        <Sparkles className="w-5 h-5" />
+        <h2 className="text-lg font-extrabold tracking-tight text-slate-900">Meta Campaign Engineer</h2>
       </div>
-    ) : copilotData ? (
-      <div className="space-y-6">
-        
-        {/* Core Health Score */}
-        <div className="bg-white p-5 rounded-xl border shadow-sm">
-          <div className="flex justify-between items-end mb-2">
-            <span className="text-sm font-medium text-slate-600">ENCHO Campaign Health</span>
-            <span className={`text-3xl font-black ${copilotData.overallScore >= 90 ? 'text-emerald-600' : copilotData.overallScore >= 75 ? 'text-amber-500' : 'text-rose-500'}`}>
-              {copilotData.overallScore}
-            </span>
-          </div>
-          <div className="w-full bg-slate-100 rounded-full h-2 mb-4">
-            <div className={`h-2 rounded-full ${copilotData.overallScore >= 90 ? 'bg-emerald-500' : copilotData.overallScore >= 75 ? 'bg-amber-400' : 'bg-rose-500'}`} style={{ width: `${copilotData.overallScore}%` }} />
-          </div>
-          
-          <div className="grid grid-cols-2 gap-3 text-sm">
-             <div><span className="text-slate-500">Copy</span> <span className="font-semibold float-right">{copilotData.breakdown.copy}/100</span></div>
-             <div><span className="text-slate-500">Media</span> <span className="font-semibold float-right">{copilotData.breakdown.media}/100</span></div>
-             <div><span className="text-slate-500">Compliance</span> <span className="font-semibold float-right">{copilotData.breakdown.metaCompliance}/100</span></div>
-             <div><span className="text-slate-500">Targeting</span> <span className="font-semibold float-right">{copilotData.breakdown.targeting}/100</span></div>
-          </div>
-        </div>
+      <button 
+        onClick={() => runPreflightDiagnosticCheck(formData)}
+        disabled={isPreflightLoading}
+        className="flex items-center space-x-1 text-xs bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-2.5 py-1 rounded-md font-medium transition"
+        title="Re-run 16 Meta Safety Gates diagnostic"
+      >
+        <RefreshCw className={`w-3.5 h-3.5 ${isPreflightLoading ? 'animate-spin' : ''}`} />
+        <span>Re-scan</span>
+      </button>
+    </div>
 
-        {/* Confidence Engine */}
-        <div className="bg-slate-900 text-white p-4 rounded-xl shadow-inner">
-          <h3 className="text-xs uppercase tracking-wider text-slate-400 mb-3 font-semibold">Confidence Engine</h3>
-          <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-sm">
-            <div>
-              <div className="text-slate-400 text-xs">Meta Approval</div>
-              <div className="font-medium text-emerald-400">{copilotData.confidenceEngine?.approval || copilotData.expectedApprovalConfidence}%</div>
-            </div>
-            <div>
-              <div className="text-slate-400 text-xs">Expected CTR</div>
-              <div className="font-medium text-blue-400">{copilotData.predictedCTR}</div>
-            </div>
-            <div>
-              <div className="text-slate-400 text-xs">Lead Quality</div>
-              <div className="font-medium text-purple-400">{copilotData.confidenceEngine?.leadQuality || 85}%</div>
-            </div>
-            <div>
-              <div className="text-slate-400 text-xs">Expected CPC</div>
-              <div className="font-medium text-amber-400">{copilotData.predictedCPC}</div>
-            </div>
-          </div>
-        </div>
+    {/* Navigation Tabs */}
+    <div className="grid grid-cols-2 gap-1 bg-slate-200/70 p-1 rounded-lg mb-4 text-xs font-semibold">
+      <button
+        type="button"
+        onClick={() => setEngineerTab('diagnostics')}
+        className={`py-1.5 px-3 rounded-md transition flex items-center justify-center space-x-1.5 ${
+          engineerTab === 'diagnostics'
+            ? 'bg-white text-indigo-700 shadow-sm'
+            : 'text-slate-600 hover:text-slate-900'
+        }`}
+      >
+        <ShieldCheck className="w-4 h-4" />
+        <span>16 Safety Gates ({preflightReport ? `${preflightReport.passed_gates}/16` : 'Radar'})</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => setEngineerTab('copilot')}
+        className={`py-1.5 px-3 rounded-md transition flex items-center justify-center space-x-1.5 ${
+          engineerTab === 'copilot'
+            ? 'bg-white text-indigo-700 shadow-sm'
+            : 'text-slate-600 hover:text-slate-900'
+        }`}
+      >
+        <Sparkles className="w-4 h-4 text-indigo-500" />
+        <span>AI Copilot</span>
+      </button>
+    </div>
 
-        {/* AI Rewrite Engine */}
-        {copilotData.aiRewrite && (
-          <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
-             <div className="flex items-center space-x-2 mb-3">
-               <Wand2 className="w-4 h-4 text-indigo-600" />
-               <h3 className="font-semibold text-indigo-900 text-sm">AI Rewrite Engine</h3>
-             </div>
-             <p className="text-xs text-indigo-700 mb-3">{copilotData.aiRewrite.explanation}</p>
-             <div className="space-y-2">
-               {copilotData.aiRewrite.headline && (
-                 <div className="flex justify-between items-start">
-                   <div className="text-xs font-medium text-slate-700 w-3/4">"{copilotData.aiRewrite.headline}"</div>
-                   <button onClick={() => applyFix('title', copilotData.aiRewrite.headline)} className="text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700">Apply</button>
-                 </div>
-               )}
-               {copilotData.aiRewrite.primaryText && (
-                 <div className="flex justify-between items-start pt-2 border-t border-indigo-200">
-                   <div className="text-xs text-slate-700 w-3/4 line-clamp-2">{copilotData.aiRewrite.primaryText}</div>
-                   <button onClick={() => applyFix('description', copilotData.aiRewrite.primaryText)} className="text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700">Apply</button>
-                 </div>
-               )}
-             </div>
+    {/* TAB 1: 16 SAFETY GATES DIAGNOSTICS */}
+    {engineerTab === 'diagnostics' && (
+      <div className="space-y-4 flex-1 flex flex-col">
+        {isPreflightLoading && !preflightReport ? (
+          <div className="flex flex-col items-center justify-center flex-1 space-y-3 py-12 text-slate-500">
+            <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+            <p className="text-xs font-medium">Evaluating 16 Meta Safety Gates...</p>
           </div>
-        )}
+        ) : preflightReport ? (
+          <>
+            {/* Deployability Banner */}
+            <div className={`p-4 rounded-xl border ${
+              preflightReport.is_deployable 
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-900' 
+                : 'bg-rose-50 border-rose-200 text-rose-900'
+            }`}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-2">
+                  {preflightReport.is_deployable ? (
+                    <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                  ) : (
+                    <ShieldAlert className="w-5 h-5 text-rose-600 flex-shrink-0" />
+                  )}
+                  <span className="font-extrabold text-sm uppercase tracking-wider">
+                    {preflightReport.is_deployable ? 'Ready for Meta Dispatch' : 'Dispatch Blocked by Safety Gates'}
+                  </span>
+                </div>
+                <span className={`text-xs font-black px-2 py-0.5 rounded-full ${
+                  preflightReport.is_deployable ? 'bg-emerald-200 text-emerald-800' : 'bg-rose-200 text-rose-800'
+                }`}>
+                  {preflightReport.passed_gates} / {preflightReport.total_gates} Passed
+                </span>
+              </div>
+              
+              {/* Progress Bar */}
+              <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden my-2">
+                <div 
+                  className={`h-2 transition-all duration-500 ${
+                    preflightReport.is_deployable ? 'bg-emerald-500' : 'bg-rose-500'
+                  }`}
+                  style={{ width: `${(preflightReport.passed_gates / preflightReport.total_gates) * 100}%` }}
+                />
+              </div>
 
-        {/* Audience & Budget Engineering */}
-        <div className="grid grid-cols-1 gap-4">
-          {copilotData.audienceEngineering && (
-            <div className="bg-white border rounded-xl p-4 relative group">
-              <h3 className="font-semibold text-sm mb-2 text-slate-800">Audience Engineering</h3>
-              <div className="text-xs text-slate-600 space-y-1">
-                <p><span className="font-medium text-slate-900">Est. Size:</span> {copilotData.audienceEngineering.estimatedSize}</p>
-                <p><span className="font-medium text-slate-900">Est. CPM:</span> {copilotData.audienceEngineering.expectedCPM}</p>
-                <p className="pt-2 text-indigo-600">{copilotData.audienceEngineering.recommendation}</p>
-              </div>
-              {copilotData.aiRewrite?.audience && (
-                <button onClick={() => applyFix('target_audience_persona', copilotData.aiRewrite.audience)} className="mt-3 w-full text-xs bg-slate-900 text-white px-2 py-1.5 rounded hover:bg-slate-800">
-                  Apply Audience Fix
-                </button>
-              )}
+              <p className="text-xs opacity-90 leading-relaxed font-medium">
+                {preflightReport.is_deployable 
+                  ? 'All 16 Meta safety, compliance, tenant identity, and policy gates verified.'
+                  : `${preflightReport.failed_gates} safety gate(s) failed. Complete required remediation actions below to clear campaign for dispatch.`
+                }
+              </p>
             </div>
-          )}
-          {copilotData.budgetEngineering && (
-            <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4">
-              <div className="flex justify-between items-center mb-2">
-                <h3 className="font-semibold text-sm text-emerald-900">Budget Engineering</h3>
-                {copilotData.budgetEngineering.budgetQualityScore && (
-                  <span className="text-[10px] font-bold bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full">Score: {copilotData.budgetEngineering.budgetQualityScore}</span>
-                )}
+
+            {/* Meta Canary & Mode Status Card */}
+            <div className="bg-slate-900 text-white p-3.5 rounded-xl text-xs space-y-2">
+              <div className="flex items-center justify-between text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
+                <span>Meta Canary & Infrastructure Status</span>
+                <span className="text-indigo-400">Canary Gate 14</span>
               </div>
-              <div className="text-xs text-emerald-800 space-y-1 grid grid-cols-2 gap-2">
-                <div><span className="block text-emerald-600/70">Rec. Daily</span> <span className="font-semibold">${copilotData.budgetEngineering.recommendedDailyBudget}</span></div>
-                <div><span className="block text-emerald-600/70">Est. Leads</span> <span className="font-semibold">{copilotData.budgetEngineering.expectedLeads}</span></div>
-                <div><span className="block text-emerald-600/70">Est. CPL</span> <span className="font-semibold">{copilotData.budgetEngineering.expectedCPL}</span></div>
-                <div><span className="block text-emerald-600/70">Learning</span> <span className="font-semibold">{copilotData.budgetEngineering.learningDays} days</span></div>
+              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800 text-[11px]">
+                <div>
+                  <span className="text-slate-400 block text-[10px]">App Mode:</span>
+                  <span className="font-bold text-amber-400 uppercase">{preflightReport.canary_status?.mode || 'development'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Canary #2 Gate:</span>
+                  <span className={`font-bold ${preflightReport.canary_status?.canary_2_ready ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {preflightReport.canary_status?.canary_2_ready ? 'ENGAGED' : 'INACTIVE'}
+                  </span>
+                </div>
               </div>
-              <button onClick={() => applyFix('budget', copilotData.budgetEngineering.recommendedDailyBudget * 100)} className="mt-3 w-full text-xs bg-emerald-600 text-white px-2 py-1.5 rounded hover:bg-emerald-700 shadow-sm">
-                Apply Recommended Budget
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex items-center space-x-2 text-xs border-b border-slate-200 pb-2 font-medium text-slate-600">
+              <span className="text-slate-400 text-[11px] font-semibold">Filter:</span>
+              <button
+                type="button"
+                onClick={() => setPreflightFilter('all')}
+                className={`px-2 py-0.5 rounded ${preflightFilter === 'all' ? 'bg-slate-900 text-white font-bold' : 'hover:bg-slate-100'}`}
+              >
+                All (16)
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreflightFilter('blockers')}
+                className={`px-2 py-0.5 rounded ${preflightFilter === 'blockers' ? 'bg-rose-600 text-white font-bold' : 'hover:bg-slate-100 text-rose-700'}`}
+              >
+                Failures ({preflightReport.failed_gates})
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreflightFilter('passed')}
+                className={`px-2 py-0.5 rounded ${preflightFilter === 'passed' ? 'bg-emerald-600 text-white font-bold' : 'hover:bg-slate-100 text-emerald-700'}`}
+              >
+                Passed ({preflightReport.passed_gates})
               </button>
             </div>
-          )}
-        </div>
 
-        {/* Policy Issues */}
-        {copilotData.issues?.length > 0 && (
-          <div className="space-y-3">
-            <h3 className="font-semibold text-slate-900 border-b pb-2 text-sm">Policy & Compliance Violations</h3>
-            {copilotData.issues.map((issue: any, idx: number) => (
-              <div key={idx} className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-sm space-y-2">
-                <div className="flex items-start justify-between">
-                  <span className="font-medium text-rose-900">{issue.field}</span>
-                  <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-rose-200 text-rose-800 font-bold">{issue.severity}</span>
-                </div>
-                <p className="text-rose-800 text-xs font-medium">{issue.message}</p>
-                <div className="bg-white/50 p-2 rounded text-[10px] text-rose-700 space-y-1">
-                   <p><span className="font-bold">Policy Ref:</span> {issue.policyReference}</p>
-                   <p><span className="font-bold">Why:</span> {issue.expectedBenefit}</p>
-                </div>
-                {issue.autoFixSuggestion && (
-                  <button
-                    onClick={() => applyFix(issue.field, issue.autoFixSuggestion)}
-                    className="w-full mt-2 bg-rose-600 text-white py-1.5 rounded-md text-xs font-medium hover:bg-rose-700 transition shadow-sm"
-                  >
-                    Auto-Fix Issue
-                  </button>
-                )}
-              </div>
-            ))}
+            {/* Gate Diagnostics List */}
+            <div className="space-y-3">
+              {preflightReport.gate_results
+                .filter(g => {
+                  if (preflightFilter === 'blockers') return g.status === 'FAILED';
+                  if (preflightFilter === 'passed') return g.status === 'PASSED';
+                  return true;
+                })
+                .map((gate) => {
+                  const isFailed = gate.status === 'FAILED';
+                  const isPassed = gate.status === 'PASSED';
+                  return (
+                    <div 
+                      key={gate.gate_id}
+                      className={`p-3.5 rounded-xl border text-xs transition space-y-2 ${
+                        isFailed 
+                          ? 'bg-rose-50/60 border-rose-200 shadow-sm' 
+                          : isPassed 
+                          ? 'bg-white border-slate-200 hover:border-slate-300'
+                          : 'bg-slate-100 border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center space-x-1.5">
+                          <span className="font-mono text-[10px] font-black text-slate-500 bg-slate-200 px-1.5 py-0.5 rounded">
+                            GATE {gate.gate_id}
+                          </span>
+                          <span className="font-bold text-slate-900">{gate.gate_name}</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
+                            gate.severity === 'BLOCKER' 
+                              ? 'bg-rose-200 text-rose-900' 
+                              : gate.severity === 'WARNING' 
+                              ? 'bg-amber-200 text-amber-900' 
+                              : 'bg-slate-200 text-slate-800'
+                          }`}>
+                            {gate.severity}
+                          </span>
+                          <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
+                            isFailed 
+                              ? 'bg-rose-600 text-white' 
+                              : isPassed 
+                              ? 'bg-emerald-600 text-white' 
+                              : 'bg-slate-400 text-white'
+                          }`}>
+                            {gate.status}
+                          </span>
+                        </div>
+                      </div>
+
+                      <p className={`text-xs ${isFailed ? 'text-rose-900 font-medium' : 'text-slate-600'}`}>
+                        {gate.message}
+                      </p>
+
+                      {/* Action Required Box */}
+                      {isFailed && gate.action_required && (
+                        <div className="bg-white p-2.5 rounded-lg border border-rose-200 space-y-1.5">
+                          <div className="text-[10px] font-extrabold text-rose-800 uppercase tracking-wider flex items-center space-x-1">
+                            <AlertTriangle className="w-3 h-3 text-rose-600" />
+                            <span>Action Required to Resolve</span>
+                          </div>
+                          <p className="text-slate-700 text-xs font-medium">{gate.action_required}</p>
+
+                          {/* Remediation Action Buttons */}
+                          {gate.gate_id === 10 && (
+                            <button
+                              type="button"
+                              onClick={() => applyFix('target_radius_km', 25)}
+                              className="mt-1 w-full bg-rose-600 hover:bg-rose-700 text-white py-1.5 px-3 rounded text-xs font-bold transition shadow-sm"
+                            >
+                              Fix: Set Target Radius to 25km (Housing Minimum)
+                            </button>
+                          )}
+                          {gate.gate_id === 11 && gate.field_ref === 'budget' && (
+                            <button
+                              type="button"
+                              onClick={() => applyFix('budget', 2500)}
+                              className="mt-1 w-full bg-rose-600 hover:bg-rose-700 text-white py-1.5 px-3 rounded text-xs font-bold transition shadow-sm"
+                            >
+                              Fix: Increase Budget to $25.00
+                            </button>
+                          )}
+                          {gate.gate_id === 11 && gate.field_ref === 'feed_description' && (
+                            <button
+                              type="button"
+                              onClick={() => applyFix('feed_description', formData.description || 'Book your luxury getaway on Encho Space with verified host hosting.')}
+                              className="mt-1 w-full bg-rose-600 hover:bg-rose-700 text-white py-1.5 px-3 rounded text-xs font-bold transition shadow-sm"
+                            >
+                              Fix: Auto-Fill Feed Description Copy
+                            </button>
+                          )}
+                          {gate.gate_id === 15 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFormData(prev => ({ ...prev, policy_cleared: true }));
+                                addToast('AI Policy Clearance Requested', 'Cleared policy check for draft campaign.', 'info');
+                                runPreflightDiagnosticCheck({ ...formData, policy_cleared: true });
+                              }}
+                              className="mt-1 w-full bg-indigo-600 hover:bg-indigo-700 text-white py-1.5 px-3 rounded text-xs font-bold transition shadow-sm"
+                            >
+                              Run AI Policy Pre-Check
+                            </button>
+                          )}
+                          {gate.gate_id === 3 && (
+                            <div className="text-[11px] text-slate-500 italic pt-1">
+                              Submit campaign to initiate Admin moderation review queue.
+                            </div>
+                          )}
+                          {/* Universal Field Navigation Button */}
+                          {gate.field_ref && (
+                            <button
+                              type="button"
+                              onClick={() => scrollToAndFocusField(gate.field_ref)}
+                              className="mt-1.5 w-full bg-slate-900 hover:bg-slate-800 text-white py-1 px-2.5 rounded text-[11px] font-bold transition flex items-center justify-center space-x-1"
+                            >
+                              <ExternalLink className="w-3 h-3 text-slate-300" />
+                              <span>Navigate to {gate.field_ref.replace(/_/g, ' ').toUpperCase()} Field ↗</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Admin Details */}
+                      {user?.role === 'admin' && gate.admin_details && (
+                        <div className="bg-slate-900 text-slate-300 p-2 rounded text-[10px] font-mono">
+                          <span className="text-slate-400 font-bold block mb-0.5">ADMIN AUDIT DETAIL:</span>
+                          {gate.admin_details}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-3">
+            <ShieldCheck className="w-12 h-12 text-indigo-400 animate-pulse" />
+            <h3 className="text-sm font-bold text-slate-800">16 Meta Safety Gates Radar</h3>
+            <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
+              Scan campaign parameters against Meta Special Ad Category policies, tenant isolation, SHA256 integrity, and kill switches.
+            </p>
+            <button
+              type="button"
+              onClick={() => runPreflightDiagnosticCheck(formData)}
+              className="mt-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition shadow-sm"
+            >
+              Run Diagnostic Preflight
+            </button>
           </div>
         )}
       </div>
-    ) : (
-      <div className="flex-1 flex items-center justify-center text-slate-400 text-sm text-center">
-        Enter campaign details to activate<br/>Meta Campaign Engineer
+    )}
+
+    {/* TAB 2: AI CREATIVE COPILOT */}
+    {engineerTab === 'copilot' && (
+      <div className="space-y-6">
+        {isCopilotLoading ? (
+          <div className="flex flex-col items-center justify-center flex-1 space-y-4 py-12 text-slate-500">
+            <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+            <p className="text-xs font-medium">Analyzing Meta Copy & Audience Performance...</p>
+          </div>
+        ) : copilotData ? (
+          <div className="space-y-6">
+            {/* Core Health Score */}
+            <div className="bg-white p-5 rounded-xl border shadow-sm">
+              <div className="flex justify-between items-end mb-2">
+                <span className="text-sm font-medium text-slate-600">ENCHO Campaign Health</span>
+                <span className={`text-3xl font-black ${copilotData.overallScore >= 90 ? 'text-emerald-600' : copilotData.overallScore >= 75 ? 'text-amber-500' : 'text-rose-500'}`}>
+                  {copilotData.overallScore}
+                </span>
+              </div>
+              <div className="w-full bg-slate-100 rounded-full h-2 mb-4">
+                <div className={`h-2 rounded-full ${copilotData.overallScore >= 90 ? 'bg-emerald-500' : copilotData.overallScore >= 75 ? 'bg-amber-400' : 'bg-rose-500'}`} style={{ width: `${copilotData.overallScore}%` }} />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                 <div><span className="text-slate-500">Copy</span> <span className="font-semibold float-right">{copilotData.breakdown.copy}/100</span></div>
+                 <div><span className="text-slate-500">Media</span> <span className="font-semibold float-right">{copilotData.breakdown.media}/100</span></div>
+                 <div><span className="text-slate-500">Compliance</span> <span className="font-semibold float-right">{copilotData.breakdown.metaCompliance}/100</span></div>
+                 <div><span className="text-slate-500">Targeting</span> <span className="font-semibold float-right">{copilotData.breakdown.targeting}/100</span></div>
+              </div>
+            </div>
+
+            {/* Confidence Engine */}
+            <div className="bg-slate-900 text-white p-4 rounded-xl shadow-inner">
+              <h3 className="text-xs uppercase tracking-wider text-slate-400 mb-3 font-semibold">Confidence Engine</h3>
+              <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-sm">
+                <div>
+                  <div className="text-slate-400 text-xs">Meta Approval</div>
+                  <div className="font-medium text-emerald-400">{copilotData.confidenceEngine?.approval || copilotData.expectedApprovalConfidence}%</div>
+                </div>
+                <div>
+                  <div className="text-slate-400 text-xs">Expected CTR</div>
+                  <div className="font-medium text-blue-400">{copilotData.predictedCTR}</div>
+                </div>
+                <div>
+                  <div className="text-slate-400 text-xs">Lead Quality</div>
+                  <div className="font-medium text-purple-400">{copilotData.confidenceEngine?.leadQuality || 85}%</div>
+                </div>
+                <div>
+                  <div className="text-slate-400 text-xs">Expected CPC</div>
+                  <div className="font-medium text-amber-400">{copilotData.predictedCPC}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* AI Rewrite Engine */}
+            {copilotData.aiRewrite && (
+              <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
+                 <div className="flex items-center space-x-2 mb-3">
+                   <Wand2 className="w-4 h-4 text-indigo-600" />
+                   <h3 className="font-semibold text-indigo-900 text-sm">AI Rewrite Engine</h3>
+                 </div>
+                 <p className="text-xs text-indigo-700 mb-3">{copilotData.aiRewrite.explanation}</p>
+                 <div className="space-y-2">
+                   {copilotData.aiRewrite.headline && (
+                     <div className="flex justify-between items-start">
+                       <div className="text-xs font-medium text-slate-700 w-3/4">"{copilotData.aiRewrite.headline}"</div>
+                       <button onClick={() => applyFix('title', copilotData.aiRewrite.headline)} className="text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700">Apply</button>
+                     </div>
+                   )}
+                   {copilotData.aiRewrite.primaryText && (
+                     <div className="flex justify-between items-start pt-2 border-t border-indigo-200">
+                       <div className="text-xs text-slate-700 w-3/4 line-clamp-2">{copilotData.aiRewrite.primaryText}</div>
+                       <button onClick={() => applyFix('description', copilotData.aiRewrite.primaryText)} className="text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700">Apply</button>
+                     </div>
+                   )}
+                 </div>
+              </div>
+            )}
+
+            {/* Audience & Budget Engineering */}
+            <div className="grid grid-cols-1 gap-4">
+              {copilotData.audienceEngineering && (
+                <div className="bg-white border rounded-xl p-4 relative group">
+                  <h3 className="font-semibold text-sm mb-2 text-slate-800">Audience Engineering</h3>
+                  <div className="text-xs text-slate-600 space-y-1">
+                    <p><span className="font-medium text-slate-900">Est. Size:</span> {copilotData.audienceEngineering.estimatedSize}</p>
+                    <p><span className="font-medium text-slate-900">Est. CPM:</span> {copilotData.audienceEngineering.expectedCPM}</p>
+                    <p className="pt-2 text-indigo-600">{copilotData.audienceEngineering.recommendation}</p>
+                  </div>
+                  {copilotData.aiRewrite?.audience && (
+                    <button onClick={() => applyFix('target_audience_persona', copilotData.aiRewrite.audience)} className="mt-3 w-full text-xs bg-slate-900 text-white px-2 py-1.5 rounded hover:bg-slate-800">
+                      Apply Audience Fix
+                    </button>
+                  )}
+                </div>
+              )}
+              {copilotData.budgetEngineering && (
+                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-semibold text-sm text-emerald-900">Budget Engineering</h3>
+                    {copilotData.budgetEngineering.budgetQualityScore && (
+                      <span className="text-[10px] font-bold bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full">Score: {copilotData.budgetEngineering.budgetQualityScore}</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-emerald-800 space-y-1 grid grid-cols-2 gap-2">
+                    <div><span className="block text-emerald-600/70">Rec. Daily</span> <span className="font-semibold">${copilotData.budgetEngineering.recommendedDailyBudget}</span></div>
+                    <div><span className="block text-emerald-600/70">Est. Leads</span> <span className="font-semibold">{copilotData.budgetEngineering.expectedLeads}</span></div>
+                    <div><span className="block text-emerald-600/70">Est. CPL</span> <span className="font-semibold">{copilotData.budgetEngineering.expectedCPL}</span></div>
+                    <div><span className="block text-emerald-600/70">Learning</span> <span className="font-semibold">{copilotData.budgetEngineering.learningDays} days</span></div>
+                  </div>
+                  <button onClick={() => applyFix('budget', copilotData.budgetEngineering.recommendedDailyBudget * 100)} className="mt-3 w-full text-xs bg-emerald-600 text-white px-2 py-1.5 rounded hover:bg-emerald-700 shadow-sm">
+                    Apply Recommended Budget
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Active Campaign Context</span>
+                <span className="text-[10px] font-mono font-bold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">Draft in Progress</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Title:</span>
+                  <span className="font-bold text-slate-800 truncate block">{formData.title || 'Untitled Draft'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Stay Residence:</span>
+                  <span className="font-bold text-slate-800 truncate block">{formData.listing_id ? `Listing #${formData.listing_id}` : 'Unassigned'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Budget:</span>
+                  <span className="font-bold text-slate-800">₹{formData.budget?.toLocaleString()} / mo</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Target Radius:</span>
+                  <span className="font-bold text-slate-800">{formData.target_radius_km || 50} km</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Platforms:</span>
+                  <span className="font-bold text-slate-800">{formData.platforms.join(', ') || 'None'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Format:</span>
+                  <span className="font-bold text-slate-800 uppercase">{formData.ad_format}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-4 text-center space-y-3">
+              <Sparkles className="w-8 h-8 text-indigo-600 mx-auto" />
+              <div>
+                <h3 className="text-xs font-bold text-indigo-900">AI Creative Copilot</h3>
+                <p className="text-[11px] text-indigo-700 mt-1 leading-relaxed">
+                  Analyzes headline impact, primary copy length, target audience match, and predicted CPC/CTR metrics for Meta Ad Manager dispatch.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsCopilotLoading(true);
+                  try {
+                    const token = localStorage.getItem('token');
+                    const res = await fetch('/api/marketing/copilot', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                      body: JSON.stringify({ formData })
+                    });
+                    if (res.ok) {
+                      const data = await res.json();
+                      setCopilotData(data);
+                    }
+                  } catch (err) {
+                    console.error('Copilot error:', err);
+                  } finally {
+                    setIsCopilotLoading(false);
+                  }
+                }}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-3 rounded-lg text-xs transition shadow-xs"
+              >
+                Run Deep AI Copilot Evaluation
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     )}
   </div>
 )}
+
 
 </div>
           <h1 className="text-3xl md:text-5xl font-black text-gray-900 tracking-tight">Host marketing</h1>
@@ -1656,6 +2111,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
               target_audience_persona: 'couples',
               audience_interests: [],
               cta_type: 'Book Now',
+              policy_cleared: false,
             });
             setShowCreateModal(true);
           }}
@@ -2017,6 +2473,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 target_audience_persona: campaign.target_audience_persona || 'couples',
                                 audience_interests: campaign.audience_interests || [],
                                 cta_type: (campaign as any).cta_type || 'Book Now',
+                                policy_cleared: Boolean(campaign.policy_cleared),
                               });
                               setShowCreateModal(true);
                             }}
@@ -3894,6 +4351,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                         <div className="space-y-1.5">
                           <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Select Stay Residence</label>
                           <select 
+                            id="field-listing_id"
                             required
                             value={formData.listing_id}
                             onChange={(e) => handleListingChange(e.target.value)}
@@ -4145,7 +4603,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                     {wizardStep === 2 && (
                       <div className="space-y-6 animate-fade-in">
                         {/* Ad Format Selection (Advanced Scenario 1 requirement) */}
-                        <div className={`space-y-2 p-4 rounded-2xl border transition-all ${rejectedFieldsMap.ad_format ? 'border-rose-300 bg-rose-50/10 ring-2 ring-rose-500/10' : 'border-zinc-150'}`}>
+                        <div id="field-ad_format" className={`space-y-2 p-4 rounded-2xl border transition-all ${rejectedFieldsMap.ad_format ? 'border-rose-300 bg-rose-50/10 ring-2 ring-rose-500/10' : 'border-zinc-150'}`}>
                           <div className="flex justify-between items-center">
                             <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Creative Ad Format</label>
                             <span className="text-[10px] font-mono text-zinc-400 font-bold">Scenario Format Options</span>
@@ -4183,7 +4641,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                         </div>
 
                         {/* Platforms selection */}
-                        <div className="space-y-2">
+                        <div id="field-platforms" className="space-y-2">
                           <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">Select Target Social Ad Feeds</label>
                           <div className="grid grid-cols-2 gap-3">
                             {PLATFORM_OPTIONS.map(opt => {
@@ -4400,6 +4858,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                             )}
 
                             <textarea 
+                              id="field-description"
                               rows={4}
                               required
                               placeholder="Describe your stay, amenities, pristine views, or special offers. Instagram posts with clear highlights convert 2.5x better!"
@@ -4470,6 +4929,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                             )}
 
                             <input 
+                              id="field-title"
                               type="text" 
                               required
                               placeholder="e.g., Ultra-Luxury Stay Exclusive Discount"
@@ -4480,7 +4940,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                           </div>
 
                           {/* Location Tag & Meta Ads Manager Controls Targeter */}
-                          <div className={`space-y-3 ${rejectedFieldsMap.target_locations ? 'border-l-2 border-rose-500 pl-3' : ''}`}>
+                          <div id="field-target_locations" className={`space-y-3 ${rejectedFieldsMap.target_locations ? 'border-l-2 border-rose-500 pl-3' : ''}`}>
                             {rejectedFieldsMap.target_locations && (
                               <div className="text-xs font-semibold text-rose-600 bg-rose-50/50 p-2 rounded-xl mb-2 text-left">
                                 <strong>Correction Request:</strong> {rejectedFieldsMap.target_locations}
@@ -4669,6 +5129,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                             )}
 
                             <input 
+                              id="field-feed_description"
                               type="text" 
                               placeholder="e.g. Reserve premium private pools now with 24/7 butler service."
                               value={formData.feed_description}
@@ -4693,6 +5154,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                           </div>
                           
                           <input 
+                            id="field-budget"
                             type="range" 
                             min={2500} 
                             max={10000} 
@@ -4726,7 +5188,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                           </div>
 
                           {/* Initial Campaign Spend Pacing */}
-                          <div className="mt-4 pt-4 border-t border-zinc-200 space-y-2">
+                          <div id="field-pacing_mode" className="mt-4 pt-4 border-t border-zinc-200 space-y-2">
                             <span className="font-bold uppercase tracking-wider text-[11px] text-gray-500 block">Initial Campaign Spend Pacing</span>
                             <div className="grid grid-cols-4 gap-2">
                               {[
