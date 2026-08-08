@@ -1,0 +1,131 @@
+      message: 'Creative headline, feed description, and budget minimums verified.',
+      action_required: 'No action needed.'
+    });
+  }
+
+  // Gate 12: Publish Idempotency Key Lock Check
+  let existingTx: any = { rows: [] };
+  if (campaignId > 0) {
+    const idempotencyKey = `publish_meta_camp_${campaignId}`;
+    existingTx = await dbPool.query(
+      'SELECT * FROM meta_publishing_transactions WHERE idempotency_key = $1 AND publish_status = $2',
+      [idempotencyKey, 'SUCCESS']
+    );
+  }
+  gateResults.push({
+    gate_id: 12,
+    gate_key: 'GATE_12_IDEMPOTENCY_KEY',
+    gate_name: 'Publish Idempotency Key Lock Check',
+    status: 'PASSED',
+    severity: 'INFO',
+    message: 'Publish idempotency key slot clear and unlocked.',
+    action_required: 'No action needed.'
+  });
+
+  // Gate 13: Existing Publishing Transaction Ledger Check
+  if (existingTx.rows && existingTx.rows.length > 0) {
+    gateResults.push({
+      gate_id: 13,
+      gate_key: 'GATE_13_TRANSACTION_LEDGER',
+      gate_name: 'Existing Publishing Transaction Ledger Check',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: `Campaign #${campaignId} already successfully published on transaction ${existingTx.rows[0].id}.`,
+      action_required: 'Use Re-sync Meta option to update active Meta Graph hierarchy.'
+    });
+  } else {
+    gateResults.push({
+      gate_id: 13,
+      gate_key: 'GATE_13_TRANSACTION_LEDGER',
+      gate_name: 'Existing Publishing Transaction Ledger Check',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: 'No prior published transaction found in ledger. Idempotency slot clear for publishing.',
+      action_required: 'No action needed.'
+    });
+  }
+
+
+
+  // Gate 14: Meta Canary #2 Readiness & Development Mode Restriction Gate
+  const appMode = (process.env.META_APP_MODE as 'development' | 'live') || 'development';
+  let devModeBlockedInDb = false;
+
+  try {
+    const devBlockCheck = await dbPool.query(`
+      SELECT id FROM meta_api_traces
+      WHERE meta_error_subcode = 1885183 OR meta_error_message LIKE '%development mode%'
+      ORDER BY created_at DESC LIMIT 1
+    `);
+    if (devBlockCheck.rows.length > 0) {
+      devModeBlockedInDb = true;
+    }
+  } catch(e) {
+    // Ignore db query error
+  }
+
+  if (options.externalReport && !options.externalReport.is_ready) {
+    const devModeFail = options.externalReport.blockers.find((b: string) => b.includes('Development Mode'));
+    const failureReason = devModeFail ? devModeFail : options.externalReport.blockers.join(' | ');
+    gateResults.push({
+      gate_id: 14,
+      gate_key: 'GATE_14_CANARY_2_READY',
+      gate_name: 'Meta App Canary #2 Readiness & Dev Mode Restriction',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: devModeFail ? 'META_APP_DEVELOPMENT_MODE_BLOCK' : 'META_EXTERNAL_PRODUCTION_READINESS_FAILED',
+      admin_only: true,
+      admin_details: `External Blockers: ${options.externalReport.blockers.join(', ')}`,
+      message: `Preflight Failed: Infrastructure Blocker — ${failureReason}`,
+      action_required: options.isAdmin
+        ? `Remediate external readiness blockers: ${failureReason}`
+        : 'Infrastructure Status: Meta Integration external readiness checks failed. Please contact administrator.'
+    });
+  } else if (process.env.META_CANARY_2_READY !== 'true' || appMode === 'development' || devModeBlockedInDb) {
+    const failureReason = 'Canary #2 Readiness Gate inactive (META_CANARY_2_READY is not true).';
+    if (devModeBlockedInDb || appMode === 'development') {
+      failureReason = 'Meta App 1347659864208278 is currently in Development Mode on Meta Developers Console (error 100/1885183).';
+    }
+
+    gateResults.push({
+      gate_id: 14,
+      gate_key: 'GATE_14_CANARY_2_READY',
+      gate_name: 'Meta App Canary #2 Readiness & Dev Mode Restriction',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: 'META_APP_DEVELOPMENT_MODE_BLOCK',
+      admin_only: true,
+      admin_details: `META_CANARY_2_READY=${process.env.META_CANARY_2_READY}, META_APP_MODE=${appMode}, devModeBlockedInDb=${devModeBlockedInDb}. Meta App ID: 1347659864208278.`,
+      message: `Preflight Failed: Infrastructure Blocker — ${failureReason}`,
+      action_required: options.isAdmin
+        ? 'Switch Meta App 1347659864208278 from Development to Live/Public Mode in Meta Developers Console, set META_APP_MODE=live and META_CANARY_2_READY=true.'
+        : 'Infrastructure Status: Meta Integration is currently in Canary Sandbox / Development mode. Your campaign draft configuration is valid and ready for Admin review once Meta App is switched to Live Mode.'
+    });
+  } else {
+    gateResults.push({
+      gate_id: 14,
+      gate_key: 'GATE_14_CANARY_2_READY',
+      gate_name: 'Meta App Canary #2 Readiness & Dev Mode Verification',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: 'Meta Canary #2 Readiness Gate engaged. Meta App verified in Live/Public mode' + (options.externalReport ? ' and external signals passed.' : '.'),
+      action_required: 'No action needed.'
+    });
+  }
+
+  // Gate 15: Independent Policy Clearance Gate
+  if (!campaign || campaign.policy_cleared !== true) {
+    gateResults.push({
+      gate_id: 15,
+      gate_key: 'GATE_15_POLICY_CLEARANCE',
+      gate_name: 'Independent AI Policy Clearance',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: 'POLICY_CLEARANCE_REQUIRED',
+      field_ref: 'policy_cleared',
+      message: 'Preflight Failed: POLICY_CLEARANCE_REQUIRED. Campaign must successfully pass AI Pre-Check policy scan (policy_cleared=true) before Meta dispatch.',
+      action_required: 'Run AI Pre-Check policy scan to obtain policy clearance (policy_cleared=true).'
+    });
+  } else {
+    gateResults.push({
+      gate_id: 15,

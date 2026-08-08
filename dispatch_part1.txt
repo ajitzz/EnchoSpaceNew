@@ -1,0 +1,148 @@
+async function dispatchMetaCampaign(campaignId: number, req: any) {
+  if (process.env.META_PUBLISHING_PAUSED === 'true') {
+    console.error(`[EMERGENCY KILL SWITCH] Publishing aborted for campaign #${campaignId}: Meta publishing is paused.`);
+    throw new Error('EMERGENCY KILL SWITCH ACTIVE: Meta publishing dispatches are currently paused by platform administration.');
+  }
+
+  const correlationId = crypto.randomUUID();
+  const idempotencyKey = `publish_meta_camp_${campaignId}`;
+  
+  // Phase 1 & 2: Idempotent Publishing & Transaction State Machine
+  const txCheck = await pool.query(`SELECT * FROM meta_publishing_transactions WHERE idempotency_key = $1 FOR UPDATE`, [idempotencyKey]);
+  
+  let txId;
+  let publishAttempt = 1;
+  
+  if (txCheck.rows.length > 0) {
+    const tx = txCheck.rows[0];
+    if (tx.publish_status === 'SUCCESS') {
+      console.log(`[META ENGINE] Campaign ${campaignId} already successfully published. Idempotency hit.`);
+      return true;
+    }
+    if (tx.publish_status === 'PRECHECK_RUNNING' || tx.publish_status === 'PUBLISHING') {
+       console.log(`[META ENGINE] Campaign ${campaignId} is currently being published in another process.`);
+       return false;
+    }
+    publishAttempt = tx.publish_attempt + 1;
+    await pool.query(`UPDATE meta_publishing_transactions SET publish_attempt = $1, publish_status = 'PRECHECK_RUNNING', updated_at = CURRENT_TIMESTAMP WHERE id = $2`, [publishAttempt, tx.id]);
+    txId = tx.id;
+  } else {
+    const newTx = await pool.query(`INSERT INTO meta_publishing_transactions (campaign_id, idempotency_key, correlation_id, publish_status) VALUES ($1, $2, $3, 'PRECHECK_RUNNING') RETURNING id`, [campaignId, idempotencyKey, correlationId]);
+    txId = newTx.rows[0].id;
+  }
+
+  // Phase 3: Rollback Engine State
+  const rollbackState: { metaCampaignId?: string, metaAdSetId?: string, metaCreativeId?: string, metaAdId?: string } = {};
+
+  try {
+    await runMetaPreflightEngine(campaignId, pool, { correlationId });
+    await pool.query(`UPDATE meta_publishing_transactions SET publish_status = 'PUBLISHING', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [txId]);
+
+    const campaignResult = await pool.query(`
+      SELECT c.*, l.title as listing_title, l.description as listing_desc, l.image_url as listing_image, l.city, l.amenities as listing_amenities
+      FROM host_marketing_campaigns c
+      LEFT JOIN listings l ON c.listing_id = l.id
+      WHERE c.id = $1
+    `, [campaignId]);
+
+    if (campaignResult.rows.length === 0) {
+      throw new Error('Campaign not found');
+    }
+
+    const campaign = campaignResult.rows[0];
+    
+    // Core Configuration
+    const accessToken = process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN;
+    const rawAdAccountId = process.env.META_AD_ACCOUNT_ID;
+    const pageId = process.env.META_PAGE_ID;
+    const igAccountId = process.env.META_INSTAGRAM_ACCOUNT_ID;
+    
+    checkIntegrationKeys(
+      'Meta Marketing API',
+      ['META_ACCESS_TOKEN', 'META_AD_ACCOUNT_ID', 'META_PAGE_ID', 'META_INSTAGRAM_ACCOUNT_ID'],
+      `Campaign #${campaign.id} Meta Sync Dispatch`
+    );
+
+    if (!accessToken || !rawAdAccountId || !pageId) {
+      throw new Error('Missing core Meta API credentials');
+    }
+
+    const cleanAdAccountId = rawAdAccountId.startsWith('act_') ? rawAdAccountId : `act_${rawAdAccountId}`;
+    
+    // Using global classifyMetaError from Phase 11
+
+    // Phase 4: Retry Engine with Exponential Backoff
+    const executeMetaRequest = async (stepName: string, endpoint: string, payload: any, maxRetries = 3) => {
+      let attempt = 0;
+      let delayMs = 1000;
+      
+      while (attempt < maxRetries) {
+        attempt++;
+        const startTime = Date.now();
+        const redactedPayload = { ...payload, access_token: 'REDACTED' };
+        if (redactedPayload.bytes) redactedPayload.bytes = 'REDACTED_BASE64_IMAGE';
+        
+        console.log(`[META TRACE ${correlationId}] Step: ${stepName} | Attempt ${attempt}/${maxRetries} | POST ${endpoint}`);
+        
+        try {
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+          const executionTime = Date.now() - startTime;
+          
+          // Enterprise Meta Debug Recorder Insert
+          try {
+            await pool.query(`
+              INSERT INTO meta_api_traces (
+                correlation_id, campaign_id, host_id, step, endpoint, request_payload, response_payload, http_status, fbtrace_id, meta_error_code, meta_error_subcode, meta_error_message, meta_error_type, meta_error_is_transient, meta_error_user_title, meta_error_user_msg, latency_ms
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+            `, [
+              correlationId, campaignId, req.user.id, stepName, endpoint, JSON.stringify(redactedPayload), JSON.stringify(data), res.status,
+              data.error?.fbtrace_id || null, data.error?.code || null, data.error?.error_subcode || null, data.error?.message || null,
+              data.error?.type || null, data.error?.is_transient || null, data.error?.error_user_title || null, data.error?.error_user_msg || null, executionTime
+            ]);
+          } catch(e: any) {
+            console.error('[META API TRACES] Failed to save trace', e.message);
+          }
+            
+          if (!res.ok || data.error) {
+            const errorClassification = classifyMetaError(data);
+            console.error(`[META TRACE ${correlationId}] FAILED: ${stepName} | Code: ${errorClassification.code_name} | Error:`, JSON.stringify(data.error));
+            
+            if (errorClassification.retryable && attempt < maxRetries) {
+              const jitter = Math.random() * 500;
+              await new Promise(r => setTimeout(r, delayMs + jitter));
+              delayMs *= 2; // exponential backoff
+              continue;
+            }
+            const errObj: any = new Error(data.error?.message || JSON.stringify(data.error) || `${stepName} failed`);
+            errObj.metaData = data;
+            throw errObj;
+          }
+            
+          console.log(`[META TRACE ${correlationId}] SUCCESS: ${stepName} in ${executionTime}ms`);
+          return data;
+        } catch (e: any) {
+          if (attempt === maxRetries || e.message.includes('Preflight Failed')) {
+            throw e;
+          }
+          // Network errors (fetch throws)
+          const jitter = Math.random() * 500;
+          await new Promise(r => setTimeout(r, delayMs + jitter));
+          delayMs *= 2;
+        }
+      }
+      throw new Error(`Max retries reached for ${stepName}`);
+    };
+
+    // Prepare activeLeadFormId, URL, description etc.
+    let activeLeadFormId = campaign.meta_lead_form_id;
+    if (!activeLeadFormId) {
+      activeLeadFormId = `${Math.floor(10000000000000 + Math.random() * 90000000000000)}`; // MOCK ID if missing
+      await pool.query('UPDATE host_marketing_campaigns SET meta_lead_form_id = $1 WHERE id = $2', [activeLeadFormId, campaign.id]);
+    }
+    
+    const imageUrl = campaign.listing_image || 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6';

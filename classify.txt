@@ -1,0 +1,51 @@
+  }> = [];
+
+  // Gate 1: Valid Campaign State
+  if (!campaign || (!campaign.id && !campaign.listing_id)) {
+    gateResults.push({
+      gate_id: 1,
+      gate_key: 'GATE_1_CAMPAIGN_STATE',
+      gate_name: 'Campaign & Listing Identity State',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: 'CAMPAIGN_STATE_INVALID',
+      field_ref: 'listing_id',
+      message: 'Preflight Failed: Campaign not found',
+      action_required: 'Select a valid property listing and save campaign draft.'
+    });
+  } else {
+    gateResults.push({
+      gate_id: 1,
+      gate_key: 'GATE_1_CAMPAIGN_STATE',
+      gate_name: 'Campaign & Listing Identity State',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: 'Campaign identity and listing reference verified.',
+      action_required: 'No action needed.'
+    });
+  }
+
+  // Gate 2: Valid AI Compliance Result
+  if (campaign && campaign.status === 'rejected') {
+    gateResults.push({
+      gate_id: 2,
+      gate_key: 'GATE_2_AI_COMPLIANCE',
+      gate_name: 'AI Policy Compliance Result',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: 'AI_COMPLIANCE_REJECTED',
+      field_ref: 'description',
+      message: 'Preflight Failed: Campaign was rejected by AI Gatekeeper/Policy.',
+      action_required: 'Review AI Gatekeeper feedback and update ad copy or targeting parameters.'
+    });
+  } else {
+    gateResults.push({
+      gate_id: 2,
+      gate_key: 'GATE_2_AI_COMPLIANCE',
+      gate_name: 'AI Policy Compliance Result',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: 'Campaign content passed AI compliance check.',
+      action_required: 'No action needed.'
+    });
+  }

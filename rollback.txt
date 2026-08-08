@@ -1,0 +1,101 @@
+          transaction_id, campaign_id, correlation_id, failure_stage, failure_code, requires_human_action, error_payload, recommended_action
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `, [
+        txId, 
+        campaignId, 
+        correlationId, 
+        stageName,
+        classification.code_name,
+        classification.requires_human_action,
+        JSON.stringify(rawErrorPayload),
+        classification.action_required
+      ]);
+    } catch (dlqErr) {
+      console.error('[META DLQ FAULT] Failed to write to DLQ:', dlqErr);
+    }
+    return false;
+  }
+}
+
+
+// Helper to hash user data for privacy-compliant Meta CAPI matching
+function hashCAPIParameter(val: string | null | undefined): string | null {
+  if (!val) return null;
+  const clean = String(val).trim().toLowerCase();
+  return crypto.createHash('sha256').update(clean).digest('hex');
+}
+
+// Direct Meta Conversions API (CAPI) & Google Ads Offline Conversion dispatch engine
+async function dispatchConversionsAPI(booking: any, listingId: number, eventName: 'Purchase' | 'Lead' | 'ViewContent') {
+  try {
+    // 1. Fetch active marketing campaign for this listing
+    const campaignsRes = await pool.query(`
+      SELECT * FROM host_marketing_campaigns 
+      WHERE listing_id = $1 AND status = 'active' AND subscription_active = true
+      ORDER BY id DESC LIMIT 1
+    `, [listingId]);
+
+    if (campaignsRes.rows.length === 0) {
+      console.log(`[CONVERSIONS API] No active campaign running for Listing #${listingId}. Skipping direct CAPI linkage.`);
+      return;
+    }
+
+    const campaign = campaignsRes.rows[0];
+    const { meta_pixel_id, meta_capi_token, google_conversion_id, google_conversion_label } = campaign;
+
+    console.log(`[CONVERSIONS API] Active campaign found: "${campaign.title}" (Campaign #${campaign.id})`);
+
+    const hasMetaCAPI = meta_pixel_id && meta_capi_token;
+    const hasGoogleAds = google_conversion_id && google_conversion_label;
+
+    if (!hasMetaCAPI && !hasGoogleAds) {
+      console.log(`[CONVERSIONS API] Meta Pixel and Google Ads IDs are not configured for Campaign #${campaign.id}. Skipping CAPI payload.`);
+      return;
+    }
+
+    // Prepare payload info
+    const phoneHashed = hashCAPIParameter(booking.phone);
+    const nameHashed = hashCAPIParameter(booking.name);
+    const emailHashed = hashCAPIParameter(booking.email || `${booking.name?.replace(/\s+/g, '')}@encho.space`);
+    const finalAmount = Number(booking.total_rent || booking.amount || 0);
+
+    // I. Send Meta Conversions API (CAPI) event
+    if (hasMetaCAPI) {
+      console.log(`[META CAPI DISPATCH] Dispatched to Pixel ${meta_pixel_id} for event "${eventName}"...`);
+      const capiUrl = `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${meta_pixel_id}/events`;
+
+      const user_data: any = {
+        ph: phoneHashed ? [phoneHashed] : [],
+        fn: nameHashed ? [nameHashed] : [],
+        em: emailHashed ? [emailHashed] : []
+      };
+
+      const custom_data = {
+        value: finalAmount,
+        currency: 'INR',
+        content_name: `Listing Booking #${booking.id}`,
+        content_type: 'product',
+        content_ids: [String(listingId)]
+      };
+
+      const eventPayload = {
+        data: [{
+          event_name: eventName,
+          event_time: Math.floor(Date.now() / 1000),
+          action_source: 'website',
+          event_source_url: `https://nestpick-clone.com/listings/${listingId}`,
+          user_data,
+          custom_data
+        }]
+      };
+
+      try {
+        const res = await fetch(capiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${meta_capi_token}`
+          },
+          body: JSON.stringify(eventPayload)
+        });
+

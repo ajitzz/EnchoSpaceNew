@@ -539,7 +539,7 @@ async function runE2ECertificationSuite() {
 
   // TEST 20: Safe Trace JSON Formatting Check
   try {
-    const safeJsonFormat = (str: string) => {
+    const safeJsonFormat = (str: any) => {
       if (!str) return '';
       if (typeof str === 'object') return JSON.stringify(str, null, 2);
       try {

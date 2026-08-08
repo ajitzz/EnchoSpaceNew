@@ -1,0 +1,150 @@
+    const squareUrl = imageUrl;
+    const verticalUrl = imageUrl;
+    const landscapeUrl = imageUrl;
+
+    const rawDescription = campaign.description || campaign.listing_desc || 'Book your luxury getaway stay with Encho Space.';
+    const contactLeakRegex = /(\+?\d[\d\s-]{8,})|([\w.-]+@[\w.-]+\.\w+)|(wa\.me)|(whatsapp)|(t\.me)|(instagram\.com)|(facebook\.com)|(call me)|(contact at)|(http[s]?:\/\/[^\s]+)/gi;
+    const sanitizedDescription = rawDescription.replace(contactLeakRegex, '[REDACTED: Please use Encho Inbox to communicate]');
+    const destinationUrl = `https://encho-space-chi.vercel.app/crm/lead-capture/${campaign.listing_id || ''}?campaign_id=${campaign.id}`;
+    const adHeadline = campaign.title || campaign.listing_title || 'Exclusive Resort Stay';
+    const feedDescription = campaign.feed_description || `Experience high-end luxury living at ${adHeadline}.`;
+
+    // 1. Create Campaign
+    const campPayload = {
+        access_token: accessToken,
+        name: `Encho Space - ${adHeadline} (Campaign #${campaign.id})`,
+        objective: 'OUTCOME_AWARENESS',
+        special_ad_categories: ['HOUSING'],
+        special_ad_category_country: ['US', 'IN'],
+        is_adset_budget_sharing_enabled: false,
+        buying_type: 'AUCTION',
+        status: 'PAUSED'
+    };
+    const campData = await executeMetaRequest('campaign_creation', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/campaigns`, campPayload);
+    rollbackState.metaCampaignId = campData.id;
+    await pool.query(`UPDATE meta_publishing_transactions SET meta_campaign_id = $1 WHERE id = $2`, [campData.id, txId]);
+
+    // 2. Create Ad Set
+    const adSetPayload: any = {
+      access_token: accessToken,
+      name: `AdSet - ${adHeadline}`,
+      campaign_id: rollbackState.metaCampaignId,
+      daily_budget: Math.max(10000, Math.floor(Number(campaign.budget || 100) * 100)),
+      billing_event: 'IMPRESSIONS',
+      optimization_goal: 'REACH',
+      promoted_object: { page_id: pageId },
+      bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+      targeting: { geo_locations: { countries: ['US', 'IN'] } },
+      status: 'PAUSED'
+    };
+    const adSetData = await executeMetaRequest('adset_creation', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/adsets`, adSetPayload);
+    rollbackState.metaAdSetId = adSetData.id;
+    await pool.query(`UPDATE meta_publishing_transactions SET meta_adset_id = $1 WHERE id = $2`, [adSetData.id, txId]);
+
+    // 3. Upload Images
+    let squareHash = 'mock_hash';
+    try {
+      const sqUpload = await executeMetaRequest('adimage_upload_square', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/adimages`, {
+         access_token: accessToken, bytes: 'mock_base64_img'
+      });
+      if (sqUpload && sqUpload.images) {
+        squareHash = Object.values(sqUpload.images)[0].hash;
+      }
+    } catch (e) {
+      console.error('[META IMG UPLOAD IGN]', e);
+    }
+
+    // 4. Create Creative
+    const creativePayload = {
+      access_token: accessToken,
+      name: `Creative - ${adHeadline}`,
+      object_story_spec: {
+        page_id: pageId,
+        instagram_actor_id: igAccountId || undefined,
+        link_data: {
+          image_hash: squareHash,
+          link: destinationUrl,
+          message: sanitizedDescription,
+          name: adHeadline,
+          description: feedDescription,
+          call_to_action: { type: 'BOOK_TRAVEL', value: { lead_gen_form_id: activeLeadFormId, link: destinationUrl } }
+        }
+      },
+      degrees_of_freedom_spec: { creative_features_spec: { standard_enhancements: { enrollment_status: 'OPT_OUT' } } }
+    };
+    const creativeData = await executeMetaRequest('creative_creation', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/adcreatives`, creativePayload);
+    rollbackState.metaCreativeId = creativeData.id;
+    await pool.query(`UPDATE meta_publishing_transactions SET meta_creative_id = $1 WHERE id = $2`, [creativeData.id, txId]);
+
+    // 5. Create Ad
+    const adPayload = {
+      access_token: accessToken,
+      name: `Ad - ${adHeadline}`,
+      adset_id: rollbackState.metaAdSetId,
+      creative: { creative_id: rollbackState.metaCreativeId },
+      status: 'PAUSED' // Must explicitly unpause by admin later
+    };
+    const adData = await executeMetaRequest('ad_creation', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/ads`, adPayload);
+    rollbackState.metaAdId = adData.id;
+    await pool.query(`UPDATE meta_publishing_transactions SET meta_ad_id = $1 WHERE id = $2`, [adData.id, txId]);
+
+    // 6. DB Commit
+    await pool.query(`
+      UPDATE host_marketing_campaigns 
+      SET meta_campaign_id = $1, meta_adset_id = $2, meta_creative_id = $3, meta_ad_id = $4, meta_dispatched_at = CURRENT_TIMESTAMP
+      WHERE id = $5
+    `, [rollbackState.metaCampaignId, rollbackState.metaAdSetId, rollbackState.metaCreativeId, rollbackState.metaAdId, campaignId]);
+
+    await pool.query(`UPDATE meta_publishing_transactions SET publish_status = 'SUCCESS', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [txId]);
+
+    broadcastDbEvent(req, 'marketing');
+    return true;
+
+  } catch (error: any) {
+    console.error(`[META ENGINE FAULT] Campaign ${campaignId} failed.`, error);
+    
+    const rawErrorPayload = error.metaData || error.response || { error: { message: error.message } };
+    const classification = classifyMetaError(rawErrorPayload);
+
+    // Phase 3: Trigger explicit reverse cascade rollback
+    const rollbackRes = await executeMetaRollback(rollbackState, correlationId, pool);
+    let finalTxStatus = 'FAILED_PUBLISH';
+    let rollbackStatus = 'NOT_REQUIRED';
+
+    const hasCreatedObjects = !!(rollbackState.metaCampaignId || rollbackState.metaAdSetId || rollbackState.metaCreativeId || rollbackState.metaAdId);
+
+    if (hasCreatedObjects) {
+      rollbackStatus = rollbackRes.success ? 'SUCCESS' : 'FAILED';
+      finalTxStatus = rollbackRes.success ? 'ROLLBACK_SUCCESS' : 'ROLLBACK_FAILED';
+    }
+
+    const stageName = rollbackState.metaCreativeId
+      ? 'AD_CREATION'
+      : (rollbackState.metaAdSetId ? 'CREATIVE_CREATION' : (rollbackState.metaCampaignId ? 'ADSET_CREATION' : 'CAMPAIGN_CREATION'));
+
+    // Update meta_publishing_transactions with full classification
+    await pool.query(`
+      UPDATE meta_publishing_transactions 
+      SET publish_status = $1, 
+          failure_code = $2, 
+          failure_category = $3, 
+          failure_stage = $4, 
+          rollback_status = $5,
+          error_details = $6,
+          updated_at = CURRENT_TIMESTAMP 
+      WHERE id = $7
+    `, [finalTxStatus, classification.code_name, classification.category, stageName, rollbackStatus, JSON.stringify(rawErrorPayload), txId]);
+
+    // Update host_marketing_campaigns (NEVER MARK LIVE)
+    const feedbackMsg = `${classification.user_title}: ${classification.recommended_action || classification.action_required || ''}`;
+    await pool.query(`
+      UPDATE host_marketing_campaigns 
+      SET status = 'failed_publish', admin_feedback = $1 
+      WHERE id = $2
+    `, [feedbackMsg, campaignId]);
+    
+    // Phase 13: Record in Dead Letter Queue
+    try {
+      await pool.query(`
+        INSERT INTO meta_publishing_dlq (
+          transaction_id, campaign_id, correlation_id, failure_stage, failure_code, requires_human_action, error_payload, recommended_action

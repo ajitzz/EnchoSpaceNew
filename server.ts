@@ -5745,12 +5745,14 @@ async function checkExternalMetaReadiness(dbPool: any, correlationId: string) {
 
   // Signal 3: App Mode Verification (Requires App Token or Admin rights)
   try {
-    const appRes = await fetch(`${baseUrl}/${appId}?fields=is_in_development_mode&access_token=${accessToken}`);
+    const appSecret = process.env.META_APP_SECRET;
+    const verifyToken = appSecret ? `${appId}|${appSecret}` : accessToken;
+    const appRes = await fetch(`${baseUrl}/${appId}?fields=is_in_development_mode&access_token=${verifyToken}`);
     const appData = await appRes.json();
     if (appData.error) {
       // Often token doesn't have app read permissions
       report.signals.push({ type: 'APP_MODE', status: 'EXTERNAL_UNVERIFIABLE', error: appData.error });
-      // We do not block here if it's unverifiable, but we rely on human DB flags
+      report.blockers.push('App Mode is EXTERNAL_UNVERIFIABLE. System token lacks permission to verify App Mode.');
     } else {
       if (appData.is_in_development_mode) {
         report.signals.push({ type: 'APP_MODE', status: 'FAILED', data: appData });
@@ -6201,7 +6203,7 @@ async function evaluateMetaPreflightDiagnostics(
         : 'Infrastructure Status: Meta Integration external readiness checks failed. Please contact administrator.'
     });
   } else if (process.env.META_CANARY_2_READY !== 'true' || appMode === 'development' || devModeBlockedInDb) {
-    const failureReason = 'Canary #2 Readiness Gate inactive (META_CANARY_2_READY is not true).';
+    let failureReason = 'Canary #2 Readiness Gate inactive (META_CANARY_2_READY is not true).';
     if (devModeBlockedInDb || appMode === 'development') {
       failureReason = 'Meta App 1347659864208278 is currently in Development Mode on Meta Developers Console (error 100/1885183).';
     }
@@ -6358,6 +6360,22 @@ export function classifyMetaError(data: any): MetaErrorClassification {
   const code = Number(e?.code || 0);
   const subcode = Number(e?.error_subcode || 0);
   const msg = String(e?.message || e?.error_user_msg || (typeof data === 'string' ? data : '')).toLowerCase();
+
+  if (msg.includes('assignment to constant variable') || msg.includes('is not a function') || msg.includes('is not defined') || e instanceof TypeError || e instanceof ReferenceError || msg.includes('cannot read properties') || msg.includes('typeerror') || msg.includes('referenceerror')) {
+    return {
+      code_name: 'INTERNAL_RUNTIME_ERROR',
+      category: 'INTERNAL_APPLICATION',
+      severity: 'BLOCKER',
+      user_title: 'Internal Application Error',
+      user_message: 'The publishing engine encountered an internal code execution fault.',
+      technical_message: `Runtime Error: ${e?.message || msg}`,
+      retryable: false,
+      requires_human_action: false,
+      blocks_dispatch: true,
+      rollback_required: false,
+      recommended_action: 'Engineering action required. Please inspect application logs.'
+    };
+  }
 
   // 1. Meta App in Development Mode Block (Error 100, Subcode 1885183)
   if ((code === 100 && subcode === 1885183) || msg.includes('development mode')) {
