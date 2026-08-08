@@ -6184,8 +6184,8 @@ async function evaluateMetaPreflightDiagnostics(
   }
 
   if (options.externalReport && !options.externalReport.is_ready) {
-    let devModeFail = options.externalReport.blockers.find((b: string) => b.includes('Development Mode'));
-    let failureReason = devModeFail ? devModeFail : options.externalReport.blockers.join(' | ');
+    const devModeFail = options.externalReport.blockers.find((b: string) => b.includes('Development Mode'));
+    const failureReason = devModeFail ? devModeFail : options.externalReport.blockers.join(' | ');
     gateResults.push({
       gate_id: 14,
       gate_key: 'GATE_14_CANARY_2_READY',
@@ -6201,7 +6201,7 @@ async function evaluateMetaPreflightDiagnostics(
         : 'Infrastructure Status: Meta Integration external readiness checks failed. Please contact administrator.'
     });
   } else if (process.env.META_CANARY_2_READY !== 'true' || appMode === 'development' || devModeBlockedInDb) {
-    let failureReason = 'Canary #2 Readiness Gate inactive (META_CANARY_2_READY is not true).';
+    const failureReason = 'Canary #2 Readiness Gate inactive (META_CANARY_2_READY is not true).';
     if (devModeBlockedInDb || appMode === 'development') {
       failureReason = 'Meta App 1347659864208278 is currently in Development Mode on Meta Developers Console (error 100/1885183).';
     }
@@ -6721,15 +6721,7 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
 
     const cleanAdAccountId = rawAdAccountId.startsWith('act_') ? rawAdAccountId : `act_${rawAdAccountId}`;
     
-    // Meta Error Intelligence Catalog
-    const classifyMetaError = (data: any) => {
-      const e = data.error;
-      if (!e) return 'UNKNOWN_ERROR';
-      if (e.code === 190) return 'AUTH_ERROR_TOKEN_EXPIRED';
-      if (e.code === 100 && e.error_subcode === 1885016) return 'AD_ACCOUNT_DISABLED';
-      if (e.is_transient) return 'TRANSIENT_NETWORK_ERROR';
-      return 'API_ERROR';
-    };
+    // Using global classifyMetaError from Phase 11
 
     // Phase 4: Retry Engine with Exponential Backoff
     const executeMetaRequest = async (stepName: string, endpoint: string, payload: any, maxRetries = 3) => {
