@@ -6200,20 +6200,6 @@ async function evaluateMetaPreflightDiagnostics(
 
   // Gate 14: Meta Canary #2 Readiness & Development Mode Restriction Gate
   const appMode = (process.env.META_APP_MODE as 'development' | 'live') || 'development';
-  let devModeBlockedInDb = false;
-
-  try {
-    const devBlockCheck = await dbPool.query(`
-      SELECT id FROM meta_api_traces
-      WHERE meta_error_subcode = 1885183 OR meta_error_message LIKE '%development mode%'
-      ORDER BY created_at DESC LIMIT 1
-    `);
-    if (devBlockCheck.rows.length > 0) {
-      devModeBlockedInDb = true;
-    }
-  } catch(e) {
-    // Ignore db query error
-  }
 
   let billingWarning = '';
   if (options.externalReport) {
@@ -6240,9 +6226,9 @@ async function evaluateMetaPreflightDiagnostics(
         ? `Remediate external readiness blockers: ${failureReason}`
         : 'Infrastructure Status: Meta Integration external readiness checks failed. Please contact administrator.'
     });
-  } else if (process.env.META_CANARY_2_READY !== 'true' || appMode === 'development' || devModeBlockedInDb) {
+  } else if (process.env.META_CANARY_2_READY !== 'true' || appMode === 'development') {
     let failureReason = 'Canary #2 Readiness Gate inactive (META_CANARY_2_READY is not true).';
-    if (devModeBlockedInDb || appMode === 'development') {
+    if (appMode === 'development') {
       failureReason = `Meta App ${process.env.META_APP_ID || '1347659864208278'} is currently in Development Mode on Meta Developers Console (error 100/1885183).`;
     }
 
