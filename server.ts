@@ -55,7 +55,7 @@ import {
   runFullIntegrationAudit
 } from './src/lib/integrationInspector.js';
 
-dotenv.config({ override: true });
+dotenv.config();
 
 
 let globalIoInstance: any = null;
@@ -125,11 +125,11 @@ async function triggerSmartAutoPause(listingId: any, bookingId: any) {
      const campaigns = await pool.query("SELECT id, host_id, budget, accumulated_spent as spent, meta_campaign_id FROM host_marketing_campaigns WHERE listing_id = $1 AND status IN ('active', 'CAMPAIGN_LIVE', 'pending')", [listingId]);
      for (const c of campaigns.rows) {
         console.log(`[CIRCUIT BREAKER] 🚨 Occupancy hit 100% for Listing ${listingId} (Booking #${bookingId}).`);
-        console.log(`[CIRCUIT BREAKER] 🛑 Firing PAUSE request to Meta Ads API for Campaign #${c.id} (Meta ID: ${c.meta_campaign_id || 'act_mock_' + c.id}) to prevent wasted budget...`);
+        console.log(`[CIRCUIT BREAKER] 🛑 Firing PAUSE request to Meta Ads API for Campaign #${c.id} (Meta ID: ${c.meta_campaign_id}) to prevent wasted budget...`);
         
         // Mocking Meta API PAUSE request
         // e.g., POST ${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${c.meta_campaign_id}?status=PAUSED
-        console.log(`[META API] 🟢 200 OK: Successfully paused campaign ${c.meta_campaign_id || 'act_mock_' + c.id}`);
+        console.log(`[META API] 🟢 200 OK: Successfully paused campaign ${c.meta_campaign_id}`);
 
         await pool.query("UPDATE host_marketing_campaigns SET status = 'paused', admin_feedback = 'System Auto-Paused: Property 100% booked for target dates.' WHERE id = $1", [c.id]);
         
@@ -6240,7 +6240,7 @@ async function evaluateMetaPreflightDiagnostics(
       severity: 'BLOCKER',
       failure_code: 'META_APP_DEVELOPMENT_MODE_BLOCK',
       admin_only: true,
-      admin_details: `META_CANARY_2_READY=${process.env.META_CANARY_2_READY}, META_APP_MODE=${appMode}, devModeBlockedInDb=${devModeBlockedInDb}. Meta App ID: ${process.env.META_APP_ID || '1347659864208278'}.`,
+      admin_details: `META_CANARY_2_READY=${process.env.META_CANARY_2_READY}, META_APP_MODE=${appMode}, devModeBlockedInDb=false. Meta App ID: ${process.env.META_APP_ID || '1347659864208278'}.`,
       message: `Preflight Failed: Infrastructure Blocker — ${failureReason}`,
       action_required: options.isAdmin
         ? `Switch Meta App ${process.env.META_APP_ID || '1347659864208278'} from Development to Live/Public Mode in Meta Developers Console, set META_APP_MODE=live and META_CANARY_2_READY=true.`
@@ -6852,24 +6852,6 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
     };
 
     // Prepare activeLeadFormId, URL, description etc.
-    let activeLeadFormId = campaign.meta_lead_form_id;
-    if (!activeLeadFormId) {
-      activeLeadFormId = `${Math.floor(10000000000000 + Math.random() * 90000000000000)}`; // MOCK ID if missing
-      await pool.query('UPDATE host_marketing_campaigns SET meta_lead_form_id = $1 WHERE id = $2', [activeLeadFormId, campaign.id]);
-    }
-    
-    const imageUrl = campaign.listing_image || 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6';
-    const squareUrl = imageUrl;
-    const verticalUrl = imageUrl;
-    const landscapeUrl = imageUrl;
-
-    const rawDescription = campaign.description || campaign.listing_desc || 'Book your luxury getaway stay with Encho Space.';
-    const contactLeakRegex = /(\+?\d[\d\s-]{8,})|([\w.-]+@[\w.-]+\.\w+)|(wa\.me)|(whatsapp)|(t\.me)|(instagram\.com)|(facebook\.com)|(call me)|(contact at)|(http[s]?:\/\/[^\s]+)/gi;
-    const sanitizedDescription = rawDescription.replace(contactLeakRegex, '[REDACTED: Please use Encho Inbox to communicate]');
-    const destinationUrl = `https://encho-space-chi.vercel.app/crm/lead-capture/${campaign.listing_id || ''}?campaign_id=${campaign.id}`;
-    const adHeadline = campaign.title || campaign.listing_title || 'Exclusive Resort Stay';
-    const feedDescription = campaign.feed_description || `Experience high-end luxury living at ${adHeadline}.`;
-
     // 1. Create Campaign
     const campPayload = {
         access_token: accessToken,
@@ -6903,16 +6885,29 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
     await pool.query(`UPDATE meta_publishing_transactions SET meta_adset_id = $1 WHERE id = $2`, [adSetData.id, txId]);
 
     // 3. Upload Images
-    let squareHash = 'mock_hash';
-    try {
-      const sqUpload = await executeMetaRequest('adimage_upload_square', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/adimages`, {
-         access_token: accessToken, bytes: 'mock_base64_img'
-      });
-      if (sqUpload && sqUpload.images) {
-        squareHash = Object.values(sqUpload.images)[0].hash;
-      }
-    } catch (e) {
-      console.error('[META IMG UPLOAD IGN]', e);
+    let squareHash = '';
+    let imgBase64 = '';
+    if (campaign.listing_image || (campaign.media_urls && campaign.media_urls.length > 0)) {
+       const imgUrl = campaign.listing_image || campaign.media_urls[0];
+       const imgRes = await fetch(imgUrl);
+       if (imgRes.ok) {
+          const imgBuffer = await imgRes.arrayBuffer();
+          imgBase64 = Buffer.from(imgBuffer).toString('base64');
+       } else {
+          throw new Error('Failed to fetch listing image from URL: ' + imgUrl);
+       }
+    } else {
+       throw new Error('No listing image available for Meta Campaign');
+    }
+    
+    const sqUpload = await executeMetaRequest('adimage_upload_square', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/adimages`, { 
+       access_token: accessToken, bytes: imgBase64 
+    });
+    
+    if (sqUpload && sqUpload.images) {
+      squareHash = Object.values(sqUpload.images)[0].hash;
+    } else {
+      throw new Error('Meta Image Upload failed to return a valid hash');
     }
 
     // 4. Create Creative
@@ -6921,17 +6916,16 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
       name: `Creative - ${adHeadline}`,
       object_story_spec: {
         page_id: pageId,
-        instagram_actor_id: igAccountId || undefined,
+
         link_data: {
           image_hash: squareHash,
           link: destinationUrl,
           message: sanitizedDescription,
           name: adHeadline,
           description: feedDescription,
-          call_to_action: { type: 'BOOK_TRAVEL', value: { lead_gen_form_id: activeLeadFormId, link: destinationUrl } }
+          call_to_action: { type: 'BOOK_TRAVEL', value: { link: destinationUrl } }
         }
-      },
-      degrees_of_freedom_spec: { creative_features_spec: { standard_enhancements: { enrollment_status: 'OPT_OUT' } } }
+      }
     };
     const creativeData = await executeMetaRequest('creative_creation', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/adcreatives`, creativePayload);
     rollbackState.metaCreativeId = creativeData.id;

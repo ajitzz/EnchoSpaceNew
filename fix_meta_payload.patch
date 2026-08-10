@@ -1,0 +1,30 @@
+--- server.ts
++++ server.ts
+@@ -6909,9 +6909,17 @@
+     // 3. Upload Images
+     let squareHash = 'mock_hash';
+     try {
++      let imgBase64 = 'mock_base64_img';
++      if (campaign.listing_image) {
++         const imgRes = await fetch(campaign.listing_image);
++         if (imgRes.ok) {
++            const imgBuffer = await imgRes.arrayBuffer();
++            imgBase64 = Buffer.from(imgBuffer).toString('base64');
++         }
++      }
+       const sqUpload = await executeMetaRequest('adimage_upload_square', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/adimages`, { 
+-         access_token: accessToken, bytes: 'mock_base64_img' 
++         access_token: accessToken, bytes: imgBase64 
+       });
+       if (sqUpload && sqUpload.images) {
+         squareHash = Object.values(sqUpload.images)[0].hash;
+@@ -6931,8 +6939,7 @@
+           name: adHeadline,
+           description: feedDescription,
+           call_to_action: { type: 'BOOK_TRAVEL', value: { lead_gen_form_id: activeLeadFormId, link: destinationUrl } }
+         }
+-      },
+-      degrees_of_freedom_spec: { creative_features_spec: { standard_enhancements: { enrollment_status: 'OPT_OUT' } } }
++      }
+     };
+     const creativeData = await executeMetaRequest('creative_creation', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/adcreatives`, creativePayload);

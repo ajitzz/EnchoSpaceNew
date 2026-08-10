@@ -1,32 +1,53 @@
 const fs = require('fs');
-let code = fs.readFileSync('server.ts', 'utf8');
 
-const startMarker = "export interface MetaErrorClassification {";
-const endMarker = "  return { success: allSucceeded, details };\n}";
-const gate14Marker = "  // Gate 14:";
+let content = fs.readFileSync('server.ts', 'utf8');
 
-const startIndex = code.indexOf(startMarker);
-const endIndex = code.indexOf(endMarker, startIndex) + endMarker.length;
-const gate14Index = code.indexOf(gate14Marker, endIndex);
+const target1 = `    // 3. Upload Images
+    let squareHash = 'mock_hash';
+    try {
+      const sqUpload = await executeMetaRequest('adimage_upload_square', \`\${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/\${cleanAdAccountId}/adimages\`, { 
+         access_token: accessToken, bytes: 'mock_base64_img' 
+      });`;
 
-if (startIndex === -1 || endIndex === -1 || gate14Index === -1) {
-  console.log("Could not find markers.");
-  process.exit(1);
+const replacement1 = `    // 3. Upload Images
+    let squareHash = 'mock_hash';
+    try {
+      let imgBase64 = 'mock_base64_img';
+      if (campaign.listing_image || (campaign.media_urls && campaign.media_urls.length > 0)) {
+         const imgUrl = campaign.listing_image || campaign.media_urls[0];
+         const imgRes = await fetch(imgUrl);
+         if (imgRes.ok) {
+            const imgBuffer = await imgRes.arrayBuffer();
+            imgBase64 = Buffer.from(imgBuffer).toString('base64');
+         }
+      }
+      const sqUpload = await executeMetaRequest('adimage_upload_square', \`\${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/\${cleanAdAccountId}/adimages\`, { 
+         access_token: accessToken, bytes: imgBase64 
+      });`;
+
+const target2 = `          call_to_action: { type: 'BOOK_TRAVEL', value: { lead_gen_form_id: activeLeadFormId, link: destinationUrl } }
+        }
+      },
+      degrees_of_freedom_spec: { creative_features_spec: { standard_enhancements: { enrollment_status: 'OPT_OUT' } } }
+    };`;
+
+const replacement2 = `          call_to_action: { type: 'BOOK_TRAVEL', value: { lead_gen_form_id: activeLeadFormId, link: destinationUrl } }
+        }
+      }
+    };`;
+
+if (content.includes(target1)) {
+    content = content.replace(target1, replacement1);
+    console.log('Replaced target1');
+} else {
+    console.log('Could not find target1.');
 }
 
-const extractedCode = code.substring(startIndex, endIndex);
-
-let newCode = code.substring(0, startIndex) + code.substring(endIndex);
-
-const evalEndMarker = "  };\n}";
-const evalEndIndex = newCode.indexOf(evalEndMarker, startIndex);
-if (evalEndIndex === -1) {
-  console.log("Could not find eval function end.");
-  process.exit(1);
+if (content.includes(target2)) {
+    content = content.replace(target2, replacement2);
+    console.log('Replaced target2');
+} else {
+    console.log('Could not find target2.');
 }
 
-// Insert extracted code right after evalEndMarker
-newCode = newCode.substring(0, evalEndIndex + evalEndMarker.length) + "\n\n" + extractedCode + "\n" + newCode.substring(evalEndIndex + evalEndMarker.length);
-
-fs.writeFileSync('server.ts', newCode);
-console.log("Fixed server.ts!");
+fs.writeFileSync('server.ts', content);
