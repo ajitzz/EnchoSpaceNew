@@ -5743,26 +5743,56 @@ async function checkExternalMetaReadiness(dbPool: any, correlationId: string) {
     report.signals.push({ type: 'AD_ACCOUNT', status: 'UNVERIFIABLE', error: e.message });
   }
 
+  // Signal 4: Billing Readiness
+  try {
+    // Attempting to fetch billing_event or funding_source_details usually requires additional scopes or business manager access
+    // Instead of failing the readiness check outright if we cannot verify it, we set it to EXTERNAL_UNVERIFIABLE
+    const billingRes = await fetch(`${baseUrl}/${cleanAdAccountId}?fields=funding_source_details,balance,amount_spent&access_token=${accessToken}`);
+    const billingData = await billingRes.json();
+    if (billingData.error) {
+      report.signals.push({ type: 'BILLING', status: 'EXTERNAL_UNVERIFIABLE', error: billingData.error });
+    } else {
+      report.signals.push({ type: 'BILLING', status: 'EXTERNAL_UNVERIFIABLE', data: billingData });
+    }
+  } catch (e: any) {
+    report.signals.push({ type: 'BILLING', status: 'EXTERNAL_UNVERIFIABLE', error: e.message });
+  }
+
   // Signal 3: App Mode Verification (Requires App Token or Admin rights)
   try {
     const appSecret = process.env.META_APP_SECRET;
-    const verifyToken = appSecret ? `${appId}|${appSecret}` : accessToken;
-    const appRes = await fetch(`${baseUrl}/${appId}?fields=is_in_development_mode&access_token=${verifyToken}`);
-    const appData = await appRes.json();
-    if (appData.error) {
-      // Often token doesn't have app read permissions
-      report.signals.push({ type: 'APP_MODE', status: 'EXTERNAL_UNVERIFIABLE', error: appData.error });
-      report.blockers.push('App Mode is EXTERNAL_UNVERIFIABLE. System token lacks permission to verify App Mode.');
-    } else {
-      if (appData.is_in_development_mode) {
-        report.signals.push({ type: 'APP_MODE', status: 'FAILED', data: appData });
-        report.blockers.push(`Meta App ${appId} is currently in Development Mode.`);
+    if (!appSecret) {
+      report.signals.push({ type: 'APP_MODE', status: 'EXTERNAL_UNVERIFIABLE', error: 'Missing META_APP_SECRET' });
+      if (process.env.META_HUMAN_VERIFIED_APP_MODE_LIVE === 'true') {
+         report.signals.push({ type: 'APP_MODE_HUMAN_VERIFIED', status: 'PASSED' });
       } else {
-        report.signals.push({ type: 'APP_MODE', status: 'PASSED', data: appData });
+         report.blockers.push('App Mode is EXTERNAL_UNVERIFIABLE. Provide META_APP_SECRET or set META_HUMAN_VERIFIED_APP_MODE_LIVE=true to confirm manually.');
+      }
+    } else {
+      const verifyToken = `${appId}|${appSecret}`;
+      const appRes = await fetch(`${baseUrl}/${appId}?fields=is_in_development_mode&access_token=${verifyToken}`);
+      const appData = await appRes.json();
+      if (appData.error) {
+        report.signals.push({ type: 'APP_MODE', status: 'EXTERNAL_UNVERIFIABLE', error: appData.error });
+        if (process.env.META_HUMAN_VERIFIED_APP_MODE_LIVE === 'true') {
+           report.signals.push({ type: 'APP_MODE_HUMAN_VERIFIED', status: 'PASSED' });
+        } else {
+           report.blockers.push('App Mode is EXTERNAL_UNVERIFIABLE. App token failed. Set META_HUMAN_VERIFIED_APP_MODE_LIVE=true to bypass manually.');
+        }
+      } else {
+        if (appData.is_in_development_mode) {
+          report.signals.push({ type: 'APP_MODE', status: 'FAILED', data: appData });
+          report.blockers.push(`Meta App ${appId} is currently in Development Mode.`);
+        } else {
+          report.signals.push({ type: 'APP_MODE', status: 'PASSED', data: appData });
+        }
       }
     }
   } catch (e: any) {
     report.signals.push({ type: 'APP_MODE', status: 'UNVERIFIABLE', error: e.message });
+    if (process.env.META_HUMAN_VERIFIED_APP_MODE_LIVE !== 'true') {
+      report.blockers.push('App Mode is UNVERIFIABLE. Set META_HUMAN_VERIFIED_APP_MODE_LIVE=true to confirm manually.');
+    }
   }
 
   report.is_ready = report.blockers.length === 0;
@@ -6185,8 +6215,16 @@ async function evaluateMetaPreflightDiagnostics(
     // Ignore db query error
   }
 
+  let billingWarning = '';
+  if (options.externalReport) {
+    const billingSignal = options.externalReport.signals.find((s: any) => s.type === 'BILLING');
+    if (billingSignal && billingSignal.status === 'EXTERNAL_UNVERIFIABLE') {
+      billingWarning = ' (Warning: Payment method exists in Meta Business Portfolio, but attachment to the Master Ad Account act_' + process.env.META_AD_ACCOUNT_ID + ' has not been externally verified.)';
+    }
+  }
+
   if (options.externalReport && !options.externalReport.is_ready) {
-    const devModeFail = options.externalReport.blockers.find((b: string) => b.includes('Development Mode'));
+    const devModeFail = options.externalReport.blockers.find((b: string) => b.includes('Development Mode') || b.includes('META_HUMAN_VERIFIED_APP_MODE_LIVE'));
     const failureReason = devModeFail ? devModeFail : options.externalReport.blockers.join(' | ');
     gateResults.push({
       gate_id: 14,
@@ -6196,8 +6234,8 @@ async function evaluateMetaPreflightDiagnostics(
       severity: 'BLOCKER',
       failure_code: devModeFail ? 'META_APP_DEVELOPMENT_MODE_BLOCK' : 'META_EXTERNAL_PRODUCTION_READINESS_FAILED',
       admin_only: true,
-      admin_details: `External Blockers: ${options.externalReport.blockers.join(', ')}`,
-      message: `Preflight Failed: Infrastructure Blocker — ${failureReason}`,
+      admin_details: `External Blockers: ${options.externalReport.blockers.join(', ')}${billingWarning}`,
+      message: `Preflight Failed: Infrastructure Blocker — ${failureReason}${billingWarning}`,
       action_required: options.isAdmin
         ? `Remediate external readiness blockers: ${failureReason}`
         : 'Infrastructure Status: Meta Integration external readiness checks failed. Please contact administrator.'
@@ -6448,8 +6486,8 @@ export function classifyMetaError(data: any): MetaErrorClassification {
   // 5. Missing Payment Method
   if ((code === 100 && subcode === 1359188) || msg.includes('payment method')) {
     return {
-      code_name: 'NO_PAYMENT_METHOD',
-      category: 'AD_ACCOUNT',
+      code_name: 'META_BILLING_PAYMENT_METHOD_REQUIRED',
+      category: 'EXTERNAL_BILLING',
       severity: 'BLOCKER',
       user_title: 'No Payment Method on Meta Ad Account',
       user_message: 'Master Ad Account has no valid payment method attached.',
@@ -6458,7 +6496,7 @@ export function classifyMetaError(data: any): MetaErrorClassification {
       requires_human_action: true,
       blocks_dispatch: true,
       rollback_required: true,
-      recommended_action: 'Add valid payment method in Meta Billing & Payment Centre.'
+      recommended_action: 'Add a valid Meta-supported payment method to Master Meta Ad Account act_1681483723153196 in Meta Billing & Payments.'
     };
   }
 
@@ -6940,6 +6978,15 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
       ? 'AD_CREATION'
       : (rollbackState.metaAdSetId ? 'CREATIVE_CREATION' : (rollbackState.metaCampaignId ? 'ADSET_CREATION' : 'CAMPAIGN_CREATION'));
 
+    // Prevent circular reference crashes when persisting error
+    const safeErrorPayload = (() => {
+      try {
+        return JSON.stringify(rawErrorPayload);
+      } catch (e) {
+        return JSON.stringify({ error: { message: rawErrorPayload?.message || 'Circular reference in error payload' }});
+      }
+    })();
+
     // Update meta_publishing_transactions with full classification
     await pool.query(`
       UPDATE meta_publishing_transactions 
@@ -6951,7 +6998,7 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
           error_details = $6,
           updated_at = CURRENT_TIMESTAMP 
       WHERE id = $7
-    `, [finalTxStatus, classification.code_name, classification.category, stageName, rollbackStatus, JSON.stringify(rawErrorPayload), txId]);
+    `, [finalTxStatus, classification.code_name, classification.category, stageName, rollbackStatus, safeErrorPayload, txId]);
 
     // Update host_marketing_campaigns (NEVER MARK LIVE)
     const feedbackMsg = `${classification.user_title}: ${classification.recommended_action || classification.action_required || ''}`;
@@ -8129,11 +8176,23 @@ app.get('/api/admin/marketing/dashboard/stats', authenticateToken, async (req: A
       LIMIT 5
     `);
     
+    const h = queueHealthRes.rows[0];
+    const total = Number(h.total_transactions) || 0;
+    const success = Number(h.success) || 0;
+    // Success rate is calculated strictly on terminal SUCCESS state over total transactions
+    const success_rate = total > 0 ? Math.round((success / total) * 100) : 100;
+    
+    // avg_latency_ms is average of latency
+    const avg_latency_ms = latencyRes.rows.length > 0 ? Math.round(latencyRes.rows.reduce((sum, r) => sum + Number(r.avg_latency), 0) / latencyRes.rows.length) : 0;
+
     res.json({
-      health: queueHealthRes.rows[0],
+      health: h,
       latency: latencyRes.rows,
       dlq: dlqRes.rows[0],
-      common_failures: failureRes.rows
+      common_failures: failureRes.rows,
+      total_transactions: total,
+      success_rate,
+      avg_latency_ms
     });
   } catch (error: any) {
     console.error('Error fetching dashboard stats:', error);
@@ -8217,6 +8276,7 @@ app.get('/api/admin/marketing/health', authenticateToken, async (req: AuthReques
     const health = {
       meta_access_token: !!accessToken,
       meta_ad_account: !!adAccountId,
+      meta_ad_account_id: adAccountId,
       meta_page_id: !!pageId,
       meta_instagram_account: !!process.env.META_INSTAGRAM_ACCOUNT_ID,
       kill_switch_active: process.env.META_PUBLISHING_PAUSED === 'true',

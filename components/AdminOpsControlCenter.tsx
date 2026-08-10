@@ -362,7 +362,7 @@ export const AdminOpsControlCenter: React.FC<AdminOpsControlCenterProps> = () =>
             <div className="text-gray-400">Active Credential</div>
             <div className="text-lg font-bold text-blue-400 mt-1 flex items-center gap-1.5 truncate">
               <Lock className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">Master Act #{process.env.META_AD_ACCOUNT_ID || 'Configured'}</span>
+              <span className="truncate">Master Act #{healthData?.meta_ad_account_id || 'Configured'}</span>
             </div>
           </div>
         </div>
