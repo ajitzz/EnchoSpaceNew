@@ -1,26 +1,8 @@
 const { Pool } = require('pg');
-require('dotenv').config();
-
-// Fix connection string if needed
-let dbUrl = process.env.DATABASE_URL;
-if (dbUrl && dbUrl.includes('?')) {
-    dbUrl = dbUrl.split('?')[0];
-}
-
-const pool = new Pool({
-  connectionString: dbUrl,
-  ssl: { rejectUnauthorized: false }
-});
-
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 async function run() {
-  const client = await pool.connect();
-  try {
-    const res = await client.query('SELECT 1 as test');
-    console.log(res.rows);
-  } finally {
-    client.release();
-    await pool.end();
-  }
+  const res = await pool.query('SELECT error_details FROM meta_publishing_transactions WHERE id = 31');
+  console.log(JSON.stringify(res.rows[0], null, 2));
+  process.exit(0);
 }
-
-run().catch(console.error);
+run();

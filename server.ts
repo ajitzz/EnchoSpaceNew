@@ -6243,7 +6243,7 @@ async function evaluateMetaPreflightDiagnostics(
   } else if (process.env.META_CANARY_2_READY !== 'true' || appMode === 'development' || devModeBlockedInDb) {
     let failureReason = 'Canary #2 Readiness Gate inactive (META_CANARY_2_READY is not true).';
     if (devModeBlockedInDb || appMode === 'development') {
-      failureReason = 'Meta App 1347659864208278 is currently in Development Mode on Meta Developers Console (error 100/1885183).';
+      failureReason = `Meta App ${process.env.META_APP_ID || '1347659864208278'} is currently in Development Mode on Meta Developers Console (error 100/1885183).`;
     }
 
     gateResults.push({
@@ -6254,10 +6254,10 @@ async function evaluateMetaPreflightDiagnostics(
       severity: 'BLOCKER',
       failure_code: 'META_APP_DEVELOPMENT_MODE_BLOCK',
       admin_only: true,
-      admin_details: `META_CANARY_2_READY=${process.env.META_CANARY_2_READY}, META_APP_MODE=${appMode}, devModeBlockedInDb=${devModeBlockedInDb}. Meta App ID: 1347659864208278.`,
+      admin_details: `META_CANARY_2_READY=${process.env.META_CANARY_2_READY}, META_APP_MODE=${appMode}, devModeBlockedInDb=${devModeBlockedInDb}. Meta App ID: ${process.env.META_APP_ID || '1347659864208278'}.`,
       message: `Preflight Failed: Infrastructure Blocker — ${failureReason}`,
       action_required: options.isAdmin
-        ? 'Switch Meta App 1347659864208278 from Development to Live/Public Mode in Meta Developers Console, set META_APP_MODE=live and META_CANARY_2_READY=true.'
+        ? `Switch Meta App ${process.env.META_APP_ID || '1347659864208278'} from Development to Live/Public Mode in Meta Developers Console, set META_APP_MODE=live and META_CANARY_2_READY=true.`
         : 'Infrastructure Status: Meta Integration is currently in Canary Sandbox / Development mode. Your campaign draft configuration is valid and ready for Admin review once Meta App is switched to Live Mode.'
     });
   } else {
@@ -6399,6 +6399,25 @@ export function classifyMetaError(data: any): MetaErrorClassification {
   const subcode = Number(e?.error_subcode || 0);
   const msg = String(e?.message || e?.error_user_msg || (typeof data === 'string' ? data : '')).toLowerCase();
 
+  if (msg.includes('preflight failed') || e?.diagnosticReport) {
+    const diagnosticReport = e?.diagnosticReport;
+    const firstBlocker = diagnosticReport?.gate_results?.find((g: any) => g.status === 'FAILED' && g.severity === 'BLOCKER');
+    
+    return {
+      code_name: firstBlocker?.failure_code || 'PREFLIGHT_VALIDATION_FAILED',
+      category: 'PREFLIGHT',
+      severity: 'BLOCKER',
+      user_title: 'Preflight Safety Check Failed',
+      user_message: 'The campaign was blocked by Encho AI internal safety gates before reaching Meta.',
+      technical_message: e?.message || msg,
+      retryable: false,
+      requires_human_action: true,
+      blocks_dispatch: true,
+      rollback_required: false,
+      recommended_action: firstBlocker?.action_required || 'Review Preflight Diagnostics in Admin Console.'
+    };
+  }
+
   if (msg.includes('assignment to constant variable') || msg.includes('is not a function') || msg.includes('is not defined') || e instanceof TypeError || e instanceof ReferenceError || msg.includes('cannot read properties') || msg.includes('typeerror') || msg.includes('referenceerror')) {
     return {
       code_name: 'INTERNAL_RUNTIME_ERROR',
@@ -6428,7 +6447,7 @@ export function classifyMetaError(data: any): MetaErrorClassification {
       requires_human_action: true,
       blocks_dispatch: true,
       rollback_required: true,
-      recommended_action: 'Switch Meta App 1347659864208278 from Development to Live/Public Mode in Meta Developers Console.'
+      recommended_action: `Switch Meta App ${process.env.META_APP_ID || '1347659864208278'} from Development to Live/Public Mode in Meta Developers Console.`
     };
   }
 
@@ -6959,7 +6978,7 @@ async function dispatchMetaCampaign(campaignId: number, req: any) {
   } catch (error: any) {
     console.error(`[META ENGINE FAULT] Campaign ${campaignId} failed.`, error);
     
-    const rawErrorPayload = error.metaData || error.response || { error: { message: error.message } };
+    const rawErrorPayload = error.metaData || error.response || { error: { message: error.message, diagnosticReport: error.diagnosticReport } };
     const classification = classifyMetaError(rawErrorPayload);
 
     // Phase 3: Trigger explicit reverse cascade rollback
