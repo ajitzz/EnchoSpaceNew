@@ -408,7 +408,7 @@ export class MetaGraphClient {
       };
     }
 
-    const pageUrl = `${source}?fields=id,name,access_token,tasks,instagram_business_account&access_token=${accessToken}`;
+    const pageUrl = `${source}?fields=id,name,access_token,instagram_business_account&access_token=${accessToken}`;
     const { status, data, error } = await this.safeFetch(pageUrl);
 
     if (error) {
@@ -441,17 +441,34 @@ export class MetaGraphClient {
       };
     }
 
-    if (!data.access_token && (!data.tasks || data.tasks.length === 0)) {
+    if (!data.id) {
       return {
         check_name,
-        expected: `Page admin or posting access token for Page ${pageId}`,
-        actual: 'Page Object returned without access_token or tasks',
+        expected: `Accessible Page ${pageId}`,
+        actual: 'Page Object returned without a valid ID',
         source,
         timestamp,
         correlation_id: correlationId,
         status: 'FAILED',
         failure_code: 'META_PAGE_ACCESS_DENIED',
-        message: `Master System Access Token lacks admin or posting management role on Page ${pageId}.`
+        message: `Master System Access Token cannot verify identity on Page ${pageId}.`
+      };
+    }
+
+    // ADVERTISING CAPABILITY CHECK:
+    // If the token can retrieve the Page access_token, it proves we have sufficient roles (like CREATE_ADS / MANAGE)
+    // without needing the deprecated 'tasks' field.
+    if (!data.access_token) {
+      return {
+        check_name,
+        expected: `Publishing capability on Page ${pageId}`,
+        actual: 'Page Object returned without access_token',
+        source,
+        timestamp,
+        correlation_id: correlationId,
+        status: 'FAILED',
+        failure_code: 'META_PAGE_MISSING_PUBLISH_CAPABILITY',
+        message: `Master System Access Token lacks sufficient permissions to publish on Page ${pageId}.`
       };
     }
 

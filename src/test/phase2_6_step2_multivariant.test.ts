@@ -57,7 +57,9 @@ describe('PHASE 2.6 MILESTONE 2 — STEP 2: MULTI-VARIANT META PUBLISHING', () =
       await pool.query('DELETE FROM campaign_creative_variants WHERE campaign_id = $1', [testCampaignId]);
       await pool.query('DELETE FROM meta_publishing_events WHERE campaign_id = $1', [testCampaignId]);
       await pool.query('DELETE FROM meta_publishing_dlq WHERE campaign_id = $1', [testCampaignId]);
+      await pool.query('DELETE FROM meta_api_traces WHERE campaign_id = $1', [testCampaignId]);
       await pool.query('DELETE FROM meta_publishing_transactions WHERE campaign_id = $1', [testCampaignId]);
+      
       await pool.query('DELETE FROM host_marketing_campaigns WHERE id = $1', [testCampaignId]);
     }
     if (testListingId) {
@@ -269,6 +271,7 @@ describe('PHASE 2.6 MILESTONE 2 — STEP 2: MULTI-VARIANT META PUBLISHING', () =
       await pool.query('DELETE FROM campaign_creative_variants WHERE campaign_id = $1', [failingCampId]);
       await pool.query('DELETE FROM meta_publishing_events WHERE campaign_id = $1', [failingCampId]);
       await pool.query('DELETE FROM meta_publishing_dlq WHERE campaign_id = $1', [failingCampId]);
+      await pool.query('DELETE FROM meta_api_traces WHERE campaign_id = $1', [failingCampId]);
       await pool.query('DELETE FROM meta_publishing_transactions WHERE campaign_id = $1', [failingCampId]);
       await pool.query('DELETE FROM host_marketing_campaigns WHERE id = $1', [failingCampId]);
     }

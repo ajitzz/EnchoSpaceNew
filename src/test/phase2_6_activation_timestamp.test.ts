@@ -57,7 +57,8 @@ describe('PHASE 2.6 — VARIANT ACTIVATION TIMESTAMP REMEDIATION', () => {
       await pool.query('DELETE FROM campaign_creative_variants WHERE campaign_id = $1', [campaignId]);
       await pool.query('DELETE FROM meta_publishing_events WHERE campaign_id = $1', [campaignId]);
       await pool.query('DELETE FROM meta_publishing_dlq WHERE campaign_id = $1', [campaignId]);
-      await pool.query('DELETE FROM meta_publishing_transactions WHERE campaign_id = $1', [campaignId]);
+      await pool.query('DELETE FROM meta_api_traces WHERE campaign_id = campaignId;
+      await pool.query(`DELETE FROM meta_publishing_transactions WHERE campaign_id = $1', [campaignId]);
       await pool.query('DELETE FROM host_marketing_campaigns WHERE id = $1', [campaignId]);
     }
     if (testListingId) {
@@ -138,7 +139,8 @@ describe('PHASE 2.6 — VARIANT ACTIVATION TIMESTAMP REMEDIATION', () => {
     await pool.query('DELETE FROM campaign_creative_variants WHERE campaign_id = $1', [campaignId]);
     await pool.query('DELETE FROM dco_evaluation_transactions WHERE campaign_id = $1', [campaignId]);
     await pool.query('DELETE FROM meta_publishing_dlq WHERE campaign_id = $1', [campaignId]);
-    await pool.query('DELETE FROM meta_publishing_transactions WHERE campaign_id = $1', [campaignId]);
+    await pool.query('DELETE FROM meta_api_traces WHERE campaign_id = campaignId;
+      await pool.query(`DELETE FROM meta_publishing_transactions WHERE campaign_id = $1', [campaignId]);
   };
 
   const prepareForDispatch = async () => {
@@ -240,7 +242,7 @@ describe('PHASE 2.6 — VARIANT ACTIVATION TIMESTAMP REMEDIATION', () => {
   it('D. NULL activation timestamp causes Step 4A: VARIANT_NOT_ACTIVATED', async () => {
     await prepareForDCO(null);
 
-    const result = await evaluateCampaignDCO(campaignId, 'epoch_test_D');
+    const result = await evaluateCampaignDCO(campaignId, { evaluationEpoch: 'epoch_test_D' });
     expect(result.decision).toBe('DEFERRED');
     expect(result.decision_reason).toBe('VARIANT_NOT_ACTIVATED');
   });
@@ -249,7 +251,7 @@ describe('PHASE 2.6 — VARIANT ACTIVATION TIMESTAMP REMEDIATION', () => {
     const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
     await prepareForDCO(twoDaysAgo);
 
-    const result = await evaluateCampaignDCO(campaignId, 'epoch_test_E');
+    const result = await evaluateCampaignDCO(campaignId, { evaluationEpoch: 'epoch_test_E' });
     expect(result.decision_reason).not.toBe('VARIANT_NOT_ACTIVATED');
     expect(result.decision_reason).not.toBe('VARIANT_TOO_YOUNG');
   });
@@ -285,7 +287,7 @@ describe('PHASE 2.6 — VARIANT ACTIVATION TIMESTAMP REMEDIATION', () => {
     const exactly24hAgo = new Date(Date.now() - 24 * 60 * 60 * 1000 - 1000);
     await prepareForDCO(exactly24hAgo);
 
-    const result = await evaluateCampaignDCO(campaignId, 'epoch_test_G');
+    const result = await evaluateCampaignDCO(campaignId, { evaluationEpoch: 'epoch_test_G' });
     expect(result.decision_reason).not.toBe('VARIANT_TOO_YOUNG');
     expect(result.decision_reason).not.toBe('VARIANT_NOT_ACTIVATED');
   });
@@ -294,7 +296,7 @@ describe('PHASE 2.6 — VARIANT ACTIVATION TIMESTAMP REMEDIATION', () => {
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
     await prepareForDCO(twoHoursAgo);
 
-    const result = await evaluateCampaignDCO(campaignId, 'epoch_test_H');
+    const result = await evaluateCampaignDCO(campaignId, { evaluationEpoch: 'epoch_test_H' });
     expect(result.decision).toBe('DEFERRED');
     expect(result.decision_reason).toBe('VARIANT_TOO_YOUNG');
   });

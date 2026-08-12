@@ -1,0 +1,501 @@
+export async function dispatchMetaCampaign(campaignId: number, req: any, overrideCorrelationId?: string) {
+  if (process.env.META_PUBLISHING_PAUSED === 'true') {
+    console.error(`[EMERGENCY KILL SWITCH] Publishing aborted for campaign #${campaignId}: Meta publishing is paused.`);
+    throw new Error('EMERGENCY KILL SWITCH ACTIVE: Meta publishing dispatches are currently paused by platform administration.');
+  }
+
+  const correlationId = overrideCorrelationId || crypto.randomUUID();
+  const idempotencyKey = `publish_meta_camp_${campaignId}`;
+  
+  // Phase 1 & 2: Idempotent Publishing & Transaction State Machine
+  let txId;
+  let publishAttempt = 1;
+
+  const claimClient = await pool.connect();
+  try {
+    await claimClient.query('BEGIN');
+    
+    await claimClient.query(
+      `INSERT INTO meta_publishing_transactions (campaign_id, idempotency_key, correlation_id, publish_status) 
+       VALUES ($1, $2, $3, 'PRECHECK_RUNNING') 
+       ON CONFLICT (idempotency_key) DO NOTHING`,
+      [campaignId, idempotencyKey, correlationId]
+    );
+
+    const txCheck = await claimClient.query(`SELECT * FROM meta_publishing_transactions WHERE idempotency_key = $1 FOR UPDATE NOWAIT`, [idempotencyKey]);
+    
+    if (txCheck.rows.length === 0) {
+       throw new Error('Critical idempotency failure: Record not found after insert or conflict');
+    }
+
+    const tx = txCheck.rows[0];
+    txId = tx.id;
+    publishAttempt = tx.publish_attempt;
+
+    if (tx.correlation_id !== correlationId) { // Existing record
+      if (tx.publish_status === 'SUCCESS' || tx.publish_status === 'LIVE') {
+        console.log(`[META ENGINE] Campaign ${campaignId} already successfully published. Idempotency hit.`);
+        await claimClient.query('COMMIT');
+        return true;
+      }
+      
+      if (tx.publish_status === 'EXTERNAL_OUTCOME_UNKNOWN') {
+        console.warn(`[META ENGINE] Campaign ${campaignId} has EXTERNAL_OUTCOME_UNKNOWN transaction #${tx.id}. Blocking duplicate dispatch until reconciliation.`);
+        await claimClient.query('COMMIT');
+        return false;
+      }
+
+      if (tx.publish_status === 'PRECHECK_RUNNING' || tx.publish_status === 'PUBLISHING') {
+         const lastUpdate = new Date(tx.updated_at).getTime();
+         const now = Date.now();
+         if (now - lastUpdate < 5 * 60 * 1000) { // 5 minutes lease
+           console.log(`[META ENGINE] Campaign ${campaignId} is currently being published in another process.`);
+           await claimClient.query('ROLLBACK');
+           return false;
+         } else {
+           console.log(`[META ENGINE] Campaign ${campaignId} lease expired. Reclaiming.`);
+         }
+      }
+      
+      publishAttempt++;
+      await claimClient.query(
+        `UPDATE meta_publishing_transactions 
+         SET publish_attempt = $1, publish_status = 'PRECHECK_RUNNING', updated_at = CURRENT_TIMESTAMP, correlation_id = $2 
+         WHERE id = $3`,
+        [publishAttempt, correlationId, txId]
+      );
+    }
+
+    await claimClient.query('COMMIT');
+  } catch (error: any) {
+    await claimClient.query('ROLLBACK');
+    if (error.code === '55P03') { // lock_not_available
+       console.log(`[META ENGINE] Campaign ${campaignId} is locked by another concurrent dispatch process.`);
+       return false;
+    }
+    throw error;
+  } finally {
+    claimClient.release();
+  }
+
+  // Phase 3: Rollback Engine State
+  const rollbackState: { metaCampaignId?: string, metaAdSetId?: string, metaCreativeId?: string, metaAdId?: string } = {};
+
+  try {
+    await runMetaPreflightEngine(campaignId, pool, { correlationId });
+    await pool.query(`UPDATE meta_publishing_transactions SET publish_status = 'PUBLISHING', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [txId]);
+
+    const campaignResult = await pool.query(`
+      SELECT c.*, l.title as listing_title, l.description as listing_desc, l.image_url as listing_image, l.city, l.amenities as listing_amenities
+      FROM host_marketing_campaigns c
+      LEFT JOIN listings l ON c.listing_id = l.id
+      WHERE c.id = $1
+    `, [campaignId]);
+
+    if (campaignResult.rows.length === 0) {
+      throw new Error('Campaign not found');
+    }
+
+    const campaign = campaignResult.rows[0];
+    
+    // Core Configuration
+    const accessToken = process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN;
+    const rawAdAccountId = process.env.META_AD_ACCOUNT_ID;
+    const pageId = process.env.META_PAGE_ID;
+    const igAccountId = process.env.META_INSTAGRAM_ACCOUNT_ID;
+    
+    checkIntegrationKeys(
+      'Meta Marketing API',
+      ['META_ACCESS_TOKEN', 'META_AD_ACCOUNT_ID', 'META_PAGE_ID', 'META_INSTAGRAM_ACCOUNT_ID'],
+      `Campaign #${campaign.id} Meta Sync Dispatch`
+    );
+
+    if (!accessToken || !rawAdAccountId || !pageId) {
+      throw new Error('Missing core Meta API credentials');
+    }
+
+    const cleanAdAccountId = rawAdAccountId.startsWith('act_') ? rawAdAccountId : `act_${rawAdAccountId}`;
+    
+    // Using global classifyMetaError from Phase 11
+
+    // Phase 4: Retry Engine with Exponential Backoff
+    const executeMetaRequest = async (stepName: string, endpoint: string, payload: any, maxRetries = 3) => {
+      let attempt = 0;
+      let delayMs = 1000;
+      
+      while (attempt < maxRetries) {
+        attempt++;
+        const startTime = Date.now();
+        const redactedPayload = { ...payload, access_token: 'REDACTED' };
+        if (redactedPayload.bytes) redactedPayload.bytes = 'REDACTED_BASE64_IMAGE';
+        
+        console.log(`[META TRACE ${correlationId}] Step: ${stepName} | Attempt ${attempt}/${maxRetries} | POST ${endpoint}`);
+        
+        try {
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+          const executionTime = Date.now() - startTime;
+          
+          // Enterprise Meta Debug Recorder Insert
+          try {
+            await pool.query(`
+              INSERT INTO meta_api_traces (
+                correlation_id, campaign_id, host_id, step, endpoint, request_payload, response_payload, http_status, fbtrace_id, meta_error_code, meta_error_subcode, meta_error_message, meta_error_type, meta_error_is_transient, meta_error_user_title, meta_error_user_msg, latency_ms
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+            `, [
+              correlationId, campaignId, req.user.id, stepName, endpoint, JSON.stringify(redactedPayload), JSON.stringify(data), res.status,
+              data.error?.fbtrace_id || null, data.error?.code || null, data.error?.error_subcode || null, data.error?.message || null,
+              data.error?.type || null, data.error?.is_transient || null, data.error?.error_user_title || null, data.error?.error_user_msg || null, executionTime
+            ]);
+          } catch(e: any) {
+            console.error('[META API TRACES] Failed to save trace', e.message);
+          }
+            
+          if (!res.ok || data.error) {
+            const errorClassification = classifyMetaError(data);
+            console.error(`[META TRACE ${correlationId}] FAILED: ${stepName} | Code: ${errorClassification.code_name} | Error:`, JSON.stringify(data.error));
+            
+            if (errorClassification.retryable && attempt < maxRetries) {
+              const jitter = Math.random() * 500;
+              await new Promise(r => setTimeout(r, delayMs + jitter));
+              delayMs *= 2; // exponential backoff
+              continue;
+            }
+            const errObj: any = new Error(data.error?.message || JSON.stringify(data.error) || `${stepName} failed`);
+            errObj.metaData = data;
+            throw errObj;
+          }
+            
+          console.log(`[META TRACE ${correlationId}] SUCCESS: ${stepName} in ${executionTime}ms`);
+          return data;
+        } catch (e: any) {
+          if (attempt === maxRetries || e.message?.includes('Preflight Failed') || e.metaData) {
+            if (!e.metaData && !e.response) {
+              e.isNetworkTimeout = true;
+            }
+            throw e;
+          }
+          // Network errors (fetch throws)
+          const jitter = Math.random() * 500;
+          await new Promise(r => setTimeout(r, delayMs + jitter));
+          delayMs *= 2;
+        }
+      }
+      const timeoutErr: any = new Error(`Max retries reached for ${stepName} due to network timeout or connection failure`);
+      timeoutErr.isNetworkTimeout = true;
+      throw timeoutErr;
+    };
+
+    // Prepare activeLeadFormId, URL, description etc.
+    const adHeadline = campaign.title || campaign.listing_title || 'Featured Stay';
+    const destinationUrl = campaign.destination_url || `https://encho.app/listings/${campaign.listing_id || 1}`;
+    const sanitizedDescription = campaign.description || campaign.listing_desc || 'Experience a wonderful stay with Encho.';
+    const feedDescription = campaign.feed_description || 'Book your dream getaway today.';
+
+    // 1. Create Campaign
+    const campPayload = {
+        access_token: accessToken,
+        name: `Encho Space - ${adHeadline} (Campaign #${campaign.id})`,
+        objective: 'OUTCOME_AWARENESS',
+        special_ad_categories: ['HOUSING'],
+        special_ad_category_country: ['US', 'IN'],
+        is_adset_budget_sharing_enabled: false,
+        buying_type: 'AUCTION',
+        status: 'PAUSED'
+    };
+    const campData = await executeMetaRequest('campaign_creation', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/campaigns`, campPayload);
+    rollbackState.metaCampaignId = campData.id;
+    await pool.query(`UPDATE meta_publishing_transactions SET meta_campaign_id = $1 WHERE id = $2`, [campData.id, txId]);
+
+    // 2. Create Ad Set
+    const adSetPayload: any = {
+      access_token: accessToken,
+      name: `AdSet - ${adHeadline}`,
+      campaign_id: rollbackState.metaCampaignId,
+      daily_budget: Math.max(10000, Math.floor(Number(campaign.budget || 100) * 100)),
+      billing_event: 'IMPRESSIONS',
+      optimization_goal: 'REACH',
+      promoted_object: { page_id: pageId },
+      bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+      targeting: { geo_locations: { countries: ['US', 'IN'] } },
+      status: 'PAUSED'
+    };
+    const adSetData = await executeMetaRequest('adset_creation', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/adsets`, adSetPayload);
+    rollbackState.metaAdSetId = adSetData.id;
+    await pool.query(`UPDATE meta_publishing_transactions SET meta_adset_id = $1 WHERE id = $2`, [adSetData.id, txId]);
+
+    // 3. Extract media URLs for Multi-Variant Publishing (Step 2)
+    let mediaUrls: string[] = [];
+    if (campaign.media_urls) {
+      try {
+        mediaUrls = typeof campaign.media_urls === 'string' ? JSON.parse(campaign.media_urls) : campaign.media_urls;
+      } catch (e) {
+        mediaUrls = [];
+      }
+    }
+    if ((!mediaUrls || mediaUrls.length === 0) && campaign.listing_image) {
+      mediaUrls = [campaign.listing_image];
+    }
+    if (!mediaUrls || mediaUrls.length === 0) {
+      throw new Error('No media assets available for Meta Campaign');
+    }
+
+    const createdCreativeIds: string[] = [];
+    const createdAdIds: string[] = [];
+    (rollbackState as any).creativeIds = createdCreativeIds;
+    (rollbackState as any).adIds = createdAdIds;
+
+    for (let i = 0; i < mediaUrls.length; i++) {
+      const imgUrl = mediaUrls[i];
+      const imgRes = await fetch(imgUrl);
+      if (!imgRes.ok) {
+         throw new Error(`Failed to fetch media asset from URL (${imgRes.status}): ${imgUrl}`);
+      }
+      const imgArrayBuffer = await imgRes.arrayBuffer();
+      const imgBuffer = Buffer.from(imgArrayBuffer);
+      if (imgBuffer.length === 0) {
+         throw new Error(`Zero-byte media asset retrieved from ${imgUrl}`);
+      }
+      if (imgBuffer.length > 10 * 1024 * 1024) {
+         throw new Error(`Media asset exceeds Meta maximum 10MB size limit`);
+      }
+
+      const assetSha256 = crypto.createHash('sha256').update(imgBuffer).digest('hex');
+      const mediaType = imgUrl.match(/\.(mp4|mov|webm)$/i) ? 'video' : 'image';
+      const imgBase64 = imgBuffer.toString('base64');
+
+      // Check existing variant in campaign_creative_variants
+      const variantRes = await pool.query(
+        `SELECT * FROM campaign_creative_variants WHERE campaign_id = $1 AND (media_url = $2 OR asset_sha256 = $3)`,
+        [campaignId, imgUrl, assetSha256]
+      );
+
+      let variantId: number;
+      if (variantRes.rows.length === 0) {
+        const insRes = await pool.query(
+          `INSERT INTO campaign_creative_variants (campaign_id, media_url, media_type, asset_sha256, status, is_published)
+           VALUES ($1, $2, $3, $4, 'ACTIVE', false) RETURNING id`,
+          [campaignId, imgUrl, mediaType, assetSha256]
+        );
+        variantId = insRes.rows[0].id;
+      } else {
+        variantId = variantRes.rows[0].id;
+      }
+
+      // Upload to Meta
+      const sqUpload = await executeMetaRequest(`adimage_upload_variant_${i}`, `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/adimages`, { 
+         access_token: accessToken, bytes: imgBase64 
+      });
+      let imageHash = '';
+      if (sqUpload && sqUpload.images) {
+        imageHash = Object.values(sqUpload.images)[0].hash;
+      } else {
+        throw new Error(`Meta Image Upload failed for variant ${i}`);
+      }
+
+      // Create Creative
+      const creativePayload = {
+        access_token: accessToken,
+        name: `Creative - ${adHeadline} - Variant ${i + 1}`,
+        object_story_spec: {
+          page_id: pageId,
+          link_data: {
+            image_hash: imageHash,
+            link: destinationUrl,
+            message: sanitizedDescription,
+            name: `${adHeadline} (${i + 1})`,
+            description: feedDescription,
+            call_to_action: { type: 'BOOK_TRAVEL', value: { link: destinationUrl } }
+          }
+        }
+      };
+      const creativeData = await executeMetaRequest(`creative_creation_variant_${i}`, `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/adcreatives`, creativePayload);
+      const creativeId = creativeData.id;
+      createdCreativeIds.push(creativeId);
+      if (i === 0) {
+        rollbackState.metaCreativeId = creativeId;
+        await pool.query(`UPDATE meta_publishing_transactions SET meta_creative_id = $1 WHERE id = $2`, [creativeId, txId]);
+      }
+
+      // Create Ad
+      const adPayload = {
+        access_token: accessToken,
+        name: `Ad - ${adHeadline} - Variant ${i + 1}`,
+        adset_id: rollbackState.metaAdSetId,
+        creative: { creative_id: creativeId },
+        status: 'ACTIVE'
+      };
+      const adData = await executeMetaRequest(`ad_creation_variant_${i}`, `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/ads`, adPayload);
+      const adId = adData.id;
+      createdAdIds.push(adId);
+      if (i === 0) {
+        rollbackState.metaAdId = adId;
+        await pool.query(`UPDATE meta_publishing_transactions SET meta_ad_id = $1 WHERE id = $2`, [adId, txId]);
+      }
+
+      // External Verification
+      const verifyCreativeRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${creativeId}?fields=id,account_id&access_token=${accessToken}`);
+      const verifyCreativeData = await verifyCreativeRes.json().catch(() => ({}));
+      if (!verifyCreativeRes.ok || verifyCreativeData.error || !verifyCreativeData.id) {
+        throw new Error(`External verification failed for creative ${creativeId}`);
+      }
+
+      const verifyAdRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${adId}?fields=id,adset_id,campaign_id,account_id,status,effective_status&access_token=${accessToken}`);
+      const verifyAdData = await verifyAdRes.json().catch(() => ({}));
+      if (!verifyAdRes.ok || verifyAdData.error || !verifyAdData.id) {
+        throw new Error(`External verification failed for ad ${adId}`);
+      }
+
+      const isRemoteActive = (verifyAdData.status === 'ACTIVE' || verifyAdData.effective_status === 'ACTIVE');
+
+      // Fetch existing variant record to check for existing variant_activated_at (immutability)
+      const currentVarRes = await pool.query(
+        `SELECT variant_activated_at FROM campaign_creative_variants WHERE id = $1`,
+        [variantId]
+      );
+      const existingActivatedAt = currentVarRes.rows[0]?.variant_activated_at;
+
+      let activationTimestampToSet: Date | string | null = existingActivatedAt || null;
+      if (isRemoteActive && !existingActivatedAt) {
+        activationTimestampToSet = new Date().toISOString();
+      }
+
+      // Update variant with Meta IDs, status, and variant_activated_at
+      await pool.query(
+        `UPDATE campaign_creative_variants 
+         SET meta_creative_id = $1, 
+             meta_ad_id = $2, 
+             asset_sha256 = $3, 
+             is_published = true, 
+             status = $4, 
+             variant_activated_at = $5,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $6`,
+        [creativeId, adId, assetSha256, isRemoteActive ? 'ACTIVE' : 'PAUSED', activationTimestampToSet, variantId]
+      );
+    }
+
+    const primaryCreativeId = createdCreativeIds[0] || null;
+    const primaryAdId = createdAdIds[0] || null;
+
+    // 4. DB Commit
+    await pool.query(`
+      UPDATE host_marketing_campaigns 
+      SET meta_campaign_id = $1, meta_adset_id = $2, meta_creative_id = $3, meta_ad_id = $4, meta_dispatched_at = CURRENT_TIMESTAMP
+      WHERE id = $5
+    `, [rollbackState.metaCampaignId, rollbackState.metaAdSetId, primaryCreativeId, primaryAdId, campaignId]);
+
+    await pool.query(`UPDATE meta_publishing_transactions SET publish_status = 'SUCCESS', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [txId]);
+
+    broadcastDbEvent(req, 'marketing');
+    return true;
+
+  } catch (error: any) {
+    console.error(`[META ENGINE FAULT] Campaign ${campaignId} failed.`, error);
+    
+    const rawErrorPayload = error.metaData || error.response || {
+      error: {
+        message: error.message,
+        diagnosticReport: error.diagnosticReport,
+        name: error.name,
+        code: error.code,
+        isNetworkTimeout: error.isNetworkTimeout
+      }
+    };
+    const classification = classifyMetaError(rawErrorPayload);
+    const isUnknownOutcome = classification.code_name === 'EXTERNAL_NETWORK_TIMEOUT_UNKNOWN_OUTCOME';
+
+    // Phase 3: Trigger explicit reverse cascade rollback
+    const rollbackRes = await executeMetaRollback(rollbackState, correlationId, pool);
+    let finalTxStatus = 'FAILED_PUBLISH';
+    let rollbackStatus = 'NOT_REQUIRED';
+
+    const hasCreatedObjects = !!(rollbackState.metaCampaignId || rollbackState.metaAdSetId || rollbackState.metaCreativeId || rollbackState.metaAdId);
+
+    if (isUnknownOutcome) {
+      finalTxStatus = 'EXTERNAL_OUTCOME_UNKNOWN';
+      rollbackStatus = hasCreatedObjects ? (rollbackRes.quarantined ? 'QUARANTINED' : 'QUARANTINE_FAILED') : 'UNKNOWN_EXTERNAL_STATE';
+    } else if (hasCreatedObjects) {
+      if (rollbackRes.quarantined) {
+        rollbackStatus = 'QUARANTINED';
+        finalTxStatus = 'QUARANTINED';
+      } else if (rollbackRes.success) {
+        rollbackStatus = 'SUCCESS';
+        finalTxStatus = 'ROLLBACK_SUCCESS';
+      } else {
+        rollbackStatus = 'FAILED';
+        finalTxStatus = 'ROLLBACK_FAILED';
+      }
+    }
+
+    const stageName = rollbackState.metaCreativeId
+      ? 'AD_CREATION'
+      : (rollbackState.metaAdSetId ? 'CREATIVE_CREATION' : (rollbackState.metaCampaignId ? 'ADSET_CREATION' : 'CAMPAIGN_CREATION'));
+
+    // Prevent circular reference crashes when persisting error
+    const safeErrorPayload = (() => {
+      try {
+        return JSON.stringify(rawErrorPayload);
+      } catch (e) {
+        return JSON.stringify({ error: { message: rawErrorPayload?.message || 'Circular reference in error payload' }});
+      }
+    })();
+
+    // Update meta_publishing_transactions with full classification and quarantined objects
+    await pool.query(`
+      UPDATE meta_publishing_transactions 
+      SET publish_status = $1, 
+          failure_code = $2, 
+          failure_category = $3, 
+          failure_stage = $4, 
+          rollback_status = $5,
+          error_details = $6,
+          quarantined_objects = $7,
+          updated_at = CURRENT_TIMESTAMP 
+      WHERE id = $8
+    `, [
+      finalTxStatus,
+      classification.code_name,
+      classification.category,
+      stageName,
+      rollbackStatus,
+      safeErrorPayload,
+      JSON.stringify(rollbackRes.quarantinedObjects || {}),
+      txId
+    ]);
+
+    // Update host_marketing_campaigns (NEVER MARK LIVE)
+    const feedbackMsg = `${classification.user_title}: ${classification.recommended_action || classification.action_required || ''}`;
+    await transitionCampaignState({ campaignId: Number(campaignId), to: 'failed_publish', reason: 'Fallback to DLQ after publish error', actorType: 'system' });
+    await pool.query(`
+      UPDATE host_marketing_campaigns 
+      SET admin_feedback = $1 
+      WHERE id = $2
+    `, [feedbackMsg, campaignId]);
+    
+    // Phase 13: Record in Dead Letter Queue
+    try {
+      await pool.query(`
+        INSERT INTO meta_publishing_dlq (
+          transaction_id, campaign_id, correlation_id, failure_stage, failure_code, requires_human_action, error_payload, recommended_action
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `, [
+        txId, 
+        campaignId, 
+        correlationId, 
+        stageName,
+        classification.code_name,
+        classification.requires_human_action,
+        JSON.stringify(rawErrorPayload),
+        classification.action_required
+      ]);
+    } catch (dlqErr) {
+      console.error('[META DLQ FAULT] Failed to write to DLQ:', dlqErr);
+    }
+    return false;
+  }
+}

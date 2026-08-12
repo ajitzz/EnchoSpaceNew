@@ -157,6 +157,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import hpp from 'hpp';
 import { processMarketingAssets } from './src/lib/imageProcessor.js';
+import { MetaTargetMapper } from './src/lib/metaTargetMapper.js';
 import { metaGraphClient, getAuthoritativeMetaIdentity } from './src/lib/metaGraphClient.js';
 
 // import pinoHttp from 'pino-http'; // Removed as per JS version
@@ -513,6 +514,7 @@ const campaignSchema = z.object({
   target_locations: z.string().optional(),
   target_radius_km: z.coerce.number().min(25).max(150).optional(),
   ad_format: z.string().optional(),
+  target_locations_json: z.any().optional(),
   feed_description: z.string().optional(),
   meta_pixel_id: z.string().optional(),
   meta_capi_token: z.string().optional(),
@@ -3906,7 +3908,7 @@ app.post('/api/marketing/campaigns', authenticateToken, async (req: AuthRequest,
     if (!parseResult.success) {
       return res.status(400).json({ error: 'Invalid input', details: parseResult.error.issues || parseResult.error.errors });
     }
-    const { listing_id, title, description, video_url, media_urls, platforms, budget, target_locations, target_radius_km, ad_format, feed_description, meta_pixel_id, meta_capi_token, google_conversion_id, google_conversion_label, target_audience_persona, audience_interests, ai_generated_ad_copies } = parseResult.data;
+    const { listing_id, title, description, video_url, media_urls, platforms, budget, target_locations, target_radius_km, ad_format, feed_description, meta_pixel_id, meta_capi_token, google_conversion_id, google_conversion_label, target_audience_persona, audience_interests, ai_generated_ad_copies, target_locations_json } = parseResult.data;
 
     // Verify listing ownership
     const listingCheck = await pool.query('SELECT 1 FROM listings WHERE id = $1 AND user_id = $2', [listing_id, req.user?.id]);
@@ -3939,7 +3941,7 @@ app.post('/api/marketing/campaigns', authenticateToken, async (req: AuthRequest,
       target_audience_persona || 'everyone',
       JSON.stringify(audience_interests || []),
       JSON.stringify(ai_generated_ad_copies || {}),
-      JSON.stringify(target_locations ? target_locations.split(',').map(s => s.trim()) : [])
+      JSON.stringify(target_locations_json || (target_locations ? target_locations.split(',').map(s => s.trim()) : []))
     ]);
 
     // Log Audit Trail
@@ -3974,7 +3976,7 @@ app.put('/api/marketing/campaigns/:id', authenticateToken, async (req: AuthReque
     if (!parseResult.success) {
       return res.status(400).json({ error: 'Invalid input', details: parseResult.error.issues || parseResult.error.errors });
     }
-    const { title, description, video_url, media_urls, platforms, budget, status, target_locations, target_radius_km, ad_format, feed_description, rejected_fields, meta_pixel_id, meta_capi_token, google_conversion_id, google_conversion_label, target_audience_persona, audience_interests, ai_generated_ad_copies } = parseResult.data;
+    const { title, description, video_url, media_urls, platforms, budget, status, target_locations, target_radius_km, ad_format, feed_description, rejected_fields, meta_pixel_id, meta_capi_token, google_conversion_id, google_conversion_label, target_audience_persona, audience_interests, ai_generated_ad_copies, target_locations_json } = parseResult.data;
 
     // Verify ownership
     const campaignCheck = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1 AND host_id = $2', [id, req.user?.id]);
@@ -4068,12 +4070,13 @@ app.put('/api/marketing/campaigns/:id', authenticateToken, async (req: AuthReque
             audience_interests = COALESCE($17, audience_interests),
             ai_generated_ad_copies = COALESCE($18, ai_generated_ad_copies),
             admin_approved = $19,
-            approved_at = $20,
-            approval_snapshot = $21,
-            approval_hash = $22,
-            policy_cleared = $23,
-            policy_cleared_at = $24
-        WHERE id = $25 AND host_id = $26
+            target_locations_json = COALESCE($20, target_locations_json),
+            approved_at = $21,
+            approval_snapshot = $22,
+            approval_hash = $23,
+            policy_cleared = $24,
+            policy_cleared_at = $25
+        WHERE id = $26 AND host_id = $27
         RETURNING *
       `, [
         title || currentCampaign.title,
@@ -4095,6 +4098,7 @@ app.put('/api/marketing/campaigns/:id', authenticateToken, async (req: AuthReque
         audience_interests ? JSON.stringify(audience_interests) : null,
         ai_generated_ad_copies ? JSON.stringify(ai_generated_ad_copies) : null,
         nextAdminApproved,
+        target_locations_json ? JSON.stringify(target_locations_json) : currentCampaign.target_locations_json,
         nextApprovedAt,
         nextApprovalSnapshot ? JSON.stringify(nextApprovalSnapshot) : null,
         nextApprovalHash,
@@ -7453,7 +7457,7 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
       optimization_goal: 'REACH',
       promoted_object: { page_id: pageId },
       bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
-      targeting: { geo_locations: { countries: ['US', 'IN'] } },
+      targeting: MetaTargetMapper.mapTargeting(campaign, campaign), // Note: campaign has listing fields injected
       status: 'PAUSED'
     };
     const adSetData = await executeMetaRequest('adset_creation', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/adsets`, adSetPayload);
@@ -14219,48 +14223,105 @@ app.get('/api/admin/payments/overview', async (req: Request, res: Response) => {
 
 // 4. Admin Force Release Escrow Endpoint
 app.post('/api/admin/payments/escrow/release', async (req: Request, res: Response) => {
+  let releaseClient;
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Authentication required' });
     }
     const token = authHeader.substring(7);
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const jwt = require('jsonwebtoken');
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret') as any;
     const adminId = decoded.userId || decoded.id;
 
     const { campaign_id } = req.body;
     if (!campaign_id) return res.status(400).json({ error: 'campaign_id is required' });
 
-    const cRes = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [campaign_id]);
-    if (cRes.rows.length === 0) return res.status(404).json({ error: 'Campaign not found' });
+    releaseClient = await pool.connect();
+    await releaseClient.query('BEGIN');
+    const cRes = await releaseClient.query('SELECT * FROM host_marketing_campaigns WHERE id = $1 FOR UPDATE', [campaign_id]);
+    
+    if (cRes.rows.length === 0) {
+      await releaseClient.query('ROLLBACK');
+      releaseClient.release();
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+    
     const campaign = cRes.rows[0];
 
-    await pool.query(
-      `UPDATE host_marketing_campaigns
-       SET escrow_status = 'released', updated_at = CURRENT_TIMESTAMP
+    // Check prerequisites
+    if (!campaign.admin_approved) {
+      await releaseClient.query('ROLLBACK');
+      releaseClient.release();
+      return res.status(400).json({ error: 'Campaign is not admin approved' });
+    }
+    if (campaign.payment_status !== 'paid' && campaign.payment_status !== 'PAYMENT_SUCCESS') {
+      await releaseClient.query('ROLLBACK');
+      releaseClient.release();
+      return res.status(400).json({ error: 'Payment is not settled' });
+    }
+
+    await releaseClient.query(
+      `UPDATE host_marketing_campaigns 
+       SET escrow_status = 'released', updated_at = CURRENT_TIMESTAMP 
        WHERE id = $1`,
       [campaign_id]
     );
 
     await logAdminAudit(adminId, 'campaign_escrow', campaign_id, 'force_release_escrow', { escrow_status: campaign.escrow_status }, { escrow_status: 'released' });
 
-    if (campaign.admin_approved) {
-      if (campaign.payment_status === 'paid' || campaign.payment_status === 'PAYMENT_SUCCESS') {
-          await transitionCampaignState({ campaignId: campaign_id, to: 'ASSET_PREP', reason: 'Admin force release escrow', actorType: 'admin' });
-          await dispatchMetaCampaign(campaign_id, { protocol: 'https', get: () => 'localhost' });
-          await dispatchGoogleAdsCampaign(campaign_id, { protocol: 'https', get: () => 'localhost' });
-      } else {
-          console.log(`[WEBHOOK] Campaign #${campaign_id} approved, but payment is not settled yet (${campaign.payment_status})`);
-      }
+    // Advance through FSM correctly to reach META_API_PUSH
+    if (campaign.status === 'escrow') {
+        await transitionCampaignState({ campaignId: campaign_id, to: 'ASSET_PREP', reason: 'Escrow released', actorType: 'admin', client: releaseClient });
+        await transitionCampaignState({ campaignId: campaign_id, to: 'META_API_PUSH', reason: 'Async dispatch started', actorType: 'system', client: releaseClient });
+    } else if (campaign.status === 'approved') {
+        await transitionCampaignState({ campaignId: campaign_id, to: 'META_API_PUSH', reason: 'Escrow released, dispatching to Meta', actorType: 'admin', client: releaseClient });
+    } else if (campaign.status === 'ASSET_PREP') {
+        await transitionCampaignState({ campaignId: campaign_id, to: 'META_API_PUSH', reason: 'Async dispatch started', actorType: 'system', client: releaseClient });
+    }
+
+    await releaseClient.query('COMMIT');
+    releaseClient.release();
+    releaseClient = undefined;
+
+    let dispatchError: any;
+    try {
+        const metaSuccess = await dispatchMetaCampaign(campaign_id, { protocol: 'https', get: () => 'localhost' });
+        if (!metaSuccess) {
+            // Find true error from meta_publishing_transactions
+            const errQuery = await pool.query(`SELECT error_details FROM meta_publishing_transactions WHERE campaign_id = $1 ORDER BY created_at DESC LIMIT 1`, [campaign_id]);
+            if (errQuery.rows.length > 0 && errQuery.rows[0].error_details) {
+                const details = typeof errQuery.rows[0].error_details === 'string' ? JSON.parse(errQuery.rows[0].error_details) : errQuery.rows[0].error_details;
+                dispatchError = new Error(details?.error?.message || 'Meta dispatch failed (see transaction log)');
+            } else {
+                dispatchError = new Error('Meta dispatch failed');
+            }
+            await transitionCampaignState({ campaignId: campaign_id, to: 'failed_publish', reason: `Meta dispatch failed: ${dispatchError.message}`, actorType: 'system' });
+        } else {
+            await dispatchGoogleAdsCampaign(campaign_id, { protocol: 'https', get: () => 'localhost' });
+        }
+    } catch (err: any) {
+        dispatchError = err;
+        await transitionCampaignState({ campaignId: campaign_id, to: 'failed_publish', reason: `Meta dispatch failed: ${err.message}`, actorType: 'system' });
     }
 
     broadcastDbEvent(req, 'marketing');
+
+    if (dispatchError) {
+        return res.status(500).json({ error: dispatchError.message || 'Meta dispatch failed', details: dispatchError });
+    }
 
     return res.json({
       success: true,
       message: `Escrow for Campaign #${campaign_id} force-released by Admin. Ad spend dispatched to Meta & Google network.`
     });
+
   } catch (err: any) {
+    if (releaseClient) {
+      await releaseClient.query('ROLLBACK').catch(() => {});
+      releaseClient.release();
+    }
     res.status(500).json({ error: err.message || 'Failed to release escrow' });
   }
 });

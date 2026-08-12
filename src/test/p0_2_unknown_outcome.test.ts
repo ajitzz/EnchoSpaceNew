@@ -102,6 +102,7 @@ describe('P0-2 — Unknown External Outcome Invariants', () => {
   beforeEach(async () => {
     if (testCampaignId) {
       await pool.query(`DELETE FROM meta_publishing_dlq WHERE campaign_id = $1`, [testCampaignId]);
+      await pool.query(`DELETE FROM meta_api_traces WHERE campaign_id = $1`, [testCampaignId]);
       await pool.query(`DELETE FROM meta_publishing_transactions WHERE campaign_id = $1`, [testCampaignId]);
       await pool.query(`
         UPDATE host_marketing_campaigns 
@@ -116,6 +117,7 @@ describe('P0-2 — Unknown External Outcome Invariants', () => {
     if (testCampaignId) {
       await pool.query(`DELETE FROM meta_publishing_events WHERE campaign_id = $1`, [testCampaignId]);
       await pool.query(`DELETE FROM meta_publishing_dlq WHERE campaign_id = $1`, [testCampaignId]);
+      await pool.query(`DELETE FROM meta_api_traces WHERE campaign_id = $1`, [testCampaignId]);
       await pool.query(`DELETE FROM meta_publishing_transactions WHERE campaign_id = $1`, [testCampaignId]);
       await pool.query(`DELETE FROM host_marketing_campaigns WHERE id = $1`, [testCampaignId]);
     }
@@ -252,6 +254,7 @@ describe('P0-2 — Unknown External Outcome Invariants', () => {
       expect(txRes.rows[0].publish_status).toBe('EXTERNAL_OUTCOME_UNKNOWN');
     } finally {
       await pool.query(`DELETE FROM meta_publishing_dlq WHERE campaign_id = $1`, [testCampaignId]);
+      await pool.query(`DELETE FROM meta_api_traces WHERE campaign_id = $1`, [testCampaignId]);
       await pool.query(`DELETE FROM meta_publishing_transactions WHERE campaign_id = $1`, [testCampaignId]);
     }
   });
