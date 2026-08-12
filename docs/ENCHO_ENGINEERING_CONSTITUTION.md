@@ -226,7 +226,14 @@ The Meta Publishing Engine is NOT complete until:
 - Remaining: Identify Root Cause of INC-001.
 
 **Phase 2: Reliability & Rollback**
-- Objectives: Ensure idempotent publishing and orphan cleanup.
+- Objectives: Ensure idempotent publishing, state transition invariants (P0-1 through P0-5), and time-series analytics rollups (Phase 2.6).
+- Completed:
+  - P0-1: Rollback Semantics & Quarantine Invariants
+  - P0-2: Unknown Outcome & Quarantine Guard
+  - P0-3: Reconciliation & Recovery Worker
+  - P0-4: Centralized FSM Bypass Remediation
+  - P0-5: Atomic Immutable Event Ledger
+  - Phase 2.6 Milestone 1: Campaign Analytics Aggregation & Time-Series Rollup (`campaign_raw_event_logs`, `campaign_daily_rollups`, `runAnalyticsRollup` with UTC occurrence date extraction and composite `campaign_id + event_date` grouping, tenant-isolated analytics endpoints) — **Remediated & Certified Green**
 
 **Phase 3: DCO & AI Expansion**
 - Objectives: Fully dynamic creative optimization and predictive pricing.
@@ -235,7 +242,7 @@ The Meta Publishing Engine is NOT complete until:
 
 ## 17. Future Roadmap
 
-**Immediate:** Resolve Meta API silent failures; implement strict rollback.
+**Immediate:** Phase 2.6 Milestone 2 — Lead Intent Scoring & Walled Garden CRM Analytics.
 **Near Term:** Multi-channel alerting (SMS/Push) for new leads; Razorpay routing completion.
 **Long Term:** Google Display Network retargeting pipeline.
 
@@ -265,3 +272,4 @@ Capabilities include:
 | Decision # | Date | Problem | Chosen Solution | Reason | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | ADR-003 | 2026-08-07 | Meta API Policy Rejections | Live Preflight & AI Engineering Brain | Waiting for Meta to reject a payload hurts Master Ad Account standing. Preventing it client-side is safer. | Active |
+| ADR-004 | 2026-08-11 | High-frequency analytics DB degradation | Raw Event Logging + Daily Upsert Rollup | Isolates write deltas into `campaign_raw_event_logs` and aggregates into `campaign_daily_rollups` to protect query performance. | Active |
