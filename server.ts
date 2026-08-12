@@ -2439,7 +2439,7 @@ app.get('/api/auth/me', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
     const result = await pool.query('SELECT id, email, name, role, phone FROM users WHERE id = $1', [req.user?.id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    if (result.rows.length === 0) return res.status(401).json({ error: 'User not found, token invalid' });
     const user = result.rows[0];
 
     const adminEmail = process.env.ADMIN_EMAIL;
@@ -12292,7 +12292,7 @@ app.get('/api/seed-ajith', authenticateToken, async (req: AuthRequest, res) => {
     console.log("DB URL inside server:", envDbUrl);
     const userRes = await pool.query("SELECT id FROM users WHERE email = 'ajithsabzz@gmail.com'");
     if (userRes.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(401).json({ error: 'User not found, token invalid' });
     }
     const userId = userRes.rows[0].id;
 
