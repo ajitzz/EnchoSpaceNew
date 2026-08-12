@@ -606,7 +606,7 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
   const token = authHeader && authHeader.split(' ')[1];
   
   if (!token) {
-    req.user = { id: 'user_ajith', email: 'ajithsabzz@gmail.com', role: 'host' };
+    req.user = { id: 1, email: 'ajithsabzz@gmail.com', role: 'host' };
     return rlsStorage.run({ userId: req.user.id, isRequest: true, bypassRls: true }, () => {
       next();
     });
@@ -614,7 +614,7 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
 
   jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
     if (err) {
-      req.user = { id: 'user_ajith', email: 'ajithsabzz@gmail.com', role: 'host' };
+      req.user = { id: 1, email: 'ajithsabzz@gmail.com', role: 'host' };
       return rlsStorage.run({ userId: req.user.id, isRequest: true, bypassRls: true }, () => {
         next();
       });
@@ -1116,18 +1116,6 @@ const ensureListingsTable = async () => {
   `);
 
   await pool.query(`
-        CREATE TABLE IF NOT EXISTS lead_inquiries (
-      id SERIAL PRIMARY KEY,
-      campaign_id INT REFERENCES host_marketing_campaigns(id) ON DELETE CASCADE,
-      host_id INT REFERENCES users(id) ON DELETE CASCADE,
-      lead_name VARCHAR(255),
-      lead_source VARCHAR(50), -- e.g. 'META_LEAD_ADS', 'GOOGLE_ADS'
-      lead_intent_score VARCHAR(20) DEFAULT 'COLD', -- 'HOT', 'WARM', 'COLD'
-      masked_contact_info TEXT, -- Walled Garden CRM Requirement
-      raw_inquiry TEXT,
-      is_read BOOLEAN DEFAULT false,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
   `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS messages (
@@ -1491,7 +1479,21 @@ const ensureListingsTable = async () => {
       analytics JSONB DEFAULT '{"impressions": 0, "clicks": 0, "ctr": 0, "conversions": 0, "spent": 0}'::jsonb,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       approved_at TIMESTAMP
+    );  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS lead_inquiries (
+      id SERIAL PRIMARY KEY,
+      campaign_id INT REFERENCES host_marketing_campaigns(id) ON DELETE CASCADE,
+      host_id INT REFERENCES users(id) ON DELETE CASCADE,
+      lead_name VARCHAR(255),
+      lead_source VARCHAR(50), 
+      lead_intent_score VARCHAR(20) DEFAULT 'COLD',
+      masked_contact_info TEXT, 
+      raw_inquiry TEXT,
+      is_read BOOLEAN DEFAULT false,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+
   `);
 
   // Run migrations for advanced ad capabilities (Scenario 1 support!)
@@ -12334,7 +12336,7 @@ app.get('/api/seed-ajith', authenticateToken, async (req: AuthRequest, res) => {
     ]);
     res.json(result.rows[0]);
   } catch (error: unknown) {
-    console.error(error);
+    console.error("API ERROR:", error);
     res.status(500).json({ error: (error as Error).message });
   }
 });
