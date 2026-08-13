@@ -68,8 +68,8 @@ export const TravelerLobby: React.FC<TravelerLobbyProps> = ({ experience, onClos
       ]);
 
       if (msgRes.ok && partRes.ok) {
-        const msgs = await msgRes.json();
-        const parts = await partRes.json();
+        const msgs = msgRes.headers.get('content-type')?.includes('json') ? await msgRes.json() : { error: 'Server returned non-JSON response: ' + (await msgRes.text()).slice(0, 150) } as any;
+        const parts = partRes.headers.get('content-type')?.includes('json') ? await partRes.json() : { error: 'Server returned non-JSON response: ' + (await partRes.text()).slice(0, 150) } as any;
         setMessages(msgs);
         setParticipants(parts);
       }
@@ -97,7 +97,7 @@ export const TravelerLobby: React.FC<TravelerLobbyProps> = ({ experience, onClos
       });
 
       if (res.ok) {
-        const addedMsg = await res.json();
+        const addedMsg = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setMessages(prev => [...prev, addedMsg]);
         setNewMessage('');
       } else {

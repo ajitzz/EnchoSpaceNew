@@ -138,15 +138,16 @@ describe('PHASE 2.6 MILESTONE 2 — STEP 4B: DCO EXTERNAL META ACTION EXECUTION'
       const urlStr = String(url);
       if (urlStr.includes('ad_4b_loser') && options?.method === 'POST') {
         requestedActions.push(urlStr);
-        return { ok: true, json: async () => ({ success: true }) } as any;
+        return { ok: true, headers: new Headers({'content-type': 'application/json'}), json: async () => ({ success: true }) } as any;
       }
       if (urlStr.includes('ad_4b_loser') && (!options || options.method === 'GET')) {
         return {
           ok: true,
+          headers: new Headers({'content-type': 'application/json'}),
           json: async () => ({ id: 'ad_4b_loser', status: 'PAUSED', account_id: 'act_4b', campaign_id: 'meta_camp_4b', adset_id: 'meta_adset_4b' })
         } as any;
       }
-      return { ok: true, json: async () => ({}) } as any;
+      return { ok: true, headers: new Headers({'content-type': 'application/json'}), json: async () => ({}) } as any;
     });
 
     const res = await executeDCOOptimization(testCampaignId);
@@ -172,10 +173,11 @@ describe('PHASE 2.6 MILESTONE 2 — STEP 4B: DCO EXTERNAL META ACTION EXECUTION'
       if (urlStr.includes('ad_4b_loser') && (!options || options.method === 'GET')) {
         return {
           ok: true,
+          headers: new Headers({'content-type': 'application/json'}),
           json: async () => ({ id: 'ad_4b_loser', status: 'PAUSED', account_id: 'act_4b', campaign_id: 'meta_camp_4b', adset_id: 'meta_adset_4b' })
         } as any;
       }
-      return { ok: true, json: async () => ({ success: true }) } as any;
+      return { ok: true, headers: new Headers({'content-type': 'application/json'}), json: async () => ({ success: true }) } as any;
     });
 
     await executeDCOOptimization(testCampaignId);
@@ -198,10 +200,11 @@ describe('PHASE 2.6 MILESTONE 2 — STEP 4B: DCO EXTERNAL META ACTION EXECUTION'
       if (urlStr.includes('ad_4b_loser') && (!options || options.method === 'GET')) {
         return {
           ok: true,
+          headers: new Headers({'content-type': 'application/json'}),
           json: async () => ({ id: 'ad_4b_loser', status: 'PAUSED', account_id: 'act_4b', campaign_id: 'meta_camp_4b', adset_id: 'meta_adset_4b' })
         } as any;
       }
-      return { ok: true, json: async () => ({ success: true }) } as any;
+      return { ok: true, headers: new Headers({'content-type': 'application/json'}), json: async () => ({ success: true }) } as any;
     });
 
     await executeDCOOptimization(testCampaignId);
@@ -219,10 +222,11 @@ describe('PHASE 2.6 MILESTONE 2 — STEP 4B: DCO EXTERNAL META ACTION EXECUTION'
       if (urlStr.includes('ad_4b_loser') && (!options || options.method === 'GET')) {
         return {
           ok: true,
+          headers: new Headers({'content-type': 'application/json'}),
           json: async () => ({ id: 'ad_4b_loser', status: 'PAUSED', account_id: 'act_4b', campaign_id: 'meta_camp_4b', adset_id: 'meta_adset_4b' })
         } as any;
       }
-      return { ok: true, json: async () => ({ success: true }) } as any;
+      return { ok: true, headers: new Headers({'content-type': 'application/json'}), json: async () => ({ success: true }) } as any;
     });
 
     const res = await executeDCOOptimization(testCampaignId);
@@ -246,7 +250,7 @@ describe('PHASE 2.6 MILESTONE 2 — STEP 4B: DCO EXTERNAL META ACTION EXECUTION'
       if (options?.method === 'POST') {
         throw new Error('ETIMEDOUT');
       }
-      return { ok: true, json: async () => ({}) } as any;
+      return { ok: true, headers: new Headers({'content-type': 'application/json'}), json: async () => ({}) } as any;
     });
 
     const res = await executeDCOOptimization(testCampaignId);
@@ -267,7 +271,7 @@ describe('PHASE 2.6 MILESTONE 2 — STEP 4B: DCO EXTERNAL META ACTION EXECUTION'
       if (options?.method === 'POST') {
         throw new Error('ECONNRESET');
       }
-      return { ok: true, json: async () => ({}) } as any;
+      return { ok: true, headers: new Headers({'content-type': 'application/json'}), json: async () => ({}) } as any;
     });
 
     const res = await executeDCOOptimization(testCampaignId);
@@ -285,15 +289,16 @@ describe('PHASE 2.6 MILESTONE 2 — STEP 4B: DCO EXTERNAL META ACTION EXECUTION'
       const urlStr = String(url);
       if (options?.method === 'POST') {
         postCount++;
-        return { ok: true, json: async () => ({ success: true }) } as any;
+        return { ok: true, headers: new Headers({'content-type': 'application/json'}), json: async () => ({ success: true }) } as any;
       }
       if (urlStr.includes('ad_4b_loser') && (!options || options.method === 'GET')) {
         return {
           ok: true,
+          headers: new Headers({'content-type': 'application/json'}),
           json: async () => ({ id: 'ad_4b_loser', status: 'PAUSED', account_id: 'act_4b', campaign_id: 'meta_camp_4b', adset_id: 'meta_adset_4b' })
         } as any;
       }
-      return { ok: true, json: async () => ({}) } as any;
+      return { ok: true, headers: new Headers({'content-type': 'application/json'}), json: async () => ({}) } as any;
     });
 
     // Simulate crash after POST by running with chaos C (or running first part and setting REQUESTED)
@@ -321,6 +326,7 @@ describe('PHASE 2.6 MILESTONE 2 — STEP 4B: DCO EXTERNAL META ACTION EXECUTION'
     global.fetch = vi.fn(async (url: any) => {
       return {
         ok: true,
+        headers: new Headers({'content-type': 'application/json'}),
         json: async () => ({ id: 'ad_4b_loser', status: 'PAUSED', account_id: 'act_4b', campaign_id: 'meta_camp_4b', adset_id: 'meta_adset_4b' })
       } as any;
     });
@@ -343,6 +349,7 @@ describe('PHASE 2.6 MILESTONE 2 — STEP 4B: DCO EXTERNAL META ACTION EXECUTION'
       }
       return {
         ok: true,
+        headers: new Headers({'content-type': 'application/json'}),
         json: async () => ({ id: 'ad_4b_loser', status: 'PAUSED', account_id: 'act_4b', campaign_id: 'meta_camp_4b', adset_id: 'meta_adset_4b' })
       } as any;
     });
@@ -400,6 +407,7 @@ describe('PHASE 2.6 MILESTONE 2 — STEP 4B: DCO EXTERNAL META ACTION EXECUTION'
     global.fetch = vi.fn(async () => {
       return {
         ok: true,
+        headers: new Headers({'content-type': 'application/json'}),
         json: async () => ({ id: 'ad_4b_loser', status: 'ACTIVE', account_id: 'act_wrong_account', campaign_id: 'meta_camp_4b', adset_id: 'meta_adset_4b' })
       } as any;
     });
@@ -417,10 +425,11 @@ describe('PHASE 2.6 MILESTONE 2 — STEP 4B: DCO EXTERNAL META ACTION EXECUTION'
       if (urlStr.includes('ad_4b_loser') && (!options || options.method === 'GET')) {
         return {
           ok: true,
+          headers: new Headers({'content-type': 'application/json'}),
           json: async () => ({ id: 'ad_4b_loser', status: 'PAUSED', account_id: 'act_4b', campaign_id: 'meta_camp_4b', adset_id: 'meta_adset_4b' })
         } as any;
       }
-      return { ok: true, json: async () => ({ success: true }) } as any;
+      return { ok: true, headers: new Headers({'content-type': 'application/json'}), json: async () => ({ success: true }) } as any;
     });
 
     await executeDCOOptimization(testCampaignId);
@@ -441,10 +450,11 @@ describe('PHASE 2.6 MILESTONE 2 — STEP 4B: DCO EXTERNAL META ACTION EXECUTION'
       if (urlStr.includes('ad_4b_loser') && (!options || options.method === 'GET')) {
         return {
           ok: true,
+          headers: new Headers({'content-type': 'application/json'}),
           json: async () => ({ id: 'ad_4b_loser', status: 'PAUSED', account_id: 'act_4b', campaign_id: 'meta_camp_4b', adset_id: 'meta_adset_4b' })
         } as any;
       }
-      return { ok: true, json: async () => ({ success: true }) } as any;
+      return { ok: true, headers: new Headers({'content-type': 'application/json'}), json: async () => ({ success: true }) } as any;
     });
 
     await executeDCOOptimization(testCampaignId);

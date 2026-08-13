@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { safeParseResponse } from '../src/lib/apiClient';
 
 export interface User {
   id: number;
@@ -47,16 +48,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const res = await fetch('/api/auth/me', {
             headers: { 'Authorization': `Bearer ${token}` }
           });
-          if (res.ok) {
-            const data = await res.json();
-            setUser(data.user);
-            localStorage.setItem('user', JSON.stringify(data.user));
-          } else if (res.status === 401 || res.status === 403) {
+          const parsed = await safeParseResponse<{ user: User }>(res);
+          if (parsed.ok && parsed.data?.user) {
+            setUser(parsed.data.user);
+            localStorage.setItem('user', JSON.stringify(parsed.data.user));
+          } else if (parsed.status === 401 || parsed.status === 403) {
             setToken(null);
             setUser(null);
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             localStorage.removeItem('auth_session');
+          } else if (!parsed.ok) {
+            console.warn(`[/api/auth/me] Auth check returned non-OK status ${parsed.status}:`, parsed.error);
           }
         } catch (e) {
           console.error("Failed to fetch user:", e);

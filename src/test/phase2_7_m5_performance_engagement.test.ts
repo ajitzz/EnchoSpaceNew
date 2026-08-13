@@ -6,7 +6,10 @@ import { evaluateCampaignDCO, computeCampaignApprovalHash } from '../../server.j
 
 const { Pool } = pkg;
 
-const dbUrl = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_Kbtu5eg0BkOT@ep-gentle-pine-azmkxmz0-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require';
+const dbUrl = process.env.DATABASE_URL;
+if (!dbUrl) {
+  throw new Error("DATABASE_URL is not configured for test environment");
+}
 const pool = new Pool({ connectionString: dbUrl });
 
 describe('Phase 2.7 Milestone 5 — Performance & Social Engagement Telemetry Engine', () => {
@@ -656,7 +659,7 @@ describe('Phase 2.7 Milestone 5 — Performance & Social Engagement Telemetry En
 
     it('7.10 Handles HTTP 5xx server errors from Meta API gracefully', async () => {
       const originalFetch = global.fetch;
-      (global as any).fetch = async () => new Response(JSON.stringify({ error: { message: 'Internal Meta Server Error', code: 500 } }), { status: 500 });
+      (global as any).fetch = async () => new Response(JSON.stringify({ error: { message: 'Internal Meta Server Error', code: 500 } }), { status: 500, headers: { 'content-type': 'application/json' } });
       try {
         const res = await MetaTelemetrySyncEngine.syncAdsInsights(
           testCampaignId,

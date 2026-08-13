@@ -472,7 +472,7 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
                                                     })
                                                 });
                                                 if (res.ok) {
-                                                    const data = await res.json();
+                                                    const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
                                                     if (data.reply) {
                                                         setNewMessage(data.reply);
                                                         uiAudio.playPop();
@@ -526,7 +526,7 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
                                                         })
                                                     });
                                                     if (res.ok) {
-                                                        const data = await res.json();
+                                                        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
                                                         if (data.reply) setNewMessage(data.reply);
                                                     }
                                                 } catch (e) {

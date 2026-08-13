@@ -1,4 +1,5 @@
 import { get, set } from 'idb-keyval';
+import { safeParseResponse } from './apiClient';
 
 /**
  * Local-First Sync Service
@@ -23,10 +24,10 @@ export async function fetchWithCache<T>(url: string, cacheKey: string, options?:
 
     try {
         const response = await fetch(url, options);
-        if (response.ok) {
-            const data = await response.json();
-            await set(cacheKey, data); // store to idle cache
-            return data;
+        const parsed = await safeParseResponse<T>(response);
+        if (parsed.ok && parsed.data !== null) {
+            await set(cacheKey, parsed.data); // store to idle cache
+            return parsed.data;
         } else if (cachedData) {
             console.log(`[Fetch Failed] Using cached data for ${cacheKey}`);
             return cachedData;

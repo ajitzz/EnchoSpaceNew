@@ -33,7 +33,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ phone }),
         });
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         if (!res.ok) throw new Error(data.error || 'Failed to send verification code');
         setIsOtpSent(true);
     } catch (err: any) {
@@ -54,7 +54,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ phone, otp, name }),
         });
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         if (!res.ok) throw new Error(data.error || 'Invalid verification code');
         login(data.user, data.token);
         onClose();
@@ -80,7 +80,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
           name: decoded.name || 'Google User'
         }),
       });
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
       if (!res.ok) throw new Error(data.error || 'Google authentication failed');
       login(data.user, data.token);
       onClose();

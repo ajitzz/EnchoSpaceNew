@@ -60,10 +60,10 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         }
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setViewInvoiceModal(data.invoice);
       } else {
-        const err = await res.json();
+        const err = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         addToast(err.error || 'Failed to fetch tax invoice', 'error');
       }
     } catch (err) {
@@ -86,7 +86,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setGeoRouteInfo(data);
       }
     } catch (err) {
@@ -208,7 +208,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           ...(editingCampaignId ? { id: editingCampaignId } : {})
         })
       });
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
       
       let reportObj = data.report;
       if (!reportObj && data.gates) {
@@ -272,7 +272,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           body: JSON.stringify({ formData })
         });
         if (res.ok) {
-          const data = await res.json();
+          const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
           setCopilotData(data);
         }
       } catch (err) {
@@ -398,7 +398,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           campaignId: selectedCampaignForAnalytics?.id || (campaigns.length > 0 ? campaigns[0].id : null)
         })
       });
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
       if (res.ok) {
         addToast(action === 'lead' ? '🔥 Hot Lead Alert' : '⚡ Dopamine Webhook Dispatched', data.message, 'success');
         fetchCampaigns();
@@ -440,7 +440,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         },
         body: JSON.stringify({ amount: refuelAmount, gateway })
       });
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
       if (!res.ok) throw new Error(data.error);
 
       if (gateway === 'stripe' && data.url) {
@@ -487,7 +487,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                   transaction_id: data.transaction_id
                 })
               });
-              const verifyData = await verifyRes.json();
+              const verifyData = verifyRes.headers.get('content-type')?.includes('json') ? await verifyRes.json() : { error: 'Server returned non-JSON response: ' + (await verifyRes.text()).slice(0, 150) } as any;
               if (verifyRes.ok && verifyData.success) {
                 addToast('Payment verified & balance credited successfully!', 'success');
               } else {
@@ -520,7 +520,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setWallet(data.wallet);
         setWalletTransactions(data.transactions);
       }
@@ -536,7 +536,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setCampaigns(data);
         localStorage.setItem('cached_campaigns', JSON.stringify(data));
         if (data.length > 0) {
@@ -581,7 +581,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         body: JSON.stringify({ pacing_mode: mode })
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         if (data.success) {
           setCampaigns(prev => prev.map(c => c.id === campaignId ? data.campaign : c));
           if (selectedCampaignForAnalytics?.id === campaignId) {
@@ -589,7 +589,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           }
         }
       } else {
-        const errorData = await res.json();
+        const errorData = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         alert(errorData.error || 'Failed to update pacing mode');
       }
     } catch (err) {
@@ -605,7 +605,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setSocialPosts(data);
         if (data.length > 0 && !selectedPostForDetail) {
           setSelectedPostForDetail(data[0]);
@@ -637,7 +637,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           existing_caption: useDraft ? socialFormData.caption : undefined
         })
       });
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
       if (!res.ok) throw new Error(data.error || 'AI caption evaluation failed');
       if (data.caption) {
         setSocialFormData((prev) => ({
@@ -767,7 +767,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         })
       });
 
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
       if (!res.ok) throw new Error(data.error || 'Failed to submit social post');
 
       if (data.status === 'rejected') {
@@ -810,7 +810,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         }
         fetchSocialPosts();
       } else {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         addToast('Error', data.error || 'Failed to delete post.', 'error');
       }
     } catch (err) {
@@ -836,7 +836,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         })
       });
 
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
       if (!res.ok) throw new Error(data.error || 'Failed to boost post');
 
       addToast('Post Boost Initiated', `Successfully configured paid ad campaign for ${formatPrice(boostBudget, 'INR')}. Pending final moderation.`, 'success');
@@ -923,7 +923,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setAiTargetingRecs(data);
         // Automatically pre-grade if there are current target locations typed
         if (formData.target_locations) {
@@ -952,7 +952,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         body: JSON.stringify({ listing_id: listingId, target_locations: locations })
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setTargetingGrade(data);
       }
     } catch (error) {
@@ -985,7 +985,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         })
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setAiCopyDossier(data);
         if (data.variations && data.variations.length > 0) {
           const firstAngle = data.variations[0];
@@ -1006,7 +1006,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         }
         addToast('Property-Scientist AI Copy Ready!', 'Generated 3 strategic angles, property DNA dossier & viral hashtag matrix.', 'success');
       } else {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         addToast('AI Error', data.error || 'Failed to generate copy.', 'error');
       }
     } catch (err: any) {
@@ -1026,7 +1026,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setCampaignLeads(data);
       }
     } catch (error) {
@@ -1050,7 +1050,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         body: JSON.stringify({ message_text: text, template_name: templateName })
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         addToast('Message Dispatched', 'Programmatic WhatsApp and SMS receipt sent successfully!', 'success');
         
         // Update local logs for that lead so it immediately renders as Contacted with history
@@ -1135,7 +1135,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         fetchCampaigns();
         fetchCampaignLeads(campaignId);
       } else {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         addToast('Conversion Error', data.error || 'Failed to complete direct booking.', 'error');
       }
     } catch (error) {
@@ -1235,7 +1235,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       });
 
       if (response.status === 200) {
-        const { uploadUrl, fileUrl } = await response.json();
+        const { uploadUrl, fileUrl } = response.headers.get('content-type')?.includes('json') ? await response.json() : { error: 'Server returned non-JSON response: ' + (await response.text()).slice(0, 150) } as any;
         setUploadProgress(50);
 
         const uploadResponse = await fetch(uploadUrl, {
@@ -1378,7 +1378,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       } else {
         let errorMsg = 'Failed to create campaign draft';
         try {
-          const errorData = await res.json();
+          const errorData = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
           errorMsg = errorData.error || errorMsg;
         } catch(e) {
           errorMsg = `Server error (${res.status}). Please try again.`;
@@ -1421,7 +1421,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setAiCheckResult({ campaignId: campaign.id, ...(data.ai_evaluation || data) });
         addToast('AI Pre-Check Complete', `Ad score: ${(data.ai_evaluation || data).score}/10. Read suggestions below.`, 'success');
         fetchCampaigns(); // Refresh to show A/B test media updates if Gap 10 triggered
@@ -1478,7 +1478,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       });
 
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         
         if (data.checkoutUrl) {
           addToast('Stripe Connected', 'Redirecting you to official secure Stripe Checkout portal...', 'success');
@@ -1498,7 +1498,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
         setUpiId('');
         fetchCampaigns();
       } else {
-        const errorData = await res.json();
+        const errorData = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         if (errorData.gatekeeper_score) {
           addToast('Gatekeeper Auto-Reject', `Score: ${errorData.gatekeeper_score}/10. ${errorData.gatekeeper_feedback}`, 'error');
           setShowPayModal(null);
@@ -1533,13 +1533,13 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       });
 
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         addToast('Campaign Launched!', data.message || `Deducted ₹${campaign.budget.toLocaleString()} from Master Fuel Tank. Submitted for Admin Quality Control.`, 'success');
         setShowPayModal(null);
         fetchCampaigns();
         fetchWallet();
       } else {
-        const errorData = await res.json();
+        const errorData = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         if (errorData.gatekeeper_score) {
           addToast('Gatekeeper Auto-Reject', `Score: ${errorData.gatekeeper_score}/10. ${errorData.gatekeeper_feedback}`, 'error');
           setShowPayModal(null);
@@ -2053,7 +2053,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                       body: JSON.stringify({ formData })
                     });
                     if (res.ok) {
-                      const data = await res.json();
+                      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
                       setCopilotData(data);
                     }
                   } catch (err) {

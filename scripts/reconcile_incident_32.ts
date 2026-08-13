@@ -5,7 +5,10 @@ async function reconcileIncident32() {
   console.log("   ENCHO DATABASE RECONCILIATION FOR CAMPAIGN #32 / TRANSACTION #7");
   console.log("==================================================================");
 
-  let rawDbUrl = process.env.DATABASE_URL || "postgres://postgres:postgres@localhost:5432/encho";
+  let rawDbUrl = process.env.DATABASE_URL;
+  if (!rawDbUrl) {
+    throw new Error("DATABASE_URL is not configured");
+  }
   if (rawDbUrl.includes('sslmode=') && !rawDbUrl.includes('sslmode=verify-full')) {
     rawDbUrl = rawDbUrl.replace(/sslmode=[^&]+/, 'sslmode=no-verify');
   }

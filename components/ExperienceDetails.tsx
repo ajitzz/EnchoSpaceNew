@@ -274,7 +274,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
     try {
       const res = await fetch(`/api/experiences/${experience.id}/reviews`);
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         if (data && data.length > 0) {
           setReviews(data);
         } else {
@@ -309,7 +309,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
       }
 
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         if (data && data.length > 0) {
           setVideos([...baseVideos, ...data]);
         } else {
@@ -338,7 +338,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
     try {
       const res = await fetch(`/api/experiences`);
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         if (data && data.length > 0) {
           // Filter out current, shuffle, take 2
           const others = data.filter((e: Experience) => e.id !== experience.id);
@@ -370,7 +370,7 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setIsEligible(data.eligible);
       }
 
@@ -418,14 +418,14 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
       });
 
       if (res.ok) {
-        const addedVideo = await res.json();
+        const addedVideo = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setVideos(prev => [addedVideo, ...prev]);
         setNewVideoUrl('');
         setNewVideoTitle('');
         setShowAddVideo(false);
         addToast("Snippet Uploaded!", "Your vertical reel has been added to this experience timeline.", "success");
       } else {
-        const errorData = await res.json();
+        const errorData = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         addToast("Error", errorData.error || "Failed to submit video.", "error");
       }
     } catch (e) {
@@ -470,13 +470,13 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
       });
 
       if (res.ok) {
-        const addedReview = await res.json();
+        const addedReview = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setReviews(prev => [addedReview, ...prev]);
         setNewContent('');
         setNewRating(5);
         addToast("Review Submitted", "Thank you for your feedback! It builds trust for other travelers.", "success");
       } else {
-        const errorData = await res.json();
+        const errorData = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         addToast("Error", errorData.error || "Failed to submit review.", "error");
       }
     } catch (e) {

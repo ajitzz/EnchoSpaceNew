@@ -57,7 +57,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({ address, city, o
     const fetchAddress = async () => {
       try {
         const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.lat}&lon=${position.lng}`);
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         if (data && data.address) {
           const newCity = data.address.city || data.address.town || data.address.village || city;
           const newAddress = data.name || `${data.address.road || ''} ${data.address.house_number || ''}`.trim() || address;

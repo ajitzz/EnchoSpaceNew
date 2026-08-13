@@ -68,15 +68,15 @@ describe('P0-3 — Reconciliation Active Remediation & External-Truth Engine', (
     global.fetch = async (url: any) => {
       const urlStr = String(url);
       if (urlStr.includes('missing_obj')) {
-        return new Response(JSON.stringify({ error: { code: 100, message: 'Unsupported get request' } }), { status: 404 });
+        return new Response(JSON.stringify({ error: { code: 100, message: 'Unsupported get request' } }), { status: 404, headers: { 'content-type': 'application/json' } });
       }
       if (urlStr.includes('timeout_obj')) {
         throw new TypeError('fetch failed - Connection timeout');
       }
       if (urlStr.includes('active_obj_123')) {
-        return new Response(JSON.stringify({ id: 'active_obj_123', status: 'ACTIVE', name: 'My Active Campaign', daily_budget: '5000' }), { status: 200 });
+        return new Response(JSON.stringify({ id: 'active_obj_123', status: 'ACTIVE', name: 'My Active Campaign', daily_budget: '5000' }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
-      return new Response(JSON.stringify({ id: 'obj_999', status: 'PAUSED' }), { status: 200 });
+      return new Response(JSON.stringify({ id: 'obj_999', status: 'PAUSED' }), { status: 200, headers: { 'content-type': 'application/json' } });
     };
 
     try {
@@ -122,21 +122,21 @@ describe('P0-3 — Reconciliation Active Remediation & External-Truth Engine', (
           const wasRenameCalled = fetchedCalls.some(c => c.method === 'POST' && c.url.includes('FAILED_ROLLBACK'));
 
           if (wasRenameCalled) {
-            return new Response(JSON.stringify({ id: 'orphan_camp_999', status: 'PAUSED', name: `[FAILED_ROLLBACK_${corr}]_Campaign_orphan_camp_999` }), { status: 200 });
+            return new Response(JSON.stringify({ id: 'orphan_camp_999', status: 'PAUSED', name: `[FAILED_ROLLBACK_${corr}]_Campaign_orphan_camp_999` }), { status: 200, headers: { 'content-type': 'application/json' } });
           }
           if (wasPauseCalled) {
-            return new Response(JSON.stringify({ id: 'orphan_camp_999', status: 'PAUSED', name: 'Original Name' }), { status: 200 });
+            return new Response(JSON.stringify({ id: 'orphan_camp_999', status: 'PAUSED', name: 'Original Name' }), { status: 200, headers: { 'content-type': 'application/json' } });
           }
-          return new Response(JSON.stringify({ id: 'orphan_camp_999', status: 'ACTIVE', name: 'Active Orphan Campaign' }), { status: 200 });
+          return new Response(JSON.stringify({ id: 'orphan_camp_999', status: 'ACTIVE', name: 'Active Orphan Campaign' }), { status: 200, headers: { 'content-type': 'application/json' } });
         }
-        return new Response(JSON.stringify({ error: { code: 100 } }), { status: 404 });
+        return new Response(JSON.stringify({ error: { code: 100 } }), { status: 404, headers: { 'content-type': 'application/json' } });
       }
 
       if (method === 'POST') {
-        return new Response(JSON.stringify({ success: true, id: 'orphan_camp_999' }), { status: 200 });
+        return new Response(JSON.stringify({ success: true, id: 'orphan_camp_999' }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
 
-      return new Response(JSON.stringify({ success: true }), { status: 200 });
+      return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'content-type': 'application/json' } });
     };
 
     try {
@@ -181,9 +181,9 @@ describe('P0-3 — Reconciliation Active Remediation & External-Truth Engine', (
       if (method === 'POST') postCalls.push(urlStr);
 
       if (method === 'GET' && urlStr.includes('already_q_123')) {
-        return new Response(JSON.stringify({ id: 'already_q_123', status: 'PAUSED', name: `[FAILED_ROLLBACK_${corr}]_Campaign_already_q_123` }), { status: 200 });
+        return new Response(JSON.stringify({ id: 'already_q_123', status: 'PAUSED', name: `[FAILED_ROLLBACK_${corr}]_Campaign_already_q_123` }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
-      return new Response(JSON.stringify({ error: { code: 100 } }), { status: 404 });
+      return new Response(JSON.stringify({ error: { code: 100 } }), { status: 404, headers: { 'content-type': 'application/json' } });
     };
 
     try {
@@ -254,9 +254,9 @@ describe('P0-3 — Reconciliation Active Remediation & External-Truth Engine', (
       const urlStr = String(url);
       if (urlStr.includes('camp_mismatch_888')) {
         // Meta has budget 200000 cents ($2000.00), local has $100.00 (10000 cents)
-        return new Response(JSON.stringify({ id: 'camp_mismatch_888', status: 'ACTIVE', name: 'Live Campaign', daily_budget: '200000' }), { status: 200 });
+        return new Response(JSON.stringify({ id: 'camp_mismatch_888', status: 'ACTIVE', name: 'Live Campaign', daily_budget: '200000' }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
-      return new Response(JSON.stringify({ error: { code: 100 } }), { status: 404 });
+      return new Response(JSON.stringify({ error: { code: 100 } }), { status: 404, headers: { 'content-type': 'application/json' } });
     };
 
     try {

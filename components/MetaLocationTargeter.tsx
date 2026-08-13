@@ -461,7 +461,7 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
     let cityName = '';
     try {
       const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
       if (data && data.address) {
         cityName = data.address.city || data.address.town || data.address.suburb || data.address.village || data.address.state || data.address.county || data.display_name.split(',')[0] || '';
       }
@@ -571,7 +571,7 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
       setIsSearching(true);
       try {
         const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=5`);
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         if (Array.isArray(data)) {
           setSearchResults(data.map(item => ({
             name: item.display_name.split(',').slice(0, 2).join(','),
@@ -818,7 +818,7 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
       } else {
         try {
           const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(name)}&limit=1`);
-          const data = await res.json();
+          const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
           if (Array.isArray(data) && data.length > 0) {
             newItems.push({
               id: `bulk_${Date.now()}_${i}`,

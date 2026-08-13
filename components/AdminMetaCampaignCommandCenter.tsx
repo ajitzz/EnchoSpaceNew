@@ -97,7 +97,7 @@ export const AdminMetaCampaignCommandCenter: React.FC<AdminMetaCampaignCommandCe
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setCampaigns(data);
         if (data.length > 0 && !selectedCampaignId) {
           setSelectedCampaignId(data[0].id);
@@ -117,7 +117,7 @@ export const AdminMetaCampaignCommandCenter: React.FC<AdminMetaCampaignCommandCe
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        const truth = await res.json();
+        const truth = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setTruthMap(prev => ({ ...prev, [campaignId]: truth }));
       }
     } catch (err) {
@@ -327,7 +327,7 @@ export const AdminMetaCampaignCommandCenter: React.FC<AdminMetaCampaignCommandCe
         body: actionPreview.payload ? JSON.stringify(actionPreview.payload) : undefined
       });
 
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
 
       if (res.ok && data.success !== false) {
         setNotification({

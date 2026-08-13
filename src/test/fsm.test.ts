@@ -73,7 +73,7 @@ describe('Phase 2.2 Central Campaign State Machine', () => {
   });
 
   it('logs transition in event ledger', async () => {
-    const events = await pool.query("SELECT * FROM meta_publishing_events WHERE campaign_id = $1", [testCampaignId]);
+    const events = await pool.query("SELECT * FROM meta_publishing_events WHERE campaign_id = $1 ORDER BY id ASC", [testCampaignId]);
     expect(events.rows.length).toBeGreaterThan(0);
     // the last event should be pending_approval -> draft
     const lastEvent = events.rows[events.rows.length - 1];

@@ -362,7 +362,7 @@ export class MetaExternalSyncEngine {
 
       try {
         const res = await fetch(fullUrl);
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         return { status: res.status, data };
       } catch (err: any) {
         return { status: 500, data: { error: { message: err.message || 'Fetch failed' } } };

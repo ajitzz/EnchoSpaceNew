@@ -63,7 +63,7 @@ const CheckoutForm = ({ amount, onPaymentSuccess, onCancel }: { amount: number, 
     if (!res.ok) {
        let isStripeNotConfigured = false;
        try {
-           const data = await res.json();
+           const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
            if (data.error === 'Stripe is not configured') isStripeNotConfigured = true;
        } catch (e) {
            // ignore
@@ -77,7 +77,7 @@ const CheckoutForm = ({ amount, onPaymentSuccess, onCancel }: { amount: number, 
        return;
     }
 
-    const { clientSecret } = await res.json();
+    const { clientSecret } = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
 
     const { error: confirmError } = await stripe.confirmPayment({
         elements,

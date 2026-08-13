@@ -20,6 +20,9 @@ import pg from 'pg';
 let globalPool: pg.Pool | null = null;
 function getDbPool(): pg.Pool {
   if (!globalPool) {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not configured");
+    }
     globalPool = new pg.Pool({
       connectionString: process.env.DATABASE_URL
     });
@@ -356,7 +359,7 @@ export class MetaTelemetrySyncEngine {
             const timer = setTimeout(() => controller.abort(), timeoutMs);
             const res = await fetch(url, { signal: controller.signal });
             clearTimeout(timer);
-            const json = await res.json();
+            const json = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
             if (res.ok && json.data?.[0]) {
               const rawV = json.data[0];
               varInsights.impressions = Number(rawV.impressions || 0);
@@ -480,7 +483,7 @@ export class MetaTelemetrySyncEngine {
         const res = await fetch(url, { signal: controller.signal });
         clearTimeout(timer);
 
-        const json = await res.json();
+        const json = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         if (!res.ok || json.error) {
           const errCode = json.error?.code || res.status;
           const isRateLimit = [17, 32, 613].includes(Number(json.error?.code)) || res.status === 429;
@@ -748,7 +751,7 @@ export class MetaTelemetrySyncEngine {
         const res = await fetch(url, { signal: controller.signal });
         clearTimeout(timer);
 
-        const json = await res.json();
+        const json = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         if (!res.ok || json.error) {
           const errCode = json.error?.code || res.status;
           const isRateLimit = [17, 32, 613].includes(Number(json.error?.code)) || res.status === 429;

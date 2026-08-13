@@ -236,15 +236,17 @@ const { Pool } = pkg;
 const __filename = typeof fileURLToPath === 'function' ? fileURLToPath(import.meta.url || 'file://') : '';
 const __dirname = __filename ? path.dirname(__filename) : '';
 
-// Initialize DB (Neon)
-// Use the user-provided DB URL from the instructions
-const userDbUrl = 'postgresql://neondb_owner:npg_DS7vjuFc0efR@ep-muddy-sun-aoyw9d8l-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
-// Always use the user provided DB URL to ensure we connect to the correct database with the actual listings
-const envDbUrl = process.env.DATABASE_URL || userDbUrl;
-console.log('===> SERVER INIT: envDbUrl is', envDbUrl);
+// Initialize DB (Neon) - FAIL-CLOSED CONFIGURATION
+const dbUrl = process.env.DATABASE_URL;
 
-const isDbConfigured = envDbUrl && !envDbUrl.includes('dummy');
-const dbUrl = envDbUrl;
+if (!dbUrl) {
+  console.error('[DATABASE CONFIG ERROR] DATABASE_URL is not configured.');
+  throw new Error("DATABASE_URL is not configured");
+}
+
+const envDbUrl = dbUrl;
+const isDbConfigured = true;
+console.log('===> SERVER INIT: Database connection configured via process.env.DATABASE_URL');
 
 
 
@@ -586,7 +588,7 @@ async function sendWhatsAppMessage(toPhone: string, messageText: string): Promis
       })
     });
 
-    const data = await response.json();
+    const data = response.headers.get('content-type')?.includes('json') ? await response.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await response.text()).slice(0, 150) } as any;
     if (!response.ok) {
        console.warn("[WHATSAPP SYSTEM] API returned OAuthException or validation failure, falling back to secure sandbox channel:", data?.error || data);
        console.log(`[WHATSAPP SANDBOX DELIVERED] Broadcast processed successfully via fallback channel:`);
@@ -611,18 +613,12 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
   const token = authHeader && authHeader.split(' ')[1];
   
   if (!token) {
-    req.user = { id: 1, email: 'ajithsabzz@gmail.com', role: 'host' };
-    return rlsStorage.run({ userId: req.user.id, isRequest: true, bypassRls: true }, () => {
-      next();
-    });
+    return res.status(401).json({ error: 'Authentication required. No token provided.' });
   }
 
   jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
     if (err) {
-      req.user = { id: 1, email: 'ajithsabzz@gmail.com', role: 'host' };
-      return rlsStorage.run({ userId: req.user.id, isRequest: true, bypassRls: true }, () => {
-        next();
-      });
+      return res.status(401).json({ error: 'Invalid or expired authentication token.' });
     }
     req.user = user;
     // Propagate the authenticated host's context to enable genuine row-level security
@@ -4637,7 +4633,7 @@ const publishToInstagram = async (post: any) => {
             }
 
             const res = await fetch(`${baseUrl}/media`, { method: 'POST', body });
-            const data = await res.json();
+            const data = res.headers.get('content-type')?.includes('json') ? await res.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
             if (data.error) throw new Error(`Meta API Error (Carousel Item): ${data.error.message}`);
             childrenIds.push(data.id);
         }
@@ -4649,7 +4645,7 @@ const publishToInstagram = async (post: any) => {
             caption: caption || ''
         });
         const res2 = await fetch(`${baseUrl}/media`, { method: 'POST', body: carouselBody });
-        const data2 = await res2.json();
+        const data2 = res2.headers.get('content-type')?.includes('json') ? await res2.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res2.text()).slice(0, 150) } as any;
         if (data2.error) throw new Error(`Meta API Error (Carousel Container): ${data2.error.message}`);
         creationId = data2.id;
     } else {
@@ -4671,7 +4667,7 @@ const publishToInstagram = async (post: any) => {
         }
 
         const res = await fetch(`${baseUrl}/media`, { method: 'POST', body });
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         if (data.error) throw new Error(`Meta API Error (Media Container): ${data.error.message}`);
         creationId = data.id;
     }
@@ -4687,7 +4683,7 @@ const publishToInstagram = async (post: any) => {
                 access_token: token
             });
             const res3 = await fetch(`${baseUrl}/media_publish`, { method: 'POST', body: publishBody });
-            const data3 = await res3.json();
+            const data3 = res3.headers.get('content-type')?.includes('json') ? await res3.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res3.text()).slice(0, 150) } as any;
             
             if (data3.error) {
                 lastError = data3.error.message;
@@ -5167,7 +5163,7 @@ app.post('/api/marketing/campaigns/:id/sync-meta', authenticateToken, async (req
     const accessToken = process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN;
     if (accessToken && metaCampId) {
       const metaRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${metaCampId}?fields=id,name,status,created_time,adsets{id,name,status,daily_budget,ads{id,name,status}}&access_token=${accessToken}`);
-      const metaData = await metaRes.json();
+      const metaData = metaRes.headers.get('content-type')?.includes('json') ? await metaRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await metaRes.text()).slice(0, 150) } as any;
       
       let liveAdSetId = campaign.meta_adset_id || null;
       let liveAdId = campaign.meta_ad_id || null;
@@ -7148,7 +7144,7 @@ export async function executeMetaRollback(
     // Step 0: Idempotency Pre-Check - If already PAUSED and RENAMED with FAILED_ROLLBACK, skip POST mutations
     try {
       const precheckRes = await fetch(`${baseUrl}/${objId}?fields=id,status,name&access_token=${accessToken}`);
-      const precheckData = await precheckRes.json().catch(() => ({}));
+      const precheckData = precheckRes.headers.get('content-type')?.includes('json') ? await precheckRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await precheckRes.text()).slice(0, 150) } as any;
 
       if (precheckRes.status === 404 || (precheckData.error && (precheckData.error.code === 100 || precheckData.error.code === 10))) {
         quarantinedObjects[objType.toLowerCase()] = objId;
@@ -7176,11 +7172,11 @@ export async function executeMetaRollback(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'PAUSED', access_token: accessToken })
       });
-      const pauseData = await pauseRes.json().catch(() => ({}));
+      const pauseData = pauseRes.headers.get('content-type')?.includes('json') ? await pauseRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await pauseRes.text()).slice(0, 150) } as any;
 
       // Step 2: VERIFY PAUSED externally
       const verifyPauseRes = await fetch(`${baseUrl}/${objId}?fields=id,status,name&access_token=${accessToken}`);
-      const verifyPauseData = await verifyPauseRes.json().catch(() => ({}));
+      const verifyPauseData = verifyPauseRes.headers.get('content-type')?.includes('json') ? await verifyPauseRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await verifyPauseRes.text()).slice(0, 150) } as any;
 
       if (verifyPauseRes.status === 404 || (verifyPauseData.error && (verifyPauseData.error.code === 100 || verifyPauseData.error.code === 10))) {
         // Object does not exist externally
@@ -7220,11 +7216,11 @@ export async function executeMetaRollback(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: quarantineName, access_token: accessToken })
         });
-        const renameData = await renameRes.json().catch(() => ({}));
+        const renameData = renameRes.headers.get('content-type')?.includes('json') ? await renameRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await renameRes.text()).slice(0, 150) } as any;
 
         // Step 4: Verify rename externally
         const verifyRenameRes = await fetch(`${baseUrl}/${objId}?fields=id,status,name&access_token=${accessToken}`);
-        const verifyRenameData = await verifyRenameRes.json().catch(() => ({}));
+        const verifyRenameData = verifyRenameRes.headers.get('content-type')?.includes('json') ? await verifyRenameRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await verifyRenameRes.text()).slice(0, 150) } as any;
         const extName = String(verifyRenameData.name || '');
 
         if (extName.includes('FAILED_ROLLBACK') || extName.includes(correlationId) || renameData.success === true || renameData.id || renameRes.ok) {
@@ -7451,7 +7447,7 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
           });
-          const data = await res.json();
+          const data = res.headers.get('content-type')?.includes('json') ? await res.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
           const executionTime = Date.now() - startTime;
           
           // Enterprise Meta Debug Recorder Insert
@@ -7653,13 +7649,13 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
 
       // External Verification
       const verifyCreativeRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${creativeId}?fields=id,account_id&access_token=${accessToken}`);
-      const verifyCreativeData = await verifyCreativeRes.json().catch(() => ({}));
+      const verifyCreativeData = verifyCreativeRes.headers.get('content-type')?.includes('json') ? await verifyCreativeRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await verifyCreativeRes.text()).slice(0, 150) } as any;
       if (!verifyCreativeRes.ok || verifyCreativeData.error || !verifyCreativeData.id) {
         throw new Error(`External verification failed for creative ${creativeId}`);
       }
 
       const verifyAdRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${adId}?fields=id,adset_id,campaign_id,account_id,status,effective_status&access_token=${accessToken}`);
-      const verifyAdData = await verifyAdRes.json().catch(() => ({}));
+      const verifyAdData = verifyAdRes.headers.get('content-type')?.includes('json') ? await verifyAdRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await verifyAdRes.text()).slice(0, 150) } as any;
       if (!verifyAdRes.ok || verifyAdData.error || !verifyAdData.id) {
         throw new Error(`External verification failed for ad ${adId}`);
       }
@@ -7846,7 +7842,7 @@ export async function ingestVariantInsights(variantId: number, forcedInsights?: 
       const timeoutId = setTimeout(() => controller.abort(), 10000);
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timeoutId);
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
       if (!res.ok || data.error) {
         throw new Error(data.error?.message || `Meta Insights API failed with status ${res.status}`);
       }
@@ -8470,7 +8466,7 @@ export async function executeDCOOptimization(
     if (actionRecord && (actionRecord.status === 'REQUESTED' || actionRecord.status === 'EXTERNAL_OUTCOME_UNKNOWN')) {
       try {
         const verifyRes = await fetch(`${baseUrl}/${loserVariant.meta_ad_id}?fields=id,status,effective_status,campaign_id,adset_id,account_id&access_token=${accessToken}`);
-        const verifyData = await verifyRes.json().catch(() => ({}));
+        const verifyData = verifyRes.headers.get('content-type')?.includes('json') ? await verifyRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await verifyRes.text()).slice(0, 150) } as any;
         const extStatus = String(verifyData.status || verifyData.effective_status || '').toUpperCase();
         if (extStatus === 'PAUSED' || extStatus === 'ARCHIVED') {
           await client.query(`UPDATE dco_external_actions SET status = 'META_ACTION_SUCCEEDED', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [actionRecord.id]);
@@ -8514,7 +8510,7 @@ export async function executeDCOOptimization(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'PAUSED', access_token: accessToken })
       });
-      const postData = await postRes.json().catch(() => ({}));
+      const postData = postRes.headers.get('content-type')?.includes('json') ? await postRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await postRes.text()).slice(0, 150) } as any;
       if (!postRes.ok || postData.error) {
         throw new Error(postData.error?.message || `HTTP ${postRes.status} pause failure`);
       }
@@ -8548,7 +8544,7 @@ export async function executeDCOOptimization(
     let verifiedPaused = false;
     try {
       const getRes = await fetch(`${baseUrl}/${loserVariant.meta_ad_id}?fields=id,status,effective_status,campaign_id,adset_id,account_id&access_token=${accessToken}`);
-      const getData = await getRes.json().catch(() => ({}));
+      const getData = getRes.headers.get('content-type')?.includes('json') ? await getRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await getRes.text()).slice(0, 150) } as any;
       const extStatus = String(getData.status || getData.effective_status || '').toUpperCase();
       
       const expectedAccountId = campaign.owner_meta_ad_account_id.startsWith('act_') ? campaign.owner_meta_ad_account_id : `act_${campaign.owner_meta_ad_account_id}`;
@@ -8683,7 +8679,7 @@ export async function reconcileDCOExternalActionsWorker() {
       if (!action.meta_ad_id) continue;
       try {
         const getRes = await fetch(`${baseUrl}/${action.meta_ad_id}?fields=id,status,effective_status,campaign_id,adset_id,account_id&access_token=${accessToken}`);
-        const getData = await getRes.json().catch(() => ({}));
+        const getData = getRes.headers.get('content-type')?.includes('json') ? await getRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await getRes.text()).slice(0, 150) } as any;
         const extStatus = String(getData.status || getData.effective_status || '').toUpperCase();
 
         if (extStatus === 'PAUSED' || extStatus === 'ARCHIVED') {
@@ -8802,7 +8798,7 @@ async function dispatchConversionsAPI(booking: any, listingId: number, eventName
           body: JSON.stringify(eventPayload)
         });
 
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         if (res.ok) {
           console.log(`[META CAPI SUCCESS] Pixel ${meta_pixel_id} received "${eventName}" event successfully! Event ID: ${data.events_received || 'Received'}`);
         } else {
@@ -9787,7 +9783,7 @@ app.get('/api/admin/marketing/health', authenticateToken, async (req: AuthReques
     
     // Ping Meta API
     const metaRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}?access_token=${accessToken}&fields=id,account_status,name`);
-    const metaData = await metaRes.json();
+    const metaData = metaRes.headers.get('content-type')?.includes('json') ? await metaRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await metaRes.text()).slice(0, 150) } as any;
     
     if (metaData.error) {
       health.status = 'OUTAGE';
@@ -9884,7 +9880,7 @@ app.post('/api/admin/marketing/rollback/:metaId', authenticateToken, async (req:
     const deleteRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${metaId}?access_token=${accessToken}`, {
       method: 'DELETE'
     });
-    const deleteData = await deleteRes.json();
+    const deleteData = deleteRes.headers.get('content-type')?.includes('json') ? await deleteRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await deleteRes.text()).slice(0, 150) } as any;
     
     await pool.query(`
       INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
@@ -10207,7 +10203,7 @@ app.post('/api/admin/marketing/campaigns/:id/pause-meta', authenticateToken, asy
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'PAUSED', access_token: accessToken })
         });
-        const metaData = await metaRes.json();
+        const metaData = metaRes.headers.get('content-type')?.includes('json') ? await metaRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await metaRes.text()).slice(0, 150) } as any;
         console.log(`[META ADMIN PAUSE] Campaign #${id} Meta API response:`, metaData);
       } catch (metaErr) {
         console.warn(`[META ADMIN PAUSE WARN] Failed to pause on Meta Graph API:`, metaErr);
@@ -10257,7 +10253,7 @@ app.post('/api/admin/marketing/campaigns/:id/resume-meta', authenticateToken, as
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'ACTIVE', access_token: accessToken })
         });
-        const metaData = await metaRes.json();
+        const metaData = metaRes.headers.get('content-type')?.includes('json') ? await metaRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await metaRes.text()).slice(0, 150) } as any;
         console.log(`[META ADMIN RESUME] Campaign #${id} Meta API response:`, metaData);
       } catch (metaErr) {
         console.warn(`[META ADMIN RESUME WARN] Failed to resume on Meta Graph API:`, metaErr);
@@ -10307,7 +10303,7 @@ app.post('/api/admin/marketing/campaigns/:id/kill-meta', authenticateToken, asyn
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'ARCHIVED', access_token: accessToken })
         });
-        const metaData = await metaRes.json();
+        const metaData = metaRes.headers.get('content-type')?.includes('json') ? await metaRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await metaRes.text()).slice(0, 150) } as any;
         console.log(`[META ADMIN KILL/ARCHIVE] Campaign #${id} Meta API response:`, metaData);
       } catch (metaErr) {
         console.warn(`[META ADMIN KILL WARN] Failed to archive on Meta Graph API:`, metaErr);
@@ -12429,7 +12425,7 @@ const demoExperiences = [
 app.get('/api/seed-ajith', authenticateToken, async (req: AuthRequest, res) => {
   if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
   try {
-    console.log("DB URL inside server:", envDbUrl);
+    console.log("DB connection configured for seed-ajith");
     const userRes = await pool.query("SELECT id FROM users WHERE email = 'ajithsabzz@gmail.com'");
     if (userRes.rows.length === 0) {
       return res.status(401).json({ error: 'User not found, token invalid' });
@@ -15094,7 +15090,7 @@ export async function verifyMetaExternalObjectDetailed(
     });
     clearTimeout(timeout);
 
-    const data = await res.json().catch(() => ({}));
+    const data = (res.headers.get('content-type')?.includes('json') ? await res.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res.text().catch(() => '')).slice(0, 150) } as any);
 
     // Check for HTTP 404 or Graph API missing object errors
     if (res.status === 404 || (data.error && (data.error.code === 100 || data.error.code === 10 || String(data.error.message || '').includes('does not exist')))) {

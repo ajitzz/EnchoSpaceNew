@@ -2,8 +2,11 @@ import pg from 'pg';
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 const { Pool } = pg;
+if (!process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL is not configured");
+}
 const pool = new Pool({
-  connectionString: 'postgresql://neondb_owner:npg_4cbpQjKtym9n@ep-small-smoke-a1vjxk25-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require',
+  connectionString: process.env.DATABASE_URL,
   ssl: true
 });
 

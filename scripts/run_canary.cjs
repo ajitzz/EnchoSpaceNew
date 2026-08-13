@@ -1,7 +1,10 @@
 const { Pool } = require('pg');
 const crypto = require('crypto');
 
-let rawDbUrl = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/encho';
+let rawDbUrl = process.env.DATABASE_URL;
+if (!rawDbUrl) {
+  throw new Error("DATABASE_URL is not configured");
+}
 if (rawDbUrl.includes('sslmode=') && !rawDbUrl.includes('sslmode=verify-full')) {
   rawDbUrl = rawDbUrl.replace(/sslmode=[^&]+/, 'sslmode=no-verify');
 }

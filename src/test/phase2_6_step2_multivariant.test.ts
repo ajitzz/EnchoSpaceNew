@@ -83,7 +83,7 @@ describe('PHASE 2.6 MILESTONE 2 — STEP 2: MULTI-VARIANT META PUBLISHING', () =
       const method = (options.method || 'GET').toUpperCase();
 
       if (urlStr.includes('/debug_token')) {
-        return new Response(JSON.stringify({ data: { is_valid: true, scopes: ['ads_management', 'pages_read_engagement', 'pages_manage_posts'] } }), { status: 200 });
+        return new Response(JSON.stringify({ data: { is_valid: true, scopes: ['ads_management', 'pages_read_engagement', 'pages_manage_posts'] } }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
       if (urlStr.includes(`/${pageId}`) || urlStr.includes('/me/accounts')) {
         return new Response(JSON.stringify({
@@ -92,13 +92,13 @@ describe('PHASE 2.6 MILESTONE 2 — STEP 2: MULTI-VARIANT META PUBLISHING', () =
           access_token: 'page_token_123',
           tasks: ['ANALYZE', 'ADVERTISE', 'MODERATE'],
           data: [{ id: pageId, name: 'Test Page', access_token: 'page_token_123', tasks: ['ANALYZE', 'ADVERTISE', 'MODERATE'] }]
-        }), { status: 200 });
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
 
       // Mock image fetch
       if (urlStr.includes('picsum.photos') || urlStr.includes('url1') || urlStr.includes('url2')) {
         const buf = Buffer.from(`mock_image_bytes_${Math.random()}`);
-        return new Response(buf, { status: 200 });
+        return new Response(buf, { status: 200, headers: { 'content-type': 'application/json' } });
       }
 
       if (customMetaPost) {
@@ -108,42 +108,42 @@ describe('PHASE 2.6 MILESTONE 2 — STEP 2: MULTI-VARIANT META PUBLISHING', () =
 
       // Mock Meta adimages upload
       if (urlStr.includes('/adimages')) {
-        return new Response(JSON.stringify({ images: { img1: { hash: `hash_${Math.random()}` } } }), { status: 200 });
+        return new Response(JSON.stringify({ images: { img1: { hash: `hash_${Math.random()}` } } }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
 
       // Mock campaigns creation
       if (urlStr.includes('/campaigns') && method === 'POST') {
-        return new Response(JSON.stringify({ id: 'mock_camp_step2' }), { status: 200 });
+        return new Response(JSON.stringify({ id: 'mock_camp_step2' }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
 
       // Mock adsets creation
       if (urlStr.includes('/adsets') && method === 'POST') {
-        return new Response(JSON.stringify({ id: 'mock_adset_step2' }), { status: 200 });
+        return new Response(JSON.stringify({ id: 'mock_adset_step2' }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
 
       // Mock adcreatives creation
       if (urlStr.includes('/adcreatives') && method === 'POST') {
         const cid = `mock_creative_${creativeCounter++}`;
-        return new Response(JSON.stringify({ id: cid }), { status: 200 });
+        return new Response(JSON.stringify({ id: cid }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
 
       // Mock ads creation
       if (urlStr.includes('/ads') && method === 'POST') {
         const aid = `mock_ad_${adCounter++}`;
-        return new Response(JSON.stringify({ id: aid }), { status: 200 });
+        return new Response(JSON.stringify({ id: aid }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
 
       if (urlStr.includes('/act_') || urlStr.includes('account_status')) {
-        return new Response(JSON.stringify({ id: 'act_123456789', account_status: 1 }), { status: 200 });
+        return new Response(JSON.stringify({ id: 'act_123456789', account_status: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
 
       // Mock GET verification for creatives & ads
       if (method === 'GET' && (urlStr.includes('mock_creative_') || urlStr.includes('mock_ad_'))) {
         verifiedObjects.push(urlStr);
-        return new Response(JSON.stringify({ id: 'mock_obj_id', account_id: '123456789', status: 'ACTIVE', effective_status: 'ACTIVE' }), { status: 200 });
+        return new Response(JSON.stringify({ id: 'mock_obj_id', account_id: '123456789', status: 'ACTIVE', effective_status: 'ACTIVE' }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
 
-      return new Response(JSON.stringify({ success: true }), { status: 200 });
+      return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'content-type': 'application/json' } });
     };
 
     return {
@@ -252,7 +252,7 @@ describe('PHASE 2.6 MILESTONE 2 — STEP 2: MULTI-VARIANT META PUBLISHING', () =
       if (urlStr.includes('/adcreatives')) {
         creativeCallCount++;
         if (creativeCallCount === 2) {
-          return new Response(JSON.stringify({ error: { message: 'Invalid parameter on Variant B', code: 100, is_transient: false } }), { status: 400 });
+          return new Response(JSON.stringify({ error: { message: 'Invalid parameter on Variant B', code: 100, is_transient: false } }), { status: 400, headers: { 'content-type': 'application/json' } });
         }
       }
       return null;

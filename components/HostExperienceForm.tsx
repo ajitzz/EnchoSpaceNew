@@ -360,7 +360,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                 body: JSON.stringify({ filename: file.name || 'photo.webp', contentType: file.type || 'image/webp' }),
             });
             if (presignRes.ok) {
-                const { uploadUrl, fileUrl } = await presignRes.json();
+                const { uploadUrl, fileUrl } = presignRes.headers.get('content-type')?.includes('json') ? await presignRes.json() : { error: 'Server returned non-JSON response: ' + (await presignRes.text()).slice(0, 150) } as any;
                 const uploadRes = await fetch(uploadUrl, {
                     method: 'PUT',
                     headers: { 'Content-Type': file.type || 'image/webp' },
@@ -391,7 +391,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                 body: JSON.stringify({ filename: file.name || 'photo.webp', base64Data, contentType: file.type || 'image/webp' })
             });
             if (!res.ok) throw new Error('Base64 upload failed');
-            const data = await res.json();
+            const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
             return data.url;
         } catch (base64Err) {
             console.error('All upload methods failed:', base64Err);
@@ -520,7 +520,7 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
             });
 
             if (!res.ok) {
-                const errorData = await res.json().catch(() => ({}));
+                const errorData = (res.headers.get('content-type')?.includes('json') ? await res.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res.text().catch(() => '')).slice(0, 150) } as any);
                 throw new Error(errorData.details || errorData.error || 'Failed to save experience');
             }
             

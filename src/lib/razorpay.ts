@@ -31,5 +31,5 @@ export const verifyRazorpayPayment = async (payload: RazorpayVerificationPayload
     },
     body: JSON.stringify(payload)
   });
-  return await res.json();
+  return res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
 };

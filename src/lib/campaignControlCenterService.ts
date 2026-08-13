@@ -23,6 +23,9 @@ export type ExternalFreshness = 'FRESH' | 'STALE' | 'DEGRADED' | 'UNKNOWN';
 let globalPool: pg.Pool | null = null;
 function getDbPool(): pg.Pool {
   if (!globalPool) {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL is not configured");
+    }
     globalPool = new pg.Pool({
       connectionString: process.env.DATABASE_URL
     });

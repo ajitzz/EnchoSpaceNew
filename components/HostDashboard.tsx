@@ -103,7 +103,7 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
         })
       });
       if (res.ok) {
-        const newMsg = await res.json();
+        const newMsg = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setMessages(prev => [...prev, newMsg]);
         setMsgInput('');
       }

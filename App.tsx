@@ -232,7 +232,7 @@ function App() {
           if (expRes.ok) {
             const expType = expRes.headers.get("content-type");
             if (expType && expType.includes("application/json")) {
-              expData = await expRes.json();
+              expData = expRes.headers.get('content-type')?.includes('json') ? await expRes.json() : { error: 'Server returned non-JSON response: ' + (await expRes.text()).slice(0, 150) } as any;
             }
           }
         } catch (e) {
@@ -245,7 +245,7 @@ function App() {
           if (settingsRes.ok) {
             const settingsType = settingsRes.headers.get("content-type");
             if (settingsType && settingsType.includes("application/json")) {
-              settingsData = await settingsRes.json();
+              settingsData = settingsRes.headers.get('content-type')?.includes('json') ? await settingsRes.json() : { error: 'Server returned non-JSON response: ' + (await settingsRes.text()).slice(0, 150) } as any;
             }
           }
         } catch (e) {
@@ -817,7 +817,7 @@ function App() {
                 const contentType = res.headers.get("content-type");
                 if (contentType && contentType.includes("application/json")) {
                     try {
-                        const allListings = await res.json();
+                        const allListings = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
                         let found = allListings.find((l: any) => String(l.id) === String(id));
                         if (!found && id === 'preview-id') {
                             const previewStr = localStorage.getItem('hostPreviewListing');
@@ -855,7 +855,7 @@ function App() {
                 const contentType = res.headers.get("content-type");
                 if (contentType && contentType.includes("application/json")) {
                     try {
-                        const allExps = await res.json();
+                        const allExps = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
                         const found = allExps.find((e: any) => String(e.id) === String(id));
                         if (found) {
                            setSelectedExperience(found);
@@ -1114,7 +1114,7 @@ function App() {
                           body: JSON.stringify({ listingId: selectedListing.originalId || selectedListing.id, hostId: selectedListing.user_id })
                       });
                       if (!res.ok) {
-                          const errData = await res.json().catch(() => ({}));
+                          const errData = (res.headers.get('content-type')?.includes('json') ? await res.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res.text().catch(() => '')).slice(0, 150) } as any);
                           console.error('Failed to create thread:', errData);
                           alert('Could not start conversation. Listing might be unavailable.');
                           return;
@@ -1276,7 +1276,7 @@ function App() {
                       setLoading(true);
                       const res = await fetch(`/api/experiences`);
                       if (res.ok) {
-                          const allExps = await res.json();
+                          const allExps = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
                           const found = allExps.find((e: any) => String(e.id) === String(experienceId));
                           if (found) {
                               setSelectedExperience(found);
@@ -1305,7 +1305,7 @@ function App() {
                           body: JSON.stringify({ listingId: listing.originalId || listing.id, hostId: listing.user_id })
                       });
                       if (!res.ok) {
-                          const errData = await res.json().catch(() => ({}));
+                          const errData = (res.headers.get('content-type')?.includes('json') ? await res.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res.text().catch(() => '')).slice(0, 150) } as any);
                           console.error('Failed to create thread:', errData);
                           alert('Could not start conversation. Property might be unavailable.');
                           return;

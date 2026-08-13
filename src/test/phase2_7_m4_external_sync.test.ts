@@ -7,7 +7,10 @@ import { CampaignControlCenterService } from '../lib/campaignControlCenterServic
 const { Pool } = pkg;
 
 // Use test database connection or mock pool
-const dbUrl = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_Kbtu5eg0BkOT@ep-gentle-pine-azmkxmz0-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require';
+const dbUrl = process.env.DATABASE_URL;
+if (!dbUrl) {
+  throw new Error("DATABASE_URL is not configured for test environment");
+}
 const pool = new Pool({ connectionString: dbUrl });
 
 describe('Phase 2.7 Milestone 4 — External Meta Synchronization & Reconciliation Engine', () => {
@@ -368,7 +371,7 @@ describe('Phase 2.7 Milestone 4 — External Meta Synchronization & Reconciliati
         WHERE id = $2
       `, [freshTime, testCampaignId]);
 
-      const truth = await CampaignControlCenterService.getCampaignTruth(testCampaignId, { role: 'admin', isAdmin: true }, pool);
+      const truth = await CampaignControlCenterService.getCampaignTruth(testCampaignId, { role: 'admin', isAdmin: true, userId: 1 }, pool);
 
       expect(truth.meta_external_state.meta_status).toBe('ACTIVE');
       expect(truth.meta_external_state.meta_effective_status).toBe('ACTIVE');

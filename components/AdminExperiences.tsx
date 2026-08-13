@@ -42,10 +42,10 @@ export const AdminExperiences: React.FC<AdminExperiencesProps> = ({ token }) => 
       ]);
 
       if (expRes.ok) {
-        setExperiences(await expRes.json());
+        setExperiences(expRes.headers.get('content-type')?.includes('json') ? await expRes.json() : { error: 'Server returned non-JSON response: ' + (await expRes.text()).slice(0, 150) } as any);
       }
       if (settingsRes.ok) {
-        const data = await settingsRes.json();
+        const data = settingsRes.headers.get('content-type')?.includes('json') ? await settingsRes.json() : { error: 'Server returned non-JSON response: ' + (await settingsRes.text()).slice(0, 150) } as any;
         setHeroSettings(data);
         if (data.hero_image_urls) {
           setHeroPhotos(data.hero_image_urls.map((url: string, i: number) => ({ id: `img-${i}`, url })));
@@ -72,7 +72,7 @@ export const AdminExperiences: React.FC<AdminExperiencesProps> = ({ token }) => 
             headers: { 'Authorization': `Bearer ${token}` },
             body: formData
           });
-          const uploadData = await uploadRes.json();
+          const uploadData = uploadRes.headers.get('content-type')?.includes('json') ? await uploadRes.json() : { error: 'Server returned non-JSON response: ' + (await uploadRes.text()).slice(0, 150) } as any;
           uploadedUrls.push(uploadData.url);
         } else {
           uploadedUrls.push(photo.url);
@@ -157,7 +157,7 @@ export const AdminExperiences: React.FC<AdminExperiencesProps> = ({ token }) => 
                           method: 'POST',
                           headers: { 'Authorization': `Bearer ${session.token}` }
                         });
-                        const data = await res.json();
+                        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
                         if (data.success) {
                            addToast('Demo data seeded successfully!', 'success');
                            window.location.reload();
@@ -364,7 +364,7 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
             body: JSON.stringify({ filename: file.name, contentType: file.type }),
         });
         if (!presignRes.ok) throw new Error('Failed to create upload URL');
-        const { uploadUrl, fileUrl } = await presignRes.json();
+        const { uploadUrl, fileUrl } = presignRes.headers.get('content-type')?.includes('json') ? await presignRes.json() : { error: 'Server returned non-JSON response: ' + (await presignRes.text()).slice(0, 150) } as any;
         const uploadRes = await fetch(uploadUrl, {
             method: 'PUT',
             headers: { 'Content-Type': file.type },

@@ -2,7 +2,10 @@ import pg from 'pg';
 import { config } from 'dotenv';
 config();
 
-let dbUrl = "postgresql://neondb_owner:npg_4cbpQjKtym9n@ep-small-smoke-a1vjxk25.ap-southeast-1.aws.neon.tech/neondb?sslmode=require";
+let dbUrl = process.env.DATABASE_URL;
+if (!dbUrl) {
+  throw new Error("DATABASE_URL is not configured");
+}
 if (dbUrl && dbUrl.includes('sslmode=')) {
   dbUrl = dbUrl.replace(/sslmode=[^&?#]*/, '');
 }

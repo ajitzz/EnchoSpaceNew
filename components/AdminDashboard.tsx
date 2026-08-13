@@ -131,7 +131,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setCurrentTraces(data);
       }
     } catch (e) {
@@ -185,60 +185,60 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
       ]);
       
       if (listingsRes.ok) {
-        const data = await listingsRes.json();
+        const data = listingsRes.headers.get('content-type')?.includes('json') ? await listingsRes.json() : { error: 'Server returned non-JSON response: ' + (await listingsRes.text()).slice(0, 150) } as any;
         setListings(data);
       }
       if (expRes.ok) {
-        const data = await expRes.json();
+        const data = expRes.headers.get('content-type')?.includes('json') ? await expRes.json() : { error: 'Server returned non-JSON response: ' + (await expRes.text()).slice(0, 150) } as any;
         setExperiences(data);
       }
       if (expBookingsRes.ok) {
-        const data = await expBookingsRes.json();
+        const data = expBookingsRes.headers.get('content-type')?.includes('json') ? await expBookingsRes.json() : { error: 'Server returned non-JSON response: ' + (await expBookingsRes.text()).slice(0, 150) } as any;
         setExperienceBookings(data);
       }
       if (metricsRes.ok) {
-        const metricsData = await metricsRes.json();
+        const metricsData = metricsRes.headers.get('content-type')?.includes('json') ? await metricsRes.json() : { error: 'Server returned non-JSON response: ' + (await metricsRes.text()).slice(0, 150) } as any;
         setMetrics(prev => ({ ...prev, ...metricsData }));
       }
       if (usersRes.ok) {
-        const data = await usersRes.json();
+        const data = usersRes.headers.get('content-type')?.includes('json') ? await usersRes.json() : { error: 'Server returned non-JSON response: ' + (await usersRes.text()).slice(0, 150) } as any;
         setUsers(data);
         setMetrics(prev => ({ ...prev, totalUsers: data.length }));
       }
       if (whatsappRes.ok) {
-        const data = await whatsappRes.json();
+        const data = whatsappRes.headers.get('content-type')?.includes('json') ? await whatsappRes.json() : { error: 'Server returned non-JSON response: ' + (await whatsappRes.text()).slice(0, 150) } as any;
         setWhatsappSettings(data);
       }
       if (callRes.ok) {
-        const data = await callRes.json();
+        const data = callRes.headers.get('content-type')?.includes('json') ? await callRes.json() : { error: 'Server returned non-JSON response: ' + (await callRes.text()).slice(0, 150) } as any;
         setCallSettings(data);
       }
       if (demoRes.ok) {
-         const data = await demoRes.json();
+         const data = demoRes.headers.get('content-type')?.includes('json') ? await demoRes.json() : { error: 'Server returned non-JSON response: ' + (await demoRes.text()).slice(0, 150) } as any;
          setDemoSettings(data);
       }
       if (expHostsRes.ok) {
-         const data = await expHostsRes.json();
+         const data = expHostsRes.headers.get('content-type')?.includes('json') ? await expHostsRes.json() : { error: 'Server returned non-JSON response: ' + (await expHostsRes.text()).slice(0, 150) } as any;
          setAuthorizedExperienceHosts(data);
       }
       if (offersRes.ok) {
-         const data = await offersRes.json();
+         const data = offersRes.headers.get('content-type')?.includes('json') ? await offersRes.json() : { error: 'Server returned non-JSON response: ' + (await offersRes.text()).slice(0, 150) } as any;
          setOffers(data);
       }
       if (reviewsRes.ok) {
-         const data = await reviewsRes.json();
+         const data = reviewsRes.headers.get('content-type')?.includes('json') ? await reviewsRes.json() : { error: 'Server returned non-JSON response: ' + (await reviewsRes.text()).slice(0, 150) } as any;
          setReviews(data);
       }
       if (ratesRes.ok) {
-         const data = await ratesRes.json();
+         const data = ratesRes.headers.get('content-type')?.includes('json') ? await ratesRes.json() : { error: 'Server returned non-JSON response: ' + (await ratesRes.text()).slice(0, 150) } as any;
          setPaymentRates(data);
       }
       if (campaignsRes.ok) {
-         const data = await campaignsRes.json();
+         const data = campaignsRes.headers.get('content-type')?.includes('json') ? await campaignsRes.json() : { error: 'Server returned non-JSON response: ' + (await campaignsRes.text()).slice(0, 150) } as any;
          setMarketingCampaigns(data);
       }
       if (outreachRes.ok) {
-         const data = await outreachRes.json();
+         const data = outreachRes.headers.get('content-type')?.includes('json') ? await outreachRes.json() : { error: 'Server returned non-JSON response: ' + (await outreachRes.text()).slice(0, 150) } as any;
          setOutreachLeads(data);
       }
       fetchAdminSocialPosts();
@@ -258,7 +258,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setAdminAuditLogs(data);
       }
     } catch (err) {
@@ -276,7 +276,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
         headers: { 'Authorization': `Bearer ${authToken}` }
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setAdminSocialPosts(data);
       }
     } catch (err) {
@@ -293,7 +293,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setAdminPaymentOverview(data);
       }
       fetchAdminLedgers();
@@ -311,7 +311,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setAdminLedgersData(data);
       }
     } catch (err) {
@@ -331,7 +331,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
         addToast('Success', 'Social post approved and pushed live to @enchospace feeds!', 'success');
         fetchAdminSocialPosts();
       } else {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         addToast('Error', data.error || 'Failed to approve post.', 'error');
       }
     } catch (err) {
@@ -357,7 +357,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
         setSocialRejectionFeedback('');
         fetchAdminSocialPosts();
       } else {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         addToast('Error', data.error || 'Failed to reject post.', 'error');
       }
     } catch (err) {
@@ -456,7 +456,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
       });
       
       if (res.ok) {
-        const savedLead = await res.json();
+        const savedLead = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         if (isEdit) {
           setOutreachLeads(prev => prev.map(l => l.id === editingOutreachId ? savedLead : l));
           addToast('Outreach Lead Updated', `Successfully updated tracking for "${outreachForm.property_name}"!`, 'success');
@@ -527,7 +527,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
         })
       });
       if (res.ok) {
-        const updated = await res.json();
+        const updated = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setOutreachLeads(prev => prev.map(l => l.id === lead.id ? updated : l));
         addToast('Status Updated', `Updated "${lead.property_name}" to ${newStatus.toUpperCase()}`, 'success');
       } else {
@@ -566,7 +566,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
           'Authorization': `Bearer ${token}`
         }
       });
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
       if (res.ok) {
         const score = data.score ?? data.ai_evaluation?.score ?? 8.5;
         const passed = data.passed ?? data.ai_evaluation?.passed ?? (score >= 8.0);
@@ -604,7 +604,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         addToast('Approved', 'Campaign approved and dispatched live to Meta Ad Network!', 'success');
         if (data.campaign) {
           setMarketingCampaigns(prev => prev.map(c => c.id === id ? data.campaign : c));
@@ -627,7 +627,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
       if (res.ok && data.campaign) {
         addToast('Meta Sync Complete', `Campaign #${data.campaign.id} successfully dispatched & synced with Meta Ads Manager!`, 'success');
         setMarketingCampaigns(prev => prev.map(c => c.id === id ? data.campaign : c));
@@ -722,7 +722,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
         },
         body: JSON.stringify({ campaign_id: campaignId })
       });
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
       if (res.ok) {
         addToast('Escrow Released', data.message || 'Escrow force-released by Admin.', 'success');
         setMarketingCampaigns(prev => prev.map(c => c.id === campaignId ? { ...c, escrow_status: 'released', status: 'active' } : c));
@@ -748,7 +748,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
           'Authorization': `Bearer ${token}`
         }
       });
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
       if (res.ok) {
         addToast('Campaign Paused', data.message || 'Campaign paused successfully on Meta.', 'success');
         setMarketingCampaigns(prev => prev.map(c => c.id === campaignId ? { ...c, status: 'paused' } : c));
@@ -774,7 +774,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
           'Authorization': `Bearer ${token}`
         }
       });
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
       if (res.ok) {
         addToast('Campaign Resumed', data.message || 'Campaign resumed successfully on Meta.', 'success');
         setMarketingCampaigns(prev => prev.map(c => c.id === campaignId ? { ...c, status: 'active' } : c));
@@ -800,7 +800,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
           'Authorization': `Bearer ${token}`
         }
       });
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
       if (res.ok) {
         addToast('Campaign Killed & Archived', data.message || 'Campaign killed and archived on Meta.', 'success');
         setMarketingCampaigns(prev => prev.map(c => c.id === campaignId ? { ...c, status: 'killed', payment_status: 'refunded' } : c));
@@ -825,7 +825,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
           'Authorization': `Bearer ${token}`
         }
       });
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
       if (res.ok && data.ai_evaluation) {
         addToast('AI Gatekeeper Complete', `Campaign evaluated: ${data.ai_evaluation.score}/10 (${data.ai_evaluation.score >= 8.0 ? 'Approved' : 'Auto-Rejected'})`, data.ai_evaluation.score >= 8.0 ? 'success' : 'warning');
         setMarketingCampaigns(prev => prev.map(c => c.id === campaignId ? {
@@ -1074,7 +1074,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
         body: JSON.stringify({ title, discountPercentage: Number(discountStr) })
       });
       if (res.ok) {
-        const newOffer = await res.json();
+        const newOffer = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setOffers([newOffer, ...offers]);
       } else {
         alert('Failed to list offer');

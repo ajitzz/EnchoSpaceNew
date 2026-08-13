@@ -91,18 +91,18 @@ export const AdminOpsControlCenter: React.FC<AdminOpsControlCenterProps> = () =>
         fetch('/api/admin/marketing/campaigns', { headers })
       ]);
 
-      if (healthRes.ok) setHealthData(await healthRes.json());
-      if (statsRes.ok) setStatsData(await statsRes.json());
+      if (healthRes.ok) setHealthData(healthRes.headers.get('content-type')?.includes('json') ? await healthRes.json() : { error: 'Server returned non-JSON response: ' + (await healthRes.text()).slice(0, 150) } as any);
+      if (statsRes.ok) setStatsData(statsRes.headers.get('content-type')?.includes('json') ? await statsRes.json() : { error: 'Server returned non-JSON response: ' + (await statsRes.text()).slice(0, 150) } as any);
       if (txRes.ok) {
-        const txs = await txRes.json();
+        const txs = txRes.headers.get('content-type')?.includes('json') ? await txRes.json() : { error: 'Server returned non-JSON response: ' + (await txRes.text()).slice(0, 150) } as any;
         setTransactions(txs);
         if (txs.length > 0 && !selectedTx) {
           setSelectedTx(txs[0]);
           fetchTracesForTx(txs[0].id);
         }
       }
-      if (dlqRes.ok) setDlqItems(await dlqRes.json());
-      if (campRes.ok) setCampaigns(await campRes.json());
+      if (dlqRes.ok) setDlqItems(dlqRes.headers.get('content-type')?.includes('json') ? await dlqRes.json() : { error: 'Server returned non-JSON response: ' + (await dlqRes.text()).slice(0, 150) } as any);
+      if (campRes.ok) setCampaigns(campRes.headers.get('content-type')?.includes('json') ? await campRes.json() : { error: 'Server returned non-JSON response: ' + (await campRes.text()).slice(0, 150) } as any);
     } catch (err: any) {
       console.error('Error fetching admin ops data:', err);
     } finally {
@@ -119,7 +119,7 @@ export const AdminOpsControlCenter: React.FC<AdminOpsControlCenterProps> = () =>
         }
       });
       if (res.ok) {
-        const data = await res.json();
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
         setSelectedTxTraces(data.traces || []);
       }
     } catch (e) {
@@ -150,7 +150,7 @@ export const AdminOpsControlCenter: React.FC<AdminOpsControlCenterProps> = () =>
         },
         body: JSON.stringify({ active })
       });
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
       if (data.success) {
         setNotification({
           type: 'success',
@@ -180,7 +180,7 @@ export const AdminOpsControlCenter: React.FC<AdminOpsControlCenterProps> = () =>
           'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
         }
       });
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
       if (data.success) {
         setNotification({ type: 'success', message: `Replay initiated for transaction #${txId}.` });
         fetchAllOpsData();
@@ -203,7 +203,7 @@ export const AdminOpsControlCenter: React.FC<AdminOpsControlCenterProps> = () =>
           'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
         }
       });
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
       if (data.success) {
         setNotification({ type: 'success', message: `DLQ entry #${dlqId} marked as resolved.` });
         fetchAllOpsData();
@@ -228,7 +228,7 @@ export const AdminOpsControlCenter: React.FC<AdminOpsControlCenterProps> = () =>
           'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
         }
       });
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
       if (data.success) {
         setNotification({ type: 'success', message: `Manual rollback call completed for Meta ID: ${manualRollbackId}. Response: ${JSON.stringify(data.response)}` });
         setManualRollbackId('');

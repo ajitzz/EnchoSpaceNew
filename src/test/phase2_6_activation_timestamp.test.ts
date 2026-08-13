@@ -81,7 +81,7 @@ describe('PHASE 2.6 — VARIANT ACTIVATION TIMESTAMP REMEDIATION', () => {
       const method = (options.method || 'GET').toUpperCase();
 
       if (urlStr.includes('/debug_token')) {
-        return new Response(JSON.stringify({ data: { is_valid: true, scopes: ['ads_management', 'pages_read_engagement', 'pages_manage_posts'] } }), { status: 200 });
+        return new Response(JSON.stringify({ data: { is_valid: true, scopes: ['ads_management', 'pages_read_engagement', 'pages_manage_posts'] } }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
       if (urlStr.includes(`/${pageId}`) || urlStr.includes('/me/accounts')) {
         return new Response(JSON.stringify({
@@ -90,43 +90,43 @@ describe('PHASE 2.6 — VARIANT ACTIVATION TIMESTAMP REMEDIATION', () => {
           access_token: 'page_token_123',
           tasks: ['ANALYZE', 'ADVERTISE', 'MODERATE'],
           data: [{ id: pageId, name: 'Page', access_token: 'page_token_123', tasks: ['ANALYZE', 'ADVERTISE', 'MODERATE'] }]
-        }), { status: 200 });
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
       if (urlStr.includes('picsum.photos')) {
-        return new Response(Buffer.from(`dummy_image_data_${urlStr}`), { status: 200 });
+        return new Response(Buffer.from(`dummy_image_data_${urlStr}`), { status: 200, headers: { 'content-type': 'application/json' } });
       }
       if (urlStr.includes('/adimages')) {
-        return new Response(JSON.stringify({ images: { img1: { hash: 'hash123' } } }), { status: 200 });
+        return new Response(JSON.stringify({ images: { img1: { hash: 'hash123' } } }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
       if (urlStr.includes('/campaigns') && method === 'POST') {
-        return new Response(JSON.stringify({ id: 'mock_camp_act' }), { status: 200 });
+        return new Response(JSON.stringify({ id: 'mock_camp_act' }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
       if (urlStr.includes('/adsets') && method === 'POST') {
-        return new Response(JSON.stringify({ id: 'mock_adset_act' }), { status: 200 });
+        return new Response(JSON.stringify({ id: 'mock_adset_act' }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
       if (urlStr.includes('/adcreatives') && method === 'POST') {
-        return new Response(JSON.stringify({ id: `mock_creative_act_${creativeCount++}` }), { status: 200 });
+        return new Response(JSON.stringify({ id: `mock_creative_act_${creativeCount++}` }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
       if (urlStr.includes('/ads') && method === 'POST') {
-        return new Response(JSON.stringify({ id: `mock_ad_act_${adCount++}` }), { status: 200 });
+        return new Response(JSON.stringify({ id: `mock_ad_act_${adCount++}` }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
       if (urlStr.includes('/act_') || urlStr.includes('account_status')) {
-        return new Response(JSON.stringify({ id: getAdAccountId(), account_status: 1 }), { status: 200 });
+        return new Response(JSON.stringify({ id: getAdAccountId(), account_status: 1 }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
 
       if (method === 'GET' && (urlStr.includes('mock_creative_') || urlStr.includes('mock_ad_'))) {
         if (adStatus === 'FAIL' && urlStr.includes('mock_ad_')) {
-          return new Response(JSON.stringify({ error: { message: 'External verification failed' } }), { status: 400 });
+          return new Response(JSON.stringify({ error: { message: 'External verification failed' } }), { status: 400, headers: { 'content-type': 'application/json' } });
         }
         return new Response(JSON.stringify({
           id: 'mock_obj_act',
           account_id: getAdAccountId(),
           status: adStatus === 'ACTIVE' ? 'ACTIVE' : 'PAUSED',
           effective_status: adStatus === 'ACTIVE' ? 'ACTIVE' : 'PAUSED'
-        }), { status: 200 });
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
 
-      return new Response(JSON.stringify({ success: true }), { status: 200 });
+      return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'content-type': 'application/json' } });
     };
 
     return {

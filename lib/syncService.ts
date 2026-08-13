@@ -24,7 +24,7 @@ export async function fetchWithCache<T>(url: string, cacheKey: string, options?:
     try {
         const response = await fetch(url, options);
         if (response.ok) {
-            const data = await response.json();
+            const data = response.headers.get('content-type')?.includes('json') ? await response.json() : { error: 'Server returned non-JSON response: ' + (await response.text()).slice(0, 150) } as any;
             await set(cacheKey, data); // store to idle cache
             return data;
         } else if (cachedData) {

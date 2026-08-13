@@ -34,27 +34,27 @@ describe('P0-1 — Rollback Semantics & Quarantine Invariants', () => {
           if (urlStr.includes('mock_ad_123')) {
             const pauseCalled = fetchedUrls.some(c => c.method === 'POST' && c.url.includes('mock_ad_123') && c.url.includes('status=PAUSED'));
             const renameCalled = fetchedUrls.some(c => c.method === 'POST' && c.url.includes('mock_ad_123') && c.url.includes('FAILED_ROLLBACK'));
-            if (renameCalled) return new Response(JSON.stringify({ id: 'mock_ad_123', status: 'PAUSED', name: `[FAILED_ROLLBACK_${correlationId}]_Ad_mock_ad_123` }), { status: 200 });
-            if (pauseCalled) return new Response(JSON.stringify({ id: 'mock_ad_123', status: 'PAUSED', name: 'Original Active Ad' }), { status: 200 });
-            return new Response(JSON.stringify({ id: 'mock_ad_123', status: 'ACTIVE', name: 'Original Active Ad' }), { status: 200 });
+            if (renameCalled) return new Response(JSON.stringify({ id: 'mock_ad_123', status: 'PAUSED', name: `[FAILED_ROLLBACK_${correlationId}]_Ad_mock_ad_123` }), { status: 200, headers: { 'content-type': 'application/json' } });
+            if (pauseCalled) return new Response(JSON.stringify({ id: 'mock_ad_123', status: 'PAUSED', name: 'Original Active Ad' }), { status: 200, headers: { 'content-type': 'application/json' } });
+            return new Response(JSON.stringify({ id: 'mock_ad_123', status: 'ACTIVE', name: 'Original Active Ad' }), { status: 200, headers: { 'content-type': 'application/json' } });
           }
           if (urlStr.includes('mock_camp_123')) {
             const pauseCalled = fetchedUrls.some(c => c.method === 'POST' && c.url.includes('mock_camp_123') && c.url.includes('status=PAUSED'));
             const renameCalled = fetchedUrls.some(c => c.method === 'POST' && c.url.includes('mock_camp_123') && c.url.includes('FAILED_ROLLBACK'));
-            if (renameCalled) return new Response(JSON.stringify({ id: 'mock_camp_123', status: 'PAUSED', name: `[FAILED_ROLLBACK_${correlationId}]_Campaign_mock_camp_123` }), { status: 200 });
-            if (pauseCalled) return new Response(JSON.stringify({ id: 'mock_camp_123', status: 'PAUSED', name: 'Original Active Campaign' }), { status: 200 });
-            return new Response(JSON.stringify({ id: 'mock_camp_123', status: 'ACTIVE', name: 'Original Active Campaign' }), { status: 200 });
+            if (renameCalled) return new Response(JSON.stringify({ id: 'mock_camp_123', status: 'PAUSED', name: `[FAILED_ROLLBACK_${correlationId}]_Campaign_mock_camp_123` }), { status: 200, headers: { 'content-type': 'application/json' } });
+            if (pauseCalled) return new Response(JSON.stringify({ id: 'mock_camp_123', status: 'PAUSED', name: 'Original Active Campaign' }), { status: 200, headers: { 'content-type': 'application/json' } });
+            return new Response(JSON.stringify({ id: 'mock_camp_123', status: 'ACTIVE', name: 'Original Active Campaign' }), { status: 200, headers: { 'content-type': 'application/json' } });
           }
         }
-        return new Response(JSON.stringify({ id: 'mock_obj_999', status: 'PAUSED', name: 'mock_name' }), { status: 200 });
+        return new Response(JSON.stringify({ id: 'mock_obj_999', status: 'PAUSED', name: 'mock_name' }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
 
       // Mock POST responses (PAUSE or RENAME)
       if (method === 'POST') {
-        return new Response(JSON.stringify({ success: true, id: 'mock_obj_id' }), { status: 200 });
+        return new Response(JSON.stringify({ success: true, id: 'mock_obj_id' }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
 
-      return new Response(JSON.stringify({ success: true }), { status: 200 });
+      return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'content-type': 'application/json' } });
     };
 
     try {
@@ -106,16 +106,16 @@ describe('P0-1 — Rollback Semantics & Quarantine Invariants', () => {
       // Simulate failure on adset
       if (urlStr.includes('mock_failed_adset')) {
         if (method === 'POST') {
-          return new Response(JSON.stringify({ error: { message: 'Meta Rate Limit Exceeded', code: 17 } }), { status: 400 });
+          return new Response(JSON.stringify({ error: { message: 'Meta Rate Limit Exceeded', code: 17 } }), { status: 400, headers: { 'content-type': 'application/json' } });
         }
-        return new Response(JSON.stringify({ status: 'ACTIVE', name: 'unpaused_adset' }), { status: 200 });
+        return new Response(JSON.stringify({ status: 'ACTIVE', name: 'unpaused_adset' }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
 
       // Success on campaign
       if (method === 'GET') {
-        return new Response(JSON.stringify({ id: 'mock_camp_part', status: 'PAUSED', name: `[FAILED_ROLLBACK_${correlationId}]_Campaign_mock_camp_part` }), { status: 200 });
+        return new Response(JSON.stringify({ id: 'mock_camp_part', status: 'PAUSED', name: `[FAILED_ROLLBACK_${correlationId}]_Campaign_mock_camp_part` }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
-      return new Response(JSON.stringify({ success: true }), { status: 200 });
+      return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'content-type': 'application/json' } });
     };
 
     try {

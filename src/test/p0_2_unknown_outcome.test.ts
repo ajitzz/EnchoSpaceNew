@@ -25,7 +25,7 @@ function createMetaFetchMock(onMutation: (urlStr: string, method: string) => Res
           expires_at: 0,
           scopes: ['ads_management', 'pages_read_engagement', 'pages_show_list']
         }
-      }), { status: 200 });
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
 
     if (urlStr.includes('/act_') || urlStr.includes('account_status')) {
@@ -34,7 +34,7 @@ function createMetaFetchMock(onMutation: (urlStr: string, method: string) => Res
         account_status: 1,
         disable_reason: 0,
         funding_source: 'fs_123'
-      }), { status: 200 });
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
 
     if (urlStr.includes('/campaigns') || urlStr.includes('/adsets') || urlStr.includes('/ads')) {
@@ -42,7 +42,7 @@ function createMetaFetchMock(onMutation: (urlStr: string, method: string) => Res
         id: 'meta_obj_123',
         status: 'PAUSED',
         name: '[FAILED_ROLLBACK]_obj'
-      }), { status: 200 });
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
 
     return new Response(JSON.stringify({
@@ -53,7 +53,7 @@ function createMetaFetchMock(onMutation: (urlStr: string, method: string) => Res
       username: 'encho_official',
       instagram_business_account: { id: '123456789' },
       is_valid: true
-    }), { status: 200 });
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
   };
 }
 
@@ -136,7 +136,7 @@ describe('P0-2 — Unknown External Outcome Invariants', () => {
       if (urlStr.includes('/campaigns')) {
         throw new TypeError('fetch failed: ETIMEDOUT socket network timeout');
       }
-      return new Response(JSON.stringify({ success: true }), { status: 200 });
+      return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'content-type': 'application/json' } });
     });
 
     try {
@@ -164,12 +164,12 @@ describe('P0-2 — Unknown External Outcome Invariants', () => {
     const originalFetch = global.fetch;
     global.fetch = createMetaFetchMock((urlStr) => {
       if (urlStr.includes('/campaigns')) {
-        return new Response(JSON.stringify({ id: 'meta_camp_p02_reset_123' }), { status: 200 });
+        return new Response(JSON.stringify({ id: 'meta_camp_p02_reset_123' }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
       if (urlStr.includes('/adsets')) {
         throw new Error('read ECONNRESET - connection reset by peer');
       }
-      return new Response(JSON.stringify({ success: true }), { status: 200 });
+      return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'content-type': 'application/json' } });
     });
 
     try {
@@ -198,7 +198,7 @@ describe('P0-2 — Unknown External Outcome Invariants', () => {
     const originalFetch = global.fetch;
     global.fetch = createMetaFetchMock((urlStr) => {
       if (urlStr.includes('/campaigns')) {
-        return new Response(JSON.stringify({ id: 'meta_camp_det400' }), { status: 200 });
+        return new Response(JSON.stringify({ id: 'meta_camp_det400' }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
       if (urlStr.includes('/adsets')) {
         return new Response(JSON.stringify({
@@ -208,9 +208,9 @@ describe('P0-2 — Unknown External Outcome Invariants', () => {
             code: 100,
             fbtrace_id: 'fbtrace_det_400'
           }
-        }), { status: 400 });
+        }), { status: 400, headers: { 'content-type': 'application/json' } });
       }
-      return new Response(JSON.stringify({ success: true }), { status: 200 });
+      return new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'content-type': 'application/json' } });
     });
 
     try {

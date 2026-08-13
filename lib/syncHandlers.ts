@@ -40,7 +40,7 @@ async function uploadPhotoList(photoList: any[], token?: string) {
             throw new Error(`Failed to create upload URL (${presignRes.status}): ${errorText}`);
         }
         
-        const { uploadUrl, fileUrl } = await presignRes.json();
+        const { uploadUrl, fileUrl } = presignRes.headers.get('content-type')?.includes('json') ? await presignRes.json() : { error: 'Server returned non-JSON response: ' + (await presignRes.text()).slice(0, 150) } as any;
 
         const uploadRes = await fetch(uploadUrl, {
             method: 'PUT',

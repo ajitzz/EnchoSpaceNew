@@ -591,7 +591,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
               body: JSON.stringify({ rating: newReviewRating, content: newReviewText })
           });
           if (res.ok) {
-              const newReview = await res.json();
+              const newReview = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
               newReview.user_name = user.name;
               setReviews(prev => [newReview, ...prev]);
               setNewReviewText('');
