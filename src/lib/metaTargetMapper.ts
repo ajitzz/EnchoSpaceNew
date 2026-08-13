@@ -100,7 +100,7 @@ export class MetaTargetMapper {
     if (typeof campaign.audience_interests === 'string') {
       try {
         personas = JSON.parse(campaign.audience_interests);
-      } catch (e) { }
+      } catch (e) { /* ignore */ }
     } else if (Array.isArray(campaign.audience_interests)) {
       personas = campaign.audience_interests;
     }
@@ -127,13 +127,7 @@ export class MetaTargetMapper {
     // Deduplicate interests
     const uniqueInterests = Array.from(new Map(interests.map(item => [item.id, item])).values());
     
-    if (uniqueInterests.length > 0) {
-      targeting.flexible_spec = [
-        {
-          interests: uniqueInterests
-        }
-      ];
-    }
+    // DELIBERATELY OMITTING flexible_spec (interests) for HOUSING compliance & preventing mock ID errors.
     
     return targeting;
   }

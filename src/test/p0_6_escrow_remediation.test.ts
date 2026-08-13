@@ -15,7 +15,7 @@ describe('P0-6 Escrow Remediation and Canary Blocker', () => {
   let testHostId: number;
 
   beforeAll(async () => {
-    adminToken = jwt.sign({ userId: 99999, role: 'admin' }, process.env.JWT_SECRET || 'fallback_secret');
+    adminToken = jwt.sign({ userId: 99999, role: 'admin' }, process.env.JWT_SECRET || 'test_secret_for_unit_test');
     
     // Clean up any lingering admin from previous failed test run
     await pool.query('DELETE FROM admin_audit_logs WHERE admin_id = 99999');

@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const envSchema = z.object({
   DATABASE_URL: z.string().url().optional(),
-  JWT_SECRET: z.string().min(8).default('fallback_secret_key_12345'),
+  JWT_SECRET: z.string().min(8).optional(),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.string().default('3000'),
   GEMINI_API_KEY: z.string().optional(),

@@ -123,7 +123,7 @@ export async function transitionCampaignState(params: {
   }
 }
 // ==========================================
-/* eslint-disable @typescript-eslint/ban-ts-comment */
+ 
 // @ts-nocheck
 import fs from 'fs';
 import { AsyncLocalStorage } from 'async_hooks';
@@ -548,7 +548,7 @@ const socialPostSchema = z.object({
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.NODE_ENV === 'test' ? 0 : 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key_12345';
+const JWT_SECRET = process.env.JWT_SECRET;
 
 const META_API_TOKEN = process.env.META_API_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || "982841698238647";
@@ -13865,7 +13865,11 @@ app.get('/api/payments/geo-route/detect', async (req: Request, res: Response) =>
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
       try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret') as any;
+        const secret = JWT_SECRET;
+        if (!secret) {
+          throw new Error('JWT_SECRET missing');
+        }
+        const decoded = jwt.verify(token, secret) as any;
         hostId = decoded.userId || decoded.id;
         const uRes = await pool.query('SELECT location, currency FROM users WHERE id = $1', [hostId]);
         if (uRes.rows.length > 0) {
@@ -13915,7 +13919,16 @@ app.post('/api/payments/geo-route/initiate', async (req: Request, res: Response)
       return res.status(401).json({ error: 'Authentication required' });
     }
     const token = authHeader.substring(7);
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret') as any;
+    let decoded: any;
+    try {
+      const secret = JWT_SECRET;
+      if (!secret) {
+        return res.status(401).json({ error: 'Invalid or expired authentication token' });
+      }
+      decoded = jwt.verify(token, secret) as any;
+    } catch (jwtErr) {
+      return res.status(401).json({ error: 'Invalid or expired authentication token' });
+    }
     const hostId = decoded.userId || decoded.id;
 
     const { campaign_id, amount, gateway, idempotency_key: bodyIdemKey } = req.body;
@@ -14230,9 +14243,16 @@ app.post('/api/admin/payments/escrow/release', async (req: Request, res: Respons
       return res.status(401).json({ error: 'Authentication required' });
     }
     const token = authHeader.substring(7);
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const jwt = require('jsonwebtoken');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret') as any;
+    let decoded: any;
+    try {
+      const secret = JWT_SECRET;
+      if (!secret) {
+        return res.status(401).json({ error: 'Invalid or expired authentication token' });
+      }
+      decoded = jwt.verify(token, secret) as any;
+    } catch (jwtErr) {
+      return res.status(401).json({ error: 'Invalid or expired authentication token' });
+    }
     const adminId = decoded.userId || decoded.id;
 
     const { campaign_id } = req.body;
