@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { AppError } from '../utils/AppError.js';
-import { logger } from '../logger/index.js';
+import { AppError } from '../utils/AppError';
+import { logger } from '../logger/index';
 
 export const globalErrorHandler = (
   err: any,

@@ -8,7 +8,7 @@ import {
   MetaTelemetrySyncEngine,
   type PerformanceFreshness,
   type EngagementFreshness
-} from './metaTelemetrySyncEngine.js';
+} from './metaTelemetrySyncEngine';
 
 export interface ViewerContext {
   userId: number | string;

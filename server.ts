@@ -156,16 +156,16 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import helmet from 'helmet';
 import hpp from 'hpp';
-import { processMarketingAssets } from './src/lib/imageProcessor.js';
-import { MetaTargetMapper } from './src/lib/metaTargetMapper.js';
-import { metaGraphClient, getAuthoritativeMetaIdentity } from './src/lib/metaGraphClient.js';
-import { CampaignControlCenterService } from './src/lib/campaignControlCenterService.js';
-import { MetaExternalSyncEngine } from './src/lib/metaExternalSyncEngine.js';
-import { MetaTelemetrySyncEngine } from './src/lib/metaTelemetrySyncEngine.js';
+import { processMarketingAssets } from './src/lib/imageProcessor';
+import { MetaTargetMapper } from './src/lib/metaTargetMapper';
+import { metaGraphClient, getAuthoritativeMetaIdentity } from './src/lib/metaGraphClient';
+import { CampaignControlCenterService } from './src/lib/campaignControlCenterService';
+import { MetaExternalSyncEngine } from './src/lib/metaExternalSyncEngine';
+import { MetaTelemetrySyncEngine } from './src/lib/metaTelemetrySyncEngine';
 
 // import pinoHttp from 'pino-http'; // Removed as per JS version
-// import { logger } from './src/lib/logger/index.js'; // Removed as per JS version
-// import { globalErrorHandler } from './src/lib/middleware/errorHandler.js'; // Removed as per JS version
+// import { logger } from './src/lib/logger/index'; // Removed as per JS version
+// import { globalErrorHandler } from './src/lib/middleware/errorHandler'; // Removed as per JS version
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
@@ -176,14 +176,14 @@ import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import xss from 'xss';
 import compression from 'compression';
-import { idempotencyMiddleware } from './src/lib/idempotency.js';
-import { encryptPII, decryptPII } from './src/lib/cryptoUtils.js';
+import { idempotencyMiddleware } from './src/lib/idempotency';
+import { encryptPII, decryptPII } from './src/lib/cryptoUtils';
 import {
   printStartupIntegrationReport,
   checkIntegrationKeys,
   integrationInspectionMiddleware,
   runFullIntegrationAudit
-} from './src/lib/integrationInspector.js';
+} from './src/lib/integrationInspector';
 
 dotenv.config();
 
@@ -554,6 +554,7 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.NODE_ENV === 'test' ? 0 : 3000;
 const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error("JWT_SECRET is not configured");
 
 const META_API_TOKEN = process.env.META_API_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || "982841698238647";

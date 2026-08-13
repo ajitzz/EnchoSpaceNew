@@ -13,7 +13,7 @@
  */
 
 import crypto from 'crypto';
-import { getAuthoritativeMetaIdentity } from './metaGraphClient.js';
+import { getAuthoritativeMetaIdentity } from './metaGraphClient';
 
 export type VerificationSource = 'WEBHOOK' | 'ACTIVE_POLL' | 'MANUAL_RESYNC' | 'RECONCILIATION_WORKER' | 'UNKNOWN';
 export type ExternalFreshness = 'FRESH' | 'STALE' | 'DEGRADED' | 'UNKNOWN';
