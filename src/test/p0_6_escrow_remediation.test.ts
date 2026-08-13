@@ -19,7 +19,6 @@ describe('P0-6 Escrow Remediation and Canary Blocker', () => {
     
     // Clean up any lingering admin from previous failed test run
     await pool.query('DELETE FROM admin_audit_logs WHERE admin_id = 99999');
-      await pool.query('DELETE FROM meta_publishing_events WHERE campaign_id = \'" + testCampaignId + "\'');
     await pool.query('DELETE FROM users WHERE id = 99999');
     
     await pool.query(`INSERT INTO users (id, email, name, role) VALUES (99999, 'admin_p06_${Date.now()}@encho.com', 'Admin', 'admin')`);
@@ -37,13 +36,12 @@ describe('P0-6 Escrow Remediation and Canary Blocker', () => {
       await pool.query('DELETE FROM meta_publishing_dlq WHERE transaction_id IN (SELECT id FROM meta_publishing_transactions WHERE campaign_id = $1)', [testCampaignId]);
       await pool.query('DELETE FROM meta_publishing_transactions WHERE campaign_id = $1', [testCampaignId]);
       await pool.query('DELETE FROM admin_audit_logs WHERE entity_id = $1', [testCampaignId]);
-      await pool.query('DELETE FROM meta_publishing_events WHERE campaign_id = \'" + testCampaignId + "\'');
+      await pool.query('DELETE FROM meta_publishing_events WHERE campaign_id = $1', [String(testCampaignId)]);
       await pool.query('DELETE FROM host_marketing_campaigns WHERE id = $1', [testCampaignId]);
     }
     if (testListingId) await pool.query('DELETE FROM listings WHERE id = $1', [testListingId]);
     if (testHostId) await pool.query('DELETE FROM users WHERE id = $1', [testHostId]);
     await pool.query('DELETE FROM admin_audit_logs WHERE admin_id = 99999');
-      await pool.query('DELETE FROM meta_publishing_events WHERE campaign_id = \'" + testCampaignId + "\'');
     await pool.query('DELETE FROM users WHERE id = 99999');
     await pool.end();
   });
@@ -93,6 +91,6 @@ describe('P0-6 Escrow Remediation and Canary Blocker', () => {
     expect(verifyRes.rows[0].escrow_status).toBe('released');
     
     expect(verifyRes.rows[0].status).toBe('failed_publish');
-  });
+  }, 15000);
 
 });

@@ -9,9 +9,18 @@ const pool = new Pool({
 
 describe('P0-3 — Reconciliation Active Remediation & External-Truth Engine', () => {
   const correlationIdBase = 'test-p03-' + Date.now();
+  let testUserId: number;
 
   beforeAll(async () => {
     process.env.META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN || 'test_token_p03';
+    
+    // Seed test user
+    const userRes = await pool.query(`
+      INSERT INTO users (email, password_hash, role, name)
+      VALUES ($1, 'hash', 'host', 'P03 Test Host')
+      RETURNING id
+    `, [`p03_host_${Date.now()}@test.com`]);
+    testUserId = userRes.rows[0].id;
     await pool.query(`
       CREATE TABLE IF NOT EXISTS meta_publishing_transactions (
         id SERIAL PRIMARY KEY,
@@ -44,6 +53,12 @@ describe('P0-3 — Reconciliation Active Remediation & External-Truth Engine', (
   });
 
   afterAll(async () => {
+    if (testUserId) {
+      await pool.query(`DELETE FROM meta_reconciliation_incidents WHERE transaction_id IN (SELECT id FROM meta_publishing_transactions WHERE campaign_id IN (SELECT id FROM host_marketing_campaigns WHERE host_id = $1))`, [testUserId]);
+      await pool.query(`DELETE FROM meta_publishing_transactions WHERE campaign_id IN (SELECT id FROM host_marketing_campaigns WHERE host_id = $1)`, [testUserId]);
+      await pool.query(`DELETE FROM host_marketing_campaigns WHERE host_id = $1`, [testUserId]);
+      await pool.query(`DELETE FROM users WHERE id = $1`, [testUserId]);
+    }
     await pool.end();
   });
 
@@ -222,9 +237,9 @@ describe('P0-3 — Reconciliation Active Remediation & External-Truth Engine', (
     // Create a mock campaign with budget 100.00
     const campRes = await pool.query(`
       INSERT INTO host_marketing_campaigns (host_id, title, budget, status)
-      VALUES (1, 'Config Test Campaign', 100.00, 'CAMPAIGN_LIVE')
+      VALUES ($1, 'Config Test Campaign', 100.00, 'CAMPAIGN_LIVE')
       RETURNING id
-    `);
+    `, [testUserId]);
     const campaignId = campRes.rows[0].id;
 
     const txInsert = await pool.query(`

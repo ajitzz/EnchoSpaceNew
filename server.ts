@@ -159,6 +159,9 @@ import hpp from 'hpp';
 import { processMarketingAssets } from './src/lib/imageProcessor.js';
 import { MetaTargetMapper } from './src/lib/metaTargetMapper.js';
 import { metaGraphClient, getAuthoritativeMetaIdentity } from './src/lib/metaGraphClient.js';
+import { CampaignControlCenterService } from './src/lib/campaignControlCenterService.js';
+import { MetaExternalSyncEngine } from './src/lib/metaExternalSyncEngine.js';
+import { MetaTelemetrySyncEngine } from './src/lib/metaTelemetrySyncEngine.js';
 
 // import pinoHttp from 'pino-http'; // Removed as per JS version
 // import { logger } from './src/lib/logger/index.js'; // Removed as per JS version
@@ -1507,6 +1510,12 @@ const ensureListingsTable = async () => {
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS rejected_fields JSONB DEFAULT '{}'::jsonb;`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'unpaid';`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS payment_gateway VARCHAR(50);`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS external_status_verified_at TIMESTAMP WITH TIME ZONE;`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS external_status_verification_source VARCHAR(100);`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS insights_synced_at TIMESTAMP WITH TIME ZONE;`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS meta_status VARCHAR(50);`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS meta_effective_status VARCHAR(50);`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS meta_review_status VARCHAR(50);`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS payment_intent_id VARCHAR(255);`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS admin_approved BOOLEAN DEFAULT false;`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS meta_campaign_id VARCHAR(255);`);
@@ -1543,6 +1552,13 @@ const ensureListingsTable = async () => {
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS meta_sync_logs JSONB DEFAULT '{}'::jsonb;`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS approval_snapshot JSONB;`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS approval_hash VARCHAR(255);`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS reach INT DEFAULT 0;`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS comments_count INT DEFAULT 0;`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS reactions_count INT DEFAULT 0;`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS shares_count INT;`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS engagement_synced_at TIMESTAMP WITH TIME ZONE;`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS telemetry_source_metadata JSONB DEFAULT '{}'::jsonb;`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS engagement_source_metadata JSONB DEFAULT '{}'::jsonb;`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS processed_webhook_events (
       event_id VARCHAR(255) PRIMARY KEY,
@@ -3546,6 +3562,68 @@ app.get('/api/marketing/analytics', authenticateToken, async (req: AuthRequest, 
   } catch (error) {
     console.error('Error fetching host analytics:', error);
     res.status(500).json({ error: 'Failed to fetch host analytics' });
+  }
+});
+
+// Phase 2.7 Milestone 2: Host Campaign Command & Control Center Truth
+app.get(['/api/marketing/campaigns/:id/control-center', '/api/marketing/campaigns/:id/telemetry'], authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+    const userRole = req.user?.role || 'host';
+    const isAdmin = userRole === 'admin';
+
+    const truth = await CampaignControlCenterService.getCampaignTruth(
+      id,
+      {
+        userId: userId!,
+        role: userRole,
+        isAdmin,
+        tenantId: userId
+      },
+      pool
+    );
+
+    res.json(truth);
+  } catch (error: any) {
+    console.error('Error fetching campaign truth:', error);
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    res.status(500).json({ error: error.message || 'Failed to compute campaign truth' });
+  }
+});
+
+// Phase 2.7 Milestone 2: Admin Campaign Command & Control Center Truth
+app.get(['/api/admin/marketing/campaigns/:id/control-center', '/api/admin/campaigns/:id/control-center'], authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+    const userRole = req.user?.role || 'admin';
+
+    if (userRole !== 'admin' && !req.user?.isAdmin) {
+      return res.status(403).json({ error: 'Admin role required' });
+    }
+
+    const truth = await CampaignControlCenterService.getCampaignTruth(
+      id,
+      {
+        userId: userId!,
+        role: 'admin',
+        isAdmin: true
+      },
+      pool
+    );
+
+    res.json(truth);
+  } catch (error: any) {
+    console.error('Error fetching admin campaign truth:', error);
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    res.status(500).json({ error: error.message || 'Failed to compute admin campaign truth' });
   }
 });
 
@@ -9972,7 +10050,16 @@ app.post('/api/admin/marketing/campaigns/:id/resync-meta', authenticateToken, as
     if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
     const { id } = req.params;
 
-    console.log(`[ADMIN META RE-SYNC] Triggering live Meta Graph API hierarchy re-sync for Campaign #${id}...`);
+    console.log(`[ADMIN META RE-SYNC] Triggering authoritative Meta Graph API external state re-sync for Campaign #${id}...`);
+    
+    // Perform authoritative external GET verification & snapshot update
+    const verifiedSnapshot = await MetaExternalSyncEngine.resyncCampaignExternalState(
+      Number(id),
+      { userId: req.user.id, role: req.user.role, isAdmin: true },
+      {},
+      pool
+    );
+
     const metaSuccess = await dispatchMetaCampaign(Number(id), req);
 
     const updatedCheck = await pool.query(`
@@ -9991,12 +10078,61 @@ app.post('/api/admin/marketing/campaigns/:id/resync-meta', authenticateToken, as
     res.json({
       success: true,
       meta_dispatched: metaSuccess,
+      external_snapshot: verifiedSnapshot,
       message: 'Meta Graph API AdSet, Creative & Ad hierarchy re-synced successfully.',
       campaign: finalCampaign
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error re-syncing Meta campaign:', error);
-    res.status(500).json({ error: 'Failed to re-sync Meta campaign hierarchy' });
+    res.status(500).json({ error: error.message || 'Failed to re-sync Meta campaign hierarchy' });
+  }
+});
+
+app.post('/api/marketing/campaigns/:id/sync-telemetry', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const rawData = req.body || {};
+
+    const syncResult = await MetaTelemetrySyncEngine.syncAdsInsights(
+      Number(id),
+      rawData,
+      {
+        userId: req.user.id,
+        role: req.user.role,
+        isAdmin: req.user.role === 'admin'
+      },
+      pool
+    );
+
+    res.json(syncResult);
+  } catch (error: any) {
+    console.error('Error syncing campaign telemetry:', error);
+    res.status(error.status || 500).json({ error: error.message || 'Failed to sync telemetry' });
+  }
+});
+
+app.post('/api/marketing/campaigns/:id/sync-engagement', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const rawData = req.body || {};
+
+    const syncResult = await MetaTelemetrySyncEngine.syncSocialEngagement(
+      Number(id),
+      rawData,
+      {
+        userId: req.user.id,
+        role: req.user.role,
+        isAdmin: req.user.role === 'admin'
+      },
+      pool
+    );
+
+    res.json(syncResult);
+  } catch (error: any) {
+    console.error('Error syncing campaign engagement:', error);
+    res.status(error.status || 500).json({ error: error.message || 'Failed to sync engagement' });
   }
 });
 

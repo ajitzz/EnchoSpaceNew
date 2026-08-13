@@ -9,11 +9,21 @@ const pool = new Pool({
 
 describe('Phase 2.2 Central Campaign State Machine', () => {
   let testCampaignId: number;
+  let testUserId: number;
 
   beforeAll(async () => {
+    // Seed user to satisfy host_id foreign key constraint
+    const userRes = await pool.query(`
+      INSERT INTO users (email, password_hash, role, name)
+      VALUES ($1, 'hash', 'host', 'FSM Test Host')
+      RETURNING id
+    `, [`fsm_host_${Date.now()}@test.com`]);
+    testUserId = userRes.rows[0].id;
+
     // Insert a dummy campaign for testing
     const res = await pool.query(
-      "INSERT INTO host_marketing_campaigns (host_id, status, title, budget) VALUES (1, 'draft', 'Test FSM', 100) RETURNING id"
+      "INSERT INTO host_marketing_campaigns (host_id, status, title, budget) VALUES ($1, 'draft', 'Test FSM', 100) RETURNING id",
+      [testUserId]
     );
     testCampaignId = res.rows[0].id;
   });
@@ -22,6 +32,7 @@ describe('Phase 2.2 Central Campaign State Machine', () => {
     // Cleanup
     await pool.query("DELETE FROM meta_publishing_events WHERE campaign_id = $1", [testCampaignId]);
     await pool.query("DELETE FROM host_marketing_campaigns WHERE id = $1", [testCampaignId]);
+    if (testUserId) await pool.query("DELETE FROM users WHERE id = $1", [testUserId]);
     await pool.end();
   });
 

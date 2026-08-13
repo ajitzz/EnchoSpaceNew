@@ -9,6 +9,7 @@ import AdminInbox from './AdminInbox';
 import { useCurrency } from './CurrencyContext';
 import { AdminExperiences } from './AdminExperiences';
 import { AdminOpsControlCenter } from './AdminOpsControlCenter';
+import { AdminMetaCampaignCommandCenter } from './AdminMetaCampaignCommandCenter';
 import { useToast } from './ToastContext';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { io } from 'socket.io-client';
@@ -89,7 +90,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   const [outreachLeads, setOutreachLeads] = useState<any[]>([]);
   const [outreachSearch, setOutreachSearch] = useState('');
   const [outreachFilter, setOutreachFilter] = useState<'all' | 'discovered' | 'contacted' | 'negotiating' | 'onboarded' | 'ignored'>('all');
-  const [marketingSubTab, setMarketingSubTab] = useState<'ops_control_center' | 'moderation' | 'linkage' | 'outreach' | 'organic_social' | 'audit_logs' | 'geo_router'>('ops_control_center');
+  const [marketingSubTab, setMarketingSubTab] = useState<'ops_control_center' | 'command_center' | 'moderation' | 'linkage' | 'outreach' | 'organic_social' | 'audit_logs' | 'geo_router'>('ops_control_center');
   const [adminSocialPosts, setAdminSocialPosts] = useState<any[]>([]);
   const [socialPostFilter, setSocialPostFilter] = useState<'all' | 'pending_approval' | 'approved' | 'rejected'>('all');
   const [loadingAdminSocialPosts, setLoadingAdminSocialPosts] = useState(false);
@@ -1752,6 +1753,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                     <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-1">
                        <button
                           type="button"
+                          onClick={() => setMarketingSubTab('command_center')}
+                          className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+                             marketingSubTab === 'command_center'
+                                ? 'border-indigo-600 text-indigo-900 font-bold bg-indigo-50 rounded-t-xl'
+                                : 'border-transparent text-gray-500 hover:text-gray-900'
+                          }`}
+                       >
+                          <Zap className="w-4 h-4 text-indigo-600" />
+                          Meta Command Center (M6)
+                       </button>
+                       <button
+                          type="button"
                           onClick={() => setMarketingSubTab('ops_control_center')}
                           className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
                              marketingSubTab === 'ops_control_center'
@@ -1838,6 +1851,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                           Payment Geo-Router & Escrow ({adminPaymentOverview.metrics?.escrow_holding_count || 0} Holding)
                        </button>
                     </div>
+
+                    {/* Tab Content -1: Meta Command Center (M6) */}
+                    {marketingSubTab === 'command_center' && (
+                       <AdminMetaCampaignCommandCenter onBack={onBack} />
+                    )}
 
                     {/* Tab Content 0: Operations Control Center */}
                     {marketingSubTab === 'ops_control_center' && (

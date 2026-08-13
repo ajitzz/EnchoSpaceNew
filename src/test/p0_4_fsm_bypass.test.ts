@@ -11,11 +11,21 @@ const pool = new Pool({
 
 describe('P0-4 Centralized FSM Bypass Remediation Certification', () => {
   let testCampaignId: number;
+  let testUserId: number;
 
   beforeAll(async () => {
+    // Seed user to satisfy host_id foreign key constraint
+    const userRes = await pool.query(`
+      INSERT INTO users (email, password_hash, role, name)
+      VALUES ($1, 'hash', 'host', 'P04 Test Host')
+      RETURNING id
+    `, [`p04_host_${Date.now()}@test.com`]);
+    testUserId = userRes.rows[0].id;
+
     // Insert a test campaign in draft state
     const res = await pool.query(
-      "INSERT INTO host_marketing_campaigns (host_id, status, title, budget, admin_approved) VALUES (1, 'draft', 'P0-4 Test Campaign', 200, false) RETURNING id"
+      "INSERT INTO host_marketing_campaigns (host_id, status, title, budget, admin_approved) VALUES ($1, 'draft', 'P0-4 Test Campaign', 200, false) RETURNING id",
+      [testUserId]
     );
     testCampaignId = res.rows[0].id;
   });
@@ -24,6 +34,9 @@ describe('P0-4 Centralized FSM Bypass Remediation Certification', () => {
     if (testCampaignId) {
       await pool.query("DELETE FROM meta_publishing_events WHERE campaign_id = $1", [testCampaignId]);
       await pool.query("DELETE FROM host_marketing_campaigns WHERE id = $1", [testCampaignId]);
+    }
+    if (testUserId) {
+      await pool.query("DELETE FROM users WHERE id = $1", [testUserId]);
     }
     await pool.end();
   });
