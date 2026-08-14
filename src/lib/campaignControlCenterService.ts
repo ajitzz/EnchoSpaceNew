@@ -475,9 +475,14 @@ export class CampaignControlCenterService {
       host_next_action,
       admin_next_action,
       plain_english_failure,
+      admin_diagnostics: {
+        fbtrace_id: parsedErrorDetails?.fbtrace_id || null,
+        raw_error: parsedErrorDetails
+      },
       financial_safety: {
         is_money_safe: true,
         total_charged_cents: Math.round((campaign.budget || 0) * 100),
+        total_paid_cents: Math.round((campaign.budget || 0) * 100),
         ad_spend_allocated_cents: Math.round((campaign.budget || 0) * 85),
         encho_fee_cents: Math.round((campaign.budget || 0) * 15),
         escrow_status,
@@ -518,79 +523,521 @@ export class CampaignControlCenterService {
     }
 
     // HOST PROJECTION: Friendly delivery state, performance, guidance, redacted tokens & logs
-    const friendly_delivery_state = this.getFriendlyDeliveryState(truth);
+    const opStatusInfo = this.getOperationalStatus(truth);
+    const friendly_delivery_state = opStatusInfo.display_label;
+    const actionsInfo = this.getAllowedHostActions(truth);
+    const timeline = this.buildHostLifecycleTimeline(truth);
+
+    // Host Financial Projection
+    const total_paid_cents = truth.financial_safety?.total_charged_cents || 0;
+    const ad_spend_allocation_cents = truth.financial_safety?.ad_spend_allocated_cents || Math.round(total_paid_cents * 0.85);
+    const encho_fee_cents = truth.financial_safety?.encho_fee_cents || Math.round(total_paid_cents * 0.15);
+    const meta_authorized_spend_cents = ad_spend_allocation_cents;
+    const actual_spend_cents = truth.performance_state?.spend_cents || 0;
+    const remaining_authorized_spend_cents = Math.max(0, meta_authorized_spend_cents - actual_spend_cents);
+    const escrow_status = truth.financial_safety?.escrow_status || 'HOLDING';
+
+    let escrow_state_display = 'Protected in Escrow';
+    if (escrow_status === 'RELEASED' || (truth.publish_status === 'SUCCESS' && truth.meta_external_state?.meta_status === 'ACTIVE')) {
+      escrow_state_display = 'Active - Delivering';
+    } else if (escrow_status === 'REFUNDED_TO_WALLET') {
+      escrow_state_display = 'Refunded to Wallet';
+    } else if (escrow_status === 'UNFUNDED') {
+      escrow_state_display = 'Unfunded';
+    }
+
+    // Zero-data fabrication checks for host telemetry
+    const has_performance_data = Boolean(
+      truth.performance_state?.insights_synced_at || 
+      (truth.performance_state?.impressions !== undefined && truth.performance_state?.impressions > 0)
+    );
+
+    const has_engagement_data = Boolean(
+      truth.engagement_state?.engagement_synced_at ||
+      (truth.engagement_state?.comments !== undefined && truth.engagement_state?.comments > 0) ||
+      (truth.engagement_state?.reactions !== undefined && truth.engagement_state?.reactions > 0) ||
+      (truth.engagement_state?.shares !== null && truth.engagement_state?.shares !== undefined && truth.engagement_state?.shares > 0)
+    );
+
+    const host_performance_state = {
+      has_performance_data,
+      impressions: has_performance_data ? truth.performance_state.impressions : null,
+      reach: has_performance_data ? (truth.performance_state.reach || truth.performance_state.impressions) : null,
+      clicks: has_performance_data ? truth.performance_state.clicks : null,
+      ctr: has_performance_data ? truth.performance_state.ctr : null,
+      cpc: has_performance_data ? truth.performance_state.cpc : null,
+      spend: has_performance_data ? truth.performance_state.spend : null,
+      spend_cents: has_performance_data ? truth.performance_state.spend_cents : null,
+      conversions: has_performance_data ? truth.performance_state.conversions : null,
+      performance_freshness: has_performance_data ? truth.performance_state.performance_freshness : 'UNAVAILABLE',
+      dco_data_stale: has_performance_data ? truth.performance_state.dco_data_stale : null,
+      performance_last_updated: truth.performance_state.insights_synced_at || null,
+      performance_source: truth.performance_state.telemetry_metadata?.source || 'Meta Graph API v20.0',
+      message: has_performance_data ? null : 'No performance data yet. Live metrics will appear once Meta begins delivering your ad.'
+    };
+
+    const host_engagement_state = {
+      has_engagement_data,
+      comments: has_engagement_data ? truth.engagement_state.comments : null,
+      reactions: has_engagement_data ? truth.engagement_state.reactions : null,
+      shares: has_engagement_data ? truth.engagement_state.shares : null,
+      engagement_freshness: has_engagement_data ? truth.engagement_state.engagement_freshness : 'UNAVAILABLE',
+      engagement_last_updated: truth.engagement_state.engagement_synced_at || null,
+      engagement_source: truth.engagement_state.engagement_metadata?.source || 'Meta Graph API v20.0 - Page Post Social Signals',
+      message: has_engagement_data ? null : 'No social engagement data yet.'
+    };
+
+    // Host-safe DCO Variant Cards
+    const host_variants = (truth.dco_state?.variants || []).map((v: any) => ({
+      id: v.id,
+      media_url: v.media_url,
+      has_meta_ad: Boolean(v.meta_ad_id),
+      delivery_status: v.meta_ad_id ? (truth.publish_status === 'SUCCESS' ? (v.status === 'PRUNED' ? 'PAUSED' : 'ACTIVE') : 'PENDING') : 'PENDING',
+      reach: has_performance_data ? (v.reach ?? null) : null,
+      impressions: has_performance_data ? (v.impressions ?? null) : null,
+      clicks: has_performance_data ? (v.clicks ?? null) : null,
+      spend: has_performance_data ? (v.spend ?? null) : null,
+      ctr: has_performance_data ? (v.ctr ?? null) : null,
+      cpc: has_performance_data ? (v.cpc ?? null) : null,
+      conversions: has_performance_data ? (v.conversions ?? null) : null,
+      freshness: has_performance_data ? 'FRESH' : 'UNAVAILABLE',
+      dco_status: v.status || 'TESTING',
+      dco_status_label: CampaignControlCenterService.getDcoStatusTranslation(v.status || 'TESTING')
+    }));
+
+    // Server-verified Meta Link
+    const meta_campaign_id = truth.meta_external_state?.meta_campaign_id || null;
+    const meta_link = meta_campaign_id 
+      ? `https://www.facebook.com/adsmanager/manage/campaigns?selected_campaign_ids=${meta_campaign_id}`
+      : null;
 
     return {
       campaign_id: truth.campaign_id,
       title: truth.title,
       projection_type: 'HOST',
       access_role: 'HOST',
+      operational_status: opStatusInfo.operational_status,
+      operational_status_info: opStatusInfo,
       friendly_delivery_state,
       is_host_action_required: Boolean(truth.error_owner === 'HOST_ERROR' || truth.root_error_classification === 'POLICY_DISAPPROVED'),
       host_next_action: truth.host_next_action,
       plain_english_failure: truth.plain_english_failure,
-      performance_state: truth.performance_state,
-      engagement_state: truth.engagement_state,
+      performance_state: host_performance_state,
+      engagement_state: host_engagement_state,
       financial_safety: {
-        is_money_safe: truth.financial_safety.is_money_safe,
-        escrow_status: truth.financial_safety.escrow_status,
-        total_charged_cents: truth.financial_safety.total_charged_cents,
-        ad_spend_allocated_cents: truth.financial_safety.ad_spend_allocated_cents,
-        encho_fee_cents: truth.financial_safety.encho_fee_cents
+        is_money_safe: true,
+        total_paid: Number((total_paid_cents / 100).toFixed(2)),
+        total_paid_cents,
+        ad_spend_allocation: Number((ad_spend_allocation_cents / 100).toFixed(2)),
+        ad_spend_allocation_cents,
+        encho_fee: Number((encho_fee_cents / 100).toFixed(2)),
+        encho_fee_cents,
+        meta_authorized_spend: Number((meta_authorized_spend_cents / 100).toFixed(2)),
+        meta_authorized_spend_cents,
+        actual_spend: Number((actual_spend_cents / 100).toFixed(2)),
+        actual_spend_cents,
+        remaining_authorized_spend: Number((remaining_authorized_spend_cents / 100).toFixed(2)),
+        remaining_authorized_spend_cents,
+        escrow_status,
+        escrow_state_display,
+        currency: truth.currency || 'USD'
       },
       freshness: {
         external_freshness: truth.meta_external_state.external_freshness,
         external_status_verified_at: truth.meta_external_state.external_status_verified_at,
-        performance_freshness: truth.performance_state.performance_freshness,
+        performance_freshness: host_performance_state.performance_freshness,
         insights_synced_at: truth.performance_state.insights_synced_at,
-        engagement_freshness: truth.engagement_state.engagement_freshness,
+        engagement_freshness: host_engagement_state.engagement_freshness,
         engagement_synced_at: truth.engagement_state.engagement_synced_at,
         dco_data_stale: truth.performance_state.dco_data_stale
       },
       dco_state: {
         dco_status: truth.dco_state.dco_status,
+        dco_status_label: CampaignControlCenterService.getDcoStatusTranslation(truth.dco_state.dco_status),
         variant_count: truth.dco_state.variant_count,
-        winner_variant_id: truth.dco_state.winner_variant_id
+        winner_variant_id: truth.dco_state.winner_variant_id,
+        variants: host_variants
       },
+      timeline,
+      allowed_actions: actionsInfo.allowed_actions,
+      action_previews: actionsInfo.action_previews,
+      meta_link,
       failure_intelligence: FailureIntelligenceService.projectFailureIntelligenceForViewer(truth.failure_intelligence, viewerContext)
       // REDACTED FOR HOST:
-      // - correlation_id
-      // - raw_traces_count / traces
-      // - root_error_code / subcode
-      // - object_hierarchy IDs
-      // - admin_next_action
-      // - access tokens / sensitive internal logs
+      // - correlation_id (omitted)
+      // - raw_traces_count / traces (omitted)
+      // - root_error_code / subcode (omitted)
+      // - root_error_message / type (omitted)
+      // - object_hierarchy raw IDs (omitted)
+      // - admin_next_action (omitted)
+      // - internal database diagnostics / stack traces (omitted)
     };
   }
 
   private static getFriendlyDeliveryState(truth: any): string {
-    if (truth.publish_status === 'SUCCESS' && truth.meta_external_state.meta_status === 'ACTIVE') {
-      return 'Live on Meta';
-    }
-    if (truth.publish_status === 'SUCCESS' && truth.meta_external_state.meta_status === 'PAUSED') {
-      return 'Paused on Meta';
-    }
-    if (truth.publish_status === 'FAILED_PUBLISH') {
-      if (truth.error_owner === 'HOST_ERROR' || truth.root_error_classification === 'DETERMINISTIC_ASSET_ERROR') {
-        return 'Action Required: Media Adjustment Needed';
-      }
-      if (truth.root_error_classification === 'POLICY_DISAPPROVED') {
-        return 'Action Required: Policy Re-check Needed';
-      }
-      if (truth.retry_eligible) {
-        return 'Retrying Delivery Setup';
-      }
-      return 'Delivery Setup Issue';
-    }
-    if (truth.publish_status === 'DISPATCHING' || truth.publish_status === 'QUEUED_FOR_DISPATCH') {
-      return 'Publishing to Meta';
-    }
-    if (truth.governance_status === 'PENDING_ADMIN_REVIEW') {
-      return 'Under Review by Admin';
-    }
-    if (truth.governance_status === 'DRAFT') {
-      return 'Draft Saved';
-    }
-    return 'Processing';
+    const op = this.getOperationalStatus(truth);
+    return op.display_label;
   }
+
+  public static getDcoStatusTranslation(status: string): string {
+    switch (status?.toUpperCase()) {
+      case 'TESTING':
+        return 'ENCHO is comparing your approved creatives.';
+      case 'WINNER_SELECTED':
+        return 'A better-performing creative has been identified.';
+      case 'WINNER_OPTIMIZED':
+        return 'The lower-performing creative has been paused.';
+      case 'PRUNED':
+        return 'This creative is no longer being delivered.';
+      default:
+        return 'Creative variant active.';
+    }
+  }
+
+  public static getOperationalStatus(truth: any): { 
+    operational_status: string; 
+    operational_reason: string | null; 
+    operational_owner: string | null; 
+    recommended_action: string | null; 
+    financial_safety_state: string; 
+    last_verified_at: string | null;
+    display_label: string;
+    display_description: string;
+    badge_color: 'emerald' | 'amber' | 'blue' | 'rose' | 'slate' | 'purple';
+  } {
+    let opStatus = 'UNKNOWN';
+    const gov = truth.governance_status;
+    const pub = truth.publish_status;
+    const meta = truth.meta_external_state?.meta_effective_status || truth.meta_external_state?.meta_status;
+    const review = truth.meta_external_state?.meta_review_status;
+
+    // Rule A: APPROVED MUST NEVER mean LIVE
+    if (pub === 'EXTERNAL_OUTCOME_UNKNOWN' || truth.meta_external_state?.reconciliation_required || truth.reconciliation_state === 'RECONCILIATION_REQUIRED') {
+      opStatus = 'RECONCILIATION_REQUIRED';
+    } else if (pub === 'UNKNOWN') {
+      opStatus = 'UNKNOWN';
+    } else if (pub === 'FAILED' || pub === 'FAILED_PUBLISH' || pub === 'ROLLBACK_FAILED' || pub === 'QUARANTINED') {
+      opStatus = 'FAILED';
+    } else if (pub === 'QUEUED_FOR_DISPATCH' || pub === 'DISPATCHING' || pub === 'PRECHECK_RUNNING') {
+      opStatus = 'DISPATCHING';
+    } else if (gov === 'DRAFT' || gov === 'PENDING_ADMIN_REVIEW' || pub === 'IDLE') {
+      opStatus = 'NOT_DISPATCHED';
+    } else if (pub === 'SUCCESS' || pub === 'LIVE') {
+      if (meta === 'ACTIVE') {
+        opStatus = 'LIVE';
+      } else if (meta === 'PAUSED') {
+        opStatus = 'PAUSED';
+      } else if (meta === 'DISAPPROVED' || review === 'DISAPPROVED' || truth.root_error_classification === 'POLICY_DISAPPROVED') {
+        opStatus = 'DISAPPROVED';
+      } else if (review === 'PENDING_REVIEW') {
+        opStatus = 'PENDING_REVIEW';
+      } else if (meta === 'CAMPAIGN_GROUP_ACTIVE' || meta === 'ADSET_PAUSED' || meta === 'ARCHIVED') {
+        opStatus = 'CREATED_NOT_SERVING';
+      } else {
+        opStatus = 'OBJECTS_CREATED';
+      }
+    }
+
+    let owner = truth.error_owner || null;
+    let reason = truth.plain_english_failure || truth.root_error_message || null;
+    let action = truth.admin_next_action || truth.host_next_action || null;
+
+    if (opStatus === 'RECONCILIATION_REQUIRED') {
+      owner = 'SYSTEM';
+      reason = 'Awaiting Meta synchronization confirmation.';
+      action = 'System will auto-heal via background reconciliation worker.';
+    }
+
+    const displayInfo = this.getOperationalStatusDisplay(opStatus, gov);
+
+    return {
+      operational_status: opStatus,
+      operational_reason: reason,
+      operational_owner: owner,
+      recommended_action: action,
+      financial_safety_state: truth.financial_safety?.escrow_status || 'HOLDING',
+      last_verified_at: truth.meta_external_state?.external_status_verified_at || null,
+      display_label: displayInfo.label,
+      display_description: displayInfo.description,
+      badge_color: displayInfo.badge_color
+    };
+  }
+
+  public static getOperationalStatusDisplay(status: string, governance_status?: string): {
+    label: string;
+    description: string;
+    badge_color: 'emerald' | 'amber' | 'blue' | 'rose' | 'slate' | 'purple';
+  } {
+    switch (status) {
+      case 'NOT_DISPATCHED':
+        if (governance_status === 'ADMIN_APPROVED') {
+          return {
+            label: 'Approved - Waiting for Delivery',
+            description: 'Approved by ENCHO. Waiting for Meta delivery dispatch.',
+            badge_color: 'blue'
+          };
+        }
+        if (governance_status === 'PENDING_ADMIN_REVIEW') {
+          return {
+            label: 'Under Review',
+            description: 'Your campaign is currently being reviewed by ENCHO administrators.',
+            badge_color: 'amber'
+          };
+        }
+        return {
+          label: 'Not Yet Dispatched',
+          description: 'Your campaign has been created and is waiting to be submitted.',
+          badge_color: 'slate'
+        };
+
+      case 'DISPATCHING':
+        return {
+          label: 'Transmitting to Meta',
+          description: 'Your campaign is being transmitted to Meta.',
+          badge_color: 'blue'
+        };
+
+      case 'OBJECTS_CREATED':
+        return {
+          label: 'Created on Meta (Not Serving)',
+          description: 'Your campaign was successfully created on Meta, but it is not currently serving.',
+          badge_color: 'amber'
+        };
+
+      case 'CREATED_NOT_SERVING':
+        return {
+          label: 'Delivery Turned Off',
+          description: 'Your campaign exists on Meta, but delivery is currently turned off.',
+          badge_color: 'amber'
+        };
+
+      case 'PENDING_REVIEW':
+        return {
+          label: 'Meta Review in Progress',
+          description: 'Meta is reviewing your advertisement.',
+          badge_color: 'purple'
+        };
+
+      case 'LIVE':
+        return {
+          label: 'Live on Meta',
+          description: 'Your campaign is currently running on Meta.',
+          badge_color: 'emerald'
+        };
+
+      case 'PAUSED':
+        return {
+          label: 'Paused',
+          description: 'Your campaign is currently paused.',
+          badge_color: 'slate'
+        };
+
+      case 'DISAPPROVED':
+        return {
+          label: 'Ad Disapproved',
+          description: 'Meta has not approved your advertisement.',
+          badge_color: 'rose'
+        };
+
+      case 'FAILED':
+        return {
+          label: 'Delivery Failed',
+          description: 'Your campaign could not be published.',
+          badge_color: 'rose'
+        };
+
+      case 'RECONCILIATION_REQUIRED':
+        return {
+          label: 'Verifying State',
+          description: 'ENCHO is verifying the current Meta state.',
+          badge_color: 'amber'
+        };
+
+      case 'UNKNOWN':
+      default:
+        return {
+          label: 'State Unconfirmed',
+          description: 'We could not yet confirm the current Meta state.',
+          badge_color: 'slate'
+        };
+    }
+  }
+
+  public static buildHostLifecycleTimeline(truth: any): Array<{
+    key: string;
+    label: string;
+    status: 'COMPLETED' | 'CURRENT' | 'PENDING' | 'FAILED';
+    description?: string;
+    timestamp?: string | null;
+  }> {
+    const gov = truth.governance_status;
+    const pub = truth.publish_status;
+    const meta = truth.meta_external_state?.meta_effective_status || truth.meta_external_state?.meta_status;
+    const verified = truth.meta_external_state?.external_status_verified_at;
+
+    type StepStatus = 'COMPLETED' | 'CURRENT' | 'PENDING' | 'FAILED';
+    const steps: Array<{
+      key: string;
+      label: string;
+      status: StepStatus;
+      description?: string;
+      timestamp?: string | null;
+    }> = [
+      {
+        key: 'CREATED',
+        label: 'Campaign Created',
+        status: 'COMPLETED',
+        description: 'Campaign configuration initiated.'
+      },
+      {
+        key: 'SUBMITTED',
+        label: 'Submitted for Review',
+        status: gov === 'DRAFT' ? 'CURRENT' : 'COMPLETED',
+        description: gov === 'DRAFT' ? 'Waiting for host submission.' : 'Submitted for quality check.'
+      },
+      {
+        key: 'ADMIN_APPROVED',
+        label: 'ENCHO Approved',
+        status: gov === 'ADMIN_APPROVED' ? 'COMPLETED' : (gov === 'ADMIN_REJECTED' || gov === 'POLICY_VIOLATED' ? 'FAILED' : 'PENDING'),
+        description: gov === 'ADMIN_APPROVED' ? 'Passed quality and brand safety standards.' : (gov === 'PENDING_ADMIN_REVIEW' ? 'Analyst review in progress.' : 'Pending review.')
+      },
+      {
+        key: 'PUBLISHING',
+        label: 'Transmitting to Meta',
+        status: pub === 'SUCCESS' ? 'COMPLETED' : (pub === 'DISPATCHING' || pub === 'QUEUED_FOR_DISPATCH' ? 'CURRENT' : (pub === 'FAILED_PUBLISH' || pub === 'FAILED' ? 'FAILED' : 'PENDING')),
+        description: pub === 'SUCCESS' ? 'Payload successfully accepted by Meta Graph API.' : (pub === 'DISPATCHING' ? 'Active API transmission.' : 'Awaiting dispatch.')
+      },
+      {
+        key: 'META_CREATED',
+        label: 'Created on Meta',
+        status: truth.meta_external_state?.meta_campaign_id || pub === 'SUCCESS' ? 'COMPLETED' : (pub === 'DISPATCHING' ? 'CURRENT' : 'PENDING'),
+        description: truth.meta_external_state?.meta_campaign_id ? 'Campaign structure provisioned in ad account.' : 'Pending object creation.'
+      },
+      {
+        key: 'META_VERIFIED',
+        label: 'Meta Verification',
+        status: verified && truth.meta_external_state?.external_freshness !== 'DEGRADED' ? 'COMPLETED' : (pub === 'SUCCESS' ? 'CURRENT' : 'PENDING'),
+        timestamp: verified,
+        description: verified ? 'Active status confirmed with Meta API.' : 'Awaiting verification.'
+      },
+      {
+        key: 'LIVE',
+        label: 'Delivering on Facebook & Instagram',
+        status: meta === 'ACTIVE' && pub === 'SUCCESS' ? 'COMPLETED' : (meta === 'PAUSED' ? 'CURRENT' : 'PENDING'),
+        description: meta === 'ACTIVE' ? 'Serving impressions to targeted audiences.' : (meta === 'PAUSED' ? 'Ad delivery currently paused.' : 'Pending live serving.')
+      }
+    ];
+
+    if (pub === 'FAILED' || pub === 'FAILED_PUBLISH' || truth.operational_status === 'DISAPPROVED' || truth.operational_status === 'FAILED') {
+      steps.push({
+        key: 'PROBLEM_DETECTED',
+        label: 'Problem Detected',
+        status: 'FAILED',
+        description: truth.plain_english_failure || 'Campaign could not be delivered to Meta.'
+      });
+      steps.push({
+        key: 'RESOLUTION',
+        label: 'Action Required',
+        status: 'CURRENT',
+        description: truth.host_next_action || 'Review failure guidance below.'
+      });
+    }
+
+    return steps;
+  }
+
+  public static getAllowedHostActions(truth: any): {
+    allowed_actions: string[];
+    action_previews: Record<string, {
+      action: string;
+      current_state: string;
+      what_will_happen: string;
+      what_will_not_happen: string;
+      why_allowed: string;
+      expected_result: string;
+      failure_or_unknown_outcome: string;
+    }>;
+  } {
+    const op = truth.operational_status || this.getOperationalStatus(truth).operational_status;
+    const allowed_actions: string[] = [];
+    const action_previews: Record<string, any> = {};
+
+    if (op === 'LIVE') {
+      allowed_actions.push('PAUSE');
+      action_previews['PAUSE'] = {
+        action: 'Pause Campaign',
+        current_state: 'Campaign is currently LIVE and serving ads on Facebook & Instagram.',
+        what_will_happen: 'A pause command will be sent to Meta Ads API. Ad delivery will halt immediately.',
+        what_will_not_happen: 'Your campaign will NOT be deleted, and unspent budget remains safe in escrow.',
+        why_allowed: 'Hosts have full control to pause active campaigns at any time.',
+        expected_result: 'Delivery stops within seconds and status transitions to PAUSED.',
+        failure_or_unknown_outcome: 'If Meta API is unreachable, status enters RECONCILIATION_REQUIRED and auto-verifies.'
+      };
+    } else if (op === 'PAUSED') {
+      allowed_actions.push('RESUME');
+      action_previews['RESUME'] = {
+        action: 'Resume Campaign',
+        current_state: 'Campaign is currently PAUSED.',
+        what_will_happen: 'An activation command will be sent to Meta Ads API to resume ad delivery.',
+        what_will_not_happen: 'Your account will NOT be recharged. Only existing remaining authorized budget will be consumed.',
+        why_allowed: 'Hosts can resume paused campaigns whenever remaining budget exists.',
+        expected_result: 'Ad delivery restarts on Facebook & Instagram, and status transitions back to LIVE.',
+        failure_or_unknown_outcome: 'If Meta API fails, status remains PAUSED with clear guidance.'
+      };
+    }
+
+    if (op === 'RECONCILIATION_REQUIRED' || truth.meta_external_state?.external_freshness === 'STALE' || truth.meta_external_state?.external_freshness === 'DEGRADED' || op === 'CREATED_NOT_SERVING' || op === 'OBJECTS_CREATED') {
+      allowed_actions.push('RESYNC');
+      action_previews['RESYNC'] = {
+        action: 'Re-sync with Meta',
+        current_state: 'External status requires verification against Meta.',
+        what_will_happen: 'An active poll will query Meta Graph API to reconcile the exact delivery status and telemetry.',
+        what_will_not_happen: 'No creative, targeting, or budget changes will be made.',
+        why_allowed: 'Hosts can refresh the latest external status and telemetry on demand.',
+        expected_result: 'Telemetry and delivery state are refreshed directly from Meta within seconds.',
+        failure_or_unknown_outcome: 'If Meta API is temporarily unreachable, existing cached state is safely preserved.'
+      };
+    }
+
+    if (op === 'DISAPPROVED' || op === 'FAILED' || truth.error_owner === 'HOST_ERROR' || truth.governance_status === 'ADMIN_REJECTED') {
+      allowed_actions.push('FIX_CAMPAIGN');
+      action_previews['FIX_CAMPAIGN'] = {
+        action: 'Fix Campaign Details',
+        current_state: 'Campaign requires media or copy adjustment to meet platform standards.',
+        what_will_happen: 'Opens campaign wizard with specific feedback highlighted for instant correction.',
+        what_will_not_happen: 'No ads will be served until updated assets are reviewed and cleared.',
+        why_allowed: 'Hosts can update flagged fields to comply with advertising policies.',
+        expected_result: 'Updated campaign is checked via AI pre-flight and prepared for resubmission.',
+        failure_or_unknown_outcome: 'If adjustments still fail policy checks, specific guidance will be highlighted.'
+      };
+
+      allowed_actions.push('RESUBMIT');
+      action_previews['RESUBMIT'] = {
+        action: 'Resubmit for Review',
+        current_state: 'Campaign has been updated and is ready for re-evaluation.',
+        what_will_happen: 'Submits revised creative and targeting to ENCHO review queue.',
+        what_will_not_happen: 'Your payment will NOT be recharged; your existing funded budget applies.',
+        why_allowed: 'Hosts can resubmit after correcting flagged media or text.',
+        expected_result: 'Campaign moves to PENDING_ADMIN_REVIEW for expedited sign-off.',
+        failure_or_unknown_outcome: 'If review fails again, detailed feedback is provided.'
+      };
+    }
+
+    if (['DRAFT', 'PENDING_ADMIN_REVIEW', 'NOT_DISPATCHED', 'PAUSED'].includes(op) || truth.governance_status === 'DRAFT' || truth.governance_status === 'PENDING_ADMIN_REVIEW') {
+      allowed_actions.push('CANCEL');
+      action_previews['CANCEL'] = {
+        action: 'Cancel Campaign',
+        current_state: 'Campaign is currently not serving.',
+        what_will_happen: 'Cancels campaign and refunds all unused escrowed budget back to your Host Wallet.',
+        what_will_not_happen: 'Already-delivered impressions and fees cannot be refunded.',
+        why_allowed: 'Hosts retain full control to cancel campaigns before or during paused states.',
+        expected_result: 'Campaign is archived and remaining funds are immediately credited to your wallet.',
+        failure_or_unknown_outcome: 'If cancellation fails, escrow remains protected and support is alerted.'
+      };
+    }
+
+    return { allowed_actions, action_previews };
+  }
+
+
 }

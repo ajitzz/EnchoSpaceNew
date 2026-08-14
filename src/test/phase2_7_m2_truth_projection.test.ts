@@ -350,8 +350,8 @@ describe('PHASE 2.7 MILESTONE 2 — CAMPAIGN TRUTH PROJECTION ENGINE CERTIFICATI
     const hostTruth = await CampaignControlCenterService.getCampaignTruth(campaignId, { userId: testHost1Id, role: 'host' }, pool);
     expect(hostTruth.financial_safety.is_money_safe).toBe(true);
     expect(hostTruth.financial_safety.escrow_status).toBe('HOLDING');
-    expect(hostTruth.financial_safety.total_charged_cents).toBe(20000);
-    expect(hostTruth.financial_safety.ad_spend_allocated_cents).toBe(17000);
+    expect(hostTruth.financial_safety.total_paid_cents).toBe(20000);
+    expect(hostTruth.financial_safety.ad_spend_allocation_cents).toBe(17000);
     expect(hostTruth.financial_safety.encho_fee_cents).toBe(3000);
 
     await pool.query(`DELETE FROM host_marketing_campaigns WHERE id = $1`, [campaignId]);

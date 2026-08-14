@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Grid } from 'lucide-react';
 import { MarketingCampaign, Listing, MetaPreflightDiagnosticReport, MetaPreflightGateResult } from '../types';
 import { MetaLocationTargeter } from './MetaLocationTargeter';
+import HostCampaignControlCenter from './HostCampaignControlCenter';
 import { 
   Sparkles, CheckCircle, AlertTriangle, ShieldAlert, Play, Pause, BarChart3, 
   Tv, Eye, MousePointerClick, TrendingUp, DollarSign, Target, Plus, 
@@ -44,6 +45,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   const [wallet, setWallet] = useState<any>(null);
   const [walletTransactions, setWalletTransactions] = useState<any[]>([]);
   const [selectedCampaignForAnalytics, setSelectedCampaignForAnalytics] = useState<MarketingCampaign | null>(null);
+  const [controlCenterCampaignId, setControlCenterCampaignId] = useState<number | string | null>(null);
   const [geoRouteInfo, setGeoRouteInfo] = useState<any>(null);
   const [loadingGeoRoute, setLoadingGeoRoute] = useState(false);
   const [viewInvoiceModal, setViewInvoiceModal] = useState<any | null>(null);
@@ -1569,6 +1571,52 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
     }
   };
 
+  if (controlCenterCampaignId) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-8 md:py-12 animate-fade-in pb-40">
+        <HostCampaignControlCenter
+          campaignId={controlCenterCampaignId}
+          onBack={() => {
+            setControlCenterCampaignId(null);
+            fetchCampaigns();
+          }}
+          onEditCampaign={(campId) => {
+            const camp = campaigns.find(c => String(c.id) === String(campId));
+            if (camp) {
+              setEditingCampaignId(camp.id);
+              setRejectedFieldsMap(camp.rejected_fields || {});
+              setWizardStep(1);
+              setFormData({
+                listing_id: String(camp.listing_id),
+                title: camp.title,
+                description: camp.description,
+                video_url: camp.video_url || '',
+                platforms: camp.platforms || [],
+                budget: camp.budget,
+                target_locations: camp.target_locations || '',
+                target_radius_km: camp.target_radius_km || 50,
+                ad_format: camp.ad_format || 'post',
+                feed_description: camp.feed_description || '',
+                media_urls: camp.media_urls || [],
+                meta_pixel_id: camp.meta_pixel_id || '',
+                meta_capi_token: camp.meta_capi_token || '',
+                google_conversion_id: camp.google_conversion_id || '',
+                google_conversion_label: camp.google_conversion_label || '',
+                pacing_mode: (camp.pacing_mode || 'standard') as any,
+                target_audience_persona: camp.target_audience_persona || 'couples',
+                audience_interests: camp.audience_interests || [],
+                cta_type: (camp as any).cta_type || 'Book Now',
+                policy_cleared: Boolean(camp.policy_cleared),
+              });
+              setShowCreateModal(true);
+              setControlCenterCampaignId(null);
+            }
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 md:py-12 animate-fade-in pb-40">
       
@@ -2345,9 +2393,23 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1 gap-2">
                           <h4 className="font-bold text-gray-900 truncate text-[15px]">{campaign.title}</h4>
-                          <span className={`text-[9px] font-extrabold uppercase border px-2 py-0.5 rounded-md tracking-wider ${getStatusStyle(campaign.status)}`}>
-                            {campaign.status}
-                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setControlCenterCampaignId(campaign.id);
+                              }}
+                              className="text-[10.5px] font-bold px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/70 flex items-center gap-1 transition-all"
+                              title="Open Full Campaign Control Center (Meta delivery, escrow truth, actions)"
+                            >
+                              <Sliders className="w-3 h-3 text-indigo-600" />
+                              <span>Control Center</span>
+                            </button>
+                            <span className={`text-[9px] font-extrabold uppercase border px-2 py-0.5 rounded-md tracking-wider ${getStatusStyle(campaign.status)}`}>
+                              {campaign.status}
+                            </span>
+                          </div>
                         </div>
                         <p className="text-xs font-light text-gray-500 truncate mb-3">Linked: {campaign.listing_title}</p>
                         
@@ -2386,7 +2448,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                             )}
                             <span>AI Check</span>
                           </button>
-                          {((Number(wallet?.balance) || 0) > 1000 ? Number(wallet?.balance) : Math.round((Number(wallet?.balance) || 0) * 83.5)) >= campaign.budget ? (
+                          {(Number(wallet?.balance) || 0) >= campaign.budget ? (
                             <button 
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -2394,7 +2456,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               }}
                               disabled={isPaying}
                               className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3.5 py-1.5 rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
-                              title={`Launch using ₹${campaign.budget.toLocaleString()} from your ₹${((Number(wallet?.balance) || 0) > 1000 ? Number(wallet?.balance) : Math.round((Number(wallet?.balance) || 0) * 83.5)).toLocaleString()} Master Fuel Tank`}
+                              title={`Launch using ₹${campaign.budget.toLocaleString()} from your ₹${(Number(wallet?.balance) || 0).toLocaleString()} Master Fuel Tank`}
                             >
                               {isPaying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />}
                               <span>Launch from Fuel Tank</span>
@@ -2790,22 +2852,34 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
           <div className="lg:col-span-5 bg-white p-6 md:p-8 rounded-3xl border border-zinc-150">
             {selectedCampaignForAnalytics ? (
               <div className="text-left space-y-6">
-                <div>
-                  <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest block font-mono">
-                    Live Performance
-                  </span>
-                  <h3 className="text-xl font-bold text-gray-900 tracking-tight mt-1 truncate">
-                    {selectedCampaignForAnalytics.title}
-                  </h3>
-                  <div className="flex flex-wrap items-center gap-2 mt-1">
-                    <p className="text-xs font-light text-gray-500">Linked stays: {selectedCampaignForAnalytics.listing_title}</p>
-                    {(selectedCampaignForAnalytics.meta_campaign_id || ['active', 'CAMPAIGN_LIVE'].includes(selectedCampaignForAnalytics.status)) && (
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200 font-bold font-mono text-[10.5px]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
-                        Meta ID: {selectedCampaignForAnalytics.meta_campaign_id || `act_8849203_camp_${selectedCampaignForAnalytics.id}`}
-                      </span>
-                    )}
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                  <div className="min-w-0 flex-1">
+                    <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest block font-mono">
+                      Live Performance
+                    </span>
+                    <h3 className="text-xl font-bold text-gray-900 tracking-tight mt-1 truncate">
+                      {selectedCampaignForAnalytics.title}
+                    </h3>
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                      <p className="text-xs font-light text-gray-500">Linked stays: {selectedCampaignForAnalytics.listing_title}</p>
+                      {(selectedCampaignForAnalytics.meta_campaign_id || ['active', 'CAMPAIGN_LIVE'].includes(selectedCampaignForAnalytics.status)) && (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200 font-bold font-mono text-[10.5px]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
+                          Meta ID: {selectedCampaignForAnalytics.meta_campaign_id || `act_8849203_camp_${selectedCampaignForAnalytics.id}`}
+                        </span>
+                      )}
+                    </div>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setControlCenterCampaignId(selectedCampaignForAnalytics.id)}
+                    className="shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition-all active:scale-95"
+                    title="Open Authoritative Meta Delivery Truth, Escrow Ledger & Operational Lifecycle Actions"
+                  >
+                    <Sliders className="w-3.5 h-3.5" />
+                    <span>Open Control Center</span>
+                  </button>
                 </div>
 
                 {['active', 'CAMPAIGN_LIVE'].includes(selectedCampaignForAnalytics.status) ? (
@@ -8480,10 +8554,10 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                     <Zap className="w-5 h-5 text-amber-400 fill-amber-400 animate-pulse" />
                     <div>
                       <span className="text-[9px] font-mono uppercase text-zinc-400 block tracking-wider">Master Fuel Tank Balance</span>
-                      <span className="font-extrabold text-base text-white font-mono">₹{((Number(wallet?.balance) || 0) > 1000 ? Number(wallet?.balance) : Math.round((Number(wallet?.balance) || 0) * 83.5)).toLocaleString()}</span>
+                      <span className="font-extrabold text-base text-white font-mono">₹{(Number(wallet?.balance) || 0).toLocaleString()}</span>
                     </div>
                   </div>
-                  {((Number(wallet?.balance) || 0) > 1000 ? Number(wallet?.balance) : Math.round((Number(wallet?.balance) || 0) * 83.5)) >= showPayModal.budget ? (
+                  {(Number(wallet?.balance) || 0) >= showPayModal.budget ? (
                     <span className="text-[9px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-full uppercase font-mono">
                       ✓ Covered
                     </span>
@@ -8494,7 +8568,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                   )}
                 </div>
 
-                {((Number(wallet?.balance) || 0) > 1000 ? Number(wallet?.balance) : Math.round((Number(wallet?.balance) || 0) * 83.5)) >= showPayModal.budget ? (
+                {(Number(wallet?.balance) || 0) >= showPayModal.budget ? (
                   <div className="pt-2 border-t border-zinc-800/80 space-y-2">
                     <p className="text-[10.5px] text-zinc-300 font-light leading-relaxed">
                       You have sufficient pre-funded budget in your Master Fuel Tank. No external payment needed!
@@ -8511,7 +8585,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                   </div>
                 ) : (
                   <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between text-[10px] text-zinc-400">
-                    <span>Available ₹{((Number(wallet?.balance) || 0) > 1000 ? Number(wallet?.balance) : Math.round((Number(wallet?.balance) || 0) * 83.5)).toLocaleString()} is less than budget ₹{showPayModal.budget.toLocaleString()}</span>
+                    <span>Available ₹{(Number(wallet?.balance) || 0).toLocaleString()} is less than budget ₹{showPayModal.budget.toLocaleString()}</span>
                     <button
                       type="button"
                       onClick={() => {

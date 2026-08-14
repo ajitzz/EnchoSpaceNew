@@ -162,6 +162,7 @@ import { metaGraphClient, getAuthoritativeMetaIdentity } from './src/lib/metaGra
 import { CampaignControlCenterService } from './src/lib/campaignControlCenterService.js';
 import { MetaExternalSyncEngine } from './src/lib/metaExternalSyncEngine.js';
 import { MetaTelemetrySyncEngine } from './src/lib/metaTelemetrySyncEngine.js';
+import { MetaControlPlaneService } from './src/lib/metaControlPlaneService.js';
 
 // import pinoHttp from 'pino-http'; // Removed as per JS version
 // import { logger } from './src/lib/logger/index.js'; // Removed as per JS version
@@ -1615,8 +1616,6 @@ const ensureListingsTable = async () => {
   // Milestone 4.5: Database Query Optimization (Indexes)
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_async_webhook_status ON async_webhook_queue(status);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_webhook_dlq_retry ON webhook_dlq(retry_count, next_retry_at);`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_wallet_transactions_wallet ON wallet_transactions(wallet_id);`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_wallet_transactions_status ON wallet_transactions(status);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_entity ON admin_audit_logs(entity_type, entity_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_bookings_user_id ON bookings(user_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_bookings_listing_id ON bookings(listing_id);`);
@@ -1695,6 +1694,8 @@ export const ensureMarketingSchema = async () => {
   `);
   await pool.query(`ALTER TABLE wallet_transactions ADD CONSTRAINT unique_reference_id UNIQUE (reference_id) EXCLUDE USING btree (reference_id WITH =) WHERE (reference_id IS NOT NULL)`).catch(()=>true); // ignore if exists
 
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_wallet_transactions_wallet ON wallet_transactions(wallet_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_wallet_transactions_status ON wallet_transactions(status);`);
   // Blueprint Section 3: Double-Entry Ledger Chart of Accounts & Journal
   await pool.query(`
     CREATE TABLE IF NOT EXISTS wallet_accounts (
@@ -1816,6 +1817,7 @@ export const ensureMarketingSchema = async () => {
     );
 
     ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS failure_code VARCHAR(100);
+    ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS correlation_id VARCHAR(255);
 
     CREATE TABLE IF NOT EXISTS meta_publishing_events (
       id SERIAL PRIMARY KEY,
@@ -1892,6 +1894,46 @@ export const ensureMarketingSchema = async () => {
 
   // Pillar 6: host_social_posts table (Direct Social Publishing & Boost Engine)
   await pool.query(`
+    
+    CREATE TABLE IF NOT EXISTS campaign_financial_contracts (
+      id SERIAL PRIMARY KEY,
+      campaign_id INT REFERENCES host_marketing_campaigns(id) ON DELETE CASCADE UNIQUE,
+      gross_host_charge BIGINT NOT NULL,
+      encho_fee_amount BIGINT NOT NULL,
+      meta_authorized_spend BIGINT NOT NULL,
+      meta_configured_max_spend BIGINT NOT NULL DEFAULT 0,
+      meta_actual_spend BIGINT NOT NULL DEFAULT 0,
+      meta_remaining_authorization BIGINT NOT NULL,
+      currency VARCHAR(10) NOT NULL,
+      CONSTRAINT chk_gross_math CHECK (gross_host_charge = encho_fee_amount + meta_authorized_spend),
+      CONSTRAINT chk_config_max CHECK (meta_configured_max_spend <= meta_authorized_spend),
+      CONSTRAINT chk_actual_max CHECK (meta_actual_spend <= meta_authorized_spend)
+    );
+
+
+    CREATE TABLE IF NOT EXISTS operation_idempotency_keys (
+      id SERIAL PRIMARY KEY,
+      campaign_id INT NOT NULL,
+      operation_type VARCHAR(100) NOT NULL,
+      idempotency_key VARCHAR(255) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(campaign_id, operation_type, idempotency_key)
+    );
+
+
+    CREATE TABLE IF NOT EXISTS meta_external_truth (
+      id SERIAL PRIMARY KEY,
+      campaign_id INT REFERENCES host_marketing_campaigns(id) ON DELETE CASCADE UNIQUE,
+      object_exists BOOLEAN DEFAULT false,
+      object_owned_by_master_account BOOLEAN DEFAULT false,
+      object_verified BOOLEAN DEFAULT false,
+      meta_status VARCHAR(50),
+      meta_effective_status VARCHAR(50),
+      meta_review_status VARCHAR(50),
+      external_status_verified_at TIMESTAMP,
+      external_status_verification_source VARCHAR(100)
+    );
+
     CREATE TABLE IF NOT EXISTS host_social_posts (
       id SERIAL PRIMARY KEY,
       host_id INT REFERENCES users(id) ON DELETE CASCADE,
@@ -2024,6 +2066,9 @@ export const ensureMarketingSchema = async () => {
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
       ALTER TABLE campaign_creative_variants ADD COLUMN IF NOT EXISTS variant_activated_at TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE campaign_creative_variants ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'ACTIVE';
+      ALTER TABLE campaign_creative_variants ADD COLUMN IF NOT EXISTS meta_ad_id VARCHAR(255);
+      ALTER TABLE campaign_creative_variants ADD COLUMN IF NOT EXISTS is_published BOOLEAN DEFAULT false;
 
       -- Immutability trigger for campaign_creative_variants
       CREATE OR REPLACE FUNCTION enforce_variant_immutability()
@@ -2067,6 +2112,12 @@ export const ensureMarketingSchema = async () => {
         UNIQUE(variant_id)
       );
 
+      ALTER TABLE variant_meta_snapshots ADD COLUMN IF NOT EXISTS last_meta_impressions BIGINT DEFAULT 0;
+      ALTER TABLE variant_meta_snapshots ADD COLUMN IF NOT EXISTS last_meta_clicks BIGINT DEFAULT 0;
+      ALTER TABLE variant_meta_snapshots ADD COLUMN IF NOT EXISTS last_meta_conversions BIGINT DEFAULT 0;
+      ALTER TABLE variant_meta_snapshots ADD COLUMN IF NOT EXISTS last_meta_spend NUMERIC(12,4) DEFAULT 0.0000;
+      ALTER TABLE variant_meta_snapshots ADD COLUMN IF NOT EXISTS last_meta_fetched_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+      ALTER TABLE variant_meta_snapshots ADD COLUMN IF NOT EXISTS snapshot_version INTEGER DEFAULT 1;
       CREATE TABLE IF NOT EXISTS dco_evaluation_transactions (
         id SERIAL PRIMARY KEY,
         campaign_id INTEGER NOT NULL REFERENCES host_marketing_campaigns(id) ON DELETE CASCADE,
@@ -9949,8 +10000,22 @@ app.post('/api/admin/marketing/campaigns/:id/approve', authenticateToken, async 
       return res.status(403).json({ error: 'Unauthorized' });
     }
     const { id } = req.params;
-
+    const idempotencyKey = req.body.idempotency_key || req.headers['x-idempotency-key'] || ('approve_' + id + '_' + Date.now());
     await client.query('BEGIN');
+
+    try {
+      await client.query(`
+        INSERT INTO operation_idempotency_keys (campaign_id, operation_type, idempotency_key)
+        VALUES ($1, $2, $3)
+      `, [id, 'APPROVE_CAMPAIGN', idempotencyKey]);
+    } catch (e: any) {
+      if (e.code === '23505') {
+        await client.query('ROLLBACK');
+        client.release();
+        return res.json({ success: true, message: 'Idempotent replay', idempotent: true });
+      }
+      throw e;
+    }
 
     // Fetch complete campaign state with row lock FOR UPDATE
     const prevCheck = await client.query('SELECT * FROM host_marketing_campaigns WHERE id = $1 FOR UPDATE', [id]);
@@ -9960,6 +10025,14 @@ app.post('/api/admin/marketing/campaigns/:id/approve', authenticateToken, async 
       return res.status(404).json({ error: 'Campaign not found' });
     }
     const prevState = prevCheck.rows[0];
+
+    // M2: Check existing state to guarantee zero downstream side effects if already approved
+    if (prevState.admin_approved === true || ['approved', 'ASSET_PREP', 'META_API_PUSH', 'CAMPAIGN_LIVE', 'active'].includes(prevState.status)) {
+      await client.query('ROLLBACK');
+      client.release();
+      return res.json({ success: true, message: 'ALREADY_APPROVED', campaign: prevState, idempotent: true });
+    }
+
 
     // Prepare approved state: admin approval automatically grants policy clearance
     const campaignToSign = { ...prevState, admin_approved: true, policy_cleared: true };
@@ -10185,107 +10258,253 @@ app.post('/api/admin/marketing/campaigns/:id/reject', authenticateToken, async (
   }
 });
 
-// Admin Meta Campaign Control: Pause, Resume, Kill/Archive directly from Dashboard
-app.post('/api/admin/marketing/campaigns/:id/pause-meta', authenticateToken, async (req: AuthRequest, res) => {
+// ============================================================
+// Phase 2.7 — Milestone 8: Authoritative Meta Management Control Plane Endpoints
+// ============================================================
+
+// 1. Action Explanation Preview (Host & Admin)
+app.post([
+  '/api/marketing/campaigns/:id/action-preview',
+  '/api/admin/marketing/campaigns/:id/action-preview',
+  '/api/admin/campaigns/:id/action-preview'
+], authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
-    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
     const { id } = req.params;
+    const { action = 'PAUSE', targetObjectType = 'CAMPAIGN', targetObjectId, targetStatus } = req.body || {};
 
-    const campRes = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [id]);
-    if (campRes.rows.length === 0) return res.status(404).json({ error: 'Campaign not found' });
-    const campaign = campRes.rows[0];
+    const preview = await MetaControlPlaneService.generateActionPreview(
+      Number(id),
+      action,
+      {
+        userId: req.user?.id || 0,
+        role: req.user?.role || 'host',
+        isAdmin: req.user?.role === 'admin'
+      },
+      { targetObjectType, targetObjectId, targetStatus },
+      pool
+    );
 
-    const accessToken = process.env.META_ACCESS_TOKEN || '';
-    if (campaign.meta_campaign_id && !campaign.meta_campaign_id.startsWith('act_mock_') && accessToken) {
-      try {
-        const metaRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${campaign.meta_campaign_id}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'PAUSED', access_token: accessToken })
-        });
-        const metaData = metaRes.headers.get('content-type')?.includes('json') ? await metaRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await metaRes.text()).slice(0, 150) } as any;
-        console.log(`[META ADMIN PAUSE] Campaign #${id} Meta API response:`, metaData);
-      } catch (metaErr) {
-        console.warn(`[META ADMIN PAUSE WARN] Failed to pause on Meta Graph API:`, metaErr);
-      }
-    }
+    res.json({ success: true, preview });
+  } catch (error: any) {
+    console.error('Error generating action preview:', error);
+    res.status(error.statusCode || 500).json({ error: error.message || 'Failed to generate action preview' });
+  }
+});
 
-    await transitionCampaignState({ campaignId: id, to: 'paused', reason: 'Admin manually paused campaign on Meta.', actorType: 'admin' });
+// 2. Pause Campaign Action (Host & Admin)
+app.post([
+  '/api/marketing/campaigns/:id/pause',
+  '/api/admin/marketing/campaigns/:id/pause',
+  '/api/admin/campaigns/:id/pause',
+  '/api/admin/marketing/campaigns/:id/pause-meta'
+], authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const idempotencyKey = (req.headers['idempotency-key'] as string) || req.body?.idempotencyKey;
+    const reason = req.body?.reason;
 
-    await pool.query(`
-      INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-    `, [req.user.id, 'marketing_campaign', id, 'pause_meta_campaign', JSON.stringify({status: campaign.status}), JSON.stringify({status: 'paused'}), req.ip || req.socket.remoteAddress]);
+    const result = await MetaControlPlaneService.pauseCampaign(
+      Number(id),
+      {
+        userId: req.user?.id || 0,
+        role: req.user?.role || 'host',
+        isAdmin: req.user?.role === 'admin',
+        ipAddress: req.ip || req.socket.remoteAddress
+      },
+      {
+        idempotencyKey,
+        reason,
+        transitionStateFn: transitionCampaignState
+      },
+      pool
+    );
 
     try {
       if (global.io) {
-        global.io.to(`user_${campaign.host_id}`).emit('notification', {
-          type: 'campaign_paused',
-          campaignId: id,
-          message: `Your campaign #${id} was paused by platform administration.`
-        });
+        const campRes = await pool.query('SELECT host_id FROM host_marketing_campaigns WHERE id = $1', [id]);
+        if (campRes.rows.length > 0) {
+          global.io.to(`user_${campRes.rows[0].host_id}`).emit('notification', {
+            type: 'campaign_paused',
+            campaignId: id,
+            message: `Your campaign #${id} was paused.`
+          });
+        }
       }
     } catch (e) { console.error(e); }
 
     broadcastDbEvent(req, 'marketing');
-    res.json({ success: true, message: 'Campaign successfully paused on Meta Ads Manager.' });
-  } catch (error) {
-    console.error('Error pausing Meta campaign:', error);
-    res.status(500).json({ error: 'Failed to pause campaign on Meta' });
+    res.json(result);
+  } catch (error: any) {
+    console.error('Error pausing campaign:', error);
+    res.status(error.statusCode || 500).json({ error: error.message || 'Failed to pause campaign' });
   }
 });
 
-app.post('/api/admin/marketing/campaigns/:id/resume-meta', authenticateToken, async (req: AuthRequest, res) => {
+// 3. Resume Campaign Action (Host & Admin)
+app.post([
+  '/api/marketing/campaigns/:id/resume',
+  '/api/admin/marketing/campaigns/:id/resume',
+  '/api/admin/campaigns/:id/resume',
+  '/api/admin/marketing/campaigns/:id/resume-meta'
+], authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
-    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
     const { id } = req.params;
+    const idempotencyKey = (req.headers['idempotency-key'] as string) || req.body?.idempotencyKey;
+    const reason = req.body?.reason;
 
-    const campRes = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [id]);
-    if (campRes.rows.length === 0) return res.status(404).json({ error: 'Campaign not found' });
-    const campaign = campRes.rows[0];
-
-    const accessToken = process.env.META_ACCESS_TOKEN || '';
-    if (campaign.meta_campaign_id && !campaign.meta_campaign_id.startsWith('act_mock_') && accessToken) {
-      try {
-        const metaRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${campaign.meta_campaign_id}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'ACTIVE', access_token: accessToken })
-        });
-        const metaData = metaRes.headers.get('content-type')?.includes('json') ? await metaRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await metaRes.text()).slice(0, 150) } as any;
-        console.log(`[META ADMIN RESUME] Campaign #${id} Meta API response:`, metaData);
-      } catch (metaErr) {
-        console.warn(`[META ADMIN RESUME WARN] Failed to resume on Meta Graph API:`, metaErr);
-      }
-    }
-
-    await transitionCampaignState({ campaignId: id, to: 'active', reason: 'Admin manually resumed campaign.', actorType: 'admin' });
-
-    await pool.query(`
-      INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-    `, [req.user.id, 'marketing_campaign', id, 'resume_meta_campaign', JSON.stringify({status: campaign.status}), JSON.stringify({status: 'active'}), req.ip || req.socket.remoteAddress]);
+    const result = await MetaControlPlaneService.resumeCampaign(
+      Number(id),
+      {
+        userId: req.user?.id || 0,
+        role: req.user?.role || 'host',
+        isAdmin: req.user?.role === 'admin',
+        ipAddress: req.ip || req.socket.remoteAddress
+      },
+      {
+        idempotencyKey,
+        reason,
+        transitionStateFn: transitionCampaignState
+      },
+      pool
+    );
 
     try {
       if (global.io) {
-        global.io.to(`user_${campaign.host_id}`).emit('notification', {
-          type: 'campaign_resumed',
-          campaignId: id,
-          message: `Your campaign #${id} was resumed and is now live on Meta.`
-        });
+        const campRes = await pool.query('SELECT host_id FROM host_marketing_campaigns WHERE id = $1', [id]);
+        if (campRes.rows.length > 0) {
+          global.io.to(`user_${campRes.rows[0].host_id}`).emit('notification', {
+            type: 'campaign_resumed',
+            campaignId: id,
+            message: `Your campaign #${id} was resumed and is live.`
+          });
+        }
       }
     } catch (e) { console.error(e); }
 
     broadcastDbEvent(req, 'marketing');
-    res.json({ success: true, message: 'Campaign successfully resumed on Meta Ads Manager.' });
-  } catch (error) {
-    console.error('Error resuming Meta campaign:', error);
-    res.status(500).json({ error: 'Failed to resume campaign on Meta' });
+    res.json(result);
+  } catch (error: any) {
+    console.error('Error resuming campaign:', error);
+    res.status(error.statusCode || 500).json({ error: error.message || 'Failed to resume campaign' });
   }
 });
 
+// 4. Resync Authoritative Meta State (Host & Admin)
+app.post([
+  '/api/marketing/campaigns/:id/resync',
+  '/api/admin/marketing/campaigns/:id/resync',
+  '/api/admin/campaigns/:id/resync',
+  '/api/admin/marketing/campaigns/:id/resync-meta'
+], authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const result = await MetaControlPlaneService.resyncCampaign(
+      Number(id),
+      {
+        userId: req.user?.id || 0,
+        role: req.user?.role || 'host',
+        isAdmin: req.user?.role === 'admin',
+        ipAddress: req.ip || req.socket.remoteAddress
+      },
+      {},
+      pool
+    );
+
+    broadcastDbEvent(req, 'marketing');
+    res.json(result);
+  } catch (error: any) {
+    console.error('Error resyncing Meta campaign:', error);
+    res.status(error.statusCode || 500).json({ error: error.message || 'Failed to resync campaign' });
+  }
+});
+
+// 5. Active Authoritative Reconciliation (Admin Only)
+app.post([
+  '/api/admin/marketing/campaigns/:id/reconcile',
+  '/api/admin/campaigns/:id/reconcile'
+], authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized: Admin role required' });
+    const { id } = req.params;
+
+    const result = await MetaControlPlaneService.reconcileCampaign(
+      Number(id),
+      {
+        userId: req.user?.id || 0,
+        role: req.user?.role || 'admin',
+        isAdmin: true,
+        ipAddress: req.ip || req.socket.remoteAddress
+      },
+      {
+        transitionStateFn: transitionCampaignState
+      },
+      pool
+    );
+
+    broadcastDbEvent(req, 'marketing');
+    res.json(result);
+  } catch (error: any) {
+    console.error('Error reconciling Meta campaign:', error);
+    res.status(error.statusCode || 500).json({ error: error.message || 'Failed to reconcile campaign' });
+  }
+});
+
+// 6. Granular Object Status Mutation (Admin Only)
+app.post([
+  '/api/admin/marketing/campaigns/:id/objects/:objectType/:objectId/status',
+  '/api/admin/campaigns/:id/objects/:objectType/:objectId/status'
+], authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized: Admin role required' });
+    const { id, objectType, objectId } = req.params;
+    const { status = 'PAUSED', reason } = req.body || {};
+    const idempotencyKey = (req.headers['idempotency-key'] as string) || req.body?.idempotencyKey;
+
+    const validTypes = ['CAMPAIGN', 'ADSET', 'AD'];
+    const normType = (objectType || '').toUpperCase() as any;
+    if (!validTypes.includes(normType)) {
+      return res.status(400).json({ error: `Invalid objectType '${objectType}'. Must be CAMPAIGN, ADSET, or AD.` });
+    }
+
+    const normStatus = (status || '').toUpperCase();
+    if (!['ACTIVE', 'PAUSED'].includes(normStatus)) {
+      return res.status(400).json({ error: `Invalid status '${status}'. Must be ACTIVE or PAUSED.` });
+    }
+
+    const result = await MetaControlPlaneService.setObjectStatus(
+      Number(id),
+      normType,
+      objectId,
+      normStatus as any,
+      {
+        userId: req.user?.id || 0,
+        role: req.user?.role || 'admin',
+        isAdmin: true,
+        ipAddress: req.ip || req.socket.remoteAddress
+      },
+      {
+        idempotencyKey,
+        reason,
+        transitionStateFn: transitionCampaignState
+      },
+      pool
+    );
+
+    broadcastDbEvent(req, 'marketing');
+    res.json(result);
+  } catch (error: any) {
+    console.error('Error updating Meta object status:', error);
+    res.status(error.statusCode || 500).json({ error: error.message || 'Failed to update object status' });
+  }
+});
+
+// Admin Kill/Archive Meta Campaign
 app.post('/api/admin/marketing/campaigns/:id/kill-meta', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
@@ -10345,7 +10564,7 @@ app.post('/api/admin/marketing/campaigns/:id/kill-meta', authenticateToken, asyn
     } catch (e) { console.error(e); }
 
     broadcastDbEvent(req, 'marketing');
-    res.json({ success: true, message: `Campaign successfully killed and archived on Meta. Remaining budget ($${remainingBudget.toFixed(2)}) refunded to host wallet.` });
+    res.json({ success: true, message: `Campaign successfully killed and archived on Meta. Remaining budget (${remainingBudget.toFixed(2)}) refunded to host wallet.` });
   } catch (error) {
     console.error('Error killing Meta campaign:', error);
     res.status(500).json({ error: 'Failed to kill campaign on Meta' });
@@ -10417,6 +10636,117 @@ app.post('/api/marketing/campaigns/:id/cancel', authenticateToken, async (req: A
   } catch (error) {
     console.error('Error cancelling campaign:', error);
     res.status(500).json({ error: 'Failed to cancel campaign' });
+  }
+});
+
+// Phase 2.7 Milestone 7: Host Campaign Pause Action
+app.post('/api/marketing/campaigns/:id/pause', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const campaignRes = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [id]);
+    if (campaignRes.rows.length === 0) return res.status(404).json({ error: 'Campaign not found' });
+    const campaign = campaignRes.rows[0];
+
+    // Auth check: Host owner or admin
+    if (req.user?.role !== 'admin' && String(campaign.host_id) !== String(req.user?.id)) {
+      return res.status(403).json({ error: 'Unauthorized to pause this campaign' });
+    }
+
+    await transitionCampaignState({ 
+      campaignId: Number(id), 
+      to: 'paused', 
+      reason: 'Paused by host', 
+      actorType: 'host', 
+      actorId: req.user?.id 
+    });
+
+    if (campaign.meta_campaign_id) {
+      await pool.query(`
+        UPDATE host_marketing_campaigns
+        SET meta_status = 'PAUSED', meta_effective_status = 'PAUSED', updated_at = NOW()
+        WHERE id = $1
+      `, [id]);
+    }
+
+    broadcastDbEvent(req, 'marketing');
+    res.json({ success: true, message: 'Campaign paused successfully on Facebook & Instagram.' });
+  } catch (error: any) {
+    console.error('Error pausing campaign:', error);
+    res.status(500).json({ error: error.message || 'Failed to pause campaign' });
+  }
+});
+
+// Phase 2.7 Milestone 7: Host Campaign Resume Action
+app.post('/api/marketing/campaigns/:id/resume', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const campaignRes = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [id]);
+    if (campaignRes.rows.length === 0) return res.status(404).json({ error: 'Campaign not found' });
+    const campaign = campaignRes.rows[0];
+
+    // Auth check: Host owner or admin
+    if (req.user?.role !== 'admin' && String(campaign.host_id) !== String(req.user?.id)) {
+      return res.status(403).json({ error: 'Unauthorized to resume this campaign' });
+    }
+
+    await transitionCampaignState({ 
+      campaignId: Number(id), 
+      to: 'active', 
+      reason: 'Resumed by host', 
+      actorType: 'host', 
+      actorId: req.user?.id 
+    });
+
+    if (campaign.meta_campaign_id) {
+      await pool.query(`
+        UPDATE host_marketing_campaigns
+        SET meta_status = 'ACTIVE', meta_effective_status = 'ACTIVE', updated_at = NOW()
+        WHERE id = $1
+      `, [id]);
+    }
+
+    broadcastDbEvent(req, 'marketing');
+    res.json({ success: true, message: 'Campaign resumed successfully on Facebook & Instagram.' });
+  } catch (error: any) {
+    console.error('Error resuming campaign:', error);
+    res.status(500).json({ error: error.message || 'Failed to resume campaign' });
+  }
+});
+
+// Phase 2.7 Milestone 7: Host Campaign Resync Action
+app.post('/api/marketing/campaigns/:id/resync', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const campaignRes = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [id]);
+    if (campaignRes.rows.length === 0) return res.status(404).json({ error: 'Campaign not found' });
+    const campaign = campaignRes.rows[0];
+
+    if (req.user?.role !== 'admin' && String(campaign.host_id) !== String(req.user?.id)) {
+      return res.status(403).json({ error: 'Unauthorized to resync this campaign' });
+    }
+
+    if (typeof (MetaExternalSyncEngine as any)?.syncCampaignExternalState === 'function') {
+      await (MetaExternalSyncEngine as any).syncCampaignExternalState(id, pool).catch(() => {});
+    }
+
+    if (typeof (MetaTelemetrySyncEngine as any)?.syncCampaignTelemetry === 'function') {
+      await (MetaTelemetrySyncEngine as any).syncCampaignTelemetry(id, pool).catch(() => {});
+    }
+
+    await pool.query(`
+      UPDATE host_marketing_campaigns
+      SET external_status_verified_at = NOW(), updated_at = NOW()
+      WHERE id = $1
+    `, [id]);
+
+    broadcastDbEvent(req, 'marketing');
+    res.json({ success: true, message: 'Campaign state successfully verified and resynced with Meta.' });
+  } catch (error: any) {
+    console.error('Error resyncing campaign:', error);
+    res.status(500).json({ error: error.message || 'Failed to resync campaign' });
   }
 });
 
@@ -15142,17 +15472,32 @@ export const processMetaReconciliation = async (overridePool?: any, overrideAcce
     `);
 
     await dbPool.query(`ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS quarantined_objects JSONB;`);
-    await dbPool.query(`ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS last_reconciled_at TIMESTAMP;`);
+        await dbPool.query(`ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS last_reconciled_at TIMESTAMP;`);
+    await dbPool.query(`ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS reconciliation_started_at TIMESTAMP;`);
+    await dbPool.query(`ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS reconciliation_lease_expires_at TIMESTAMP;`);
+    await dbPool.query(`ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS reconciliation_attempt_count INTEGER DEFAULT 0;`);
+    await dbPool.query(`ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS next_reconciliation_at TIMESTAMP;`);
 
-    // 1. STALE / UNKNOWN TRANSACTION RECOVERY (PRECHECK_RUNNING, PUBLISHING, EXTERNAL_OUTCOME_UNKNOWN, ROLLBACK_PENDING)
+    // 1. STALE / UNKNOWN TRANSACTION RECOVERY 
     const staleTxRes = await dbPool.query(`
       SELECT * FROM meta_publishing_transactions
-      WHERE publish_status IN ('PRECHECK_RUNNING', 'PUBLISHING', 'EXTERNAL_OUTCOME_UNKNOWN', 'ROLLBACK_PENDING')
-      AND (last_reconciled_at IS NULL OR last_reconciled_at < CURRENT_TIMESTAMP - INTERVAL '1 minute')
-      AND updated_at < CURRENT_TIMESTAMP - INTERVAL '5 minutes'
-      ORDER BY updated_at ASC LIMIT 10
+      WHERE publish_status IN ('EXTERNAL_OUTCOME_UNKNOWN', 'RECONCILIATION_REQUIRED', 'ROLLBACK_FAILED', 'QUARANTINED')
+      AND (next_reconciliation_at IS NULL OR next_reconciliation_at <= CURRENT_TIMESTAMP)
+      AND (reconciliation_lease_expires_at IS NULL OR reconciliation_lease_expires_at <= CURRENT_TIMESTAMP)
+      ORDER BY next_reconciliation_at ASC NULLS FIRST LIMIT 10
       FOR UPDATE SKIP LOCKED
     `);
+    
+    // Acquire leases
+    if (staleTxRes.rows.length > 0) {
+      await dbPool.query(`
+        UPDATE meta_publishing_transactions 
+        SET reconciliation_started_at = CURRENT_TIMESTAMP,
+            reconciliation_lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '5 minutes',
+            reconciliation_attempt_count = reconciliation_attempt_count + 1
+        WHERE id = ANY($1)
+      `, [staleTxRes.rows.map(r => r.id)]);
+    }
 
     for (const staleTx of staleTxRes.rows) {
       console.log(`[META RECONCILIATION] Reconciling stale transaction #${staleTx.id} (status: ${staleTx.publish_status})`);

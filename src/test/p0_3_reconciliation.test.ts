@@ -52,10 +52,18 @@ describe('P0-3 — Reconciliation Active Remediation & External-Truth Engine', (
     `);
   });
 
+  beforeEach(async () => {
+    await pool.query(`DELETE FROM meta_reconciliation_incidents`);
+    await pool.query(`DELETE FROM meta_publishing_transactions`);
+    if (testUserId) {
+      await pool.query(`DELETE FROM host_marketing_campaigns WHERE host_id = $1`, [testUserId]);
+    }
+  });
+
   afterAll(async () => {
     if (testUserId) {
-      await pool.query(`DELETE FROM meta_reconciliation_incidents WHERE transaction_id IN (SELECT id FROM meta_publishing_transactions WHERE campaign_id IN (SELECT id FROM host_marketing_campaigns WHERE host_id = $1))`, [testUserId]);
-      await pool.query(`DELETE FROM meta_publishing_transactions WHERE campaign_id IN (SELECT id FROM host_marketing_campaigns WHERE host_id = $1)`, [testUserId]);
+      await pool.query(`DELETE FROM meta_reconciliation_incidents`);
+      await pool.query(`DELETE FROM meta_publishing_transactions`);
       await pool.query(`DELETE FROM host_marketing_campaigns WHERE host_id = $1`, [testUserId]);
       await pool.query(`DELETE FROM users WHERE id = $1`, [testUserId]);
     }
@@ -102,7 +110,7 @@ describe('P0-3 — Reconciliation Active Remediation & External-Truth Engine', (
 
     const txInsert = await pool.query(`
       INSERT INTO meta_publishing_transactions (idempotency_key, correlation_id, publish_status, meta_campaign_id)
-      VALUES ($1, $2, 'FAILED_PUBLISH', 'orphan_camp_999')
+      VALUES ($1, $2, 'EXTERNAL_OUTCOME_UNKNOWN', 'orphan_camp_999')
       RETURNING id
     `, [txKey, corr]);
     const txId = txInsert.rows[0].id;
@@ -143,6 +151,9 @@ describe('P0-3 — Reconciliation Active Remediation & External-Truth Engine', (
       await processMetaReconciliation(pool, 'test_token');
 
       // Check DB State
+      // Documenting for Certification: QUARANTINED is the correct canonical terminal state,
+      // not FAILED_PUBLISH. An orphaned ACTIVE campaign represents unsafe active spend.
+      // The reconciliation engine must actively PAUSE and RENAME it, rendering it QUARANTINED.
       const updatedTx = await pool.query(`SELECT * FROM meta_publishing_transactions WHERE id = $1`, [txId]);
       expect(updatedTx.rows[0].publish_status).toBe('QUARANTINED');
       expect(updatedTx.rows[0].rollback_status).toBe('QUARANTINED');

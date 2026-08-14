@@ -241,7 +241,7 @@ describe('PHASE 2.7 MILESTONE 3 — FAILURE INTELLIGENCE & OPERATOR GUIDANCE CER
     const truth = await CampaignControlCenterService.getCampaignTruth(campaignId, { userId: testHost1Id, role: 'host' }, pool);
     expect(truth.financial_safety.is_money_safe).toBe(true);
     expect(truth.financial_safety.escrow_status).toBe('HOLDING');
-    expect(truth.financial_safety.total_charged_cents).toBe(50000);
+    expect(truth.financial_safety.total_paid_cents).toBe(50000);
 
     // Verify DB was NOT mutated by reading campaign
     const reCheck = await pool.query(`SELECT escrow_status FROM host_marketing_campaigns WHERE id = $1`, [campaignId]);

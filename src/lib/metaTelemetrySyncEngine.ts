@@ -228,6 +228,7 @@ export class MetaTelemetrySyncEngine {
            snapshot_version = $5,
            last_meta_fetched_at = $6,
            updated_at = NOW()
+           
        WHERE variant_id = $7`,
       [insights.impressions, insights.clicks, insights.conversions, insights.spend, afterVersion, observedAt, variantId]
     );
@@ -438,8 +439,9 @@ export class MetaTelemetrySyncEngine {
              accumulated_conversions = $4,
              reach = $5,
              insights_synced_at = $6,
-             telemetry_source_metadata = $7::jsonb,
-             updated_at = NOW()
+             telemetry_source_metadata = $7::jsonb
+
+             
          WHERE id = $8`,
         [aggImp, aggClicks, aggSpend, aggConv, aggImp, minFetchedAtIso, JSON.stringify(metadata), campaignId]
       );
@@ -647,8 +649,9 @@ export class MetaTelemetrySyncEngine {
            accumulated_conversions = $4,
            reach = $5,
            insights_synced_at = $6,
-           telemetry_source_metadata = $7::jsonb,
-           updated_at = NOW()
+           telemetry_source_metadata = $7::jsonb
+
+           
        WHERE id = $8`,
       [newImpressions, newClicks, newSpend, newConversions, newReach, nowIso, JSON.stringify(metadata), campaignId]
     );
@@ -840,8 +843,8 @@ export class MetaTelemetrySyncEngine {
            reactions_count = $2,
            shares_count = $3,
            engagement_synced_at = $4,
-           engagement_source_metadata = $5::jsonb,
-           updated_at = NOW()
+           engagement_source_metadata = $5::jsonb
+           
        WHERE id = $6`,
       [comments, reactions, shares, nowIso, JSON.stringify(metadata), campaignId]
     );
