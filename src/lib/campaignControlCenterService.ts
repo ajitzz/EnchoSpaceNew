@@ -3,12 +3,12 @@ import {
   FailureIntelligenceService,
   FailureIntelligenceContract,
   FailureInputs
-} from './failureIntelligenceService';
+} from './failureIntelligenceService.js';
 import {
   MetaTelemetrySyncEngine,
   type PerformanceFreshness,
   type EngagementFreshness
-} from './metaTelemetrySyncEngine';
+} from './metaTelemetrySyncEngine.js';
 
 export interface ViewerContext {
   userId: number | string;

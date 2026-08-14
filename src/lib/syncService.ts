@@ -1,5 +1,5 @@
 import { get, set } from 'idb-keyval';
-import { safeParseResponse } from './apiClient';
+import { safeParseResponse } from './apiClient.js';
 
 /**
  * Local-First Sync Service
