@@ -30,7 +30,8 @@ export function enforceTestDatabaseSafety() {
   if (isHooked) return;
 
   const originalQuery = Pool.prototype.query;
-  Pool.prototype.query = function (text: any, values?: any, cb?: any) {
+  Pool.prototype.query = function (...args: any[]) {
+    const text = args[0];
     let sql = typeof text === 'string' ? text : text?.text || '';
     sql = sql.toUpperCase();
 
@@ -50,7 +51,7 @@ export function enforceTestDatabaseSafety() {
       }
     }
 
-    return originalQuery.apply(this, arguments as any) as any;
+    return originalQuery.apply(this, args as any) as any;
   };
   
   isHooked = true;

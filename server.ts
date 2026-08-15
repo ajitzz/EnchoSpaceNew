@@ -188,6 +188,20 @@ import {
 
 dotenv.config();
 
+// Ensure Meta Marketing & Graph API environment variable bridges
+if (!process.env.META_ACCESS_TOKEN && process.env.META_API_TOKEN) {
+  process.env.META_ACCESS_TOKEN = process.env.META_API_TOKEN;
+}
+if (!process.env.META_PAGE_ID && process.env.PHONE_NUMBER_ID) {
+  process.env.META_PAGE_ID = process.env.PHONE_NUMBER_ID;
+}
+if (!process.env.META_AD_ACCOUNT_ID) {
+  process.env.META_AD_ACCOUNT_ID = process.env.PHONE_NUMBER_ID ? `act_${process.env.PHONE_NUMBER_ID}` : 'act_982841698238647';
+}
+if (!process.env.META_INSTAGRAM_ACCOUNT_ID && process.env.PHONE_NUMBER_ID) {
+  process.env.META_INSTAGRAM_ACCOUNT_ID = process.env.PHONE_NUMBER_ID;
+}
+
 
 let globalIoInstance: any = null;
 
@@ -6216,11 +6230,11 @@ async function executeCampaignStateMachine(campaignId: number, triggerEvent: str
     try {
         console.log(`[STATE MACHINE] Campaign #${campaignId} | Event: ${triggerEvent}`);
         
-        // 1. Fetch current state with row lock to prevent race conditions
+        // 1. Fetch current complete state with row lock to prevent race conditions
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
-            const stateRes = await client.query('SELECT status, payment_status, admin_approved FROM host_marketing_campaigns WHERE id = $1 FOR UPDATE', [campaignId]);
+            const stateRes = await client.query('SELECT * FROM host_marketing_campaigns WHERE id = $1 FOR UPDATE', [campaignId]);
             if (stateRes.rows.length === 0) throw new Error('Campaign not found');
             const campaign = stateRes.rows[0];
             
@@ -6228,39 +6242,63 @@ async function executeCampaignStateMachine(campaignId: number, triggerEvent: str
             let nextState = campaign.status;
             let dispatchMeta = false;
 
-            if (triggerEvent === 'PAYMENT_SUCCESS') {
-                if (!campaign.admin_approved) {
+            if (triggerEvent === 'PAYMENT_SUCCESS' || triggerEvent === 'ADMIN_APPROVE' || triggerEvent === 'MANUAL_DISPATCH') {
+                if (!campaign.admin_approved && triggerEvent !== 'ADMIN_APPROVE') {
                     console.log(`[STATE MACHINE] Wait: Payment cleared, but AI/Admin approval pending.`);
                     nextState = 'pending_approval';
-                } else if (campaign.status === 'draft' || campaign.status === 'pending_approval' || campaign.status === 'PAYMENT_PENDING' || campaign.status === 'pending' || campaign.status === 'escrow') {
+                } else if (
+                    campaign.status === 'draft' || 
+                    campaign.status === 'pending_approval' || 
+                    campaign.status === 'PAYMENT_PENDING' || 
+                    campaign.status === 'pending' || 
+                    campaign.status === 'escrow' ||
+                    campaign.status === 'approved' ||
+                    campaign.status === 'failed_publish' ||
+                    campaign.status === 'failed'
+                ) {
                     // Milestone 7: Master Account Fraud Liability & Escrow Delay
-                    // Determine if Host is verified
-                    const userCheck = await client.query('SELECT is_verified FROM users WHERE id = $1', [campaign.host_id]);
-                    const isVerifiedUser = userCheck.rows[0]?.is_verified;
-                    const amount = Number(campaign.budget);
-                    
-                    const isHighRisk = !isVerifiedUser || amount > 5000;
-                    
-                    if (isHighRisk && campaign.escrow_status !== 'released') {
-                        console.log(`[ESCROW] 3D Secure Verification triggered. Host unverified or amount high. Placing Campaign into 24-hour Escrow delay to prevent chargeback fraud on Master Account.`);
-                        console.log(`[STATE MACHINE] Transitioning state: PAYMENT_PENDING -> ESCROW`);
-                        nextState = 'escrow';
+                    // When Admin explicitly approves/dispatches or Escrow is released:
+                    if (triggerEvent === 'ADMIN_APPROVE' || triggerEvent === 'MANUAL_DISPATCH' || campaign.escrow_status === 'released') {
+                        console.log(`[STATE MACHINE] Admin authorization / Escrow cleared. Transitioning state: ${campaign.status} -> ASSET_PREP`);
+                        nextState = 'ASSET_PREP';
+                        dispatchMeta = true;
                         
                         await client.query(`
                             UPDATE host_marketing_campaigns 
-                            SET escrow_status = 'holding', 
-                                escrow_release_at = NOW() + INTERVAL '24 hours' 
+                            SET escrow_status = 'released', 
+                                escrow_release_at = COALESCE(escrow_release_at, CURRENT_TIMESTAMP) 
                             WHERE id = $1
                         `, [campaignId]);
                     } else {
-                        console.log(`[STATE MACHINE] Transitioning state: PAYMENT_PENDING -> PAYMENT_SUCCESS`);
-                        // We artificially log this as per blueprint, next true state is ASSET_PREP
-                        console.log(`[STATE MACHINE] Transitioning state: PAYMENT_SUCCESS -> ASSET_PREP`);
-                        nextState = 'ASSET_PREP';
-                        dispatchMeta = true;
+                        // Host self-service payment flow: check verification
+                        const userCheck = await client.query('SELECT is_verified FROM users WHERE id = $1', [campaign.host_id]);
+                        const isVerifiedUser = userCheck.rows[0]?.is_verified;
+                        const amount = Number(campaign.budget || 0);
+                        
+                        const isHighRisk = !isVerifiedUser || amount > 5000;
+                        
+                        if (isHighRisk && campaign.escrow_status !== 'released') {
+                            console.log(`[ESCROW] 3D Secure Verification triggered. Host unverified or amount high. Placing Campaign into 24-hour Escrow delay to prevent chargeback fraud on Master Account.`);
+                            console.log(`[STATE MACHINE] Transitioning state: ${campaign.status} -> ESCROW`);
+                            nextState = 'escrow';
+                            
+                            await client.query(`
+                                UPDATE host_marketing_campaigns 
+                                SET escrow_status = 'holding', 
+                                    escrow_release_at = NOW() + INTERVAL '24 hours' 
+                                WHERE id = $1
+                            `, [campaignId]);
+                        } else {
+                            console.log(`[STATE MACHINE] Transitioning state: ${campaign.status} -> ASSET_PREP`);
+                            nextState = 'ASSET_PREP';
+                            dispatchMeta = true;
+                        }
                     }
                 } else if (['active', 'CAMPAIGN_LIVE', 'ASSET_PREP', 'META_API_PUSH'].includes(campaign.status)) {
-                     console.log(`[STATE MACHINE] Idempotent Replay Protection: Campaign is already active or in pipeline. Ignoring.`);
+                     console.log(`[STATE MACHINE] Idempotent check: Campaign is in status ${campaign.status}. Force dispatch: ${triggerEvent === 'ADMIN_APPROVE' || triggerEvent === 'MANUAL_DISPATCH'}`);
+                     if (triggerEvent === 'ADMIN_APPROVE' || triggerEvent === 'MANUAL_DISPATCH') {
+                         dispatchMeta = true;
+                     }
                 }
             }
 
@@ -6268,8 +6306,9 @@ async function executeCampaignStateMachine(campaignId: number, triggerEvent: str
                 await transitionCampaignState({ 
                     campaignId: Number(campaignId), 
                     to: nextState as any, 
-                    reason: 'Webhook-driven state transition',
-                    actorType: 'webhook',
+                    reason: `${triggerEvent} driven state transition`,
+                    actorType: triggerEvent === 'ADMIN_APPROVE' ? 'admin' : (triggerEvent === 'PAYMENT_SUCCESS' ? 'webhook' : 'system'),
+                    actorId: req?.user?.id,
                     client: client 
                 });
             }
@@ -6285,17 +6324,27 @@ async function executeCampaignStateMachine(campaignId: number, triggerEvent: str
                 broadcastDbEvent(req, 'marketing'); // Notify UI of pipeline movement
                 
                 // Dispatch to Meta (This inherently triggers Asset Prep under the hood in dispatchMetaCampaign)
-                const metaSuccess = await dispatchMetaCampaign(campaignId, req);
-                await dispatchGoogleAdsCampaign(campaignId, req);
+                let metaSuccess = false;
+                try {
+                    metaSuccess = await dispatchMetaCampaign(campaignId, req);
+                } catch (err: any) {
+                    console.error(`[STATE MACHINE DISPATCH ERROR] Campaign ${campaignId}:`, err);
+                    metaSuccess = false;
+                }
+
+                try {
+                    await dispatchGoogleAdsCampaign(campaignId, req);
+                } catch (googleErr: any) {
+                    console.error(`[GOOGLE ADS DISPATCH ERROR] Campaign ${campaignId}:`, googleErr);
+                }
 
                 if (metaSuccess) {
                    await transitionCampaignState({ campaignId: Number(campaignId), to: 'CAMPAIGN_LIVE', reason: 'Meta API Push Success', actorType: 'system' });
                    console.log(`[STATE MACHINE] Transitioning state: META_API_PUSH -> CAMPAIGN_LIVE`);
                    broadcastDbEvent(req, 'marketing'); // Final notification
                 } else {
-                   await transitionCampaignState({ campaignId: Number(campaignId), to: 'failed', reason: 'Meta API Push Failed', actorType: 'system' });
-                   await pool.query('UPDATE host_marketing_campaigns SET admin_feedback = $1 WHERE id = $2', ['Meta API Push Failed', campaignId]);
-                   console.log(`[STATE MACHINE] Pipeline Failed. Campaign marked as failed.`);
+                   await transitionCampaignState({ campaignId: Number(campaignId), to: 'failed_publish', reason: 'Meta API Push Failed', actorType: 'system' });
+                   console.log(`[STATE MACHINE] Pipeline Failed. Campaign marked as failed_publish.`);
                    broadcastDbEvent(req, 'marketing');
                 }
             }
@@ -7531,7 +7580,7 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
                 correlation_id, campaign_id, host_id, step, endpoint, request_payload, response_payload, http_status, fbtrace_id, meta_error_code, meta_error_subcode, meta_error_message, meta_error_type, meta_error_is_transient, meta_error_user_title, meta_error_user_msg, latency_ms
               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
             `, [
-              correlationId, campaignId, req.user.id, stepName, endpoint, JSON.stringify(redactedPayload), JSON.stringify(data), res.status,
+              correlationId, campaignId, req?.user?.id || campaign.host_id, stepName, endpoint, JSON.stringify(redactedPayload), JSON.stringify(data), res.status,
               data.error?.fbtrace_id || null, data.error?.code || null, data.error?.error_subcode || null, data.error?.message || null,
               data.error?.type || null, data.error?.is_transient || null, data.error?.error_user_title || null, data.error?.error_user_msg || null, executionTime
             ]);
@@ -10048,19 +10097,18 @@ app.post('/api/admin/marketing/campaigns/:id/approve', authenticateToken, async 
     }
     const prevState = prevCheck.rows[0];
 
-    // M2: Check existing state to guarantee zero downstream side effects if already approved
-    if (prevState.admin_approved === true || ['approved', 'ASSET_PREP', 'META_API_PUSH', 'CAMPAIGN_LIVE', 'active'].includes(prevState.status)) {
+    // Only short-circuit if ALREADY successfully published and active on live ad network
+    if (['CAMPAIGN_LIVE', 'active'].includes(prevState.status) && prevState.meta_campaign_id) {
       await client.query('ROLLBACK');
       client.release();
-      return res.json({ success: true, message: 'ALREADY_APPROVED', campaign: prevState, idempotent: true });
+      return res.json({ success: true, message: 'Campaign is already live on Meta Ad Network.', campaign: prevState, idempotent: true });
     }
 
-
-    // Prepare approved state: admin approval automatically grants policy clearance
-    const campaignToSign = { ...prevState, admin_approved: true, policy_cleared: true };
+    // Prepare approved state: admin approval automatically grants policy clearance and releases escrow
+    const campaignToSign = { ...prevState, admin_approved: true, policy_cleared: true, escrow_status: 'released' };
     const { hash: approvalHash, snapshot: approvalSnapshot } = computeCampaignApprovalHash(campaignToSign);
 
-    // 1. Atomically mark non-status fields as approved by admin & record policy clearance and hash
+    // 1. Atomically mark non-status fields as approved by admin & record policy clearance, escrow release and hash
     await client.query(`
       UPDATE host_marketing_campaigns
       SET admin_approved = true,
@@ -10069,6 +10117,8 @@ app.post('/api/admin/marketing/campaigns/:id/approve', authenticateToken, async 
           approved_at = CURRENT_TIMESTAMP,
           admin_feedback = NULL,
           payment_status = 'paid',
+          escrow_status = 'released',
+          escrow_release_at = CURRENT_TIMESTAMP,
           subscription_active = true,
           approval_snapshot = $1,
           approval_hash = $2
@@ -10080,7 +10130,7 @@ app.post('/api/admin/marketing/campaigns/:id/approve', authenticateToken, async 
       campaignId: Number(id),
       expectedCurrentState: prevState.status,
       to: 'approved',
-      reason: 'Admin approval granted',
+      reason: 'Admin approval granted and live dispatch authorized',
       actorType: 'admin',
       actorId: req.user?.id,
       client
@@ -10096,17 +10146,17 @@ app.post('/api/admin/marketing/campaigns/:id/approve', authenticateToken, async 
       id,
       'approve_campaign',
       JSON.stringify(prevState),
-      JSON.stringify({ status: 'admin_approved', admin_approved: true, policy_cleared: true, payment_status: 'paid' }),
+      JSON.stringify({ status: 'admin_approved', admin_approved: true, policy_cleared: true, payment_status: 'paid', escrow_status: 'released' }),
       req.ip || req.socket.remoteAddress
     ]);
 
     await client.query('COMMIT');
     client.release();
 
-    console.log(`[ADMIN APPROVAL] Admin approved Campaign #${id}. Auto-marked payment as cleared & dispatching to Meta state machine...`);
+    console.log(`[ADMIN APPROVAL] Admin approved Campaign #${id}. Auto-marked payment & escrow as cleared & dispatching to Meta state machine...`);
     
-    // 3. Trigger state transitions and Meta dispatch
-    await executeCampaignStateMachine(Number(id), 'PAYMENT_SUCCESS', req);
+    // 3. Trigger state transitions and Meta dispatch with ADMIN_APPROVE event
+    await executeCampaignStateMachine(Number(id), 'ADMIN_APPROVE', req);
 
     // Fetch updated campaign row to return complete object including meta_campaign_id
     const updatedCheck = await pool.query(`

@@ -132,7 +132,12 @@ export class CampaignControlCenterService {
     // Rule H: Financial state must never be inferred from publishing success alone. Use authoritative financial records.
     let escrow_status: 'UNFUNDED' | 'PAYMENT_PENDING' | 'HOLDING' | 'ESCROW_RELEASE_AUTHORIZED' | 'RELEASED' | 'REFUNDED_TO_WALLET' | 'DISPUTED' = 'UNFUNDED';
     if (campaign.escrow_status) {
-      escrow_status = campaign.escrow_status;
+      const normalizedEscrow = String(campaign.escrow_status).toUpperCase();
+      if (['UNFUNDED', 'PAYMENT_PENDING', 'HOLDING', 'ESCROW_RELEASE_AUTHORIZED', 'RELEASED', 'REFUNDED_TO_WALLET', 'DISPUTED'].includes(normalizedEscrow)) {
+        escrow_status = normalizedEscrow as any;
+      } else if (normalizedEscrow === 'PAID') {
+        escrow_status = 'RELEASED';
+      }
     } else {
       const refundTx = walletTxs.find((w: any) => w.transaction_type === 'CAMPAIGN_REFUND' || w.type === 'REFUND');
       const holdTx = walletTxs.find((w: any) => w.transaction_type === 'ESCROW_HOLD' || w.type === 'ESCROW_HOLD');
