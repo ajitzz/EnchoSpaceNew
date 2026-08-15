@@ -2,6 +2,7 @@ import React, { Component, ErrorInfo, ReactNode } from 'react';
 
 interface Props {
   children: ReactNode;
+  fallback?: ReactNode | ((error: Error, reset: () => void) => ReactNode);
 }
 
 interface State {
@@ -10,7 +11,7 @@ interface State {
   errorInfo: ErrorInfo | null;
 }
 
-export class ErrorBoundary extends React.Component<Props, State> {
+export class ErrorBoundary extends Component<Props, State> {
   public state: State = {
     hasError: false,
     error: null,
@@ -22,7 +23,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Uncaught React Error:', error, errorInfo);
+    console.error('Uncaught React Error in ErrorBoundary:', error, errorInfo);
     this.setState({ errorInfo });
     // Make sure native splash screen is removed if error occurs
     const splash = document.getElementById('native-splash');
@@ -30,6 +31,10 @@ export class ErrorBoundary extends React.Component<Props, State> {
       splash.remove();
     }
   }
+
+  private handleReset = () => {
+    this.setState({ hasError: false, error: null, errorInfo: null });
+  };
 
   private handleReload = () => {
     window.location.reload();
@@ -47,31 +52,40 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   public render() {
     if (this.state.hasError) {
+      if (typeof this.props.fallback === 'function' && this.state.error) {
+        return this.props.fallback(this.state.error, this.handleReset);
+      }
+      if (this.props.fallback && typeof this.props.fallback !== 'function') {
+        return this.props.fallback;
+      }
+
       return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6 text-gray-900 font-sans">
-          <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-gray-100 p-8 text-center">
-            <div className="w-14 h-14 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl font-bold">
+        <div id="error-boundary-container" className="min-h-screen bg-gray-50 flex items-center justify-center p-6 text-gray-900 font-sans">
+          <div id="error-boundary-card" className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-gray-100 p-8 text-center">
+            <div id="error-boundary-icon" className="w-14 h-14 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl font-bold">
               !
             </div>
-            <h2 className="text-2xl font-bold mb-2">Something went wrong</h2>
-            <p className="text-gray-600 text-sm mb-6">
+            <h2 id="error-boundary-title" className="text-2xl font-bold mb-2">Something went wrong</h2>
+            <p id="error-boundary-desc" className="text-gray-600 text-sm mb-6">
               An unexpected error occurred in the application view.
             </p>
             {this.state.error && (
-              <div className="bg-red-50 border border-red-100 rounded-lg p-3 text-left mb-6 max-h-40 overflow-auto">
+              <div id="error-boundary-details" className="bg-red-50 border border-red-100 rounded-lg p-3 text-left mb-6 max-h-40 overflow-auto">
                 <p className="text-xs font-mono text-red-700 whitespace-pre-wrap">
                   {this.state.error.toString()}
                 </p>
               </div>
             )}
-            <div className="flex flex-col gap-3">
+            <div id="error-boundary-actions" className="flex flex-col gap-3">
               <button
+                id="error-boundary-refresh-btn"
                 onClick={this.handleReload}
                 className="w-full py-3 px-4 bg-sky-600 hover:bg-sky-700 text-white font-semibold rounded-xl transition-colors shadow-sm"
               >
                 Refresh App
               </button>
               <button
+                id="error-boundary-clear-cache-btn"
                 onClick={this.handleResetState}
                 className="w-full py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl text-xs transition-colors"
               >

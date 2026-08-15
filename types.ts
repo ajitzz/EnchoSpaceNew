@@ -221,6 +221,10 @@ export interface MarketingCampaign {
   meta_adset_id?: string;
   meta_creative_id?: string;
   meta_ad_id?: string;
+  meta_status?: string;
+  meta_effective_status?: string;
+  meta_review_status?: string;
+  verification_source?: string;
   ad_medias?: any[];
   adset_specifications?: any;
   meta_specifications?: any;

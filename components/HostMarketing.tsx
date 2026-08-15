@@ -2559,6 +2559,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                       let barBg = 'bg-emerald-950/20';
                       let textColor = 'text-emerald-700';
                       let indicatorColor = 'bg-emerald-500';
+                      let liveLabel = 'Live & Active';
 
                       if (pct >= 60 && pct < 85) {
                         barColor = 'from-amber-500 to-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.4)]';
@@ -2570,6 +2571,35 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                         barBg = 'bg-rose-950/20';
                         textColor = 'text-rose-700';
                         indicatorColor = 'bg-rose-500';
+                      }
+
+                      // Adjust label and styling based on actual Meta Effective Status
+                      if (!isDepleted && campaign.meta_effective_status) {
+                        if (campaign.meta_effective_status === 'CAMPAIGN_OFF') {
+                          liveLabel = 'Campaign Paused on Meta';
+                          textColor = 'text-slate-700';
+                          indicatorColor = 'bg-slate-500';
+                        } else if (campaign.meta_effective_status === 'ADSET_OFF') {
+                          liveLabel = 'Ad Set Paused on Meta';
+                          textColor = 'text-slate-700';
+                          indicatorColor = 'bg-slate-500';
+                        } else if (campaign.meta_effective_status === 'NOT_DELIVERING') {
+                          liveLabel = 'Active (Not Delivering Ads)';
+                          textColor = 'text-amber-700';
+                          indicatorColor = 'bg-amber-500';
+                        } else if (campaign.meta_effective_status === 'PENDING_META_REVIEW') {
+                          liveLabel = 'Pending Meta Review';
+                          textColor = 'text-amber-700';
+                          indicatorColor = 'bg-amber-500';
+                        } else if (campaign.meta_effective_status === 'CREATED_NOT_SERVING') {
+                          liveLabel = 'Created (Not Serving)';
+                          textColor = 'text-amber-700';
+                          indicatorColor = 'bg-amber-500';
+                        } else if (campaign.meta_effective_status === 'DISAPPROVED') {
+                          liveLabel = 'Disapproved by Meta';
+                          textColor = 'text-rose-700';
+                          indicatorColor = 'bg-rose-500';
+                        }
                       }
 
                       return (
@@ -2586,7 +2616,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                 ) : (
                                   <>
                                     <div className={`w-2 h-2 ${indicatorColor} rounded-full animate-ping`} />
-                                    <span className={textColor}>Live & Active — Pacing: {campaign.pacing_mode || 'standard'}</span>
+                                    <span className={textColor}>{liveLabel} — Pacing: {campaign.pacing_mode || 'standard'}</span>
                                   </>
                                 )}
                               </div>

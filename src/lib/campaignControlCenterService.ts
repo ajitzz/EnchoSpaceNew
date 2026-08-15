@@ -35,6 +35,17 @@ function getDbPool(): pg.Pool {
 
 export class CampaignControlCenterService {
   /**
+   * Alias for getCampaignTruth for canonical truth projection queries.
+   */
+  static async getCanonicalTruth(
+    campaignId: number | string,
+    viewerContext: ViewerContext,
+    dbClient?: any
+  ): Promise<any> {
+    return this.getCampaignTruth(campaignId, viewerContext, dbClient);
+  }
+
+  /**
    * Primary canonical truth projection engine for Host and Admin command centers.
    */
   static async getCampaignTruth(
@@ -84,7 +95,8 @@ export class CampaignControlCenterService {
       variantSnapshotsRes,
       dcoEvalRes,
       dcoActionsRes,
-      dailyMetricsRes
+      dailyMetricsRes,
+      contractRes
     ] = await Promise.all([
       client.query(`SELECT * FROM meta_publishing_transactions WHERE campaign_id = $1 ORDER BY id DESC LIMIT 1`, [numericCampaignId]).catch(() => ({ rows: [] })),
       client.query(`SELECT * FROM meta_publishing_events WHERE campaign_id = $1 ORDER BY id ASC`, [numericCampaignId]).catch(() => ({ rows: [] })),
@@ -95,7 +107,8 @@ export class CampaignControlCenterService {
       client.query(`SELECT * FROM variant_meta_snapshots WHERE variant_id IN (SELECT id FROM campaign_creative_variants WHERE campaign_id = $1) ORDER BY last_meta_fetched_at DESC`, [numericCampaignId]).catch(() => ({ rows: [] })),
       client.query(`SELECT * FROM dco_evaluation_transactions WHERE campaign_id = $1 ORDER BY id DESC LIMIT 1`, [numericCampaignId]).catch(() => ({ rows: [] })),
       client.query(`SELECT * FROM dco_external_actions WHERE campaign_id = $1 ORDER BY id DESC`, [numericCampaignId]).catch(() => ({ rows: [] })),
-      client.query(`SELECT * FROM campaign_daily_metrics WHERE campaign_id = $1 ORDER BY metric_date DESC LIMIT 30`, [numericCampaignId]).catch(() => ({ rows: [] }))
+      client.query(`SELECT * FROM campaign_daily_metrics WHERE campaign_id = $1 ORDER BY metric_date DESC LIMIT 30`, [numericCampaignId]).catch(() => ({ rows: [] })),
+      client.query(`SELECT * FROM campaign_financial_contracts WHERE campaign_id = $1`, [numericCampaignId]).catch(() => ({ rows: [] }))
     ]);
 
     const tx = txRes.rows[0] || null;
@@ -108,6 +121,7 @@ export class CampaignControlCenterService {
     const dcoEval = dcoEvalRes.rows[0] || null;
     const dcoActions = dcoActionsRes.rows || [];
     const dailyMetrics = dailyMetricsRes.rows || [];
+    const financialContract = contractRes.rows[0] || null;
 
     // 3. Compute 3 Core State Axes
 
@@ -353,7 +367,9 @@ export class CampaignControlCenterService {
 
     // 9. Derived Operational State
     let derived_operational_state = 'DRAFT';
-    if (governance_status === 'ADMIN_APPROVED' && publish_status === 'SUCCESS' && meta_status === 'ACTIVE') {
+    if (meta_effective_status === 'EXTERNAL_VERIFICATION_BLOCKED' || meta_status === 'EXTERNAL_VERIFICATION_BLOCKED' || root_error_classification === 'AUTH_EXPIRED') {
+      derived_operational_state = 'EXTERNAL_VERIFICATION_BLOCKED';
+    } else if (governance_status === 'ADMIN_APPROVED' && publish_status === 'SUCCESS' && (meta_status === 'ACTIVE' || meta_effective_status === 'ACTIVE' || meta_effective_status === 'LIVE') && external_freshness !== 'UNKNOWN') {
       derived_operational_state = 'HEALTHY_LIVE';
     } else if (publish_status === 'SUCCESS' && meta_review_status === 'PENDING_REVIEW') {
       derived_operational_state = 'META_REVIEW_DELAYED';
@@ -365,8 +381,8 @@ export class CampaignControlCenterService {
       derived_operational_state = 'EXTERNAL_OUTCOME_UNKNOWN';
     } else if (reconciliation_state === 'RECONCILIATION_REQUIRED') {
       derived_operational_state = 'RECONCILIATION_REQUIRED';
-    } else if (root_error_classification === 'AUTH_EXPIRED') {
-      derived_operational_state = 'AUTH_CIRCUIT_BROKEN';
+    } else if (meta_status === 'UNKNOWN' || meta_effective_status === 'UNKNOWN' || external_freshness === 'UNKNOWN') {
+      derived_operational_state = 'EXTERNAL_STATE_UNKNOWN';
     } else {
       derived_operational_state = `${governance_status}_${publish_status}`;
     }
@@ -375,7 +391,10 @@ export class CampaignControlCenterService {
     let host_next_action = failure_intelligence.host_guidance;
     let plain_english_failure: string | null = failure_intelligence.root_cause;
 
-    if (publish_status === 'SUCCESS') {
+    if (meta_effective_status === 'EXTERNAL_VERIFICATION_BLOCKED' || meta_status === 'EXTERNAL_VERIFICATION_BLOCKED') {
+      host_next_action = 'Your campaign is securely preserved. External Meta verification is currently awaiting developer reactivation.';
+      plain_english_failure = 'Meta API access is deactivated or unreachable. Awaiting developer reactivation.';
+    } else if (publish_status === 'SUCCESS' && (meta_effective_status === 'LIVE' || meta_effective_status === 'ACTIVE') && external_freshness !== 'UNKNOWN') {
       host_next_action = 'Your campaign is live on Meta! Monitor reach, clicks, and incoming leads below.';
       plain_english_failure = null;
     } else if (governance_status === 'PENDING_ADMIN_REVIEW' && publish_status === 'IDLE') {
@@ -387,11 +406,17 @@ export class CampaignControlCenterService {
     }
 
     let admin_next_action = failure_intelligence.admin_guidance;
-    if (governance_status === 'PENDING_ADMIN_REVIEW' && publish_status === 'IDLE') {
+    if (meta_effective_status === 'EXTERNAL_VERIFICATION_BLOCKED' || meta_status === 'EXTERNAL_VERIFICATION_BLOCKED') {
+      admin_next_action = 'Meta developer portal access deactivated (OAuth code 200). Complete developer registration on developer.facebook.com to resume live sync.';
+    } else if (governance_status === 'PENDING_ADMIN_REVIEW' && publish_status === 'IDLE') {
       admin_next_action = 'Review creative copy, image resolution, and targeting specs before sign-off.';
     } else if (publish_status === 'SUCCESS') {
       admin_next_action = 'Monitor performance telemetry and DCO variant metrics.';
     }
+
+    const hasFinancialBlockedEvent = events.some((e: any) => e.event_type === 'FINANCIAL_ACTIVATION_BLOCKED');
+    const isContractOverConfigured = financialContract ? (Number(financialContract.meta_configured_max_spend || 0) > Number(financialContract.meta_authorized_spend)) : false;
+    const is_financial_blocked = isContractOverConfigured || hasFinancialBlockedEvent;
 
     // Assemble Canonical Raw Truth
     const canonicalTruth = {
@@ -486,10 +511,22 @@ export class CampaignControlCenterService {
       },
       financial_safety: {
         is_money_safe: true,
-        total_charged_cents: Math.round((campaign.budget || 0) * 100),
-        total_paid_cents: Math.round((campaign.budget || 0) * 100),
-        ad_spend_allocated_cents: Math.round((campaign.budget || 0) * 85),
-        encho_fee_cents: Math.round((campaign.budget || 0) * 15),
+        total_charged_cents: financialContract ? Number(financialContract.gross_host_charge) : Math.round((campaign.budget || 0) * 100),
+        total_paid_cents: financialContract ? Number(financialContract.gross_host_charge) : Math.round((campaign.budget || 0) * 100),
+        ad_spend_allocated_cents: financialContract ? Number(financialContract.meta_authorized_spend) : Math.round((campaign.budget || 0) * 85),
+        encho_fee_cents: financialContract ? Number(financialContract.encho_fee_amount) : Math.round((campaign.budget || 0) * 15),
+        meta_authorized_spend_cents: financialContract ? Number(financialContract.meta_authorized_spend) : Math.round((campaign.budget || 0) * 85),
+        meta_configured_max_cents: financialContract ? Number(financialContract.meta_configured_max_spend || 0) : Math.round((campaign.budget || 0) * 100),
+        meta_actual_spend_cents: financialContract ? Number(financialContract.meta_actual_spend || 0) : Math.round((campaign.spent || 0) * 100),
+        meta_remaining_authorization_cents: financialContract ? Number(financialContract.meta_remaining_authorization || 0) : Math.max(0, Math.round((campaign.budget || 0) * 85) - Math.round((campaign.spent || 0) * 100)),
+        variance_cents: financialContract ? (Number(financialContract.meta_configured_max_spend || 0) - Number(financialContract.meta_authorized_spend)) : 0,
+        is_financial_blocked,
+        financial_block_reason: is_financial_blocked
+          ? "The Meta budget exceeds the campaign's authorized advertising spend."
+          : null,
+        recommended_action: is_financial_blocked
+          ? "Financial configuration must be corrected before activation."
+          : null,
         escrow_status,
         risk_level: failure_intelligence.financial_risk
       },
@@ -645,7 +682,11 @@ export class CampaignControlCenterService {
         remaining_authorized_spend_cents,
         escrow_status,
         escrow_state_display,
-        currency: truth.currency || 'USD'
+        currency: truth.currency || 'USD',
+        is_financial_blocked: truth.financial_safety?.is_financial_blocked || false,
+        friendly_financial_guidance: truth.financial_safety?.is_financial_blocked
+          ? "Campaign activation is temporarily blocked because a financial authorization mismatch was detected. Your funds remain protected."
+          : null
       },
       freshness: {
         external_freshness: truth.meta_external_state.external_freshness,
@@ -717,9 +758,11 @@ export class CampaignControlCenterService {
     const review = truth.meta_external_state?.meta_review_status;
 
     // Rule A: APPROVED MUST NEVER mean LIVE
-    if (pub === 'EXTERNAL_OUTCOME_UNKNOWN' || truth.meta_external_state?.reconciliation_required || truth.reconciliation_state === 'RECONCILIATION_REQUIRED') {
+    if (meta === 'EXTERNAL_VERIFICATION_BLOCKED' || truth.meta_external_state?.meta_effective_status === 'EXTERNAL_VERIFICATION_BLOCKED' || truth.meta_external_state?.meta_status === 'EXTERNAL_VERIFICATION_BLOCKED') {
+      opStatus = 'EXTERNAL_VERIFICATION_BLOCKED';
+    } else if (pub === 'EXTERNAL_OUTCOME_UNKNOWN' || truth.meta_external_state?.reconciliation_required || truth.reconciliation_state === 'RECONCILIATION_REQUIRED') {
       opStatus = 'RECONCILIATION_REQUIRED';
-    } else if (pub === 'UNKNOWN') {
+    } else if (pub === 'UNKNOWN' || meta === 'UNKNOWN' || truth.meta_external_state?.external_freshness === 'UNKNOWN') {
       opStatus = 'UNKNOWN';
     } else if (pub === 'FAILED' || pub === 'FAILED_PUBLISH' || pub === 'ROLLBACK_FAILED' || pub === 'QUARANTINED') {
       opStatus = 'FAILED';
@@ -728,15 +771,19 @@ export class CampaignControlCenterService {
     } else if (gov === 'DRAFT' || gov === 'PENDING_ADMIN_REVIEW' || pub === 'IDLE') {
       opStatus = 'NOT_DISPATCHED';
     } else if (pub === 'SUCCESS' || pub === 'LIVE') {
-      if (meta === 'ACTIVE') {
+      if ((meta === 'LIVE' || meta === 'ACTIVE') && truth.meta_external_state?.external_freshness !== 'UNKNOWN' && meta !== 'EXTERNAL_VERIFICATION_BLOCKED') {
         opStatus = 'LIVE';
-      } else if (meta === 'PAUSED') {
+      } else if (meta === 'CAMPAIGN_OFF' || meta === 'PAUSED') {
         opStatus = 'PAUSED';
+      } else if (meta === 'ADSET_OFF') {
+        opStatus = 'ADSET_OFF';
+      } else if (meta === 'NOT_DELIVERING') {
+        opStatus = 'NOT_DELIVERING';
+      } else if (meta === 'PENDING_META_REVIEW' || review === 'PENDING_REVIEW') {
+        opStatus = 'PENDING_REVIEW';
       } else if (meta === 'DISAPPROVED' || review === 'DISAPPROVED' || truth.root_error_classification === 'POLICY_DISAPPROVED') {
         opStatus = 'DISAPPROVED';
-      } else if (review === 'PENDING_REVIEW') {
-        opStatus = 'PENDING_REVIEW';
-      } else if (meta === 'CAMPAIGN_GROUP_ACTIVE' || meta === 'ADSET_PAUSED' || meta === 'ARCHIVED') {
+      } else if (meta === 'CREATED_NOT_SERVING' || meta === 'CAMPAIGN_GROUP_ACTIVE' || meta === 'ADSET_PAUSED' || meta === 'ARCHIVED') {
         opStatus = 'CREATED_NOT_SERVING';
       } else {
         opStatus = 'OBJECTS_CREATED';
@@ -747,7 +794,11 @@ export class CampaignControlCenterService {
     let reason = truth.plain_english_failure || truth.root_error_message || null;
     let action = truth.admin_next_action || truth.host_next_action || null;
 
-    if (opStatus === 'RECONCILIATION_REQUIRED') {
+    if (opStatus === 'EXTERNAL_VERIFICATION_BLOCKED') {
+      owner = 'META_INFRASTRUCTURE';
+      reason = 'Meta developer portal access deactivated (OAuth code 200). Awaiting developer reactivation.';
+      action = 'Complete developer registration on developer.facebook.com to resume live sync.';
+    } else if (opStatus === 'RECONCILIATION_REQUIRED') {
       owner = 'SYSTEM';
       reason = 'Awaiting Meta synchronization confirmation.';
       action = 'System will auto-heal via background reconciliation worker.';
@@ -774,6 +825,13 @@ export class CampaignControlCenterService {
     badge_color: 'emerald' | 'amber' | 'blue' | 'rose' | 'slate' | 'purple';
   } {
     switch (status) {
+      case 'EXTERNAL_VERIFICATION_BLOCKED':
+        return {
+          label: 'External Verification Blocked',
+          description: 'Meta API access is currently deactivated or unreachable. Awaiting developer reactivation.',
+          badge_color: 'amber'
+        };
+
       case 'NOT_DISPATCHED':
         if (governance_status === 'ADMIN_APPROVED') {
           return {
@@ -832,9 +890,23 @@ export class CampaignControlCenterService {
 
       case 'PAUSED':
         return {
-          label: 'Paused',
-          description: 'Your campaign is currently paused.',
+          label: 'Campaign Paused',
+          description: 'Campaign is currently paused on Meta.',
           badge_color: 'slate'
+        };
+
+      case 'ADSET_OFF':
+        return {
+          label: 'Ad Set Paused',
+          description: 'Your campaign is approved, but the Meta Ad Set is not currently delivering.',
+          badge_color: 'slate'
+        };
+
+      case 'NOT_DELIVERING':
+        return {
+          label: 'Not Delivering',
+          description: 'Your campaign is active, but none of the ads are currently delivering.',
+          badge_color: 'amber'
         };
 
       case 'DISAPPROVED':
@@ -921,15 +993,19 @@ export class CampaignControlCenterService {
       {
         key: 'META_VERIFIED',
         label: 'Meta Verification',
-        status: verified && truth.meta_external_state?.external_freshness !== 'DEGRADED' ? 'COMPLETED' : (pub === 'SUCCESS' ? 'CURRENT' : 'PENDING'),
+        status: (meta === 'EXTERNAL_VERIFICATION_BLOCKED')
+          ? 'FAILED'
+          : (verified && truth.meta_external_state?.external_freshness !== 'DEGRADED' && truth.meta_external_state?.external_freshness !== 'UNKNOWN' ? 'COMPLETED' : (pub === 'SUCCESS' ? 'CURRENT' : 'PENDING')),
         timestamp: verified,
-        description: verified ? 'Active status confirmed with Meta API.' : 'Awaiting verification.'
+        description: (meta === 'EXTERNAL_VERIFICATION_BLOCKED')
+          ? 'Meta API access is deactivated or unreachable. Awaiting developer reactivation.'
+          : (verified ? 'Active status confirmed with Meta API.' : 'Awaiting verification.')
       },
       {
         key: 'LIVE',
         label: 'Delivering on Facebook & Instagram',
-        status: meta === 'ACTIVE' && pub === 'SUCCESS' ? 'COMPLETED' : (meta === 'PAUSED' ? 'CURRENT' : 'PENDING'),
-        description: meta === 'ACTIVE' ? 'Serving impressions to targeted audiences.' : (meta === 'PAUSED' ? 'Ad delivery currently paused.' : 'Pending live serving.')
+        status: (meta === 'ACTIVE' || meta === 'LIVE') && pub === 'SUCCESS' && truth.meta_external_state?.external_freshness !== 'UNKNOWN' && meta !== 'EXTERNAL_VERIFICATION_BLOCKED' ? 'COMPLETED' : (meta === 'PAUSED' || meta === 'ADSET_OFF' || meta === 'CAMPAIGN_OFF' ? 'CURRENT' : 'PENDING'),
+        description: (meta === 'ACTIVE' || meta === 'LIVE') && meta !== 'EXTERNAL_VERIFICATION_BLOCKED' ? 'Serving impressions to targeted audiences.' : (meta === 'EXTERNAL_VERIFICATION_BLOCKED' ? 'Delivery unverified — Meta API access deactivated.' : (meta === 'PAUSED' || meta === 'ADSET_OFF' ? 'Ad delivery currently paused.' : 'Pending live serving.'))
       }
     ];
 

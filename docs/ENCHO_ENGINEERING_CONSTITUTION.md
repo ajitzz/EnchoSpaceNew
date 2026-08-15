@@ -83,6 +83,13 @@ This pipeline ensures that only high-quality, compliant ads are published to Met
 - If any Meta API call fails, the pipeline aborts. The error is logged with a specific `correlationId` and `fbtrace_id`.
 - The system must support rollback of partially created objects to prevent orphan resources.
 
+### Automatic Activation Policy (Policy B Specification)
+ENCHO strictly enforces **Policy B**:
+1. **Safe Creation**: Campaign and AdSet objects are created on Meta in the `PAUSED` state to prevent accidental live-firing before escrow clearance, preflight verification, and admin approval.
+2. **Explicit Activation Operation (`activateMetaCampaign`)**: Once approved and escrow-released, an explicit, idempotent, audited, read-after-write verified activation operation is executed.
+3. **Hierarchy Verification**: The activation engine issues `POST status=ACTIVE` to both Campaign and AdSet, and verifies via read-after-write GET that `effective_status === 'ACTIVE'` before marking the campaign as `LIVE`.
+4. **Financial Safety**: Activation controls delivery status only and never alters financial parameters (`gross_host_charge`, `encho_fee_amount`, `escrow`, `meta_authorized_spend`).
+
 ---
 
 
@@ -234,9 +241,10 @@ The Meta Publishing Engine is NOT complete until:
   - P0-4: Centralized FSM Bypass Remediation
   - P0-5: Atomic Immutable Event Ledger
   - Phase 2.6 Milestone 1: Campaign Analytics Aggregation & Time-Series Rollup (`campaign_raw_event_logs`, `campaign_daily_rollups`, `runAnalyticsRollup` with UTC occurrence date extraction and composite `campaign_id + event_date` grouping, tenant-isolated analytics endpoints) — **Remediated & Certified Green**
+  - Phase 2.7 Milestones 1-9: Unified Canonical Truth Projection Engine, Dual Projection (Host Transparency vs Admin Ops Command Center), Root-Cause Failure Intelligence, Drift Detection Worker, and Financial Authorization Boundary Enforcement (`campaign_financial_contracts` with DB check constraints, Scenarios A-O adversarial test matrix certified) — **Completed & Certified Green**
 
 **Phase 3: DCO & AI Expansion**
-- Objectives: Fully dynamic creative optimization and predictive pricing.
+- Objectives: Fully dynamic creative optimization, Lead Intent Scoring, and Walled Garden CRM Integration.
 
 ---
 
@@ -273,3 +281,5 @@ Capabilities include:
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | ADR-003 | 2026-08-07 | Meta API Policy Rejections | Live Preflight & AI Engineering Brain | Waiting for Meta to reject a payload hurts Master Ad Account standing. Preventing it client-side is safer. | Active |
 | ADR-004 | 2026-08-11 | High-frequency analytics DB degradation | Raw Event Logging + Daily Upsert Rollup | Isolates write deltas into `campaign_raw_event_logs` and aggregates into `campaign_daily_rollups` to protect query performance. | Active |
+| ADR-005 | 2026-08-14 | Split UI Divergence & State Drift | Dual-Projection Canonical Truth Engine | Serves single source of truth to both Host Transparency View and Admin Ops Command Center with role-scoped projections. | Active |
+| ADR-006 | 2026-08-15 | Financial Risk & External Budget Over-spend | `campaign_financial_contracts` with DB Invariant Constraints | Enforces hard DB and runtime boundary: `gross_host_charge = encho_fee + meta_authorized_spend` & `configured_max <= authorized_spend`. Blocks external Meta over-spend. | Active |

@@ -269,7 +269,7 @@ export class MetaExternalSyncEngine {
         // Construct result snapshot
         const freshness = this.calculateExternalFreshness(verifiedAtIso);
         const localActive = ['active', 'CAMPAIGN_LIVE'].includes(campaign.status);
-        const metaActive = normEffectiveStatus === 'ACTIVE';
+        const metaActive = normEffectiveStatus === 'ACTIVE' || normEffectiveStatus === 'LIVE';
         const hasDrift = (localActive && !metaActive) || (!localActive && metaActive);
 
         snapshotResult = {
@@ -353,7 +353,7 @@ export class MetaExternalSyncEngine {
 
     // Default fetcher fallback
     const fetcher = options.customGraphFetcher || (async (endpoint: string) => {
-      const token = process.env.META_SYSTEM_USER_TOKEN || process.env.META_PAGE_ACCESS_TOKEN || '';
+      const token = process.env.META_SYSTEM_USER_TOKEN || process.env.META_PAGE_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN || '';
       const version = process.env.META_GRAPH_VERSION || 'v20.0';
       const baseUrl = process.env.META_BASE_URL || `https://graph.facebook.com/${version}`;
       const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}/${endpoint.replace(/^\//, '')}`;
@@ -371,15 +371,26 @@ export class MetaExternalSyncEngine {
 
     let campaignData: any = null;
     let adsetData: any = null;
-    let adData: any = null;
 
     let metaStatus = 'UNKNOWN';
     let metaEffectiveStatus = 'UNKNOWN';
     let metaReviewStatus = 'NO_REVIEW';
     let objectMissingOnMeta = false;
+    let isExternalAuthBlocked = false;
     let hierarchyVerified = true;
     let accountOwnershipVerified = true;
     let errorMsg: string | undefined = undefined;
+
+    const isAuthError = (callResult: any) => {
+      if (!callResult) return false;
+      if (callResult.status === 401 || callResult.status === 403) return true;
+      const err = callResult.data?.error;
+      if (!err) return false;
+      const code = err.code;
+      const type = err.type;
+      const msg = (err.message || '').toLowerCase();
+      return code === 190 || code === 200 || type === 'OAuthException' || msg.includes('oauth') || msg.includes('access token') || msg.includes('deactivated') || msg.includes('developer');
+    };
 
     // 1. GET Campaign Object
     const campCall = await fetcher(`/${meta_campaign_id}?fields=id,name,status,effective_status,configured_status,account_id`);
@@ -389,6 +400,14 @@ export class MetaExternalSyncEngine {
       metaStatus = 'MISSING_ON_META';
       hierarchyVerified = false;
       errorMsg = `Meta Campaign ID ${meta_campaign_id} not found on Meta Graph API`;
+    } else if (isAuthError(campCall)) {
+      isExternalAuthBlocked = true;
+      metaEffectiveStatus = 'EXTERNAL_VERIFICATION_BLOCKED';
+      metaStatus = 'EXTERNAL_VERIFICATION_BLOCKED';
+      metaReviewStatus = 'UNKNOWN';
+      hierarchyVerified = false;
+      accountOwnershipVerified = false;
+      errorMsg = campCall.data?.error?.message || `Meta Graph API access blocked (status ${campCall.status})`;
     } else if (campCall.data && !campCall.data.error) {
       campaignData = campCall.data;
       metaStatus = campaignData.status || 'PAUSED';
@@ -409,9 +428,15 @@ export class MetaExternalSyncEngine {
     }
 
     // 2. GET AdSet Object if exists
-    if (!objectMissingOnMeta && meta_adset_id) {
+    if (!objectMissingOnMeta && !isExternalAuthBlocked && meta_adset_id) {
       const adsetCall = await fetcher(`/${meta_adset_id}?fields=id,name,status,effective_status,campaign_id,account_id`);
-      if (adsetCall.data && !adsetCall.data.error) {
+      if (isAuthError(adsetCall)) {
+        isExternalAuthBlocked = true;
+        metaEffectiveStatus = 'EXTERNAL_VERIFICATION_BLOCKED';
+        metaStatus = 'EXTERNAL_VERIFICATION_BLOCKED';
+        hierarchyVerified = false;
+        errorMsg = adsetCall.data?.error?.message || `AdSet fetch blocked (status ${adsetCall.status})`;
+      } else if (adsetCall.data && !adsetCall.data.error) {
         adsetData = adsetCall.data;
         // Verify AdSet -> Campaign Hierarchy
         if (adsetData.campaign_id && adsetData.campaign_id !== meta_campaign_id) {
@@ -424,40 +449,103 @@ export class MetaExternalSyncEngine {
       }
     }
 
-    // 3. GET Ad Object if exists
-    if (!objectMissingOnMeta && meta_ad_id) {
-      const adCall = await fetcher(`/${meta_ad_id}?fields=id,name,status,effective_status,review_status,adset_id,campaign_id,account_id`);
-      if (adCall.data && !adCall.data.error) {
-        adData = adCall.data;
-        metaReviewStatus = adData.review_status || 'NO_REVIEW';
-        if (adData.effective_status) {
-          metaEffectiveStatus = adData.effective_status;
-        }
-        // Verify Ad -> AdSet / Campaign Hierarchy
-        if ((adData.adset_id && adData.adset_id !== meta_adset_id) || (adData.campaign_id && adData.campaign_id !== meta_campaign_id)) {
-          hierarchyVerified = false;
-          errorMsg = `Ad hierarchy mismatch for Ad ID ${meta_ad_id}`;
-        }
-      } else if (adCall.status === 404) {
+    // 3. GET All Ads in AdSet
+    let adsData: any[] = [];
+    if (!objectMissingOnMeta && !isExternalAuthBlocked && meta_adset_id) {
+      const adsCall = await fetcher(`/${meta_adset_id}/ads?fields=id,name,status,effective_status,adset_id,campaign_id,account_id`);
+      if (isAuthError(adsCall)) {
+        isExternalAuthBlocked = true;
+        metaEffectiveStatus = 'EXTERNAL_VERIFICATION_BLOCKED';
+        metaStatus = 'EXTERNAL_VERIFICATION_BLOCKED';
         hierarchyVerified = false;
-        errorMsg = `Meta Ad ID ${meta_ad_id} missing on Meta`;
+        errorMsg = adsCall.data?.error?.message || `Ads fetch blocked (status ${adsCall.status})`;
+      } else if (adsCall.data && !adsCall.data.error && adsCall.data.data) {
+        adsData = adsCall.data.data;
+        // Verify Ad -> AdSet / Campaign Hierarchy for all returned ads
+        for (const ad of adsData) {
+          if ((ad.adset_id && ad.adset_id !== meta_adset_id) || (ad.campaign_id && ad.campaign_id !== meta_campaign_id)) {
+            hierarchyVerified = false;
+            errorMsg = `Ad hierarchy mismatch for Ad ID ${ad.id}`;
+          }
+        }
       }
     }
 
+    // 4. Deterministic Hierarchy-Aware Reducer
+    if (isExternalAuthBlocked) {
+      metaEffectiveStatus = 'EXTERNAL_VERIFICATION_BLOCKED';
+      metaStatus = 'EXTERNAL_VERIFICATION_BLOCKED';
+      metaReviewStatus = 'UNKNOWN';
+    } else if (objectMissingOnMeta) {
+      metaEffectiveStatus = 'MISSING_ON_META';
+      metaReviewStatus = 'NO_REVIEW';
+    } else if (campaignData) {
+      const campStatus = campaignData?.effective_status || campaignData?.status || 'PAUSED';
+      const adsetEffective = adsetData?.effective_status || adsetData?.status || campStatus;
+      
+      let allAdsDisabled = adsData.length > 0;
+      let anyAdActive = false;
+      let anyAdPendingReview = false;
+      let anyAdDisapproved = false;
+
+      for (const ad of adsData) {
+        if (['ACTIVE', 'CAMPAIGN_GROUP_ACTIVE', 'ADSET_PAUSED'].includes(ad.effective_status) || ad.status === 'ACTIVE') {
+          allAdsDisabled = false;
+        }
+        if (ad.effective_status === 'ACTIVE' || ad.status === 'ACTIVE') {
+          anyAdActive = true;
+        }
+        if (ad.effective_status === 'PENDING_REVIEW' || ad.review_status === 'PENDING_REVIEW') {
+          anyAdPendingReview = true;
+        }
+        if (ad.effective_status === 'DISAPPROVED' || ad.review_status === 'DISAPPROVED') {
+          anyAdDisapproved = true;
+        }
+      }
+
+      if (['PAUSED', 'DELETED', 'ARCHIVED'].includes(campStatus)) {
+        metaEffectiveStatus = 'CAMPAIGN_OFF';
+      } else if (adsetData && ['PAUSED', 'DELETED', 'ARCHIVED'].includes(adsetEffective)) {
+        metaEffectiveStatus = 'ADSET_OFF';
+      } else if (adsData.length > 0 && allAdsDisabled) {
+        metaEffectiveStatus = 'NOT_DELIVERING';
+      } else if (anyAdPendingReview) {
+        metaEffectiveStatus = 'PENDING_META_REVIEW';
+      } else if (campStatus === 'ACTIVE' && (adsetData ? (adsetEffective === 'ACTIVE' || adsetEffective === 'LIVE') : true)) {
+        metaEffectiveStatus = 'ACTIVE';
+      } else {
+        metaEffectiveStatus = 'CREATED_NOT_SERVING';
+      }
+
+      if (anyAdDisapproved) {
+        metaReviewStatus = 'DISAPPROVED';
+      } else if (anyAdPendingReview) {
+        metaReviewStatus = 'PENDING_REVIEW';
+      } else if (anyAdActive || adsData.length === 0) {
+        metaReviewStatus = 'APPROVED';
+      } else {
+        metaReviewStatus = 'NO_REVIEW';
+      }
+    } else {
+      metaEffectiveStatus = 'UNKNOWN';
+      metaReviewStatus = 'UNKNOWN';
+    }
+
     const verifiedAtIso = new Date().toISOString();
-    const freshness = this.calculateExternalFreshness(verifiedAtIso);
+    const freshness = isExternalAuthBlocked ? 'UNKNOWN' : this.calculateExternalFreshness(verifiedAtIso);
 
     // Detect state drift
     const localActive = ['active', 'CAMPAIGN_LIVE'].includes(campaign.status);
-    const metaActive = metaEffectiveStatus === 'ACTIVE';
+    const metaActive = metaEffectiveStatus === 'LIVE' || metaEffectiveStatus === 'ACTIVE';
     const localFailed = ['failed', 'failed_publish'].includes(campaign.status);
 
-    const hasDrift = (localActive && !metaActive) || (localFailed && metaActive) || objectMissingOnMeta || !hierarchyVerified || !accountOwnershipVerified;
-    const reconciliationRequired = hasDrift || objectMissingOnMeta;
+    const hasDrift = isExternalAuthBlocked || (localActive && !metaActive) || (localFailed && metaActive) || objectMissingOnMeta || !hierarchyVerified || !accountOwnershipVerified;
+    const reconciliationRequired = hasDrift || objectMissingOnMeta || isExternalAuthBlocked;
 
     let driftDetails: string | undefined = undefined;
     if (hasDrift) {
-      if (objectMissingOnMeta) driftDetails = 'Object missing on Meta Graph API';
+      if (isExternalAuthBlocked) driftDetails = `External Meta verification is blocked (${errorMsg || 'API access deactivated'})`;
+      else if (objectMissingOnMeta) driftDetails = 'Object missing on Meta Graph API';
       else if (!hierarchyVerified) driftDetails = 'Object hierarchy validation failed';
       else if (!accountOwnershipVerified) driftDetails = 'Master Ad Account ownership mismatch';
       else driftDetails = `Local status (${campaign.status}) differs from Meta effective status (${metaEffectiveStatus})`;
@@ -610,9 +698,9 @@ export class MetaExternalSyncEngine {
         }
 
         // Rule B: Local ACTIVE / Meta PAUSED Mismatch
-        if (!remediated && ['active', 'CAMPAIGN_LIVE'].includes(prevStatus) && ['PAUSED', 'DELETED', 'ARCHIVED', 'DISAPPROVED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED'].includes(verifiedSnapshot.meta_effective_status)) {
+        if (!remediated && ['active', 'CAMPAIGN_LIVE'].includes(prevStatus) && ['PAUSED', 'DELETED', 'ARCHIVED', 'DISAPPROVED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED', 'CAMPAIGN_OFF', 'ADSET_OFF', 'NOT_DELIVERING'].includes(verifiedSnapshot.meta_effective_status)) {
           remediated = true;
-          remediationAction = `SYNCED_LOCAL_STATE_TO_${verifiedSnapshot.meta_effective_status}`;
+          remediationAction = 'SYNCED_LOCAL_STATE_TO_PAUSED';
           remediatedCount++;
 
           if (options.transitionStateFn) {

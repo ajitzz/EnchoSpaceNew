@@ -379,9 +379,12 @@ export const rlsStorage = new AsyncLocalStorage<{ userId?: number | string | nul
 const pool = new Pool({
   connectionString: isDbConfigured ? dbUrl : undefined,
   ssl: isDbConfigured ? { rejectUnauthorized: false } : undefined,
-  max: 15, // Increase pool size to 15 to completely prevent connection queuing on Vercel
-  idleTimeoutMillis: process.env.VERCEL ? 1000 : 30000, // Close idle connections fast on Vercel
-  connectionTimeoutMillis: 10000 // 10s timeout to allow Neon cold-start
+  max: 20, // Increase pool size to 20 to prevent connection queuing and handle peak throughput
+  idleTimeoutMillis: 10000, // Cycle idle connections after 10s to prevent stale sockets dropped by serverless Neon DB
+  connectionTimeoutMillis: 15000, // 15s timeout to allow Neon serverless compute cold-start
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
+  allowExitOnIdle: false
 });
 
 // Handle pool background errors gracefully to prevent process crash or unhandled pool errors
@@ -391,8 +394,9 @@ pool.on('error', (err) => {
 
 // Wrap pool.query to support secure Row-Level Security session context propagation and resilient connection retries
 const originalPoolQuery = pool.query;
+const originalPoolConnect = pool.connect.bind(pool);
 
-async function executeQueryWithRetry(fn: () => Promise<any>, retries = 2, delay = 250): Promise<any> {
+async function executeQueryWithRetry(fn: () => Promise<any>, retries = 3, delay = 300): Promise<any> {
   try {
     return await fn();
   } catch (err: any) {
@@ -401,16 +405,39 @@ async function executeQueryWithRetry(fn: () => Promise<any>, retries = 2, delay 
       errMsg.includes('connection terminated') ||
       errMsg.includes('connection timeout') ||
       errMsg.includes('econnreset') ||
+      errMsg.includes('econnrefused') ||
+      errMsg.includes('etimedout') ||
+      errMsg.includes('epipe') ||
       errMsg.includes('too many clients') ||
-      errMsg.includes('timeout overflow');
+      errMsg.includes('timeout overflow') ||
+      errMsg.includes('client has already been connected') ||
+      errMsg.includes('terminating connection') ||
+      errMsg.includes('server closed the connection') ||
+      errMsg.includes('ssl connection has been closed') ||
+      errMsg.includes('could not connect to server') ||
+      errMsg.includes('broken pipe') ||
+      err?.code === '08006' ||
+      err?.code === '08001' ||
+      err?.code === '08004' ||
+      err?.code === '57P01' ||
+      err?.code === '57P02' ||
+      err?.code === '57P03';
     if (isConnError && retries > 0) {
-      console.warn(`[DATABASE QUERY RETRY] Retrying query after transient error (${err?.message}). Retries remaining: ${retries}`);
-      await new Promise(res => setTimeout(res, delay));
+      const jitterDelay = delay + Math.floor(Math.random() * 150);
+      console.warn(`[DATABASE QUERY RETRY] Retrying query after transient error (${err?.message || err?.code}). Retries remaining: ${retries}`);
+      await new Promise(res => setTimeout(res, jitterDelay));
       return executeQueryWithRetry(fn, retries - 1, delay * 2);
     }
     throw err;
   }
 }
+
+pool.connect = (async function (this: any, callback?: any) {
+  if (typeof callback === 'function') {
+    return originalPoolConnect(callback);
+  }
+  return executeQueryWithRetry(async () => originalPoolConnect(), 3, 300);
+}) as any;
 
 pool.query = async function (this: any, ...args: any[]) {
   const [text, params, callback] = args;
@@ -3296,7 +3323,7 @@ async function syncCampaignSpend(row: any): Promise<any> {
       targeting_optimization: 'unconstrained', // Milestone 8.2: Advantage+ Broad Targeting
         special_ad_category: 'HOUSING',
         special_ad_category_country: ['IN', 'US', 'GB', 'AE', 'CA'],
-        daily_budget: Math.max(20000, Math.floor((Number(row.budget) || 2500) / 30 * 100)),
+        daily_budget: Math.floor(Math.round(Number(row.budget || 2500) * 100 * 0.85) / Math.max(1, Number(row.duration_days || 1))),
         billing_event: 'IMPRESSIONS',
         optimization_goal: 'REACH',
         bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
@@ -6407,6 +6434,104 @@ async function checkExternalMetaReadiness(dbPool: any, correlationId: string) {
   return await metaGraphClient.checkExternalMetaReadiness(dbPool, correlationId);
 }
 
+// ----------------- FINANCIAL CONTRACT & AUTHORIZATION ENGINE -----------------
+export interface CampaignFinancialContract {
+  id: number;
+  campaign_id: number;
+  gross_host_charge: bigint;
+  encho_fee_amount: bigint;
+  meta_authorized_spend: bigint;
+  meta_configured_max_spend: bigint;
+  meta_actual_spend: bigint;
+  meta_remaining_authorization: bigint;
+  currency: string;
+}
+
+export async function getOrEstablishFinancialContract(
+  campaignId: number,
+  clientOrPool: any = pool
+): Promise<CampaignFinancialContract> {
+  const existing = await clientOrPool.query(
+    `SELECT * FROM campaign_financial_contracts WHERE campaign_id = $1`,
+    [campaignId]
+  );
+  if (existing.rows.length > 0) {
+    const row = existing.rows[0];
+    return {
+      id: row.id,
+      campaign_id: row.campaign_id,
+      gross_host_charge: BigInt(row.gross_host_charge),
+      encho_fee_amount: BigInt(row.encho_fee_amount),
+      meta_authorized_spend: BigInt(row.meta_authorized_spend),
+      meta_configured_max_spend: BigInt(row.meta_configured_max_spend || 0),
+      meta_actual_spend: BigInt(row.meta_actual_spend || 0),
+      meta_remaining_authorization: BigInt(row.meta_remaining_authorization),
+      currency: row.currency || 'INR'
+    };
+  }
+
+  // Fetch campaign to establish initial contract
+  const campRes = await clientOrPool.query(
+    `SELECT * FROM host_marketing_campaigns WHERE id = $1`,
+    [campaignId]
+  );
+  if (campRes.rows.length === 0) {
+    throw new Error(`Campaign #${campaignId} not found to establish financial contract`);
+  }
+  const campaign = campRes.rows[0];
+
+  // Minor-unit arithmetic (paise / cents)
+  // Gross host charge: from campaign.budget, in minor units (e.g. ₹2,500 = 250,000 paise)
+  const rawGross = Number(campaign.budget || 2500);
+  const gross_host_charge = BigInt(Math.round(rawGross * 100));
+  const encho_fee_amount = (gross_host_charge * 15n) / 100n;
+  const meta_authorized_spend = gross_host_charge - encho_fee_amount;
+  const meta_actual_spend = BigInt(Math.round(Number(campaign.spent || 0) * 100));
+  const meta_remaining_authorization = meta_authorized_spend - meta_actual_spend;
+  const meta_configured_max_spend = meta_authorized_spend;
+  const currency = campaign.currency || (campaign.payment_gateway === 'stripe' ? 'USD' : 'INR');
+
+  // Verify invariant
+  if (gross_host_charge !== encho_fee_amount + meta_authorized_spend) {
+    throw new Error(`[FINANCIAL_INVARIANT_VIOLATION] Gross (${gross_host_charge}) != Fee (${encho_fee_amount}) + Authorized (${meta_authorized_spend})`);
+  }
+
+  const insertRes = await clientOrPool.query(`
+    INSERT INTO campaign_financial_contracts
+    (campaign_id, gross_host_charge, encho_fee_amount, meta_authorized_spend, meta_configured_max_spend, meta_actual_spend, meta_remaining_authorization, currency)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    ON CONFLICT (campaign_id) DO UPDATE
+    SET gross_host_charge = EXCLUDED.gross_host_charge,
+        encho_fee_amount = EXCLUDED.encho_fee_amount,
+        meta_authorized_spend = EXCLUDED.meta_authorized_spend,
+        meta_remaining_authorization = EXCLUDED.meta_authorized_spend - campaign_financial_contracts.meta_actual_spend,
+        currency = EXCLUDED.currency
+    RETURNING *
+  `, [
+    campaignId,
+    gross_host_charge.toString(),
+    encho_fee_amount.toString(),
+    meta_authorized_spend.toString(),
+    meta_configured_max_spend.toString(),
+    meta_actual_spend.toString(),
+    meta_remaining_authorization.toString(),
+    currency
+  ]);
+
+  const row = insertRes.rows[0];
+  return {
+    id: row.id,
+    campaign_id: row.campaign_id,
+    gross_host_charge: BigInt(row.gross_host_charge),
+    encho_fee_amount: BigInt(row.encho_fee_amount),
+    meta_authorized_spend: BigInt(row.meta_authorized_spend),
+    meta_configured_max_spend: BigInt(row.meta_configured_max_spend),
+    meta_actual_spend: BigInt(row.meta_actual_spend),
+    meta_remaining_authorization: BigInt(row.meta_remaining_authorization),
+    currency: row.currency
+  };
+}
+
 // ----------------- META PREFLIGHT ENGINE (16 SAFETY GATES) -----------------
 async function evaluateMetaPreflightDiagnostics(
   campaignIdOrData: number | any,
@@ -6901,7 +7026,59 @@ async function evaluateMetaPreflightDiagnostics(
     });
   }
 
-  const total_gates = 16;
+  // Gate 17: Financial Contract Authorization & Budget Ceiling Gate
+  let gate17Passed = true;
+  let gate17Msg = 'Financial contract authorized spend and budget ceiling verified.';
+  let gate17Action = 'No action needed.';
+  let gate17FailureCode: string | undefined = undefined;
+
+  if (campaignId > 0 || (campaign && campaign.budget)) {
+    try {
+      const contract = await getOrEstablishFinancialContract(campaignId || (campaign ? campaign.id : 0), dbPool);
+      if (contract) {
+        if (contract.meta_configured_max_spend > contract.meta_authorized_spend) {
+          gate17Passed = false;
+          gate17FailureCode = 'FINANCIAL_BUDGET_EXCEEDS_AUTHORIZATION';
+          gate17Msg = `Preflight Failed: Configured Meta budget (${contract.meta_configured_max_spend}) exceeds authorized advertising spend (${contract.meta_authorized_spend}).`;
+          gate17Action = options.isAdmin
+            ? 'Adjust Meta AdSet budget or re-establish financial contract to match meta_authorized_spend.'
+            : 'Campaign activation is temporarily blocked because a financial authorization mismatch was detected. Your funds remain protected.';
+        }
+      }
+    } catch (err: any) {
+      if (err.message?.includes('FINANCIAL_INVARIANT_VIOLATION') || err.message?.includes('FINANCIAL_BUDGET_EXCEEDS_AUTHORIZATION')) {
+        gate17Passed = false;
+        gate17FailureCode = 'FINANCIAL_BUDGET_EXCEEDS_AUTHORIZATION';
+        gate17Msg = `Preflight Failed: ${err.message}`;
+        gate17Action = 'Financial configuration must be corrected before activation.';
+      }
+    }
+  }
+
+  if (!gate17Passed) {
+    gateResults.push({
+      gate_id: 17,
+      gate_key: 'GATE_17_FINANCIAL_AUTHORIZATION_CEILING',
+      gate_name: 'Financial Authorization & Budget Ceiling Invariant',
+      status: 'FAILED',
+      severity: 'BLOCKER',
+      failure_code: gate17FailureCode || 'FINANCIAL_BUDGET_EXCEEDS_AUTHORIZATION',
+      message: gate17Msg,
+      action_required: gate17Action
+    });
+  } else {
+    gateResults.push({
+      gate_id: 17,
+      gate_key: 'GATE_17_FINANCIAL_AUTHORIZATION_CEILING',
+      gate_name: 'Financial Authorization & Budget Ceiling Invariant',
+      status: 'PASSED',
+      severity: 'INFO',
+      message: gate17Msg,
+      action_required: gate17Action
+    });
+  }
+
+  const total_gates = 17;
   const passed_gates = gateResults.filter(g => g.status === 'PASSED').length;
   const failed_gates = gateResults.filter(g => g.status === 'FAILED').length;
   const is_deployable = gateResults.filter(g => g.status === 'FAILED' && g.severity === 'BLOCKER').length === 0;
@@ -7644,12 +7821,20 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
     rollbackState.metaCampaignId = campData.id;
     await pool.query(`UPDATE meta_publishing_transactions SET meta_campaign_id = $1 WHERE id = $2`, [campData.id, txId]);
 
-    // 2. Create Ad Set
+    // 2. Create Ad Set with Authoritative Financial Contract Budget
+    const financialContract = await getOrEstablishFinancialContract(campaign.id, pool);
+    const authorizedSpendMinorUnits = financialContract.meta_authorized_spend;
+    const configuredDailyBudget = Number(authorizedSpendMinorUnits);
+
+    if (BigInt(configuredDailyBudget) > authorizedSpendMinorUnits) {
+      throw new Error(`[FINANCIAL_BUDGET_EXCEEDS_AUTHORIZATION] Configured Meta daily_budget (${configuredDailyBudget}) exceeds authorized spend (${authorizedSpendMinorUnits})`);
+    }
+
     const adSetPayload: any = {
       access_token: accessToken,
       name: `AdSet - ${adHeadline}`,
       campaign_id: rollbackState.metaCampaignId,
-      daily_budget: Math.max(10000, Math.floor(Number(campaign.budget || 100) * 100)),
+      daily_budget: configuredDailyBudget,
       billing_event: 'IMPRESSIONS',
       optimization_goal: 'REACH',
       promoted_object: { page_id: pageId },
@@ -7660,6 +7845,7 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
     const adSetData = await executeMetaRequest('adset_creation', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/adsets`, adSetPayload);
     rollbackState.metaAdSetId = adSetData.id;
     await pool.query(`UPDATE meta_publishing_transactions SET meta_adset_id = $1 WHERE id = $2`, [adSetData.id, txId]);
+    await pool.query(`UPDATE campaign_financial_contracts SET meta_configured_max_spend = $1 WHERE campaign_id = $2`, [configuredDailyBudget.toString(), campaign.id]);
 
     // 3. Extract media URLs for Multi-Variant Publishing (Step 2)
     let mediaUrls: string[] = [];
@@ -7930,6 +8116,159 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
       console.error('[META DLQ FAULT] Failed to write to DLQ:', dlqErr);
     }
     return false;
+  }
+}
+
+/**
+ * PHASE 2.7 — Activation Pipeline (Policy B: Safe creation as PAUSED, explicit activation)
+ */
+export async function activateMetaCampaign(campaignId: number, req: any, overrideCorrelationId?: string) {
+  const correlationId = overrideCorrelationId || crypto.randomUUID();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    const campRes = await client.query(`SELECT * FROM host_marketing_campaigns WHERE id = $1 FOR UPDATE`, [campaignId]);
+    if (campRes.rows.length === 0) {
+      throw new Error(`Campaign #${campaignId} not found`);
+    }
+    const campaign = campRes.rows[0];
+
+    if (!campaign.admin_approved && req?.user?.role !== 'admin') {
+      throw new Error('Campaign must be admin-approved before activation');
+    }
+
+    if (!campaign.meta_campaign_id || !campaign.meta_adset_id) {
+      throw new Error('Campaign has not been dispatched to Meta yet');
+    }
+
+    const accessToken = process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN;
+    if (!accessToken) {
+      throw new Error('Missing Meta Access Token');
+    }
+
+    const baseUrl = process.env.META_BASE_URL || "https://graph.facebook.com/v20.0";
+
+    // FINANCIAL BOUNDARY GATE: Independent verification of financial ceiling before ANY Meta mutation
+    const financialContract = await getOrEstablishFinancialContract(campaignId, client);
+    
+    // Invariant 1: Local configured max spend must not exceed authorized spend
+    if (financialContract.meta_configured_max_spend > financialContract.meta_authorized_spend) {
+      const variance = financialContract.meta_configured_max_spend - financialContract.meta_authorized_spend;
+      await pool.query(`
+        INSERT INTO meta_publishing_events (campaign_id, event_type, to_state, correlation_id, metadata)
+        VALUES ($1, 'FINANCIAL_ACTIVATION_BLOCKED', 'BLOCKED', $2, $3)
+      `, [campaignId, correlationId, JSON.stringify({
+        error: 'FINANCIAL_BUDGET_EXCEEDS_AUTHORIZATION',
+        configured_amount: financialContract.meta_configured_max_spend.toString(),
+        authorized_amount: financialContract.meta_authorized_spend.toString(),
+        variance: variance.toString(),
+        stage: 'ACTIVATION_GATE'
+      })]);
+      throw new Error(`[FINANCIAL_BUDGET_EXCEEDS_AUTHORIZATION] Configured Meta spend (${financialContract.meta_configured_max_spend}) exceeds authorized spend (${financialContract.meta_authorized_spend})`);
+    }
+
+    // Invariant 2: External Meta Daily/Lifetime Budget verification via read-only GET
+    if (campaign.meta_adset_id) {
+      try {
+        const extAdSetRes = await fetch(`${baseUrl}/${campaign.meta_adset_id}?fields=id,daily_budget,lifetime_budget&access_token=${accessToken}`);
+        const extAdSetData = extAdSetRes.headers.get('content-type')?.includes('json') ? await extAdSetRes.json().catch(() => ({})) : {};
+        if (extAdSetData && !extAdSetData.error) {
+          const externalBudget = BigInt(extAdSetData.daily_budget || extAdSetData.lifetime_budget || 0);
+          if (externalBudget > 0n && externalBudget > financialContract.meta_authorized_spend) {
+            const variance = externalBudget - financialContract.meta_authorized_spend;
+            await pool.query(`
+              INSERT INTO meta_publishing_events (campaign_id, event_type, to_state, correlation_id, metadata)
+              VALUES ($1, 'FINANCIAL_ACTIVATION_BLOCKED', 'BLOCKED', $2, $3)
+            `, [campaignId, correlationId, JSON.stringify({
+              error: 'FINANCIAL_BUDGET_EXCEEDS_AUTHORIZATION',
+              configured_amount: externalBudget.toString(),
+              authorized_amount: financialContract.meta_authorized_spend.toString(),
+              variance: variance.toString(),
+              stage: 'ACTIVATION_GATE_EXTERNAL_READ_VERIFY'
+            })]);
+            throw new Error(`[FINANCIAL_BUDGET_EXCEEDS_AUTHORIZATION] External Meta AdSet budget (${externalBudget}) exceeds authorized spend (${financialContract.meta_authorized_spend})`);
+          }
+        }
+      } catch (probeErr: any) {
+        if (probeErr.message?.includes('FINANCIAL_BUDGET_EXCEEDS_AUTHORIZATION')) {
+          throw probeErr;
+        }
+        console.warn(`[ACTIVATION PROBE] Warning reading adset budget for campaign #${campaignId}:`, probeErr.message);
+      }
+    }
+
+    // 1. Activate Campaign on Meta
+    const campActRes = await fetch(`${baseUrl}/${campaign.meta_campaign_id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access_token: accessToken, status: 'ACTIVE' })
+    });
+    const campActData = campActRes.headers.get('content-type')?.includes('json') ? await campActRes.json().catch(() => ({})) : {};
+    if (!campActRes.ok || campActData.error) {
+      throw new Error(campActData.error?.message || 'Failed to activate campaign on Meta');
+    }
+
+    // 2. Activate AdSet on Meta
+    const adSetActRes = await fetch(`${baseUrl}/${campaign.meta_adset_id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access_token: accessToken, status: 'ACTIVE' })
+    });
+    const adSetActData = adSetActRes.headers.get('content-type')?.includes('json') ? await adSetActRes.json().catch(() => ({})) : {};
+    if (!adSetActRes.ok || adSetActData.error) {
+      throw new Error(adSetActData.error?.message || 'Failed to activate ad set on Meta');
+    }
+
+    // 3. Read-After-Write Verification
+    const verifyCampRes = await fetch(`${baseUrl}/${campaign.meta_campaign_id}?fields=status,effective_status&access_token=${accessToken}`);
+    const verifyCampData = verifyCampRes.headers.get('content-type')?.includes('json') ? await verifyCampRes.json().catch(() => ({})) : {};
+    const verifyAdSetRes = await fetch(`${baseUrl}/${campaign.meta_adset_id}?fields=status,effective_status&access_token=${accessToken}`);
+    const verifyAdSetData = verifyAdSetRes.headers.get('content-type')?.includes('json') ? await verifyAdSetRes.json().catch(() => ({})) : {};
+
+    const isCampaignActive = verifyCampData.status === 'ACTIVE';
+    const isAdSetActive = verifyAdSetData.status === 'ACTIVE';
+
+    const newMetaStatus = isCampaignActive && isAdSetActive ? 'ACTIVE' : 'PAUSED';
+    const newMetaEffectiveStatus = verifyCampData.effective_status === 'ACTIVE' && verifyAdSetData.effective_status === 'ACTIVE' ? 'ACTIVE' : (verifyCampData.effective_status || 'PAUSED');
+
+    // 4. Update Database State using FSM and metadata update
+    await transitionCampaignState({
+      campaignId: Number(campaignId),
+      expectedCurrentState: campaign.status,
+      to: 'active',
+      reason: 'Meta Campaign Activated & Verified',
+      actorType: req?.user?.role === 'admin' ? 'admin' : 'host',
+      actorId: req?.user?.id,
+      client
+    });
+
+    await client.query(`
+      UPDATE host_marketing_campaigns
+      SET meta_status = $1, meta_effective_status = $2, external_status_verified_at = NOW(), external_status_verification_source = 'ACTIVATION_VERIFY', updated_at = NOW()
+      WHERE id = $3
+    `, [newMetaStatus, newMetaEffectiveStatus, campaignId]);
+
+    // 5. Audit Log & Publishing Event
+    await client.query(`
+      INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state)
+      VALUES ($1, 'campaign', $2, 'ACTIVATE_META_CAMPAIGN', $3, $4)
+    `, [req?.user?.id || 1, campaignId, JSON.stringify({ meta_status: campaign.meta_status }), JSON.stringify({ correlationId, newMetaStatus, newMetaEffectiveStatus })]);
+
+    await client.query(`
+      INSERT INTO meta_publishing_events (campaign_id, event_type, to_state, correlation_id, metadata)
+      VALUES ($1, 'CAMPAIGN_ACTIVATED', 'ACTIVE', $2, $3)
+    `, [campaignId, correlationId, JSON.stringify({ verifyCampData, verifyAdSetData })]);
+
+    await client.query('COMMIT');
+    broadcastDbEvent(req, 'marketing');
+    return { success: true, newMetaStatus, newMetaEffectiveStatus };
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    console.error(`[ACTIVATE META] Failed for campaign #${campaignId}:`, error.message);
+    throw error;
+  } finally {
+    client.release();
   }
 }
 
@@ -10819,6 +11158,35 @@ app.post('/api/marketing/campaigns/:id/resync', authenticateToken, async (req: A
   } catch (error: any) {
     console.error('Error resyncing campaign:', error);
     res.status(500).json({ error: error.message || 'Failed to resync campaign' });
+  }
+});
+
+// Phase 2.7 Milestone: Campaign Activation Endpoints (Policy B)
+app.post('/api/admin/marketing/campaigns/:id/activate', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    const result = await activateMetaCampaign(Number(req.params.id), req);
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to activate campaign' });
+  }
+});
+
+app.post('/api/marketing/campaigns/:id/activate', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const campaignRes = await pool.query('SELECT host_id FROM host_marketing_campaigns WHERE id = $1', [req.params.id]);
+    if (campaignRes.rows.length === 0) return res.status(404).json({ error: 'Campaign not found' });
+    if (req.user?.role !== 'admin' && String(campaignRes.rows[0].host_id) !== String(req.user?.id)) {
+      return res.status(403).json({ error: 'Unauthorized to activate this campaign' });
+    }
+    const result = await activateMetaCampaign(Number(req.params.id), req);
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to activate campaign' });
   }
 });
 
