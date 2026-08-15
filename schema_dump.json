@@ -1,0 +1,782 @@
+[
+  {
+    "table_name": "campaign_creative_variants",
+    "column_name": "id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "campaign_creative_variants",
+    "column_name": "campaign_id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "campaign_creative_variants",
+    "column_name": "variant_activated_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_name": "campaign_creative_variants",
+    "column_name": "is_published",
+    "data_type": "boolean"
+  },
+  {
+    "table_name": "campaign_creative_variants",
+    "column_name": "meta_ad_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "campaign_creative_variants",
+    "column_name": "status",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "campaign_creative_variants",
+    "column_name": "media_url",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "campaign_creative_variants",
+    "column_name": "media_type",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "campaign_creative_variants",
+    "column_name": "asset_sha256",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "campaign_creative_variants",
+    "column_name": "meta_creative_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "campaign_creative_variants",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_name": "campaign_creative_variants",
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_name": "campaign_financial_contracts",
+    "column_name": "id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "campaign_financial_contracts",
+    "column_name": "campaign_id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "campaign_financial_contracts",
+    "column_name": "gross_host_charge",
+    "data_type": "bigint"
+  },
+  {
+    "table_name": "campaign_financial_contracts",
+    "column_name": "encho_fee_amount",
+    "data_type": "bigint"
+  },
+  {
+    "table_name": "campaign_financial_contracts",
+    "column_name": "meta_authorized_spend",
+    "data_type": "bigint"
+  },
+  {
+    "table_name": "campaign_financial_contracts",
+    "column_name": "meta_configured_max_spend",
+    "data_type": "bigint"
+  },
+  {
+    "table_name": "campaign_financial_contracts",
+    "column_name": "meta_actual_spend",
+    "data_type": "bigint"
+  },
+  {
+    "table_name": "campaign_financial_contracts",
+    "column_name": "meta_remaining_authorization",
+    "data_type": "bigint"
+  },
+  {
+    "table_name": "campaign_financial_contracts",
+    "column_name": "currency",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "host_id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "listing_id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "title",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "description",
+    "data_type": "text"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "video_url",
+    "data_type": "text"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "media_urls",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "platforms",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "budget",
+    "data_type": "numeric"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "status",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "admin_feedback",
+    "data_type": "text"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "subscription_active",
+    "data_type": "boolean"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "analytics",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "created_at",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "approved_at",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "dco_status",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "objective",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "optimization_metric",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "owner_meta_ad_account_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "policy_cleared",
+    "data_type": "boolean"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "policy_cleared_at",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "target_locations",
+    "data_type": "text"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "target_locations_json",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "target_radius_km",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "ad_format",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "feed_description",
+    "data_type": "text"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "rejected_fields",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "payment_status",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "payment_gateway",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "payment_intent_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "admin_approved",
+    "data_type": "boolean"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "meta_campaign_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "meta_adset_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "meta_ad_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "meta_creative_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "meta_dispatched_at",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "meta_pixel_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "meta_capi_token",
+    "data_type": "text"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "meta_lead_form_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "google_conversion_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "google_conversion_label",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "pacing_mode",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "accumulated_spent",
+    "data_type": "numeric"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "spent",
+    "data_type": "numeric"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "accumulated_impressions",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "accumulated_clicks",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "encho_absorbed_overspend",
+    "data_type": "numeric"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "accumulated_conversions",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "escrow_status",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "escrow_release_at",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "three_d_secure_verified",
+    "data_type": "boolean"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "optimization_fee",
+    "data_type": "numeric"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "ad_spend_pool",
+    "data_type": "numeric"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "idempotency_key",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "last_pacing_calc_at",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "updated_at",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "target_audience_persona",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "audience_interests",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "ai_generated_ad_copies",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "ad_medias",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "adset_specifications",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "meta_specifications",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "meta_sync_logs",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "approval_snapshot",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "approval_hash",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "external_status_verified_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "external_status_verification_source",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "insights_synced_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "meta_status",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "meta_effective_status",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "meta_review_status",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "reach",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "comments_count",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "reactions_count",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "shares_count",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "engagement_synced_at",
+    "data_type": "timestamp with time zone"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "telemetry_source_metadata",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "host_marketing_campaigns",
+    "column_name": "engagement_source_metadata",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "meta_api_traces",
+    "column_name": "id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "meta_api_traces",
+    "column_name": "campaign_id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "meta_external_truth",
+    "column_name": "id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "meta_external_truth",
+    "column_name": "campaign_id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "meta_external_truth",
+    "column_name": "object_exists",
+    "data_type": "boolean"
+  },
+  {
+    "table_name": "meta_external_truth",
+    "column_name": "object_owned_by_master_account",
+    "data_type": "boolean"
+  },
+  {
+    "table_name": "meta_external_truth",
+    "column_name": "object_verified",
+    "data_type": "boolean"
+  },
+  {
+    "table_name": "meta_external_truth",
+    "column_name": "meta_status",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_external_truth",
+    "column_name": "meta_effective_status",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_external_truth",
+    "column_name": "meta_review_status",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_external_truth",
+    "column_name": "external_status_verified_at",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "table_name": "meta_external_truth",
+    "column_name": "external_status_verification_source",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_publishing_events",
+    "column_name": "id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "meta_publishing_events",
+    "column_name": "transaction_id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "meta_publishing_events",
+    "column_name": "campaign_id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "meta_publishing_events",
+    "column_name": "event_type",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_publishing_events",
+    "column_name": "from_state",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_publishing_events",
+    "column_name": "to_state",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_publishing_events",
+    "column_name": "actor_type",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_publishing_events",
+    "column_name": "actor_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_publishing_events",
+    "column_name": "reason",
+    "data_type": "text"
+  },
+  {
+    "table_name": "meta_publishing_events",
+    "column_name": "correlation_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_publishing_events",
+    "column_name": "metadata",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "campaign_id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "failure_code",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "failure_category",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "failure_stage",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "rollback_status",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "error_details",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "quarantined_objects",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "last_reconciled_at",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "reconciliation_started_at",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "reconciliation_lease_expires_at",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "reconciliation_attempt_count",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "next_reconciliation_at",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "correlation_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "idempotency_key",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "publish_status",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "publish_attempt",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "meta_campaign_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "meta_adset_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "meta_creative_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "meta_ad_id",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "created_at",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "table_name": "meta_publishing_transactions",
+    "column_name": "updated_at",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "table_name": "meta_reconciliation_incidents",
+    "column_name": "id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "meta_reconciliation_incidents",
+    "column_name": "transaction_id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "meta_reconciliation_incidents",
+    "column_name": "mismatch_type",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "meta_reconciliation_incidents",
+    "column_name": "details",
+    "data_type": "jsonb"
+  },
+  {
+    "table_name": "meta_reconciliation_incidents",
+    "column_name": "resolved",
+    "data_type": "boolean"
+  },
+  {
+    "table_name": "meta_reconciliation_incidents",
+    "column_name": "created_at",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "table_name": "operation_idempotency_keys",
+    "column_name": "id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "operation_idempotency_keys",
+    "column_name": "campaign_id",
+    "data_type": "integer"
+  },
+  {
+    "table_name": "operation_idempotency_keys",
+    "column_name": "operation_type",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "operation_idempotency_keys",
+    "column_name": "idempotency_key",
+    "data_type": "character varying"
+  },
+  {
+    "table_name": "operation_idempotency_keys",
+    "column_name": "created_at",
+    "data_type": "timestamp without time zone"
+  }
+]

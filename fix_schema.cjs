@@ -1,30 +1,41 @@
-const fs = require('fs');
-let code = fs.readFileSync('server.ts', 'utf8');
+const { Pool } = require('pg');
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-const t = `    CREATE TABLE IF NOT EXISTS wallet_transactions (
-      id SERIAL PRIMARY KEY,
-      wallet_id INT REFERENCES host_wallets(id) ON DELETE CASCADE,
-      amount DECIMAL NOT NULL,
-      type VARCHAR(50) NOT NULL,
-      reference_id VARCHAR(255),
-      status VARCHAR(50) DEFAULT 'completed',
-      description TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );`;
+async function run() {
+  try {
+    await pool.query(`
+      ALTER TABLE meta_api_traces 
+      ADD COLUMN IF NOT EXISTS correlation_id VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS host_id INTEGER REFERENCES users(id),
+      ADD COLUMN IF NOT EXISTS step VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS endpoint VARCHAR(1000),
+      ADD COLUMN IF NOT EXISTS request_payload JSONB,
+      ADD COLUMN IF NOT EXISTS response_payload JSONB,
+      ADD COLUMN IF NOT EXISTS http_status INTEGER,
+      ADD COLUMN IF NOT EXISTS fbtrace_id VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS meta_error_code INTEGER,
+      ADD COLUMN IF NOT EXISTS meta_error_subcode INTEGER,
+      ADD COLUMN IF NOT EXISTS meta_error_message TEXT,
+      ADD COLUMN IF NOT EXISTS meta_error_type VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS meta_error_is_transient BOOLEAN,
+      ADD COLUMN IF NOT EXISTS meta_error_user_title TEXT,
+      ADD COLUMN IF NOT EXISTS meta_error_user_msg TEXT,
+      ADD COLUMN IF NOT EXISTS latency_ms INTEGER,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();
+    `);
+    
+    // Set NOT NULL only if there are 0 rows, but it's empty so it's fine
+    await pool.query(`
+      ALTER TABLE meta_api_traces 
+      ALTER COLUMN correlation_id SET NOT NULL,
+      ALTER COLUMN step SET NOT NULL;
+    `);
 
-const r = `    CREATE TABLE IF NOT EXISTS wallet_transactions (
-      id SERIAL PRIMARY KEY,
-      wallet_id INT REFERENCES host_wallets(id) ON DELETE CASCADE,
-      amount DECIMAL NOT NULL,
-      type VARCHAR(50) NOT NULL,
-      reference_id VARCHAR(255) UNIQUE,
-      status VARCHAR(50) DEFAULT 'completed',
-      description TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-  \`);
-  await pool.query(\`ALTER TABLE wallet_transactions ADD CONSTRAINT unique_reference_id UNIQUE (reference_id) EXCLUDE USING btree (reference_id WITH =) WHERE (reference_id IS NOT NULL)\`).catch(()=>true); // ignore if exists`;
-
-code = code.replace(t, r);
-fs.writeFileSync('server.ts', code);
-console.log('Fixed schema init in server.ts');
+    console.log("Schema fixed successfully.");
+  } catch (err) {
+    console.error(err);
+  } finally {
+    pool.end();
+  }
+}
+run();

@@ -1860,6 +1860,28 @@ export const ensureMarketingSchema = async () => {
       latency_ms INTEGER,
       created_at TIMESTAMP DEFAULT NOW()
     );
+  `);
+  
+  await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS correlation_id VARCHAR(255);`);
+  await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS host_id INTEGER REFERENCES users(id);`);
+  await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS step VARCHAR(255);`);
+  await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS endpoint VARCHAR(1000);`);
+  await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS request_payload JSONB;`);
+  await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS response_payload JSONB;`);
+  await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS http_status INTEGER;`);
+  await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS fbtrace_id VARCHAR(255);`);
+  await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS meta_error_code INTEGER;`);
+  await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS meta_error_subcode INTEGER;`);
+  await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS meta_error_message TEXT;`);
+  await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS meta_error_type VARCHAR(255);`);
+  await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS meta_error_is_transient BOOLEAN;`);
+  await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS meta_error_user_title TEXT;`);
+  await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS meta_error_user_msg TEXT;`);
+  await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS latency_ms INTEGER;`);
+  await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();`);
+  
+  await pool.query(`
+
     
     CREATE TABLE IF NOT EXISTS meta_publishing_dlq (
       id SERIAL PRIMARY KEY,
@@ -10000,7 +10022,7 @@ app.post('/api/admin/marketing/campaigns/:id/approve', authenticateToken, async 
       return res.status(403).json({ error: 'Unauthorized' });
     }
     const { id } = req.params;
-    const idempotencyKey = req.body.idempotency_key || req.headers['x-idempotency-key'] || ('approve_' + id + '_' + Date.now());
+    const idempotencyKey = req.body?.idempotency_key || req.headers['x-idempotency-key'] || ('approve_' + id + '_' + Date.now());
     await client.query('BEGIN');
 
     try {
