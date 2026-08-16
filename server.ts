@@ -3609,7 +3609,19 @@ app.get('/api/marketing/campaigns', authenticateToken, async (req: AuthRequest, 
     `, [req.user?.id]);
 
     // Bounded concurrent spend sync to avoid database connection pool exhaustion
-    const campaigns = await mapConcurrent(result.rows, 5, row => syncCampaignSpend(row));
+    const campaigns = await mapConcurrent(result.rows, 5, async (row) => {
+      const synced = await syncCampaignSpend(row);
+      try {
+        const truth = await CampaignControlCenterService.getCampaignTruth(row.id, { userId: req.user!.id, role: 'host' }, pool);
+        return {
+          ...synced,
+          truth
+        };
+      } catch (e) {
+        console.error('Failed to get truth for campaign ' + row.id, e);
+        return synced;
+      }
+    });
 
     res.json(campaigns);
   } catch (error) {
@@ -10392,7 +10404,19 @@ app.get('/api/admin/marketing/campaigns', authenticateToken, async (req: AuthReq
     `);
 
     // Dynamic, database-backed campaign sync for admin view
-    const campaigns = await mapConcurrent(result.rows, 5, row => syncCampaignSpend(row));
+    const campaigns = await mapConcurrent(result.rows, 5, async (row) => {
+      const synced = await syncCampaignSpend(row);
+      try {
+        const truth = await CampaignControlCenterService.getCampaignTruth(row.id, { userId: req.user!.id, role: 'admin', isAdmin: true }, pool);
+        return {
+          ...synced,
+          truth
+        };
+      } catch (e) {
+        console.error('Failed to get admin truth for campaign ' + row.id, e);
+        return synced;
+      }
+    });
 
     res.json(campaigns);
   } catch (error) {
