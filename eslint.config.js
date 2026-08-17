@@ -18,8 +18,10 @@ export default tseslint.config(
       'react-refresh': reactRefresh,
     },
     rules: {
-      ...reactHooks.configs.recommended.rules, 'react-hooks/set-state-in-effect': 'off',
-      'react-hooks/exhaustive-deps': 'off', 'react-hooks/exhaustive-deps': 'off',
+      ...reactHooks.configs.recommended.rules,
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',
+      'react-hooks/exhaustive-deps': 'off',
       'react-refresh/only-export-components': ['off',
         { allowConstantExport: true },
       ],

@@ -404,7 +404,9 @@ export class LeadAlertingCrmService {
       if (parseInt(repeatRes.rows[0]?.count || '0') > 0) {
         scoringInputs.repeat_inquiry_on_listing = true;
       }
-    } catch (e) {}
+    } catch (_ignored) {
+      // Repeat inquiry check non-fatal
+    }
 
     const scoreResult = this.calculateHotLeadScore(scoringInputs);
 
@@ -541,7 +543,9 @@ export class LeadAlertingCrmService {
         reason: 'Lead successfully persisted and queued for notification',
         poolOrClient
       });
-    } catch (transErr) {}
+    } catch (_transErr) {
+      // Non-fatal if initial state transition fails
+    }
 
     return {
       success: true,
@@ -578,7 +582,9 @@ export class LeadAlertingCrmService {
         const anyUser = await poolOrClient.query(`SELECT id FROM users ORDER BY id ASC LIMIT 1`);
         if (anyUser.rows.length > 0) guestId = anyUser.rows[0].id;
       }
-    } catch (e) {}
+    } catch (_guestErr) {
+      // Non-fatal if guest resolution falls back to host
+    }
 
     // Check for existing thread for this host/listing/guest combination
     const threadCheck = await poolOrClient.query(`
@@ -1021,7 +1027,9 @@ export class LeadAlertingCrmService {
           poolOrClient
         });
         lead.status = 'VIEWED';
-      } catch (e) {}
+      } catch (_viewErr) {
+        // Non-fatal if marking as VIEWED fails
+      }
     }
 
     // Fetch Lifecycle Timeline

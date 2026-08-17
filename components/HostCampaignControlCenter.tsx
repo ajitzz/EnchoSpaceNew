@@ -178,8 +178,8 @@ export const HostCampaignControlCenter: React.FC<HostCampaignControlCenterProps>
     setIsExecutingAction(true);
     try {
       let endpoint = `/api/marketing/campaigns/${campaignId}/action`;
-      let method = 'POST';
-      let body: any = { action: selectedActionKey };
+      const method = 'POST';
+      const body: any = { action: selectedActionKey };
 
       if (selectedActionKey === 'PAUSE_CAMPAIGN') {
         endpoint = `/api/marketing/campaigns/${campaignId}/pause`;

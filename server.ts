@@ -287,7 +287,9 @@ async function triggerSmartAutoPause(listingId: any, bookingId: any) {
       if (global.io) {
         global.io.emit('db_changed', { type: 'marketing' });
       }
-    } catch (sockErr) {}
+    } catch (_sockErr) {
+      // Socket broadcast non-fatal
+    }
   } catch(e: any) {
     console.error('[SMART AUTO-PAUSE ERROR]', e?.message || e);
   }
@@ -4242,7 +4244,9 @@ app.post('/api/marketing/leads/:id/message', authenticateToken, async (req: Auth
           hostId: req.user?.id,
           poolOrClient: pool
         });
-      } catch (e) {}
+      } catch (_transErr) {
+        // Transition to CONTACTED non-fatal
+      }
     }
 
     res.json({
@@ -16226,7 +16230,9 @@ export const processDynamicCreativeOptimization = async (overridePool?: any) => 
           let urls: string[] = [];
           try {
             urls = typeof row.media_urls === 'string' ? JSON.parse(row.media_urls) : row.media_urls;
-          } catch (e: any) {}
+          } catch (_parseErr) {
+            // Non-fatal parse fallback
+          }
           if (urls && urls.length > 1) {
             const winningMedia = [urls[0]];
             await dbPool.query("UPDATE host_marketing_campaigns SET media_urls = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2", [JSON.stringify(winningMedia), row.id]);

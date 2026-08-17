@@ -40,19 +40,6 @@ export const TravelerLobby: React.FC<TravelerLobbyProps> = ({ experience, onClos
   const [activeTab, setActiveTab] = useState<'chat' | 'participants'>('chat');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    fetchLobbyData();
-    // In a real app, we'd use websockets or polling here for live updates.
-    const interval = setInterval(fetchLobbyData, 10000);
-    return () => clearInterval(interval);
-  }, [experience.id]);
-
-  useEffect(() => {
-    if (activeTab === 'chat') {
-      scrollToBottom();
-    }
-  }, [messages, activeTab]);
-
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -79,6 +66,19 @@ export const TravelerLobby: React.FC<TravelerLobbyProps> = ({ experience, onClos
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchLobbyData();
+    // In a real app, we'd use websockets or polling here for live updates.
+    const interval = setInterval(fetchLobbyData, 10000);
+    return () => clearInterval(interval);
+  }, [experience.id]);
+
+  useEffect(() => {
+    if (activeTab === 'chat') {
+      scrollToBottom();
+    }
+  }, [messages, activeTab]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();

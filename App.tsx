@@ -220,6 +220,9 @@ function App() {
       hero_image_urls: ['https://images.unsplash.com/photo-1501555088652-021faa106b9b?auto=format&fit=crop&q=80&w=2400']
   });
   const [loadingExperiences, setLoadingExperiences] = useState(true);
+  const [filters, setFilters] = useState<any>({});
+
+  const fetchGlobalExperiencesRef = useRef<((retryCount?: number) => Promise<void>) | null>(null);
 
   const fetchGlobalExperiences = React.useCallback(async (retryCount = 0) => {
       try {
@@ -255,7 +258,7 @@ function App() {
         // If both failed and we have retries left, wait and retry (e.g. server restarting during dev)
         if (!expData && !settingsData && retryCount < 3) {
           setTimeout(() => {
-            fetchGlobalExperiences(retryCount + 1);
+            fetchGlobalExperiencesRef.current?.(retryCount + 1);
           }, 1500);
           return;
         }
@@ -289,10 +292,90 @@ function App() {
   }, []);
 
   useEffect(() => {
-      fetchGlobalExperiences();
+    fetchGlobalExperiencesRef.current = fetchGlobalExperiences;
+    fetchGlobalExperiences();
   }, [fetchGlobalExperiences]);
 
-  const [filters, setFilters] = useState<any>({});
+  const handleSearch = React.useCallback(async (searchCity: string, activeFilters: any = filters, customBounds?: any) => {
+    setLoading(true);
+    setCity(searchCity);
+    setCurrentView('SEARCH');
+    setSelectedListing(null);
+    try {
+        let url = `/api/listings?city=${encodeURIComponent(searchCity)}&_t=${Date.now()}`;
+        if (activeFilters.minPrice) url += `&minPrice=${activeFilters.minPrice}`;
+        if (activeFilters.maxPrice) url += `&maxPrice=${activeFilters.maxPrice}`;
+        if (activeFilters.type) url += `&type=${encodeURIComponent(activeFilters.type)}`;
+        if (activeFilters.amenities?.length) url += `&amenities=${encodeURIComponent(activeFilters.amenities.join(','))}`;
+        if (activeFilters.bedrooms) url += `&bedrooms=${activeFilters.bedrooms}`;
+        if (activeFilters.beds) url += `&beds=${activeFilters.beds}`;
+        if (activeFilters.bathrooms) url += `&bathrooms=${activeFilters.bathrooms}`;
+        if (activeFilters.maxGuests) url += `&maxGuests=${activeFilters.maxGuests}`;
+        if (activeFilters.sort) url += `&sort=${activeFilters.sort}`;
+        
+        if (customBounds) {
+            url += `&minLat=${customBounds.minLat}&maxLat=${customBounds.maxLat}&minLng=${customBounds.minLng}&maxLng=${customBounds.maxLng}`;
+        }
+
+        let apiListings: Listing[] = await fetchWithCache(url, `listings_${url}`) || [];
+
+        // Apply advanced dynamic filters on client side
+        if (activeFilters.rentalMode) {
+            apiListings = apiListings.filter(l => l.rental_mode === activeFilters.rentalMode);
+        }
+
+        if (activeFilters.minAcousticRating) {
+            apiListings = apiListings.filter(l => {
+                const stayStructure = getStayStructure(l);
+                const privIndex = stayStructure.privacyPercent;
+                let acousticRating = 72;
+                if (privIndex === 100) acousticRating = 100;
+                else if (privIndex === 90) acousticRating = 90;
+                else if (privIndex === 85) acousticRating = 85;
+                else if (privIndex === 70) acousticRating = 70;
+                else if (privIndex === 60) acousticRating = 60;
+                return acousticRating >= activeFilters.minAcousticRating;
+            });
+        }
+
+        if (activeFilters.minCrowdingRating) {
+            apiListings = apiListings.filter(l => {
+                const stayStructure = getStayStructure(l);
+                const privIndex = stayStructure.privacyPercent;
+                let crowdingRating = 65;
+                if (privIndex === 100) crowdingRating = 100;
+                else if (privIndex === 90) crowdingRating = 80;
+                else if (privIndex === 85) crowdingRating = 80;
+                else if (privIndex === 70) crowdingRating = 65;
+                else if (privIndex === 60) crowdingRating = 65;
+                return crowdingRating >= activeFilters.minCrowdingRating;
+            });
+        }
+
+        if (activeFilters.mustHaveAc) {
+            apiListings = apiListings.filter(l => {
+                const hasAc = l.amenities?.some(a => a.toLowerCase().includes('air conditioning') || a.toLowerCase().includes('ac') || a.toLowerCase().includes('aircon')) ||
+                              l.rooms?.some(r => r.hasAc || r.amenities?.some(a => a.toLowerCase().includes('air conditioning') || a.toLowerCase().includes('ac') || a.toLowerCase().includes('aircon')));
+                return !!hasAc;
+            });
+        }
+
+        if (activeFilters.mustHaveAttachedBathroom) {
+            apiListings = apiListings.filter(l => {
+                const hasAttached = l.rooms?.some(r => r.hasAttachedBathroom) || 
+                                    l.amenities?.some(a => a.toLowerCase().includes('bathroom') && (a.toLowerCase().includes('private') || a.toLowerCase().includes('attached') || a.toLowerCase().includes('ensuite')));
+                return !!hasAttached;
+            });
+        }
+
+        setListings(apiListings);
+        fetchGlobalExperiences();
+    } catch (e) {
+        console.error("Failed to load listings", e);
+    } finally {
+        setLoading(false);
+    }
+  }, [filters, fetchGlobalExperiences]);
   
   const { setBadge, clearBadge } = useAppBadge();
 
@@ -322,7 +405,7 @@ function App() {
 
   useEffect(() => {
     handleSearch(city, filters);
-  }, [filters]);
+  }, [city, filters, handleSearch]);
 
   useEffect(() => {
     if (user) {
@@ -465,90 +548,9 @@ function App() {
              .catch(console.error);
          }
      };
-     socket.on('db_changed', handleDbChange);
-     return () => { socket.off('db_changed', handleDbChange); };
-  }, [city, filters, user]);
-
-  const handleSearch = React.useCallback(async (searchCity: string, activeFilters: any = filters, customBounds?: any) => {
-    setLoading(true);
-    setCity(searchCity);
-    setCurrentView('SEARCH');
-    setSelectedListing(null);
-    try {
-        let url = `/api/listings?city=${encodeURIComponent(searchCity)}&_t=${Date.now()}`;
-        if (activeFilters.minPrice) url += `&minPrice=${activeFilters.minPrice}`;
-        if (activeFilters.maxPrice) url += `&maxPrice=${activeFilters.maxPrice}`;
-        if (activeFilters.type) url += `&type=${encodeURIComponent(activeFilters.type)}`;
-        if (activeFilters.amenities?.length) url += `&amenities=${encodeURIComponent(activeFilters.amenities.join(','))}`;
-        if (activeFilters.bedrooms) url += `&bedrooms=${activeFilters.bedrooms}`;
-        if (activeFilters.beds) url += `&beds=${activeFilters.beds}`;
-        if (activeFilters.bathrooms) url += `&bathrooms=${activeFilters.bathrooms}`;
-        if (activeFilters.maxGuests) url += `&maxGuests=${activeFilters.maxGuests}`;
-        if (activeFilters.sort) url += `&sort=${activeFilters.sort}`;
-        
-        if (customBounds) {
-            url += `&minLat=${customBounds.minLat}&maxLat=${customBounds.maxLat}&minLng=${customBounds.minLng}&maxLng=${customBounds.maxLng}`;
-        }
-
-        let apiListings: Listing[] = await fetchWithCache(url, `listings_${url}`) || [];
-
-        // Apply advanced dynamic filters on client side
-        if (activeFilters.rentalMode) {
-            apiListings = apiListings.filter(l => l.rental_mode === activeFilters.rentalMode);
-        }
-
-        if (activeFilters.minAcousticRating) {
-            apiListings = apiListings.filter(l => {
-                const stayStructure = getStayStructure(l);
-                const privIndex = stayStructure.privacyPercent;
-                let acousticRating = 72;
-                if (privIndex === 100) acousticRating = 100;
-                else if (privIndex === 90) acousticRating = 90;
-                else if (privIndex === 85) acousticRating = 85;
-                else if (privIndex === 70) acousticRating = 70;
-                else if (privIndex === 60) acousticRating = 60;
-                return acousticRating >= activeFilters.minAcousticRating;
-            });
-        }
-
-        if (activeFilters.minCrowdingRating) {
-            apiListings = apiListings.filter(l => {
-                const stayStructure = getStayStructure(l);
-                const privIndex = stayStructure.privacyPercent;
-                let crowdingRating = 65;
-                if (privIndex === 100) crowdingRating = 100;
-                else if (privIndex === 90) crowdingRating = 80;
-                else if (privIndex === 85) crowdingRating = 80;
-                else if (privIndex === 70) crowdingRating = 65;
-                else if (privIndex === 60) crowdingRating = 65;
-                return crowdingRating >= activeFilters.minCrowdingRating;
-            });
-        }
-
-        if (activeFilters.mustHaveAc) {
-            apiListings = apiListings.filter(l => {
-                const hasAc = l.amenities?.some(a => a.toLowerCase().includes('air conditioning') || a.toLowerCase().includes('ac') || a.toLowerCase().includes('aircon')) ||
-                              l.rooms?.some(r => r.hasAc || r.amenities?.some(a => a.toLowerCase().includes('air conditioning') || a.toLowerCase().includes('ac') || a.toLowerCase().includes('aircon')));
-                return !!hasAc;
-            });
-        }
-
-        if (activeFilters.mustHaveAttachedBathroom) {
-            apiListings = apiListings.filter(l => {
-                const hasAttached = l.rooms?.some(r => r.hasAttachedBathroom) || 
-                                    l.amenities?.some(a => a.toLowerCase().includes('bathroom') && (a.toLowerCase().includes('private') || a.toLowerCase().includes('attached') || a.toLowerCase().includes('ensuite')));
-                return !!hasAttached;
-            });
-        }
-
-        setListings(apiListings);
-        fetchGlobalExperiences();
-    } catch (e) {
-        console.error("Failed to load listings", e);
-    } finally {
-        setLoading(false);
-    }
-  }, [filters]);
+      socket.on('db_changed', handleDbChange);
+      return () => { socket.off('db_changed', handleDbChange); };
+   }, [city, filters, user]);
 
   const isFavorite = React.useCallback((id: string | number) => {
       const targetId = String(id);

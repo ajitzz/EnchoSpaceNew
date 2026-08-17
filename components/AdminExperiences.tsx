@@ -29,10 +29,6 @@ export const AdminExperiences: React.FC<AdminExperiencesProps> = ({ token }) => 
   const [editingExperience, setEditingExperience] = useState<any | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -57,6 +53,10 @@ export const AdminExperiences: React.FC<AdminExperiencesProps> = ({ token }) => 
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   const saveDesign = async () => {
     setSavingDesign(true);

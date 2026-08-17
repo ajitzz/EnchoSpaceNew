@@ -69,7 +69,7 @@ export const AdminActionControlPanel: React.FC<AdminActionControlPanelProps> = (
     setIsExecuting(true);
     try {
       let endpoint = `/api/admin/marketing/campaigns/${campaignId}/action`;
-      let method = 'POST';
+      const method = 'POST';
       let body: any = { action: selectedActionKey };
 
       if (selectedActionKey === 'APPROVE') {

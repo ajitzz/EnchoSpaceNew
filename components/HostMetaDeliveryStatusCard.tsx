@@ -121,11 +121,7 @@ export const HostMetaDeliveryStatusCard: React.FC<HostMetaDeliveryStatusCardProp
     if (!dateStr) return 'Awaiting initial Meta verification';
     try {
       const date = new Date(dateStr);
-      const diffSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
-      if (diffSeconds < 60) return `${diffSeconds}s ago`;
-      const diffMinutes = Math.floor(diffSeconds / 60);
-      if (diffMinutes < 60) return `${diffMinutes}m ago`;
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     } catch {
       return dateStr;
     }

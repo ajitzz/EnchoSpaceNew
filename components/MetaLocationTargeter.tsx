@@ -413,6 +413,45 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
     return bounds;
   };
 
+  // Handle map click when Drop Pin mode is active
+  const handleMapClick = async (lat: number, lng: number) => {
+    const coordLabel = `(${lat.toFixed(3)}, ${lng.toFixed(3)})`;
+    let cityName = '';
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
+      if (data && data.address) {
+        cityName = data.address.city || data.address.town || data.address.suburb || data.address.village || data.address.state || data.address.county || data.display_name.split(',')[0] || '';
+      }
+    } catch (err) {
+      console.warn("Reverse geocode warning:", err);
+    }
+
+    const placeName = cityName ? `${cityName} ${coordLabel}` : `Dropped Pin ${coordLabel}`;
+
+    const newItem: MetaLocationItem = {
+      id: `pin_${Math.abs(Math.round(lat * 10000))}_${Math.abs(Math.round(lng * 10000))}`,
+      name: placeName,
+      type: 'pin',
+      lat: lat,
+      lng: lng,
+      radius_km: targetRadiusKm || 50,
+      mode: filterMode,
+      beltIds: [],
+      isManual: true
+    };
+
+    const currentList = locationListRef.current;
+    const updated = [...currentList, newItem];
+    setLocationList(updated);
+    notifyParent(updated);
+    setIsDropPinMode(false);
+
+    if (leafletMapRef.current) {
+      leafletMapRef.current.flyTo([lat, lng], 10, { duration: 0.8 });
+    }
+  };
+
   // Initialize Leaflet Map
   useEffect(() => {
     if (!mapContainerRef.current) return;
@@ -454,45 +493,6 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
       }
     };
   }, []);
-
-  // Handle map click when Drop Pin mode is active
-  const handleMapClick = async (lat: number, lng: number) => {
-    const coordLabel = `(${lat.toFixed(3)}, ${lng.toFixed(3)})`;
-    let cityName = '';
-    try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
-      const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
-      if (data && data.address) {
-        cityName = data.address.city || data.address.town || data.address.suburb || data.address.village || data.address.state || data.address.county || data.display_name.split(',')[0] || '';
-      }
-    } catch (err) {
-      console.warn("Reverse geocode warning:", err);
-    }
-
-    const placeName = cityName ? `${cityName} ${coordLabel}` : `Dropped Pin ${coordLabel}`;
-
-    const newItem: MetaLocationItem = {
-      id: `pin_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      name: placeName,
-      type: 'pin',
-      lat: lat,
-      lng: lng,
-      radius_km: targetRadiusKm || 50,
-      mode: filterMode,
-      beltIds: [],
-      isManual: true
-    };
-
-    const currentList = locationListRef.current;
-    const updated = [...currentList, newItem];
-    setLocationList(updated);
-    notifyParent(updated);
-    setIsDropPinMode(false);
-
-    if (leafletMapRef.current) {
-      leafletMapRef.current.flyTo([lat, lng], 10, { duration: 0.8 });
-    }
-  };
 
   // Dynamic Smooth Fly-To & Auto-Zoom bounds update when locations or radius change
   useEffect(() => {
@@ -593,7 +593,7 @@ export const MetaLocationTargeter: React.FC<MetaLocationTargeterProps> = ({
   // Add location from search result
   const handleSelectSearchResult = (result: { name: string; lat: number; lng: number; type: string }) => {
     const newItem: MetaLocationItem = {
-      id: `loc_${Date.now()}`,
+      id: `loc_${(result.name || 'item').toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Math.abs(Math.round(result.lat * 10000))}`,
       name: result.name,
       type: result.type as any,
       lat: result.lat,

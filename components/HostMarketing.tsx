@@ -21,6 +21,8 @@ interface HostMarketingProps {
   listings: Listing[];
 }
 
+const generateWalletRefuelKey = () => `refuel_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
 export default function HostMarketing({ user, listings }: HostMarketingProps) {
   const { addToast } = useToast();
   const { currency, setCurrency, formatPrice } = useCurrency();
@@ -76,9 +78,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
     }
   };
 
-  useEffect(() => {
-    detectGeoRoute();
-  }, []);
+  const [editingCampaignId, setEditingCampaignId] = useState<number | null>(null);
 
   const detectGeoRoute = async () => {
     setLoadingGeoRoute(true);
@@ -97,6 +97,10 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       setLoadingGeoRoute(false);
     }
   };
+
+  useEffect(() => {
+    detectGeoRoute();
+  }, []);
 
   // Pillar 6: Encho Social Studio States
   const [marketingViewTab, setMarketingViewTab] = useState<'paid' | 'social'>('paid');
@@ -326,7 +330,6 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
 
   const [activeSlideIndex, setActiveSlideIndex] = useState<number>(0);
-  const [editingCampaignId, setEditingCampaignId] = useState<number | null>(null);
   const [rejectedFieldsMap, setRejectedFieldsMap] = useState<Record<string, string>>({});
   const [newMediaUrl, setNewMediaUrl] = useState('');
   const [wizardStep, setWizardStep] = useState(1);
@@ -429,10 +432,26 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
     { id: 'instagram_stories', label: 'Instagram Stories & Reels', icon: 'IGR' }
   ];
 
+  const fetchWallet = React.useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/marketing/wallet', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
+        setWallet(data.wallet);
+        setWalletTransactions(data.transactions);
+      }
+    } catch (err) {
+      console.error('Failed to fetch wallet:', err);
+    }
+  }, []);
+
   const handleRefuel = async (gateway: 'stripe' | 'razorpay') => {
     try {
       const token = localStorage.getItem('token');
-      const idempotencyKey = `refuel_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const idempotencyKey = generateWalletRefuelKey();
       const res = await fetch('/api/marketing/wallet/refuel', {
         method: 'POST',
         headers: { 
@@ -446,7 +465,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       if (!res.ok) throw new Error(data.error);
 
       if (gateway === 'stripe' && data.url) {
-        window.location.href = data.url;
+        window.location.assign(data.url);
       } else if (gateway === 'razorpay' && data.order_id) {
         // Load Razorpay Checkout SDK dynamically if not already present
         const loadRazorpayScript = () => {
@@ -512,22 +531,6 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       }
     } catch (err: any) {
       addToast(err.message || 'Failed to initialize payment', 'error');
-    }
-  };
-
-  const fetchWallet = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch('/api/marketing/wallet', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
-        setWallet(data.wallet);
-        setWalletTransactions(data.transactions);
-      }
-    } catch (err) {
-      console.error('Failed to fetch wallet:', err);
     }
   };
 
@@ -3128,12 +3131,12 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                                         <Zap className="w-3.5 h-3.5 text-blue-400" />
                                       </div>
                                       <motion.div 
-                                        key={Date.now()} // Force re-animation if needed, or we just rely on static pulse
+                                        key="social-pulse-badge"
                                         initial={{ opacity: 0, y: 5 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         className="text-[10.5px] text-zinc-300 font-medium leading-tight"
                                       >
-                                        <span className="text-white font-bold">Social Pulse:</span> {Math.floor(Math.random() * 8) + 2} people from metropolitan areas are viewing your property right now.
+                                        <span className="text-white font-bold">Social Pulse:</span> {((Math.abs(Math.round(spentPercent * 3)) % 7) + 3)} people from metropolitan areas are viewing your property right now.
                                       </motion.div>
                                     </div>
                                   )}

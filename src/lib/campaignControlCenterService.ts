@@ -1292,24 +1292,24 @@ export class CampaignControlCenterService {
 
   public static sanitizeTracesForAdmin(traces: any[]): any[] {
     return (traces || []).map(t => {
-      let payload = t.request_payload;
-      let response = t.response_payload;
+      const payload = t.request_payload;
+      const response = t.response_payload;
 
       const maskSecrets = (val: any): any => {
         if (!val) return val;
         if (typeof val === 'string') {
           return val
             .replace(/EAAB[a-zA-Z0-9]+/g, '[REDACTED_ACCESS_TOKEN]')
-            .replace(/Bearer\s+[a-zA-Z0-9_\-\.]+/gi, 'Bearer [REDACTED]')
-            .replace(/access_token=[a-zA-Z0-9_\-\.]+/gi, 'access_token=[REDACTED]');
+            .replace(/Bearer\s+[a-zA-Z0-9_.-]+/gi, 'Bearer [REDACTED]')
+            .replace(/access_token=[a-zA-Z0-9_.-]+/gi, 'access_token=[REDACTED]');
         }
         if (typeof val === 'object') {
           try {
             let str = JSON.stringify(val);
             str = str
               .replace(/EAAB[a-zA-Z0-9]+/g, '[REDACTED_ACCESS_TOKEN]')
-              .replace(/Bearer\s+[a-zA-Z0-9_\-\.]+/gi, 'Bearer [REDACTED]')
-              .replace(/access_token=[a-zA-Z0-9_\-\.]+/gi, 'access_token=[REDACTED]');
+              .replace(/Bearer\s+[a-zA-Z0-9_.-]+/gi, 'Bearer [REDACTED]')
+              .replace(/access_token=[a-zA-Z0-9_.-]+/gi, 'access_token=[REDACTED]');
             return JSON.parse(str);
           } catch {
             return val;

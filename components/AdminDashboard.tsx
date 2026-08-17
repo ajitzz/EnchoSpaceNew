@@ -142,25 +142,75 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   };
 
 
-  useEffect(() => {
-    fetchData();
-
-    // Setup Socket.io client to listen for real-time changes
-    const socket = io();
-    socket.emit('join_admin');
-
-    socket.on('db_changed', (data: any) => {
-      // Refresh admin queue instantly on marketing, listing, experience, or outreach changes
-      if (data && (data.type === 'marketing' || data.type === 'listing' || data.type === 'experience' || data.type === 'outreach')) {
-        console.log(`[REALTIME SOCKET] Received database change event of type: ${data.type}. Refreshing...`);
-        fetchData();
+  const fetchAdminAuditLogs = async () => {
+    setLoadingAdminAuditLogs(true);
+    try {
+      const res = await fetch('/api/admin/audit-logs', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
+        setAdminAuditLogs(data);
       }
-    });
+    } catch (err) {
+      console.error('Failed to fetch admin audit logs:', err);
+    } finally {
+      setLoadingAdminAuditLogs(false);
+    }
+  };
 
-    return () => {
-      socket.disconnect();
-    };
-  }, [adminMode]);
+  const fetchAdminSocialPosts = async () => {
+    setLoadingAdminSocialPosts(true);
+    try {
+      const authToken = localStorage.getItem('token') || token;
+      const res = await fetch('/api/admin/social-posts', {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+      if (res.ok) {
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
+        setAdminSocialPosts(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch admin social posts:', err);
+    } finally {
+      setLoadingAdminSocialPosts(false);
+    }
+  };
+
+  const fetchAdminLedgers = async () => {
+    setLoadingAdminLedgers(true);
+    try {
+      const res = await fetch('/api/marketing/admin/ledgers', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
+        setAdminLedgersData(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch admin ledgers:', err);
+    } finally {
+      setLoadingAdminLedgers(false);
+    }
+  };
+
+  const fetchAdminPaymentOverview = async () => {
+    setLoadingAdminPaymentOverview(true);
+    try {
+      const res = await fetch('/api/admin/payments/overview', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
+        setAdminPaymentOverview(data);
+      }
+      fetchAdminLedgers();
+    } catch (err) {
+      console.error('Failed to fetch admin payment overview:', err);
+    } finally {
+      setLoadingAdminPaymentOverview(false);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -251,75 +301,25 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
     }
   };
 
-  const fetchAdminAuditLogs = async () => {
-    setLoadingAdminAuditLogs(true);
-    try {
-      const res = await fetch('/api/admin/audit-logs', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
-        setAdminAuditLogs(data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch admin audit logs:', err);
-    } finally {
-      setLoadingAdminAuditLogs(false);
-    }
-  };
+  useEffect(() => {
+    fetchData();
 
-  const fetchAdminSocialPosts = async () => {
-    setLoadingAdminSocialPosts(true);
-    try {
-      const authToken = localStorage.getItem('token') || token;
-      const res = await fetch('/api/admin/social-posts', {
-        headers: { 'Authorization': `Bearer ${authToken}` }
-      });
-      if (res.ok) {
-        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
-        setAdminSocialPosts(data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch admin social posts:', err);
-    } finally {
-      setLoadingAdminSocialPosts(false);
-    }
-  };
+    // Setup Socket.io client to listen for real-time changes
+    const socket = io();
+    socket.emit('join_admin');
 
-  const fetchAdminPaymentOverview = async () => {
-    setLoadingAdminPaymentOverview(true);
-    try {
-      const res = await fetch('/api/admin/payments/overview', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
-        setAdminPaymentOverview(data);
+    socket.on('db_changed', (data: any) => {
+      // Refresh admin queue instantly on marketing, listing, experience, or outreach changes
+      if (data && (data.type === 'marketing' || data.type === 'listing' || data.type === 'experience' || data.type === 'outreach')) {
+        console.log(`[REALTIME SOCKET] Received database change event of type: ${data.type}. Refreshing...`);
+        fetchData();
       }
-      fetchAdminLedgers();
-    } catch (err) {
-      console.error('Failed to fetch admin payment overview:', err);
-    } finally {
-      setLoadingAdminPaymentOverview(false);
-    }
-  };
+    });
 
-  const fetchAdminLedgers = async () => {
-    setLoadingAdminLedgers(true);
-    try {
-      const res = await fetch('/api/marketing/admin/ledgers', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
-        setAdminLedgersData(data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch admin ledgers:', err);
-    } finally {
-      setLoadingAdminLedgers(false);
-    }
-  };
+    return () => {
+      socket.disconnect();
+    };
+  }, [adminMode]);
 
   const handleApproveSocialPost = async (id: number) => {
     try {

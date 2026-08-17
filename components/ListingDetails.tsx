@@ -1222,7 +1222,7 @@ const ListingDetails: React.FC<ListingDetailsProps> = ({ listing, onBack, simila
                                         <div className="absolute bottom-3 left-3 flex gap-1.5">
                                             <span className="bg-black/40 backdrop-blur-md text-white text-[9px] font-bold px-2 py-1 rounded-full uppercase tracking-wider flex items-center gap-1">
                                                 <Heart className="w-3 h-3 fill-white/20" />
-                                                {Math.floor(Math.random() * 500) + 50} Likes
+                                                {((Number(post.id || 1) * 37) % 450) + 75} Likes
                                             </span>
                                         </div>
                                     </div>

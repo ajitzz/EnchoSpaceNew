@@ -57,10 +57,10 @@ export class GoogleDeliveryReducer {
     const assetSummaries = input.asset_policy_summaries || [];
 
     // 2. Asset Policy Analysis (Partial vs Total Disapproval)
-    let totalAssets = assetSummaries.length;
-    let disapprovedAssets = assetSummaries.filter(a => a.approval_status === 'DISAPPROVED');
-    let approvedAssets = assetSummaries.filter(a => a.approval_status === 'APPROVED' || a.approval_status === 'APPROVED_LIMITED');
-    let pendingAssets = assetSummaries.filter(a => a.approval_status === 'REVIEW_IN_PROGRESS');
+    const totalAssets = assetSummaries.length;
+    const disapprovedAssets = assetSummaries.filter(a => a.approval_status === 'DISAPPROVED');
+    const approvedAssets = assetSummaries.filter(a => a.approval_status === 'APPROVED' || a.approval_status === 'APPROVED_LIMITED');
+    const pendingAssets = assetSummaries.filter(a => a.approval_status === 'REVIEW_IN_PROGRESS');
 
     const disapprovalTopics: string[] = [];
     disapprovedAssets.forEach(a => {
