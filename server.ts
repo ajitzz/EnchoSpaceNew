@@ -851,7 +851,7 @@ app.use(async (req, res, next) => {
       console.warn('Database self-healing connection check failed:', (err as Error).message || String(err));
     }
   }
-  if (req.path.startsWith('/api/') && req.path !== '/api/health') {
+  if (req.path.startsWith('/api/') && !req.path.startsWith('/api/health')) {
     await ensureDbInitialized();
   }
   next();
@@ -10132,7 +10132,7 @@ export const processLeadNotificationQueue = async (overridePool?: any) => {
   return LeadAlertingCrmService.processLeadNotificationQueue(dbPool);
 };
 
-if (process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
+if (!process.env.VERCEL && process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
   setInterval(processAsyncWebhookQueue, 60 * 1000); // Check every 60 seconds
   setInterval(() => processLeadNotificationQueue(), 30 * 1000); // Check every 30 seconds
 }
@@ -15820,7 +15820,7 @@ export const processEscrowAutoRelease = async (overridePool?: any) => {
   }
 };
 
-if (process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
+if (!process.env.VERCEL && process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
   setInterval(processEscrowAutoRelease, 60000);
 }
 
