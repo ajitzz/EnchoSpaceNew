@@ -110,13 +110,13 @@ export class MetaGraphClient {
         }
       });
       clearTimeout(timeoutId);
-      const data = (res.headers.get('content-type')?.includes('json') ? await res.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res.text().catch(() => '')).slice(0, 150) } as any);
+      const data = (res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text().catch(() => '')).slice(0, 150) } as any);
       return { status: res.status, data };
     } catch (err: any) {
       clearTimeout(timeoutId);
       return {
         status: 0,
-        data: {},
+        data: null,
         error: err.name === 'AbortError' ? 'Meta API Request Timeout (10s exceeded)' : (err.message || 'Network fetch failed')
       };
     }

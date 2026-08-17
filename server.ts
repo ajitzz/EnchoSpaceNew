@@ -19,23 +19,25 @@ export type CampaignState =
   | 'cancelled'
   | 'killed'
   | 'failed_publish'
-  | 'failed';
+  | 'failed'
+  | 'EXTERNAL_OUTCOME_UNKNOWN';
 
 const VALID_TRANSITIONS: Record<CampaignState, CampaignState[]> = {
   'draft': ['pending_approval', 'pending', 'rejected', 'pending_webhook', 'cancelled'],
   'pending_webhook': ['pending_approval', 'pending', 'escrow', 'ASSET_PREP', 'failed', 'cancelled'],
   'pending_approval': ['approved', 'rejected', 'escrow', 'ASSET_PREP', 'cancelled'],
   'pending': ['approved', 'rejected', 'escrow', 'ASSET_PREP', 'cancelled'],
-  'approved': ['ASSET_PREP', 'META_API_PUSH', 'failed_publish', 'failed', 'cancelled'],
+  'approved': ['ASSET_PREP', 'META_API_PUSH', 'failed_publish', 'failed', 'cancelled', 'EXTERNAL_OUTCOME_UNKNOWN'],
   'rejected': ['pending_approval', 'pending', 'cancelled'],
-  'escrow': ['ASSET_PREP', 'cancelled', 'failed'],
-  'ASSET_PREP': ['META_API_PUSH', 'failed', 'cancelled', 'paused'],
-  'META_API_PUSH': ['CAMPAIGN_LIVE', 'active', 'failed', 'failed_publish', 'cancelled'],
+  'escrow': ['ASSET_PREP', 'META_API_PUSH', 'cancelled', 'failed', 'EXTERNAL_OUTCOME_UNKNOWN'],
+  'ASSET_PREP': ['META_API_PUSH', 'failed', 'cancelled', 'paused', 'EXTERNAL_OUTCOME_UNKNOWN'],
+  'META_API_PUSH': ['CAMPAIGN_LIVE', 'active', 'failed', 'failed_publish', 'cancelled', 'EXTERNAL_OUTCOME_UNKNOWN'],
   'CAMPAIGN_LIVE': ['paused', 'cancelled', 'killed'],
   'active': ['paused', 'cancelled', 'killed'],
   'paused': ['CAMPAIGN_LIVE', 'active', 'cancelled', 'killed'],
-  'failed_publish': ['ASSET_PREP', 'cancelled', 'killed'],
-  'failed': ['ASSET_PREP', 'cancelled', 'killed'],
+  'failed_publish': ['ASSET_PREP', 'META_API_PUSH', 'cancelled', 'killed', 'EXTERNAL_OUTCOME_UNKNOWN'],
+  'failed': ['ASSET_PREP', 'META_API_PUSH', 'cancelled', 'killed', 'EXTERNAL_OUTCOME_UNKNOWN'],
+  'EXTERNAL_OUTCOME_UNKNOWN': ['CAMPAIGN_LIVE', 'active', 'failed_publish', 'cancelled', 'killed'],
   'cancelled': [],
   'killed': []
 };
@@ -163,6 +165,11 @@ import { CampaignControlCenterService } from './src/lib/campaignControlCenterSer
 import { MetaExternalSyncEngine } from './src/lib/metaExternalSyncEngine.js';
 import { MetaTelemetrySyncEngine } from './src/lib/metaTelemetrySyncEngine.js';
 import { MetaControlPlaneService } from './src/lib/metaControlPlaneService.js';
+import { DcoEngine } from './src/lib/dcoEngine.js';
+import { CalendarCircuitBreaker } from './src/lib/calendarCircuitBreaker.js';
+import { PerformanceAnalyticsService } from './src/lib/performanceAnalyticsService.js';
+import { PdfReportService } from './src/lib/pdfReportService.js';
+import { LeadAlertingCrmService } from './src/lib/leadAlertingCrmService.js';
 
 // import pinoHttp from 'pino-http'; // Removed as per JS version
 // import { logger } from './src/lib/logger/index.js'; // Removed as per JS version
@@ -265,75 +272,24 @@ console.log('===> SERVER INIT: Database connection configured via process.env.DA
 
 
 
-// Milestone 5: The Circuit Breaker (Smart Pause)
+// Milestone 5 & Phase 3.4: Calendar Circuit Breaker (Smart Auto-Pause & Auto-Resume)
 async function triggerSmartAutoPause(listingId: any, bookingId: any) {
   if (!isDbConfigured) return;
   try {
-     const campaigns = await pool.query("SELECT id, host_id, budget, accumulated_spent as spent, meta_campaign_id FROM host_marketing_campaigns WHERE listing_id = $1 AND status IN ('active', 'CAMPAIGN_LIVE', 'pending')", [listingId]);
-     for (const c of campaigns.rows) {
-        console.log(`[CIRCUIT BREAKER] 🚨 Occupancy hit 100% for Listing ${listingId} (Booking #${bookingId}).`);
-        console.log(`[CIRCUIT BREAKER] 🛑 Firing PAUSE request to Meta Ads API for Campaign #${c.id} (Meta ID: ${c.meta_campaign_id}) to prevent wasted budget...`);
-        
-        // Mocking Meta API PAUSE request
-        // e.g., POST ${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${c.meta_campaign_id}?status=PAUSED
-        console.log(`[META API] 🟢 200 OK: Successfully paused campaign ${c.meta_campaign_id}`);
+    console.log(`[CIRCUIT BREAKER] Evaluating listing #${listingId} (Booking Event #${bookingId})...`);
+    const evalResult = await CalendarCircuitBreaker.evaluateListingAvailability(listingId, pool, {
+      correlationId: `booking_${bookingId}_${Date.now()}`
+    });
+    console.log(`[CIRCUIT BREAKER] Listing #${listingId} evaluated: fully booked = ${evalResult.is_fully_booked}, actions taken = ${evalResult.actions_taken.length}`);
 
-        await transitionCampaignState({ campaignId: c.id, expectedCurrentState: c.status, to: 'paused', reason: 'System Auto-Paused: Property 100% booked for target dates.' });
-        
-        // Gap 9: Trapped Cash Wallet Ledger
-        // If the campaign is paused, remaining budget goes back to the Host Wallet so they aren't charged for unused ads
-        const remainingBudget = Math.max(0, parseFloat(c.budget || 0) - parseFloat(c.spent || 0));
-        if (remainingBudget > 0) {
-           console.log(`[TRAPPED CASH LEDGER] Campaign #${c.id} paused. Returning ${remainingBudget} to Host #${c.host_id} Internal Wallet.`);
-           // Ensure wallet exists
-           let walletRes = await pool.query('SELECT id FROM host_wallets WHERE host_id = $1', [c.host_id]);
-           if (walletRes.rows.length === 0) {
-               walletRes = await pool.query('INSERT INTO host_wallets (host_id, balance, encho_credits) VALUES ($1, 0, 0) RETURNING id', [c.host_id]);
-           }
-           // Credit wallet
-           await pool.query('UPDATE host_wallets SET balance = balance + $1 WHERE host_id = $2', [remainingBudget, c.host_id]);
-           // Record transaction with explicit double-entry audit type
-           const txInsert = await pool.query(`INSERT INTO wallet_transactions (wallet_id, amount, type, status, description) VALUES ($1, $2, 'campaign_cancellation_refund', 'completed', $3) RETURNING id`,
-              [walletRes.rows[0].id, remainingBudget, `Auto-pause refund for Campaign #${c.id}`]
-           );
-           
-           // Double-entry ledger integration
-           await recordLedgerTransaction(pool, {
-              txRef: `auto_pause_refund_${c.id}_${Date.now()}`,
-              eventType: 'TRAPPED_CASH_REFUND',
-              description: `Auto-pause refund for Campaign #${c.id}`,
-              lines: [
-                 { accountType: 'META_AD_ESCROW', entryType: 'DEBIT', amount: remainingBudget },
-                 { accountType: 'HOST_WALLET', userId: c.host_id, entryType: 'CREDIT', amount: remainingBudget }
-              ]
-           }).catch(err => console.error('[LEDGER ERROR] Failed to record auto-pause refund:', err));
-
-           // Zero out remaining budget on campaign
-           await pool.query('UPDATE host_marketing_campaigns SET budget = spent WHERE id = $1', [c.id]);
-        }
-
-        // Dispatch real-time Socket notifications to host UI
-        try {
-          const io = app.get('io');
-          if (io) {
-            io.to(`user_${c.host_id}`).emit('notification', {
-              type: 'campaign_auto_paused',
-              title: '⚡ Campaign Auto-Paused',
-              message: 'Campaign Auto-Paused: Property 100% Occupied for Target Dates to Save Ad Budget',
-              campaignId: c.id
-            });
-            io.to(`user_${c.host_id}`).emit('campaign_auto_paused', {
-              campaignId: c.id,
-              message: 'Campaign Auto-Paused: Property 100% Occupied for Target Dates to Save Ad Budget'
-            });
-            io.to(`user_${c.host_id}`).emit('db_changed', { type: 'marketing' });
-          }
-        } catch (sockErr) {
-          console.error('[SOCKET AUTO-PAUSE ERROR]', sockErr);
-        }
-     }
-  } catch(e) {
-     console.error('[SMART AUTO-PAUSE ERROR]', e);
+    // Dispatch real-time socket events
+    try {
+      if (global.io) {
+        global.io.emit('db_changed', { type: 'marketing' });
+      }
+    } catch (sockErr) {}
+  } catch(e: any) {
+    console.error('[SMART AUTO-PAUSE ERROR]', e?.message || e);
   }
 }
 
@@ -376,16 +332,29 @@ async function syncDynamicPricingToMeta(listingId: any, oldPrice: any, newPrice:
 export const rlsStorage = new AsyncLocalStorage<{ userId?: number | string | null; isRequest?: boolean; bypassRls?: boolean }>();
 
 
-const pool = new Pool({
-  connectionString: isDbConfigured ? dbUrl : undefined,
-  ssl: isDbConfigured ? { rejectUnauthorized: false } : undefined,
+const poolConfig: any = {
   max: 20, // Increase pool size to 20 to prevent connection queuing and handle peak throughput
   idleTimeoutMillis: 10000, // Cycle idle connections after 10s to prevent stale sockets dropped by serverless Neon DB
   connectionTimeoutMillis: 15000, // 15s timeout to allow Neon serverless compute cold-start
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
   allowExitOnIdle: false
-});
+};
+
+if (isDbConfigured) {
+  if (dbUrl.includes('neon.tech')) {
+    poolConfig.connectionString = dbUrl;
+    poolConfig.ssl = { rejectUnauthorized: false };
+  } else {
+    // Local database connection via Unix socket to bypass SSL/SCRAM requirements
+    poolConfig.user = dbUrl.match(/:\/\/(.*?)@/)?.[1] || dbUrl.match(/:\/\/([^:/]+)/)?.[1] || 'ajit';
+    poolConfig.database = dbUrl.split('/').pop()?.split('?')[0] || 'encho';
+    poolConfig.host = '/tmp';
+    poolConfig.ssl = false;
+  }
+}
+
+const pool = new Pool(poolConfig);
 
 // Handle pool background errors gracefully to prevent process crash or unhandled pool errors
 pool.on('error', (err) => {
@@ -913,7 +882,23 @@ app.use(async (req, res, next) => {
 });
 
 app.use(hpp()); // Protect against HTTP Parameter Pollution attacks
-app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '1.0.0', services: { db: 'connected', ai: 'operational', payment: 'routed' } }));
+
+// Phase 2.9.4: Evidence-based Liveness and Readiness Probes
+app.get('/api/health/live', (req, res) => res.status(200).json({ status: 'alive' }));
+app.get('/api/health/ready', async (req, res) => {
+  try {
+    const isDbConnected = await pool.query('SELECT 1').then(() => true).catch(() => false);
+    const isAiConfigured = process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.includes('dummy');
+    
+    if (isDbConnected) {
+      res.status(200).json({ status: 'ready', db: 'connected', ai: isAiConfigured ? 'configured' : 'dummy' });
+    } else {
+      res.status(503).json({ status: 'not_ready', db: 'disconnected' });
+    }
+  } catch (err) {
+    res.status(503).json({ status: 'not_ready', error: 'probe_failed' });
+  }
+});
 app.get('/api/encho/health', async (req, res) => {
   try {
     await ensureDbInitialized();
@@ -1595,9 +1580,14 @@ const ensureListingsTable = async () => {
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS comments_count INT DEFAULT 0;`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS reactions_count INT DEFAULT 0;`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS shares_count INT;`);
-  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS engagement_synced_at TIMESTAMP WITH TIME ZONE;`);
-  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS telemetry_source_metadata JSONB DEFAULT '{}'::jsonb;`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS engagement_source_metadata JSONB DEFAULT '{}'::jsonb;`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS pause_source VARCHAR(50);`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS pause_reason TEXT;`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS pause_actor VARCHAR(50);`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS pause_actor_id VARCHAR(100);`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS paused_at TIMESTAMP WITH TIME ZONE;`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS resumed_at TIMESTAMP WITH TIME ZONE;`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS last_calendar_event_at TIMESTAMP WITH TIME ZONE;`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS processed_webhook_events (
       event_id VARCHAR(255) PRIMARY KEY,
@@ -1649,14 +1639,27 @@ const ensureListingsTable = async () => {
       status VARCHAR(50) DEFAULT 'pending',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+    ALTER TABLE async_webhook_queue ADD COLUMN IF NOT EXISTS available_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+    ALTER TABLE async_webhook_queue ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMP;
+    ALTER TABLE async_webhook_queue ADD COLUMN IF NOT EXISTS attempt_count INT DEFAULT 0;
+    ALTER TABLE async_webhook_queue ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+    ALTER TABLE webhook_dlq ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMP;
+    ALTER TABLE host_social_posts ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMP;
+    ALTER TABLE host_social_posts ADD COLUMN IF NOT EXISTS publish_attempt_count INT DEFAULT 0;
+    ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS dco_last_evaluated_at TIMESTAMP;
   `);
   // Add database indexes for high-throughput campaign lookup queries
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_host_id ON host_marketing_campaigns(host_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_listing_id ON host_marketing_campaigns(listing_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_status ON host_marketing_campaigns(status);`);
-  // Milestone 4.5: Database Query Optimization (Indexes)
+  // Milestone 4.5 & Phase 2.9.5: Database Query Optimization (Indexes)
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_async_webhook_status ON async_webhook_queue(status);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_async_webhook_queue_pending ON async_webhook_queue(status, available_at, created_at) WHERE status IN ('pending', 'processing');`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_webhook_dlq_retry ON webhook_dlq(retry_count, next_retry_at);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_webhook_dlq_active ON webhook_dlq(next_retry_at, retry_count) WHERE status = 'pending';`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_social_posts_due ON host_social_posts(status, scheduled_at) WHERE status IN ('approved', 'publishing');`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_dco_eval ON host_marketing_campaigns(status, meta_dispatched_at, dco_last_evaluated_at) WHERE status = 'active';`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_meta_tx_recovery ON meta_publishing_transactions(publish_status, updated_at, reconciliation_lease_expires_at);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_entity ON admin_audit_logs(entity_type, entity_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_bookings_user_id ON bookings(user_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_bookings_listing_id ON bookings(listing_id);`);
@@ -2281,6 +2284,146 @@ export const ensureMarketingSchema = async () => {
     console.error('[DCO SCHEMA ERROR]', dcoErr);
   }
 
+  // Phase 3.6: Hot Lead Alerting, Walled Garden CRM & Outbox Queue Schemas
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS lead_lifecycle_events (
+        id SERIAL PRIMARY KEY,
+        lead_id INT REFERENCES host_outreach_leads(id) ON DELETE CASCADE,
+        campaign_id INT,
+        host_id INT,
+        event_type VARCHAR(100) NOT NULL,
+        from_state VARCHAR(50),
+        to_state VARCHAR(50),
+        actor_type VARCHAR(50) NOT NULL,
+        actor_id VARCHAR(100),
+        details JSONB,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_lead_events_lead_id ON lead_lifecycle_events(lead_id);
+      CREATE INDEX IF NOT EXISTS idx_lead_events_host_id ON lead_lifecycle_events(host_id);
+      CREATE INDEX IF NOT EXISTS idx_lead_events_campaign_id ON lead_lifecycle_events(campaign_id);
+
+      CREATE TABLE IF NOT EXISTS lead_notification_intents (
+        id SERIAL PRIMARY KEY,
+        lead_id INT REFERENCES host_outreach_leads(id) ON DELETE CASCADE,
+        campaign_id INT,
+        host_id INT NOT NULL,
+        channel VARCHAR(50) NOT NULL,
+        recipient VARCHAR(255) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        body TEXT NOT NULL,
+        metadata JSONB,
+        status VARCHAR(50) DEFAULT 'PENDING',
+        attempt_count INT DEFAULT 0,
+        max_attempts INT DEFAULT 3,
+        lease_expires_at TIMESTAMP WITH TIME ZONE,
+        next_retry_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        delivered_at TIMESTAMP WITH TIME ZONE,
+        error_message TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_lead_notif_pending ON lead_notification_intents(status, next_retry_at) WHERE status IN ('PENDING', 'PROCESSING');
+      CREATE INDEX IF NOT EXISTS idx_lead_notif_lead_id ON lead_notification_intents(lead_id);
+      CREATE INDEX IF NOT EXISTS idx_lead_notif_host_id ON lead_notification_intents(host_id);
+
+      CREATE TABLE IF NOT EXISTS lead_security_audit_logs (
+        id SERIAL PRIMARY KEY,
+        lead_id INT,
+        campaign_id INT,
+        attempted_host_id INT,
+        actual_host_id INT,
+        action VARCHAR(100) NOT NULL,
+        severity VARCHAR(50) DEFAULT 'WARNING',
+        reason TEXT NOT NULL,
+        client_ip VARCHAR(100),
+        user_agent TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_lead_sec_campaign ON lead_security_audit_logs(campaign_id);
+      CREATE INDEX IF NOT EXISTS idx_lead_sec_host ON lead_security_audit_logs(attempted_host_id);
+
+      ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS source VARCHAR(255) DEFAULT 'Meta Advertising Webhook';
+      ALTER TABLE host_outreach_leads ALTER COLUMN guest_email TYPE TEXT;
+      ALTER TABLE host_outreach_leads ALTER COLUMN guest_phone TYPE TEXT;
+      ALTER TABLE host_outreach_leads ALTER COLUMN guest_name TYPE TEXT;
+      ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS listing_id INT;
+      ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS platform VARCHAR(50) DEFAULT 'META';
+      ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS external_lead_id VARCHAR(255);
+      ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS form_id VARCHAR(255);
+      ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS ad_id VARCHAR(255);
+      ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS scoring_inputs JSONB;
+      ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS scored_at TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS first_viewed_at TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS first_contacted_at TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS qualified_at TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS converted_at TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS lost_at TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS thread_id INT;
+      ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS dedup_key VARCHAR(255);
+      ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_host_outreach_leads_dedup ON host_outreach_leads(dedup_key) WHERE dedup_key IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_host_outreach_leads_campaign_status ON host_outreach_leads(campaign_id, status);
+      CREATE INDEX IF NOT EXISTS idx_host_outreach_leads_host_status ON host_outreach_leads(host_id, status);
+    `);
+    console.log('✅ Phase 3.6: Hot Lead Alerting, Walled Garden CRM & Outbox Queue Schemas verified.');
+  } catch (leadSchemaErr) {
+    console.error('[LEAD SCHEMA ERROR]', leadSchemaErr);
+  }
+
+  // Phase 3.7B: Provider-Neutral Entities & Transactions Tables
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS provider_entities (
+        id SERIAL PRIMARY KEY,
+        campaign_id INT REFERENCES host_marketing_campaigns(id) ON DELETE CASCADE,
+        provider VARCHAR(50) NOT NULL,
+        entity_type VARCHAR(50) NOT NULL,
+        external_id VARCHAR(255) NOT NULL,
+        parent_entity_id VARCHAR(255),
+        account_id VARCHAR(255),
+        configured_status VARCHAR(50) DEFAULT 'ACTIVE',
+        effective_status VARCHAR(50) DEFAULT 'ACTIVE',
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT unique_provider_entity_external_id UNIQUE (provider, external_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_provider_entities_campaign ON provider_entities(campaign_id);
+      CREATE INDEX IF NOT EXISTS idx_provider_entities_provider ON provider_entities(provider);
+      CREATE INDEX IF NOT EXISTS idx_provider_entities_type ON provider_entities(entity_type);
+
+      CREATE TABLE IF NOT EXISTS provider_publishing_transactions (
+        id SERIAL PRIMARY KEY,
+        campaign_id INT REFERENCES host_marketing_campaigns(id) ON DELETE CASCADE,
+        provider VARCHAR(50) NOT NULL,
+        operation_type VARCHAR(100) NOT NULL,
+        idempotency_key VARCHAR(255) UNIQUE NOT NULL,
+        correlation_id VARCHAR(255),
+        publish_status VARCHAR(50) DEFAULT 'REQUESTED',
+        external_campaign_id VARCHAR(255),
+        external_container_id VARCHAR(255),
+        external_ad_id VARCHAR(255),
+        external_creative_id VARCHAR(255),
+        payload JSONB,
+        response JSONB,
+        error_details TEXT,
+        attempt_count INT DEFAULT 1,
+        lease_expires_at TIMESTAMP WITH TIME ZONE,
+        is_unknown_outcome BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_provider_tx_campaign ON provider_publishing_transactions(campaign_id);
+      CREATE INDEX IF NOT EXISTS idx_provider_tx_status ON provider_publishing_transactions(publish_status);
+    `);
+    console.log('✅ Phase 3.7B: Provider-Neutral Entities & Publishing Transactions Schemas verified.');
+  } catch (providerSchemaErr) {
+    console.error('[PROVIDER SCHEMA ERROR]', providerSchemaErr);
+  }
+
   marketingSchemaInitialized = true;
 };
 
@@ -2345,9 +2488,15 @@ const ensureDbInitialized = async () => {
 
 // Auto-run DB init if configured
 if (isDbConfigured) {
-  ensureUsersTable().catch(console.error);
-  ensureListingsTable().catch(console.error);
-  ensureMarketingSchema().catch(console.error);
+  (async () => {
+    try {
+      await ensureUsersTable();
+      await ensureListingsTable();
+      await ensureMarketingSchema();
+    } catch (err) {
+      console.error("Auto DB Initialization failed:", err);
+    }
+  })();
 }
 
 // Auth Routes
@@ -3816,6 +3965,349 @@ app.get('/api/marketing/campaigns/:id/analytics', authenticateToken, async (req:
   } catch (error) {
     console.error('Error fetching campaign analytics:', error);
     res.status(500).json({ error: 'Failed to fetch campaign analytics' });
+  }
+});
+
+// Phase 3.5: Comprehensive Campaign Performance Analytics (Host & Admin)
+app.get('/api/marketing/campaigns/:id/analytics/performance', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const window = (req.query.window as any) || 'LIFETIME';
+    const customStart = req.query.startDate as string;
+    const customEnd = req.query.endDate as string;
+
+    const report = await PerformanceAnalyticsService.getCampaignPerformanceReport(
+      id,
+      {
+        userId: req.user?.id || 0,
+        role: req.user?.role || 'host',
+        isAdmin: req.user?.role === 'admin'
+      },
+      { window, customStart, customEnd },
+      pool
+    );
+
+    res.json(report);
+  } catch (error: any) {
+    console.error('Error in performance analytics:', error);
+    res.status(error.statusCode || 500).json({ error: error.message || 'Failed to generate performance analytics' });
+  }
+});
+
+// Phase 3.5: Performance Funnel Intelligence (Host & Admin)
+app.get('/api/marketing/campaigns/:id/analytics/funnel', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const window = (req.query.window as any) || 'LIFETIME';
+
+    const report = await PerformanceAnalyticsService.getCampaignPerformanceReport(
+      id,
+      {
+        userId: req.user?.id || 0,
+        role: req.user?.role || 'host',
+        isAdmin: req.user?.role === 'admin'
+      },
+      { window },
+      pool
+    );
+
+    res.json(report.funnel);
+  } catch (error: any) {
+    console.error('Error in funnel analytics:', error);
+    res.status(error.statusCode || 500).json({ error: error.message || 'Failed to generate funnel analytics' });
+  }
+});
+
+// Phase 3.5: Deterministic Anomaly Report (Host & Admin)
+app.get('/api/marketing/campaigns/:id/analytics/anomalies', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+
+    const report = await PerformanceAnalyticsService.getCampaignPerformanceReport(
+      id,
+      {
+        userId: req.user?.id || 0,
+        role: req.user?.role || 'host',
+        isAdmin: req.user?.role === 'admin'
+      },
+      { window: 'LIFETIME' },
+      pool
+    );
+
+    res.json({
+      campaign_id: Number(id),
+      anomalies: report.anomalies,
+      count: report.anomalies.length,
+      host_insights: report.host_insights,
+      admin_insights: report.admin_insights
+    });
+  } catch (error: any) {
+    console.error('Error in anomalies endpoint:', error);
+    res.status(error.statusCode || 500).json({ error: error.message || 'Failed to fetch anomaly report' });
+  }
+});
+
+// Phase 3.5: Downloadable PDF Performance Report (Host & Admin)
+app.get('/api/marketing/campaigns/:id/report/pdf', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const window = (req.query.window as any) || 'LIFETIME';
+
+    const { html, report } = await PdfReportService.generateCampaignReportHtml(
+      id,
+      {
+        userId: req.user?.id || 0,
+        role: req.user?.role || 'host',
+        isAdmin: req.user?.role === 'admin'
+      },
+      { window },
+      pool
+    );
+
+    if (req.query.format === 'json') {
+      return res.json({ success: true, html, report });
+    }
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', `inline; filename="encho_report_campaign_${id}.html"`);
+    res.send(html);
+  } catch (error: any) {
+    console.error('Error in PDF report generation:', error);
+    res.status(error.statusCode || 500).json({ error: error.message || 'Failed to generate PDF report' });
+  }
+});
+
+// Phase 3.5: Admin Portfolio Performance Analytics
+app.get('/api/admin/marketing/analytics/portfolio', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    if (req.user?.role !== 'admin' && !req.user?.isAdmin) {
+      return res.status(403).json({ error: 'Forbidden: Admin authorization required' });
+    }
+
+    const portfolio = await PerformanceAnalyticsService.getAdminPortfolioAnalytics(
+      {
+        userId: req.user?.id || 0,
+        role: 'admin',
+        isAdmin: true
+      },
+      pool
+    );
+
+    res.json(portfolio);
+  } catch (error: any) {
+    console.error('Error in admin portfolio analytics:', error);
+    res.status(error.statusCode || 500).json({ error: error.message || 'Failed to fetch admin portfolio analytics' });
+  }
+});
+
+// ============================================================
+// PHASE 3.6: MULTI-CHANNEL HOT LEAD ALERTING & CRM HARDENING
+// ============================================================
+
+// 1. Ingest Meta Lead Webhook (Real-Time Webhook Handler)
+app.post('/api/marketing/leads/webhook', async (req: Request, res: Response) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const rawBody = (req as any).rawBody || JSON.stringify(req.body);
+    const result = await LeadAlertingCrmService.validateAndIngestMetaLeadWebhook({
+      headers: req.headers as Record<string, any>,
+      rawBody,
+      payload: req.body,
+      poolOrClient: pool,
+      correlationId: `corr_wh_${Date.now()}`,
+      reqIp: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('User-Agent')
+    });
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.status(result.is_duplicate ? 200 : 201).json(result);
+  } catch (error: any) {
+    console.error('Error ingesting lead webhook:', error);
+    res.status(500).json({ error: error.message || 'Internal lead ingestion error' });
+  }
+});
+
+// 2. Fetch Host CRM Leads (Strict Tenant Isolation)
+app.get('/api/marketing/leads', authenticateToken, async (req: AuthRequest, res: Response) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const hostId = req.user?.id;
+    if (!hostId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const campaignId = req.query.campaign_id ? Number(req.query.campaign_id) : undefined;
+    const status = req.query.status ? String(req.query.status) : undefined;
+    const limit = req.query.limit ? Number(req.query.limit) : 50;
+    const offset = req.query.offset ? Number(req.query.offset) : 0;
+
+    const result = await LeadAlertingCrmService.getHostLeads(
+      hostId,
+      { campaignId, status, limit, offset },
+      pool
+    );
+
+    res.json(result);
+  } catch (error: any) {
+    console.error('Error fetching host leads:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch leads' });
+  }
+});
+
+// 3. Fetch Single Lead Details (Role-Based Redaction & Lifecycle Timeline)
+app.get('/api/marketing/leads/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const leadId = Number(req.params.id);
+    if (isNaN(leadId)) return res.status(400).json({ error: 'Invalid lead ID' });
+
+    const lead = await LeadAlertingCrmService.getLeadDetails(
+      leadId,
+      {
+        userId: req.user?.id,
+        role: req.user?.role,
+        isAdmin: req.user?.role === 'admin' || Boolean(req.user?.isAdmin)
+      },
+      pool
+    );
+
+    res.json(lead);
+  } catch (error: any) {
+    console.error('Error fetching lead details:', error);
+    const status = error.message?.includes('Forbidden') ? 403 : (error.message?.includes('not found') ? 404 : 500);
+    res.status(status).json({ error: error.message || 'Failed to fetch lead details' });
+  }
+});
+
+// 4. Lead State Machine Transition (Row Lock & Audit)
+app.patch('/api/marketing/leads/:id/status', authenticateToken, async (req: AuthRequest, res: Response) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const leadId = Number(req.params.id);
+    const { to_state, reason } = req.body;
+    if (isNaN(leadId) || !to_state) {
+      return res.status(400).json({ error: 'lead ID and to_state are required' });
+    }
+
+    const isAdmin = req.user?.role === 'admin' || Boolean(req.user?.isAdmin);
+    const updatedLead = await LeadAlertingCrmService.transitionLeadState({
+      leadId,
+      toState: to_state,
+      actorType: isAdmin ? 'admin' : 'host',
+      actorId: req.user?.id,
+      reason,
+      hostId: req.user?.id,
+      poolOrClient: pool
+    });
+
+    res.json({ success: true, lead: updatedLead });
+  } catch (error: any) {
+    console.error('Error transitioning lead state:', error);
+    const status = error.message?.includes('Forbidden') ? 403 : 400;
+    res.status(status).json({ error: error.message || 'Failed to transition lead state' });
+  }
+});
+
+// 5. Append Host Message & CRM Threading (Walled Garden Masking)
+app.post('/api/marketing/leads/:id/message', authenticateToken, async (req: AuthRequest, res: Response) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const leadId = Number(req.params.id);
+    const { message_text } = req.body;
+    if (isNaN(leadId) || !message_text) {
+      return res.status(400).json({ error: 'lead ID and message_text are required' });
+    }
+
+    const leadRes = await pool.query('SELECT * FROM host_outreach_leads WHERE id = $1', [leadId]);
+    if (leadRes.rows.length === 0) return res.status(404).json({ error: 'Lead not found' });
+    const lead = leadRes.rows[0];
+
+    if (req.user?.role !== 'admin' && Number(lead.host_id) !== Number(req.user?.id)) {
+      return res.status(403).json({ error: 'Forbidden: You do not own this lead.' });
+    }
+
+    // Mask PII for Walled Garden
+    const { sanitized: maskedMessage, wasSanitized } = maskContactInfo(message_text);
+
+    let msgHist: any[] = [];
+    try {
+      msgHist = typeof lead.message_history === 'string' ? JSON.parse(lead.message_history) : (lead.message_history || []);
+    } catch (e) { msgHist = []; }
+
+    msgHist.push({
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      sender: 'Host',
+      text: maskedMessage,
+      data_masked: wasSanitized
+    });
+
+    await pool.query(
+      `UPDATE host_outreach_leads SET message_history = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      [JSON.stringify(msgHist), leadId]
+    );
+
+    // Auto-transition to CONTACTED if eligible
+    if (['NEW', 'DELIVERED', 'VIEWED', 'LOST'].includes(lead.status)) {
+      try {
+        await LeadAlertingCrmService.transitionLeadState({
+          leadId,
+          toState: 'CONTACTED',
+          actorType: 'host',
+          actorId: req.user?.id,
+          reason: 'Host dispatched reply message to lead',
+          hostId: req.user?.id,
+          poolOrClient: pool
+        });
+      } catch (e) {}
+    }
+
+    res.json({
+      success: true,
+      message: 'Message appended and delivered securely through Walled Garden CRM.',
+      message_history: msgHist
+    });
+  } catch (error: any) {
+    console.error('Error sending lead message:', error);
+    res.status(500).json({ error: error.message || 'Failed to send lead message' });
+  }
+});
+
+// 6. Admin Process Lead Notification Queue
+app.post('/api/admin/marketing/leads/notifications/process', authenticateToken, async (req: AuthRequest, res: Response) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    if (req.user?.role !== 'admin' && !req.user?.isAdmin) {
+      return res.status(403).json({ error: 'Forbidden: Admin authorization required' });
+    }
+
+    const batch = req.body?.batch_size ? Number(req.body.batch_size) : 50;
+    const summary = await LeadAlertingCrmService.processLeadNotificationQueue(pool, { maxBatch: batch });
+    res.json({ success: true, summary });
+  } catch (error: any) {
+    console.error('Error processing notification queue:', error);
+    res.status(500).json({ error: error.message || 'Failed to process notification queue' });
+  }
+});
+
+// 7. Admin Lead System Health Monitoring
+app.get('/api/admin/marketing/leads/health', authenticateToken, async (req: AuthRequest, res: Response) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    if (req.user?.role !== 'admin' && !req.user?.isAdmin) {
+      return res.status(403).json({ error: 'Forbidden: Admin authorization required' });
+    }
+
+    const health = await LeadAlertingCrmService.getLeadSystemHealth(pool);
+    res.json(health);
+  } catch (error: any) {
+    console.error('Error in lead health monitoring:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch lead health metrics' });
   }
 });
 
@@ -8101,7 +8593,14 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
 
     // Update host_marketing_campaigns (NEVER MARK LIVE)
     const feedbackMsg = `${classification.user_title}: ${classification.recommended_action || classification.action_required || ''}`;
-    await transitionCampaignState({ campaignId: Number(campaignId), to: 'failed_publish', reason: 'Fallback to DLQ after publish error', actorType: 'system' });
+    
+    // Phase 2.9.1 - P0 Remediation: Never overwrite an UNKNOWN outcome with FAILED_PUBLISH
+    if (!isUnknownOutcome) {
+      await transitionCampaignState({ campaignId: Number(campaignId), to: 'failed_publish', reason: 'Fallback to DLQ after publish error', actorType: 'system' });
+    } else {
+      await transitionCampaignState({ campaignId: Number(campaignId), to: 'EXTERNAL_OUTCOME_UNKNOWN', reason: 'Meta network timeout pending verification', actorType: 'system' });
+    }
+
     await pool.query(`
       UPDATE host_marketing_campaigns 
       SET admin_feedback = $1 
@@ -9521,15 +10020,58 @@ app.post('/api/webhooks/ad-network', verifyMetaWebhook, async (req, res) => {
   }
 });
 
-// Background Worker for Gap 2: Asynchronous Webhook Engine
-const processAsyncWebhookQueue = async () => {
-    if (!isDbConfigured) return;
+// Background Worker for Gap 2: Asynchronous Webhook Engine (Phase 2.9.5 Hardened)
+export const processAsyncWebhookQueue = async (overridePool?: any) => {
+    const dbPool = overridePool || pool;
+    if (!dbPool) return;
+
     try {
-        const queueRes = await pool.query("SELECT * FROM async_webhook_queue WHERE status = 'pending' LIMIT 50");
-        for (const row of queueRes.rows) {
-            console.log(`[BACKGROUND WORKER] Processing queued Ad Network webhook ID: ${row.id} from ${row.source}`);
+        const client = await dbPool.connect();
+        let claimedItems: any[] = [];
+
+        try {
+            await client.query('BEGIN');
+
+            // 1. Claim eligible pending or timed-out processing webhook items with lease
+            const queueRes = await client.query(`
+                SELECT id, source, payload, attempt_count
+                FROM async_webhook_queue
+                WHERE (status = 'pending' OR (status = 'processing' AND lease_expires_at <= CURRENT_TIMESTAMP))
+                AND (available_at IS NULL OR available_at <= CURRENT_TIMESTAMP)
+                ORDER BY created_at ASC, id ASC
+                LIMIT 50
+                FOR UPDATE SKIP LOCKED
+            `);
+
+            if (queueRes.rows.length === 0) {
+                await client.query('COMMIT');
+                return;
+            }
+
+            const ids = queueRes.rows.map(r => r.id);
+            await client.query(`
+                UPDATE async_webhook_queue
+                SET status = 'processing',
+                    lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '2 minutes',
+                    attempt_count = COALESCE(attempt_count, 0) + 1,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ANY($1::int[])
+            `, [ids]);
+
+            await client.query('COMMIT');
+            claimedItems = queueRes.rows;
+        } catch (lockErr: any) {
+            await client.query('ROLLBACK');
+            if (lockErr.code === '55P03') return;
+            throw lockErr;
+        } finally {
+            client.release();
+        }
+
+        // 2. Process claimed items OUTSIDE the database transaction
+        for (const row of claimedItems) {
+            console.log(`[ASYNC WEBHOOK WORKER] Processing claimed webhook ID: ${row.id} from ${row.source}`);
             try {
-                // Here we would parse row.payload (e.g. ad approvals, impression syncs)
                 const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
                 
                 if (payload.event === 'ad_approved' && payload.campaign_id) {
@@ -9537,90 +10079,87 @@ const processAsyncWebhookQueue = async () => {
                     console.log(`[ASYNC WEBHOOK] Campaign #${payload.campaign_id} marked as ACTIVE based on Ad Network webhook.`);
                 } else if (payload.event === 'ad_metrics_update' && payload.campaign_id) {
                     // Initialize metrics row if it doesn't exist for today
-                    const metricsCheck = await pool.query("SELECT id FROM campaign_metrics WHERE campaign_id = $1 AND date = CURRENT_DATE", [payload.campaign_id]);
+                    const metricsCheck = await dbPool.query("SELECT id FROM campaign_metrics WHERE campaign_id = $1 AND date = CURRENT_DATE", [payload.campaign_id]);
                     if (metricsCheck.rows.length === 0) {
-                        await pool.query("INSERT INTO campaign_metrics (campaign_id, date, spend, impressions, clicks) VALUES ($1, CURRENT_DATE, 0, 0, 0)", [payload.campaign_id]);
+                        await dbPool.query("INSERT INTO campaign_metrics (campaign_id, date, spend, impressions, clicks) VALUES ($1, CURRENT_DATE, 0, 0, 0)", [payload.campaign_id]);
                     }
                     
-                    await pool.query(`
+                    await dbPool.query(`
                         UPDATE campaign_metrics 
                         SET impressions = impressions + $1, clicks = clicks + $2 
                         WHERE campaign_id = $3 AND date = CURRENT_DATE
                     `, [payload.impressions || 0, payload.clicks || 0, payload.campaign_id]);
                     console.log(`[ASYNC WEBHOOK] Updated metrics for Campaign #${payload.campaign_id}.`);
-                } else if (payload.event === 'new_lead' && payload.campaign_id) {
-                    const campRes = await pool.query(
-                        "SELECT c.*, l.title as listing_title FROM host_marketing_campaigns c JOIN listings l ON c.listing_id = l.id WHERE c.id = $1",
-                        [payload.campaign_id]
-                    );
-                    if (campRes.rows.length > 0) {
-                        const camp = campRes.rows[0];
-                        const leadMessage = payload.message || `Inquired via Meta/Google Ad for ${camp.listing_title}`;
-                        const { sanitized, wasSanitized } = maskContactInfo(leadMessage);
+                } else if (payload.event === 'new_lead' || payload.event === 'leadgen') {
+                    const leadRes = await LeadAlertingCrmService.validateAndIngestMetaLeadWebhook({
+                        headers: {},
+                        rawBody: typeof row.payload === 'string' ? row.payload : JSON.stringify(row.payload),
+                        payload,
+                        poolOrClient: dbPool,
+                        correlationId: `corr_wh_queue_${row.id}`
+                    });
 
-                        let guestId = payload.guest_id;
-                        if (!guestId) {
-                            const guestRes = await pool.query("SELECT id FROM users WHERE role = 'guest' ORDER BY id ASC LIMIT 1");
-                            guestId = guestRes.rows.length > 0 ? guestRes.rows[0].id : camp.host_id;
-                        }
-
-                        let threadId;
-                        const threadCheck = await pool.query(
-                            "SELECT id FROM threads WHERE host_id = $1 AND listing_id = $2 AND guest_id = $3 LIMIT 1",
-                            [camp.host_id, camp.listing_id, guestId]
+                    if (leadRes.success && !leadRes.is_duplicate) {
+                        const campRes = await dbPool.query(
+                            "SELECT c.*, l.title as listing_title FROM host_marketing_campaigns c JOIN listings l ON c.listing_id = l.id WHERE c.id = $1",
+                            [payload.campaign_id]
                         );
-                        if (threadCheck.rows.length > 0) {
-                            threadId = threadCheck.rows[0].id;
-                            await pool.query(
-                                "UPDATE threads SET last_message = $1, lead_intent_score = '🔥 HOT LEAD', updated_at = CURRENT_TIMESTAMP WHERE id = $2",
-                                [sanitized, threadId]
-                            );
-                        } else {
-                            const newThread = await pool.query(
-                                "INSERT INTO threads (guest_id, host_id, listing_id, last_message, lead_intent_score) VALUES ($1, $2, $3, $4, '🔥 HOT LEAD') RETURNING id",
-                                [guestId, camp.host_id, camp.listing_id, sanitized]
-                            );
-                            threadId = newThread.rows[0].id;
-                        }
-
-                        await pool.query(
-                            "INSERT INTO messages (thread_id, sender_id, receiver_id, content, is_sanitized) VALUES ($1, $2, $3, $4, $5)",
-                            [threadId, guestId, camp.host_id, sanitized, wasSanitized]
-                        );
-
-                        console.log(`[COLD START LEAD ALERT ENGINE] 🚨 SMS/Email/Push dispatched to Host #${camp.host_id}: "You have a new Hot Lead for '${camp.listing_title}'! Click to reply." (Data Masked: ${wasSanitized})`);
-
-                        const io = app.get('io');
-                        if (io) {
-                            io.to(`user_${camp.host_id}`).emit('notification', {
-                                type: 'new_lead',
-                                title: '🔥 New Ad Lead Received!',
-                                message: `You have a new Hot Lead for '${camp.listing_title}'. Click to reply in CRM.`,
-                                threadId: threadId,
-                                campaignId: camp.id
-                            });
-                            io.to('admin_room').emit('db_changed', { type: 'marketing_leads' });
+                        if (campRes.rows.length > 0) {
+                            const camp = campRes.rows[0];
+                            const io = app.get('io');
+                            if (io) {
+                                io.to(`user_${camp.host_id}`).emit('notification', {
+                                    type: 'new_lead',
+                                    title: leadRes.classification === 'HOT' ? '🔥 Hot Lead Received!' : '⚡ New Ad Lead Received!',
+                                    message: `You have a new inquiry for '${camp.listing_title}'. Click to reply in CRM.`,
+                                    threadId: leadRes.thread_id,
+                                    campaignId: camp.id,
+                                    leadId: leadRes.lead_id
+                                });
+                                io.to('admin_room').emit('db_changed', { type: 'marketing_leads' });
+                            }
                         }
                     }
                 }
 
-                // Mark as processed
-                await pool.query("UPDATE async_webhook_queue SET status = 'processed' WHERE id = $1", [row.id]);
+                // Mark as successfully processed
+                await dbPool.query("UPDATE async_webhook_queue SET status = 'processed', lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1", [row.id]);
             } catch (err: any) {
-                console.error(`[BACKGROUND WORKER ERROR] Failed to process webhook ID ${row.id}:`, err);
-                await pool.query("UPDATE async_webhook_queue SET status = 'failed' WHERE id = $1", [row.id]);
-                // Gap 18: Send failed webhook payload to Dead Letter Queue (DLQ)
-                await pool.query(
-                    "INSERT INTO webhook_dlq (source, payload, error_message, next_retry_at) VALUES ($1, $2, $3, NOW() + interval '5 minutes')",
-                    [row.source, JSON.stringify(row.payload), err.message]
-                );
+                console.error(`[ASYNC WEBHOOK WORKER ERROR] Failed to process webhook ID ${row.id}:`, err);
+                const currentAttempts = (row.attempt_count || 1);
+                if (currentAttempts >= 3) {
+                    await dbPool.query("UPDATE async_webhook_queue SET status = 'dlq', lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1", [row.id]);
+                    // Send failed webhook payload to Dead Letter Queue (DLQ)
+                    await dbPool.query(
+                        "INSERT INTO webhook_dlq (source, payload, error_message, next_retry_at) VALUES ($1, $2, $3, CURRENT_TIMESTAMP + interval '5 minutes')",
+                        [row.source, JSON.stringify(row.payload), err.message]
+                    );
+                } else {
+                    // Schedule next attempt with 1 minute backoff
+                    await dbPool.query(`
+                        UPDATE async_webhook_queue 
+                        SET status = 'pending', available_at = CURRENT_TIMESTAMP + INTERVAL '1 minute', lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP 
+                        WHERE id = $1
+                    `, [row.id]);
+                }
             }
         }
     } catch (err) {
-        console.error('[BACKGROUND WORKER ERROR]', err);
+        console.error('[ASYNC WEBHOOK WORKER ERROR]', err);
     }
 };
-setInterval(processAsyncWebhookQueue, 60 * 1000); // Check every 60 seconds
+
+// Background Worker for Phase 3.6: Lead Notification Outbox Queue
+export const processLeadNotificationQueue = async (overridePool?: any) => {
+  const dbPool = overridePool || pool;
+  if (!dbPool) return { processed: 0, delivered: 0, failed: 0, dlq: 0 };
+  return LeadAlertingCrmService.processLeadNotificationQueue(dbPool);
+};
+
+if (process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
+  setInterval(processAsyncWebhookQueue, 60 * 1000); // Check every 60 seconds
+  setInterval(() => processLeadNotificationQueue(), 30 * 1000); // Check every 30 seconds
+}
 
 // Subscribe & activate campaign (Initiates gateway checkout)
 app.post('/api/marketing/campaigns/:id/subscribe', authenticateToken, async (req: AuthRequest, res) => {
@@ -10662,28 +11201,15 @@ app.post('/api/admin/marketing/campaigns/:id/reject', authenticateToken, async (
     if (prevState && (prevState.payment_status === 'paid' || ['active', 'CAMPAIGN_LIVE'].includes(prevState.status)) && prevState.budget) {
       const remainingBudget = Math.max(0, parseFloat(prevState.budget || 0) - parseFloat(prevState.spent || 0));
       if (remainingBudget > 0) {
-        let walletRes = await pool.query('SELECT id FROM host_wallets WHERE host_id = $1', [prevState.host_id]);
-        if (walletRes.rows.length === 0) {
-          walletRes = await pool.query('INSERT INTO host_wallets (host_id, balance, encho_credits) VALUES ($1, 0, 0) RETURNING id', [prevState.host_id]);
-        }
-        const walletId = walletRes.rows[0].id;
-
-        await pool.query('UPDATE host_wallets SET balance = balance + $1 WHERE id = $2', [remainingBudget, walletId]);
-
-        await pool.query(`
-          INSERT INTO wallet_transactions (wallet_id, amount, type, reference_id, status, description)
-          VALUES ($1, $2, 'campaign_cancellation_refund', $3, 'completed', $4)
-        `, [walletId, remainingBudget, `campaign_reject_${id}`, `Double-entry audit refund for rejected campaign #${id}`]);
-
-        await pool.query("UPDATE host_marketing_campaigns SET payment_status = 'refunded' WHERE id = $1", [id]);
+        await processAtomicRefund(Number(id), prevState.host_id, remainingBudget, 'campaign_cancellation_refund', `campaign_reject_${id}`, `Double-entry audit refund for rejected campaign #${id}`, req.user.id, 'reject_campaign', prevState, feedback);
       }
+    } else {
+      // Gap 14: Immutable Admin Audit Trail (if no refund occurred)
+      await pool.query(`
+        INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `, [req.user.id, 'marketing_campaign', id, 'reject_campaign', JSON.stringify(prevState), JSON.stringify({status: 'rejected', admin_feedback: feedback}), req.ip || req.socket.remoteAddress]);
     }
-
-    // Gap 14: Immutable Admin Audit Trail
-    await pool.query(`
-      INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-    `, [req.user.id, 'marketing_campaign', id, 'reject_campaign', JSON.stringify(prevState), JSON.stringify({status: 'rejected', admin_feedback: feedback}), req.ip || req.socket.remoteAddress]);
 
     broadcastDbEvent(req, 'marketing');
     res.json({ success: true, message: 'Campaign rejected and unused budget refunded to host wallet.' });
@@ -10774,6 +11300,42 @@ app.post([
   } catch (error: any) {
     console.error('Error pausing campaign:', error);
     res.status(error.statusCode || 500).json({ error: error.message || 'Failed to pause campaign' });
+  }
+});
+
+// 2B. Emergency Safe Pause Action (Admin Only)
+app.post([
+  '/api/admin/marketing/campaigns/:id/emergency-pause',
+  '/api/admin/campaigns/:id/emergency-pause'
+], authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized: Admin role required for Emergency Pause' });
+    const { id } = req.params;
+    const idempotencyKey = (req.headers['idempotency-key'] as string) || req.body?.idempotencyKey;
+    const reason = req.body?.reason || 'Emergency Safe Pause invoked by Administrator';
+
+    const result = await MetaControlPlaneService.emergencyPauseCampaign(
+      Number(id),
+      {
+        userId: req.user?.id || 0,
+        role: 'admin',
+        isAdmin: true,
+        ipAddress: req.ip || req.socket.remoteAddress
+      },
+      {
+        idempotencyKey,
+        reason,
+        transitionStateFn: transitionCampaignState
+      },
+      pool
+    );
+
+    broadcastDbEvent(req, 'marketing');
+    res.json(result);
+  } catch (error: any) {
+    console.error('Error in emergency pause:', error);
+    res.status(error.statusCode || 500).json({ error: error.message || 'Failed to execute emergency pause' });
   }
 });
 
@@ -10970,23 +11532,13 @@ app.post('/api/admin/marketing/campaigns/:id/kill-meta', authenticateToken, asyn
     // Refund remaining unused budget to host wallet
     const remainingBudget = Math.max(0, parseFloat(campaign.budget || 0) - parseFloat(campaign.spent || 0));
     if (remainingBudget > 0 && campaign.payment_status === 'paid') {
-      let walletRes = await pool.query('SELECT id FROM host_wallets WHERE host_id = $1', [campaign.host_id]);
-      if (walletRes.rows.length === 0) {
-        walletRes = await pool.query('INSERT INTO host_wallets (host_id, balance, encho_credits) VALUES ($1, 0, 0) RETURNING id', [campaign.host_id]);
-      }
-      const walletId = walletRes.rows[0].id;
-      await pool.query('UPDATE host_wallets SET balance = balance + $1 WHERE id = $2', [remainingBudget, walletId]);
+      await processAtomicRefund(Number(id), campaign.host_id, remainingBudget, 'campaign_cancellation_refund', `admin_kill_campaign_${id}`, `Admin kill-switch refund for campaign #${id}`, req.user.id, 'kill_meta_campaign', {status: campaign.status}, 'Killed by admin');
+    } else {
       await pool.query(`
-        INSERT INTO wallet_transactions (wallet_id, amount, type, reference_id, status, description)
-        VALUES ($1, $2, 'campaign_cancellation_refund', $3, 'completed', $4)
-      `, [walletId, remainingBudget, `admin_kill_campaign_${id}`, `Admin kill-switch refund for campaign #${id}`]);
-      await pool.query("UPDATE host_marketing_campaigns SET payment_status = 'refunded' WHERE id = $1", [id]);
+        INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `, [req.user.id, 'marketing_campaign', id, 'kill_meta_campaign', JSON.stringify({status: campaign.status}), JSON.stringify({status: 'killed', refund: remainingBudget}), req.ip || req.socket.remoteAddress]);
     }
-
-    await pool.query(`
-      INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-    `, [req.user.id, 'marketing_campaign', id, 'kill_meta_campaign', JSON.stringify({status: campaign.status}), JSON.stringify({status: 'killed', refund: remainingBudget}), req.ip || req.socket.remoteAddress]);
 
     try {
       if (global.io) {
@@ -11031,32 +11583,7 @@ app.post('/api/marketing/campaigns/:id/cancel', authenticateToken, async (req: A
     `, [id]);
 
     if ((campaign.payment_status === 'paid' || ['active', 'CAMPAIGN_LIVE'].includes(campaign.status)) && remainingBudget > 0) {
-      let walletRes = await pool.query('SELECT id FROM host_wallets WHERE host_id = $1', [campaign.host_id]);
-      if (walletRes.rows.length === 0) {
-        walletRes = await pool.query('INSERT INTO host_wallets (host_id, balance, encho_credits) VALUES ($1, 0, 0) RETURNING id', [campaign.host_id]);
-      }
-      const walletId = walletRes.rows[0].id;
-
-      await pool.query('UPDATE host_wallets SET balance = balance + $1 WHERE id = $2', [remainingBudget, walletId]);
-
-      // Double-entry transaction
-      await pool.query(`
-        INSERT INTO wallet_transactions (wallet_id, amount, type, reference_id, status, description)
-        VALUES ($1, $2, 'campaign_cancellation_refund', $3, 'completed', $4)
-      `, [walletId, remainingBudget, `campaign_cancel_${id}`, `Double-entry audit refund for cancelled campaign #${id}`]);
-
-      await recordLedgerTransaction(pool, {
-        txRef: `campaign_cancel_${id}_${Date.now()}`,
-        eventType: 'CAMPAIGN_CANCELLATION_REFUND',
-        description: `Double-entry audit refund for cancelled campaign #${id}`,
-        lines: [
-          { accountType: 'META_AD_ESCROW', entryType: 'DEBIT', amount: remainingBudget * 0.85 },
-          { accountType: 'ENCHO_REVENUE', entryType: 'DEBIT', amount: remainingBudget * 0.15 },
-          { accountType: 'HOST_WALLET', userId: campaign.host_id, entryType: 'CREDIT', amount: remainingBudget }
-        ]
-      });
-
-      await pool.query("UPDATE host_marketing_campaigns SET payment_status = 'refunded' WHERE id = $1", [id]);
+      await processAtomicRefund(Number(id), campaign.host_id, remainingBudget, 'campaign_cancellation_refund', `campaign_cancel_${id}`, `Double-entry audit refund for cancelled campaign #${id}`);
     }
 
     if (req.user?.role === 'admin') {
@@ -11071,117 +11598,6 @@ app.post('/api/marketing/campaigns/:id/cancel', authenticateToken, async (req: A
   } catch (error) {
     console.error('Error cancelling campaign:', error);
     res.status(500).json({ error: 'Failed to cancel campaign' });
-  }
-});
-
-// Phase 2.7 Milestone 7: Host Campaign Pause Action
-app.post('/api/marketing/campaigns/:id/pause', authenticateToken, async (req: AuthRequest, res) => {
-  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  try {
-    const { id } = req.params;
-    const campaignRes = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [id]);
-    if (campaignRes.rows.length === 0) return res.status(404).json({ error: 'Campaign not found' });
-    const campaign = campaignRes.rows[0];
-
-    // Auth check: Host owner or admin
-    if (req.user?.role !== 'admin' && String(campaign.host_id) !== String(req.user?.id)) {
-      return res.status(403).json({ error: 'Unauthorized to pause this campaign' });
-    }
-
-    await transitionCampaignState({ 
-      campaignId: Number(id), 
-      to: 'paused', 
-      reason: 'Paused by host', 
-      actorType: 'host', 
-      actorId: req.user?.id 
-    });
-
-    if (campaign.meta_campaign_id) {
-      await pool.query(`
-        UPDATE host_marketing_campaigns
-        SET meta_status = 'PAUSED', meta_effective_status = 'PAUSED', updated_at = NOW()
-        WHERE id = $1
-      `, [id]);
-    }
-
-    broadcastDbEvent(req, 'marketing');
-    res.json({ success: true, message: 'Campaign paused successfully on Facebook & Instagram.' });
-  } catch (error: any) {
-    console.error('Error pausing campaign:', error);
-    res.status(500).json({ error: error.message || 'Failed to pause campaign' });
-  }
-});
-
-// Phase 2.7 Milestone 7: Host Campaign Resume Action
-app.post('/api/marketing/campaigns/:id/resume', authenticateToken, async (req: AuthRequest, res) => {
-  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  try {
-    const { id } = req.params;
-    const campaignRes = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [id]);
-    if (campaignRes.rows.length === 0) return res.status(404).json({ error: 'Campaign not found' });
-    const campaign = campaignRes.rows[0];
-
-    // Auth check: Host owner or admin
-    if (req.user?.role !== 'admin' && String(campaign.host_id) !== String(req.user?.id)) {
-      return res.status(403).json({ error: 'Unauthorized to resume this campaign' });
-    }
-
-    await transitionCampaignState({ 
-      campaignId: Number(id), 
-      to: 'active', 
-      reason: 'Resumed by host', 
-      actorType: 'host', 
-      actorId: req.user?.id 
-    });
-
-    if (campaign.meta_campaign_id) {
-      await pool.query(`
-        UPDATE host_marketing_campaigns
-        SET meta_status = 'ACTIVE', meta_effective_status = 'ACTIVE', updated_at = NOW()
-        WHERE id = $1
-      `, [id]);
-    }
-
-    broadcastDbEvent(req, 'marketing');
-    res.json({ success: true, message: 'Campaign resumed successfully on Facebook & Instagram.' });
-  } catch (error: any) {
-    console.error('Error resuming campaign:', error);
-    res.status(500).json({ error: error.message || 'Failed to resume campaign' });
-  }
-});
-
-// Phase 2.7 Milestone 7: Host Campaign Resync Action
-app.post('/api/marketing/campaigns/:id/resync', authenticateToken, async (req: AuthRequest, res) => {
-  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  try {
-    const { id } = req.params;
-    const campaignRes = await pool.query('SELECT * FROM host_marketing_campaigns WHERE id = $1', [id]);
-    if (campaignRes.rows.length === 0) return res.status(404).json({ error: 'Campaign not found' });
-    const campaign = campaignRes.rows[0];
-
-    if (req.user?.role !== 'admin' && String(campaign.host_id) !== String(req.user?.id)) {
-      return res.status(403).json({ error: 'Unauthorized to resync this campaign' });
-    }
-
-    if (typeof (MetaExternalSyncEngine as any)?.syncCampaignExternalState === 'function') {
-      await (MetaExternalSyncEngine as any).syncCampaignExternalState(id, pool).catch(() => {});
-    }
-
-    if (typeof (MetaTelemetrySyncEngine as any)?.syncCampaignTelemetry === 'function') {
-      await (MetaTelemetrySyncEngine as any).syncCampaignTelemetry(id, pool).catch(() => {});
-    }
-
-    await pool.query(`
-      UPDATE host_marketing_campaigns
-      SET external_status_verified_at = NOW(), updated_at = NOW()
-      WHERE id = $1
-    `, [id]);
-
-    broadcastDbEvent(req, 'marketing');
-    res.json({ success: true, message: 'Campaign state successfully verified and resynced with Meta.' });
-  } catch (error: any) {
-    console.error('Error resyncing campaign:', error);
-    res.status(500).json({ error: error.message || 'Failed to resync campaign' });
   }
 });
 
@@ -12819,6 +13235,14 @@ app.put('/api/user/bookings/:id/cancel', authenticateToken, async (req: AuthRequ
        } catch(e) { console.error(e); }
        io.to(`listing_${booking.listing_id}`).emit('listing_updated', { type: 'booking_cancelled' });
     }
+    
+    // Evaluate calendar circuit breaker to auto-resume eligible campaigns
+    if (booking.listing_id) {
+      triggerSmartAutoPause(booking.listing_id, `CANCELLED_${id}`).catch(err => {
+        console.error('[CIRCUIT BREAKER CANCEL HOOK ERROR]', err);
+      });
+    }
+
     res.json({ message: 'Booking cancelled successfully', booking });
   } catch (error) {
     console.error('Cancel Booking Error:', error);
@@ -14051,6 +14475,72 @@ async function recordLedgerTransaction(executor: any, {
   }
 }
 
+// Phase 2.9.2: Atomic Financial Settlement Helper
+async function processAtomicRefund(campaignId: number, hostId: number, remainingBudget: number, txType: string, txRef: string, description: string, adminId?: number, adminAction?: string, prevState?: any, feedback?: string) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    // 1. Lock Campaign for Update to check idempotency
+    const campCheck = await client.query('SELECT * FROM host_marketing_campaigns WHERE id = $1 FOR UPDATE', [campaignId]);
+    if (campCheck.rows.length === 0) throw new Error('Campaign not found');
+    const camp = campCheck.rows[0];
+    
+    if (camp.payment_status === 'refunded') {
+      await client.query('ROLLBACK');
+      return { success: false, message: 'Already refunded' };
+    }
+
+    // 2. Lock Wallet for Update
+    let walletRes = await client.query('SELECT id FROM host_wallets WHERE host_id = $1 FOR UPDATE', [hostId]);
+    if (walletRes.rows.length === 0) {
+      walletRes = await client.query('INSERT INTO host_wallets (host_id, balance, encho_credits) VALUES ($1, 0, 0) RETURNING id', [hostId]);
+    }
+    const walletId = walletRes.rows[0].id;
+
+    // 3. Mutate Wallet
+    await client.query('UPDATE host_wallets SET balance = balance + $1 WHERE id = $2', [remainingBudget, walletId]);
+
+    // 4. Insert Ledger Transaction
+    await client.query(`
+      INSERT INTO wallet_transactions (wallet_id, amount, type, reference_id, status, description)
+      VALUES ($1, $2, $3, $4, 'completed', $5)
+    `, [walletId, remainingBudget, txType, txRef, description]);
+
+    // 5. Update Campaign Financial State
+    await client.query("UPDATE host_marketing_campaigns SET payment_status = 'refunded' WHERE id = $1", [campaignId]);
+
+    // 6. Immutable Audit Event (if Admin)
+    if (adminId && adminAction && prevState) {
+      const newState = { status: adminAction.includes('reject') ? 'rejected' : 'killed', refund: remainingBudget, admin_feedback: feedback };
+      await client.query(`
+        INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `, [adminId, 'marketing_campaign', campaignId, adminAction, JSON.stringify(prevState), JSON.stringify(newState), '127.0.0.1']);
+    }
+
+    await recordLedgerTransaction(client, {
+      txRef: `${txRef}_${Date.now()}`,
+      eventType: 'CAMPAIGN_CANCELLATION_REFUND',
+      description,
+      lines: [
+        { accountType: 'META_AD_ESCROW', entryType: 'DEBIT', amount: remainingBudget * 0.85 },
+        { accountType: 'ENCHO_REVENUE', entryType: 'DEBIT', amount: remainingBudget * 0.15 },
+        { accountType: 'HOST_WALLET', userId: hostId, entryType: 'CREDIT', amount: remainingBudget }
+      ]
+    });
+
+    await client.query('COMMIT');
+    return { success: true };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[ATOMIC REFUND ERROR]', err);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 app.get('/api/marketing/ledger', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const hostId = req.user?.id;
@@ -15244,13 +15734,19 @@ app.post('/api/admin/payments/escrow/release', async (req: Request, res: Respons
             } else {
                 dispatchError = new Error('Meta dispatch failed');
             }
-            await transitionCampaignState({ campaignId: campaign_id, to: 'failed_publish', reason: `Meta dispatch failed: ${dispatchError.message}`, actorType: 'system' });
+            const currentStatusCheck = await pool.query(`SELECT status FROM host_marketing_campaigns WHERE id = $1`, [campaign_id]);
+            if (currentStatusCheck.rows[0]?.status !== 'failed_publish') {
+                await transitionCampaignState({ campaignId: campaign_id, to: 'failed_publish', reason: `Meta dispatch failed: ${dispatchError.message}`, actorType: 'system' });
+            }
         } else {
             await dispatchGoogleAdsCampaign(campaign_id, { protocol: 'https', get: () => 'localhost' });
         }
     } catch (err: any) {
         dispatchError = err;
-        await transitionCampaignState({ campaignId: campaign_id, to: 'failed_publish', reason: `Meta dispatch failed: ${err.message}`, actorType: 'system' });
+        const currentStatusCheck = await pool.query(`SELECT status FROM host_marketing_campaigns WHERE id = $1`, [campaign_id]);
+        if (currentStatusCheck.rows[0]?.status !== 'failed_publish') {
+            await transitionCampaignState({ campaignId: campaign_id, to: 'failed_publish', reason: `Meta dispatch failed: ${err.message}`, actorType: 'system' });
+        }
     }
 
     broadcastDbEvent(req, 'marketing');
@@ -15273,32 +15769,84 @@ app.post('/api/admin/payments/escrow/release', async (req: Request, res: Respons
   }
 });
 
-// 5. Automatic 24-Hour Fraud Escrow Auto-Release Worker
-setInterval(async () => {
+// 5. Automatic 24-Hour Fraud Escrow Auto-Release Worker (Safe Transactional Boundary)
+export const processEscrowAutoRelease = async (overridePool?: any) => {
+  const dbPool = overridePool || pool;
+  if (!dbPool) return;
+
   try {
-    const expiredEscrows = await pool.query(
-      `SELECT id, admin_approved FROM host_marketing_campaigns
-       WHERE escrow_status = 'holding' AND escrow_release_at <= CURRENT_TIMESTAMP`
+    // Phase 2.9.3: Pull 10 campaigns at a time to prevent memory exhaustion, with deterministic ordering
+    const expiredEscrows = await dbPool.query(
+      `SELECT id FROM host_marketing_campaigns
+       WHERE escrow_status = 'holding' AND escrow_release_at <= CURRENT_TIMESTAMP 
+       ORDER BY escrow_release_at ASC, id ASC
+       LIMIT 10`
     );
 
-    for (const c of expiredEscrows.rows) {
-      await pool.query(
-        `UPDATE host_marketing_campaigns
-         SET escrow_status = 'released', updated_at = CURRENT_TIMESTAMP
-         WHERE id = $1`,
-        [c.id]
-      );
-      console.log(`[ESCROW WORKER] 24-Hour Fraud Escrow expired and auto-released for Campaign #${c.id}`);
-
-      if (c.admin_approved) {
-        await dispatchMetaCampaign(c.id, { protocol: 'https', get: () => 'localhost' } as any);
-        await dispatchGoogleAdsCampaign(c.id, { protocol: 'https', get: () => 'localhost' } as any);
+    for (const row of expiredEscrows.rows) {
+      const client = await dbPool.connect();
+      let shouldDispatch = false;
+      const campaignId = row.id;
+      
+      try {
+        await client.query('BEGIN');
+        
+        // 1. Lock campaign FOR UPDATE SKIP LOCKED
+        const campRes = await client.query(
+          `SELECT id, admin_approved, escrow_status FROM host_marketing_campaigns WHERE id = $1 FOR UPDATE SKIP LOCKED`, 
+          [campaignId]
+        );
+        
+        if (campRes.rows.length > 0 && campRes.rows[0].escrow_status === 'holding') {
+           const c = campRes.rows[0];
+           
+           // 2. Authorize Escrow Release
+           await client.query(
+             `UPDATE host_marketing_campaigns
+              SET escrow_status = 'released', updated_at = CURRENT_TIMESTAMP
+              WHERE id = $1`,
+             [campaignId]
+           );
+           
+           // 3. Pre-authorize Meta Dispatch if admin approved
+           if (c.admin_approved) {
+             const correlationId = crypto.randomUUID();
+             const idempotencyKey = `publish_meta_camp_${campaignId}`;
+             await client.query(
+               `INSERT INTO meta_publishing_transactions (campaign_id, idempotency_key, correlation_id, publish_status) 
+                VALUES ($1, $2, $3, 'PRECHECK_RUNNING') 
+                ON CONFLICT (idempotency_key) DO NOTHING`,
+               [campaignId, idempotencyKey, correlationId]
+             );
+             shouldDispatch = true;
+           }
+           
+           await client.query('COMMIT');
+           console.log(`[ESCROW WORKER] 24-Hour Fraud Escrow auto-released transactionally for Campaign #${campaignId}`);
+        } else {
+           await client.query('ROLLBACK');
+        }
+      } catch (err) {
+        await client.query('ROLLBACK');
+        console.error(`[ESCROW WORKER ERROR] Campaign #${campaignId}:`, err);
+      } finally {
+        client.release();
+      }
+      
+      // 4. Dispatch Async (outside the tight DB lock)
+      if (shouldDispatch) {
+         dispatchMetaCampaign(campaignId, { protocol: 'https', get: () => 'localhost' } as any).catch(e => console.error(e));
+         dispatchGoogleAdsCampaign(campaignId, { protocol: 'https', get: () => 'localhost' } as any).catch(e => console.error(e));
       }
     }
   } catch (workerErr) {
-    console.error('[ESCROW WORKER ERROR]', workerErr);
+    console.error('[ESCROW WORKER POLLING ERROR]', workerErr);
   }
-}, 60000);
+};
+
+if (process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
+  setInterval(processEscrowAutoRelease, 60000);
+}
 
 // Setup fallback and start server if not running serverless
 
@@ -15636,231 +16184,366 @@ if ((process.env.NODE_ENV !== 'production' || !process.env.VERCEL) && process.en
 }
 
 
-// Gap 6: Master Account Fraud Liability & Chargeback Escrow Processor
-const processEscrowCampaigns = async () => {
-  if (!isDbConfigured) return;
+
+
+
+// Gap 10: Automated A/B Testing (Dynamic Creative Optimization) Processor (Phase 2.9.5 Hardened)
+export const processDynamicCreativeOptimization = async (overridePool?: any) => {
+  const dbPool = overridePool || pool;
+  if (!dbPool) return;
+
   try {
-    const res = await pool.query(
-      "SELECT id FROM host_marketing_campaigns WHERE status = 'escrow' AND escrow_status = 'holding' AND escrow_release_at <= CURRENT_TIMESTAMP"
-    );
-    for (const row of res.rows) {
-      console.log(`[ESCROW CRON] 24-hour escrow period completed for Campaign #${row.id}. Dispatching to Meta Ads...`);
-      await dispatchMetaCampaign(row.id, null);
-                await dispatchGoogleAdsCampaign(row.id, null);
+    const client = await dbPool.connect();
+    let claimedCampaigns: any[] = [];
+
+    try {
+      await client.query('BEGIN');
+      const res = await client.query(`
+        SELECT id, media_urls
+        FROM host_marketing_campaigns
+        WHERE status = 'active'
+        AND media_urls IS NOT NULL
+        AND jsonb_array_length(media_urls) > 1
+        AND meta_dispatched_at <= CURRENT_TIMESTAMP - INTERVAL '24 hours'
+        AND (dco_last_evaluated_at IS NULL OR dco_last_evaluated_at <= CURRENT_TIMESTAMP - INTERVAL '24 hours')
+        ORDER BY meta_dispatched_at ASC, id ASC
+        LIMIT 20
+        FOR UPDATE SKIP LOCKED
+      `);
+
+      if (res.rows.length === 0) {
+        await client.query('COMMIT');
+        return;
+      }
+
+      const ids = res.rows.map(r => r.id);
+      await client.query(`
+        UPDATE host_marketing_campaigns
+        SET dco_last_evaluated_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ANY($1::int[])
+      `, [ids]);
+
+      await client.query('COMMIT');
+      claimedCampaigns = res.rows;
+    } catch (lockErr: any) {
+      await client.query('ROLLBACK');
+      if (lockErr.code === '55P03') return;
+      throw lockErr;
+    } finally {
+      client.release();
     }
-  } catch (err) {
-    console.error('[ESCROW CRON ERROR]', err);
-  }
-};
-setInterval(processEscrowCampaigns, 5 * 60 * 1000); // Check every 5 minutes
 
+    for (const row of claimedCampaigns) {
+      try {
+        const variantCountRes = await dbPool.query('SELECT COUNT(*) as count FROM campaign_creative_variants WHERE campaign_id = $1', [row.id]);
+        const hasVariants = Number(variantCountRes.rows[0]?.count || 0) >= 2;
 
-// Gap 10: Automated A/B Testing (Dynamic Creative Optimization) Processor
-const processDynamicCreativeOptimization = async () => {
-  if (!isDbConfigured) return;
-  try {
-     const res = await pool.query(
-        "SELECT id, media_urls FROM host_marketing_campaigns WHERE status = 'active' AND media_urls IS NOT NULL AND jsonb_array_length(media_urls) > 1 AND meta_dispatched_at <= CURRENT_TIMESTAMP - interval '24 hours'"
-     );
-     for (const row of res.rows) {
-        let urls = [];
-        try {
-           urls = typeof row.media_urls === 'string' ? JSON.parse(row.media_urls) : row.media_urls;
-        } catch(e) { console.error('Failed to parse media urls for optimization', e); }
-        
-        if (urls && urls.length > 1) {
-            console.log(`[DYNAMIC CREATIVE OPTIMIZATION] Campaign #${row.id} has run A/B testing for 24+ hours.`);
-            console.log(`[DYNAMIC CREATIVE OPTIMIZATION] Routing 100% of remaining budget to winning creative: ${urls[0]}`);
+        if (hasVariants) {
+          console.log(`[DYNAMIC CREATIVE OPTIMIZATION] Evaluating campaign #${row.id} via DcoEngine...`);
+          const result = await DcoEngine.processCampaignDco(row.id, dbPool);
+          console.log(`[DYNAMIC CREATIVE OPTIMIZATION] Campaign #${row.id} evaluation completed: ${result.result} (${result.reason})`);
+        } else {
+          let urls: string[] = [];
+          try {
+            urls = typeof row.media_urls === 'string' ? JSON.parse(row.media_urls) : row.media_urls;
+          } catch (e: any) {}
+          if (urls && urls.length > 1) {
             const winningMedia = [urls[0]];
-            await pool.query("UPDATE host_marketing_campaigns SET media_urls = $1 WHERE id = $2", [JSON.stringify(winningMedia), row.id]);
+            await dbPool.query("UPDATE host_marketing_campaigns SET media_urls = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2", [JSON.stringify(winningMedia), row.id]);
+          }
         }
-     }
+      } catch (e: any) {
+        console.error(`[DYNAMIC CREATIVE OPTIMIZATION] Failed to process campaign #${row.id}:`, e.message);
+      }
+    }
   } catch (err) {
     console.error('[DYNAMIC CREATIVE ERROR]', err);
   }
 };
-setInterval(processDynamicCreativeOptimization, 60 * 60 * 1000); // Check every 1 hour
+if (process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
+  setInterval(processDynamicCreativeOptimization, 60 * 60 * 1000); // Check every 1 hour
+}
 
-// Gap 11: Database Death by Analytics (Time-Series Rollups - Phase 2.6 Milestone 1)
-export const runAnalyticsRollup = async () => {
-  if (!isDbConfigured) return;
-  const client = await pool.connect();
+// Gap 11: Database Death by Analytics (Time-Series Rollups - Phase 2.6 & 2.9.5 Hardened Bounded Processor)
+export const runAnalyticsRollup = async (overridePool?: any) => {
+  const dbPool = overridePool || pool;
+  if (!dbPool) return;
+
+  const client = await dbPool.connect();
   try {
-     console.log('[ANALYTICS ROLLUP] Aggregating raw ad metrics into lightweight time-series table...');
-     await client.query('BEGIN');
-     
-     // 1. Fetch unprocessed raw event log IDs and delta sums with event date derived from created_at (UTC)
-     const rawEventsRes = await client.query(`
-       SELECT 
-         id,
-         campaign_id,
-         (created_at AT TIME ZONE 'UTC')::date::text as date,
-         impressions_delta,
-         clicks_delta,
-         conversions_delta,
-         spent_delta
-       FROM campaign_raw_event_logs
-       WHERE processed = false
-       FOR UPDATE
-     `);
+    console.log('[ANALYTICS ROLLUP] Aggregating bounded raw ad metrics into lightweight time-series table...');
+    await client.query('BEGIN');
 
-     if (rawEventsRes.rows.length === 0) {
-       await client.query('COMMIT');
-       return;
-     }
+    // 1. Fetch bounded chunk of unprocessed raw event log IDs with deterministic ordering and SKIP LOCKED
+    const rawEventsRes = await client.query(`
+      SELECT 
+        id,
+        campaign_id,
+        (created_at AT TIME ZONE 'UTC')::date::text as date,
+        impressions_delta,
+        clicks_delta,
+        conversions_delta,
+        spent_delta
+      FROM campaign_raw_event_logs
+      WHERE processed = false
+      ORDER BY id ASC
+      LIMIT 500
+      FOR UPDATE SKIP LOCKED
+    `);
 
-     const rawLogIds = rawEventsRes.rows.map(r => r.id);
+    if (rawEventsRes.rows.length === 0) {
+      await client.query('COMMIT');
+      return;
+    }
 
-     // Composite grouping by campaign_id + event_date
-     const groupedMap = new Map<string, { campaign_id: number; date: string; impressions: number; clicks: number; conversions: number; spent: number }>();
-     for (const row of rawEventsRes.rows) {
-       const key = `${row.campaign_id}_${row.date}`;
-       const existing = groupedMap.get(key) || {
-         campaign_id: row.campaign_id,
-         date: row.date,
-         impressions: 0,
-         clicks: 0,
-         conversions: 0,
-         spent: 0
-       };
-       existing.impressions += Number(row.impressions_delta || 0);
-       existing.clicks += Number(row.clicks_delta || 0);
-       existing.conversions += Number(row.conversions_delta || 0);
-       existing.spent += Number(row.spent_delta || 0);
-       groupedMap.set(key, existing);
-     }
+    const rawLogIds = rawEventsRes.rows.map(r => r.id);
 
-     // 2. Daily Rollup Upsert
-     for (const item of groupedMap.values()) {
-       await client.query(`
-         INSERT INTO campaign_daily_rollups (campaign_id, date, impressions, clicks, conversions, spent_usd)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (campaign_id, date) DO UPDATE
-         SET impressions = campaign_daily_rollups.impressions + EXCLUDED.impressions,
-             clicks = campaign_daily_rollups.clicks + EXCLUDED.clicks,
-             conversions = campaign_daily_rollups.conversions + EXCLUDED.conversions,
-             spent_usd = campaign_daily_rollups.spent_usd + EXCLUDED.spent_usd
-       `, [item.campaign_id, item.date, item.impressions, item.clicks, item.conversions, item.spent]);
-     }
+    // Composite grouping by campaign_id + event_date
+    const groupedMap = new Map<string, { campaign_id: number; date: string; impressions: number; clicks: number; conversions: number; spent: number }>();
+    for (const row of rawEventsRes.rows) {
+      const key = `${row.campaign_id}_${row.date}`;
+      const existing = groupedMap.get(key) || {
+        campaign_id: row.campaign_id,
+        date: row.date,
+        impressions: 0,
+        clicks: 0,
+        conversions: 0,
+        spent: 0
+      };
+      existing.impressions += Number(row.impressions_delta || 0);
+      existing.clicks += Number(row.clicks_delta || 0);
+      existing.conversions += Number(row.conversions_delta || 0);
+      existing.spent += Number(row.spent_delta || 0);
+      groupedMap.set(key, existing);
+    }
 
-     // 3. Sync cumulative stats back to host_marketing_campaigns
-     await client.query(`
-       UPDATE host_marketing_campaigns c
-       SET accumulated_impressions = COALESCE(r.total_impressions, 0),
-           accumulated_clicks = COALESCE(r.total_clicks, 0),
-           accumulated_conversions = COALESCE(r.total_conversions, 0),
-           accumulated_spent = COALESCE(r.total_spent, 0)
-       FROM (
-         SELECT campaign_id,
-                SUM(impressions) as total_impressions,
-                SUM(clicks) as total_clicks,
-                SUM(conversions) as total_conversions,
-                SUM(spent_usd) as total_spent
-         FROM campaign_daily_rollups
-         GROUP BY campaign_id
-       ) r
-       WHERE c.id = r.campaign_id;
-     `);
+    // 2. Daily Rollup Upsert
+    for (const item of groupedMap.values()) {
+      await client.query(`
+        INSERT INTO campaign_daily_rollups (campaign_id, date, impressions, clicks, conversions, spent_usd)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (campaign_id, date) DO UPDATE
+        SET impressions = campaign_daily_rollups.impressions + EXCLUDED.impressions,
+            clicks = campaign_daily_rollups.clicks + EXCLUDED.clicks,
+            conversions = campaign_daily_rollups.conversions + EXCLUDED.conversions,
+            spent_usd = campaign_daily_rollups.spent_usd + EXCLUDED.spent_usd
+      `, [item.campaign_id, item.date, item.impressions, item.clicks, item.conversions, item.spent]);
+    }
 
-     // 4. Mark processed raw event logs atomically by ID
-     await client.query(`
-       UPDATE campaign_raw_event_logs 
-       SET processed = true 
-       WHERE id = ANY($1::int[])
-     `, [rawLogIds]);
+    // 3. Sync cumulative stats back to host_marketing_campaigns for updated campaigns
+    const impactedCampaignIds = Array.from(new Set(rawEventsRes.rows.map(r => r.campaign_id)));
+    await client.query(`
+      UPDATE host_marketing_campaigns c
+      SET accumulated_impressions = COALESCE(r.total_impressions, 0),
+          accumulated_clicks = COALESCE(r.total_clicks, 0),
+          accumulated_conversions = COALESCE(r.total_conversions, 0),
+          accumulated_spent = COALESCE(r.total_spent, 0)
+      FROM (
+        SELECT campaign_id,
+               SUM(impressions) as total_impressions,
+               SUM(clicks) as total_clicks,
+               SUM(conversions) as total_conversions,
+               SUM(spent_usd) as total_spent
+        FROM campaign_daily_rollups
+        WHERE campaign_id = ANY($1::int[])
+        GROUP BY campaign_id
+      ) r
+      WHERE c.id = r.campaign_id;
+    `, [impactedCampaignIds]);
 
-     await client.query('COMMIT');
+    // 4. Mark processed raw event logs atomically by ID
+    await client.query(`
+      UPDATE campaign_raw_event_logs 
+      SET processed = true 
+      WHERE id = ANY($1::int[])
+    `, [rawLogIds]);
+
+    await client.query('COMMIT');
+    console.log(`[ANALYTICS ROLLUP] Successfully aggregated ${rawLogIds.length} raw event logs across ${impactedCampaignIds.length} campaigns.`);
   } catch (err) {
-     await client.query('ROLLBACK');
-     console.error('[ANALYTICS ROLLUP TRANSACTION ERROR]', err);
-     throw err;
+    await client.query('ROLLBACK');
+    console.error('[ANALYTICS ROLLUP TRANSACTION ERROR]', err);
+    throw err;
   } finally {
-     client.release();
+    client.release();
   }
 };
-setInterval(runAnalyticsRollup, 15 * 60 * 1000); // 15 mins
+if (process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
+  setInterval(runAnalyticsRollup, 15 * 60 * 1000); // 15 mins
+}
 
-// Social Studio Auto-Publisher Worker (FAANG Optimization)
-const processScheduledSocialPosts = async () => {
-  if (!isDbConfigured) return;
+// Social Studio Auto-Publisher Worker (Phase 2.9.5 Hardened Bounded Processor)
+export const processScheduledSocialPosts = async (overridePool?: any) => {
+  const dbPool = overridePool || pool;
+  if (!dbPool) return;
+
   try {
-     const res = await pool.query(
-        "SELECT * FROM host_social_posts WHERE status = 'approved' AND (scheduled_at <= NOW() OR scheduled_at IS NULL) AND published_at IS NULL"
-     );
-     for (const row of res.rows) {
-        console.log(`[SOCIAL STUDIO PUBLISHER] Scheduled post ID ${row.id} (${row.media_type}) is due. Dispatching to Instagram/Facebook...`);
-        
-        try {
-            // Attempt to publish to Meta
-            const publishResult = await publishToInstagram(row);
-            
-            if (publishResult.success) {
-                await pool.query(
-                  "UPDATE host_social_posts SET published_at = NOW(), likes = 0, comments = 0, shares = 0 WHERE id = $1",
-                  [row.id]
-                );
-                console.log(`[SOCIAL STUDIO PUBLISHER] Post ID ${row.id} successfully published to @enchospace feed.`);
-                
-                
-            }
-        } catch (publishErr: any) {
-            console.error(`[SOCIAL STUDIO PUBLISHER ERROR] Failed to publish post ${row.id}:`, publishErr.message);
-            // Optionally update the status to failed or add a retry mechanism, 
-            // but keeping it as is will let it retry on the next interval.
-            // If it's a permanent error, maybe we should reject it.
-            // For now, let's just log it and it will retry next time.
+    const client = await dbPool.connect();
+    let claimedPosts: any[] = [];
+
+    try {
+      await client.query('BEGIN');
+
+      const res = await client.query(`
+        SELECT *
+        FROM host_social_posts
+        WHERE (status = 'approved' OR (status = 'publishing' AND lease_expires_at <= CURRENT_TIMESTAMP))
+        AND (scheduled_at <= CURRENT_TIMESTAMP OR scheduled_at IS NULL)
+        AND published_at IS NULL
+        ORDER BY scheduled_at ASC NULLS FIRST, id ASC
+        LIMIT 10
+        FOR UPDATE SKIP LOCKED
+      `);
+
+      if (res.rows.length === 0) {
+        await client.query('COMMIT');
+        return;
+      }
+
+      const ids = res.rows.map(r => r.id);
+      await client.query(`
+        UPDATE host_social_posts
+        SET status = 'publishing',
+            lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '3 minutes',
+            publish_attempt_count = COALESCE(publish_attempt_count, 0) + 1,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ANY($1::int[])
+      `, [ids]);
+
+      await client.query('COMMIT');
+      claimedPosts = res.rows;
+    } catch (lockErr: any) {
+      await client.query('ROLLBACK');
+      if (lockErr.code === '55P03') return;
+      throw lockErr;
+    } finally {
+      client.release();
+    }
+
+    for (const row of claimedPosts) {
+      console.log(`[SOCIAL STUDIO PUBLISHER] Scheduled post ID ${row.id} (${row.media_type}) is due. Dispatching to Instagram/Facebook...`);
+      const currentAttempts = (row.publish_attempt_count || 1);
+
+      try {
+        const publishResult = await publishToInstagram(row);
+
+        if (publishResult.success) {
+          await dbPool.query(
+            "UPDATE host_social_posts SET status = 'published', published_at = CURRENT_TIMESTAMP, lease_expires_at = NULL, likes = 0, comments = 0, shares = 0, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+            [row.id]
+          );
+          console.log(`[SOCIAL STUDIO PUBLISHER] Post ID ${row.id} successfully published to @enchospace feed.`);
         }
-     }
+      } catch (publishErr: any) {
+        console.error(`[SOCIAL STUDIO PUBLISHER ERROR] Failed to publish post ${row.id}:`, publishErr.message);
+        if (currentAttempts >= 3) {
+          await dbPool.query(
+            "UPDATE host_social_posts SET status = 'failed_publish', admin_feedback = $1, lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+            [publishErr.message || 'Publish failed after max retries', row.id]
+          );
+        } else {
+          await dbPool.query(
+            "UPDATE host_social_posts SET status = 'approved', lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+            [row.id]
+          );
+        }
+      }
+    }
   } catch (err) {
     console.error('[SOCIAL STUDIO PUBLISHER ERROR]', err);
   }
 };
-// Check every minute
-setInterval(processScheduledSocialPosts, 60 * 1000);
+if (process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
+  setInterval(processScheduledSocialPosts, 60 * 1000);
+}
 
-// Gap 18: Webhook Retry Jitter & Dead Letter Queue (DLQ)
-const processWebhookDLQ = async () => {
-  if (!isDbConfigured) return;
+// Gap 18: Webhook Retry Jitter & Dead Letter Queue (DLQ) (Phase 2.9.5 Hardened Bounded Processor)
+export const processWebhookDLQ = async (overridePool?: any) => {
+  const dbPool = overridePool || pool;
+  if (!dbPool) return;
+
   try {
-     const dlqItems = await pool.query("SELECT * FROM webhook_dlq WHERE retry_count < 5 AND next_retry_at <= NOW()");
-     for (const item of dlqItems.rows) {
-         console.log(`[DLQ PROCESSOR] Retrying failed webhook ID ${item.id} from source '${item.source}' (Attempt ${item.retry_count + 1})`);
-         try {
-             // Mock failure randomly for testing the retry jitter
-             const isFail = Math.random() < 0.3; // 30% chance to fail again
-             if (isFail) throw new Error("Simulated network failure");
-             
-             // Success
-             await pool.query("DELETE FROM webhook_dlq WHERE id = $1", [item.id]);
-             console.log(`[DLQ PROCESSOR] Successfully recovered webhook ID ${item.id}`);
-         } catch (retryErr: any) {
-             const newRetryCount = item.retry_count + 1;
-             if (newRetryCount >= 5) {
-                 await pool.query("UPDATE webhook_dlq SET status = 'failed' WHERE id = $1", [item.id]);
-                 console.log(`[DLQ PROCESSOR] Webhook ID ${item.id} permanently failed after 5 attempts.`);
-             } else {
-                 // Exponential backoff with jitter
-                 // Delay: base_delay * (2 ^ retry_count) + jitter
-                 // base_delay = 5 mins, jitter = 0 to 60 secs
-                 const baseDelayMs = 5 * 60 * 1000;
-                 const exponentialDelayMs = baseDelayMs * Math.pow(2, item.retry_count);
-                 const jitterMs = Math.floor(Math.random() * 60000);
-                 const totalDelayMs = exponentialDelayMs + jitterMs;
-                 
-                 // Using PostgreSQL interval syntax for accurate addition in DB or we can compute in JS:
-                 const nextRetryDate = new Date(Date.now() + totalDelayMs);
-                 
-                 await pool.query("UPDATE webhook_dlq SET retry_count = $1, next_retry_at = $2 WHERE id = $3", [newRetryCount, nextRetryDate.toISOString(), item.id]);
-                 console.log(`[DLQ PROCESSOR] Webhook ID ${item.id} failed. Scheduled next retry at ${nextRetryDate.toISOString()} (Delay: ${totalDelayMs}ms with jitter)`);
-             }
-         }
-     }
+    const client = await dbPool.connect();
+    let claimedItems: any[] = [];
+
+    try {
+      await client.query('BEGIN');
+
+      const dlqItems = await client.query(`
+        SELECT *
+        FROM webhook_dlq
+        WHERE status = 'pending'
+        AND retry_count < 5
+        AND next_retry_at <= CURRENT_TIMESTAMP
+        AND (lease_expires_at IS NULL OR lease_expires_at <= CURRENT_TIMESTAMP)
+        ORDER BY next_retry_at ASC, id ASC
+        LIMIT 20
+        FOR UPDATE SKIP LOCKED
+      `);
+
+      if (dlqItems.rows.length === 0) {
+        await client.query('COMMIT');
+        return;
+      }
+
+      const ids = dlqItems.rows.map(r => r.id);
+      await client.query(`
+        UPDATE webhook_dlq
+        SET lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '5 minutes'
+        WHERE id = ANY($1::int[])
+      `, [ids]);
+
+      await client.query('COMMIT');
+      claimedItems = dlqItems.rows;
+    } catch (lockErr: any) {
+      await client.query('ROLLBACK');
+      if (lockErr.code === '55P03') return;
+      throw lockErr;
+    } finally {
+      client.release();
+    }
+
+    for (const item of claimedItems) {
+      console.log(`[DLQ PROCESSOR] Retrying failed webhook ID ${item.id} from source '${item.source}' (Attempt ${item.retry_count + 1})`);
+      try {
+        const isFail = process.env.NODE_ENV === 'test' ? false : Math.random() < 0.3;
+        if (isFail) throw new Error("Simulated network failure");
+
+        // Success
+        await dbPool.query("DELETE FROM webhook_dlq WHERE id = $1", [item.id]);
+        console.log(`[DLQ PROCESSOR] Successfully recovered webhook ID ${item.id}`);
+      } catch (retryErr: any) {
+        const newRetryCount = item.retry_count + 1;
+        if (newRetryCount >= 5) {
+          await dbPool.query("UPDATE webhook_dlq SET status = 'failed', lease_expires_at = NULL WHERE id = $1", [item.id]);
+          console.log(`[DLQ PROCESSOR] Webhook ID ${item.id} permanently failed after 5 attempts.`);
+        } else {
+          // Exponential backoff with jitter
+          // Delay: base_delay * (2 ^ retry_count) + jitter
+          // base_delay = 5 mins, jitter = 0 to 60 secs
+          const baseDelayMs = 5 * 60 * 1000;
+          const exponentialDelayMs = baseDelayMs * Math.pow(2, item.retry_count);
+          const jitterMs = Math.floor(Math.random() * 60000);
+          const totalDelayMs = exponentialDelayMs + jitterMs;
+          const nextRetryDate = new Date(Date.now() + totalDelayMs);
+
+          await dbPool.query(`
+            UPDATE webhook_dlq 
+            SET retry_count = $1, next_retry_at = $2, lease_expires_at = NULL 
+            WHERE id = $3
+          `, [newRetryCount, nextRetryDate.toISOString(), item.id]);
+          console.log(`[DLQ PROCESSOR] Webhook ID ${item.id} failed. Scheduled next retry at ${nextRetryDate.toISOString()} (Delay: ${totalDelayMs}ms with jitter)`);
+        }
+      }
+    }
   } catch (err) {
     console.error('[DLQ PROCESSOR ERROR]', err);
   }
 };
-// Run every 5 minutes
-setInterval(processWebhookDLQ, 5 * 60 * 1000);
+if (process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
+  setInterval(processWebhookDLQ, 5 * 60 * 1000);
+}
 
 
 // Deep External Meta Object Verification Helper
@@ -15948,7 +16631,7 @@ export const processMetaReconciliation = async (overridePool?: any, overrideAcce
       WHERE publish_status IN ('EXTERNAL_OUTCOME_UNKNOWN', 'RECONCILIATION_REQUIRED', 'ROLLBACK_FAILED', 'QUARANTINED')
       AND (next_reconciliation_at IS NULL OR next_reconciliation_at <= CURRENT_TIMESTAMP)
       AND (reconciliation_lease_expires_at IS NULL OR reconciliation_lease_expires_at <= CURRENT_TIMESTAMP)
-      ORDER BY next_reconciliation_at ASC NULLS FIRST LIMIT 10
+      ORDER BY next_reconciliation_at ASC NULLS FIRST, id ASC LIMIT 10
       FOR UPDATE SKIP LOCKED
     `);
     
@@ -16066,7 +16749,7 @@ export const processMetaReconciliation = async (overridePool?: any, overrideAcce
       WHERE t.publish_status IN ('SUCCESS', 'ROLLBACK_SUCCESS', 'ROLLBACK_FAILED', 'FAILED', 'FAILED_PUBLISH', 'LIVE', 'QUARANTINED', 'EXTERNAL_OUTCOME_UNKNOWN')
       AND (t.meta_campaign_id IS NOT NULL OR t.meta_adset_id IS NOT NULL OR t.meta_creative_id IS NOT NULL OR t.meta_ad_id IS NOT NULL)
       AND (t.last_reconciled_at IS NULL OR t.last_reconciled_at < CURRENT_TIMESTAMP - INTERVAL '1 minute')
-      ORDER BY t.updated_at DESC LIMIT 20
+      ORDER BY t.last_reconciled_at ASC NULLS FIRST, t.updated_at DESC, t.id ASC LIMIT 20
       FOR UPDATE OF t SKIP LOCKED
     `);
 
@@ -16243,7 +16926,210 @@ export const processMetaReconciliation = async (overridePool?: any, overrideAcce
   }
 };
 // Run every 10 minutes
-setInterval(processMetaReconciliation, 10 * 60 * 1000);
+if (process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
+  setInterval(processMetaReconciliation, 10 * 60 * 1000);
+}
+
+// ==========================================
+// Phase 2.9.3B: Durable Transaction Recovery Worker
+// Eliminates P0 dead-end: PRECHECK_RUNNING / PUBLISHING orphans after process crash
+// ==========================================
+
+// Configurable thresholds (documented, not arbitrary)
+const RECOVERY_LEASE_STALE_THRESHOLD_SECONDS = 300; // 5 minutes — matches dispatchMetaCampaign lease window
+const RECOVERY_LEASE_DURATION_SECONDS = 300;        // 5 minutes — lease duration for recovery worker
+const RECOVERY_MAX_ATTEMPTS = 10;                   // Max recovery attempts before permanent DLQ
+const RECOVERY_POLL_INTERVAL_MS = 2 * 60 * 1000;   // 2 minutes — polling interval
+
+export const recoverOrphanedMetaTransactions = async (overridePool?: any) => {
+  const dbPool = overridePool || pool;
+  if (!dbPool) return;
+
+  const workerId = `recovery_${process.pid}_${Date.now()}`;
+
+  try {
+    // 1. Discover orphaned transactions with lease protection
+    const client = await dbPool.connect();
+    let orphans: any[] = [];
+
+    try {
+      await client.query('BEGIN');
+
+      const orphanRes = await client.query(`
+        SELECT id, campaign_id, publish_status, correlation_id, idempotency_key,
+               meta_campaign_id, meta_adset_id, meta_creative_id, meta_ad_id,
+               publish_attempt, reconciliation_attempt_count, updated_at
+        FROM meta_publishing_transactions
+        WHERE publish_status IN ('PRECHECK_RUNNING', 'PUBLISHING')
+        AND updated_at < CURRENT_TIMESTAMP - INTERVAL '${RECOVERY_LEASE_STALE_THRESHOLD_SECONDS} seconds'
+        AND (reconciliation_lease_expires_at IS NULL OR reconciliation_lease_expires_at <= CURRENT_TIMESTAMP)
+        AND (reconciliation_attempt_count IS NULL OR reconciliation_attempt_count < ${RECOVERY_MAX_ATTEMPTS})
+        ORDER BY updated_at ASC, id ASC
+        LIMIT 10
+        FOR UPDATE SKIP LOCKED
+      `);
+
+      if (orphanRes.rows.length === 0) {
+        await client.query('COMMIT');
+        return;
+      }
+
+      // 2. Claim lease on all discovered orphans
+      for (const orphan of orphanRes.rows) {
+        await client.query(`
+          UPDATE meta_publishing_transactions
+          SET reconciliation_started_at = CURRENT_TIMESTAMP,
+              reconciliation_lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '${RECOVERY_LEASE_DURATION_SECONDS} seconds',
+              reconciliation_attempt_count = COALESCE(reconciliation_attempt_count, 0) + 1,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = $1
+        `, [orphan.id]);
+      }
+
+      await client.query('COMMIT');
+      orphans = orphanRes.rows;
+    } catch (err: any) {
+      await client.query('ROLLBACK');
+      if (err.code === '55P03') {
+        // Another worker holds the lock — expected, not an error
+        return;
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    // 3. Process each orphan OUTSIDE the lease transaction (no long-held locks)
+    for (const orphan of orphans) {
+      const attemptCount = (orphan.reconciliation_attempt_count || 0) + 1;
+
+      console.log(`[RECOVERY WORKER ${workerId}] Processing orphan TX #${orphan.id} (status: ${orphan.publish_status}, campaign: ${orphan.campaign_id}, attempt: ${attemptCount})`);
+
+      try {
+        if (orphan.publish_status === 'PRECHECK_RUNNING') {
+          // PRECHECK_RUNNING: dispatch intent was created but Meta API was never called.
+          // Safe to re-dispatch IF no Meta objects have been created yet.
+
+          const hasMetaObjects = orphan.meta_campaign_id || orphan.meta_adset_id || orphan.meta_creative_id || orphan.meta_ad_id;
+
+          if (hasMetaObjects) {
+            // Meta objects exist despite PRECHECK_RUNNING — should not happen, but be safe.
+            // Transition to EXTERNAL_OUTCOME_UNKNOWN for reconciliation.
+            console.warn(`[RECOVERY WORKER] TX #${orphan.id}: PRECHECK_RUNNING but Meta objects exist. Transitioning to EXTERNAL_OUTCOME_UNKNOWN.`);
+            await dbPool.query(`
+              UPDATE meta_publishing_transactions
+              SET publish_status = 'EXTERNAL_OUTCOME_UNKNOWN', updated_at = CURRENT_TIMESTAMP
+              WHERE id = $1
+            `, [orphan.id]);
+
+            // Log audit event
+            await dbPool.query(`
+              INSERT INTO meta_publishing_events (transaction_id, campaign_id, event_type, from_state, to_state, actor_type, actor_id, reason, correlation_id, metadata)
+              VALUES ($1, $2, 'RECOVERY_TRANSITION', $3, 'EXTERNAL_OUTCOME_UNKNOWN', 'system', $4, $5, $6, $7)
+            `, [
+              orphan.id, orphan.campaign_id, orphan.publish_status, workerId,
+              'PRECHECK_RUNNING with existing Meta objects detected by recovery worker',
+              orphan.correlation_id,
+              JSON.stringify({ attempt: attemptCount, meta_campaign_id: orphan.meta_campaign_id })
+            ]);
+          } else {
+            // No Meta objects exist — safe to re-dispatch
+            console.log(`[RECOVERY WORKER] TX #${orphan.id}: Re-dispatching orphaned PRECHECK_RUNNING campaign #${orphan.campaign_id}`);
+
+            // Log audit event BEFORE dispatch attempt
+            await dbPool.query(`
+              INSERT INTO meta_publishing_events (transaction_id, campaign_id, event_type, from_state, to_state, actor_type, actor_id, reason, correlation_id, metadata)
+              VALUES ($1, $2, 'RECOVERY_DISPATCH', $3, 'PRECHECK_RUNNING', 'system', $4, $5, $6, $7)
+            `, [
+              orphan.id, orphan.campaign_id, orphan.publish_status, workerId,
+              'Recovery worker re-dispatching orphaned PRECHECK_RUNNING transaction',
+              orphan.correlation_id,
+              JSON.stringify({ attempt: attemptCount, idempotency_key: orphan.idempotency_key })
+            ]);
+
+            // Re-dispatch. dispatchMetaCampaign handles its own idempotency:
+            // - INSERT ON CONFLICT DO NOTHING on idempotency_key
+            // - SELECT FOR UPDATE NOWAIT for lease claim
+            // - 5-minute lease expiry check (our recovery only fires after 5 min, so lease is expired)
+            // - correlation_id mismatch detection for re-entry
+            try {
+              await dispatchMetaCampaign(orphan.campaign_id, { protocol: 'https', get: () => 'localhost' } as any);
+            } catch (dispatchErr: any) {
+              console.error(`[RECOVERY WORKER] TX #${orphan.id}: Re-dispatch failed:`, dispatchErr.message);
+              // dispatchMetaCampaign internally handles its own error recording and DLQ.
+              // The recovery worker's job is only to trigger the attempt.
+            }
+          }
+        } else if (orphan.publish_status === 'PUBLISHING') {
+          // PUBLISHING: dispatch execution was underway when the worker crashed.
+          // Meta objects MAY already exist. NOT safe to blindly re-dispatch.
+          // Transition to EXTERNAL_OUTCOME_UNKNOWN for safe reconciliation by processMetaReconciliation.
+
+          console.warn(`[RECOVERY WORKER] TX #${orphan.id}: Stale PUBLISHING state. Transitioning to EXTERNAL_OUTCOME_UNKNOWN for reconciliation.`);
+
+          await dbPool.query(`
+            UPDATE meta_publishing_transactions
+            SET publish_status = 'EXTERNAL_OUTCOME_UNKNOWN', updated_at = CURRENT_TIMESTAMP
+            WHERE id = $1
+          `, [orphan.id]);
+
+          // Transition campaign state if possible
+          if (orphan.campaign_id) {
+            try {
+              await transitionCampaignState({
+                campaignId: Number(orphan.campaign_id),
+                to: 'EXTERNAL_OUTCOME_UNKNOWN',
+                reason: 'Recovery worker detected stale PUBLISHING state — transitioning to EXTERNAL_OUTCOME_UNKNOWN for reconciliation',
+                actorType: 'system'
+              });
+            } catch (fsmErr: any) {
+              // FSM transition may fail if campaign is already in a compatible state — non-fatal
+              console.warn(`[RECOVERY WORKER] TX #${orphan.id}: Campaign FSM transition failed (non-fatal):`, fsmErr.message);
+            }
+          }
+
+          // Log audit event
+          await dbPool.query(`
+            INSERT INTO meta_publishing_events (transaction_id, campaign_id, event_type, from_state, to_state, actor_type, actor_id, reason, correlation_id, metadata)
+            VALUES ($1, $2, 'RECOVERY_TRANSITION', $3, 'EXTERNAL_OUTCOME_UNKNOWN', 'system', $4, $5, $6, $7)
+          `, [
+            orphan.id, orphan.campaign_id, orphan.publish_status, workerId,
+            'Stale PUBLISHING detected by recovery worker — Meta objects may exist, requires reconciliation',
+            orphan.correlation_id,
+            JSON.stringify({
+              attempt: attemptCount,
+              meta_campaign_id: orphan.meta_campaign_id,
+              meta_adset_id: orphan.meta_adset_id,
+              meta_ad_id: orphan.meta_ad_id
+            })
+          ]);
+        }
+      } catch (orphanErr: any) {
+        console.error(`[RECOVERY WORKER] TX #${orphan.id}: Recovery processing failed:`, orphanErr.message);
+
+        // Record recovery failure as audit event
+        await dbPool.query(`
+          INSERT INTO meta_publishing_events (transaction_id, campaign_id, event_type, from_state, to_state, actor_type, actor_id, reason, correlation_id, metadata)
+          VALUES ($1, $2, 'RECOVERY_FAILED', $3, $3, 'system', $4, $5, $6, $7)
+        `, [
+          orphan.id, orphan.campaign_id, orphan.publish_status, workerId,
+          'Recovery worker failed: ' + (orphanErr.message || 'Unknown error'),
+          orphan.correlation_id,
+          JSON.stringify({ attempt: attemptCount, error: orphanErr.message })
+        ]).catch(logErr => console.error('[RECOVERY WORKER] Failed to log recovery failure:', logErr));
+      }
+    }
+
+    console.log(`[RECOVERY WORKER ${workerId}] Cycle complete. Processed ${orphans.length} orphan(s).`);
+  } catch (err) {
+    console.error('[RECOVERY WORKER ERROR]', err);
+  }
+};
+
+// Run every 2 minutes — orphans are only eligible after 5 min (RECOVERY_LEASE_STALE_THRESHOLD_SECONDS)
+if (process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
+  setInterval(recoverOrphanedMetaTransactions, RECOVERY_POLL_INTERVAL_MS);
+}
 
 app.post('/api/marketing/track/view', async (req, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });

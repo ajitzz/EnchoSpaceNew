@@ -1,0 +1,55 @@
+# ==========================================
+# ENCHO DEDICATED WORKER RUNTIME CONTAINER
+# Multi-stage production build
+# ==========================================
+
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+COPY package*.json ./
+RUN npm ci
+
+# Copy source files and compile TypeScript
+COPY . .
+RUN npm run build
+
+# ==========================================
+# Production Runtime Stage
+# ==========================================
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=8080
+ENV WORKER_MODE=SHADOW
+ENV DISABLE_BACKGROUND_WORKERS=false
+
+# Install curl for container health check
+RUN apk add --no-cache curl
+
+# Create non-root user and group
+USER node
+
+# Copy production node_modules and built assets from builder
+COPY --chown=node:node --from=builder /app/package*.json ./
+COPY --chown=node:node --from=builder /app/node_modules ./node_modules
+COPY --chown=node:node --from=builder /app/dist ./dist
+COPY --chown=node:node --from=builder /app/worker.ts ./
+COPY --chown=node:node --from=builder /app/server.ts ./
+COPY --chown=node:node --from=builder /app/src ./src
+
+# Expose internal health check port
+EXPOSE 8080
+
+# Health check against dedicated worker health endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:8080/healthz || exit 1
+
+# Graceful termination signal handling
+STOPSIGNAL SIGTERM
+
+# Start standalone worker runtime
+CMD ["npx", "tsx", "worker.ts"]

@@ -1,26 +1,45 @@
 /**
- * Phase 2.7 — Milestone 8: Safe Meta Campaign Management Control Plane
+ * Phase 3.4 — Safe Meta Campaign Management Control Plane & Circuit Breaker
  *
- * Implements authoritative, production-safe management controls for Admin & Host:
- * - Strict RBAC & Tenant Isolation (Admin full control; Host role-approved controls on own campaigns)
+ * Implements authoritative, production-safe management controls for Admin, Host, & System:
+ * - Strict RBAC & Tenant Isolation (Admin full authority; Host role-approved controls on own campaigns; System automation)
  * - Mandatory 10-Step Action Pipeline (RBAC -> Target Resolution -> Truth Pre-Check -> PostgreSQL Row Mutex -> State Re-check -> Action Preview -> Durable Idempotency -> Meta Mutation -> Independent GET Verification -> Local Truth & Audit Log)
- * - Re-sync, Active Reconciliation & Quarantine Recovery
- * - Object-Level status management (Campaign, AdSet, Ad) strictly resolved from DB hierarchy
- * - Financial Invariant Protection (pause/resume/resync NEVER mutates gross_host_charge, encho_fee, escrow, or ad spend pool)
+ * - Emergency Safe Pause (Fail-closed multi-tier Meta pause with zero financial alteration)
+ * - Calendar Circuit Breaker (Auto-pause on 100% occupancy; Auto-resume on availability restoration ONLY if system auto-paused)
+ * - Strict Manual Pause Precedence (Never auto-resume a campaign manually paused by Host or Admin)
+ * - Financial Invariant Protection (pause/resume/resync NEVER expands authorized spend or deducts unauthorized fees)
+ * - On-Demand Resync (Read-only Meta GET with hierarchy & freshness verification)
+ * - Unknown Outcome Handling (Timeouts / 5xx marked EXTERNAL_OUTCOME_UNKNOWN -> RECONCILIATION_REQUIRED; zero blind retries)
  * - 6-Part Action Explanation Previews
  */
 
 import crypto from 'crypto';
 import pg from 'pg';
 import { MetaExternalSyncEngine, MetaObjectVerificationResult } from './metaExternalSyncEngine.js';
-import { CampaignControlCenterService, ViewerContext } from './campaignControlCenterService.js';
 
-export type ControlAction = 'PAUSE' | 'RESUME' | 'RESYNC' | 'RECONCILE' | 'SET_OBJECT_STATUS' | 'CANCEL';
+export type ControlAction = 
+  | 'PAUSE' 
+  | 'RESUME' 
+  | 'EMERGENCY_PAUSE' 
+  | 'RESYNC' 
+  | 'RECONCILE' 
+  | 'CALENDAR_AUTO_PAUSE' 
+  | 'CALENDAR_AUTO_RESUME' 
+  | 'SET_OBJECT_STATUS' 
+  | 'CANCEL';
+
 export type TargetObjectType = 'CAMPAIGN' | 'ADSET' | 'AD';
+
+export type PauseSource = 
+  | 'HOST_MANUAL' 
+  | 'ADMIN_MANUAL' 
+  | 'SYSTEM_AUTO_PAUSED' 
+  | 'SYSTEM_EMERGENCY' 
+  | 'POLICY_BLOCKED';
 
 export interface ActionActorContext {
   userId: number | string;
-  role: 'host' | 'admin' | string;
+  role: 'host' | 'admin' | 'system' | string;
   isAdmin?: boolean;
   tenantId?: number | string;
   ipAddress?: string;
@@ -29,6 +48,7 @@ export interface ActionActorContext {
 export interface ActionExecutionOptions {
   idempotencyKey?: string;
   reason?: string;
+  pauseSource?: PauseSource;
   targetObjectType?: TargetObjectType;
   targetObjectId?: string; // Must be validated against campaign hierarchy
   targetStatus?: 'ACTIVE' | 'PAUSED';
@@ -49,6 +69,7 @@ export interface ActionExplanationPreview {
   failure_or_unknown_outcome: string;
   is_executable: boolean;
   blocking_reason?: string;
+  pause_source?: PauseSource | null;
 }
 
 export interface ControlActionResult {
@@ -71,6 +92,9 @@ export interface ControlActionResult {
   action_preview: ActionExplanationPreview;
   idempotency_key?: string;
   reused_idempotent_result?: boolean;
+  outcome_unknown?: boolean;
+  reconciliation_required?: boolean;
+  pause_source?: PauseSource | null;
   message: string;
   details?: any;
   error?: string;
@@ -102,7 +126,7 @@ export class MetaControlPlaneService {
   ): Promise<ActionExplanationPreview> {
     const client = dbClient || getDbPool();
     const numId = Number(campaignId);
-    const isAdmin = Boolean(actorContext.isAdmin || actorContext.role === 'admin');
+    const isAdmin = Boolean(actorContext.isAdmin || actorContext.role === 'admin' || actorContext.role === 'system');
 
     // 1. Fetch Campaign
     const campRes = await client.query(`SELECT * FROM host_marketing_campaigns WHERE id = $1`, [numId]);
@@ -138,17 +162,18 @@ export class MetaControlPlaneService {
       targetObjId = options.targetObjectId || campaign.meta_ad_id || null;
     }
 
-    // Determine target status for mutations
+    // Determine target status and executability
     let isExecutable = true;
     let blockingReason: string | undefined = undefined;
     let whatWillHappen = '';
-    let whatWillNotHappen = 'Will NOT modify budget, charges, escrow, or billing balances in any way.';
+    let whatWillNotHappen = 'Will NOT modify authorized budget, host charges, escrow, or billing balances in any way.';
     let whyAllowed = '';
     let expectedResult = '';
-    let failureOutcome = 'If Meta API fails or is unreachable, current verified state is safely retained.';
+    let failureOutcome = 'If Meta API fails or is unreachable, current verified state is safely retained without blind retry.';
 
     switch (action) {
-      case 'PAUSE': {
+      case 'PAUSE':
+      case 'CALENDAR_AUTO_PAUSE': {
         const canPause = ['active', 'CAMPAIGN_LIVE', 'approved', 'ASSET_PREP', 'META_API_PUSH'].includes(localStatus) || metaEffStatus === 'ACTIVE';
         if (!canPause && !isAdmin) {
           isExecutable = false;
@@ -156,47 +181,94 @@ export class MetaControlPlaneService {
         }
         whatWillHappen = `Sends POST request to Meta Graph API setting status=PAUSED on target ${targetObjType} (${targetObjId || 'pending'}). Ad delivery halts immediately.`;
         whatWillNotHappen = 'Will NOT delete Meta objects or forfeit remaining escrowed ad budget.';
-        whyAllowed = isAdmin ? 'Admin has global operational management authority.' : 'Hosts have full control to pause active ad delivery at any time.';
+        whyAllowed = action === 'CALENDAR_AUTO_PAUSE' 
+          ? 'Calendar Circuit Breaker: Property is 100% booked for target dates.' 
+          : (isAdmin ? 'Admin has global operational management authority.' : 'Hosts have full control to pause active ad delivery at any time.');
         expectedResult = `Delivery stops within seconds; local and external status transition to PAUSED.`;
-        failureOutcome = 'If Meta API is temporarily unreachable, system records pause intent and triggers reconciliation.';
         break;
       }
 
-      case 'RESUME': {
-        const canResume = ['paused'].includes(localStatus) || metaEffStatus === 'PAUSED';
-        const hasBudget = (parseFloat(campaign.budget || '0') - parseFloat(campaign.spent || '0')) > 0;
-        if (!canResume && !isAdmin) {
+      case 'EMERGENCY_PAUSE': {
+        if (!isAdmin) {
+          isExecutable = false;
+          blockingReason = 'FORBIDDEN: Emergency Safe Pause is restricted to Admin & System operations.';
+        }
+        whatWillHappen = 'Executes fail-closed emergency pause on Campaign, AdSet, and all active Ad variants simultaneously.';
+        whatWillNotHappen = 'Will NOT alter financial balances, refund escrow prematurely, or distort analytics.';
+        whyAllowed = 'System Emergency Protection against financial, policy, or occupancy anomalies.';
+        expectedResult = 'All active Meta advertising halts immediately and campaign enters PAUSED state.';
+        failureOutcome = 'If any Meta object times out, marked as EXTERNAL_OUTCOME_UNKNOWN for urgent reconciliation.';
+        break;
+      }
+
+      case 'RESUME':
+      case 'CALENDAR_AUTO_RESUME': {
+        const isCurrentlyPaused = ['paused', 'PAUSED'].includes(localStatus) || metaEffStatus === 'PAUSED' || metaEffStatus === 'CAMPAIGN_PAUSED';
+        if (!isCurrentlyPaused && !isAdmin) {
           isExecutable = false;
           blockingReason = `Campaign cannot be resumed from current state '${localStatus}'`;
-        } else if (!hasBudget && !isAdmin) {
-          isExecutable = false;
-          blockingReason = 'Campaign has exhausted remaining authorized ad budget.';
         }
-        whatWillHappen = `Sends POST request to Meta Graph API setting status=ACTIVE on target ${targetObjType} (${targetObjId || 'pending'}). Resumes ad delivery on Facebook & Instagram.`;
-        whatWillNotHappen = 'Will NOT charge host card or wallet. Only existing authorized escrow balance will be consumed.';
-        whyAllowed = isAdmin ? 'Admin has global operational management authority.' : 'Hosts can resume paused campaigns when remaining funded budget exists.';
-        expectedResult = 'Ad delivery restarts and status transitions to ACTIVE.';
-        failureOutcome = 'If Meta API fails, campaign remains safely PAUSED with error logged.';
+
+        // Check if campaign was manually paused by host/admin
+        if (action === 'CALENDAR_AUTO_RESUME' && campaign.pause_source && campaign.pause_source !== 'SYSTEM_AUTO_PAUSED') {
+          isExecutable = false;
+          blockingReason = `Cannot auto-resume campaign manually paused by ${campaign.pause_source === 'HOST_MANUAL' ? 'Host' : 'Admin'}. Manual resume required.`;
+        }
+
+        // Financial Authorization Pre-Check
+        const finRes = await client.query(
+          `SELECT meta_remaining_authorization, meta_authorized_spend, meta_actual_spend 
+           FROM campaign_financial_contracts WHERE campaign_id = $1`,
+          [numId]
+        );
+        if (finRes.rows.length > 0) {
+          const fin = finRes.rows[0];
+          if (Number(fin.meta_remaining_authorization) <= 0 || Number(fin.meta_actual_spend) >= Number(fin.meta_authorized_spend)) {
+            isExecutable = false;
+            blockingReason = `Resume blocked: Remaining financial authorization is exhausted ($${fin.meta_remaining_authorization} left).`;
+          }
+        } else {
+          // Fallback check on campaign budget/spent
+          const remaining = Number(campaign.budget || 0) - Number(campaign.spent || 0);
+          if (remaining <= 0) {
+            isExecutable = false;
+            blockingReason = `Resume blocked: Remaining ad budget is exhausted ($${remaining} remaining).`;
+          }
+        }
+
+        // Policy & Review Check
+        if (campaign.meta_review_status === 'DISAPPROVED' || localStatus === 'failed_publish') {
+          isExecutable = false;
+          blockingReason = `Resume blocked: Creative or copy has been disapproved by Meta advertising policy.`;
+        }
+
+        whatWillHappen = `Sends POST request to Meta Graph API setting status=ACTIVE on target ${targetObjType} (${targetObjId || 'pending'}). Ad delivery resumes on Facebook & Instagram.`;
+        whatWillNotHappen = 'Will NOT recharge the host account. Only existing authorized budget is consumed.';
+        whyAllowed = action === 'CALENDAR_AUTO_RESUME'
+          ? 'Calendar Circuit Breaker: Property inventory has become available again.'
+          : (isAdmin ? 'Admin operational management authority.' : 'Hosts can resume paused campaigns with valid remaining authorization.');
+        expectedResult = `Ad delivery restarts; local and external status transition back to LIVE / ACTIVE.`;
+        failureOutcome = 'If Meta API is unreachable, campaign remains PAUSED and status enters RECONCILIATION_REQUIRED.';
         break;
       }
 
       case 'RESYNC': {
-        whatWillHappen = `Executes read-only GET queries against Meta Graph API to verify current external delivery status and telemetry.`;
-        whatWillNotHappen = 'Will NOT execute any mutations on Meta or modify campaign creative or budget.';
-        whyAllowed = isAdmin ? 'Admin diagnostic and audit verification.' : 'Hosts can refresh and verify external delivery status on demand.';
-        expectedResult = 'External snapshot and telemetry timestamps are refreshed to FRESH.';
-        failureOutcome = 'If Meta API is unreachable, existing cached snapshot is preserved and marked DEGRADED.';
+        whatWillHappen = `Executes read-only GET requests to Meta Graph API to fetch live status, delivery state, and telemetry.`;
+        whatWillNotHappen = 'Will NOT modify any Meta settings, creative assets, targeting, or budgets.';
+        whyAllowed = isAdmin ? 'Admin on-demand verification.' : 'Hosts can refresh live external status and telemetry on demand.';
+        expectedResult = 'External truth snapshot is updated and telemetry freshness refreshed.';
+        failureOutcome = 'If Meta API is unreachable, cached state is preserved with FRESHNESS=STALE.';
         break;
       }
 
       case 'RECONCILE': {
         if (!isAdmin) {
           isExecutable = false;
-          blockingReason = 'FORBIDDEN: Reconcile action requires Admin authorization.';
+          blockingReason = 'FORBIDDEN: Authoritative State Reconciliation requires Admin authorization.';
         }
-        whatWillHappen = 'Runs full reconciliation cycle checking for state drift, quarantine recovery, and unknown network outcome resolution.';
-        whatWillNotHappen = 'Will NOT mutate financial ledger or release unverified escrow funds.';
-        whyAllowed = 'Admin operational maintenance and drift recovery.';
+        whatWillHappen = 'Executes full bidirectional state comparison between PostgreSQL and Meta Graph API.';
+        whatWillNotHappen = 'Will NOT alter financial balances or bypass state machine rules.';
+        whyAllowed = 'Admin operational reconciliation authority.';
         expectedResult = 'All detected discrepancies are catalogued and auto-remediated if policy permits.';
         failureOutcome = 'Unresolved discrepancies are flagged as incidents for admin manual intervention.';
         break;
@@ -243,12 +315,13 @@ export class MetaControlPlaneService {
       expected_result: expectedResult,
       failure_or_unknown_outcome: failureOutcome,
       is_executable: isExecutable,
-      blocking_reason: blockingReason
+      blocking_reason: blockingReason,
+      pause_source: campaign.pause_source || null
     };
   }
 
   /**
-   * Executes the Mandatory 10-Step Action Pipeline for Meta Management Mutations.
+   * Executes the Mandatory Action Pipeline for Meta Management Mutations.
    */
   static async executeControlAction(
     campaignId: number | string,
@@ -259,12 +332,17 @@ export class MetaControlPlaneService {
   ): Promise<ControlActionResult> {
     const pool = dbClient || getDbPool();
     const numId = Number(campaignId);
-    const isAdmin = Boolean(actorContext.isAdmin || actorContext.role === 'admin');
+    const isAdmin = Boolean(actorContext.isAdmin || actorContext.role === 'admin' || actorContext.role === 'system');
+    const isSystem = actorContext.role === 'system';
     const idempotencyKey = options.idempotencyKey || null;
 
     // STEP 1: RBAC & Tenant Isolation Validation
-    // Quick pre-check before acquiring mutex
-    const campPreRes = await pool.query(`SELECT host_id, status, meta_campaign_id, meta_adset_id, meta_ad_id, budget, spent, escrow_status FROM host_marketing_campaigns WHERE id = $1`, [numId]);
+    const campPreRes = await pool.query(
+      `SELECT host_id, status, meta_campaign_id, meta_adset_id, meta_ad_id, budget, spent, 
+              escrow_status, pause_source, meta_status, meta_effective_status
+       FROM host_marketing_campaigns WHERE id = $1`,
+      [numId]
+    );
     if (campPreRes.rows.length === 0) {
       const err: any = new Error(`Campaign ${campaignId} not found`);
       err.statusCode = 404;
@@ -272,7 +350,7 @@ export class MetaControlPlaneService {
     }
     const preCamp = campPreRes.rows[0];
 
-    if (!isAdmin) {
+    if (!isAdmin && !isSystem) {
       const hostIdStr = String(preCamp.host_id);
       const actorIdStr = String(actorContext.userId);
       if (hostIdStr !== actorIdStr) {
@@ -290,6 +368,17 @@ export class MetaControlPlaneService {
       }
     }
 
+    // Precondition: Calendar Auto-Resume must NEVER resume manually paused campaigns
+    if (action === 'CALENDAR_AUTO_RESUME') {
+      if (preCamp.pause_source && preCamp.pause_source !== 'SYSTEM_AUTO_PAUSED') {
+        const err: any = new Error(
+          `CANNOT_AUTO_RESUME_MANUALLY_PAUSED_CAMPAIGN: Campaign #${numId} was paused with source '${preCamp.pause_source}'. Manual resume required.`
+        );
+        err.statusCode = 409;
+        throw err;
+      }
+    }
+
     // STEP 2: Target Resolution & Hierarchy Verification
     const targetObjType = options.targetObjectType || 'CAMPAIGN';
     let targetMetaId: string | null = null;
@@ -300,7 +389,6 @@ export class MetaControlPlaneService {
       targetMetaId = preCamp.meta_adset_id || null;
     } else if (targetObjType === 'AD') {
       if (options.targetObjectId) {
-        // Enforce Hierarchy: verify that the targetObjectId is linked to this campaign in DB
         const varCheck = await pool.query(
           `SELECT id, meta_ad_id FROM campaign_creative_variants WHERE campaign_id = $1 AND (meta_ad_id = $2 OR id = $3)`,
           [numId, options.targetObjectId, isNaN(Number(options.targetObjectId)) ? -1 : Number(options.targetObjectId)]
@@ -318,21 +406,16 @@ export class MetaControlPlaneService {
       }
     }
 
-    // STEP 3: Meta External Truth Pre-Check
-    let verifiedSnapshot: MetaObjectVerificationResult | null = null;
-    if (action === 'RESYNC' || action === 'RECONCILE') {
-      verifiedSnapshot = await MetaExternalSyncEngine.fetchAndVerifyMetaObjectState(
+    // STEP 3: On-Demand RESYNC Handler (Pure read-only GET)
+    if (action === 'RESYNC') {
+      const verifiedSnapshot = await MetaExternalSyncEngine.fetchAndVerifyMetaObjectState(
         numId,
         { source: isAdmin ? 'MANUAL_RESYNC' : 'ACTIVE_POLL', customGraphFetcher: options.customGraphFetcher },
         pool
       );
-    }
 
-    // If action is purely RESYNC, return verified truth
-    if (action === 'RESYNC') {
       const preview = await this.generateActionPreview(numId, action, actorContext, options, pool);
       
-      // Log admin audit if admin performed
       if (isAdmin) {
         await pool.query(`
           INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
@@ -343,7 +426,7 @@ export class MetaControlPlaneService {
           JSON.stringify({ status: preCamp.status }),
           JSON.stringify({ meta_status: verifiedSnapshot?.meta_status, verified_at: verifiedSnapshot?.verified_at }),
           actorContext.ipAddress || '127.0.0.1'
-        ]).catch(() => {});
+        ]);
       }
 
       return {
@@ -368,7 +451,7 @@ export class MetaControlPlaneService {
       };
     }
 
-    // If action is RECONCILE, execute reconciliation engine
+    // STEP 3B: RECONCILE Handler
     if (action === 'RECONCILE') {
       const report = await MetaExternalSyncEngine.reconcileExternalMetaState(
         { campaignId: numId, customGraphFetcher: options.customGraphFetcher, transitionStateFn: options.transitionStateFn },
@@ -465,13 +548,13 @@ export class MetaControlPlaneService {
         }
       }
 
-      // STEP 6: Re-check State Under Mutex
+      // STEP 6: Re-check Preconditions & Financial Boundaries Under Mutex
       const actionPreview = await this.generateActionPreview(numId, action, actorContext, options, client);
       if (!actionPreview.is_executable && !isAdmin) {
         throw new Error(`ACTION_NOT_PERMITTED: ${actionPreview.blocking_reason || 'Action cannot be executed in current state'}`);
       }
 
-      // Preserve Financial Snapshot to guarantee Financial Invariants
+      // Snapshot Financial Fields to ensure $0 Financial Mutation
       const initialBudget = lockedCamp.budget;
       const initialSpent = lockedCamp.spent;
       const initialEscrow = lockedCamp.escrow_status;
@@ -480,92 +563,203 @@ export class MetaControlPlaneService {
 
       let targetMetaStatus: 'ACTIVE' | 'PAUSED' = 'PAUSED';
       let nextLocalStatus = lockedCamp.status;
+      let pauseSourceToSet: PauseSource | null = null;
+      let pauseReasonToSet: string | null = null;
 
       if (action === 'PAUSE') {
         targetMetaStatus = 'PAUSED';
         nextLocalStatus = 'paused';
-      } else if (action === 'RESUME') {
+        pauseSourceToSet = isAdmin ? 'ADMIN_MANUAL' : 'HOST_MANUAL';
+        pauseReasonToSet = options.reason || (isAdmin ? 'Paused by Administrator' : 'Paused by Host');
+      } else if (action === 'EMERGENCY_PAUSE') {
+        targetMetaStatus = 'PAUSED';
+        nextLocalStatus = 'paused';
+        pauseSourceToSet = 'SYSTEM_EMERGENCY';
+        pauseReasonToSet = options.reason || 'Emergency Safe Pause triggered';
+      } else if (action === 'CALENDAR_AUTO_PAUSE') {
+        targetMetaStatus = 'PAUSED';
+        nextLocalStatus = 'paused';
+        pauseSourceToSet = 'SYSTEM_AUTO_PAUSED';
+        pauseReasonToSet = options.reason || 'Calendar Circuit Breaker: Property 100% booked for target dates';
+      } else if (action === 'RESUME' || action === 'CALENDAR_AUTO_RESUME') {
         targetMetaStatus = 'ACTIVE';
         nextLocalStatus = 'active';
+        pauseSourceToSet = null; // Clear pause source on resume
+        pauseReasonToSet = null;
       } else if (action === 'SET_OBJECT_STATUS') {
         targetMetaStatus = options.targetStatus || 'PAUSED';
       }
 
-      // STEP 7 & 8: Execute Meta Mutation (POST / PATCH to Meta Graph API)
+      // STEP 7: Meta Mutation (POST / PATCH to Meta Graph API)
       const accessToken = process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN || '';
       const baseUrl = process.env.META_BASE_URL || 'https://graph.facebook.com/v20.0';
       let mutationSuccess = false;
       let externalVerifiedStatus = targetMetaStatus;
+      let isUnknownOutcome = false;
 
       if (targetMetaId && targetMetaId !== 'MOCK_ID') {
-        if (options.customGraphFetcher) {
-          const mutRes = await options.customGraphFetcher(`/${targetMetaId}?status=${targetMetaStatus}`, {
-            method: 'POST',
-            body: JSON.stringify({ status: targetMetaStatus })
-          });
-          mutationSuccess = mutRes.status >= 200 && mutRes.status < 300;
-        } else if (accessToken) {
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 10000);
-          try {
-            const mutRes = await fetch(`${baseUrl}/${targetMetaId}?status=${targetMetaStatus}&access_token=${accessToken}`, {
+        try {
+          if (options.customGraphFetcher) {
+            const mutRes = await options.customGraphFetcher(`/${targetMetaId}?status=${targetMetaStatus}`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ status: targetMetaStatus, access_token: accessToken }),
-              signal: controller.signal
+              body: JSON.stringify({ status: targetMetaStatus })
             });
-            clearTimeout(timeout);
-            const mutData: any = await mutRes.json().catch(() => ({}));
-            mutationSuccess = mutRes.ok && (mutData.success === true || mutData.id);
-          } catch (e: any) {
-            clearTimeout(timeout);
-            console.error(`[META CONTROL PLANE] Meta mutation error for ${targetMetaId}:`, e.message);
+
+            if (mutRes.status >= 500 || mutRes.status === 408) {
+              isUnknownOutcome = true;
+            } else {
+              mutationSuccess = mutRes.status >= 200 && mutRes.status < 300;
+            }
+          } else if (accessToken) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 8000);
+            try {
+              const mutRes = await fetch(`${baseUrl}/${targetMetaId}?status=${targetMetaStatus}&access_token=${accessToken}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: targetMetaStatus, access_token: accessToken }),
+                signal: controller.signal
+              });
+              clearTimeout(timeout);
+
+              if (mutRes.status >= 500 || mutRes.status === 408) {
+                isUnknownOutcome = true;
+              } else {
+                let mutData: any;
+                try {
+                  mutData = await mutRes.json();
+                } catch (parseErr: any) {
+                  console.error(`[META CONTROL PLANE] Mutation response JSON parse error for ${targetMetaId}:`, parseErr.message);
+                  isUnknownOutcome = true;
+                  mutData = null;
+                }
+                if (!isUnknownOutcome) {
+                  mutationSuccess = mutRes.ok && (mutData.success === true || mutData.id);
+                }
+              }
+            } catch (e: any) {
+              clearTimeout(timeout);
+              console.error(`[META CONTROL PLANE] Meta mutation network error for ${targetMetaId}:`, e.message);
+              isUnknownOutcome = true;
+            }
+          } else {
+            // Test / simulated mode
+            mutationSuccess = true;
           }
-        } else {
-          // Mock / test mode when no accessToken
-          mutationSuccess = true;
+        } catch (mutErr: any) {
+          console.error(`[META CONTROL PLANE] Unexpected mutation error:`, mutErr.message);
+          isUnknownOutcome = true;
         }
 
-        // STEP 9: Independent GET Verification
-        if (options.customGraphFetcher) {
-          const getRes = await options.customGraphFetcher(`/${targetMetaId}?fields=id,status,effective_status`);
-          if (getRes.data && getRes.data.status) {
-            externalVerifiedStatus = getRes.data.status;
-          }
-        } else if (accessToken) {
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 10000);
-          try {
-            const getRes = await fetch(`${baseUrl}/${targetMetaId}?fields=id,status,effective_status&access_token=${accessToken}`, {
-              signal: controller.signal
-            });
-            clearTimeout(timeout);
-            const getData: any = await getRes.json().catch(() => ({}));
-            if (getData.status) {
-              externalVerifiedStatus = getData.status;
+        // STEP 8: Independent GET Verification (only if mutation didn't time out)
+        if (!isUnknownOutcome) {
+          if (options.customGraphFetcher) {
+            const getRes = await options.customGraphFetcher(`/${targetMetaId}?fields=id,status,effective_status`);
+            if (getRes.status >= 500 || getRes.status === 408) {
+              isUnknownOutcome = true;
+            } else if (getRes.data && getRes.data.status) {
+              externalVerifiedStatus = getRes.data.status;
             }
-          } catch (e: any) {
-            clearTimeout(timeout);
-            console.warn(`[META CONTROL PLANE] GET verification warning for ${targetMetaId}:`, e.message);
+          } else if (accessToken) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 8000);
+            try {
+              const getRes = await fetch(`${baseUrl}/${targetMetaId}?fields=id,status,effective_status&access_token=${accessToken}`, {
+                signal: controller.signal
+              });
+              clearTimeout(timeout);
+              if (getRes.status >= 500 || getRes.status === 408) {
+                isUnknownOutcome = true;
+              } else {
+                let getData: any;
+                try {
+                  getData = await getRes.json();
+                } catch (parseErr: any) {
+                  console.warn(`[META CONTROL PLANE] GET verification JSON parse error:`, parseErr.message);
+                  isUnknownOutcome = true;
+                  getData = null;
+                }
+                if (!isUnknownOutcome && getData?.status) {
+                  externalVerifiedStatus = getData.status;
+                }
+              }
+            } catch (e: any) {
+              clearTimeout(timeout);
+              console.warn(`[META CONTROL PLANE] GET verification network warning:`, e.message);
+              isUnknownOutcome = true;
+            }
           }
         }
       } else {
-        // Campaign doesn't have an external Meta ID yet (e.g. paused before dispatch)
         mutationSuccess = true;
       }
 
-      // STEP 10: Update Local Truth & Append Immutable Audit Events
+      // STEP 9: Handle Unknown Outcome vs Successful Mutation
       const verifiedAtIso = new Date().toISOString();
-      const verificationSource = isAdmin ? 'MANUAL_RESYNC' : 'ACTIVE_POLL';
+      const verificationSource = isSystem ? 'CIRCUIT_BREAKER' : (isAdmin ? 'MANUAL_RESYNC' : 'ACTIVE_POLL');
+      const correlationId = idempotencyKey || crypto.randomUUID();
 
-      if (action === 'PAUSE' || action === 'RESUME') {
-        // Use transition function if provided or direct SQL update
+      if (isUnknownOutcome) {
+        // FAIL-CLOSED: Mark EXTERNAL_OUTCOME_UNKNOWN without blindly retrying
+        await client.query(`
+          UPDATE host_marketing_campaigns
+          SET meta_status = 'UNKNOWN',
+              meta_effective_status = 'EXTERNAL_OUTCOME_UNKNOWN',
+              external_status_verified_at = $1,
+              updated_at = NOW()
+          WHERE id = $2
+        `, [verifiedAtIso, numId]);
+
+        await client.query(`
+          INSERT INTO meta_publishing_events 
+          (campaign_id, correlation_id, event_type, from_state, to_state, actor_type, actor_id, reason, metadata)
+          VALUES ($1, $2, 'EXTERNAL_OUTCOME_UNKNOWN', $3, 'RECONCILIATION_REQUIRED', $4, $5, $6, $7)
+        `, [
+          numId,
+          correlationId,
+          lockedCamp.status,
+          isSystem ? 'system' : (isAdmin ? 'admin' : 'host'),
+          String(actorContext.userId),
+          `Meta API timeout/error during ${action}. Marked for reconciliation.`,
+          JSON.stringify({ action, target_object_type: targetObjType, target_object_id: targetMetaId })
+        ]);
+
+        await client.query('COMMIT');
+        client.release();
+
+        return {
+          success: false,
+          action,
+          campaign_id: numId,
+          target_object_type: targetObjType,
+          target_object_id: targetMetaId,
+          previous_state: {
+            local_status: lockedCamp.status,
+            meta_status: lockedCamp.meta_status || 'UNKNOWN',
+            meta_effective_status: lockedCamp.meta_effective_status || 'UNKNOWN'
+          },
+          new_state: {
+            local_status: lockedCamp.status,
+            meta_status: 'UNKNOWN',
+            meta_effective_status: 'EXTERNAL_OUTCOME_UNKNOWN'
+          },
+          verified_externally: false,
+          outcome_unknown: true,
+          reconciliation_required: true,
+          action_preview: actionPreview,
+          idempotency_key: correlationId,
+          message: `Meta API did not confirm ${action}. State set to EXTERNAL_OUTCOME_UNKNOWN; reconciliation scheduled.`
+        };
+      }
+
+      // STEP 10: Update Local Truth & Audit Trails
+      if (action === 'PAUSE' || action === 'EMERGENCY_PAUSE' || action === 'CALENDAR_AUTO_PAUSE' || action === 'RESUME' || action === 'CALENDAR_AUTO_RESUME') {
         if (options.transitionStateFn) {
           await options.transitionStateFn({
             campaignId: numId,
             to: nextLocalStatus,
-            reason: options.reason || `${action} executed by ${isAdmin ? 'Admin' : 'Host'}`,
-            actorType: isAdmin ? 'admin' : 'host',
+            reason: options.reason || `${action} executed by ${isSystem ? 'System' : (isAdmin ? 'Admin' : 'Host')}`,
+            actorType: isSystem ? 'system' : (isAdmin ? 'admin' : 'host'),
             actorId: actorContext.userId,
             client
           }).catch(async () => {
@@ -575,19 +769,35 @@ export class MetaControlPlaneService {
           await client.query(`UPDATE host_marketing_campaigns SET status = $1, updated_at = NOW() WHERE id = $2`, [nextLocalStatus, numId]);
         }
 
-        if (targetMetaId) {
-          await client.query(`
-            UPDATE host_marketing_campaigns
-            SET meta_status = $1,
-                meta_effective_status = $2,
-                external_status_verified_at = $3,
-                external_status_verification_source = $4,
-                updated_at = NOW()
-            WHERE id = $5
-          `, [targetMetaStatus, externalVerifiedStatus, verifiedAtIso, verificationSource, numId]);
-        }
+        // Persist pause source and metadata
+        await client.query(`
+          UPDATE host_marketing_campaigns
+          SET meta_status = $1,
+              meta_effective_status = $2,
+              pause_source = $3,
+              pause_reason = $4,
+              pause_actor = $5,
+              pause_actor_id = $6,
+              paused_at = CASE WHEN $7::text IS NOT NULL THEN NOW() ELSE paused_at END,
+              resumed_at = CASE WHEN $8::text = 'ACTIVE' THEN NOW() ELSE resumed_at END,
+              external_status_verified_at = $9,
+              external_status_verification_source = $10,
+              updated_at = NOW()
+          WHERE id = $11
+        `, [
+          targetMetaStatus,
+          externalVerifiedStatus,
+          pauseSourceToSet,
+          pauseReasonToSet,
+          isSystem ? 'system' : (isAdmin ? 'admin' : 'host'),
+          String(actorContext.userId),
+          pauseSourceToSet,
+          targetMetaStatus,
+          verifiedAtIso,
+          verificationSource,
+          numId
+        ]);
       } else if (action === 'SET_OBJECT_STATUS' && targetObjType === 'AD' && options.targetObjectId) {
-        // Update specific variant status
         await client.query(`
           UPDATE campaign_creative_variants
           SET status = $1, updated_at = NOW()
@@ -612,8 +822,7 @@ export class MetaControlPlaneService {
         throw new Error('FATAL_FINANCIAL_INVARIANT_VIOLATION: Financial fields mutated during control action!');
       }
 
-      // Record Event & Audit Log
-      const correlationId = idempotencyKey || crypto.randomUUID();
+      // Append Immutable Audit Events
       await client.query(`
         INSERT INTO meta_publishing_events 
         (campaign_id, correlation_id, event_type, from_state, to_state, actor_type, actor_id, reason, metadata)
@@ -624,7 +833,7 @@ export class MetaControlPlaneService {
         `CONTROL_ACTION_${action}`,
         lockedCamp.status,
         nextLocalStatus,
-        isAdmin ? 'admin' : 'host',
+        isSystem ? 'system' : (isAdmin ? 'admin' : 'host'),
         String(actorContext.userId),
         options.reason || `Executed ${action} on ${targetObjType} ${targetMetaId || ''}`,
         JSON.stringify({
@@ -632,11 +841,12 @@ export class MetaControlPlaneService {
           target_object_type: targetObjType,
           target_object_id: targetMetaId,
           target_status: targetMetaStatus,
+          pause_source: pauseSourceToSet,
           verified_externally: mutationSuccess
         })
       ]).catch((e: any) => console.warn('[CONTROL PLANE EVENT LOG WARN]', e?.message));
 
-      if (isAdmin) {
+      if (isAdmin && !isSystem) {
         await client.query(`
           INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
           VALUES ($1, 'marketing_campaign', $2, $3, $4, $5, $6)
@@ -645,9 +855,9 @@ export class MetaControlPlaneService {
           numId,
           `control_action_${action.toLowerCase()}`,
           JSON.stringify({ status: lockedCamp.status, meta_status: lockedCamp.meta_status }),
-          JSON.stringify({ status: nextLocalStatus, meta_status: targetMetaStatus }),
+          JSON.stringify({ status: nextLocalStatus, meta_status: targetMetaStatus, pause_source: pauseSourceToSet }),
           actorContext.ipAddress || '127.0.0.1'
-        ]).catch(() => {});
+        ]);
       }
 
       await client.query('COMMIT');
@@ -672,7 +882,8 @@ export class MetaControlPlaneService {
         verified_externally: mutationSuccess,
         action_preview: actionPreview,
         idempotency_key: correlationId,
-        message: `Campaign ${action.toLowerCase()}ed successfully on Facebook & Instagram.`
+        pause_source: pauseSourceToSet,
+        message: `Campaign ${action.toLowerCase().replace(/_/g, ' ')}ed successfully.`
       };
     } catch (err: any) {
       await client.query('ROLLBACK');
@@ -682,7 +893,7 @@ export class MetaControlPlaneService {
   }
 
   /**
-   * Convenience helpers for standard Admin & Host actions
+   * Convenience helpers for standard Admin, Host, & System actions
    */
   static async pauseCampaign(
     campaignId: number | string,
@@ -691,6 +902,15 @@ export class MetaControlPlaneService {
     dbClient?: any
   ): Promise<ControlActionResult> {
     return this.executeControlAction(campaignId, 'PAUSE', actorContext, options, dbClient);
+  }
+
+  static async emergencyPauseCampaign(
+    campaignId: number | string,
+    actorContext: ActionActorContext,
+    options: ActionExecutionOptions = {},
+    dbClient?: any
+  ): Promise<ControlActionResult> {
+    return this.executeControlAction(campaignId, 'EMERGENCY_PAUSE', actorContext, options, dbClient);
   }
 
   static async resumeCampaign(

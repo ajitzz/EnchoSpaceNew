@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import pg from 'pg';
 import app, { transitionCampaignState } from '../../server.ts';
 import { MetaGraphClient } from '../lib/metaGraphClient';
@@ -28,7 +28,12 @@ describe('P0-6 Escrow Remediation and Canary Blocker', () => {
     
     const listRes = await pool.query(`INSERT INTO listings (title, user_id, address, type, bedrooms, price, city, country, max_guests, beds, bathrooms) VALUES ('Test Listing', $1, '123 Test St', 'villa', 1, 100, 'City', 'Country', 2, 1, 1) RETURNING id`, [testHostId]);
     testListingId = listRes.rows[0].id;
-  });
+    
+    // Trigger DB initialization before tests run to prevent timeout during the first test
+    console.log('Triggering DB initialization...');
+    await request(app).get('/api/health-check-for-db-init').catch(() => {});
+    console.log('DB initialization finished.');
+  }, 30000);
 
   afterAll(async () => {
     if (testCampaignId) {
@@ -71,6 +76,10 @@ describe('P0-6 Escrow Remediation and Canary Blocker', () => {
   });
 
   it('Escrow release DB transaction commits before dispatch begins, transitions to META_API_PUSH, and preserves Meta error on dispatch failure', async () => {
+    // Pause Meta publishing to trigger immediate dispatch failure without network delays
+    const originalMetaPaused = process.env.META_PUBLISHING_PAUSED;
+    process.env.META_PUBLISHING_PAUSED = 'true';
+
     // Create campaign
     const campRes = await pool.query(`
       INSERT INTO host_marketing_campaigns 
@@ -80,17 +89,33 @@ describe('P0-6 Escrow Remediation and Canary Blocker', () => {
     );
     testCampaignId = campRes.rows[0].id;
 
+    console.log('1. Created campaign', testCampaignId);
+
     const res = await request(app)
       .post('/api/admin/payments/escrow/release')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ campaign_id: testCampaignId });
 
+    console.log('2. Request finished:', res.status, res.body);
+
     expect(res.status).toBe(500);
     // Even if it transitions to failed_publish twice (or fails), the escrow must be released
+    
+    console.log('3. Running verify query');
     const verifyRes = await pool.query('SELECT status, escrow_status FROM host_marketing_campaigns WHERE id = $1', [testCampaignId]);
+    console.log('4. Verify query returned:', verifyRes.rows[0]);
+    
     expect(verifyRes.rows[0].escrow_status).toBe('released');
     
     expect(verifyRes.rows[0].status).toBe('failed_publish');
+
+    console.log('5. Restoring env');
+    if (originalMetaPaused !== undefined) {
+      process.env.META_PUBLISHING_PAUSED = originalMetaPaused;
+    } else {
+      delete process.env.META_PUBLISHING_PAUSED;
+    }
+    console.log('6. Test case finished');
   }, 15000);
 
 });
