@@ -1,6 +1,6 @@
 import * as crypto from 'crypto';
-import { maskContactInfo } from '../../server';
-import { encryptPII, decryptPII } from './cryptoUtils';
+import { maskContactInfo } from './maskUtils.js';
+import { encryptPII, decryptPII } from './cryptoUtils.js';
 
 export type LeadState = 
   | 'NEW'
