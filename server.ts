@@ -342,14 +342,10 @@ const poolConfig: any = {
 };
 
 if (isDbConfigured) {
-  if (dbUrl.includes('neon.tech')) {
-    poolConfig.connectionString = dbUrl;
+  poolConfig.connectionString = dbUrl;
+  if (!dbUrl.includes('localhost') && !dbUrl.includes('127.0.0.1')) {
     poolConfig.ssl = { rejectUnauthorized: false };
   } else {
-    // Local database connection via Unix socket to bypass SSL/SCRAM requirements
-    poolConfig.user = dbUrl.match(/:\/\/(.*?)@/)?.[1] || dbUrl.match(/:\/\/([^:/]+)/)?.[1] || 'ajit';
-    poolConfig.database = dbUrl.split('/').pop()?.split('?')[0] || 'encho';
-    poolConfig.host = '/tmp';
     poolConfig.ssl = false;
   }
 }
