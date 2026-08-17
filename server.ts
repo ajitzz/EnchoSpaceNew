@@ -11837,6 +11837,7 @@ app.post('/api/listings', authenticateToken, async (req: AuthRequest, res) => {
 });
 
 // Wishlists endpoints
+app.get('/api/wishlist', authenticateToken, (req: AuthRequest, res) => res.redirect(307, '/api/wishlists'));
 app.get('/api/wishlists', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
