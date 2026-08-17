@@ -852,7 +852,9 @@ app.use(async (req, res, next) => {
     }
   }
   if (req.path.startsWith('/api/') && !req.path.startsWith('/api/health')) {
-    await ensureDbInitialized();
+    if (!marketingSchemaInitialized) {
+      ensureDbInitialized().catch(err => console.warn('Background DB Init notice:', err?.message));
+    }
   }
   next();
 });
