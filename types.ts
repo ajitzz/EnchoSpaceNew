@@ -202,7 +202,7 @@ export interface MarketingCampaign {
   platforms: string[];
   budget: number;
   currency?: string;
-  status: 'draft' | 'pending' | 'active' | 'rejected' | 'completed' | 'paused';
+  status: 'draft' | 'pending' | 'active' | 'rejected' | 'completed' | 'paused' | 'EXTERNAL_OUTCOME_UNKNOWN';
   payment_status?: string;
   payment_gateway?: string;
   payment_intent_id?: string;
@@ -222,6 +222,7 @@ export interface MarketingCampaign {
   meta_creative_id?: string;
   meta_ad_id?: string;
   meta_status?: string;
+  truth?: any;
   meta_effective_status?: string;
   meta_review_status?: string;
   verification_source?: string;

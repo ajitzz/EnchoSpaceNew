@@ -77,8 +77,8 @@ describe('PHASE 2.7 MILESTONE 2 — CAMPAIGN TRUTH PROJECTION ENGINE CERTIFICATI
 
   it('2. Successful Meta publication', async () => {
     const campRes = await pool.query(`
-      INSERT INTO host_marketing_campaigns (host_id, listing_id, title, budget, status, admin_approved, meta_status, meta_campaign_id)
-      VALUES ($1, $2, 'Live Campaign', 200, 'CAMPAIGN_LIVE', true, 'ACTIVE', 'meta_camp_123')
+      INSERT INTO host_marketing_campaigns (host_id, listing_id, title, budget, status, admin_approved, meta_status, meta_campaign_id, external_status_verified_at)
+      VALUES ($1, $2, 'Live Campaign', 200, 'CAMPAIGN_LIVE', true, 'ACTIVE', 'meta_camp_123', NOW())
       RETURNING id
     `, [testHost1Id, testListingId]);
     const campaignId = campRes.rows[0].id;

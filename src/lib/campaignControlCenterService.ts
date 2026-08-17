@@ -86,7 +86,9 @@ export class CampaignControlCenterService {
 
     // 2. Fetch Authoritative Subsidiary Records
     const [
-      txRes,
+      providerTxRes,
+      providerEntitiesRes,
+      legacyTxRes,
       eventsRes,
       tracesRes,
       auditRes,
@@ -98,20 +100,28 @@ export class CampaignControlCenterService {
       dailyMetricsRes,
       contractRes
     ] = await Promise.all([
-      client.query(`SELECT * FROM meta_publishing_transactions WHERE campaign_id = $1 ORDER BY id DESC LIMIT 1`, [numericCampaignId]).catch(() => ({ rows: [] })),
-      client.query(`SELECT * FROM meta_publishing_events WHERE campaign_id = $1 ORDER BY id ASC`, [numericCampaignId]).catch(() => ({ rows: [] })),
-      client.query(`SELECT * FROM meta_api_traces WHERE campaign_id = $1 ORDER BY id DESC LIMIT 10`, [numericCampaignId]).catch(() => ({ rows: [] })),
-      client.query(`SELECT * FROM admin_audit_logs WHERE (details->>'campaign_id' = $1 OR details->>'campaignId' = $1 OR target = $1) ORDER BY id DESC LIMIT 10`, [String(numericCampaignId)]).catch(() => ({ rows: [] })),
-      client.query(`SELECT * FROM wallet_transactions WHERE campaign_id = $1 ORDER BY id DESC`, [numericCampaignId]).catch(() => ({ rows: [] })),
-      client.query(`SELECT * FROM campaign_creative_variants WHERE campaign_id = $1 ORDER BY id ASC`, [numericCampaignId]).catch(() => ({ rows: [] })),
-      client.query(`SELECT * FROM variant_meta_snapshots WHERE variant_id IN (SELECT id FROM campaign_creative_variants WHERE campaign_id = $1) ORDER BY last_meta_fetched_at DESC`, [numericCampaignId]).catch(() => ({ rows: [] })),
-      client.query(`SELECT * FROM dco_evaluation_transactions WHERE campaign_id = $1 ORDER BY id DESC LIMIT 1`, [numericCampaignId]).catch(() => ({ rows: [] })),
-      client.query(`SELECT * FROM dco_external_actions WHERE campaign_id = $1 ORDER BY id DESC`, [numericCampaignId]).catch(() => ({ rows: [] })),
-      client.query(`SELECT * FROM campaign_daily_metrics WHERE campaign_id = $1 ORDER BY metric_date DESC LIMIT 30`, [numericCampaignId]).catch(() => ({ rows: [] })),
-      client.query(`SELECT * FROM campaign_financial_contracts WHERE campaign_id = $1`, [numericCampaignId]).catch(() => ({ rows: [] }))
-    ]);
+      client.query(`SELECT * FROM provider_publishing_transactions WHERE campaign_id = $1 ORDER BY id DESC LIMIT 1`, [numericCampaignId]),
+      client.query(`SELECT * FROM provider_entities WHERE campaign_id = $1 ORDER BY id ASC`, [numericCampaignId]),
+      client.query(`SELECT * FROM meta_publishing_transactions WHERE campaign_id = $1 ORDER BY id DESC LIMIT 1`, [numericCampaignId]),
+      client.query(`SELECT * FROM meta_publishing_events WHERE campaign_id = $1 ORDER BY id ASC`, [numericCampaignId]),
+      client.query(`SELECT * FROM meta_api_traces WHERE campaign_id = $1 ORDER BY id DESC LIMIT 10`, [numericCampaignId]),
+      client.query(`SELECT * FROM admin_audit_logs WHERE entity_id = $1 ORDER BY id DESC LIMIT 10`, [numericCampaignId]),
+      client.query(`SELECT * FROM wallet_transactions WHERE wallet_id = (SELECT id FROM host_wallets WHERE host_id = (SELECT host_id FROM host_marketing_campaigns WHERE id = $1)) ORDER BY id DESC`, [numericCampaignId]),
+      client.query(`SELECT * FROM campaign_creative_variants WHERE campaign_id = $1 ORDER BY id ASC`, [numericCampaignId]),
+      client.query(`SELECT * FROM variant_meta_snapshots WHERE variant_id IN (SELECT id FROM campaign_creative_variants WHERE campaign_id = $1) ORDER BY last_meta_fetched_at DESC`, [numericCampaignId]),
+      client.query(`SELECT * FROM dco_evaluation_transactions WHERE campaign_id = $1 ORDER BY id DESC LIMIT 1`, [numericCampaignId]),
+      client.query(`SELECT * FROM dco_external_actions WHERE campaign_id = $1 ORDER BY id DESC`, [numericCampaignId]),
+      client.query(`SELECT * FROM campaign_daily_metrics WHERE campaign_id = $1 ORDER BY metric_date DESC LIMIT 30`, [numericCampaignId]),
+      client.query(`SELECT * FROM campaign_financial_contracts WHERE campaign_id = $1`, [numericCampaignId])    ]);
 
-    const tx = txRes.rows[0] || null;
+    // Dual-read strategy: Prefer provider_publishing_transactions, fall back to legacy meta_publishing_transactions
+    let tx = providerTxRes.rows[0] || null;
+    if (!tx && legacyTxRes.rows.length > 0) {
+      console.log(`[PROVIDER_LEGACY_FALLBACK] Reading legacy Meta schema for campaign #${numericCampaignId}`);
+      tx = legacyTxRes.rows[0];
+    }
+
+    const providerEntities = providerEntitiesRes.rows || [];
     const events = eventsRes.rows || [];
     const traces = tracesRes.rows || [];
     const auditLogs = auditRes.rows || [];
@@ -183,18 +193,24 @@ export class CampaignControlCenterService {
 
     // 4. Meta External State
     const meta_status = campaign.meta_status || tx?.meta_status || (publish_status === 'SUCCESS' ? 'ACTIVE' : 'UNPUBLISHED');
-    const meta_effective_status = campaign.meta_effective_status || tx?.meta_effective_status || (publish_status === 'SUCCESS' ? 'ACTIVE' : 'UNPUBLISHED');
+    const meta_effective_status = campaign.meta_effective_status || campaign.meta_status || tx?.meta_effective_status || (publish_status === 'SUCCESS' ? 'ACTIVE' : 'UNPUBLISHED');
     const meta_review_status = campaign.meta_review_status || (['pending_review', 'pending'].includes(rawStatus) ? 'PENDING_REVIEW' : 'NO_REVIEW');
 
-    const external_status_verified_at = campaign.external_status_verified_at || tx?.last_verified_at || tx?.updated_at || null;
+    const external_status_verified_at = campaign.external_status_verified_at || tx?.last_verified_at || tx?.updated_at || tx?.created_at || null;
     const external_status_verification_source = campaign.external_status_verification_source || tx?.verification_source || (external_status_verified_at ? 'ACTIVE_POLL' : 'UNKNOWN');
 
     // Calculate External Freshness & State Drift
     let external_freshness: ExternalFreshness = 'UNKNOWN';
     if (external_status_verified_at) {
-      const extVerifiedTime = new Date(external_status_verified_at).getTime();
+      let extVerifiedIso = external_status_verified_at instanceof Date 
+        ? external_status_verified_at.toISOString() 
+        : String(external_status_verified_at);
+      if (!extVerifiedIso.endsWith('Z') && !extVerifiedIso.includes('+')) {
+        extVerifiedIso += 'Z';
+      }
+      const extVerifiedTime = new Date(extVerifiedIso).getTime();
       if (!isNaN(extVerifiedTime)) {
-        const ageMs = Date.now() - extVerifiedTime;
+        const ageMs = Math.abs(Date.now() - extVerifiedTime);
         if (ageMs <= 5 * 60 * 1000) {
           external_freshness = 'FRESH';
         } else if (ageMs <= 15 * 60 * 1000) {
@@ -205,7 +221,7 @@ export class CampaignControlCenterService {
       }
     }
 
-    const localActive = ['active', 'CAMPAIGN_LIVE'].includes(rawStatus) || publish_status === 'SUCCESS';
+    const localActive = ['active', 'campaign_live'].includes(rawStatus) || publish_status === 'SUCCESS';
     const metaActive = meta_effective_status === 'ACTIVE';
     const localFailed = ['failed', 'failed_publish'].includes(rawStatus) || publish_status === 'FAILED_PUBLISH';
 
@@ -541,8 +557,20 @@ export class CampaignControlCenterService {
         correlation_id: e.correlation_id || null
       })),
       correlation_id,
-      raw_traces_count: traces.length
+      raw_traces_count: traces.length,
+      traces: CampaignControlCenterService.sanitizeTracesForAdmin(traces),
+      host_id: campaign.host_id,
+      created_at: campaign.created_at,
+      budget: campaign.budget,
+      currency: campaign.currency || 'USD',
+      admin_approved: campaign.admin_approved,
+      admin_approved_at: campaign.admin_approved_at,
+      rejection_feedback: campaign.rejection_feedback
     };
+
+    // Build Canonical Hierarchy Tree
+    const hierarchy = CampaignControlCenterService.buildHierarchyTree(canonicalTruth, variants);
+    (canonicalTruth as any).object_hierarchy = hierarchy;
 
     // Apply Projection / Redaction for Viewer
     return this.projectForViewer(canonicalTruth, viewerContext);
@@ -556,11 +584,82 @@ export class CampaignControlCenterService {
     const isAdmin = Boolean(viewerContext.isAdmin || viewerContext.role === 'admin');
 
     if (isAdmin) {
-      // ADMIN PROJECTION: Complete diagnostic visibility
+      // ADMIN PROJECTION: Complete diagnostic visibility & explicit contracts
+      const opStatusInfo = this.getOperationalStatus(truth);
+      const adminActionsInfo = this.getAllowedAdminActions(truth);
+      const variants = truth.dco_state?.variants || [];
+      const hierarchy = truth.object_hierarchy || this.buildHierarchyTree(truth, variants);
+
       return {
         ...truth,
         projection_type: 'ADMIN',
-        access_role: 'ADMIN'
+        access_role: 'ADMIN',
+        operational_status: opStatusInfo.operational_status,
+        operational_status_info: opStatusInfo,
+        campaign_identity: {
+          id: truth.campaign_id,
+          title: truth.title,
+          host_id: truth.host_id,
+          created_at: truth.created_at,
+          budget: truth.budget,
+          currency: truth.currency || 'USD'
+        },
+        governance: {
+          status: truth.governance_status,
+          admin_approved: truth.admin_approved,
+          admin_approved_at: truth.admin_approved_at,
+          rejection_feedback: truth.rejection_feedback
+        },
+        financial: {
+          gross_host_charge: Number(((truth.financial_safety?.total_charged_cents || 0) / 100).toFixed(2)),
+          gross_host_charge_cents: truth.financial_safety?.total_charged_cents || 0,
+          encho_fee: Number(((truth.financial_safety?.encho_fee_cents || 0) / 100).toFixed(2)),
+          encho_fee_cents: truth.financial_safety?.encho_fee_cents || 0,
+          authorized_meta_spend: Number(((truth.financial_safety?.meta_authorized_spend_cents || 0) / 100).toFixed(2)),
+          authorized_meta_spend_cents: truth.financial_safety?.meta_authorized_spend_cents || 0,
+          configured_meta_spend: Number(((truth.financial_safety?.meta_configured_max_cents || 0) / 100).toFixed(2)),
+          configured_meta_spend_cents: truth.financial_safety?.meta_configured_max_cents || 0,
+          actual_meta_spend: Number(((truth.financial_safety?.meta_actual_spend_cents || 0) / 100).toFixed(2)),
+          actual_meta_spend_cents: truth.financial_safety?.meta_actual_spend_cents || 0,
+          remaining_authorization: Number(((truth.financial_safety?.meta_remaining_authorization_cents || 0) / 100).toFixed(2)),
+          remaining_authorization_cents: truth.financial_safety?.meta_remaining_authorization_cents || 0,
+          escrow_status: truth.financial_safety?.escrow_status || 'HOLDING',
+          currency: truth.currency || 'USD',
+          safety_verdict: truth.financial_safety?.is_financial_blocked ? 'BLOCKED' : (truth.meta_external_state?.reconciliation_required ? 'RECONCILIATION_REQUIRED' : 'SAFE'),
+          is_financial_blocked: truth.financial_safety?.is_financial_blocked || false,
+          financial_block_reason: truth.financial_safety?.financial_block_reason || null
+        },
+        publishing: {
+          status: truth.publish_status,
+          current_stage: truth.current_pipeline_stage,
+          failure_stage: truth.failure_stage,
+          last_successful_stage: truth.last_successful_stage,
+          retry_eligible: truth.retry_eligible
+        },
+        external_truth: {
+          ...truth.meta_external_state
+        },
+        delivery_truth: {
+          operational_status: opStatusInfo.operational_status,
+          operational_status_info: opStatusInfo,
+          configured_status: truth.meta_external_state?.meta_configured_status || truth.meta_external_state?.meta_status || 'UNKNOWN',
+          effective_status: truth.meta_external_state?.meta_effective_status || 'UNKNOWN',
+          review_status: truth.meta_external_state?.meta_review_status || 'UNKNOWN',
+          delivery_reason: opStatusInfo.operational_reason || opStatusInfo.display_description,
+          freshness: truth.meta_external_state?.external_freshness || 'UNKNOWN',
+          verified_at: truth.meta_external_state?.external_status_verified_at || null
+        },
+        object_hierarchy: hierarchy,
+        freshness: {
+          external_freshness: truth.meta_external_state?.external_freshness || 'UNKNOWN',
+          performance_freshness: truth.performance_state?.performance_freshness || 'UNAVAILABLE',
+          engagement_freshness: truth.engagement_state?.engagement_freshness || 'UNAVAILABLE',
+          verified_at: truth.meta_external_state?.external_status_verified_at || null
+        },
+        allowed_actions: adminActionsInfo.allowed_actions,
+        action_previews: adminActionsInfo.action_previews,
+        audit_history: truth.incident_timeline || [],
+        traces: truth.traces || []
       };
     }
 
@@ -650,8 +749,36 @@ export class CampaignControlCenterService {
     // Server-verified Meta Link
     const meta_campaign_id = truth.meta_external_state?.meta_campaign_id || null;
     const meta_link = meta_campaign_id 
-      ? `https://www.facebook.com/adsmanager/manage/campaigns?selected_campaign_ids=${meta_campaign_id}`
+      ? {
+          url: `https://www.facebook.com/adsmanager/manage/campaigns?selected_campaign_ids=${meta_campaign_id}`,
+          meta_campaign_id
+        }
       : null;
+
+    const transparency_panels = {
+      what_is_happening: opStatusInfo.display_label,
+      why: opStatusInfo.display_description,
+      who_is_responsible: opStatusInfo.operational_owner || 'ENCHO Automation & Meta Engine',
+      last_verified: truth.meta_external_state?.external_status_verified_at || 'Recently synchronized',
+      what_happens_next: opStatusInfo.recommended_action || 'System continuously optimizes delivery and monitors lead conversions.',
+      what_you_can_do: (actionsInfo.allowed_actions && actionsInfo.allowed_actions.length > 0)
+        ? actionsInfo.allowed_actions.map((a: string) => a.replace(/_/g, ' ')).join(', ')
+        : 'Monitor active delivery and conversion metrics.'
+    };
+
+    const current_state = {
+      title: opStatusInfo.display_label,
+      explanation: opStatusInfo.display_description,
+      responsible_actor: opStatusInfo.operational_owner || 'ENCHO System'
+    };
+
+    const delivery = {
+      configured_status: truth.meta_external_state?.meta_configured_status || 'UNKNOWN',
+      effective_status: truth.meta_external_state?.meta_effective_status || 'UNKNOWN',
+      delivery_reason: opStatusInfo.operational_reason || opStatusInfo.display_description,
+      is_delivering: opStatusInfo.operational_status === 'LIVE',
+      serving_status: opStatusInfo.display_label
+    };
 
     return {
       campaign_id: truth.campaign_id,
@@ -660,6 +787,9 @@ export class CampaignControlCenterService {
       access_role: 'HOST',
       operational_status: opStatusInfo.operational_status,
       operational_status_info: opStatusInfo,
+      current_state,
+      transparency_panels,
+      delivery,
       friendly_delivery_state,
       is_host_action_required: Boolean(truth.error_owner === 'HOST_ERROR' || truth.root_error_classification === 'POLICY_DISAPPROVED'),
       host_next_action: truth.host_next_action,
@@ -668,18 +798,26 @@ export class CampaignControlCenterService {
       engagement_state: host_engagement_state,
       financial_safety: {
         is_money_safe: true,
+        gross_host_charge: Number((total_paid_cents / 100).toFixed(2)),
+        gross_host_charge_cents: total_paid_cents,
         total_paid: Number((total_paid_cents / 100).toFixed(2)),
         total_paid_cents,
-        ad_spend_allocation: Number((ad_spend_allocation_cents / 100).toFixed(2)),
-        ad_spend_allocation_cents,
         encho_fee: Number((encho_fee_cents / 100).toFixed(2)),
         encho_fee_cents,
-        meta_authorized_spend: Number((meta_authorized_spend_cents / 100).toFixed(2)),
-        meta_authorized_spend_cents,
+        authorized_meta_spend: Number((meta_authorized_spend_cents / 100).toFixed(2)),
+        authorized_meta_spend_cents: meta_authorized_spend_cents,
+        ad_spend_allocation: Number((ad_spend_allocation_cents / 100).toFixed(2)),
+        ad_spend_allocation_cents,
+        configured_meta_spend: Number((meta_authorized_spend_cents / 100).toFixed(2)),
+        configured_meta_spend_cents: meta_authorized_spend_cents,
         actual_spend: Number((actual_spend_cents / 100).toFixed(2)),
         actual_spend_cents,
+        actual_meta_spend: Number((actual_spend_cents / 100).toFixed(2)),
+        actual_meta_spend_cents: actual_spend_cents,
         remaining_authorized_spend: Number((remaining_authorized_spend_cents / 100).toFixed(2)),
         remaining_authorized_spend_cents,
+        remaining_authorization: Number((remaining_authorized_spend_cents / 100).toFixed(2)),
+        remaining_authorization_cents: remaining_authorized_spend_cents,
         escrow_status,
         escrow_state_display,
         currency: truth.currency || 'USD',
@@ -804,6 +942,17 @@ export class CampaignControlCenterService {
       action = 'System will auto-heal via background reconciliation worker.';
     }
 
+    // Hierarchy Integrity Guard: An invalid hierarchy must NEVER be LIVE
+    const hierarchyIntegrity = truth.object_hierarchy?.hierarchy_integrity || truth.hierarchy_integrity;
+    if (hierarchyIntegrity && !hierarchyIntegrity.is_valid) {
+      if (opStatus === 'LIVE') {
+        opStatus = 'RECONCILIATION_REQUIRED';
+        reason = 'Hierarchy integrity failure: ' + (hierarchyIntegrity.failure_reasons?.join(', ') || 'Object linkage mismatch');
+        owner = 'SYSTEM';
+        action = 'Verify and reconcile object hierarchy on Meta Ads Manager.';
+      }
+    }
+
     const displayInfo = this.getOperationalStatusDisplay(opStatus, gov);
 
     return {
@@ -819,7 +968,7 @@ export class CampaignControlCenterService {
     };
   }
 
-  public static getOperationalStatusDisplay(status: string, governance_status?: string): {
+  public static getOperationalStatusDisplay(status: string, governance_status?: string, pause_source?: string | null): {
     label: string;
     description: string;
     badge_color: 'emerald' | 'amber' | 'blue' | 'rose' | 'slate' | 'purple';
@@ -889,6 +1038,27 @@ export class CampaignControlCenterService {
         };
 
       case 'PAUSED':
+        if (pause_source === 'SYSTEM_AUTO_PAUSED') {
+          return {
+            label: 'Auto-Paused (Fully Booked)',
+            description: 'Automatically paused because the property is 100% booked for target dates.',
+            badge_color: 'amber'
+          };
+        }
+        if (pause_source === 'HOST_MANUAL') {
+          return {
+            label: 'Paused by You',
+            description: 'Campaign paused by host. Resume anytime when ready to serve ads.',
+            badge_color: 'slate'
+          };
+        }
+        if (pause_source === 'ADMIN_MANUAL' || pause_source === 'SYSTEM_EMERGENCY') {
+          return {
+            label: 'Paused by Moderation',
+            description: 'Campaign is paused by ENCHO administration.',
+            badge_color: 'slate'
+          };
+        }
         return {
           label: 'Campaign Paused',
           description: 'Campaign is currently paused on Meta.',
@@ -1120,5 +1290,331 @@ export class CampaignControlCenterService {
     return { allowed_actions, action_previews };
   }
 
+  public static sanitizeTracesForAdmin(traces: any[]): any[] {
+    return (traces || []).map(t => {
+      let payload = t.request_payload;
+      let response = t.response_payload;
 
+      const maskSecrets = (val: any): any => {
+        if (!val) return val;
+        if (typeof val === 'string') {
+          return val
+            .replace(/EAAB[a-zA-Z0-9]+/g, '[REDACTED_ACCESS_TOKEN]')
+            .replace(/Bearer\s+[a-zA-Z0-9_\-\.]+/gi, 'Bearer [REDACTED]')
+            .replace(/access_token=[a-zA-Z0-9_\-\.]+/gi, 'access_token=[REDACTED]');
+        }
+        if (typeof val === 'object') {
+          try {
+            let str = JSON.stringify(val);
+            str = str
+              .replace(/EAAB[a-zA-Z0-9]+/g, '[REDACTED_ACCESS_TOKEN]')
+              .replace(/Bearer\s+[a-zA-Z0-9_\-\.]+/gi, 'Bearer [REDACTED]')
+              .replace(/access_token=[a-zA-Z0-9_\-\.]+/gi, 'access_token=[REDACTED]');
+            return JSON.parse(str);
+          } catch {
+            return val;
+          }
+        }
+        return val;
+      };
+
+      return {
+        id: t.id,
+        endpoint: t.endpoint,
+        method: t.method || 'POST',
+        status: t.status || (t.response_code && t.response_code < 400 ? 'SUCCESS' : 'FAILURE'),
+        response_code: t.response_code || null,
+        meta_error_type: t.meta_error_type || null,
+        meta_error_message: t.meta_error_message || null,
+        fbtrace_id: t.fbtrace_id || null,
+        duration_ms: t.duration_ms || null,
+        timestamp: t.created_at || t.timestamp_utc,
+        request_payload: maskSecrets(payload),
+        response_payload: maskSecrets(response)
+      };
+    });
+  }
+
+  public static buildHierarchyTree(truth: any, variants: any[] = []): any {
+    const masterAccountId = process.env.META_AD_ACCOUNT_ID || 'act_master_encho';
+    const metaCampaignId = truth.meta_external_state?.meta_campaign_id || null;
+    const metaAdsetId = truth.meta_external_state?.meta_adset_id || null;
+    const extStatus = truth.meta_external_state?.meta_status || 'UNKNOWN';
+    const extEffStatus = truth.meta_external_state?.meta_effective_status || extStatus;
+    const extRevStatus = truth.meta_external_state?.meta_review_status || 'UNKNOWN';
+    const verifiedAt = truth.meta_external_state?.external_status_verified_at || null;
+    const freshness = truth.meta_external_state?.external_freshness || 'UNKNOWN';
+
+    const failure_reasons: string[] = [];
+    let orphan_count = 0;
+    let mismatch_count = 0;
+
+    // 1. Campaign Node
+    const campaignFlags: string[] = [];
+    if (!metaCampaignId && truth.publish_status === 'SUCCESS') {
+      campaignFlags.push('MISSING');
+      failure_reasons.push('Campaign ID missing on Meta despite SUCCESS publish status');
+    }
+    if (freshness === 'STALE') campaignFlags.push('STALE');
+    if (extStatus === 'UNKNOWN') campaignFlags.push('UNKNOWN');
+
+    const campaignNode = {
+      object_type: 'CAMPAIGN',
+      id: metaCampaignId,
+      account_id: masterAccountId,
+      status: truth.meta_external_state?.meta_configured_status || extStatus,
+      effective_status: extEffStatus,
+      review_status: extRevStatus,
+      parent_id: null,
+      verified_at: verifiedAt,
+      freshness,
+      flags: campaignFlags
+    };
+
+    // 2. AdSet Node
+    const adsetFlags: string[] = [];
+    if (metaAdsetId && !metaCampaignId) {
+      adsetFlags.push('ORPHAN');
+      orphan_count++;
+      failure_reasons.push(`AdSet ${metaAdsetId} has no parent Campaign`);
+    }
+    if (!metaAdsetId && metaCampaignId && truth.publish_status === 'SUCCESS' && (truth.meta_external_state?.meta_ad_id || variants.some((v: any) => v.meta_ad_id))) {
+      adsetFlags.push('MISSING');
+      failure_reasons.push('AdSet missing under active Campaign');
+    }
+    if (extStatus === 'ADSET_OFF') {
+      adsetFlags.push('PAUSED');
+    }
+    if (freshness === 'STALE') adsetFlags.push('STALE');
+
+    const adsetNode = {
+      object_type: 'ADSET',
+      id: metaAdsetId,
+      account_id: masterAccountId,
+      campaign_id: metaCampaignId,
+      status: extStatus === 'ADSET_OFF' ? 'PAUSED' : (truth.meta_external_state?.meta_configured_status || extStatus),
+      effective_status: extStatus === 'ADSET_OFF' ? 'ADSET_PAUSED' : extEffStatus,
+      review_status: extRevStatus === 'DISAPPROVED' ? 'DISAPPROVED' : 'APPROVED',
+      parent_id: metaCampaignId,
+      verified_at: verifiedAt,
+      freshness,
+      flags: adsetFlags
+    };
+
+    // 3. Creatives & Ads Nodes
+    const creatives: any[] = [];
+    const ads: any[] = [];
+
+    for (const v of variants) {
+      if (v.meta_creative_id || v.media_url) {
+        creatives.push({
+          object_type: 'CREATIVE',
+          id: v.meta_creative_id || `local_creative_${v.id}`,
+          variant_id: v.id,
+          account_id: masterAccountId,
+          media_url: v.media_url,
+          parent_id: null,
+          status: v.status || 'ACTIVE',
+          flags: []
+        });
+      }
+
+      if (v.meta_ad_id) {
+        const adFlags: string[] = [];
+        if (!metaAdsetId) {
+          adFlags.push('ORPHAN');
+          orphan_count++;
+          failure_reasons.push(`Ad ${v.meta_ad_id} has no parent AdSet`);
+        }
+        if (v.status === 'PRUNED' || v.status === 'PAUSED') {
+          adFlags.push('PAUSED');
+        }
+        if (extRevStatus === 'DISAPPROVED') {
+          adFlags.push('DISAPPROVED');
+        }
+
+        ads.push({
+          object_type: 'AD',
+          id: v.meta_ad_id,
+          variant_id: v.id,
+          account_id: masterAccountId,
+          campaign_id: metaCampaignId,
+          adset_id: metaAdsetId,
+          creative_id: v.meta_creative_id || null,
+          status: v.status || 'ACTIVE',
+          effective_status: v.status === 'PRUNED' ? 'AD_PAUSED' : extEffStatus,
+          review_status: extRevStatus,
+          parent_id: metaAdsetId,
+          verified_at: verifiedAt,
+          freshness,
+          flags: adFlags
+        });
+      }
+    }
+
+    // Foreign account check
+    if (truth.meta_external_state?.foreign_account || (truth.meta_external_state?.account_id && truth.meta_external_state.account_id !== masterAccountId)) {
+      campaignFlags.push('FOREIGN_ACCOUNT');
+      failure_reasons.push(`Object account mismatch: expected ${masterAccountId}`);
+      mismatch_count++;
+    }
+
+    const isValid = failure_reasons.length === 0;
+
+    return {
+      campaign: campaignNode,
+      adset: adsetNode,
+      ads,
+      creatives,
+      hierarchy_integrity: {
+        is_valid: isValid,
+        integrity_status: isValid ? 'VALID' : 'HIERARCHY_INTEGRITY_FAILURE',
+        failure_reasons,
+        orphan_count,
+        mismatch_count
+      }
+    };
+  }
+
+  public static getAllowedAdminActions(truth: any): {
+    allowed_actions: string[];
+    action_previews: Record<string, {
+      action: string;
+      current_state: string;
+      what_will_happen: string;
+      what_will_not_happen: string;
+      why_allowed: string;
+      expected_result: string;
+      financial_impact: string;
+      unknown_outcome_behavior: string;
+    }>;
+  } {
+    const op = truth.operational_status || this.getOperationalStatus(truth).operational_status;
+    const gov = truth.governance_status;
+    const pub = truth.publish_status;
+    const allowed_actions: string[] = [];
+    const action_previews: Record<string, any> = {};
+
+    if (gov === 'PENDING_ADMIN_REVIEW' || pub === 'IDLE') {
+      allowed_actions.push('APPROVE');
+      action_previews['APPROVE'] = {
+        action: 'Approve Campaign for Dispatch',
+        current_state: 'Campaign is currently in PENDING_ADMIN_REVIEW.',
+        what_will_happen: 'Marks campaign as ADMIN_APPROVED and enqueues it for worker dispatch to Meta Ads API.',
+        what_will_not_happen: 'Will NOT bypass AI pre-flight gate checks or financial authorization limits.',
+        why_allowed: 'Admins have authority to clear campaigns for publishing.',
+        expected_result: 'Worker takes ownership, creates Meta Campaign/AdSet/Ad objects, and synchronizes status.',
+        financial_impact: 'Locks 85% authorized ad spend in escrow pending Meta confirmation.',
+        unknown_outcome_behavior: 'If dispatch worker fails, campaign enters RECONCILIATION_REQUIRED without double charge.'
+      };
+
+      allowed_actions.push('REJECT');
+      action_previews['REJECT'] = {
+        action: 'Reject Campaign with Feedback',
+        current_state: 'Campaign is in PENDING_ADMIN_REVIEW.',
+        what_will_happen: 'Sets governance status to ADMIN_REJECTED and sends structured remediation notes to host.',
+        what_will_not_happen: 'Will NOT debit the host wallet or publish any creative to Meta.',
+        why_allowed: 'Admins can reject listings that violate advertising policies or quality standards.',
+        expected_result: 'Host receives actionable fix request in their Control Center.',
+        financial_impact: 'Full 100% budget remains safely held or refundable to host wallet.',
+        unknown_outcome_behavior: 'Instant deterministic state transition.'
+      };
+    }
+
+    if (op === 'LIVE' || truth.meta_external_state?.meta_effective_status === 'ACTIVE') {
+      allowed_actions.push('PAUSE');
+      action_previews['PAUSE'] = {
+        action: 'Pause Campaign on Meta',
+        current_state: 'Campaign is LIVE and delivering impressions.',
+        what_will_happen: 'Dispatches PAUSE mutation to Meta Ads API to stop ad delivery immediately.',
+        what_will_not_happen: 'Will NOT delete Meta objects or release unspent escrow.',
+        why_allowed: 'Admins can pause active campaigns for moderation or host request.',
+        expected_result: 'Delivery ceases on Facebook & Instagram; status transitions to PAUSED.',
+        financial_impact: 'Halts ad spend accrual immediately.',
+        unknown_outcome_behavior: 'If Meta API is unresponsive, marks RECONCILIATION_REQUIRED and auto-heals.'
+      };
+
+      allowed_actions.push('EMERGENCY_PAUSE');
+      action_previews['EMERGENCY_PAUSE'] = {
+        action: 'Emergency Immediate Kill-Switch',
+        current_state: 'Campaign is actively delivering or dispatching.',
+        what_will_happen: 'Synchronously invokes Meta API pause on Campaign and AdSet levels simultaneously.',
+        what_will_not_happen: 'Will NOT modify historical financial ledger or delete audit records.',
+        why_allowed: 'Safety circuit breaker to halt rogue spend or policy breaches.',
+        expected_result: 'Immediate cessation of delivery across all Meta nodes.',
+        financial_impact: 'Preserves all remaining unspent authorization.',
+        unknown_outcome_behavior: 'Fails closed and isolates campaign in quarantine if API is blocked.'
+      };
+    }
+
+    if (op === 'PAUSED' || truth.meta_external_state?.meta_effective_status === 'CAMPAIGN_PAUSED') {
+      allowed_actions.push('RESUME');
+      action_previews['RESUME'] = {
+        action: 'Resume Campaign on Meta',
+        current_state: 'Campaign is currently PAUSED.',
+        what_will_happen: 'Sends ACTIVE mutation to Meta Ads API to restart ad delivery.',
+        what_will_not_happen: 'Will NOT increase budget beyond authorized contract limit.',
+        why_allowed: 'Admins can reactivate paused campaigns with valid remaining authorization.',
+        expected_result: 'Delivery restarts and status transitions to LIVE.',
+        financial_impact: 'Draws down remaining pre-funded escrow as impressions serve.',
+        unknown_outcome_behavior: 'Preserves PAUSED state if activation fails.'
+      };
+    }
+
+    // RESYNC is always allowed for admins
+    allowed_actions.push('RESYNC');
+    action_previews['RESYNC'] = {
+      action: 'Live Meta Telemetry & State Re-sync',
+      current_state: 'External status verification.',
+      what_will_happen: 'Queries Meta Graph API for fresh campaign, adset, ad statuses and rollup insights.',
+      what_will_not_happen: 'Will NOT mutate Meta objects or modify campaign parameters.',
+      why_allowed: 'Admins can poll external ground truth at any time.',
+      expected_result: 'Updates local database cache and sets freshness to FRESH.',
+      financial_impact: 'Zero financial mutation.',
+      unknown_outcome_behavior: 'Graceful fallback to existing cached truth on network failure.'
+    };
+
+    if (op === 'RECONCILIATION_REQUIRED' || truth.meta_external_state?.has_drift || truth.reconciliation_state === 'RECONCILIATION_REQUIRED') {
+      allowed_actions.push('RECONCILE');
+      action_previews['RECONCILE'] = {
+        action: 'Trigger Deep State Reconciliation',
+        current_state: 'State drift or unconfirmed external outcome detected.',
+        what_will_happen: 'Executes comprehensive bi-directional reconciliation of local records vs Meta Graph API.',
+        what_will_not_happen: 'Will NOT create duplicate ad objects or re-spend budget.',
+        why_allowed: 'Admins resolve state discrepancies and auto-heal synchronization.',
+        expected_result: 'Reconciles object hierarchy, corrects drift, and marks state clean.',
+        financial_impact: 'Reconciles actual vs recorded spend ledger.',
+        unknown_outcome_behavior: 'If reconciliation cannot verify external object, flags for manual quarantine.'
+      };
+    }
+
+    if (['FAILED', 'FAILED_PUBLISH', 'UNKNOWN', 'RECONCILIATION_REQUIRED'].includes(op) || pub === 'FAILED' || pub === 'ROLLBACK_FAILED') {
+      allowed_actions.push('QUARANTINE');
+      action_previews['QUARANTINE'] = {
+        action: 'Quarantine Campaign for Investigation',
+        current_state: 'Campaign encountered an unresolvable failure or policy block.',
+        what_will_happen: 'Locks campaign in QUARANTINED state, preventing worker pickup and alerting engineering.',
+        what_will_not_happen: 'Will NOT delete transaction history or audit records.',
+        why_allowed: 'Isolates broken state to prevent worker thrashing.',
+        expected_result: 'Campaign removed from active queues; forensic bundle preserved.',
+        financial_impact: 'Funds remain frozen in escrow until admin resolution.',
+        unknown_outcome_behavior: 'Deterministic local state transition.'
+      };
+
+      allowed_actions.push('ROLLBACK');
+      action_previews['ROLLBACK'] = {
+        action: 'Safe Transaction Rollback & Refund',
+        current_state: 'Publishing failed midway through object creation.',
+        what_will_happen: 'Attempts deletion or pausing of any orphaned Meta objects and refunds escrow to Host Wallet.',
+        what_will_not_happen: 'Will NOT double-refund or delete database audit history.',
+        why_allowed: 'Admins safely restore system state and protect host funds.',
+        expected_result: 'Orphaned objects cleaned up; host wallet credited atomically.',
+        financial_impact: '100% refund of unused budget to host wallet.',
+        unknown_outcome_behavior: 'If rollback fails midway, enters ROLLBACK_FAILED for manual intervention.'
+      };
+    }
+
+    return { allowed_actions, action_previews };
+  }
 }
+

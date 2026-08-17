@@ -2426,7 +2426,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                     </div>
 
                     {/* Bottom Status Feedback Context */}
-                    {campaign.status === 'draft' && (
+                    {campaign.truth?.operational_status === 'NOT_DISPATCHED' && campaign.truth?.operational_status_info?.display_label === 'Not Yet Dispatched' && (
                       <div className="mt-4 pt-4 border-t border-zinc-100 flex items-center justify-between gap-4">
                         <div className="flex items-center gap-1.5 text-xs text-amber-600 font-medium bg-amber-50/50 border border-amber-100/30 px-2.5 py-1 rounded-lg">
                           <AlertTriangle className="w-3.5 h-3.5" />
@@ -2487,7 +2487,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                       </div>
                     )}
 
-                    {campaign.status === 'pending' && (
+                    {campaign.truth?.operational_status === 'NOT_DISPATCHED' && campaign.truth?.operational_status_info?.display_label === 'Under Review' && (
                       <div className="mt-4 pt-4 border-t border-zinc-100 flex flex-col gap-2">
                         <div className="flex items-center gap-2 text-xs text-amber-700 font-bold bg-amber-50 border border-amber-100 px-3 py-2 rounded-xl">
                           <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-ping" />
@@ -2499,7 +2499,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                       </div>
                     )}
 
-                    {campaign.status === 'rejected' && (
+                    {campaign.truth?.allowed_actions?.includes('FIX_CAMPAIGN') && (
                       <div className="mt-4 pt-4 border-t border-zinc-100 flex flex-col gap-2 bg-rose-50/20 p-3 rounded-2xl border border-rose-100/50">
                         <div className="flex items-center gap-2 text-xs text-rose-700 font-bold">
                           <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -2547,12 +2547,12 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                       </div>
                     )}
 
-                    {(['active', 'CAMPAIGN_LIVE'].includes(campaign.status) || campaign.status === 'completed') && (() => {
+                    {campaign.truth?.operational_status && campaign.truth.operational_status !== 'NOT_DISPATCHED' && campaign.truth.operational_status !== 'UNKNOWN' && (() => {
                       const spent = Number(campaign.analytics?.spent ?? campaign.accumulated_spent ?? 0);
                       const budget = Number(campaign.budget || 2500);
                       const pct = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
                       const remaining = Math.max(0, budget - spent);
-                      const isDepleted = campaign.status === 'completed' || pct >= 100;
+                      const isDepleted = pct >= 100;
 
                       // Glow styles for Fuel Gauge
                       let barColor = 'from-emerald-500 to-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.4)]';
@@ -2573,30 +2573,15 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                         indicatorColor = 'bg-rose-500';
                       }
 
-                      // Adjust label and styling based on actual Meta Effective Status
-                      if (!isDepleted && campaign.meta_effective_status) {
-                        if (campaign.meta_effective_status === 'CAMPAIGN_OFF') {
-                          liveLabel = 'Campaign Paused on Meta';
+                      if (!isDepleted && campaign.truth?.operational_status_info) {
+                        liveLabel = campaign.truth.operational_status_info.display_label || liveLabel;
+                        if (campaign.truth.operational_status_info.badge_color === 'slate') {
                           textColor = 'text-slate-700';
                           indicatorColor = 'bg-slate-500';
-                        } else if (campaign.meta_effective_status === 'ADSET_OFF') {
-                          liveLabel = 'Ad Set Paused on Meta';
-                          textColor = 'text-slate-700';
-                          indicatorColor = 'bg-slate-500';
-                        } else if (campaign.meta_effective_status === 'NOT_DELIVERING') {
-                          liveLabel = 'Active (Not Delivering Ads)';
+                        } else if (campaign.truth.operational_status_info.badge_color === 'amber') {
                           textColor = 'text-amber-700';
                           indicatorColor = 'bg-amber-500';
-                        } else if (campaign.meta_effective_status === 'PENDING_META_REVIEW') {
-                          liveLabel = 'Pending Meta Review';
-                          textColor = 'text-amber-700';
-                          indicatorColor = 'bg-amber-500';
-                        } else if (campaign.meta_effective_status === 'CREATED_NOT_SERVING') {
-                          liveLabel = 'Created (Not Serving)';
-                          textColor = 'text-amber-700';
-                          indicatorColor = 'bg-amber-500';
-                        } else if (campaign.meta_effective_status === 'DISAPPROVED') {
-                          liveLabel = 'Disapproved by Meta';
+                        } else if (campaign.truth.operational_status_info.badge_color === 'rose') {
                           textColor = 'text-rose-700';
                           indicatorColor = 'bg-rose-500';
                         }
@@ -2624,19 +2609,15 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                             </div>
 
                             {/* Meta Ads Campaign Live Dispatch Badge */}
-                            {(campaign.meta_campaign_id || ['active', 'CAMPAIGN_LIVE'].includes(campaign.status)) && (
+                            {(campaign.truth?.meta_link?.meta_campaign_id) && (
                               <div className="flex items-center justify-between pt-2 border-t border-emerald-100/60 text-[11px]">
                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-800 border border-blue-200/80 font-bold font-mono text-[10.5px]">
                                   <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
-                                  Meta Campaign ID: {campaign.meta_campaign_id || `act_8849203_camp_${campaign.id}`}
+                                  Meta Campaign ID: {campaign.truth.meta_link.meta_campaign_id}
                                 </span>
-                                <span className={`font-bold text-[10px] flex items-center gap-1 px-2 py-0.5 rounded-md ${
-                                  campaign.meta_campaign_id?.startsWith('act_8849203_')
-                                    ? 'text-amber-800 bg-amber-100/60'
-                                    : 'text-emerald-800 bg-emerald-100/50'
-                                }`}>
-                                  <CheckCircle className={`w-3.5 h-3.5 ${campaign.meta_campaign_id?.startsWith('act_8849203_') ? 'text-amber-600' : 'text-emerald-600'}`} />
-                                  {campaign.meta_campaign_id?.startsWith('act_8849203_') ? 'Simulated Sandbox Dispatch (Missing META_ACCESS_TOKEN)' : 'Live Meta Ads Dispatched'}
+                                <span className="font-bold text-[10px] flex items-center gap-1 px-2 py-0.5 rounded-md text-emerald-800 bg-emerald-100/50">
+                                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                                  Live Meta Ads Dispatched
                                 </span>
                               </div>
                             )}
