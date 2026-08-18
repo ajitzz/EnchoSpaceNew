@@ -172,6 +172,7 @@ import { PdfReportService } from './src/lib/pdfReportService.js';
 import { LeadAlertingCrmService } from './src/lib/leadAlertingCrmService.js';
 import { DynamicPricingSyncService } from './src/lib/dynamicPricingSyncService.js';
 import { RetargetingPixelService } from './src/lib/retargetingPixelService.js';
+import { DoubleEntryLedgerService } from './src/lib/doubleEntryLedgerService.js';
 
 // import pinoHttp from 'pino-http'; // Removed as per JS version
 // import { logger } from './src/lib/logger/index.js'; // Removed as per JS version
@@ -9918,58 +9919,108 @@ app.post('/api/payments/webhook', async (req, res) => {
 });
 
 async function handleVerifiedPayment(txId: any, campaignId: any, paymentIntentId: any, gateway: string, req: any) {
-  if (txId) {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const txCheck = await client.query('SELECT * FROM wallet_transactions WHERE id = $1 AND status = $2 FOR UPDATE', [txId, 'pending']);
-      if (txCheck.rows.length > 0) {
-        const tx = txCheck.rows[0];
-        await client.query('UPDATE wallet_transactions SET status = $1 WHERE id = $2', ['completed', txId]);
-        await client.query('UPDATE host_wallets SET balance = balance + $1 WHERE id = $2', [tx.amount, tx.wallet_id]);
-      }
-      await client.query('COMMIT');
-    } catch (err) {
-      await client.query('ROLLBACK');
-    } finally {
-      client.release();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. Resolve wallet transaction by ID, reference_id, or payment_intent_id
+    let txRow: any = null;
+    if (txId) {
+      const txCheck = await client.query(
+        `SELECT wt.*, hw.host_id 
+         FROM wallet_transactions wt
+         JOIN host_wallets hw ON wt.wallet_id = hw.id
+         WHERE wt.id = $1 AND wt.status = 'pending' 
+         FOR UPDATE OF wt`,
+        [txId]
+      );
+      if (txCheck.rows.length > 0) txRow = txCheck.rows[0];
     }
-  } else {
+
+    if (!txRow && paymentIntentId) {
+      const txFallback = await client.query(
+        `SELECT wt.*, hw.host_id 
+         FROM wallet_transactions wt
+         JOIN host_wallets hw ON wt.wallet_id = hw.id
+         WHERE (wt.reference_id = $1 OR wt.description ILIKE $2) AND wt.status = 'pending'
+         ORDER BY wt.id DESC LIMIT 1
+         FOR UPDATE OF wt`,
+        [String(paymentIntentId), `%${paymentIntentId}%`]
+      );
+      if (txFallback.rows.length > 0) txRow = txFallback.rows[0];
+    }
+
+    if (txRow) {
+      const amount = Number(txRow.amount);
+      const hostId = txRow.host_id;
+
+      // Mark transaction completed
+      await client.query(
+        `UPDATE wallet_transactions SET status = 'completed' WHERE id = $1`,
+        [txRow.id]
+      );
+
+      // Record immutable double-entry ledger entry:
+      // DEBIT: GATEWAY_CLEARING (Funds received by gateway)
+      // CREDIT: HOST_WALLET (Funds credited to host wallet)
+      await DoubleEntryLedgerService.recordTransaction(client, {
+        transactionRef: `PAYMENT_WEBHOOK_${gateway.toUpperCase()}_${paymentIntentId || txRow.id}_${Date.now()}`,
+        eventType: 'WALLET_FUNDING',
+        description: `Verified ${gateway.toUpperCase()} wallet funding payment (${paymentIntentId || txRow.id})`,
+        lines: [
+          {
+            userId: null,
+            accountType: 'GATEWAY_CLEARING',
+            entryType: 'DEBIT',
+            amount,
+            currency: 'INR'
+          },
+          {
+            userId: hostId,
+            accountType: 'HOST_WALLET',
+            entryType: 'CREDIT',
+            amount,
+            currency: 'INR'
+          }
+        ]
+      });
+
+      console.log(`✅ [DOUBLE-ENTRY LEDGER] Successfully recorded verified wallet funding of ₹${amount} for host #${hostId}`);
+    }
+
+    // 2. Resolve campaign activation if this was a direct campaign checkout
     let campaignIdToUse = campaignId;
     if (!campaignIdToUse && paymentIntentId) {
-      const dbCheck = await pool.query('SELECT id FROM host_marketing_campaigns WHERE payment_intent_id = $1', [paymentIntentId]);
+      const dbCheck = await client.query('SELECT id FROM host_marketing_campaigns WHERE payment_intent_id = $1', [paymentIntentId]);
       if (dbCheck.rows.length > 0) campaignIdToUse = dbCheck.rows[0].id;
     }
 
     if (campaignIdToUse) {
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        const check = await client.query('SELECT * FROM host_marketing_campaigns WHERE id = $1 FOR UPDATE', [campaignIdToUse]);
-        if (check.rows.length > 0) {
-            const campaign = check.rows[0];
-            if (campaign.payment_status !== 'paid') {
-                await client.query(`
-                  UPDATE host_marketing_campaigns 
-                  SET subscription_active = true, payment_status = 'paid', payment_gateway = $1, payment_intent_id = $2, active_slide_index = 0
-                  WHERE id = $3
-                `, [gateway, paymentIntentId, campaignIdToUse]);
-                
-                const actorClient = { ip: req.ip, userAgent: gateway };
-                if (campaign.admin_approved) {
-                    await transitionCampaignState({ campaignId: campaignIdToUse, expectedCurrentState: campaign.status, to: 'active', reason: 'PAYMENT_SUCCESS', actorType: 'webhook', client });
-                } else {
-                    await transitionCampaignState({ campaignId: campaignIdToUse, expectedCurrentState: campaign.status, to: 'pending_approval', reason: 'PAYMENT_SUCCESS', actorType: 'webhook', client });
-                }
-            }
+      const check = await client.query('SELECT * FROM host_marketing_campaigns WHERE id = $1 FOR UPDATE', [campaignIdToUse]);
+      if (check.rows.length > 0) {
+        const campaign = check.rows[0];
+        if (campaign.payment_status !== 'paid') {
+          await client.query(`
+            UPDATE host_marketing_campaigns 
+            SET subscription_active = true, payment_status = 'paid', payment_gateway = $1, payment_intent_id = $2, active_slide_index = 0
+            WHERE id = $3
+          `, [gateway, paymentIntentId, campaignIdToUse]);
+          
+          if (campaign.admin_approved) {
+            await transitionCampaignState({ campaignId: campaignIdToUse, expectedCurrentState: campaign.status, to: 'active', reason: 'PAYMENT_SUCCESS', actorType: 'webhook', client });
+          } else {
+            await transitionCampaignState({ campaignId: campaignIdToUse, expectedCurrentState: campaign.status, to: 'pending_approval', reason: 'PAYMENT_SUCCESS', actorType: 'webhook', client });
+          }
         }
-        await client.query('COMMIT');
-      } catch (err) {
-        await client.query('ROLLBACK');
-      } finally {
-        client.release();
       }
     }
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[HANDLE VERIFIED PAYMENT ERROR]', err);
+  } finally {
+    client.release();
   }
 }
 
@@ -10361,13 +10412,17 @@ app.post('/api/marketing/campaigns/:id/subscribe', authenticateToken, async (req
       try {
         await refuelClient.query('BEGIN');
 
-        await refuelClient.query('UPDATE host_wallets SET balance = balance - $1 WHERE id = $2', [usdDeduction, wallet.id]);
-
-        // Insert wallet transaction
-        const txRes = await refuelClient.query(`
-          INSERT INTO wallet_transactions (wallet_id, amount, type, reference_id, status, description)
-          VALUES ($1, $2, 'campaign_funding', $3, 'completed', $4) RETURNING id
-        `, [wallet.id, -usdDeduction, String(campaign.id), `Campaign funding via Master Fuel Tank (₹${adSpendPool} ad spend + ₹${optimizationFee} 15% Encho fee)`]);
+        await DoubleEntryLedgerService.recordTransaction(refuelClient, {
+          transactionRef: idempotencyKey || `refuel_tx_${campaign.id}_${Date.now()}`,
+          eventType: 'AD_REFUEL',
+          legacyTransactionType: 'campaign_funding',
+          description: `Campaign funding via Master Fuel Tank (₹${adSpendPool} ad spend + ₹${optimizationFee} 15% Encho fee)`,
+          lines: [
+            { accountType: 'HOST_WALLET', userId: Number(campaign.host_id), entryType: 'DEBIT', amount: usdDeduction },
+            { accountType: 'AD_SPEND_ESCROW', entryType: 'CREDIT', amount: usdDeduction * 0.85 },
+            { accountType: 'ENCHO_FEE_REVENUE', entryType: 'CREDIT', amount: usdDeduction * 0.15 }
+          ]
+        });
 
         // Update campaign non-status fields
         await refuelClient.query(`
@@ -14455,69 +14510,6 @@ app.post('/api/create-payment-intent', authenticateToken, async (req: AuthReques
 
 // ==========================================
 
-// Helper: Record Double-Entry Journal Lines (Blueprint Section 3)
-async function recordLedgerTransaction(executor: any, {
-  txRef,
-  eventType,
-  description,
-  lines
-}: {
-  txRef: string;
-  eventType: string;
-  description: string;
-  lines: Array<{ accountType: string; userId?: number; entryType: 'DEBIT' | 'CREDIT'; amount: number }>;
-}) {
-  try {
-    const entryRes = await executor.query(`
-      INSERT INTO ledger_entries (transaction_ref, event_type, description)
-      VALUES ($1, $2, $3)
-      ON CONFLICT (transaction_ref) DO UPDATE SET description = EXCLUDED.description
-      RETURNING id
-    `, [txRef, eventType, description]);
-    
-    if (!entryRes.rows.length) return;
-    const entryId = entryRes.rows[0].id;
-
-    for (const line of lines) {
-      if (!line.amount || line.amount <= 0) continue;
-      let accountRes;
-      if (line.userId) {
-        accountRes = await executor.query(
-          `SELECT id FROM wallet_accounts WHERE user_id = $1 AND account_type = $2`,
-          [line.userId, line.accountType]
-        );
-        if (accountRes.rows.length === 0) {
-          accountRes = await executor.query(
-            `INSERT INTO wallet_accounts (user_id, account_type, balance) VALUES ($1, $2, 0) RETURNING id`,
-            [line.userId, line.accountType]
-          );
-        }
-      } else {
-        accountRes = await executor.query(
-          `SELECT id FROM wallet_accounts WHERE user_id IS NULL AND account_type = $1`,
-          [line.accountType]
-        );
-        if (accountRes.rows.length === 0) {
-          accountRes = await executor.query(
-            `INSERT INTO wallet_accounts (account_type, balance) VALUES ($1, 0) RETURNING id`,
-            [line.accountType]
-          );
-        }
-      }
-      const accountId = accountRes.rows[0].id;
-
-      const delta = line.entryType === 'CREDIT' ? line.amount : -line.amount;
-      await executor.query(`UPDATE wallet_accounts SET balance = balance + $1 WHERE id = $2`, [delta, accountId]);
-
-      await executor.query(`
-        INSERT INTO ledger_lines (entry_id, account_id, entry_type, amount)
-        VALUES ($1, $2, $3, $4)
-      `, [entryId, accountId, line.entryType, line.amount]);
-    }
-  } catch (err) {
-    console.error('[DOUBLE-ENTRY LEDGER ERROR]', err);
-  }
-}
 
 // Phase 2.9.2: Atomic Financial Settlement Helper
 async function processAtomicRefund(campaignId: number, hostId: number, remainingBudget: number, txType: string, txRef: string, description: string, adminId?: number, adminAction?: string, prevState?: any, feedback?: string) {
@@ -14542,19 +14534,23 @@ async function processAtomicRefund(campaignId: number, hostId: number, remaining
     }
     const walletId = walletRes.rows[0].id;
 
-    // 3. Mutate Wallet
-    await client.query('UPDATE host_wallets SET balance = balance + $1 WHERE id = $2', [remainingBudget, walletId]);
+    // 3. Double-Entry Ledger Mutate Wallet and Insert Ledger Transaction
+    await DoubleEntryLedgerService.recordTransaction(client, {
+      transactionRef: `${txRef}_${Date.now()}`,
+      eventType: 'ESCROW_RELEASE',
+      legacyTransactionType: txType,
+      description,
+      lines: [
+        { accountType: 'AD_SPEND_ESCROW', entryType: 'DEBIT', amount: remainingBudget * 0.85 },
+        { accountType: 'ENCHO_FEE_REVENUE', entryType: 'DEBIT', amount: remainingBudget * 0.15 },
+        { accountType: 'HOST_WALLET', userId: hostId, entryType: 'CREDIT', amount: remainingBudget }
+      ]
+    });
 
-    // 4. Insert Ledger Transaction
-    await client.query(`
-      INSERT INTO wallet_transactions (wallet_id, amount, type, reference_id, status, description)
-      VALUES ($1, $2, $3, $4, 'completed', $5)
-    `, [walletId, remainingBudget, txType, txRef, description]);
-
-    // 5. Update Campaign Financial State
+    // 4. Update Campaign Financial State
     await client.query("UPDATE host_marketing_campaigns SET payment_status = 'refunded' WHERE id = $1", [campaignId]);
 
-    // 6. Immutable Audit Event (if Admin)
+    // 5. Immutable Audit Event (if Admin)
     if (adminId && adminAction && prevState) {
       const newState = { status: adminAction.includes('reject') ? 'rejected' : 'killed', refund: remainingBudget, admin_feedback: feedback };
       await client.query(`
@@ -14562,17 +14558,6 @@ async function processAtomicRefund(campaignId: number, hostId: number, remaining
         VALUES ($1, $2, $3, $4, $5, $6, $7)
       `, [adminId, 'marketing_campaign', campaignId, adminAction, JSON.stringify(prevState), JSON.stringify(newState), '127.0.0.1']);
     }
-
-    await recordLedgerTransaction(client, {
-      txRef: `${txRef}_${Date.now()}`,
-      eventType: 'CAMPAIGN_CANCELLATION_REFUND',
-      description,
-      lines: [
-        { accountType: 'META_AD_ESCROW', entryType: 'DEBIT', amount: remainingBudget * 0.85 },
-        { accountType: 'ENCHO_REVENUE', entryType: 'DEBIT', amount: remainingBudget * 0.15 },
-        { accountType: 'HOST_WALLET', userId: hostId, entryType: 'CREDIT', amount: remainingBudget }
-      ]
-    });
 
     await client.query('COMMIT');
     return { success: true };
@@ -14919,15 +14904,14 @@ app.post('/api/marketing/wallet/refuel', authenticateToken, async (req: AuthRequ
          const txCheck = await client.query('SELECT * FROM wallet_transactions WHERE id = $1 FOR UPDATE', [txId]);
          if (txCheck.rows.length > 0) {
            await client.query('UPDATE wallet_transactions SET status = $1 WHERE id = $2', ['completed', txId]);
-           await client.query('UPDATE host_wallets SET balance = balance + $1 WHERE id = $2', [netAmount, walletId]);
-           await recordLedgerTransaction(client, {
-             txRef: idempotencyKey,
-             eventType: 'WALLET_REFUEL',
+           await DoubleEntryLedgerService.recordTransaction(client, {
+             transactionRef: idempotencyKey,
+             eventType: 'WALLET_FUNDING',
              description: `Wallet Refuel via ${selectedGateway}`,
              lines: [
-               { accountType: selectedGateway === 'stripe' ? 'STRIPE_CLEARING' : 'RAZORPAY_CLEARING', entryType: 'DEBIT', amount: Number(amount) },
+               { accountType: 'GATEWAY_CLEARING', entryType: 'DEBIT', amount: Number(amount) },
                { accountType: 'HOST_WALLET', userId: hostId, entryType: 'CREDIT', amount: netAmount },
-               { accountType: 'ENCHO_REVENUE', entryType: 'CREDIT', amount: Number(optimizationFee) }
+               { accountType: 'ENCHO_FEE_REVENUE', entryType: 'CREDIT', amount: Number(optimizationFee) }
              ]
            });
          }
@@ -15224,7 +15208,17 @@ app.post('/api/payments/razorpay/verify', async (req, res) => {
           const tx = txRes.rows[0];
           if (tx.status !== 'completed') {
             await client.query('UPDATE wallet_transactions SET status = $1 WHERE id = $2', ['completed', transaction_id]);
-            await client.query('UPDATE host_wallets SET balance = balance + $1 WHERE id = $2', [tx.amount, tx.wallet_id]);
+            const walletRes = await client.query('SELECT host_id FROM host_wallets WHERE id = $1', [tx.wallet_id]);
+            const hostId = walletRes.rows[0].host_id;
+            await DoubleEntryLedgerService.recordTransaction(client, {
+               transactionRef: `rp_webhook_${razorpay_payment_id}`,
+               eventType: 'WALLET_FUNDING',
+               description: `Wallet Refuel via Razorpay Webhook`,
+               lines: [
+                 { accountType: 'GATEWAY_CLEARING', entryType: 'DEBIT', amount: tx.amount },
+                 { accountType: 'HOST_WALLET', userId: hostId, entryType: 'CREDIT', amount: tx.amount }
+               ]
+            });
           }
         }
       }
@@ -15454,9 +15448,8 @@ app.post('/api/payments/geo-route/initiate', async (req: Request, res: Response)
 
         // Deduct wallet balance in USD base
         const usdDeduction = grossAmount > currentBalanceUSD ? Math.round((grossAmount / 83.5) * 100) / 100 : grossAmount;
-        await client.query('UPDATE host_wallets SET balance = balance - $1 WHERE id = $2', [usdDeduction, wallet.id]);
 
-        // Insert wallet transaction
+        // Insert wallet transaction (needed for idempotency key linking below)
         const txInsert = await client.query(
           `INSERT INTO wallet_transactions (wallet_id, amount, type, reference_id, status, description)
            VALUES ($1, $2, 'campaign_funding', $3, 'completed', $4) RETURNING id`,
@@ -15492,14 +15485,14 @@ app.post('/api/payments/geo-route/initiate', async (req: Request, res: Response)
           [`wtx_${txInsert.rows[0].id}`, `worder_${Date.now()}`, idempotencyKey]
         );
 
-        await recordLedgerTransaction(client, {
-          txRef: `campaign_fund_${campaign_id || Date.now()}_${Date.now()}`,
-          eventType: 'AD_BUDGET_DISPATCH',
+        await DoubleEntryLedgerService.recordTransaction(client, {
+          transactionRef: `campaign_fund_${campaign_id || Date.now()}_${Date.now()}`,
+          eventType: 'AD_SPEND_DEDUCTION',
           description: `Campaign funding via internal wallet ($${netAdSpend} ad spend + $${optFee} 15% Encho fee)`,
           lines: [
-            { accountType: 'HOST_WALLET', userId: hostId, entryType: 'DEBIT', amount: grossAmount },
-            { accountType: 'ENCHO_REVENUE', entryType: 'CREDIT', amount: optFee },
-            { accountType: 'META_AD_ESCROW', entryType: 'CREDIT', amount: netAdSpend }
+            { accountType: 'HOST_WALLET', userId: hostId, entryType: 'DEBIT', amount: usdDeduction },
+            { accountType: 'ENCHO_FEE_REVENUE', entryType: 'CREDIT', amount: optFee },
+            { accountType: 'AD_SPEND_ESCROW', entryType: 'CREDIT', amount: netAdSpend }
           ]
         });
 
