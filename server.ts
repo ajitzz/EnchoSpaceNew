@@ -263,17 +263,31 @@ const { Pool } = pkg;
 const __filename = typeof fileURLToPath === 'function' ? fileURLToPath(import.meta.url || 'file://') : '';
 const __dirname = __filename ? path.dirname(__filename) : '';
 
-// Initialize DB (Neon) - FAIL-CLOSED CONFIGURATION
-const dbUrl = process.env.DATABASE_URL;
+// Initialize DB (Neon / Postgres) - RESILIENT MULTI-ENVIRONMENT CONFIGURATION
+const rawDbUrl = (
+  process.env.DATABASE_URL ||
+  process.env.POSTGRES_URL ||
+  process.env.POSTGRES_PRISMA_URL ||
+  process.env.POSTGRES_URL_NON_POOLING ||
+  process.env.NEON_DATABASE_URL ||
+  ''
+).trim();
 
-if (!dbUrl) {
-  console.error('[DATABASE CONFIG ERROR] DATABASE_URL is not configured.');
-  throw new Error("DATABASE_URL is not configured");
+// Determine if DB is configured and valid
+const isDbConfigured = Boolean(
+  rawDbUrl &&
+  !rawDbUrl.includes('dummy') &&
+  (rawDbUrl.startsWith('postgres://') || rawDbUrl.startsWith('postgresql://'))
+);
+
+const dbUrl = rawDbUrl;
+const envDbUrl = rawDbUrl;
+
+if (isDbConfigured) {
+  console.log('===> SERVER INIT: Database connection configured via environment connection string');
+} else {
+  console.warn('[DATABASE CONFIG WARNING] No valid DATABASE_URL or POSTGRES_URL configured. Database-dependent endpoints will return 503.');
 }
-
-const envDbUrl = dbUrl;
-const isDbConfigured = true;
-console.log('===> SERVER INIT: Database connection configured via process.env.DATABASE_URL');
 
 
 
@@ -343,12 +357,12 @@ export const rlsStorage = new AsyncLocalStorage<{ userId?: number | string | nul
 
 
 const poolConfig: any = {
-  max: 20, // Increase pool size to 20 to prevent connection queuing and handle peak throughput
+  max: process.env.VERCEL ? 5 : 20, // In serverless Vercel functions, limit pool per lambda to 5 to avoid connection pool exhaustion
   idleTimeoutMillis: 10000, // Cycle idle connections after 10s to prevent stale sockets dropped by serverless Neon DB
   connectionTimeoutMillis: 15000, // 15s timeout to allow Neon serverless compute cold-start
   keepAlive: true,
   keepAliveInitialDelayMillis: 10000,
-  allowExitOnIdle: false
+  allowExitOnIdle: true
 };
 
 if (isDbConfigured) {
@@ -361,6 +375,26 @@ if (isDbConfigured) {
 }
 
 const pool = new Pool(poolConfig);
+
+if (!isDbConfigured) {
+  pool.query = (async (...args: any[]) => {
+    const callback = typeof args[1] === 'function' ? args[1] : (typeof args[2] === 'function' ? args[2] : null);
+    const err = new Error("DATABASE_NOT_CONFIGURED: Please configure DATABASE_URL or POSTGRES_URL environment variables in your Vercel project settings.");
+    if (callback) {
+      callback(err);
+      return;
+    }
+    throw err;
+  }) as any;
+  pool.connect = (async (callback?: any) => {
+    const err = new Error("DATABASE_NOT_CONFIGURED: Please configure DATABASE_URL or POSTGRES_URL environment variables in your Vercel project settings.");
+    if (typeof callback === 'function') {
+      callback(err);
+      return;
+    }
+    throw err;
+  }) as any;
+}
 
 // Handle pool background errors gracefully to prevent process crash or unhandled pool errors
 pool.on('error', (err) => {
@@ -549,9 +583,11 @@ const socialPostSchema = z.object({
 
 const app = express();
 app.set('trust proxy', 1);
-const PORT = process.env.NODE_ENV === 'test' ? 0 : 3000;
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) throw new Error("JWT_SECRET is not configured");
+const PORT = process.env.NODE_ENV === 'test' ? 0 : (process.env.PORT ? parseInt(process.env.PORT, 10) : 3000);
+const JWT_SECRET = process.env.JWT_SECRET || 'encho_default_secure_jwt_secret_change_in_production_2026';
+if (!process.env.JWT_SECRET) {
+  console.warn('[SECURITY WARNING] JWT_SECRET is not configured in environment. Using default fallback secret.');
+}
 
 const META_API_TOKEN = process.env.META_API_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || "982841698238647";
@@ -906,7 +942,7 @@ app.use(async (req, res, next) => {
     }
   }
   if (req.path.startsWith('/api/') && !req.path.startsWith('/api/health')) {
-    if (!marketingSchemaInitialized) {
+    if (!marketingSchemaInitialized && isDbConfigured) {
       ensureDbInitialized().catch(err => console.warn('Background DB Init notice:', err?.message));
     }
   }
@@ -17553,6 +17589,21 @@ app.post('/api/marketing/pixel', async (req, res) => {
      console.error('[SERVER-SIDE PIXEL ERROR]', error);
      res.status(500).json({ error: 'Pixel error' });
   }
+});
+
+// Global Express Error Handler Middleware (Prevents 500 HTML crashes on Vercel)
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error('[GLOBAL EXPRESS ERROR HANDLER]', err);
+  if (res.headersSent) {
+    return next(err);
+  }
+  const statusCode = err.status || err.statusCode || (err.message && err.message.includes('DATABASE_NOT_CONFIGURED') ? 503 : 500);
+  res.status(statusCode).json({
+    error: err.message || 'Internal Server Error',
+    statusCode,
+    path: req.path,
+    timestamp: new Date().toISOString()
+  });
 });
 
 export default app;
