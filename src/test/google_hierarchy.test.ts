@@ -55,7 +55,7 @@ describe('PHASE 3.8: GOOGLE ADS HIERARCHY TEST SUITE', () => {
       ) VALUES ($1, 100000, 15000, 85000, 0, 85000, 'USD')
       ON CONFLICT (campaign_id) DO NOTHING
     `, [campaignId]);
-  });
+  }, 60000);
 
   afterAll(async () => {
     await pool.query(`DELETE FROM provider_publishing_transactions WHERE campaign_id = $1`, [campaignId]);

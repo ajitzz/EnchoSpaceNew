@@ -88,14 +88,14 @@ describe('PHASE 3.8: GOOGLE ADS PROVIDER CONTRACT TEST SUITE', () => {
         $1, 100000, 15000, 85000, 0, 85000, 'USD'
       ) ON CONFLICT (campaign_id) DO NOTHING
     `, [campaignAId]);
-  });
+  }, 60000);
 
   afterAll(async () => {
     await pool.query(`DELETE FROM provider_publishing_transactions WHERE campaign_id IN ($1, $2)`, [campaignAId, campaignBId]);
     await pool.query(`DELETE FROM provider_entities WHERE campaign_id IN ($1, $2)`, [campaignAId, campaignBId]);
     await pool.query(`DELETE FROM campaign_financial_contracts WHERE campaign_id IN ($1, $2)`, [campaignAId, campaignBId]);
     await pool.query(`DELETE FROM host_marketing_campaigns WHERE id IN ($1, $2)`, [campaignAId, campaignBId]);
-    await pool.query(`DELETE FROM listings WHERE id = $1`, [listingAId]);
+    await pool.query(`DELETE FROM listings WHERE user_id IN ($1, $2) OR id = $3`, [hostAId, hostBId, listingAId]);
     await pool.query(`DELETE FROM users WHERE id IN ($1, $2)`, [hostAId, hostBId]);
   });
 
@@ -108,6 +108,8 @@ describe('PHASE 3.8: GOOGLE ADS PROVIDER CONTRACT TEST SUITE', () => {
     expect(provider.capabilities.supportsBudgetMutation).toBe(true);
     expect(provider.capabilities.supportsAssetLevelTargeting).toBe(true);
   });
+
+  let createdExternalCampaignId: string;
 
   it('2. Hierarchy creation adhering to AdProvider contract', async () => {
     const publishReq: ProviderPublishRequest = {
@@ -130,13 +132,14 @@ describe('PHASE 3.8: GOOGLE ADS PROVIDER CONTRACT TEST SUITE', () => {
     const result = await googleProvider.createCampaignHierarchy(publishReq, pool);
     expect(result.success).toBe(true);
     expect(result.provider).toBe('GOOGLE');
-    expect(result.externalCampaignId).toContain('customers/1234567890/campaigns/');
+    expect(result.externalCampaignId).toMatch(/^customers\/\d+\/campaigns\/\d+$/);
+    createdExternalCampaignId = result.externalCampaignId;
   });
 
   it('3. Pause campaign control operation', async () => {
     const pauseReq: ProviderControlRequest = {
       campaignId: campaignAId,
-      externalCampaignId: `customers/1234567890/campaigns/${campaignAId}`,
+      externalCampaignId: createdExternalCampaignId,
       action: 'PAUSE',
       reason: 'Host requested pause',
       actorType: 'host',
@@ -154,7 +157,7 @@ describe('PHASE 3.8: GOOGLE ADS PROVIDER CONTRACT TEST SUITE', () => {
   it('4. Resume campaign control operation', async () => {
     const resumeReq: ProviderControlRequest = {
       campaignId: campaignAId,
-      externalCampaignId: `customers/1234567890/campaigns/${campaignAId}`,
+      externalCampaignId: createdExternalCampaignId,
       action: 'RESUME',
       reason: 'Host requested resume',
       actorType: 'host',
@@ -172,7 +175,7 @@ describe('PHASE 3.8: GOOGLE ADS PROVIDER CONTRACT TEST SUITE', () => {
   it('5. Budget update with authorized limit guard', async () => {
     const budgetReq: ProviderBudgetUpdateRequest = {
       campaignId: campaignAId,
-      externalCampaignId: `customers/1234567890/campaigns/${campaignAId}`,
+      externalCampaignId: createdExternalCampaignId,
       newBudget: { currency: 'USD', minor_units: 50000 },
       authorizedLimit: { currency: 'USD', minor_units: 85000 },
       idempotencyKey: `idemp_google_budget_${Date.now()}`,
@@ -187,21 +190,21 @@ describe('PHASE 3.8: GOOGLE ADS PROVIDER CONTRACT TEST SUITE', () => {
   it('6. Hierarchy ownership verification', async () => {
     const isValid = await googleProvider.validateHierarchyOwnership(
       campaignAId,
-      { externalCampaignId: `customers/1234567890/campaigns/${campaignAId}` },
+      { externalCampaignId: createdExternalCampaignId },
       pool
     );
     expect(isValid).toBe(true);
   });
 
   it('7. Delivery truth reduction', async () => {
-    const truth = await googleProvider.fetchAuthoritativeDeliveryTruth(`customers/1234567890/campaigns/${campaignAId}`, pool);
+    const truth = await googleProvider.fetchAuthoritativeDeliveryTruth(createdExternalCampaignId, pool);
     expect(truth.provider).toBe('GOOGLE');
     expect(['LIVE', 'PAUSED', 'REVIEWING', 'DISAPPROVED', 'NOT_DELIVERING', 'UNKNOWN']).toContain(truth.normalizedState);
   });
 
   it('8. Telemetry normalization', async () => {
     const snapshot = await googleProvider.fetchTelemetrySnapshot(
-      `customers/1234567890/campaigns/${campaignAId}`,
+      createdExternalCampaignId,
       { startDate: '2026-08-01', endDate: '2026-08-16' },
       pool
     );

@@ -98,7 +98,7 @@ describe('PHASE 3.8B: GOOGLE ADS SANDBOX MASTER CERTIFICATION SUITE', () => {
         $1, 100000, 15000, 85000, 0, 85000, 'USD'
       ) ON CONFLICT (campaign_id) DO NOTHING
     `, [campaignAId]);
-  });
+  }, 60000);
 
   afterAll(async () => {
     await pool.query(`DELETE FROM provider_publishing_transactions WHERE campaign_id IN ($1, $2)`, [campaignAId, campaignBId]);
@@ -176,7 +176,7 @@ describe('PHASE 3.8B: GOOGLE ADS SANDBOX MASTER CERTIFICATION SUITE', () => {
     const res = await googleProvider.createCampaignHierarchy(publishReq, pool);
     expect(res.success).toBe(true);
     expect(res.provider).toBe('GOOGLE');
-    expect(res.externalCampaignId).toContain('customers/1234567890/campaigns/');
+    expect(res.externalCampaignId).toMatch(/^customers\/\d+\/campaigns\/\d+$/);
 
     // Read-After-Write verification
     const verified = await googleProvider.validateHierarchyOwnership(

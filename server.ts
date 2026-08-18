@@ -170,6 +170,8 @@ import { CalendarCircuitBreaker } from './src/lib/calendarCircuitBreaker.js';
 import { PerformanceAnalyticsService } from './src/lib/performanceAnalyticsService.js';
 import { PdfReportService } from './src/lib/pdfReportService.js';
 import { LeadAlertingCrmService } from './src/lib/leadAlertingCrmService.js';
+import { DynamicPricingSyncService } from './src/lib/dynamicPricingSyncService.js';
+import { RetargetingPixelService } from './src/lib/retargetingPixelService.js';
 
 // import pinoHttp from 'pino-http'; // Removed as per JS version
 // import { logger } from './src/lib/logger/index.js'; // Removed as per JS version
@@ -296,34 +298,37 @@ async function triggerSmartAutoPause(listingId: any, bookingId: any) {
 }
 
 // Gap 16: Dynamic Pricing Sync (Meta & Google Ad Copy Price Synchronization)
-async function syncDynamicPricingToMeta(listingId: any, oldPrice: any, newPrice: any) {
+async function syncDynamicPricingToMeta(listingId: any, oldPrice: any, newPrice: any, currency = 'INR') {
   if (!isDbConfigured || Number(oldPrice) === Number(newPrice)) return;
   try {
      const priceChangePct = Math.round(((Number(newPrice) - Number(oldPrice)) / Number(oldPrice)) * 100);
      const changeDirection = priceChangePct > 0 ? `+${priceChangePct}%` : `${priceChangePct}%`;
 
+     console.log(`[DYNAMIC PRICING SYNC] Listing #${listingId} price updated: ${oldPrice} -> ${newPrice} (${changeDirection}). Triggering DynamicPricingSyncService...`);
+
+     // 1. Dispatch through DynamicPricingSyncService (updates marketing_campaigns and audit log)
+     await DynamicPricingSyncService.onListingPriceUpdated(listingId, oldPrice, newPrice, currency, pool);
+
+     // 2. Legacy host_marketing_campaigns fallback sync
      const campaigns = await pool.query(
        "SELECT id, title, feed_description FROM host_marketing_campaigns WHERE listing_id = $1 AND status = 'active'",
        [listingId]
      );
 
      for (const c of campaigns.rows) {
-        console.log(`[DYNAMIC PRICING SYNC] Listing #${listingId} price updated: $${oldPrice} -> $${newPrice} (${changeDirection}). Syncing active Meta/Google Ad Campaign #${c.id}...`);
-
         let updatedFeedDesc = c.feed_description || '';
-        if (updatedFeedDesc.includes(`$${oldPrice}`)) {
-           updatedFeedDesc = updatedFeedDesc.replace(`$${oldPrice}`, `$${newPrice}`);
+        if (updatedFeedDesc.includes(`${oldPrice}`)) {
+           updatedFeedDesc = updatedFeedDesc.replace(`${oldPrice}`, `${newPrice}`);
         } else {
-           updatedFeedDesc = `${updatedFeedDesc} (Now $${newPrice}/night)`;
+           updatedFeedDesc = `${updatedFeedDesc} (Now ${DynamicPricingSyncService.formatPrice(newPrice, currency)}/night)`;
         }
 
         await pool.query(
            "UPDATE host_marketing_campaigns SET feed_description = $1, meta_dispatched_at = CURRENT_TIMESTAMP WHERE id = $2",
            [updatedFeedDesc, c.id]
         );
-
-        console.log(`[DYNAMIC PRICING SYNC] Successfully updated Meta/Google Ad Copy for Campaign #${c.id} to price $${newPrice}/night.`);
      }
+     console.log(`[DYNAMIC PRICING SYNC] Successfully updated Meta & Google Ad Copy for Listing #${listingId}.`);
   } catch(e) {
      console.error('[DYNAMIC PRICING SYNC ERROR]', e);
   }
@@ -4639,6 +4644,62 @@ app.post('/api/marketing/campaigns', authenticateToken, async (req: AuthRequest,
   } catch (error) {
     console.error('Error creating marketing campaign:', error);
     res.status(500).json({ error: 'Failed to create marketing campaign' });
+  }
+});
+
+// Gap 15: Cross-Platform First-Party Pixel & Conversions API (CAPI) Endpoint
+app.post('/api/telemetry/pixel-event', async (req, res) => {
+  try {
+    const { event_name, user_data, custom_data, event_source_url } = req.body;
+    if (!event_name) {
+      return res.status(400).json({ error: 'event_name is required' });
+    }
+
+    const outcome = await RetargetingPixelService.trackServerEvent(
+      {
+        event_name,
+        user_data: {
+          ...user_data,
+          client_ip_address: req.ip || req.socket?.remoteAddress,
+          client_user_agent: req.headers['user-agent']
+        },
+        custom_data,
+        event_source_url
+      },
+      pool
+    );
+
+    res.status(200).json({ status: 'success', ...outcome });
+  } catch (error) {
+    console.error('[PIXEL EVENT ERROR]', error);
+    res.status(500).json({ error: 'Failed to process pixel event' });
+  }
+});
+
+// Gap 16: Manual Force Price Sync Endpoint for Host Command Center
+app.post('/api/marketing/campaigns/:id/sync-pricing', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const result = await DynamicPricingSyncService.forceCampaignPriceSync(id, pool);
+    res.status(200).json({ status: 'success', ...result });
+  } catch (error: any) {
+    console.error('[PRICING FORCE SYNC ERROR]', error);
+    res.status(500).json({ error: error.message || 'Failed to sync campaign pricing' });
+  }
+});
+
+// Gap 16: Pricing Sync Audit History Endpoint
+app.get('/api/marketing/campaigns/:id/pricing-history', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { id } = req.params;
+    const limit = Number(req.query.limit) || 5;
+    const history = await DynamicPricingSyncService.getPricingSyncHistory(id, pool, limit);
+    res.status(200).json({ status: 'success', history });
+  } catch (error) {
+    console.error('[PRICING HISTORY ERROR]', error);
+    res.status(500).json({ error: 'Failed to fetch pricing history' });
   }
 });
 

@@ -34,6 +34,16 @@ import {
 import { HostMetaDeliveryStatusCard } from './HostMetaDeliveryStatusCard';
 import { HostCampaignPerformanceCard } from './HostCampaignPerformanceCard';
 import { HostCampaignFinancialCard } from './HostCampaignFinancialCard';
+import { CampaignReactorCore } from './CampaignReactorCore';
+import { HostGeographicPerformanceCard } from './HostGeographicPerformanceCard';
+import { HostFunnelRoasCard } from './HostFunnelRoasCard';
+import { HostDemographicsCard } from './HostDemographicsCard';
+import { HostPlacementsAndDevicesCard } from './HostPlacementsAndDevicesCard';
+import { HostMetaProofBadge } from './HostMetaProofBadge';
+import { HostLiveCreativePreviewCard } from './HostLiveCreativePreviewCard';
+import { HostCampaignAiAdvisorCard } from './HostCampaignAiAdvisorCard';
+import { HostDirectInquiriesFeedCard } from './HostDirectInquiriesFeedCard';
+import { HostDynamicPricingSyncCard } from './HostDynamicPricingSyncCard';
 
 interface HostCampaignControlCenterProps {
   campaignId: number | string;
@@ -372,7 +382,74 @@ export const HostCampaignControlCenter: React.FC<HostCampaignControlCenterProps>
         isRefreshing={isRefreshing}
       />
 
-      {/* 2. Six Canonical Transparency Panels Grid */}
+      {/* 2. Campaign Reactor Core (Dynamic Budget Fuel Gauge & 1-Click Refuel) */}
+      <CampaignReactorCore
+        campaignId={campaignId}
+        fuelGauge={truth.fuel_gauge}
+        currency={truth.financial_safety?.currency}
+        isLive={truth.operational_status === 'LIVE'}
+        onRefuelSuccess={() => fetchCampaignTruth(false)}
+      />
+
+      {/* 3. Conversion Funnel & True ROAS Transparency Card */}
+      <HostFunnelRoasCard
+        funnelMetrics={truth.funnel_metrics}
+        financialSafety={truth.financial_safety}
+        currency={truth.financial_safety?.currency}
+      />
+
+      {/* 4. Geographic Ad Delivery & Target Region Reach Card */}
+      <HostGeographicPerformanceCard
+        geographicBreakdown={truth.geographic_breakdown}
+        currency={truth.financial_safety?.currency}
+      />
+
+      {/* 5. Audience Demographics & Persona Intelligence */}
+      <HostDemographicsCard
+        demographicsBreakdown={truth.demographics_breakdown}
+        audienceInterests={truth.audience_interests_breakdown}
+      />
+
+      {/* 6. Multi-Channel Placements & Device Operating Systems */}
+      <HostPlacementsAndDevicesCard
+        placementBreakdown={truth.placement_breakdown}
+        deviceBreakdown={truth.device_breakdown}
+      />
+
+      {/* 7. Dynamic Listing Pricing Sync Command (Gap 16) */}
+      <HostDynamicPricingSyncCard
+        campaignId={campaignId}
+        pricingSyncStatus={truth.pricing_sync_status}
+        currency={truth.financial_safety?.currency}
+        onSyncComplete={() => fetchCampaignTruth(false)}
+      />
+
+      {/* 8. Live Ad Creative Preview Mockup */}
+      <HostLiveCreativePreviewCard
+        currency={truth.financial_safety?.currency}
+        listingLocation={truth.target_locations || 'Target Metro Area'}
+      />
+
+      {/* 8. Encho AI Co-Pilot Intelligence Advisor */}
+      <HostCampaignAiAdvisorCard
+        fuelPercentage={truth.fuel_gauge?.fuel_percentage}
+        topLocation={truth.geographic_breakdown?.[0]?.location}
+        ctr={truth.funnel_metrics?.click_rate}
+        leadsCount={truth.funnel_metrics?.direct_leads}
+        isLive={truth.operational_status === 'LIVE'}
+      />
+
+      {/* 9. Direct Walled Garden Inquiries Feed */}
+      <HostDirectInquiriesFeedCard
+        leads={[]}
+      />
+
+      {/* 10. 100% Authenticity Cryptographic Proof Badge */}
+      <HostMetaProofBadge
+        proof={truth.meta_cryptographic_proof}
+      />
+
+      {/* 11. Six Canonical Transparency Panels Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Panel 1: What is Happening */}
         <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
@@ -467,7 +544,7 @@ export const HostCampaignControlCenter: React.FC<HostCampaignControlCenterProps>
         </div>
       </div>
 
-      {/* 3. Performance & Financial Cards Grid */}
+      {/* 6. Performance & Financial Cards Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <HostCampaignPerformanceCard
           performanceState={truth.performance_state}

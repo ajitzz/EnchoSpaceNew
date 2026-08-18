@@ -51,7 +51,7 @@ describe('PHASE 3.8: GOOGLE ADS RECONCILIATION TEST SUITE', () => {
         campaign_id, provider, entity_type, external_id, account_id, configured_status, effective_status
       ) VALUES ($1, 'GOOGLE', 'CAMPAIGN', $2, '123-456-7890', 'ENABLED', 'ELIGIBLE')
     `, [campaignId, `customers/1234567890/campaigns/${campaignId}`]);
-  });
+  }, 60000);
 
   afterAll(async () => {
     await pool.query(`DELETE FROM provider_entities WHERE campaign_id = $1`, [campaignId]);

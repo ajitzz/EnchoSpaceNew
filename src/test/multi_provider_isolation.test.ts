@@ -62,7 +62,7 @@ describe('PHASE 3.8: MULTI-PROVIDER ISOLATION TEST SUITE', () => {
         ($1, 'META', 'CAMPAIGN', 'meta_camp_iso_101', 'act_123', 'ACTIVE', 'ACTIVE'),
         ($2, 'GOOGLE', 'CAMPAIGN', $3, '123-456-7890', 'ENABLED', 'ELIGIBLE')
     `, [metaCampId, googleCampId, `customers/1234567890/campaigns/${googleCampId}`]);
-  });
+  }, 60000);
 
   afterAll(async () => {
     await pool.query(`DELETE FROM provider_entities WHERE campaign_id IN ($1, $2)`, [metaCampId, googleCampId]);

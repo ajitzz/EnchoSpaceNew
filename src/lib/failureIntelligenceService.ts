@@ -363,9 +363,20 @@ export class FailureIntelligenceService {
    * Host projection REDACTS correlation_id, meta_error_code, meta_subcode, http_status, admin_guidance, etc.
    */
   static projectFailureIntelligenceForViewer(
-    intelligence: FailureIntelligenceContract,
+    intelligence: FailureIntelligenceContract | undefined | null,
     viewerContext: { role: string; isAdmin?: boolean }
   ): Partial<FailureIntelligenceContract> {
+    if (!intelligence) {
+      return {
+        error_class: 'UNKNOWN',
+        severity: 'INFO',
+        failure_stage: 'NONE',
+        root_cause: 'No failure detected',
+        retryable: false,
+        host_action_required: false
+      };
+    }
+
     const isAdmin = Boolean(viewerContext.isAdmin || viewerContext.role === 'admin');
 
     if (isAdmin) {

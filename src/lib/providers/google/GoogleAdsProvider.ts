@@ -145,11 +145,15 @@ export class GoogleAdsProvider implements AdProvider {
         ]);
       }
 
-      // 4. Construct Deterministic Hierarchy IDs
-      const externalCampaignId = `customers/1234567890/campaigns/${request.campaignId}`;
-      const externalContainerId = `customers/1234567890/adGroups/ag_${request.campaignId}`;
-      const externalAdId = `customers/1234567890/adGroupAds/aga_${request.campaignId}`;
-      const externalCreativeId = `customers/1234567890/assetSets/aset_${request.campaignId}`;
+      // 4. Construct Deterministic Hierarchy IDs using Authoritative Master MCC
+      const creds = await this.validateCredentials();
+      const accountId = creds.accountId || process.env.GOOGLE_ADS_MCC_CUSTOMER_ID || '990-499-8948';
+      const customerIdClean = accountId.replace(/-/g, '');
+
+      const externalCampaignId = `customers/${customerIdClean}/campaigns/${request.campaignId}`;
+      const externalContainerId = `customers/${customerIdClean}/adGroups/ag_${request.campaignId}`;
+      const externalAdId = `customers/${customerIdClean}/adGroupAds/aga_${request.campaignId}`;
+      const externalCreativeId = `customers/${customerIdClean}/assetSets/aset_${request.campaignId}`;
 
       // 5. Persist Normalized Hierarchy Nodes in provider_entities
       if (poolOrClient) {
@@ -158,39 +162,40 @@ export class GoogleAdsProvider implements AdProvider {
           INSERT INTO provider_entities (
             campaign_id, provider, entity_type, external_id, account_id,
             configured_status, effective_status, metadata
-          ) VALUES ($1, 'GOOGLE', 'CAMPAIGN', $2, '123-456-7890', 'ENABLED', 'ELIGIBLE', $3)
+          ) VALUES ($1, 'GOOGLE', 'CAMPAIGN', $2, $3, 'ENABLED', 'ELIGIBLE', $4)
           ON CONFLICT (provider, external_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
-        `, [request.campaignId, externalCampaignId, JSON.stringify({ budgetMicros })]);
+        `, [request.campaignId, externalCampaignId, accountId, JSON.stringify({ budgetMicros })]);
 
         // AdGroup Entity
         await poolOrClient.query(`
           INSERT INTO provider_entities (
             campaign_id, provider, entity_type, external_id, parent_entity_id, account_id,
             configured_status, effective_status
-          ) VALUES ($1, 'GOOGLE', 'AD_GROUP', $2, $3, '123-456-7890', 'ENABLED', 'ELIGIBLE')
+          ) VALUES ($1, 'GOOGLE', 'AD_GROUP', $2, $3, $4, 'ENABLED', 'ELIGIBLE')
           ON CONFLICT (provider, external_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
-        `, [request.campaignId, externalContainerId, externalCampaignId]);
+        `, [request.campaignId, externalContainerId, externalCampaignId, accountId]);
 
         // Ad Entity
         await poolOrClient.query(`
           INSERT INTO provider_entities (
             campaign_id, provider, entity_type, external_id, parent_entity_id, account_id,
             configured_status, effective_status
-          ) VALUES ($1, 'GOOGLE', 'AD', $2, $3, '123-456-7890', 'ENABLED', 'ELIGIBLE')
+          ) VALUES ($1, 'GOOGLE', 'AD', $2, $3, $4, 'ENABLED', 'ELIGIBLE')
           ON CONFLICT (provider, external_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
-        `, [request.campaignId, externalAdId, externalContainerId]);
+        `, [request.campaignId, externalAdId, externalContainerId, accountId]);
 
         // Headline Asset Entity
         await poolOrClient.query(`
           INSERT INTO provider_entities (
             campaign_id, provider, entity_type, external_id, parent_entity_id, account_id,
             configured_status, effective_status, metadata
-          ) VALUES ($1, 'GOOGLE', 'ASSET', $2, $3, '123-456-7890', 'ENABLED', 'APPROVED', $4)
+          ) VALUES ($1, 'GOOGLE', 'ASSET', $2, $3, $4, 'ENABLED', 'APPROVED', $5)
           ON CONFLICT (provider, external_id) DO UPDATE SET updated_at = CURRENT_TIMESTAMP
         `, [
           request.campaignId,
-          `customers/1234567890/assets/headline_${request.campaignId}`,
+          `customers/${customerIdClean}/assets/headline_${request.campaignId}`,
           externalAdId,
+          accountId,
           JSON.stringify({ text: request.creativeAssets.headline, type: 'HEADLINE' })
         ]);
       }
