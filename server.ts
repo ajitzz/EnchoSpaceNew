@@ -289,6 +289,23 @@ if (isDbConfigured) {
   console.warn('[DATABASE CONFIG WARNING] No valid DATABASE_URL or POSTGRES_URL configured. Database-dependent endpoints will return 503.');
 }
 
+// Background Worker Execution Gate
+// Workers MUST ONLY run on dedicated long-running containers (Cloud Run worker.ts).
+// Vercel Serverless Functions, AWS Lambda, and test runners MUST NEVER execute background interval loops.
+export const shouldRunBackgroundWorkers = Boolean(
+  process.env.DISABLE_BACKGROUND_WORKERS !== 'true' &&
+  !process.env.VERCEL &&
+  !process.env.NOW_REGION &&
+  !process.env.AWS_LAMBDA_FUNCTION_NAME &&
+  process.env.NODE_ENV !== 'test'
+);
+
+if (shouldRunBackgroundWorkers) {
+  console.log('[WORKER ENGINE] Background worker timers enabled for long-running host.');
+} else {
+  console.log('[WORKER ENGINE] Background worker timers disabled (Serverless/Test runtime detected).');
+}
+
 
 
 // Milestone 5 & Phase 3.4: Calendar Circuit Breaker (Smart Auto-Pause & Auto-Resume)
@@ -357,11 +374,13 @@ export const rlsStorage = new AsyncLocalStorage<{ userId?: number | string | nul
 
 
 const poolConfig: any = {
-  max: process.env.VERCEL ? 5 : 20, // In serverless Vercel functions, limit pool per lambda to 5 to avoid connection pool exhaustion
-  idleTimeoutMillis: 10000, // Cycle idle connections after 10s to prevent stale sockets dropped by serverless Neon DB
-  connectionTimeoutMillis: 15000, // 15s timeout to allow Neon serverless compute cold-start
+  max: process.env.VERCEL ? 3 : 20, // In serverless Vercel functions, limit pool per lambda to 3 to avoid connection pool exhaustion
+  idleTimeoutMillis: 5000, // Cycle idle connections after 5s to prevent stale sockets dropped by serverless Neon DB
+  connectionTimeoutMillis: 5000, // 5s timeout to fail fast rather than hanging the serverless lambda
+  statement_timeout: 8000, // 8s statement timeout prevents long locks
+  query_timeout: 8000, // 8s query timeout
   keepAlive: true,
-  keepAliveInitialDelayMillis: 10000,
+  keepAliveInitialDelayMillis: 5000,
   allowExitOnIdle: true
 };
 
@@ -405,7 +424,7 @@ pool.on('error', (err) => {
 const originalPoolQuery = pool.query;
 const originalPoolConnect = pool.connect.bind(pool);
 
-async function executeQueryWithRetry(fn: () => Promise<any>, retries = 3, delay = 300): Promise<any> {
+async function executeQueryWithRetry(fn: () => Promise<any>, retries = 1, delay = 150): Promise<any> {
   try {
     return await fn();
   } catch (err: any) {
@@ -432,7 +451,7 @@ async function executeQueryWithRetry(fn: () => Promise<any>, retries = 3, delay 
       err?.code === '57P02' ||
       err?.code === '57P03';
     if (isConnError && retries > 0) {
-      const jitterDelay = delay + Math.floor(Math.random() * 150);
+      const jitterDelay = delay + Math.floor(Math.random() * 100);
       console.warn(`[DATABASE QUERY RETRY] Retrying query after transient error (${err?.message || err?.code}). Retries remaining: ${retries}`);
       await new Promise(res => setTimeout(res, jitterDelay));
       return executeQueryWithRetry(fn, retries - 1, delay * 2);
@@ -441,12 +460,7 @@ async function executeQueryWithRetry(fn: () => Promise<any>, retries = 3, delay 
   }
 }
 
-pool.connect = (async function (this: any, callback?: any) {
-  if (typeof callback === 'function') {
-    return originalPoolConnect(callback);
-  }
-  return executeQueryWithRetry(async () => originalPoolConnect(), 3, 300);
-}) as any;
+pool.connect = originalPoolConnect;
 
 pool.query = async function (this: any, ...args: any[]) {
   const [text, params, callback] = args;
@@ -703,6 +717,11 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" } // Allow loading cross-origin images
 }));
 
+// Process Liveness Probe — Instant 200 OK, Zero DB/Network/Worker Dependencies
+app.get('/api/health/live', (_req, res) => {
+  res.status(200).json({ status: 'alive', uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
+
 // HTTP Request Logging
 app.use(morgan('combined', {
   skip: (req) => req.path === '/api/health' || req.path.startsWith('/assets/')
@@ -931,16 +950,7 @@ app.use(express.json({
   }
 }));
 
-app.use(async (req, res, next) => {
-  if (dbConnectionError && isDbConfigured) {
-    try {
-      await pool.query('SELECT 1');
-      dbConnectionError = null;
-      console.log('✅ Database connection has self-healed and is now active.');
-    } catch (err) {
-      console.warn('Database self-healing connection check failed:', (err as Error).message || String(err));
-    }
-  }
+app.use((req, res, next) => {
   if (req.path.startsWith('/api/') && !req.path.startsWith('/api/health')) {
     if (!marketingSchemaInitialized && isDbConfigured) {
       ensureDbInitialized().catch(err => console.warn('Background DB Init notice:', err?.message));
@@ -951,8 +961,7 @@ app.use(async (req, res, next) => {
 
 app.use(hpp()); // Protect against HTTP Parameter Pollution attacks
 
-// Phase 2.9.4: Evidence-based Liveness and Readiness Probes
-app.get('/api/health/live', (req, res) => res.status(200).json({ status: 'alive' }));
+// Phase 2.9.4: Evidence-based Readiness Probe (Database & AI configuration check)
 app.get('/api/health/ready', async (req, res) => {
   try {
     const isDbConnected = await pool.query('SELECT 1').then(() => true).catch(() => false);
@@ -10564,7 +10573,7 @@ export const processLeadNotificationQueue = async (overridePool?: any) => {
   return LeadAlertingCrmService.processLeadNotificationQueue(dbPool);
 };
 
-if (!process.env.VERCEL && process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
+if (shouldRunBackgroundWorkers) {
   setInterval(() => WebhookWorkerService.processInboundWebhooks(pool, handleVerifiedPayment), 10 * 1000); // Check every 10 seconds for real-time webhooks
   setInterval(() => processLeadNotificationQueue(), 30 * 1000); // Check every 30 seconds
 }
@@ -16198,7 +16207,7 @@ export const processEscrowAutoRelease = async (overridePool?: any) => {
   );
 };
 
-if (!process.env.VERCEL && process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
+if (shouldRunBackgroundWorkers) {
   setInterval(processEscrowAutoRelease, 60000);
 }
 
@@ -16620,7 +16629,7 @@ export const processDynamicCreativeOptimization = async (overridePool?: any) => 
     }
   );
 };
-if (process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
+if (shouldRunBackgroundWorkers) {
   setInterval(processDynamicCreativeOptimization, 60 * 60 * 1000); // Check every 1 hour
 }
 
@@ -16735,7 +16744,7 @@ export const runAnalyticsRollup = async (overridePool?: any) => {
     }
   );
 };
-if (process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
+if (shouldRunBackgroundWorkers) {
   setInterval(runAnalyticsRollup, 15 * 60 * 1000); // 15 mins
 }
 
@@ -16835,7 +16844,7 @@ export const processScheduledSocialPosts = async (overridePool?: any) => {
     console.error('[SOCIAL STUDIO PUBLISHER ERROR]', err);
   }
 };
-if (process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
+if (shouldRunBackgroundWorkers) {
   setInterval(processScheduledSocialPosts, 60 * 1000);
 }
 
@@ -16925,7 +16934,7 @@ export const processWebhookDLQ = async (overridePool?: any) => {
     }
   );
 };
-if (process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
+if (shouldRunBackgroundWorkers) {
   setInterval(processWebhookDLQ, 5 * 60 * 1000);
 }
 
@@ -17313,7 +17322,7 @@ export const processMetaReconciliation = async (overridePool?: any, overrideAcce
   );
 };
 // Run every 10 minutes
-if (process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
+if (shouldRunBackgroundWorkers) {
   setInterval(processMetaReconciliation, 10 * 60 * 1000);
 }
 
@@ -17517,7 +17526,7 @@ export const recoverOrphanedMetaTransactions = async (overridePool?: any) => {
 };
 
 // Run every 2 minutes — orphans are only eligible after 5 min (RECOVERY_LEASE_STALE_THRESHOLD_SECONDS)
-if (process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
+if (shouldRunBackgroundWorkers) {
   setInterval(recoverOrphanedMetaTransactions, RECOVERY_POLL_INTERVAL_MS);
 }
 

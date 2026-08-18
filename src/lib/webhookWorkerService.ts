@@ -1,5 +1,5 @@
 import { Pool } from 'pg';
-import { LeadAlertingCrmService } from './leadAlertingCrmService';
+import { LeadAlertingCrmService } from './leadAlertingCrmService.js';
 
 export class WebhookWorkerService {
   /**
