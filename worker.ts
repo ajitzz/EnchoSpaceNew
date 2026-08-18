@@ -9,8 +9,12 @@ import {
   processWebhookDLQ,
   runAnalyticsRollup,
   processScheduledSocialPosts,
-  processDynamicCreativeOptimization
+  processDynamicCreativeOptimization,
+  processLeadNotificationQueue,
+  handleVerifiedPayment
 } from './server.ts';
+import { DistributedLockService } from './src/lib/distributedLock.js';
+import { WebhookWorkerService } from './src/lib/webhookWorkerService.js';
 
 dotenv.config();
 
@@ -529,21 +533,35 @@ app.get('/healthz', async (_req, res) => {
 // GOOGLE ADS WORKER TASK DEFINITIONS
 // ==========================================
 export async function googleReconciliationWorker() {
-  try {
-    const { googleAdsProvider } = await import('./src/lib/providers/google/GoogleAdsProvider.js');
-    return { reconciled: true, provider: 'GOOGLE' };
-  } catch (e: any) {
-    return { reconciled: false, error: e.message };
-  }
+  return DistributedLockService.withAdvisoryLock(
+    workerPool,
+    DistributedLockService.LOCKS.GOOGLE_RECONCILIATION,
+    'googleReconciliationWorker',
+    async () => {
+      try {
+        const { googleAdsProvider } = await import('./src/lib/providers/google/GoogleAdsProvider.js');
+        return { reconciled: true, provider: 'GOOGLE' };
+      } catch (e: any) {
+        return { reconciled: false, error: e.message };
+      }
+    }
+  );
 }
 
 export async function googleTelemetrySyncWorker() {
-  try {
-    const { googleAdsProvider } = await import('./src/lib/providers/google/GoogleAdsProvider.js');
-    return { synced: true, provider: 'GOOGLE' };
-  } catch (e: any) {
-    return { synced: false, error: e.message };
-  }
+  return DistributedLockService.withAdvisoryLock(
+    workerPool,
+    DistributedLockService.LOCKS.GOOGLE_TELEMETRY_SYNC,
+    'googleTelemetrySyncWorker',
+    async () => {
+      try {
+        const { googleAdsProvider } = await import('./src/lib/providers/google/GoogleAdsProvider.js');
+        return { synced: true, provider: 'GOOGLE' };
+      } catch (e: any) {
+        return { synced: false, error: e.message };
+      }
+    }
+  );
 }
 
 // ==========================================
@@ -592,7 +610,9 @@ export async function startWorker() {
   await runStartupRecoveryAudit();
 
   // Schedule background jobs with production intervals
-  intervals.push(setInterval(() => executeWorkerCycle('processEscrowAutoRelease', processEscrowAutoRelease), 60 * 1000));
+  intervals.push(setInterval(() => executeWorkerCycle('processInboundWebhooks', async () => { await WebhookWorkerService.processInboundWebhooks(workerPool, handleVerifiedPayment); }), 10 * 1000));
+  intervals.push(setInterval(() => executeWorkerCycle('processLeadNotificationQueue', async () => { await processLeadNotificationQueue(workerPool); }), 30 * 1000));
+  intervals.push(setInterval(() => executeWorkerCycle('processEscrowAutoRelease', async () => { await processEscrowAutoRelease(); }), 60 * 1000));
   intervals.push(setInterval(() => executeWorkerCycle('recoverOrphanedMetaTransactions', recoverOrphanedMetaTransactions), 2 * 60 * 1000));
   intervals.push(setInterval(() => executeWorkerCycle('processMetaReconciliation', processMetaReconciliation), 10 * 60 * 1000));
   intervals.push(setInterval(() => executeWorkerCycle('googleReconciliationWorker', async () => { await googleReconciliationWorker(); }), 10 * 60 * 1000));

@@ -3,7 +3,7 @@
 // ==========================================
 // PHASE 2.2: CENTRAL CAMPAIGN STATE MACHINE
 // ==========================================
-export type CampaignState = 
+export type CampaignState =
   | 'draft'
   | 'pending_webhook'
   | 'pending_approval'
@@ -54,7 +54,7 @@ export async function transitionCampaignState(params: {
   client?: any; // pg client
 }): Promise<CampaignState> {
   const { campaignId, expectedCurrentState, to, reason, actorType = 'system', actorId = 'system', correlationId, tenantId } = params;
-  
+
   const client = params.client || await pool.connect();
   const releaseClient = !params.client;
 
@@ -99,11 +99,11 @@ export async function transitionCampaignState(params: {
 
     // 5. Append Immutable Event
     const eventCorrId = correlationId || crypto.randomUUID();
-    
+
     // We assume meta_publishing_events table exists. Let's do a safe insert or fallback if schema differs
     try {
       await client.query(`
-        INSERT INTO meta_publishing_events 
+        INSERT INTO meta_publishing_events
         (campaign_id, correlation_id, event_type, from_state, to_state, actor_type, actor_id, reason)
         VALUES ($1, $2, 'STATE_TRANSITION', $3, $4, $5, $6, $7)
       `, [campaignId, eventCorrId, currentState, to, actorType, String(actorId), reason]);
@@ -113,7 +113,7 @@ export async function transitionCampaignState(params: {
     }
 
     if (releaseClient) await client.query('COMMIT');
-    
+
     console.log(`[FSM] Campaign ${campaignId}: ${currentState} -> ${to} (${reason})`);
     return to;
 
@@ -125,7 +125,7 @@ export async function transitionCampaignState(params: {
   }
 }
 // ==========================================
- 
+
 // @ts-nocheck
 import fs from 'fs';
 import { AsyncLocalStorage } from 'async_hooks';
@@ -173,6 +173,8 @@ import { LeadAlertingCrmService } from './src/lib/leadAlertingCrmService.js';
 import { DynamicPricingSyncService } from './src/lib/dynamicPricingSyncService.js';
 import { RetargetingPixelService } from './src/lib/retargetingPixelService.js';
 import { DoubleEntryLedgerService } from './src/lib/doubleEntryLedgerService.js';
+import { WebhookWorkerService } from './src/lib/webhookWorkerService.js';
+import { DistributedLockService } from './src/lib/distributedLock.js';
 
 // import pinoHttp from 'pino-http'; // Removed as per JS version
 // import { logger } from './src/lib/logger/index.js'; // Removed as per JS version
@@ -436,7 +438,7 @@ pool.query = async function (this: any, ...args: any[]) {
           `SELECT set_config('app.current_user_id', $1, false), set_config('app.bypass_rls', $2, false)`,
           [String(userId), 'false']
         );
-        
+
         const result = await client.query(text, params);
         return result;
       } catch (err) {
@@ -494,13 +496,13 @@ const s3 = new S3Client({
   },
 });
 
-export { maskContactInfo } from './src/lib/maskUtils.js';
+import { maskContactInfo } from './src/lib/maskUtils.js';
+import { StructuredLogger } from './src/lib/observability/structuredLogger.js';
+import { MetricsRegistry } from './src/lib/observability/metricsRegistry.js';
+import { AlertService } from './src/lib/observability/alertService.js';
+import { ProviderDriftDetector } from './src/lib/providers/schemas.js';
 
-
-// ==========================================
-
-
-
+export { maskContactInfo, StructuredLogger, MetricsRegistry, AlertService, ProviderDriftDetector };
 
 // ==========================================
 const campaignSchema = z.object({
@@ -607,7 +609,7 @@ async function sendWhatsAppMessage(toPhone: string, messageText: string): Promis
 export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
-  
+
   if (!token) {
     return res.status(401).json({ error: 'Authentication required. No token provided.' });
   }
@@ -670,6 +672,33 @@ app.use(morgan('combined', {
   skip: (req) => req.path === '/api/health' || req.path.startsWith('/assets/')
 }));
 
+// End-to-End Correlation & Production Observability Middleware
+app.use((req: any, res: any, next: any) => {
+  const correlationId = req.headers['x-correlation-id'] || `corr_req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const requestId = req.headers['x-request-id'] || `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  req.correlationId = correlationId;
+  req.requestId = requestId;
+  res.setHeader('X-Correlation-ID', correlationId);
+  res.setHeader('X-Request-ID', requestId);
+
+  const start = Date.now();
+  res.on('finish', () => {
+    const durationMs = Date.now() - start;
+    MetricsRegistry.recordApiRequest(req.method, req.route?.path || req.path, res.statusCode, durationMs);
+    if (res.statusCode >= 500) {
+      StructuredLogger.error(`[API 5XX] ${req.method} ${req.path} -> ${res.statusCode} in ${durationMs}ms`, {
+        correlationId,
+        requestId,
+        durationMs,
+        outcome: 'FAILED',
+        errorCode: `HTTP_${res.statusCode}`,
+        tenantId: req.user?.id || null
+      });
+    }
+  });
+  next();
+});
+
 // Real-time Integration Inspection Monitoring Middleware
 app.use(integrationInspectionMiddleware);
 
@@ -691,19 +720,19 @@ app.get('/privacy', (req, res) => {
     <body>
       <h1>Privacy Policy for Encho</h1>
       <p>Last updated: August 8, 2026</p>
-      
+
       <h2>1. Introduction</h2>
       <p>Welcome to Encho. This privacy policy explains how we collect, use, and protect your data.</p>
-      
+
       <h2>2. Data Collection</h2>
       <p>We only collect the information you choose to provide to us, including your profile data, marketing preferences, and campaign information.</p>
-      
+
       <h2>3. Meta and Third-Party Integrations</h2>
       <p>When you use our Meta marketing features, we interact with the Meta Graph API on your behalf. We do not sell your personal data to third parties.</p>
-      
+
       <h2>4. Data Security</h2>
       <p>We implement industry-standard security measures to protect your information, including strict Row-Level Security in our databases.</p>
-      
+
       <h2>5. Contact Us</h2>
       <p>If you have any questions about this privacy policy, please contact support.</p>
     </body>
@@ -718,6 +747,23 @@ app.get('/api/admin/integration-inspection', (req: Request, res: Response) => {
     timestamp: new Date().toISOString(),
     auditReport
   });
+});
+
+// Admin Observability & Telemetry Snapshot Endpoint
+app.get('/api/admin/metrics', authenticateToken, (req: AuthRequest, res) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required.' });
+  }
+  return res.json(MetricsRegistry.getSnapshot());
+});
+
+// Admin Operational Alerts History Endpoint
+app.get('/api/admin/alerts', authenticateToken, (req: AuthRequest, res) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required.' });
+  }
+  const limit = req.query.limit ? Number(req.query.limit) : 50;
+  return res.json({ alerts: AlertService.getRecentAlerts(limit) });
 });
 
 // Global Rate Limiting
@@ -805,7 +851,7 @@ app.use(compression({
 app.use((req, res, next) => {
   // Force disabled for stability
   return next();
-  
+
   // Only inject faults into non-critical backend read APIs (must start with /api/)
   // Protect static assets (CSS, JS, HTML), Vite middleware, auth, payments, health
   if (
@@ -875,7 +921,7 @@ app.get('/api/health/ready', async (req, res) => {
   try {
     const isDbConnected = await pool.query('SELECT 1').then(() => true).catch(() => false);
     const isAiConfigured = process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.includes('dummy');
-    
+
     if (isDbConnected) {
       res.status(200).json({ status: 'ready', db: 'connected', ai: isAiConfigured ? 'configured' : 'dummy' });
     } else {
@@ -889,19 +935,19 @@ app.get('/api/encho/health', async (req, res) => {
   try {
     await ensureDbInitialized();
     const tablesCheck = await pool.query(`
-      SELECT table_name 
-      FROM information_schema.tables 
-      WHERE table_schema = 'public' 
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
       AND table_name IN ('users', 'listings', 'host_marketing_campaigns', 'host_wallets', 'wallet_transactions', 'host_social_posts', 'admin_audit_logs', 'campaign_metrics', 'webhook_dlq', 'host_outreach_leads');
     `);
     const tables = tablesCheck.rows.map(r => r.table_name);
-    
+
     // Check RLS status
     let rlsEnforced = true;
     try {
       const rlsCheck = await pool.query(`
-        SELECT relname, relrowsecurity 
-        FROM pg_class 
+        SELECT relname, relrowsecurity
+        FROM pg_class
         WHERE relname IN ('host_marketing_campaigns', 'host_wallets', 'host_outreach_leads')
         AND relrowsecurity = true;
       `);
@@ -960,26 +1006,23 @@ app.get('/api/webhook/whatsapp', (req, res) => {
   }
 });
 
-app.post('/api/webhook/whatsapp', async (req, res) => {
-  try {
-    const body = req.body;
-    if (body.object) {
-      if (body.entry && body.entry[0].changes && body.entry[0].changes[0].value.messages && body.entry[0].changes[0].value.messages[0]) {
-        const phone_number_id = body.entry[0].changes[0].value.metadata.phone_number_id;
-        const from = body.entry[0].changes[0].value.messages[0].from;
-        const msg_body = body.entry[0].changes[0].value.messages[0].text?.body;
+export const processWhatsAppWebhookPayload = async (body: any) => {
+  if (body.entry && body.entry[0].changes && body.entry[0].changes[0].value.messages && body.entry[0].changes[0].value.messages[0]) {
+    const phone_number_id = body.entry[0].changes[0].value.metadata.phone_number_id;
+    const from = body.entry[0].changes[0].value.messages[0].from;
+    const msg_body = body.entry[0].changes[0].value.messages[0].text?.body;
 
-        // Ensure we don't send anything if msg_body is empty
-        if (!msg_body || msg_body.trim() === '') {
-           return res.sendStatus(200);
-        }
+    // Ensure we don't send anything if msg_body is empty
+    if (!msg_body || msg_body.trim() === '') {
+       return;
+    }
 
-        // Automated AI reply logic using Gemini
-        if (ai) {
-           const listingsRes = await pool.query('SELECT title, description, price, city, currency FROM listings WHERE id > 0 LIMIT 15');
-           const listingsContext = listingsRes.rows.map((l: any) => `- ${l.title} in ${l.city} (${l.currency}${l.price}): ${l.description}`).join('\n');
+    // Automated AI reply logic using Gemini
+    if (ai) {
+       const listingsRes = await pool.query('SELECT title, description, price, city, currency FROM listings WHERE id > 0 LIMIT 15');
+       const listingsContext = listingsRes.rows.map((l: any) => `- ${l.title} in ${l.city} (${l.currency}${l.price}): ${l.description}`).join('\n');
 
-           const systemInstruction = `You are a helpful, professional assistant for ENCHO Space (a real estate and property booking platform).
+       const systemInstruction = `You are a helpful, professional assistant for ENCHO Space (a real estate and property booking platform).
 You are answering queries from customers on WhatsApp.
 Never send empty messages. Never use placeholders like 'Replace this sample message', '[Insert Name]', or similar. Never output instructions to the user on how to replace text.
 Always generate a fully complete, ready-to-send, natural response. Keep your response under 1000 characters and use plain text with simple emojis.
@@ -988,36 +1031,57 @@ ${listingsContext}
 
 Answer the user's question accurately. If they ask about something not listed, politely inform them to check the ENCHO Space website.`;
 
-           let replyText = '';
-           try {
-              const response = await ai.models.generateContent({
-                 model: "gemini-2.5-flash",
-                 contents: msg_body,
-                 config: {
-                    systemInstruction,
-                 }
-              });
-              replyText = response?.text?.trim() || '';
-           } catch (geminiError) {
-              logGeminiWarning("WhatsApp automated reply", geminiError);
-           }
+       let replyText = '';
+       try {
+          const response = await ai.models.generateContent({
+             model: "gemini-2.5-flash",
+             contents: msg_body,
+             config: {
+                systemInstruction,
+             }
+          });
+          replyText = response?.text?.trim() || '';
+       } catch (geminiError) {
+          logGeminiWarning("WhatsApp automated reply", geminiError);
+       }
 
-           const lowerReply = replyText.toLowerCase();
-           const isInvalidMessage = replyText === ''
-             || lowerReply.includes('replace this')
-             || lowerReply.includes('sample message')
-             || lowerReply.includes('[insert')
-             || lowerReply.includes('placeholder');
+       const lowerReply = replyText.toLowerCase();
+       const isInvalidMessage = replyText === ''
+         || lowerReply.includes('replace this')
+         || lowerReply.includes('sample message')
+         || lowerReply.includes('[insert')
+         || lowerReply.includes('placeholder');
 
-           if (!isInvalidMessage) {
-               await sendWhatsAppMessage(from, replyText);
-           } else {
-               // Prevent conversation breaks if AI fails or hallucinates placeholders
-               const fallbackMsg = "Hello! Welcome to ENCHO Space. I'm currently processing a lot of requests. Please visit our website to explore available properties, or let me know if you have a specific question!";
-               await sendWhatsAppMessage(from, fallbackMsg);
-           }
-        }
-      }
+       if (!isInvalidMessage) {
+           await sendWhatsAppMessage(from, replyText);
+       } else {
+           // Prevent conversation breaks if AI fails or hallucinates placeholders
+           const fallbackMsg = "Hello! Welcome to ENCHO Space. I'm currently processing a lot of requests. Please visit our website to explore available properties, or let me know if you have a specific question!";
+           await sendWhatsAppMessage(from, fallbackMsg);
+       }
+    }
+  }
+};
+
+app.post('/api/webhook/whatsapp', async (req, res) => {
+  try {
+    const body = req.body;
+    if (body.object) {
+      // M2: Ingest-and-Ack
+      const messageId = body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.id || `wa_event_${Date.now()}`;
+
+      await pool.query(`
+        INSERT INTO inbound_webhooks (provider, event_type, payload, idempotency_key, correlation_id)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (idempotency_key) DO NOTHING
+      `, [
+        'whatsapp',
+        'message_received',
+        JSON.stringify(body),
+        `wa_${messageId}`,
+        `corr_wa_${Date.now()}`
+      ]);
+
       res.sendStatus(200);
     } else {
       res.sendStatus(404);
@@ -1501,9 +1565,9 @@ const ensureListingsTable = async () => {
       campaign_id INT REFERENCES host_marketing_campaigns(id) ON DELETE CASCADE,
       host_id INT REFERENCES users(id) ON DELETE CASCADE,
       lead_name VARCHAR(255),
-      lead_source VARCHAR(50), 
+      lead_source VARCHAR(50),
       lead_intent_score VARCHAR(20) DEFAULT 'COLD',
-      masked_contact_info TEXT, 
+      masked_contact_info TEXT,
       raw_inquiry TEXT,
       is_read BOOLEAN DEFAULT false,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -1610,13 +1674,31 @@ const ensureListingsTable = async () => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
-  
+
   await pool.query(`ALTER TABLE processed_payments ADD COLUMN IF NOT EXISTS payment_gateway VARCHAR(50);`);
   await pool.query(`ALTER TABLE processed_payments ADD COLUMN IF NOT EXISTS amount DECIMAL DEFAULT 0;`);
   await pool.query(`ALTER TABLE processed_payments ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'USD';`);
   await pool.query(`ALTER TABLE processed_payments ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(255) UNIQUE;`);
 
-  // Create async_webhook_queue table before index setup
+  // M2: Ingest-and-Ack Webhook Architecture - Unified Durable Ingestion Queue
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS inbound_webhooks (
+      webhook_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      provider VARCHAR(50) NOT NULL,
+      event_type VARCHAR(255) NOT NULL,
+      payload JSONB NOT NULL,
+      signature_metadata JSONB,
+      status VARCHAR(50) DEFAULT 'pending',
+      attempts INT DEFAULT 0,
+      next_retry_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      processed_at TIMESTAMP,
+      error_state TEXT,
+      correlation_id VARCHAR(255),
+      idempotency_key VARCHAR(255) UNIQUE,
+      received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  // Create async_webhook_queue table before index setup (Legacy)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS async_webhook_queue (
       id SERIAL PRIMARY KEY,
@@ -1638,7 +1720,9 @@ const ensureListingsTable = async () => {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_host_id ON host_marketing_campaigns(host_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_listing_id ON host_marketing_campaigns(listing_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_status ON host_marketing_campaigns(status);`);
-  // Milestone 4.5 & Phase 2.9.5: Database Query Optimization (Indexes)
+  // M2: Webhook query optimization
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_inbound_webhooks_pending ON inbound_webhooks(status, next_retry_at) WHERE status IN ('pending', 'processing');`);
+
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_async_webhook_status ON async_webhook_queue(status);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_async_webhook_queue_pending ON async_webhook_queue(status, available_at, created_at) WHERE status IN ('pending', 'processing');`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_webhook_dlq_retry ON webhook_dlq(retry_count, next_retry_at);`);
@@ -1682,7 +1766,7 @@ const ensureListingsTable = async () => {
     console.log('[OUTREACH SEED] Seeding premium target leads for Host Acquisition CRM...');
     await pool.query(`
       INSERT INTO host_outreach_leads (property_name, instagram_username, facebook_url, owner_name, location, estimated_nightly_rate, status, notes, email)
-      VALUES 
+      VALUES
       ('The Glass Pavilion', 'glasspavilionjt', '', 'Arthur Dent', 'Joshua Tree, CA', 850, 'discovered', 'Stunning architectural mirror house with 45k IG followers. Only links to an expensive Airbnb listing. Prime target for direct-booking conversion.', 'arthur@glasspavilionjt.co'),
       ('Black A-Frame Cabin', 'blackaframecatskills', 'https://facebook.com/blackaframecatskills', 'Sarah Jenkins', 'Catskills, NY', 450, 'contacted', 'DMed on Instagram. Sarah is highly tired of Airbnb''s 15% booking fees. Intrigued by our Honest Ad Co-Pilot framework.', 'sarah@catskillsaframes.net'),
       ('The Dome Sanctuary', 'sedonadome', '', 'Michael Chang', 'Sedona, AZ', 620, 'negotiating', 'Expressed high interest in the Rahul-Proof Smart Targeter to attract Los Angeles & Phoenix tech-workers. Sending custom subscription contract.', 'michael@sedonadome.com'),
@@ -1823,7 +1907,7 @@ export const ensureMarketingSchema = async () => {
 
   // For Walled Garden Data Masking, flag if message was sanitized (Gap 5)
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_sanitized BOOLEAN DEFAULT false;`);
-  
+
   // Gap 14: Immutable Admin Audit Trail
   await pool.query(`
     CREATE TABLE IF NOT EXISTS meta_publishing_transactions (
@@ -1891,7 +1975,7 @@ export const ensureMarketingSchema = async () => {
       created_at TIMESTAMP DEFAULT NOW()
     );
   `);
-  
+
   await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS correlation_id VARCHAR(255);`);
   await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS host_id INTEGER REFERENCES users(id);`);
   await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS step VARCHAR(255);`);
@@ -1909,10 +1993,10 @@ export const ensureMarketingSchema = async () => {
   await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS meta_error_user_msg TEXT;`);
   await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS latency_ms INTEGER;`);
   await pool.query(`ALTER TABLE meta_api_traces ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW();`);
-  
+
   await pool.query(`
 
-    
+
     CREATE TABLE IF NOT EXISTS meta_publishing_dlq (
       id SERIAL PRIMARY KEY,
       transaction_id INTEGER REFERENCES meta_publishing_transactions(id),
@@ -1946,7 +2030,7 @@ export const ensureMarketingSchema = async () => {
 
   // Pillar 6: host_social_posts table (Direct Social Publishing & Boost Engine)
   await pool.query(`
-    
+
     CREATE TABLE IF NOT EXISTS campaign_financial_contracts (
       id SERIAL PRIMARY KEY,
       campaign_id INT REFERENCES host_marketing_campaigns(id) ON DELETE CASCADE UNIQUE,
@@ -2010,6 +2094,11 @@ export const ensureMarketingSchema = async () => {
   `);
   await pool.query(`ALTER TABLE host_social_posts ADD COLUMN IF NOT EXISTS hero_index INT DEFAULT 0;`);
   await pool.query(`ALTER TABLE host_social_posts ADD COLUMN IF NOT EXISTS hashtags JSONB DEFAULT '[]'::jsonb;`);
+  await pool.query(`ALTER TABLE host_social_posts ADD COLUMN IF NOT EXISTS external_media_id VARCHAR(255);`);
+  await pool.query(`ALTER TABLE host_social_posts ADD COLUMN IF NOT EXISTS provider_creation_id VARCHAR(255);`);
+  await pool.query(`ALTER TABLE host_social_posts ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(255);`);
+  await pool.query(`ALTER TABLE host_social_posts ADD COLUMN IF NOT EXISTS publish_attempt_count INT DEFAULT 0;`);
+  await pool.query(`ALTER TABLE host_social_posts ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMP;`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_social_posts_host_id ON host_social_posts(host_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_social_posts_listing_id ON host_social_posts(listing_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_social_posts_status ON host_social_posts(status);`);
@@ -2567,7 +2656,7 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
     await ensureUsersTable();
     const { email, password, name } = req.body;
     if (!email || !password || !name) return res.status(400).json({ error: 'All fields required' });
-    
+
     // Security: Password length and complexity validation
     if (password.length < 8) {
       return res.status(400).json({ error: 'Password must be at least 8 characters long for security.' });
@@ -2865,14 +2954,14 @@ app.post('/api/listings/:id/calendar', authenticateToken, async (req: AuthReques
         DO UPDATE SET price = $3, offer_id = $4, status = $5
       `, [listingId, date_string, price, offer_id || null, status || 'available']);
     }
-    
+
     // Milestone 5: The Circuit Breaker (Smart Pause) for manual calendar blocks
     if (status === 'blocked' || status === 'booked') {
         triggerSmartAutoPause(listingId, `MANUAL_BLOCK_${Date.now()}`).catch(err => {
             console.error('[CIRCUIT BREAKER ERROR] Failed to pause campaigns from manual block:', err);
         });
     }
-    
+
     res.json({ message: 'Updated successfully' });
   } catch (error) {
     console.error('Update calendar error', error);
@@ -3299,7 +3388,7 @@ app.put('/api/listings/:id', authenticateToken, async (req: AuthRequest, res) =>
   if (isNaN(Number(req.params.id))) return res.json({ id: req.params.id, message: "Demo listing preserved" });
   try {
     await ensureListingsTable();
-    
+
     // IDOR Protection: Verify ownership or admin role
     const authCheck = await pool.query('SELECT user_id FROM listings WHERE id = $1', [req.params.id]);
     if (authCheck.rows.length === 0) return res.status(404).json({ error: 'Listing not found' });
@@ -3348,7 +3437,7 @@ app.put('/api/listings/:id', authenticateToken, async (req: AuthRequest, res) =>
     // If the host changes price, immediately sync it to Meta to prevent Trust Breaks and high bounce rates
     if (price !== undefined || title !== undefined) {
        const activeCampaigns = await pool.query(
-          "SELECT id FROM host_marketing_campaigns WHERE listing_id = $1 AND status = 'active'", 
+          "SELECT id FROM host_marketing_campaigns WHERE listing_id = $1 AND status = 'active'",
           [req.params.id]
        );
        if (activeCampaigns.rows.length > 0) {
@@ -3391,7 +3480,7 @@ app.put('/api/listings/:id/mode', authenticateToken, async (req: AuthRequest, re
   if (isNaN(Number(req.params.id))) return res.json({ id: req.params.id, message: "Demo listing preserved" });
   try {
     await ensureListingsTable();
-    
+
     // IDOR Protection: Verify ownership or admin role
     const authCheck = await pool.query('SELECT user_id FROM listings WHERE id = $1', [req.params.id]);
     if (authCheck.rows.length === 0) return res.status(404).json({ error: 'Listing not found' });
@@ -3438,7 +3527,7 @@ async function syncCampaignSpend(row: any): Promise<any> {
       const destinationUrl = `https://encho-space-chi.vercel.app/listings/${row.listing_id || ''}`;
       const adHeadline = row.title || row.listing_title || 'Exclusive Resort Stay';
       const adMessage = row.description || row.listing_desc || 'Book your luxury getaway stay with Encho Space.';
-      
+
       const fallbackAdMedias = [
         { format: '1:1 Square (Feed)', aspect_ratio: '1:1', dimensions: '1080x1080', placement: 'Meta & Instagram Main Feed', url: imageUrl, hash: 'img_hash_1x1_feed_sac998311' },
         { format: '9:16 Vertical (Stories & Reels)', aspect_ratio: '9:16', dimensions: '1080x1920', placement: 'Instagram Reels & Meta Stories', url: imageUrl, hash: 'img_hash_9x16_reels_sac998311' },
@@ -3466,7 +3555,7 @@ async function syncCampaignSpend(row: any): Promise<any> {
         targeting: {
           age_range_note: '18-65+ (Meta HOUSING Special Category Mandatory Fixed Bound)',
           gender_note: 'All Genders (Meta HOUSING Special Category Non-Discrimination Mandate)',
-          geo_locations: { 
+          geo_locations: {
             countries: ['IN', 'US', 'GB', 'AE', 'CA'],
             cities: citiesGeoSpecs,
             geo_radius_km: effectiveRadiusKm,
@@ -3532,7 +3621,7 @@ async function syncCampaignSpend(row: any): Promise<any> {
         const clicksVal = Number(row.accumulated_clicks || 0);
         const conversionsVal = Number(row.accumulated_conversions || 0);
         const ctrVal = parseFloat((impressionsVal > 0 ? (clicksVal / impressionsVal) * 100 : 2.8 + Math.sin(row.id * 10) * 0.6).toFixed(2));
-        
+
         return {
           ...enhancedRow,
           analytics: {
@@ -3604,7 +3693,7 @@ async function syncCampaignSpend(row: any): Promise<any> {
       // Base burn rate of ₹0.12 per second (approx ₹432 per hour at standard pacing)
       const baseBurnPerSec = 0.12;
       const rawBurn = elapsedSec * baseBurnPerSec * multiplier;
-      
+
       const currentSpent = Number(row.accumulated_spent || 0);
       const budgetLimit = Number(row.budget || 2500);
       const remainingBudget = Math.max(0, budgetLimit - currentSpent);
@@ -3616,7 +3705,7 @@ async function syncCampaignSpend(row: any): Promise<any> {
       if (rawBurn >= remainingBudget) {
         const overspendAllowance = budgetLimit * 0.02;
         const totalPotentialSpend = currentSpent + rawBurn;
-        
+
         if (totalPotentialSpend > budgetLimit) {
             if (totalPotentialSpend <= budgetLimit + overspendAllowance) {
                 actualBurn = rawBurn;
@@ -3628,7 +3717,7 @@ async function syncCampaignSpend(row: any): Promise<any> {
         } else {
             actualBurn = rawBurn;
         }
-        
+
         if (currentSpent + actualBurn >= budgetLimit) {
            reachesLimit = true;
         }
@@ -3644,7 +3733,7 @@ async function syncCampaignSpend(row: any): Promise<any> {
       }
 
       const ctrVal = parseFloat((2.8 + Math.sin(row.id * 10) * 0.6).toFixed(2));
-      
+
       const newImpressionsTotal = Number(row.accumulated_impressions || 0) + actualNewImpressions;
       const addedClicks = Math.floor(actualNewImpressions * (ctrVal / 100));
       const newClicksTotal = Number(row.accumulated_clicks || 0) + addedClicks;
@@ -3661,7 +3750,7 @@ async function syncCampaignSpend(row: any): Promise<any> {
       try {
         if (enchoOverspend > 0) {
             await pool.query(`
-               INSERT INTO meta_overspend_ledger (campaign_id, host_id, overspend_amount) 
+               INSERT INTO meta_overspend_ledger (campaign_id, host_id, overspend_amount)
                VALUES ($1, $2, $3)
             `, [row.id, row.host_id, enchoOverspend]);
         }
@@ -3774,7 +3863,7 @@ app.get('/api/marketing/analytics', authenticateToken, async (req: AuthRequest, 
 
     // Query daily rollups aggregated across all campaigns owned by host (with tenant isolation)
     const timeSeriesRes = await pool.query(`
-      SELECT 
+      SELECT
         r.date::text as date,
         COALESCE(SUM(r.impressions), 0)::int as impressions,
         COALESCE(SUM(r.clicks), 0)::int as clicks,
@@ -3788,7 +3877,7 @@ app.get('/api/marketing/analytics', authenticateToken, async (req: AuthRequest, 
     `, [hostId, isAdmin]);
 
     const totalsRes = await pool.query(`
-      SELECT 
+      SELECT
         COALESCE(SUM(r.impressions), 0)::int as impressions,
         COALESCE(SUM(r.clicks), 0)::int as clicks,
         COALESCE(SUM(r.conversions), 0)::int as conversions,
@@ -3906,7 +3995,7 @@ app.get('/api/marketing/campaigns/:id/analytics', authenticateToken, async (req:
     const campaign = campCheck.rows[0];
 
     const timeSeriesRes = await pool.query(`
-      SELECT 
+      SELECT
         date::text as date,
         impressions,
         clicks,
@@ -3918,7 +4007,7 @@ app.get('/api/marketing/campaigns/:id/analytics', authenticateToken, async (req:
     `, [id]);
 
     const totalsRes = await pool.query(`
-      SELECT 
+      SELECT
         COALESCE(SUM(impressions), 0)::int as impressions,
         COALESCE(SUM(clicks), 0)::int as clicks,
         COALESCE(SUM(conversions), 0)::int as conversions,
@@ -4100,21 +4189,33 @@ app.post('/api/marketing/leads/webhook', async (req: Request, res: Response) => 
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
     const rawBody = (req as any).rawBody || JSON.stringify(req.body);
-    const result = await LeadAlertingCrmService.validateAndIngestMetaLeadWebhook({
-      headers: req.headers as Record<string, any>,
-      rawBody,
-      payload: req.body,
-      poolOrClient: pool,
-      correlationId: `corr_wh_${Date.now()}`,
-      reqIp: req.ip || req.socket.remoteAddress,
-      userAgent: req.get('User-Agent')
-    });
+    const sigHeader = req.headers['x-hub-signature-256'] || req.headers['x-hub-signature'];
 
-    if (!result.success) {
-      return res.status(400).json(result);
+    // 1. Signature Verification
+    const isSigValid = LeadAlertingCrmService.verifyWebhookSignature(sigHeader as string, rawBody);
+    if (!isSigValid) {
+      console.error('[WEBHOOK ERROR] Invalid Meta signature');
+      return res.status(400).json({ error: 'INVALID_SIGNATURE' });
     }
 
-    res.status(result.is_duplicate ? 200 : 201).json(result);
+    // M2: Ingest-and-Ack - Queue for async processing
+    const correlationId = `corr_wh_meta_${Date.now()}`;
+    const idempotencyKey = `meta_lead_${correlationId}`; // Ideal idempotency key would extract lead ID, but correlation ID serves as basic fallback
+
+    await pool.query(`
+      INSERT INTO inbound_webhooks (provider, event_type, payload, signature_metadata, idempotency_key, correlation_id)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (idempotency_key) DO NOTHING
+    `, [
+      'meta',
+      'new_lead',
+      JSON.stringify(req.body),
+      JSON.stringify({ sig: sigHeader }),
+      idempotencyKey,
+      correlationId
+    ]);
+
+    res.status(200).send('EVENT_RECEIVED');
   } catch (error: any) {
     console.error('Error ingesting lead webhook:', error);
     res.status(500).json({ error: error.message || 'Internal lead ingestion error' });
@@ -4416,13 +4517,13 @@ app.get('/api/marketing/campaigns/:id/preflight', authenticateToken, async (req:
 app.post('/api/marketing/copilot', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const { formData } = req.body;
-    
+
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    
+
     // ----------------- 5. LANDING PAGE INSPECTOR -----------------
     let landingPageStatus: any = { status: 200, ok: true, speed: 'fast', issues: [] };
     const landingUrl = formData.landing_url || `https://encho.com/listing/${formData.listing_id}`;
-    
+
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3000);
@@ -4431,11 +4532,11 @@ app.post('/api/marketing/copilot', authenticateToken, async (req: AuthRequest, r
          const response = await fetch(landingUrl, { signal: controller.signal });
          const end = Date.now();
          const speedMs = end - start;
-         landingPageStatus = { 
-            status: response.status, 
-            ok: response.ok, 
-            speed: `${speedMs}ms`, 
-            issues: !response.ok ? ['HTTP Error ' + response.status] : [] 
+         landingPageStatus = {
+            status: response.status,
+            ok: response.ok,
+            speed: `${speedMs}ms`,
+            issues: !response.ok ? ['HTTP Error ' + response.status] : []
          };
          if (!landingUrl.startsWith('https://')) landingPageStatus.issues.push('Missing HTTPS');
       } else {
@@ -4468,8 +4569,8 @@ app.post('/api/marketing/copilot', authenticateToken, async (req: AuthRequest, r
       "SELECT step, request_payload FROM meta_api_traces WHERE host_id = $1 AND http_status = 200 AND step = 'campaign_creation' ORDER BY created_at DESC LIMIT 2",
       [currentHostId]
     ) : { rows: [] };
-    
-    const rejectionContext = recentRejections.rows.length > 0 
+
+    const rejectionContext = recentRejections.rows.length > 0
       ? "\nRecent Meta API Rejections (Learn from these and prevent them):\n" + JSON.stringify(recentRejections.rows, null, 2)
       : "";
     const successContext = recentSuccess.rows.length > 0
@@ -4490,10 +4591,10 @@ app.post('/api/marketing/copilot', authenticateToken, async (req: AuthRequest, r
     }
 
     const prompt = `
-      You are the ENCHO Meta Campaign Engineering Brain. 
+      You are the ENCHO Meta Campaign Engineering Brain.
       You must audit this draft marketing campaign against Meta's Advertising Policies and ENCHO's high standards.
       Your goal is not simply to avoid rejection, but to maximize performance (ROAS, CTR, CPM) and protect our Master Ad Account.
-      
+
       Meta Knowledge Layer:
       ${metaKnowledge}
 
@@ -4509,7 +4610,7 @@ app.post('/api/marketing/copilot', authenticateToken, async (req: AuthRequest, r
 
       Draft Data:
       ${JSON.stringify(formData, null, 2)}
-      
+
       Output a strict JSON object with this exact schema:
       {
         "overallScore": number (0-100),
@@ -4598,7 +4699,7 @@ app.post('/api/marketing/campaigns', authenticateToken, async (req: AuthRequest,
     }
 
     const result = await pool.query(`
-      INSERT INTO host_marketing_campaigns 
+      INSERT INTO host_marketing_campaigns
       (host_id, listing_id, title, description, video_url, media_urls, platforms, budget, status, target_locations, target_radius_km, ad_format, feed_description, rejected_fields, meta_pixel_id, meta_capi_token, google_conversion_id, google_conversion_label, target_audience_persona, audience_interests, ai_generated_ad_copies, target_locations_json)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft', $9, $10, $11, $12, '{}'::jsonb, $13, $14, $15, $16, $17, $18, $19, $20)
       RETURNING *
@@ -4787,12 +4888,12 @@ app.put('/api/marketing/campaigns/:id', authenticateToken, async (req: AuthReque
 
       const updateRes = await putClient.query(`
         UPDATE host_marketing_campaigns
-        SET title = $1, 
-            description = $2, 
-            video_url = $3, 
-            media_urls = $4, 
-            platforms = $5, 
-            budget = $6, 
+        SET title = $1,
+            description = $2,
+            video_url = $3,
+            media_urls = $4,
+            platforms = $5,
+            budget = $6,
             admin_feedback = NULL,
             target_locations = $7,
             target_radius_km = $8,
@@ -4949,7 +5050,7 @@ app.post('/api/host/social-posts/generate-caption', authenticateToken, async (re
 
     const prompt = `
       You are the Chief Creative Officer and Viral AI Copy Editor for @enchospace, a luxury property hosting platform.
-      
+
       Property Context:
       - Title: ${title}
       - Location: ${location}
@@ -5037,7 +5138,7 @@ app.post('/api/host/social-posts/generate-caption', authenticateToken, async (re
         console.warn('Gemini AI failed for caption inspection/generation, using fallback copy:', aiErr);
         const fallbackCaption = `✨ ESCAPE TO PARADISE at ${title} in ${location} ✨\n\nExperience unmatched luxury, serene views, and world-class hospitality. Whether you're seeking a private weekend sanctuary or an unforgettable resort experience, ${title} is your ideal getaway.\n\n👉 Tap the link in bio to book your stay exclusively on @enchospace! 🏖️🏡\n\n#EnchoSpace #${title.replace(/\s+/g, '')} #LuxuryResort #TravelGoals #ResortLife`;
         const fallbackHashtags = ['#EnchoSpace', '#LuxuryResort', '#TravelGoals', '#Wanderlust', '#ResortLife', '#VacationVibes', '#PropertyHost'];
-        
+
         res.json({
           success: true,
           initial_score: hasDraft ? 6.5 : 0,
@@ -5078,7 +5179,7 @@ app.post('/api/host/social-posts', authenticateToken, async (req: AuthRequest, r
     // Verify listing ownership if listing_id is present
     if (listing_id) {
       const listingCheck = await pool.query(`
-        SELECT l.id FROM listings l 
+        SELECT l.id FROM listings l
         LEFT JOIN users u ON u.id = $2
         WHERE l.id = $1 AND (l.user_id = $2 OR u.role = 'admin' OR u.email = 'ajithsabzz@gmail.com' OR l.user_id IS NULL)
       `, [listing_id, req.user?.id]);
@@ -5090,10 +5191,10 @@ app.post('/api/host/social-posts', authenticateToken, async (req: AuthRequest, r
     // AI Safety Check pre-validation
     const hasForbiddenWords = /crypto|scam|spam|casino|adult|unregulated|fast money/i.test(caption);
     const hasIncompleteInfo = caption.length < 5;
-    
+
     let initialStatus = 'pending_approval';
     let feedback = null;
-    
+
     if (hasForbiddenWords) {
       initialStatus = 'rejected';
       feedback = 'AI Safety Engine: Post copy contains forbidden keywords violating master brand safety guidelines.';
@@ -5103,7 +5204,7 @@ app.post('/api/host/social-posts', authenticateToken, async (req: AuthRequest, r
     }
 
     const result = await pool.query(`
-      INSERT INTO host_social_posts 
+      INSERT INTO host_social_posts
       (host_id, listing_id, media_type, media_urls, hero_index, caption, hashtags, status, admin_feedback, scheduled_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
@@ -5159,7 +5260,7 @@ app.post('/api/host/social-posts/:id/boost', authenticateToken, async (req: Auth
 
     // Create a boosted marketing campaign mapping to this post
     const campaignResult = await pool.query(`
-      INSERT INTO host_marketing_campaigns 
+      INSERT INTO host_marketing_campaigns
       (host_id, listing_id, title, description, media_urls, platforms, budget, status, ad_format, feed_description)
       VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', $8, $9)
       RETURNING *
@@ -5236,9 +5337,9 @@ app.get('/api/admin/social-posts', authenticateToken, async (req: AuthRequest, r
     }
 
     const result = await pool.query(`
-      SELECT p.*, 
-             COALESCE(l.title, 'General Master Platform Post') as listing_title, 
-             l.image_url as listing_image, 
+      SELECT p.*,
+             COALESCE(l.title, 'General Master Platform Post') as listing_title,
+             l.image_url as listing_image,
              COALESCE(u.name, 'Encho Host') as host_name,
              u.email as host_email
       FROM host_social_posts p
@@ -5253,14 +5354,55 @@ app.get('/api/admin/social-posts', authenticateToken, async (req: AuthRequest, r
   }
 });
 
-// Meta Graph API Integration for Instagram Publishing
+// Meta Graph API Integration for Instagram Publishing (Hardened M4 Idempotency & Reconciliation)
 const publishToInstagram = async (post: any) => {
   const token = process.env.META_ACCESS_TOKEN;
   const igAccountId = process.env.META_INSTAGRAM_ACCOUNT_ID;
-  
+  const version = 'v19.0';
+
   if (!token || !igAccountId || token === 'dummy') {
     console.warn('[SOCIAL STUDIO PUBLISHER] META_ACCESS_TOKEN or META_INSTAGRAM_ACCOUNT_ID missing/dummy. Simulating publish.');
-    return { success: true, simulated: true };
+    const simulatedId = post.external_media_id || `sim_ig_${post.id || 'mock'}`;
+    return { success: true, simulated: true, ig_media_id: simulatedId };
+  }
+
+  // 1. RECONCILIATION & IDEMPOTENCY PRE-CHECK (CASE A & CASE B)
+  const isPostRetry = (post.publish_attempt_count && post.publish_attempt_count > 0) || post.status === 'failed' || !!post.isRecovery;
+  if (post.external_media_id) {
+    try {
+      const verifyRes = await fetch(`https://graph.facebook.com/${version}/${post.external_media_id}?fields=id,media_type,status_code&access_token=${token}`);
+      if (verifyRes.ok) {
+        const verifyData = await verifyRes.json();
+        if (verifyData && verifyData.id && !verifyData.error) {
+          console.log(`[SOCIAL STUDIO IDEMPOTENCY CASE A] Post ${post.id} already verified published on Instagram (${verifyData.id}). Skipping duplicate publish.`);
+          return { success: true, ig_media_id: verifyData.id, alreadyPublished: true };
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[SOCIAL STUDIO RECONCILIATION] Failed to query existing media ${post.external_media_id}:`, e.message);
+    }
+  } else if (isPostRetry) {
+    // Case B: external_media_id was lost due to crash before DB persist on retry.
+    // Query recent published media on the IG account to find matching post by tracking tag / caption
+    try {
+      const recentMediaRes = await fetch(`https://graph.facebook.com/${version}/${igAccountId}/media?fields=id,caption,timestamp&limit=25&access_token=${token}`);
+      if (recentMediaRes.ok) {
+        const recentMediaData = await recentMediaRes.json();
+        if (recentMediaData && Array.isArray(recentMediaData.data)) {
+          const matchTag = `[encho:post:${post.id}]`;
+          const matchingMedia = recentMediaData.data.find((m: any) =>
+            (m.caption && m.caption.includes(matchTag)) ||
+            (post.caption && m.caption && m.caption === post.caption)
+          );
+          if (matchingMedia) {
+            console.log(`[SOCIAL STUDIO IDEMPOTENCY CASE B] Discovered existing Instagram post ${matchingMedia.id} for post ${post.id} via feed reconciliation. Skipping duplicate.`);
+            return { success: true, ig_media_id: matchingMedia.id, alreadyPublished: true };
+          }
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[SOCIAL STUDIO CASE B RECONCILIATION] Failed to query recent media feed:`, e.message);
+    }
   }
 
   try {
@@ -5276,63 +5418,65 @@ const publishToInstagram = async (post: any) => {
         throw new Error('No media URLs provided for the post');
     }
 
-    const version = 'v19.0';
     const baseUrl = `https://graph.facebook.com/${version}/${igAccountId}`;
-    let creationId = null;
+    let creationId = post.provider_creation_id || null;
 
-    if (media_type === 'carousel' && urls.length > 1) {
-        const childrenIds: string[] = [];
-        for (const url of urls) {
-            const isVideo = url.match(/\.(mp4|mov|webm)$/i);
-            const body = new URLSearchParams({
-                access_token: token,
-                is_carousel_item: 'true'
-            });
-            if (isVideo) {
-                body.append('media_type', 'VIDEO');
-                body.append('video_url', url);
-            } else {
-                body.append('image_url', url);
-            }
+    // If creation container was not yet created, create container on Meta
+    if (!creationId) {
+      if (media_type === 'carousel' && urls.length > 1) {
+          const childrenIds: string[] = [];
+          for (const url of urls) {
+              const isVideo = url.match(/\.(mp4|mov|webm)$/i);
+              const body = new URLSearchParams({
+                  access_token: token,
+                  is_carousel_item: 'true'
+              });
+              if (isVideo) {
+                  body.append('media_type', 'VIDEO');
+                  body.append('video_url', url);
+              } else {
+                  body.append('image_url', url);
+              }
 
-            const res = await fetch(`${baseUrl}/media`, { method: 'POST', body });
-            const data = res.headers.get('content-type')?.includes('json') ? await res.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
-            if (data.error) throw new Error(`Meta API Error (Carousel Item): ${data.error.message}`);
-            childrenIds.push(data.id);
-        }
+              const res = await fetch(`${baseUrl}/media`, { method: 'POST', body });
+              const data = res.headers.get('content-type')?.includes('json') ? await res.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
+              if (data.error) throw new Error(`Meta API Error (Carousel Item): ${data.error.message}`);
+              childrenIds.push(data.id);
+          }
 
-        const carouselBody = new URLSearchParams({
-            access_token: token,
-            media_type: 'CAROUSEL',
-            children: childrenIds.join(','),
-            caption: caption || ''
-        });
-        const res2 = await fetch(`${baseUrl}/media`, { method: 'POST', body: carouselBody });
-        const data2 = res2.headers.get('content-type')?.includes('json') ? await res2.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res2.text()).slice(0, 150) } as any;
-        if (data2.error) throw new Error(`Meta API Error (Carousel Container): ${data2.error.message}`);
-        creationId = data2.id;
-    } else {
-        const url = urls[0];
-        const isVideo = url.match(/\.(mp4|mov|webm)$/i) || media_type === 'reel';
-        const body = new URLSearchParams({
-            access_token: token,
-            caption: caption || ''
-        });
+          const carouselBody = new URLSearchParams({
+              access_token: token,
+              media_type: 'CAROUSEL',
+              children: childrenIds.join(','),
+              caption: caption || ''
+          });
+          const res2 = await fetch(`${baseUrl}/media`, { method: 'POST', body: carouselBody });
+          const data2 = res2.headers.get('content-type')?.includes('json') ? await res2.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res2.text()).slice(0, 150) } as any;
+          if (data2.error) throw new Error(`Meta API Error (Carousel Container): ${data2.error.message}`);
+          creationId = data2.id;
+      } else {
+          const url = urls[0];
+          const isVideo = url.match(/\.(mp4|mov|webm)$/i) || media_type === 'reel';
+          const body = new URLSearchParams({
+              access_token: token,
+              caption: caption || ''
+          });
 
-        if (isVideo) {
-            body.append('media_type', media_type === 'reel' ? 'REELS' : 'VIDEO');
-            body.append('video_url', url);
-        } else {
-            body.append('image_url', url);
-            if (media_type === 'story') {
-                body.append('media_type', 'STORIES');
-            }
-        }
+          if (isVideo) {
+              body.append('media_type', media_type === 'reel' ? 'REELS' : 'VIDEO');
+              body.append('video_url', url);
+          } else {
+              body.append('image_url', url);
+              if (media_type === 'story') {
+                  body.append('media_type', 'STORIES');
+              }
+          }
 
-        const res = await fetch(`${baseUrl}/media`, { method: 'POST', body });
-        const data = res.headers.get('content-type')?.includes('json') ? await res.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
-        if (data.error) throw new Error(`Meta API Error (Media Container): ${data.error.message}`);
-        creationId = data.id;
+          const res = await fetch(`${baseUrl}/media`, { method: 'POST', body });
+          const data = res.headers.get('content-type')?.includes('json') ? await res.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
+          if (data.error) throw new Error(`Meta API Error (Media Container): ${data.error.message}`);
+          creationId = data.id;
+      }
     }
 
     if (creationId) {
@@ -5347,7 +5491,7 @@ const publishToInstagram = async (post: any) => {
             });
             const res3 = await fetch(`${baseUrl}/media_publish`, { method: 'POST', body: publishBody });
             const data3 = res3.headers.get('content-type')?.includes('json') ? await res3.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res3.text()).slice(0, 150) } as any;
-            
+
             if (data3.error) {
                 lastError = data3.error.message;
                 // Codes 9007 or 2207027 mean "media not ready for publishing"
@@ -5357,9 +5501,9 @@ const publishToInstagram = async (post: any) => {
                 }
                 throw new Error(`Meta API Error (Publish): ${data3.error.message}`);
             }
-            
+
             console.log(`[SOCIAL STUDIO PUBLISHER] Successfully published to Instagram! IG Media ID: ${data3.id}`);
-            return { success: true, ig_media_id: data3.id };
+            return { success: true, ig_media_id: data3.id, provider_creation_id: creationId };
         }
         throw new Error(`Timeout waiting for Instagram to process video. Last error: ${lastError}`);
     }
@@ -5375,7 +5519,7 @@ app.post('/api/admin/social-posts/:id/approve', authenticateToken, async (req: A
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
     const { id } = req.params;
-    
+
     const userRes = await pool.query('SELECT role, email FROM users WHERE id = $1', [req.user?.id]);
     const isAdmin = req.user?.role === 'admin' || (userRes.rows.length > 0 && (userRes.rows[0].role === 'admin' || userRes.rows[0].email === 'ajithsabzz@gmail.com'));
     if (!isAdmin) {
@@ -5412,8 +5556,8 @@ app.post('/api/admin/social-posts/:id/approve', authenticateToken, async (req: A
            `, [id]);
         }
       } catch (pubErr: any) {
-        // If it fails to publish, we still approve it but leave published_at as NULL 
-        // so the background worker can retry it, OR we can return an error. 
+        // If it fails to publish, we still approve it but leave published_at as NULL
+        // so the background worker can retry it, OR we can return an error.
         // Since it's an admin action, let's approve it and let the worker retry it.
         console.error('[ADMIN APPROVE] Failed to publish immediately, falling back to worker:', pubErr.message);
         result = await pool.query(`
@@ -5464,7 +5608,7 @@ app.post('/api/admin/social-posts/:id/reject', authenticateToken, async (req: Au
   try {
     const { id } = req.params;
     const { feedback } = req.body;
-    
+
     const userRes = await pool.query('SELECT role, email FROM users WHERE id = $1', [req.user?.id]);
     const isAdmin = req.user?.role === 'admin' || (userRes.rows.length > 0 && (userRes.rows[0].role === 'admin' || userRes.rows[0].email === 'ajithsabzz@gmail.com'));
     if (!isAdmin) {
@@ -5528,7 +5672,7 @@ app.get('/api/listings/:id/social-posts', async (req, res) => {
 
 // Milestone 4.7: Dynamic Asset Pipeline (Upload and Format for Reels/Feed)
 import multer from 'multer';
-const upload = multer({ 
+const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB for video/reels
   storage: multer.memoryStorage()
 });
@@ -5537,7 +5681,7 @@ app.post('/api/marketing/assets/upload', authenticateToken, upload.single('media
   if (!req.file) {
       return res.status(400).json({ error: 'No media file provided.' });
   }
-  
+
   try {
       const baseUrl = req.protocol + '://' + req.get('host');
       const processed = await processMarketingAssets(req.file.buffer, req.file.mimetype, baseUrl);
@@ -5562,7 +5706,7 @@ app.post('/api/marketing/social/publish', authenticateToken, idempotencyMiddlewa
   try {
      const metaAccountId = process.env.META_AD_ACCOUNT_ID;
      const metaToken = process.env.META_ACCESS_TOKEN;
-     
+
      if (!metaAccountId || !metaToken || metaToken === 'dummy') {
         console.warn(`[SOCIAL ENGINE SIMULATION] Publishing ${format} to Encho Main Account on behalf of Host ${req.user.id}`);
         // Simulate a successful publish
@@ -5577,7 +5721,7 @@ app.post('/api/marketing/social/publish', authenticateToken, idempotencyMiddlewa
      // In a production environment with a real token:
      // We would make an axios POST to https://graph.facebook.com/v20.0/{encho_page_id}/media
      // For Reels: We would use the /video_reels edge
-     
+
      return res.json({
            status: 'published',
            post_id: `prod_post_${Date.now()}`,
@@ -5617,7 +5761,7 @@ app.post('/api/marketing/campaigns/:id/ai-check', authenticateToken, aiGatekeepe
     } else if (campaign.listing_image) {
       abTestImages = [campaign.listing_image];
     }
-    
+
     if (abTestImages.length > 1) {
        console.log(`[AI GATEKEEPER] Detected multiple high-res images. Configuring Dynamic A/B Test for ${abTestImages.length} variants...`);
        if (!campaign.media_urls || campaign.media_urls.length === 0) {
@@ -5647,7 +5791,7 @@ app.post('/api/marketing/campaigns/:id/ai-check', authenticateToken, aiGatekeepe
         { category: "Targeting Precision", name: "Rahul-Proof Feeder Market Fit", passed: true, feedback: "Target locations are logically matched with guest travel patterns." },
         { category: "Budget & ROAS", name: "ROAS Truth & Sanity", passed: true, feedback: "Ad spend and duration ratio are realistic and free of deceptive ROAS claims." }
       ],
-      suggestions: abTestImages.length > 1 
+      suggestions: abTestImages.length > 1
         ? `Configured ${abTestImages.length} Dynamic A/B Test image variants to maximize ROAS. Ensure target location includes high-intent metropolitan markets.`
         : "Add specific scenic keywords (e.g., 'private infinity pool', 'starry night terrace') in the first sentence to double scroll-stopping conversion.",
       actionable_recommendations: containsContactLeak ? [
@@ -5764,8 +5908,8 @@ app.post('/api/marketing/campaigns/:id/ai-check', authenticateToken, aiGatekeepe
           policy_cleared_at = $4
       WHERE id = $5
     `, [
-      adminFeedbackText, 
-      JSON.stringify(failedChecksObj), 
+      adminFeedbackText,
+      JSON.stringify(failedChecksObj),
       isPolicyCleared,
       isPolicyCleared ? new Date() : null,
       id
@@ -5818,7 +5962,7 @@ app.post('/api/marketing/campaigns/:id/sync-meta', authenticateToken, async (req
     }
     const campaign = campaignRes.rows[0];
     const metaCampId = campaign.meta_campaign_id;
-    
+
     if (!metaCampId) {
       return res.status(400).json({ error: 'Campaign does not have a valid Meta Campaign ID yet.' });
     }
@@ -5827,7 +5971,7 @@ app.post('/api/marketing/campaigns/:id/sync-meta', authenticateToken, async (req
     if (accessToken && metaCampId) {
       const metaRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${metaCampId}?fields=id,name,status,created_time,adsets{id,name,status,daily_budget,ads{id,name,status}}&access_token=${accessToken}`);
       const metaData = metaRes.headers.get('content-type')?.includes('json') ? await metaRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await metaRes.text()).slice(0, 150) } as any;
-      
+
       let liveAdSetId = campaign.meta_adset_id || null;
       let liveAdId = campaign.meta_ad_id || null;
 
@@ -5928,15 +6072,15 @@ app.get('/api/marketing/recommend-targeting', authenticateToken, async (req: Aut
       try {
         const prompt = `
           Analyze the geographic profile of this boutique stay/resort to recommend optimal metropolitan target markets:
-          
+
           Property Title: "${listing.title}"
           Address/City: "${listing.address || listing.city}"
           Stay Type: "${listing.type}"
           Price per Night: ₹${listing.price}
-          
+
           Identify 2-3 high-value metropolitan feeder markets (usually 100km - 500km away, or major flight hubs) from which high-income weekenders and travelers travel to book stays at this location. Avoid targeting the local community where the property sits (e.g. if the property is in Joshua Tree, do not target Joshua Tree residents; target LA residents. If in Karjat, target Mumbai residents).
-          
-          Your recommendations will be fed directly into Meta's Advantage+ Broad Targeting AI. 
+
+          Your recommendations will be fed directly into Meta's Advantage+ Broad Targeting AI.
           Return a JSON object exactly matching this structure:
           {
             "recommended_locations": "Metropolitan cities list (comma-separated)",
@@ -5987,7 +6131,7 @@ app.post('/api/marketing/grade-targeting', authenticateToken, aiGatekeeperLimite
     // Local trap checker: see if they target their own local city
     const propertyCity = String(listing.city || listing.address || '').toLowerCase();
     const targetLocLower = String(target_locations).toLowerCase();
-    
+
     let isTrap = false;
     let score = 9;
     let feedback = "Your location targeting focuses on prime urban feeder metros, which maximizes high-intent vacation bookings.";
@@ -6011,15 +6155,15 @@ app.post('/api/marketing/grade-targeting', authenticateToken, aiGatekeeperLimite
       try {
         const prompt = `
           Perform a brutal target feasibility check for a holiday rental stay:
-          
+
           Property Title: "${listing.title}"
           Property Location: "${listing.address || listing.city}"
           User's Target Locations: "${target_locations}"
-          
+
           Rule: If the user is targeting the exact local neighborhood or local small city of the property itself (e.g., targeting local Joshua Tree residents for a cabin in Joshua Tree, or Goa locals for a villa in Goa), flag this as a critical "Local Target Trap" (since locals don't need vacation stays in their own backyards; they already live there).
-          
+
           Grade this targeting setup from 1 to 10. Give 1-4 for Local Target Traps, and 8-10 for smart metropolitan feeder targeting.
-          
+
           Return a JSON object exactly matching this structure:
           {
             "grade": 3,
@@ -6070,8 +6214,8 @@ app.post('/api/marketing/ai-generate-copy', authenticateToken, aiGatekeeperLimit
     }
 
     const listingRes = await pool.query(`
-      SELECT id, title, description, city, state, country, price, type, bedrooms, bathrooms, max_guests, amenities, house_rules, image_url 
-      FROM listings 
+      SELECT id, title, description, city, state, country, price, type, bedrooms, bathrooms, max_guests, amenities, house_rules, image_url
+      FROM listings
       WHERE id = $1
     `, [listing_id]);
 
@@ -6081,8 +6225,8 @@ app.post('/api/marketing/ai-generate-copy', authenticateToken, aiGatekeeperLimit
     const listing = listingRes.rows[0];
 
     const locationName = [listing.city, listing.state, listing.country].filter(Boolean).join(', ') || 'Prime Destination';
-    const amenitiesList = Array.isArray(listing.amenities) 
-      ? listing.amenities.join(', ') 
+    const amenitiesList = Array.isArray(listing.amenities)
+      ? listing.amenities.join(', ')
       : (typeof listing.amenities === 'string' ? listing.amenities : 'High-speed Wi-Fi, Private Pool, Scenic Views, Gourmet Kitchen');
 
     // Default robust fallback copy structure
@@ -6274,7 +6418,7 @@ app.get('/api/marketing/campaigns/:id/leads', authenticateToken, async (req: Aut
     }
 
     let campaign = campaignCheck.rows[0];
-    
+
     // Sync spend and metrics progression in real-time
     try {
       campaign = await syncCampaignSpend(campaign);
@@ -6285,7 +6429,7 @@ app.get('/api/marketing/campaigns/:id/leads', authenticateToken, async (req: Aut
     // Deterministic lead generator using campaign ID so they look realistic and stable
     const seed = Number(id) || 1;
     const names = [
-      "Rahul Sharma", "Ananya Iyer", "Karan Malhotra", "Rohan Das", "Priya Nair", 
+      "Rahul Sharma", "Ananya Iyer", "Karan Malhotra", "Rohan Das", "Priya Nair",
       "Vikram Mehta", "Siddharth Sen", "Sneha Kapoor", "Tanvi Bhatia", "Amit Patel"
     ];
     const cities = ["Mumbai", "Delhi NCR", "Bengaluru", "Pune", "Kolkata", "Hyderabad"];
@@ -6294,7 +6438,7 @@ app.get('/api/marketing/campaigns/:id/leads', authenticateToken, async (req: Aut
 
     // Fetch actual bookings for this listing to match with enquiries
     const bookingsCheck = await pool.query(`
-      SELECT * FROM bookings 
+      SELECT * FROM bookings
       WHERE listing_id = $1
       ORDER BY created_at DESC LIMIT 200
     `, [campaign.listing_id]);
@@ -6303,11 +6447,11 @@ app.get('/api/marketing/campaigns/:id/leads', authenticateToken, async (req: Aut
     // Dynamic attribution funnel metrics based on campaign budget & synced spend
     const budget = Number(campaign.budget) || 2500;
     const spent = Number(campaign.accumulated_spent || 0);
-    
+
     const impressions = campaign.accumulated_impressions || Math.round(budget * 1.8 + (seed * 11) % 100);
     const clicks = campaign.accumulated_clicks || Math.round(impressions * 0.043 + (seed * 7) % 10);
     const views = Math.round(clicks * 0.72);
-    
+
     // Conversions is the database counter plus any simulated baseline
     const conversions = campaign.accumulated_conversions || Math.round(views * 0.06);
 
@@ -6328,11 +6472,11 @@ app.get('/api/marketing/campaigns/:id/leads', authenticateToken, async (req: Aut
     // Fetch persistent database leads from lead_inquiries
     try {
       const dbLeadsRes = await pool.query(`
-        SELECT * FROM lead_inquiries 
+        SELECT * FROM lead_inquiries
         WHERE campaign_id = $1 OR host_id = $2
         ORDER BY created_at DESC LIMIT 50
       `, [id, req.user?.id]);
-      
+
       for (const row of dbLeadsRes.rows) {
         leads.push({
           id: `db_inquiry_${row.id}`,
@@ -6360,15 +6504,15 @@ app.get('/api/marketing/campaigns/:id/leads', authenticateToken, async (req: Aut
     } catch (dbErr) {
       console.warn('Failed to fetch persistent lead_inquiries:', dbErr);
     }
-    
+
     // Fetch persistent database leads from host_outreach_leads
     try {
       const outreachLeadsRes = await pool.query(`
-        SELECT * FROM host_outreach_leads 
+        SELECT * FROM host_outreach_leads
         WHERE campaign_id = $1 OR host_id = $2
         ORDER BY created_at DESC LIMIT 20
       `, [id, req.user?.id]);
-      
+
       for (const row of outreachLeadsRes.rows) {
         let msgHist = [];
         try {
@@ -6376,7 +6520,7 @@ app.get('/api/marketing/campaigns/:id/leads', authenticateToken, async (req: Aut
         } catch (e) {
           msgHist = [];
         }
-        
+
         leads.push({
           id: `db_lead_${row.id}`,
           name: row.guest_name || row.owner_name || 'Simulated Hot Lead',
@@ -6405,27 +6549,27 @@ app.get('/api/marketing/campaigns/:id/leads', authenticateToken, async (req: Aut
     }
 
     const numLeads = Math.max(3, (seed % 4) + 4); // 4 to 7 leads
-    
+
     for (let i = 0; i < numLeads; i++) {
       const nameIndex = (seed + i) % names.length;
       const cityIndex = (seed + i + 2) % cities.length;
       const sourceIndex = (seed + i * 3) % sources.length;
-      
+
       const leadName = names[nameIndex];
       const phoneNum = `+91 98${(33 + seed * 7 + i * 11) % 99}4 ${55 + i * 14}${(10 + seed * 3) % 99}`;
       const emailName = leadName.toLowerCase().replace(' ', '.');
       const email = `${emailName}@gmail.com`;
 
       // Cross-reference with real bookings in DB
-      const matchedBooking = listingBookings.find(b => 
-        b.name.toLowerCase() === leadName.toLowerCase() || 
+      const matchedBooking = listingBookings.find(b =>
+        b.name.toLowerCase() === leadName.toLowerCase() ||
         b.phone.replace(/\s+/g, '') === phoneNum.replace(/\s+/g, '')
       );
 
       let status = statusOpts[(seed + i * 2) % statusOpts.length];
       if (i === 0 && conversions > 0) status = "Booked";
       if (i === 1) status = "Interested";
-      
+
       if (matchedBooking) {
         status = "Booked";
       }
@@ -6521,13 +6665,13 @@ app.post('/api/marketing/leads/:leadId/convert-booking', authenticateToken, asyn
       INSERT INTO bookings (user_id, listing_id, room_id, move_in_date, configuration, name, phone, total_rent, status)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'Confirmed') RETURNING *
     `, [
-      finalUserId, 
-      campaign.listing_id, 
-      roomId || null, 
-      moveInDate, 
-      configuration || `${durationNights || 1} Nights Stay`, 
-      name, 
-      phone, 
+      finalUserId,
+      campaign.listing_id,
+      roomId || null,
+      moveInDate,
+      configuration || `${durationNights || 1} Nights Stay`,
+      name,
+      phone,
       totalRent
     ]);
 
@@ -6595,10 +6739,10 @@ app.post('/api/marketing/leads/:leadId/message', authenticateToken, async (req: 
     if (leadId && leadId.startsWith('db_inquiry_')) {
       const realId = leadId.replace('db_inquiry_', '');
       await pool.query(
-        `UPDATE lead_inquiries 
+        `UPDATE lead_inquiries
          SET raw_inquiry = raw_inquiry || chr(10) || 'Host Reply: ' || $1,
              masked_contact_info = masked_contact_info || chr(10) || 'Host Reply: ' || $2,
-             is_read = true 
+             is_read = true
          WHERE id = $3 AND host_id = $4`,
         [message_text, masked_message_text, realId, req.user?.id]
       );
@@ -6608,11 +6752,11 @@ app.post('/api/marketing/leads/:leadId/message', authenticateToken, async (req: 
        if (dbLeadRes.rows.length > 0) {
            let msgHist = [];
            try {
-               msgHist = typeof dbLeadRes.rows[0].message_history === 'string' 
-                   ? JSON.parse(dbLeadRes.rows[0].message_history) 
+               msgHist = typeof dbLeadRes.rows[0].message_history === 'string'
+                   ? JSON.parse(dbLeadRes.rows[0].message_history)
                    : (dbLeadRes.rows[0].message_history || []);
            } catch (e) { msgHist = []; }
-           
+
            msgHist.push({ timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), sender: 'Host', text: masked_message_text });
            await pool.query('UPDATE host_outreach_leads SET message_history = $1 WHERE id = $2 AND host_id = $3', [JSON.stringify(msgHist), realId, req.user?.id]);
        }
@@ -6657,7 +6801,7 @@ async function dispatchGoogleAdsCampaign(campaignId: number, req: any) {
     }
 
     const campaign = campaignResult.rows[0];
-    
+
     // Check for Google Ads credentials
     const devToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
     const clientId = process.env.GOOGLE_ADS_CLIENT_ID;
@@ -6676,7 +6820,7 @@ async function dispatchGoogleAdsCampaign(campaignId: number, req: any) {
 
     if (hasRealGoogleCredentials) {
       console.log(`[GOOGLE ADS API] Full Search & Display Pipeline Initiated. Account: ${customerId}`);
-      
+
       try {
         // Step 1: Exchange Refresh Token for Access Token (OAuth2)
         const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
@@ -6697,14 +6841,14 @@ async function dispatchGoogleAdsCampaign(campaignId: number, req: any) {
           throw new Error(`OAuth token refresh returned non-JSON response (${tokenRes.status}): ${tokenText.substring(0, 150)}`);
         }
         if (!tokenRes.ok) throw new Error(`Failed to refresh token: ${tokenData.error || tokenText.substring(0, 150)}`);
-        
+
         const accessToken = tokenData.access_token;
         console.log(`[GOOGLE ADS API] OAuth2 Access Token Acquired.`);
 
         // Step 2: Create Campaign via Google Ads REST API
         // For simplicity, we are structuring the REST call format.
         const campaignUrl = `https://googleads.googleapis.com/v16/customers/${customerId}/campaigns:mutate`;
-        
+
         const gAdsPayload = {
           operations: [
             {
@@ -6729,7 +6873,7 @@ async function dispatchGoogleAdsCampaign(campaignId: number, req: any) {
           },
           body: JSON.stringify(gAdsPayload)
         });
-        
+
         const campText = await campRes.text();
         let campData: any = {};
         try {
@@ -6738,7 +6882,7 @@ async function dispatchGoogleAdsCampaign(campaignId: number, req: any) {
           throw new Error(`Google Ads API returned non-JSON response (${campRes.status}): ${campText.substring(0, 150)}`);
         }
         if (!campRes.ok) throw new Error(`Campaign creation failed: ${campData.error?.message || JSON.stringify(campData)}`);
-        
+
         const googleCampaignId = campData.results[0].resourceName;
         console.log(`[GOOGLE ADS API] Performance Max Campaign created: ${googleCampaignId}`);
 
@@ -6748,7 +6892,7 @@ async function dispatchGoogleAdsCampaign(campaignId: number, req: any) {
           SET google_campaign_id = $1
           WHERE id = $2
         `, [googleCampaignId, campaignId]);
-        
+
         return true;
 
       } catch (apiError: any) {
@@ -6758,7 +6902,7 @@ async function dispatchGoogleAdsCampaign(campaignId: number, req: any) {
       }
     } else {
       console.log(`[GOOGLE ADS API] Missing credentials, using P-Max simulation...`);
-      
+
       const payload = {
         campaignName: `Encho Space - ${campaign.title}`,
         channel: "PERFORMANCE_MAX",
@@ -6772,24 +6916,24 @@ async function dispatchGoogleAdsCampaign(campaignId: number, req: any) {
           }
         ]
       };
-      
+
       console.log(`[GOOGLE ADS API] Simulating Performance Max dispatch:`, JSON.stringify(payload, null, 2));
       await new Promise(resolve => setTimeout(resolve, 1500));
       const simulatedGoogleId = null;
-      
+
       console.log(`[GOOGLE ADS API] Success! Generated campaign ${simulatedGoogleId}`);
-      
+
       // We don't overwrite the main 'status' if it's already handled by Meta dispatch, but we update the google ID
       await pool.query(`
         ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS google_campaign_id VARCHAR(255);
       `);
-      
+
       await pool.query(`
         UPDATE host_marketing_campaigns
         SET google_campaign_id = $1
         WHERE id = $2
       `, [simulatedGoogleId, campaignId]);
-      
+
       return true;
     }
   } catch (error) {
@@ -6804,7 +6948,7 @@ async function dispatchGoogleAdsCampaign(campaignId: number, req: any) {
 async function executeCampaignStateMachine(campaignId: number, triggerEvent: string, req: any) {
     try {
         console.log(`[STATE MACHINE] Campaign #${campaignId} | Event: ${triggerEvent}`);
-        
+
         // 1. Fetch current complete state with row lock to prevent race conditions
         const client = await pool.connect();
         try {
@@ -6812,7 +6956,7 @@ async function executeCampaignStateMachine(campaignId: number, triggerEvent: str
             const stateRes = await client.query('SELECT * FROM host_marketing_campaigns WHERE id = $1 FOR UPDATE', [campaignId]);
             if (stateRes.rows.length === 0) throw new Error('Campaign not found');
             const campaign = stateRes.rows[0];
-            
+
             // 2. State Transition Engine
             let nextState = campaign.status;
             let dispatchMeta = false;
@@ -6822,10 +6966,10 @@ async function executeCampaignStateMachine(campaignId: number, triggerEvent: str
                     console.log(`[STATE MACHINE] Wait: Payment cleared, but AI/Admin approval pending.`);
                     nextState = 'pending_approval';
                 } else if (
-                    campaign.status === 'draft' || 
-                    campaign.status === 'pending_approval' || 
-                    campaign.status === 'PAYMENT_PENDING' || 
-                    campaign.status === 'pending' || 
+                    campaign.status === 'draft' ||
+                    campaign.status === 'pending_approval' ||
+                    campaign.status === 'PAYMENT_PENDING' ||
+                    campaign.status === 'pending' ||
                     campaign.status === 'escrow' ||
                     campaign.status === 'approved' ||
                     campaign.status === 'failed_publish' ||
@@ -6837,11 +6981,11 @@ async function executeCampaignStateMachine(campaignId: number, triggerEvent: str
                         console.log(`[STATE MACHINE] Admin authorization / Escrow cleared. Transitioning state: ${campaign.status} -> ASSET_PREP`);
                         nextState = 'ASSET_PREP';
                         dispatchMeta = true;
-                        
+
                         await client.query(`
-                            UPDATE host_marketing_campaigns 
-                            SET escrow_status = 'released', 
-                                escrow_release_at = COALESCE(escrow_release_at, CURRENT_TIMESTAMP) 
+                            UPDATE host_marketing_campaigns
+                            SET escrow_status = 'released',
+                                escrow_release_at = COALESCE(escrow_release_at, CURRENT_TIMESTAMP)
                             WHERE id = $1
                         `, [campaignId]);
                     } else {
@@ -6849,18 +6993,18 @@ async function executeCampaignStateMachine(campaignId: number, triggerEvent: str
                         const userCheck = await client.query('SELECT is_verified FROM users WHERE id = $1', [campaign.host_id]);
                         const isVerifiedUser = userCheck.rows[0]?.is_verified;
                         const amount = Number(campaign.budget || 0);
-                        
+
                         const isHighRisk = !isVerifiedUser || amount > 5000;
-                        
+
                         if (isHighRisk && campaign.escrow_status !== 'released') {
                             console.log(`[ESCROW] 3D Secure Verification triggered. Host unverified or amount high. Placing Campaign into 24-hour Escrow delay to prevent chargeback fraud on Master Account.`);
                             console.log(`[STATE MACHINE] Transitioning state: ${campaign.status} -> ESCROW`);
                             nextState = 'escrow';
-                            
+
                             await client.query(`
-                                UPDATE host_marketing_campaigns 
-                                SET escrow_status = 'holding', 
-                                    escrow_release_at = NOW() + INTERVAL '24 hours' 
+                                UPDATE host_marketing_campaigns
+                                SET escrow_status = 'holding',
+                                    escrow_release_at = NOW() + INTERVAL '24 hours'
                                 WHERE id = $1
                             `, [campaignId]);
                         } else {
@@ -6878,26 +7022,26 @@ async function executeCampaignStateMachine(campaignId: number, triggerEvent: str
             }
 
             if (nextState !== campaign.status) {
-                await transitionCampaignState({ 
-                    campaignId: Number(campaignId), 
-                    to: nextState as any, 
+                await transitionCampaignState({
+                    campaignId: Number(campaignId),
+                    to: nextState as any,
                     reason: `${triggerEvent} driven state transition`,
                     actorType: triggerEvent === 'ADMIN_APPROVE' ? 'admin' : (triggerEvent === 'PAYMENT_SUCCESS' ? 'webhook' : 'system'),
                     actorId: req?.user?.id,
-                    client: client 
+                    client: client
                 });
             }
-            
+
             await client.query('COMMIT');
 
             // 3. Execution (Post-Commit)
             if (dispatchMeta) {
                 console.log(`[STATE MACHINE] Transitioning state: ASSET_PREP -> META_API_PUSH`);
-                
+
                 // Set intermediate state
                 await transitionCampaignState({ campaignId: Number(campaignId), to: 'META_API_PUSH', reason: 'Async dispatch started', actorType: 'system' });
                 broadcastDbEvent(req, 'marketing'); // Notify UI of pipeline movement
-                
+
                 // Dispatch to Meta (This inherently triggers Asset Prep under the hood in dispatchMetaCampaign)
                 let metaSuccess = false;
                 try {
@@ -7686,7 +7830,7 @@ export function classifyMetaError(data: any): MetaErrorClassification {
   if (msg.includes('preflight failed') || e?.diagnosticReport) {
     const diagnosticReport = e?.diagnosticReport;
     const firstBlocker = diagnosticReport?.gate_results?.find((g: any) => g.status === 'FAILED' && g.severity === 'BLOCKER');
-    
+
     return {
       code_name: firstBlocker?.failure_code || 'PREFLIGHT_VALIDATION_FAILED',
       category: 'PREFLIGHT',
@@ -8137,11 +8281,11 @@ export async function executeMetaRollback(
 
 async function runMetaPreflightEngine(campaignId: number, dbPool: any, options: { isAdmin?: boolean; correlationId?: string } = {}) {
   console.log(`[PREFLIGHT] Running 16 Meta Safety Gates validation for campaign ${campaignId}`);
-  
+
   const corrId = options.correlationId || crypto.randomUUID();
   const externalReport = await checkExternalMetaReadiness(dbPool, corrId);
   const fullOptions = { ...options, externalReport };
-  
+
   const report = await evaluateMetaPreflightDiagnostics(campaignId, dbPool, fullOptions);
 
   if (!report.is_deployable) {
@@ -8164,7 +8308,7 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
 
   const correlationId = overrideCorrelationId || crypto.randomUUID();
   const idempotencyKey = `publish_meta_camp_${campaignId}`;
-  
+
   // Phase 1 & 2: Idempotent Publishing & Transaction State Machine
   let txId;
   let publishAttempt = 1;
@@ -8172,16 +8316,16 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
   const claimClient = await pool.connect();
   try {
     await claimClient.query('BEGIN');
-    
+
     await claimClient.query(
-      `INSERT INTO meta_publishing_transactions (campaign_id, idempotency_key, correlation_id, publish_status) 
-       VALUES ($1, $2, $3, 'PRECHECK_RUNNING') 
+      `INSERT INTO meta_publishing_transactions (campaign_id, idempotency_key, correlation_id, publish_status)
+       VALUES ($1, $2, $3, 'PRECHECK_RUNNING')
        ON CONFLICT (idempotency_key) DO NOTHING`,
       [campaignId, idempotencyKey, correlationId]
     );
 
     const txCheck = await claimClient.query(`SELECT * FROM meta_publishing_transactions WHERE idempotency_key = $1 FOR UPDATE NOWAIT`, [idempotencyKey]);
-    
+
     if (txCheck.rows.length === 0) {
        throw new Error('Critical idempotency failure: Record not found after insert or conflict');
     }
@@ -8196,7 +8340,7 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
         await claimClient.query('COMMIT');
         return true;
       }
-      
+
       if (tx.publish_status === 'EXTERNAL_OUTCOME_UNKNOWN') {
         console.warn(`[META ENGINE] Campaign ${campaignId} has EXTERNAL_OUTCOME_UNKNOWN transaction #${tx.id}. Blocking duplicate dispatch until reconciliation.`);
         await claimClient.query('COMMIT');
@@ -8214,11 +8358,11 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
            console.log(`[META ENGINE] Campaign ${campaignId} lease expired. Reclaiming.`);
          }
       }
-      
+
       publishAttempt++;
       await claimClient.query(
-        `UPDATE meta_publishing_transactions 
-         SET publish_attempt = $1, publish_status = 'PRECHECK_RUNNING', updated_at = CURRENT_TIMESTAMP, correlation_id = $2 
+        `UPDATE meta_publishing_transactions
+         SET publish_attempt = $1, publish_status = 'PRECHECK_RUNNING', updated_at = CURRENT_TIMESTAMP, correlation_id = $2
          WHERE id = $3`,
         [publishAttempt, correlationId, txId]
       );
@@ -8255,13 +8399,13 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
     }
 
     const campaign = campaignResult.rows[0];
-    
+
     // Core Configuration
     const accessToken = process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN;
     const rawAdAccountId = process.env.META_AD_ACCOUNT_ID;
     const pageId = process.env.META_PAGE_ID;
     const igAccountId = process.env.META_INSTAGRAM_ACCOUNT_ID;
-    
+
     checkIntegrationKeys(
       'Meta Marketing API',
       ['META_ACCESS_TOKEN', 'META_AD_ACCOUNT_ID', 'META_PAGE_ID', 'META_INSTAGRAM_ACCOUNT_ID'],
@@ -8273,22 +8417,22 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
     }
 
     const cleanAdAccountId = rawAdAccountId.startsWith('act_') ? rawAdAccountId : `act_${rawAdAccountId}`;
-    
+
     // Using global classifyMetaError from Phase 11
 
     // Phase 4: Retry Engine with Exponential Backoff
     const executeMetaRequest = async (stepName: string, endpoint: string, payload: any, maxRetries = 3) => {
       let attempt = 0;
       let delayMs = 1000;
-      
+
       while (attempt < maxRetries) {
         attempt++;
         const startTime = Date.now();
         const redactedPayload = { ...payload, access_token: 'REDACTED' };
         if (redactedPayload.bytes) redactedPayload.bytes = 'REDACTED_BASE64_IMAGE';
-        
+
         console.log(`[META TRACE ${correlationId}] Step: ${stepName} | Attempt ${attempt}/${maxRetries} | POST ${endpoint}`);
-        
+
         try {
           const res = await fetch(endpoint, {
             method: 'POST',
@@ -8297,7 +8441,29 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
           });
           const data = res.headers.get('content-type')?.includes('json') ? await res.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
           const executionTime = Date.now() - startTime;
-          
+
+          MetricsRegistry.recordProviderCall('META', stepName, res.status, executionTime);
+
+          if (res.status === 429) {
+            AlertService.emitAlert(
+              'PROVIDER_RATE_LIMIT_429',
+              'HIGH',
+              `Meta API Rate Limit (HTTP 429) on ${stepName}`,
+              'Meta Graph API returned HTTP 429 rate limit.',
+              'Implement backoff and respect rate limit headers.',
+              { correlationId, campaignId, stepName, endpoint }
+            );
+          } else if (res.status >= 500) {
+            AlertService.emitAlert(
+              'PROVIDER_5XX_SPIKE',
+              'HIGH',
+              `Meta API 5xx Server Error on ${stepName}`,
+              `Meta Graph API returned HTTP ${res.status}.`,
+              'Inspect Meta Platform Status dashboard.',
+              { correlationId, campaignId, stepName, endpoint, status: res.status }
+            );
+          }
+
           // Enterprise Meta Debug Recorder Insert
           try {
             await pool.query(`
@@ -8312,11 +8478,11 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
           } catch(e: any) {
             console.error('[META API TRACES] Failed to save trace', e.message);
           }
-            
+
           if (!res.ok || data.error) {
             const errorClassification = classifyMetaError(data);
             console.error(`[META TRACE ${correlationId}] FAILED: ${stepName} | Code: ${errorClassification.code_name} | Error:`, JSON.stringify(data.error));
-            
+
             if (errorClassification.retryable && attempt < maxRetries) {
               const jitter = Math.random() * 500;
               await new Promise(r => setTimeout(r, delayMs + jitter));
@@ -8327,7 +8493,7 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
             errObj.metaData = data;
             throw errObj;
           }
-            
+
           console.log(`[META TRACE ${correlationId}] SUCCESS: ${stepName} in ${executionTime}ms`);
           return data;
         } catch (e: any) {
@@ -8354,22 +8520,60 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
     const sanitizedDescription = campaign.description || campaign.listing_desc || 'Experience a wonderful stay with Encho.';
     const feedDescription = campaign.feed_description || 'Book your dream getaway today.';
 
-    // 1. Create Campaign
-    const campPayload = {
-        access_token: accessToken,
-        name: `Encho Space - ${adHeadline} (Campaign #${campaign.id})`,
-        objective: 'OUTCOME_AWARENESS',
-        special_ad_categories: ['HOUSING'],
-        special_ad_category_country: ['US', 'IN'],
-        is_adset_budget_sharing_enabled: false,
-        buying_type: 'AUCTION',
-        status: 'PAUSED'
-    };
-    const campData = await executeMetaRequest('campaign_creation', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/campaigns`, campPayload);
+    // 1. Create or Recover Campaign (Case A by ID, Case B by deterministic name on retry/recovery)
+    const isRetryOrRecovery = (campaign.publish_attempt_count && campaign.publish_attempt_count > 0) || campaign.status === 'EXTERNAL_OUTCOME_UNKNOWN' || campaign.status === 'failed_publish' || campaign.status === 'failed' || !!req?.isRecovery;
+    let campData: any = null;
+    const existingMetaCampId = campaign.meta_campaign_id;
+    if (existingMetaCampId) {
+      try {
+        const verifyCampRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${existingMetaCampId}?fields=id,status,name&access_token=${accessToken}`);
+        if (verifyCampRes.ok) {
+          const verifyCampData = await verifyCampRes.json();
+          if (verifyCampData && verifyCampData.id && !verifyCampData.error) {
+            console.log(`[META IDEMPOTENCY RECOVERY CASE A] Existing Meta Campaign ${existingMetaCampId} verified on Meta. Reusing object.`);
+            campData = { id: verifyCampData.id };
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[META RECOVERY] Failed to query existing campaign ${existingMetaCampId}:`, err.message);
+      }
+    } else if (isRetryOrRecovery) {
+      // Case B: Search ad account for deterministic campaign name when local ID was lost before crash on retry
+      try {
+        const searchCampRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/campaigns?fields=id,name,status&limit=50&access_token=${accessToken}`);
+        if (searchCampRes.ok) {
+          const searchData = await searchCampRes.json();
+          if (searchData && Array.isArray(searchData.data)) {
+            const expectedTag = `(Campaign #${campaign.id})`;
+            const matchingCamp = searchData.data.find((c: any) => c.name && c.name.includes(expectedTag));
+            if (matchingCamp) {
+              console.log(`[META IDEMPOTENCY RECOVERY CASE B] Discovered existing unpersisted Meta Campaign ${matchingCamp.id} via deterministic name search. Reusing object.`);
+              campData = { id: matchingCamp.id };
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[META CASE B RECOVERY] Failed to search existing campaigns:`, err.message);
+      }
+    }
+
+    if (!campData) {
+      const campPayload = {
+          access_token: accessToken,
+          name: `Encho Space - ${adHeadline} (Campaign #${campaign.id})`,
+          objective: 'OUTCOME_AWARENESS',
+          special_ad_categories: ['HOUSING'],
+          special_ad_category_country: ['US', 'IN'],
+          is_adset_budget_sharing_enabled: false,
+          buying_type: 'AUCTION',
+          status: 'PAUSED'
+      };
+      campData = await executeMetaRequest('campaign_creation', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/campaigns`, campPayload);
+    }
     rollbackState.metaCampaignId = campData.id;
     await pool.query(`UPDATE meta_publishing_transactions SET meta_campaign_id = $1 WHERE id = $2`, [campData.id, txId]);
 
-    // 2. Create Ad Set with Authoritative Financial Contract Budget
+    // 2. Create or Recover Ad Set with Authoritative Financial Contract Budget
     const financialContract = await getOrEstablishFinancialContract(campaign.id, pool);
     const authorizedSpendMinorUnits = financialContract.meta_authorized_spend;
     const configuredDailyBudget = Number(authorizedSpendMinorUnits);
@@ -8378,19 +8582,55 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
       throw new Error(`[FINANCIAL_BUDGET_EXCEEDS_AUTHORIZATION] Configured Meta daily_budget (${configuredDailyBudget}) exceeds authorized spend (${authorizedSpendMinorUnits})`);
     }
 
-    const adSetPayload: any = {
-      access_token: accessToken,
-      name: `AdSet - ${adHeadline}`,
-      campaign_id: rollbackState.metaCampaignId,
-      daily_budget: configuredDailyBudget,
-      billing_event: 'IMPRESSIONS',
-      optimization_goal: 'REACH',
-      promoted_object: { page_id: pageId },
-      bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
-      targeting: MetaTargetMapper.mapTargeting(campaign, campaign), // Note: campaign has listing fields injected
-      status: 'PAUSED'
-    };
-    const adSetData = await executeMetaRequest('adset_creation', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/adsets`, adSetPayload);
+    let adSetData: any = null;
+    const existingMetaAdSetId = campaign.meta_adset_id;
+    if (existingMetaAdSetId) {
+      try {
+        const verifyAdSetRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${existingMetaAdSetId}?fields=id,status,name&access_token=${accessToken}`);
+        if (verifyAdSetRes.ok) {
+          const verifyAdSetData = await verifyAdSetRes.json();
+          if (verifyAdSetData && verifyAdSetData.id && !verifyAdSetData.error) {
+            console.log(`[META IDEMPOTENCY RECOVERY CASE A] Existing Meta AdSet ${existingMetaAdSetId} verified on Meta. Reusing object.`);
+            adSetData = { id: verifyAdSetData.id };
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[META RECOVERY] Failed to query existing adset ${existingMetaAdSetId}:`, err.message);
+      }
+    } else if (isRetryOrRecovery && rollbackState.metaCampaignId) {
+      // Case B: Search adsets under the recovered campaign on retry
+      try {
+        const searchAdSetRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${rollbackState.metaCampaignId}/adsets?fields=id,name,status&limit=25&access_token=${accessToken}`);
+        if (searchAdSetRes.ok) {
+          const searchData = await searchAdSetRes.json();
+          if (searchData && Array.isArray(searchData.data)) {
+            const matchingAdSet = searchData.data.find((a: any) => a.name && a.name.includes(`AdSet - ${adHeadline}`));
+            if (matchingAdSet) {
+              console.log(`[META IDEMPOTENCY RECOVERY CASE B] Discovered existing unpersisted Meta AdSet ${matchingAdSet.id} via parent campaign search. Reusing object.`);
+              adSetData = { id: matchingAdSet.id };
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[META CASE B ADSET RECOVERY] Failed to search existing adsets:`, err.message);
+      }
+    }
+
+    if (!adSetData) {
+      const adSetPayload: any = {
+        access_token: accessToken,
+        name: `AdSet - ${adHeadline}`,
+        campaign_id: rollbackState.metaCampaignId,
+        daily_budget: configuredDailyBudget,
+        billing_event: 'IMPRESSIONS',
+        optimization_goal: 'REACH',
+        promoted_object: { page_id: pageId },
+        bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
+        targeting: MetaTargetMapper.mapTargeting(campaign, campaign), // Note: campaign has listing fields injected
+        status: 'PAUSED'
+      };
+      adSetData = await executeMetaRequest('adset_creation', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/adsets`, adSetPayload);
+    }
     rollbackState.metaAdSetId = adSetData.id;
     await pool.query(`UPDATE meta_publishing_transactions SET meta_adset_id = $1 WHERE id = $2`, [adSetData.id, txId]);
     await pool.query(`UPDATE campaign_financial_contracts SET meta_configured_max_spend = $1 WHERE campaign_id = $2`, [configuredDailyBudget.toString(), campaign.id]);
@@ -8454,8 +8694,8 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
       }
 
       // Upload to Meta
-      const sqUpload = await executeMetaRequest(`adimage_upload_variant_${i}`, `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/adimages`, { 
-         access_token: accessToken, bytes: imgBase64 
+      const sqUpload = await executeMetaRequest(`adimage_upload_variant_${i}`, `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/adimages`, {
+         access_token: accessToken, bytes: imgBase64
       });
       let imageHash = '';
       if (sqUpload && sqUpload.images) {
@@ -8533,12 +8773,12 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
 
       // Update variant with Meta IDs, status, and variant_activated_at
       await pool.query(
-        `UPDATE campaign_creative_variants 
-         SET meta_creative_id = $1, 
-             meta_ad_id = $2, 
-             asset_sha256 = $3, 
-             is_published = true, 
-             status = $4, 
+        `UPDATE campaign_creative_variants
+         SET meta_creative_id = $1,
+             meta_ad_id = $2,
+             asset_sha256 = $3,
+             is_published = true,
+             status = $4,
              variant_activated_at = $5,
              updated_at = CURRENT_TIMESTAMP
          WHERE id = $6`,
@@ -8551,7 +8791,7 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
 
     // 4. DB Commit
     await pool.query(`
-      UPDATE host_marketing_campaigns 
+      UPDATE host_marketing_campaigns
       SET meta_campaign_id = $1, meta_adset_id = $2, meta_creative_id = $3, meta_ad_id = $4, meta_dispatched_at = CURRENT_TIMESTAMP
       WHERE id = $5
     `, [rollbackState.metaCampaignId, rollbackState.metaAdSetId, primaryCreativeId, primaryAdId, campaignId]);
@@ -8563,7 +8803,7 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
 
   } catch (error: any) {
     console.error(`[META ENGINE FAULT] Campaign ${campaignId} failed.`, error);
-    
+
     const rawErrorPayload = error.metaData || error.response || {
       error: {
         message: error.message,
@@ -8614,15 +8854,15 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
 
     // Update meta_publishing_transactions with full classification and quarantined objects
     await pool.query(`
-      UPDATE meta_publishing_transactions 
-      SET publish_status = $1, 
-          failure_code = $2, 
-          failure_category = $3, 
-          failure_stage = $4, 
+      UPDATE meta_publishing_transactions
+      SET publish_status = $1,
+          failure_code = $2,
+          failure_category = $3,
+          failure_stage = $4,
           rollback_status = $5,
           error_details = $6,
           quarantined_objects = $7,
-          updated_at = CURRENT_TIMESTAMP 
+          updated_at = CURRENT_TIMESTAMP
       WHERE id = $8
     `, [
       finalTxStatus,
@@ -8637,7 +8877,7 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
 
     // Update host_marketing_campaigns (NEVER MARK LIVE)
     const feedbackMsg = `${classification.user_title}: ${classification.recommended_action || classification.action_required || ''}`;
-    
+
     // Phase 2.9.1 - P0 Remediation: Never overwrite an UNKNOWN outcome with FAILED_PUBLISH
     if (!isUnknownOutcome) {
       await transitionCampaignState({ campaignId: Number(campaignId), to: 'failed_publish', reason: 'Fallback to DLQ after publish error', actorType: 'system' });
@@ -8646,11 +8886,11 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
     }
 
     await pool.query(`
-      UPDATE host_marketing_campaigns 
-      SET admin_feedback = $1 
+      UPDATE host_marketing_campaigns
+      SET admin_feedback = $1
       WHERE id = $2
     `, [feedbackMsg, campaignId]);
-    
+
     // Phase 13: Record in Dead Letter Queue
     try {
       await pool.query(`
@@ -8658,9 +8898,9 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
           transaction_id, campaign_id, correlation_id, failure_stage, failure_code, requires_human_action, error_payload, recommended_action
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       `, [
-        txId, 
-        campaignId, 
-        correlationId, 
+        txId,
+        campaignId,
+        correlationId,
         stageName,
         classification.code_name,
         classification.requires_human_action,
@@ -8682,7 +8922,7 @@ export async function activateMetaCampaign(campaignId: number, req: any, overrid
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
+
     const campRes = await client.query(`SELECT * FROM host_marketing_campaigns WHERE id = $1 FOR UPDATE`, [campaignId]);
     if (campRes.rows.length === 0) {
       throw new Error(`Campaign #${campaignId} not found`);
@@ -8706,7 +8946,7 @@ export async function activateMetaCampaign(campaignId: number, req: any, overrid
 
     // FINANCIAL BOUNDARY GATE: Independent verification of financial ceiling before ANY Meta mutation
     const financialContract = await getOrEstablishFinancialContract(campaignId, client);
-    
+
     // Invariant 1: Local configured max spend must not exceed authorized spend
     if (financialContract.meta_configured_max_spend > financialContract.meta_authorized_spend) {
       const variance = financialContract.meta_configured_max_spend - financialContract.meta_authorized_spend;
@@ -8974,8 +9214,8 @@ export async function processUnprocessedVariantRawEvents(variantId: number) {
   try {
     await client.query('BEGIN');
     const unprocessedRes = await client.query(`
-      SELECT * FROM variant_raw_event_logs 
-      WHERE variant_id = $1 AND processed = false 
+      SELECT * FROM variant_raw_event_logs
+      WHERE variant_id = $1 AND processed = false
       FOR UPDATE
     `, [variantId]);
 
@@ -9070,7 +9310,7 @@ export async function evaluateCampaignDCO(campaignId: number, options?: { evalua
 
     // Check active publishing transactions
     const pubTxRes = await client.query(`
-      SELECT 1 FROM meta_publishing_transactions 
+      SELECT 1 FROM meta_publishing_transactions
       WHERE campaign_id = $1 AND publish_status IN ('PENDING', 'PUBLISHING')
     `, [campaignId]);
     if (pubTxRes.rows.length > 0) {
@@ -9080,7 +9320,7 @@ export async function evaluateCampaignDCO(campaignId: number, options?: { evalua
 
     // 3. Evaluation Lease (Requirement 8)
     const evalRes = await client.query(`
-      SELECT * FROM dco_evaluation_transactions 
+      SELECT * FROM dco_evaluation_transactions
       WHERE campaign_id = $1 AND evaluation_epoch = $2
       FOR UPDATE
     `, [campaignId, epoch]);
@@ -9411,7 +9651,7 @@ export async function executeDCOOptimization(
 
     // Check active publishing transactions
     const pubTxRes = await client.query(`
-      SELECT 1 FROM meta_publishing_transactions 
+      SELECT 1 FROM meta_publishing_transactions
       WHERE campaign_id = $1 AND publish_status IN ('PENDING', 'PUBLISHING')
     `, [campaignId]);
     if (pubTxRes.rows.length > 0) {
@@ -9421,7 +9661,7 @@ export async function executeDCOOptimization(
 
     // 2. Fetch WINNER_SELECTED evaluation
     let evalQuery = `
-      SELECT * FROM dco_evaluation_transactions 
+      SELECT * FROM dco_evaluation_transactions
       WHERE campaign_id = $1 AND decision = 'WINNER_SELECTED'
     `;
     const evalParams: any[] = [campaignId];
@@ -9469,7 +9709,7 @@ export async function executeDCOOptimization(
     // 4. Check existing dco_external_actions
     const actionKey = `dco_pause_${campaignId}_${evalRecord.id}_${loserVariant.id}`;
     const actionRes = await client.query('SELECT * FROM dco_external_actions WHERE action_key = $1 FOR UPDATE', [actionKey]);
-    
+
     let actionRecord = actionRes.rows[0];
 
     if (actionRecord && actionRecord.status === 'META_ACTION_SUCCEEDED') {
@@ -9542,7 +9782,7 @@ export async function executeDCOOptimization(
       try {
         await errClient.query('BEGIN');
         await errClient.query(`
-          UPDATE dco_external_actions 
+          UPDATE dco_external_actions
           SET status = 'EXTERNAL_OUTCOME_UNKNOWN', error_details = $1, updated_at = CURRENT_TIMESTAMP
           WHERE id = $2
         `, [postError, actionRecord.id]);
@@ -9563,7 +9803,7 @@ export async function executeDCOOptimization(
       const getRes = await fetch(`${baseUrl}/${loserVariant.meta_ad_id}?fields=id,status,effective_status,campaign_id,adset_id,account_id&access_token=${accessToken}`);
       const getData = getRes.headers.get('content-type')?.includes('json') ? await getRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await getRes.text()).slice(0, 150) } as any;
       const extStatus = String(getData.status || getData.effective_status || '').toUpperCase();
-      
+
       const expectedAccountId = campaign.owner_meta_ad_account_id.startsWith('act_') ? campaign.owner_meta_ad_account_id : `act_${campaign.owner_meta_ad_account_id}`;
       const actualAccountId = getData.account_id ? (getData.account_id.startsWith('act_') ? getData.account_id : `act_${getData.account_id}`) : expectedAccountId;
 
@@ -9579,7 +9819,7 @@ export async function executeDCOOptimization(
       try {
         await errClient.query('BEGIN');
         await errClient.query(`
-          UPDATE dco_external_actions 
+          UPDATE dco_external_actions
           SET status = 'EXTERNAL_OUTCOME_UNKNOWN', error_details = 'Verification failed or status not PAUSED', updated_at = CURRENT_TIMESTAMP
           WHERE id = $1
         `, [actionRecord.id]);
@@ -9600,7 +9840,7 @@ export async function executeDCOOptimization(
       await finalClient.query('BEGIN');
 
       await finalClient.query(`
-        UPDATE dco_external_actions 
+        UPDATE dco_external_actions
         SET status = 'META_ACTION_SUCCEEDED', error_details = NULL, updated_at = CURRENT_TIMESTAMP
         WHERE id = $1
       `, [actionRecord.id]);
@@ -9746,7 +9986,7 @@ async function dispatchConversionsAPI(booking: any, listingId: number, eventName
   try {
     // 1. Fetch active marketing campaign for this listing
     const campaignsRes = await pool.query(`
-      SELECT * FROM host_marketing_campaigns 
+      SELECT * FROM host_marketing_campaigns
       WHERE listing_id = $1 AND status = 'active' AND subscription_active = true
       ORDER BY id DESC LIMIT 1
     `, [listingId]);
@@ -9829,7 +10069,7 @@ async function dispatchConversionsAPI(booking: any, listingId: number, eventName
     // II. Send Google Ads Offline Conversion Linkage
     if (hasGoogleAds) {
       console.log(`[GOOGLE ADS DISPATCH] Dispatched to Conversion ID ${google_conversion_id} with Label ${google_conversion_label}...`);
-      
+
       // Google Ads Offline Conversion API upload payload simulation (or actual sandbox POST)
       const googlePayload = {
         conversionId: google_conversion_id,
@@ -9883,11 +10123,23 @@ app.post('/api/payments/webhook', async (req, res) => {
 
       if (event.type === 'payment_intent.succeeded' || event.type === 'checkout.session.completed') {
         const paymentIntentId = event.type === 'checkout.session.completed' ? (event.data.object as any).payment_intent : (event.data.object as any).id;
-        const metadata = (event.data.object as any).metadata || {};
-        await handleVerifiedPayment(metadata.transaction_id, metadata.campaign_id, paymentIntentId, 'stripe', req);
+
+        // M2: Ingest-and-Ack - Queue for async processing
+        await pool.query(`
+          INSERT INTO inbound_webhooks (provider, event_type, payload, signature_metadata, idempotency_key, correlation_id)
+          VALUES ($1, $2, $3, $4, $5, $6)
+          ON CONFLICT (idempotency_key) DO NOTHING
+        `, [
+          'stripe',
+          event.type,
+          JSON.stringify(event),
+          JSON.stringify({ sig: stripeSig }),
+          `stripe_${paymentIntentId}_${event.type}`,
+          `corr_wh_stripe_${Date.now()}`
+        ]);
       }
       return res.json({ received: true });
-    } 
+    }
     else if (razorpaySigHeader) {
       const endpointSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
       if (!endpointSecret) return res.status(403).json({ error: 'Missing RAZORPAY_WEBHOOK_SECRET' });
@@ -9905,12 +10157,24 @@ app.post('/api/payments/webhook', async (req, res) => {
       const eventType = payload.event;
       if (eventType === 'order.paid' || eventType === 'payment.captured') {
         const orderId = payload.payload?.payment?.entity?.order_id || payload.payload?.order?.entity?.id || payload.order_id;
-        const notes = payload.payload?.payment?.entity?.notes || payload.payload?.order?.entity?.notes || {};
-        await handleVerifiedPayment(notes.transaction_id, notes.campaign_id, orderId, 'razorpay', req);
+
+        // M2: Ingest-and-Ack
+        await pool.query(`
+          INSERT INTO inbound_webhooks (provider, event_type, payload, signature_metadata, idempotency_key, correlation_id)
+          VALUES ($1, $2, $3, $4, $5, $6)
+          ON CONFLICT (idempotency_key) DO NOTHING
+        `, [
+          'razorpay',
+          eventType,
+          JSON.stringify(payload),
+          JSON.stringify({ sig: razorpaySigHeader }),
+          `razorpay_${orderId}_${eventType}`,
+          `corr_wh_rzp_${Date.now()}`
+        ]);
       }
       return res.json({ received: true });
     }
-    
+
     return res.status(400).send('Unrecognized webhook');
   } catch (error) {
     console.error('Error handling webhook:', error);
@@ -9918,7 +10182,7 @@ app.post('/api/payments/webhook', async (req, res) => {
   }
 });
 
-async function handleVerifiedPayment(txId: any, campaignId: any, paymentIntentId: any, gateway: string, req: any) {
+export async function handleVerifiedPayment(txId: any, campaignId: any, paymentIntentId: any, gateway: string, req: any) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -9927,10 +10191,10 @@ async function handleVerifiedPayment(txId: any, campaignId: any, paymentIntentId
     let txRow: any = null;
     if (txId) {
       const txCheck = await client.query(
-        `SELECT wt.*, hw.host_id 
+        `SELECT wt.*, hw.host_id
          FROM wallet_transactions wt
          JOIN host_wallets hw ON wt.wallet_id = hw.id
-         WHERE wt.id = $1 AND wt.status = 'pending' 
+         WHERE wt.id = $1 AND wt.status = 'pending'
          FOR UPDATE OF wt`,
         [txId]
       );
@@ -9939,7 +10203,7 @@ async function handleVerifiedPayment(txId: any, campaignId: any, paymentIntentId
 
     if (!txRow && paymentIntentId) {
       const txFallback = await client.query(
-        `SELECT wt.*, hw.host_id 
+        `SELECT wt.*, hw.host_id
          FROM wallet_transactions wt
          JOIN host_wallets hw ON wt.wallet_id = hw.id
          WHERE (wt.reference_id = $1 OR wt.description ILIKE $2) AND wt.status = 'pending'
@@ -9964,7 +10228,7 @@ async function handleVerifiedPayment(txId: any, campaignId: any, paymentIntentId
       // DEBIT: GATEWAY_CLEARING (Funds received by gateway)
       // CREDIT: HOST_WALLET (Funds credited to host wallet)
       await DoubleEntryLedgerService.recordTransaction(client, {
-        transactionRef: `PAYMENT_WEBHOOK_${gateway.toUpperCase()}_${paymentIntentId || txRow.id}_${Date.now()}`,
+        transactionRef: `PAYMENT_WEBHOOK_${gateway.toUpperCase()}_${paymentIntentId || txRow.reference_id || txRow.id}`,
         eventType: 'WALLET_FUNDING',
         description: `Verified ${gateway.toUpperCase()} wallet funding payment (${paymentIntentId || txRow.id})`,
         lines: [
@@ -10001,11 +10265,11 @@ async function handleVerifiedPayment(txId: any, campaignId: any, paymentIntentId
         const campaign = check.rows[0];
         if (campaign.payment_status !== 'paid') {
           await client.query(`
-            UPDATE host_marketing_campaigns 
+            UPDATE host_marketing_campaigns
             SET subscription_active = true, payment_status = 'paid', payment_gateway = $1, payment_intent_id = $2, active_slide_index = 0
             WHERE id = $3
           `, [gateway, paymentIntentId, campaignIdToUse]);
-          
+
           if (campaign.admin_approved) {
             await transitionCampaignState({ campaignId: campaignIdToUse, expectedCurrentState: campaign.status, to: 'active', reason: 'PAYMENT_SUCCESS', actorType: 'webhook', client });
           } else {
@@ -10052,7 +10316,7 @@ app.get('/api/webhooks/meta', (req, res) => {
 function verifyMetaWebhook(req: any, res: any, next: any) {
   const signature = req.headers['x-hub-signature-256'];
   const appSecret = process.env.META_APP_SECRET;
-  
+
   if (!signature || !appSecret) {
     console.error('[META WEBHOOK] Missing signature or APP SECRET. Rejecting.');
     return res.status(403).json({ error: 'Missing signature or configuration' });
@@ -10074,7 +10338,7 @@ function verifyMetaWebhook(req: any, res: any, next: any) {
       console.error('[META WEBHOOK ERROR] Signature verification crashed:', err);
       return res.status(403).json({ error: 'Invalid signature' });
   }
-  
+
   next();
 }
 
@@ -10084,7 +10348,16 @@ app.post('/api/webhooks/meta', verifyMetaWebhook, async (req, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
      const payload = req.body;
-     await pool.query("INSERT INTO async_webhook_queue (source, payload) VALUES ($1, $2)", ['meta', JSON.stringify(payload)]);
+     const correlationId = `corr_wh_meta_${Date.now()}`;
+     const idempotencyKey = `meta_${payload?.entry?.[0]?.id || Date.now()}_${Date.now()}`;
+
+     // M2: Ingest-and-Ack
+     await pool.query(`
+        INSERT INTO inbound_webhooks (provider, event_type, payload, idempotency_key, correlation_id)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (idempotency_key) DO NOTHING
+     `, ['meta', 'meta_event', JSON.stringify(payload), idempotencyKey, correlationId]);
+
      console.log(`[ASYNC WEBHOOK ENGINE] Received Meta webhook. Queued for background processing.`);
      return res.status(200).send('EVENT_RECEIVED');
   } catch (err) {
@@ -10098,12 +10371,17 @@ app.post('/api/webhooks/ad-network', verifyMetaWebhook, async (req, res) => {
   try {
      const payload = req.body;
      const source = req.query.source || 'meta'; // 'meta' or 'google'
-     
-     // Webhooks from Meta/Google must not block the main thread.
-     // We push them into the async_webhook_queue to be processed by a background worker.
-     
 
-     await pool.query("INSERT INTO async_webhook_queue (source, payload) VALUES ($1, $2)", [source, JSON.stringify(payload)]);
+     const correlationId = `corr_wh_adnet_${Date.now()}`;
+     const idempotencyKey = `adnet_${source}_${payload?.entry?.[0]?.id || Date.now()}_${Date.now()}`;
+
+     // M2: Ingest-and-Ack
+     await pool.query(`
+        INSERT INTO inbound_webhooks (provider, event_type, payload, idempotency_key, correlation_id)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (idempotency_key) DO NOTHING
+     `, [source, 'ad_performance', JSON.stringify(payload), idempotencyKey, correlationId]);
+
      console.log(`[ASYNC WEBHOOK ENGINE] Received ${source} ad network webhook. Queued for background processing.`);
 
      // Acknowledge immediately to the ad network to prevent timeouts
@@ -10167,7 +10445,7 @@ export const processAsyncWebhookQueue = async (overridePool?: any) => {
             console.log(`[ASYNC WEBHOOK WORKER] Processing claimed webhook ID: ${row.id} from ${row.source}`);
             try {
                 const payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
-                
+
                 if (payload.event === 'ad_approved' && payload.campaign_id) {
                     await transitionCampaignState({ campaignId: payload.campaign_id, to: 'active', reason: 'Webhook received' });
                     console.log(`[ASYNC WEBHOOK] Campaign #${payload.campaign_id} marked as ACTIVE based on Ad Network webhook.`);
@@ -10177,10 +10455,10 @@ export const processAsyncWebhookQueue = async (overridePool?: any) => {
                     if (metricsCheck.rows.length === 0) {
                         await dbPool.query("INSERT INTO campaign_metrics (campaign_id, date, spend, impressions, clicks) VALUES ($1, CURRENT_DATE, 0, 0, 0)", [payload.campaign_id]);
                     }
-                    
+
                     await dbPool.query(`
-                        UPDATE campaign_metrics 
-                        SET impressions = impressions + $1, clicks = clicks + $2 
+                        UPDATE campaign_metrics
+                        SET impressions = impressions + $1, clicks = clicks + $2
                         WHERE campaign_id = $3 AND date = CURRENT_DATE
                     `, [payload.impressions || 0, payload.clicks || 0, payload.campaign_id]);
                     console.log(`[ASYNC WEBHOOK] Updated metrics for Campaign #${payload.campaign_id}.`);
@@ -10231,8 +10509,8 @@ export const processAsyncWebhookQueue = async (overridePool?: any) => {
                 } else {
                     // Schedule next attempt with 1 minute backoff
                     await dbPool.query(`
-                        UPDATE async_webhook_queue 
-                        SET status = 'pending', available_at = CURRENT_TIMESTAMP + INTERVAL '1 minute', lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP 
+                        UPDATE async_webhook_queue
+                        SET status = 'pending', available_at = CURRENT_TIMESTAMP + INTERVAL '1 minute', lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP
                         WHERE id = $1
                     `, [row.id]);
                 }
@@ -10251,7 +10529,7 @@ export const processLeadNotificationQueue = async (overridePool?: any) => {
 };
 
 if (!process.env.VERCEL && process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
-  setInterval(processAsyncWebhookQueue, 60 * 1000); // Check every 60 seconds
+  setInterval(() => WebhookWorkerService.processInboundWebhooks(pool, handleVerifiedPayment), 10 * 1000); // Check every 10 seconds for real-time webhooks
   setInterval(() => processLeadNotificationQueue(), 30 * 1000); // Check every 30 seconds
 }
 
@@ -10264,8 +10542,8 @@ app.post('/api/marketing/campaigns/:id/subscribe', authenticateToken, async (req
 
     const check = await pool.query(`
       SELECT c.*, l.title as listing_title, l.city, l.currency
-      FROM host_marketing_campaigns c 
-      JOIN listings l ON c.listing_id = l.id 
+      FROM host_marketing_campaigns c
+      JOIN listings l ON c.listing_id = l.id
       WHERE c.id = $1 AND c.host_id = $2
     `, [id, req.user?.id]);
 
@@ -10274,17 +10552,17 @@ app.post('/api/marketing/campaigns/:id/subscribe', authenticateToken, async (req
     }
 
     const campaign = check.rows[0];
-    
+
     // Milestone 8.4: Hybrid Payment Geo-Router
     let detectedRegion = 'international';
     let enforcedGateway = 'stripe';
-    
+
     const indianCities = ['Mumbai', 'Delhi NCR', 'Bangalore', 'Pune', 'Goa', 'Jaipur', 'Udaipur', 'Kochi', 'Delhi', 'Chennai', 'Kolkata'];
     if (campaign.currency === 'INR' || (campaign.city && indianCities.some(c => campaign.city.toLowerCase().includes(c.toLowerCase())))) {
         detectedRegion = 'india';
         enforcedGateway = 'razorpay';
     }
-    
+
     const selectedGateway = (gateway === 'internal_wallet') ? 'internal_wallet' : enforcedGateway;
     const finalAmount = amount || campaign.budget || 2500;
     const optimizationFee = Math.round((finalAmount * 0.15) * 100) / 100;
@@ -10306,14 +10584,14 @@ app.post('/api/marketing/campaigns/:id/subscribe', authenticateToken, async (req
           2. STRICTLY REJECT (Grade below 5) any campaign that includes phone numbers, email addresses, WhatsApp links, or external URLs in the title or ad copy. Hosts MUST use the Encho CRM.
           3. If the campaign contains empty placeholders, copyright issues, or discriminatory language (HEC), grade it below 8.
 
-          
+
           Campaign Details:
           Title: "${campaign.title}"
           Ad Copy (Feed): "${campaign.feed_description}"
           Target Locations: "${campaign.target_locations}"
           Property Title: "${campaign.listing_title}"
 
-          Analyze the copy and targeting. 
+          Analyze the copy and targeting.
           Return a JSON object exactly matching this structure:
           {
             "score": 8.5,
@@ -10322,19 +10600,19 @@ app.post('/api/marketing/campaigns/:id/subscribe', authenticateToken, async (req
             "rewritten_ad_copy": "The new AIDA-optimized body copy"
           }
         `;
-        
+
         const response = await ai.models.generateContent({
           model: "gemini-2.5-flash",
           contents: prompt,
           config: { responseMimeType: "application/json" }
         });
-        
+
         const reply = response?.text?.trim();
         if (reply) {
           const parsed = JSON.parse(reply);
           gatekeeperScore = parsed.score;
           gatekeeperFeedback = parsed.feedback;
-          
+
           if (parsed.rewritten_title && parsed.rewritten_ad_copy) {
             await pool.query(
               "UPDATE host_marketing_campaigns SET title = $1, feed_description = $2, description = $2 WHERE id = $3",
@@ -10355,15 +10633,15 @@ app.post('/api/marketing/campaigns/:id/subscribe', authenticateToken, async (req
       // Auto-reject
       await transitionCampaignState({ campaignId: Number(campaign.id), to: 'rejected', reason: 'AI Gatekeeper Score < 8', actorType: 'system' });
       await pool.query(`
-        UPDATE host_marketing_campaigns 
-        SET admin_feedback = $1 
+        UPDATE host_marketing_campaigns
+        SET admin_feedback = $1
         WHERE id = $2
       `, [`[AI Gatekeeper Auto-Reject] Score: ${gatekeeperScore}/10. ${gatekeeperFeedback}`, campaign.id]);
-      
-      return res.status(400).json({ 
-        error: 'Campaign failed AI Gatekeeper Check.', 
-        gatekeeper_score: gatekeeperScore, 
-        gatekeeper_feedback: gatekeeperFeedback 
+
+      return res.status(400).json({
+        error: 'Campaign failed AI Gatekeeper Check.',
+        gatekeeper_score: gatekeeperScore,
+        gatekeeper_feedback: gatekeeperFeedback
       });
     }
 
@@ -10376,12 +10654,12 @@ app.post('/api/marketing/campaigns/:id/subscribe', authenticateToken, async (req
        if (existingTx.rows.length > 0) {
           const tx = existingTx.rows[0];
           console.log(`[IDEMPOTENCY] Reusing existing transaction ${tx.id} for key ${idempotencyKey}`);
-          
+
           if (tx.status === 'completed') {
              // Idempotent replay: already deducted and processed
-             return res.json({ 
-                success: true, 
-                message: 'Campaign already subscribed and launched via idempotency replay.' 
+             return res.json({
+                success: true,
+                message: 'Campaign already subscribed and launched via idempotency replay.'
              });
           }
        }
@@ -10472,7 +10750,7 @@ app.post('/api/marketing/campaigns/:id/subscribe', authenticateToken, async (req
     if (selectedGateway === 'stripe' && stripe) {
       try {
         console.log(`[STRIPE GATEWAY INITIATION] Creating genuine Stripe Checkout Session for Campaign #${id}...`);
-        
+
         const session = await stripe.checkout.sessions.create({
           payment_method_types: ['card'],
           line_items: [
@@ -10524,7 +10802,7 @@ app.post('/api/marketing/campaigns/:id/subscribe', authenticateToken, async (req
     if (selectedGateway === 'razorpay' && razorpay) {
       try {
         console.log(`[RAZORPAY GATEWAY INITIATION] Creating genuine Razorpay Order for Campaign #${id}...`);
-        
+
         const order = await razorpay.orders.create({
           amount: Math.round(Number(finalAmount) * 100), // in paise (e.g. 2500 INR is 250000 paise)
           currency: 'INR',
@@ -10588,14 +10866,14 @@ app.get('/api/marketing/campaigns/:id/invoice', authenticateToken, async (req: A
 
     const c = campaignRes.rows[0];
     const grossAmount = Number(c.budget) || 2500;
-    
+
     // Pure Agent Rule 33 calculation:
     // 85% is direct Meta/Google ad spend pass-through (0% Encho GST charged as Pure Agent)
     const pureAgentAdSpend = Math.round((grossAmount * 0.85) * 100) / 100;
-    
+
     // 15% is Encho AI Optimization & Management Fee (SAC 998311)
     const totalEnchoFee = Math.round((grossAmount * 0.15) * 100) / 100;
-    
+
     // Calculate 18% GST on Encho's Fee
     const taxableBase = Math.round((totalEnchoFee / 1.18) * 100) / 100;
     const gstTotal = Math.round((totalEnchoFee - taxableBase) * 100) / 100;
@@ -10741,7 +11019,7 @@ app.get('/api/admin/marketing/dashboard/stats', authenticateToken, async (req: A
 
     // Live queue health
     const queueHealthRes = await pool.query(`
-      SELECT 
+      SELECT
         COUNT(*) as total_transactions,
         SUM(CASE WHEN publish_status = 'PENDING' THEN 1 ELSE 0 END) as pending,
         SUM(CASE WHEN publish_status = 'PUBLISHING' THEN 1 ELSE 0 END) as publishing,
@@ -10750,11 +11028,11 @@ app.get('/api/admin/marketing/dashboard/stats', authenticateToken, async (req: A
         SUM(CASE WHEN publish_status = 'FAILED' THEN 1 ELSE 0 END) as failed
       FROM meta_publishing_transactions
     `);
-    
+
     // Latency metrics
     const latencyRes = await pool.query(`
-      SELECT 
-        step as stage, 
+      SELECT
+        step as stage,
         AVG(latency_ms) as avg_latency,
         percentile_cont(0.95) within group (order by latency_ms) as p95_latency,
         percentile_cont(0.99) within group (order by latency_ms) as p99_latency
@@ -10762,25 +11040,25 @@ app.get('/api/admin/marketing/dashboard/stats', authenticateToken, async (req: A
       WHERE latency_ms IS NOT NULL
       GROUP BY step
     `);
-    
+
     // DLQ Size
     const dlqRes = await pool.query(`SELECT COUNT(*) as dlq_size FROM meta_publishing_dlq WHERE resolved_at IS NULL`);
-    
+
     // Most common failure reasons
     const failureRes = await pool.query(`
-      SELECT failure_stage, COUNT(*) as count 
-      FROM meta_publishing_dlq 
-      GROUP BY failure_stage 
-      ORDER BY count DESC 
+      SELECT failure_stage, COUNT(*) as count
+      FROM meta_publishing_dlq
+      GROUP BY failure_stage
+      ORDER BY count DESC
       LIMIT 5
     `);
-    
+
     const h = queueHealthRes.rows[0];
     const total = Number(h.total_transactions) || 0;
     const success = Number(h.success) || 0;
     // Success rate is calculated strictly on terminal SUCCESS state over total transactions
     const success_rate = total > 0 ? Math.round((success / total) * 100) : 100;
-    
+
     // avg_latency_ms is average of latency
     const avg_latency_ms = latencyRes.rows.length > 0 ? Math.round(latencyRes.rows.reduce((sum, r) => sum + Number(r.avg_latency), 0) / latencyRes.rows.length) : 0;
 
@@ -10804,7 +11082,7 @@ app.get('/api/admin/marketing/dlq', authenticateToken, async (req: AuthRequest, 
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
     if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
-    
+
     const dlqList = await pool.query(`
       SELECT d.*, c.title as campaign_title
       FROM meta_publishing_dlq d
@@ -10812,7 +11090,7 @@ app.get('/api/admin/marketing/dlq', authenticateToken, async (req: AuthRequest, 
       ORDER BY d.created_at DESC
       LIMIT 100
     `);
-    
+
     res.json(dlqList.rows);
   } catch (error: any) {
     console.error('Error fetching DLQ:', error);
@@ -10825,35 +11103,35 @@ app.post('/api/admin/marketing/replay/:transactionId', authenticateToken, async 
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
     if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
-    
+
     const { transactionId } = req.params;
-    
+
     const txRes = await pool.query(`SELECT * FROM meta_publishing_transactions WHERE id = $1`, [transactionId]);
     if (txRes.rows.length === 0) {
       return res.status(404).json({ error: 'Transaction not found' });
     }
-    
+
     const tx = txRes.rows[0];
-    
+
     if (tx.publish_status === 'SUCCESS') {
       return res.status(400).json({ error: 'Transaction already succeeded. Cannot replay.' });
     }
-    
+
     if (tx.publish_status === 'PUBLISHING' || tx.publish_status === 'PRECHECK_RUNNING') {
       return res.status(400).json({ error: 'Transaction is currently running.' });
     }
-    
+
     // Resolve DLQ entry if any
     await pool.query(`UPDATE meta_publishing_dlq SET resolved_at = CURRENT_TIMESTAMP WHERE transaction_id = $1 AND resolved_at IS NULL`, [tx.id]);
-    
+
     // Mark transaction as pending
     await pool.query(`UPDATE meta_publishing_transactions SET publish_status = 'PENDING', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [tx.id]);
-    
+
     // Dispatch async (Replay preserves correlation ID and idempotency key inherently by re-triggering the same campaign)
     dispatchMetaCampaign(tx.campaign_id, req).catch(err => {
       console.error(`[REPLAY ENGINE] Async replay failed for tx ${tx.id}:`, err);
     });
-    
+
     res.json({ success: true, message: 'Replay initiated', transaction_id: tx.id });
   } catch (error: any) {
     console.error('Error in replay engine:', error);
@@ -10866,12 +11144,12 @@ app.get('/api/admin/marketing/health', authenticateToken, async (req: AuthReques
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
     if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
-    
+
     // Check Meta API Credentials
     const accessToken = process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN;
     const adAccountId = process.env.META_AD_ACCOUNT_ID;
     const pageId = process.env.META_PAGE_ID;
-    
+
     const health = {
       meta_access_token: !!accessToken,
       meta_ad_account: !!adAccountId,
@@ -10883,19 +11161,19 @@ app.get('/api/admin/marketing/health', authenticateToken, async (req: AuthReques
       status: process.env.META_PUBLISHING_PAUSED === 'true' ? 'PAUSED' : 'OPERATIONAL',
       checks: [] as any[]
     };
-    
+
     if (!accessToken || !adAccountId) {
       health.status = 'DEGRADED';
       health.checks.push({ component: 'Meta Credentials', status: 'MISSING' });
       return res.json(health);
     }
-    
+
     const cleanAdAccountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
-    
+
     // Ping Meta API
     const metaRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}?access_token=${accessToken}&fields=id,account_status,name`);
     const metaData = metaRes.headers.get('content-type')?.includes('json') ? await metaRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await metaRes.text()).slice(0, 150) } as any;
-    
+
     if (metaData.error) {
       health.status = 'OUTAGE';
       health.checks.push({ component: 'Meta API Connection', status: 'ERROR', message: metaData.error.message });
@@ -10906,7 +11184,7 @@ app.get('/api/admin/marketing/health', authenticateToken, async (req: AuthReques
          health.status = 'DEGRADED';
       }
     }
-    
+
     res.json(health);
   } catch (error: any) {
     console.error('Error fetching credential health:', error);
@@ -10921,12 +11199,12 @@ app.post('/api/admin/marketing/kill-switch', authenticateToken, async (req: Auth
     if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
     const { active } = req.body;
     process.env.META_PUBLISHING_PAUSED = active ? 'true' : 'false';
-    
+
     await pool.query(`
       INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
       VALUES ($1, 'system_kill_switch', 0, 'emergency_kill_switch_toggle', $2, $3, $4)
     `, [req.user.id, JSON.stringify({ active: !active }), JSON.stringify({ active }), req.ip || req.socket.remoteAddress]);
-    
+
     broadcastDbEvent(req, 'marketing');
     console.log(`[KILL SWITCH] Emergency publishing kill switch set to ${active ? 'ACTIVE (PAUSED)' : 'INACTIVE (RUNNING)'} by Admin #${req.user.id}`);
     res.json({ success: true, kill_switch_active: !!active });
@@ -10945,13 +11223,13 @@ app.get('/api/admin/marketing/transactions/:id/traces', authenticateToken, async
     const txRes = await pool.query('SELECT * FROM meta_publishing_transactions WHERE id = $1', [id]);
     if (txRes.rows.length === 0) return res.status(404).json({ error: 'Transaction not found' });
     const tx = txRes.rows[0];
-    
+
     const tracesRes = await pool.query(`
-      SELECT * FROM meta_api_traces 
-      WHERE correlation_id = $1 OR campaign_id = $2 
+      SELECT * FROM meta_api_traces
+      WHERE correlation_id = $1 OR campaign_id = $2
       ORDER BY created_at ASC
     `, [tx.correlation_id, tx.campaign_id]);
-    
+
     res.json({ transaction: tx, traces: tracesRes.rows });
   } catch (error: any) {
     console.error('Error fetching transaction traces:', error);
@@ -10966,12 +11244,12 @@ app.post('/api/admin/marketing/dlq/resolve/:id', authenticateToken, async (req: 
     if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
     const { id } = req.params;
     await pool.query('UPDATE meta_publishing_dlq SET resolved_at = CURRENT_TIMESTAMP WHERE id = $1', [id]);
-    
+
     await pool.query(`
       INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
       VALUES ($1, 'dlq_entry', $2, 'dlq_mark_resolved', NULL, $3, $4)
     `, [req.user.id, id, JSON.stringify({ resolved: true }), req.ip || req.socket.remoteAddress]);
-    
+
     res.json({ success: true, message: `DLQ entry #${id} marked as resolved.` });
   } catch (error: any) {
     console.error('Error resolving DLQ entry:', error);
@@ -10987,17 +11265,17 @@ app.post('/api/admin/marketing/rollback/:metaId', authenticateToken, async (req:
     const { metaId } = req.params;
     const accessToken = process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN;
     if (!accessToken) return res.status(400).json({ error: 'Missing Meta Access Token' });
-    
+
     const deleteRes = await fetch(`${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${metaId}?access_token=${accessToken}`, {
       method: 'DELETE'
     });
     const deleteData = deleteRes.headers.get('content-type')?.includes('json') ? await deleteRes.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await deleteRes.text()).slice(0, 150) } as any;
-    
+
     await pool.query(`
       INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
       VALUES ($1, 'meta_object', 0, 'manual_meta_rollback', NULL, $2, $3)
     `, [req.user.id, JSON.stringify({ meta_id: metaId, response: deleteData }), req.ip || req.socket.remoteAddress]);
-    
+
     res.json({ success: true, meta_id: metaId, response: deleteData });
   } catch (error: any) {
     console.error('Error executing manual rollback:', error);
@@ -11010,7 +11288,7 @@ app.get('/api/admin/marketing/transactions', authenticateToken, async (req: Auth
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
     if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
-    
+
     const result = await pool.query(`
       SELECT tx.*, c.title as campaign_title, u.email as host_email
       FROM meta_publishing_transactions tx
@@ -11019,7 +11297,7 @@ app.get('/api/admin/marketing/transactions', authenticateToken, async (req: Auth
       ORDER BY tx.created_at DESC
       LIMIT 100
     `);
-    
+
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching marketing transactions:', error);
@@ -11154,7 +11432,7 @@ app.post('/api/admin/marketing/campaigns/:id/approve', authenticateToken, async 
     client.release();
 
     console.log(`[ADMIN APPROVAL] Admin approved Campaign #${id}. Auto-marked payment & escrow as cleared & dispatching to Meta state machine...`);
-    
+
     // 3. Trigger state transitions and Meta dispatch with ADMIN_APPROVE event
     await executeCampaignStateMachine(Number(id), 'ADMIN_APPROVE', req);
 
@@ -11166,15 +11444,15 @@ app.post('/api/admin/marketing/campaigns/:id/approve', authenticateToken, async 
       LEFT JOIN users u ON c.host_id = u.id
       WHERE c.id = $1
     `, [id]);
-    
+
     let finalCampaign = updatedCheck.rows[0];
     if (finalCampaign) {
       finalCampaign = await syncCampaignSpend(finalCampaign);
     }
 
     broadcastDbEvent(req, 'marketing');
-    return res.json({ 
-      success: true, 
+    return res.json({
+      success: true,
       message: 'Campaign approved and automatically dispatched to live Meta feed.',
       campaign: finalCampaign
     });
@@ -11193,7 +11471,7 @@ app.post('/api/admin/marketing/campaigns/:id/resync-meta', authenticateToken, as
     const { id } = req.params;
 
     console.log(`[ADMIN META RE-SYNC] Triggering authoritative Meta Graph API external state re-sync for Campaign #${id}...`);
-    
+
     // Perform authoritative external GET verification & snapshot update
     const verifiedSnapshot = await MetaExternalSyncEngine.resyncCampaignExternalState(
       Number(id),
@@ -11734,10 +12012,10 @@ app.get('/api/admin/audit-logs', authenticateToken, async (req: AuthRequest, res
   try {
     if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
     const { entity_type, entity_id } = req.query;
-    
+
     let query = 'SELECT a.*, u.name as admin_name, u.email as admin_email FROM admin_audit_logs a LEFT JOIN users u ON a.admin_id = u.id';
     const params: any[] = [];
-    
+
     if (entity_type && entity_id) {
       query += ' WHERE a.entity_type = $1 AND a.entity_id = $2';
       params.push(entity_type, entity_id);
@@ -11745,9 +12023,9 @@ app.get('/api/admin/audit-logs', authenticateToken, async (req: AuthRequest, res
       query += ' WHERE a.entity_type = $1';
       params.push(entity_type);
     }
-    
+
     query += ' ORDER BY a.created_at DESC LIMIT 100';
-    
+
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (error) {
@@ -11764,35 +12042,35 @@ app.post('/api/marketing/threads/:id/score-intent', authenticateToken, async (re
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
     const { id } = req.params;
-    
+
     // Check if user is host
     const threadCheck = await pool.query('SELECT host_id FROM threads WHERE id = $1 AND host_id = $2', [id, req.user?.id]);
     if (threadCheck.rows.length === 0) {
        return res.status(403).json({ error: 'Unauthorized to score this lead' });
     }
-    
+
     const messages = await pool.query('SELECT content, sender_id, created_at FROM messages WHERE thread_id = $1 ORDER BY created_at ASC', [id]);
-    
+
     if (messages.rows.length === 0) {
       return res.json({ score: '🧊 COLD', confidence: 'high' });
     }
-    
+
     let intent_score = "🌤️ WARM";
     if (ai) {
       try {
         const msgText = messages.rows.map((m:any) => m.content).join("");
-        const prompt = `Analyze this conversation between a host and a prospective guest. 
+        const prompt = `Analyze this conversation between a host and a prospective guest.
 Rate the guest's buying intent.
 Respond with EXACTLY ONE of these strings: "🔥 HOT LEAD", "🌤️ WARM", "🧊 COLD", or "🏆 CONVERTED".
 
 Conversation:
 ${msgText.substring(0, 2000)}`;
-        
+
         const aiResult = await ai.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: prompt,
         });
-        
+
         const text = aiResult.text?.trim() || '';
         if (text.includes('HOT')) intent_score = "🔥 HOT LEAD";
         if (text.includes('COLD')) intent_score = "🧊 COLD";
@@ -11801,9 +12079,9 @@ ${msgText.substring(0, 2000)}`;
          logGeminiWarning("AI Intent Scoring", err);
       }
     }
-    
+
     await pool.query('UPDATE threads SET lead_intent_score = $1 WHERE id = $2', [intent_score, id]);
-    
+
     res.json({ success: true, intent_score });
   } catch(e) {
     res.status(500).json({ error: 'Failed to score lead' });
@@ -11815,14 +12093,14 @@ app.get('/api/admin/outreach-leads', authenticateToken, async (req: AuthRequest,
   try {
     if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
     const result = await pool.query('SELECT * FROM host_outreach_leads ORDER BY created_at DESC LIMIT 200');
-    
+
     // Phase 4.1: Decrypt PII before sending to client
     const decryptedRows = result.rows.map(row => ({
       ...row,
       email: decryptPII(row.email),
       phone: decryptPII(row.phone)
     }));
-    
+
     res.json(decryptedRows);
   } catch (error) {
     console.error('Error fetching outreach leads:', error);
@@ -11836,12 +12114,12 @@ app.post('/api/admin/outreach-leads', authenticateToken, async (req: AuthRequest
     if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
     const { property_name, instagram_username, facebook_url, owner_name, location, estimated_nightly_rate, status, notes, email, phone } = req.body;
     const result = await pool.query(`
-      INSERT INTO host_outreach_leads 
+      INSERT INTO host_outreach_leads
       (property_name, instagram_username, facebook_url, owner_name, location, estimated_nightly_rate, status, notes, email, phone, last_contacted_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
       RETURNING *
     `, [property_name, instagram_username || '', facebook_url || '', owner_name || '', location || '', estimated_nightly_rate || 0, status || 'discovered', notes || '', email || '', phone || '']);
-    
+
     broadcastDbEvent(req, 'outreach');
     res.json(result.rows[0]);
   } catch (error) {
@@ -11856,7 +12134,7 @@ app.put('/api/admin/outreach-leads/:id', authenticateToken, async (req: AuthRequ
     if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
     const { id } = req.params;
     const { property_name, instagram_username, facebook_url, owner_name, location, estimated_nightly_rate, status, notes, email, phone, last_contacted_at } = req.body;
-    
+
     // Phase 4.1: Encrypt PII at rest
     const encryptedEmail = encryptPII(email || '');
     const encryptedPhone = encryptPII(phone || '');
@@ -11877,7 +12155,7 @@ app.put('/api/admin/outreach-leads/:id', authenticateToken, async (req: AuthRequ
       WHERE id = $12
       RETURNING *
     `, [property_name, instagram_username, facebook_url, owner_name, location, estimated_nightly_rate, status, notes, encryptedEmail, encryptedPhone, last_contacted_at ? new Date(last_contacted_at) : new Date(), id]);
-    
+
     broadcastDbEvent(req, 'outreach');
     const savedRow = result.rows[0];
     savedRow.email = decryptPII(savedRow.email);
@@ -11911,7 +12189,7 @@ app.post('/api/listings', authenticateToken, async (req: AuthRequest, res) => {
   try {
     await ensureListingsTable();
     const { title, description, price, type, address, city, imageUrl, imageUrls, videoUrl, rentalMode, rooms, maxGuests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamicPricing, seo_title, seo_description, seo_keywords, seo_image_url } = req.body;
-    
+
     // Security: Use authenticated user ID, ignore body userId to prevent IDOR spoofing
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized: User ID required.' });
@@ -12465,13 +12743,13 @@ app.put('/api/host/reservations/:id/status', authenticateToken, async (req: Auth
     let result;
     if (typeof id === 'string' && id.startsWith('exp-')) {
       const realId = id.replace('exp-', '');
-      
+
       // IDOR Protection: Verify host ownership
       const expRes = await pool.query('SELECT host_id FROM experiences WHERE id = (SELECT experience_id FROM experience_bookings WHERE id = $1)', [realId]);
       if (expRes.rows.length === 0 || (expRes.rows[0].host_id !== req.user?.id && req.user?.role !== 'admin')) {
          return res.status(403).json({ error: 'Forbidden: Not authorized to update this booking.' });
       }
-      
+
       result = await pool.query(
         'UPDATE experience_bookings SET status = $1 WHERE id = $2 RETURNING *',
         [status, realId]
@@ -12721,11 +12999,11 @@ app.post('/api/threads/:id/messages', authenticateToken, messageLimiter, async (
     const { id } = req.params;
     const { receiverId, content } = req.body;
     const senderId = req.user?.id;
-    
+
     if (!content || String(content).trim() === '') {
        return res.status(400).json({ error: 'Message content cannot be empty.' });
     }
-    
+
     const { sanitized, wasSanitized } = maskContactInfo(content || '');
     if (isNaN(Number(id))) return res.json({ id: Date.now(), thread_id: id, sender_id: senderId, receiver_id: receiverId, content, created_at: new Date(), is_read: false });
 
@@ -12810,7 +13088,7 @@ app.get('/api/messages/:bookingId', authenticateToken, async (req: AuthRequest, 
   try {
     const { bookingId } = req.params;
     const userId = req.user?.id;
-    
+
     // Check if the user is authorized to view these messages
     if (req.user?.role !== 'admin') {
       const checkAuth = await pool.query('SELECT b.user_id as guest_id, l.user_id as host_id FROM bookings b JOIN listings l ON b.listing_id = l.id WHERE b.id = $1', [bookingId]);
@@ -12838,7 +13116,7 @@ app.post('/api/messages', authenticateToken, messageLimiter, async (req: AuthReq
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
     const { bookingId, receiverId, content } = req.body;
-    
+
     // Security: Use authenticated user ID to prevent spoofing
     const senderId = req.user?.id;
     if (!senderId) return res.status(401).json({ error: 'Unauthorized' });
@@ -12854,7 +13132,7 @@ app.post('/api/messages', authenticateToken, messageLimiter, async (req: AuthReq
       JOIN listings l ON b.listing_id = l.id
       WHERE b.id = $1
     `, [bookingId]);
-    
+
     if (bookingCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Booking not found' });
     }
@@ -12905,7 +13183,7 @@ app.delete('/api/listings/:id', authenticateToken, async (req: AuthRequest, res)
   if (isNaN(Number(req.params.id))) return res.json({ success: true, message: "Demo listing deleted mockingly" });
   try {
     const id = req.params.id;
-    
+
     // IDOR Protection: Verify ownership or admin role
     const authCheck = await pool.query('SELECT user_id FROM listings WHERE id = $1', [id]);
     if (authCheck.rows.length === 0) return res.status(404).json({ error: 'Listing not found' });
@@ -12958,7 +13236,7 @@ app.get('/api/admin/metrics', authenticateToken, async (req: AuthRequest, res) =
         bookings: parseInt(row.bookings) || 0
       }));
 
-      
+
 
       const recentBookingsRes = await pool.query(`
         SELECT b.id, b.name, b.total_price as total_rent, b.created_at, e.title as listing_title
@@ -13003,7 +13281,7 @@ app.get('/api/admin/metrics', authenticateToken, async (req: AuthRequest, res) =
       bookings: parseInt(row.bookings) || 0
     }));
 
-    
+
 
     const recentBookingsRes = await pool.query(`
       SELECT b.id, b.name, b.total_rent, b.created_at, l.title as listing_title
@@ -13305,7 +13583,7 @@ app.put('/api/user/bookings/:id/cancel', authenticateToken, async (req: AuthRequ
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
     const { id } = req.params;
-    
+
     // Security: Use authenticated user ID
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -13334,7 +13612,7 @@ app.put('/api/user/bookings/:id/cancel', authenticateToken, async (req: AuthRequ
        } catch(e) { console.error(e); }
        io.to(`listing_${booking.listing_id}`).emit('listing_updated', { type: 'booking_cancelled' });
     }
-    
+
     // Evaluate calendar circuit breaker to auto-resume eligible campaigns
     if (booking.listing_id) {
       triggerSmartAutoPause(booking.listing_id, `CANCELLED_${id}`).catch(err => {
@@ -13375,7 +13653,7 @@ app.post('/api/bookings', authenticateToken, bookingLimiter, async (req: AuthReq
         const newBooking = result.rows[0];
     newBooking.id = String(newBooking.id);
     newBooking.listing_id = String(newBooking.listing_id);
-    
+
     // Milestone 5: The Circuit Breaker (Smart Pause)
     // Kick off background job to pause campaigns.
     triggerSmartAutoPause(listingId, newBooking.id).catch(err => {
@@ -13394,7 +13672,7 @@ app.post('/api/bookings', authenticateToken, bookingLimiter, async (req: AuthReq
           // Resort Plus: Inventory Deduction Logic
           let rooms = listingRes.rows[0].rooms;
           let isUpdated = false;
-          
+
           if (roomId && rooms && Array.isArray(rooms)) {
              const selectedIds = String(roomId).split(',');
              rooms = rooms.map((room: any) => {
@@ -14516,12 +14794,12 @@ async function processAtomicRefund(campaignId: number, hostId: number, remaining
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
+
     // 1. Lock Campaign for Update to check idempotency
     const campCheck = await client.query('SELECT * FROM host_marketing_campaigns WHERE id = $1 FOR UPDATE', [campaignId]);
     if (campCheck.rows.length === 0) throw new Error('Campaign not found');
     const camp = campCheck.rows[0];
-    
+
     if (camp.payment_status === 'refunded') {
       await client.query('ROLLBACK');
       return { success: false, message: 'Already refunded' };
@@ -14536,7 +14814,7 @@ async function processAtomicRefund(campaignId: number, hostId: number, remaining
 
     // 3. Double-Entry Ledger Mutate Wallet and Insert Ledger Transaction
     await DoubleEntryLedgerService.recordTransaction(client, {
-      transactionRef: `${txRef}_${Date.now()}`,
+      transactionRef: txRef,
       eventType: 'ESCROW_RELEASE',
       legacyTransactionType: txType,
       description,
@@ -14576,7 +14854,7 @@ app.get('/api/marketing/ledger', authenticateToken, async (req: AuthRequest, res
     if (!hostId) return res.status(401).json({ error: 'Unauthorized' });
 
     const entriesRes = await pool.query(`
-      SELECT e.*, 
+      SELECT e.*,
         json_agg(json_build_object('id', l.id, 'account_id', l.account_id, 'account_type', a.account_type, 'entry_type', l.entry_type, 'amount', l.amount)) as lines
       FROM ledger_entries e
       JOIN ledger_lines l ON e.id = l.entry_id
@@ -14623,14 +14901,14 @@ app.get('/api/marketing/admin/ledgers', authenticateToken, async (req: AuthReque
     `);
 
     const summaryRes = await pool.query(`
-      SELECT 
+      SELECT
         COALESCE(SUM(balance), 0) as total_master_fuel_reserves,
         COALESCE(COUNT(*), 0) as total_active_wallets
       FROM host_wallets
     `);
 
     const campaignStatsRes = await pool.query(`
-      SELECT 
+      SELECT
         COALESCE(SUM(budget), 0) as total_campaign_budget,
         COALESCE(SUM(COALESCE(spent, accumulated_spent, 0)), 0) as total_meta_spend,
         COUNT(*) as total_campaigns
@@ -14667,14 +14945,14 @@ app.get('/api/marketing/wallet', authenticateToken, async (req: AuthRequest, res
     if (!hostId) return res.status(401).json({ error: 'Unauthorized' });
 
     let walletRes = await pool.query('SELECT * FROM host_wallets WHERE host_id = $1', [hostId]);
-    
+
     if (walletRes.rows.length === 0) {
       walletRes = await pool.query(
         'INSERT INTO host_wallets (host_id, balance, encho_credits) VALUES ($1, 0, 0) RETURNING *',
         [hostId]
       );
     }
-    
+
     const wallet = walletRes.rows[0];
     const txRes = await pool.query(
       'SELECT * FROM wallet_transactions WHERE wallet_id = $1 ORDER BY created_at DESC LIMIT 100',
@@ -14694,13 +14972,13 @@ async function triggerColdStartAlert(hostId, listingTitle, threadId = null, req 
     // We NEVER include the lead's contact info or message in the alert.
     // This psychologically forces the host to open the Encho app.
     const message = `You have a new Hot Lead for '${listingTitle}'! Click to reply.`;
-    
+
     console.log(`[COLD START ALERT] 🟢 Dispatching Multi-Channel Alert (SMS/Email/Push) to Host #${hostId}`);
     console.log(`[COLD START ALERT] 📩 Content: "${message}"`);
     console.log(`[COLD START ALERT] 🔒 Security Note: No PII or lead message content included. Forcing Walled Garden CRM open.`);
 
     // In a real implementation, we would call Twilio/SendGrid here.
-    
+
     // Attempt real-time socket push if available
     try {
         const io = app.get('io');
@@ -14733,7 +15011,7 @@ app.post(['/api/marketing/meta/webhooks', '/api/meta-webhooks'], verifyMetaWebho
           if (change.field === 'leadgen') {
             const leadData = change.value;
             const eventId = leadData.leadgen_id || leadData.ad_id || `${entry.id}_${change.field}_${Date.now()}`;
-            
+
             // Webhook Deduplication Check
             const dedupCheck = await pool.query('SELECT 1 FROM processed_webhook_events WHERE event_id = $1', [eventId]);
             if (dedupCheck.rows.length > 0) {
@@ -14764,7 +15042,7 @@ app.post(['/api/marketing/meta/webhooks', '/api/meta-webhooks'], verifyMetaWebho
 
             if (campRes.rows.length > 0) {
               const camp = campRes.rows[0];
-              
+
               // Walled Garden CRM: We don't want the host calling the user directly.
               const rawInquiry = leadData.message || 'I am interested in booking this property.';
               const { sanitized, wasSanitized } = maskContactInfo(rawInquiry);
@@ -14806,7 +15084,7 @@ app.post(['/api/marketing/meta/webhooks', '/api/meta-webhooks'], verifyMetaWebho
                  VALUES ($1, $2, $3, $4, $5, $6, $7)`,
                 [camp.id, camp.host_id, 'Meta User', 'META_LEAD_ADS', 'HOT', sanitized, rawInquiry]
               );
-              
+
               // Milestone 6: Cold Start Notification Trigger
               await triggerColdStartAlert(camp.host_id, camp.listing_title, threadId, req);
             } else {
@@ -14832,11 +15110,11 @@ app.post('/api/marketing/wallet/refuel', authenticateToken, async (req: AuthRequ
     const { amount, gateway } = parseResult.data;
 
     const selectedGateway = gateway || 'stripe';
-    
+
     // Calculate 15% Encho AI Optimization Fee (Pillar 3: $85 ad spend / $15 Encho Fee)
     const optimizationFee = amount * 0.15;
     const netAmount = amount * 0.85;
-    
+
     let walletRes = await pool.query('SELECT id FROM host_wallets WHERE host_id = $1', [hostId]);
     if (walletRes.rows.length === 0) {
       walletRes = await pool.query(
@@ -14845,16 +15123,16 @@ app.post('/api/marketing/wallet/refuel', authenticateToken, async (req: AuthRequ
       );
     }
     const walletId = walletRes.rows[0].id;
-    
+
     // Create pending transaction using idempotency
     const idempotencyKey = req.headers['x-idempotency-key'] || `refuel_\${hostId}_\${Date.now()}`;
-    
+
     const txRes = await pool.query(
       'SELECT id, status FROM wallet_transactions WHERE reference_id = $1',
       [idempotencyKey]
     );
     let txId;
-    
+
     if (txRes.rows.length > 0) {
        txId = txRes.rows[0].id;
        if (txRes.rows[0].status === 'completed') {
@@ -14862,7 +15140,7 @@ app.post('/api/marketing/wallet/refuel', authenticateToken, async (req: AuthRequ
        }
     } else {
        const newTx = await pool.query(
-         `INSERT INTO wallet_transactions (wallet_id, amount, type, reference_id, status, description) 
+         `INSERT INTO wallet_transactions (wallet_id, amount, type, reference_id, status, description)
           VALUES ($1, $2, 'refuel', $3, 'pending', $4) RETURNING id`,
          [walletId, netAmount, idempotencyKey, `Refuel Wallet: \${amount} (Fee: \${optimizationFee})`]
        );
@@ -14886,7 +15164,7 @@ app.post('/api/marketing/wallet/refuel', authenticateToken, async (req: AuthRequ
           cancel_url: `\${req.headers.origin || 'http://localhost:3000'}/dashboard?refuel_cancel=true`,
           metadata: { transaction_id: String(txId) },
         }, { idempotencyKey });
-        
+
         res.json({ success: true, url: session.url, gateway: 'stripe' });
     } else if (selectedGateway === 'razorpay' && razorpay) {
         const order = await razorpay.orders.create({
@@ -14942,14 +15220,14 @@ app.post('/api/marketing/simulate-webhook', authenticateToken, async (req: AuthR
         await pool.query(`
           INSERT INTO campaign_metrics (campaign_id, impressions, clicks, date)
           VALUES ($1, 500, 32, CURRENT_DATE)
-          ON CONFLICT (campaign_id, date) DO UPDATE 
+          ON CONFLICT (campaign_id, date) DO UPDATE
           SET impressions = campaign_metrics.impressions + 500,
               clicks = campaign_metrics.clicks + 32;
         `, [campaignId]);
       }
       broadcastDbEvent(req, 'marketing');
-      return res.json({ 
-        success: true, 
+      return res.json({
+        success: true,
         message: 'Dispatched simulated ad traffic metrics: +500 Impressions, +32 Clicks!',
         dopamine_boost: true
       });
@@ -14962,8 +15240,8 @@ app.post('/api/marketing/simulate-webhook', authenticateToken, async (req: AuthR
         INSERT INTO host_outreach_leads (campaign_id, host_id, guest_name, guest_email, guest_phone, status, message_history)
         VALUES ($1, $2, 'Simulated Hot Lead', '[REDACTED]', '[REDACTED]', 'New Lead', $3)
       `, [
-        campaignId || null, 
-        hostId, 
+        campaignId || null,
+        hostId,
         JSON.stringify([{ timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), sender: 'Guest', text: 'Hi! I saw your resort ad on Instagram. Is it available next weekend?' }])
       ]);
       broadcastDbEvent(req, 'marketing');
@@ -15015,7 +15293,7 @@ app.post('/api/checkout/razorpay/order', authenticateToken, async (req: AuthRequ
       const listingRes = await pool.query('SELECT * FROM listings WHERE id = $1', [listingId]);
       if (listingRes.rows.length === 0) return res.status(404).json({ error: 'Listing not found' });
       const listing = listingRes.rows[0];
-      
+
       let baseRent = listing.price || 5000;
       if (roomId && listing.rooms && Array.isArray(listing.rooms)) {
         const selectedIds = String(roomId).split(',');
@@ -15024,7 +15302,7 @@ app.post('/api/checkout/razorpay/order', authenticateToken, async (req: AuthRequ
           baseRent = roomMatch.price;
         }
       }
-      
+
       const commissionFee = (baseRent * commissionRate) / 100;
       const taxFee = (baseRent * taxRate) / 100;
       finalAmount = Math.round(baseRent + commissionFee + taxFee + systemFee);
@@ -15051,7 +15329,7 @@ app.post('/api/checkout/razorpay/order', authenticateToken, async (req: AuthRequ
         INSERT INTO bookings (user_id, listing_id, room_id, move_in_date, configuration, name, phone, total_rent, status)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending') RETURNING id
       `, [userId, listingId, roomId || null, moveInDate || new Date().toISOString(), configuration || '', name || 'Guest', phone || '', finalAmount]);
-      
+
       bookingId = bookInsert.rows[0].id;
     } else if (experienceId) {
       bookingType = 'experience';
@@ -15256,7 +15534,7 @@ app.post('/api/payments/razorpay/verify', async (req, res) => {
                 payment_intent_id = $1
             WHERE id = $2
           `, [razorpay_payment_id, booking_id]);
-          
+
           // Milestone 5: The Circuit Breaker (Smart Pause)
           // If property gets a booking, automatically pause active ad campaigns for this listing.
           triggerSmartAutoPause(bookRes.rows[0].listing_id, booking_id).catch(err => {
@@ -15296,7 +15574,7 @@ app.post('/api/payments/razorpay/verify', async (req, res) => {
 export const logAdminAudit = async (adminId: number | null, entityType: string, entityId: number, action: string, previousState: any, newState: any, ipAddress: string = '') => {
   try {
     await pool.query(
-      `INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address) 
+      `INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [adminId, entityType, entityId, action, JSON.stringify(previousState), JSON.stringify(newState), ipAddress]
     );
@@ -15486,7 +15764,7 @@ app.post('/api/payments/geo-route/initiate', async (req: Request, res: Response)
         );
 
         await DoubleEntryLedgerService.recordTransaction(client, {
-          transactionRef: `campaign_fund_${campaign_id || Date.now()}_${Date.now()}`,
+          transactionRef: idempotencyKey || `campaign_fund_${campaign_id || 'wallet'}_${txInsert.rows[0]?.id || 'tx'}`,
           eventType: 'AD_SPEND_DEDUCTION',
           description: `Campaign funding via internal wallet ($${netAdSpend} ad spend + $${optFee} 15% Encho fee)`,
           lines: [
@@ -15522,7 +15800,7 @@ app.post('/api/payments/geo-route/initiate', async (req: Request, res: Response)
       }
 
       if (targetGateway === 'razorpay') {
-        
+
         if (razorpay) {
           try {
             const rzpOrder = await razorpay.orders.create({
@@ -15564,7 +15842,7 @@ app.post('/api/payments/geo-route/initiate', async (req: Request, res: Response)
       }
 
       // Default: Stripe
-      
+
       let stripeUrl: string | null = null;
 
       if (stripe) {
@@ -15600,7 +15878,7 @@ app.post('/api/payments/geo-route/initiate', async (req: Request, res: Response)
         await client.query('ROLLBACK');
         return res.status(501).json({ error: 'PAYMENT_NOT_IMPLEMENTED', message: 'Stripe is not configured' });
       }
-      
+
       await client.query(
         `UPDATE processed_payments
          SET razorpay_payment_id = $1, razorpay_order_id = $2
@@ -15643,7 +15921,7 @@ app.get('/api/admin/payments/overview', async (req: Request, res: Response) => {
     }
 
     const totalVolumeRes = await pool.query(`
-      SELECT 
+      SELECT
         COALESCE(SUM(amount), 0) as total_volume,
         COALESCE(SUM(CASE WHEN payment_gateway = 'stripe' THEN amount ELSE 0 END), 0) as stripe_volume,
         COALESCE(SUM(CASE WHEN payment_gateway = 'razorpay' THEN amount ELSE 0 END), 0) as razorpay_volume,
@@ -15715,13 +15993,13 @@ app.post('/api/admin/payments/escrow/release', async (req: Request, res: Respons
     releaseClient = await pool.connect();
     await releaseClient.query('BEGIN');
     const cRes = await releaseClient.query('SELECT * FROM host_marketing_campaigns WHERE id = $1 FOR UPDATE', [campaign_id]);
-    
+
     if (cRes.rows.length === 0) {
       await releaseClient.query('ROLLBACK');
       releaseClient.release();
       return res.status(404).json({ error: 'Campaign not found' });
     }
-    
+
     const campaign = cRes.rows[0];
 
     // Check prerequisites
@@ -15737,8 +16015,8 @@ app.post('/api/admin/payments/escrow/release', async (req: Request, res: Respons
     }
 
     await releaseClient.query(
-      `UPDATE host_marketing_campaigns 
-       SET escrow_status = 'released', updated_at = CURRENT_TIMESTAMP 
+      `UPDATE host_marketing_campaigns
+       SET escrow_status = 'released', updated_at = CURRENT_TIMESTAMP
        WHERE id = $1`,
       [campaign_id]
     );
@@ -15806,79 +16084,82 @@ app.post('/api/admin/payments/escrow/release', async (req: Request, res: Respons
   }
 });
 
-// 5. Automatic 24-Hour Fraud Escrow Auto-Release Worker (Safe Transactional Boundary)
+// 5. Automatic 24-Hour Fraud Escrow Auto-Release Worker (Safe Transactional Boundary + Advisory Lock)
 export const processEscrowAutoRelease = async (overridePool?: any) => {
   const dbPool = overridePool || pool;
   if (!dbPool) return;
 
-  try {
-    // Phase 2.9.3: Pull 10 campaigns at a time to prevent memory exhaustion, with deterministic ordering
-    const expiredEscrows = await dbPool.query(
-      `SELECT id FROM host_marketing_campaigns
-       WHERE escrow_status = 'holding' AND escrow_release_at <= CURRENT_TIMESTAMP 
-       ORDER BY escrow_release_at ASC, id ASC
-       LIMIT 10`
-    );
+  await DistributedLockService.withAdvisoryLock(
+    dbPool,
+    DistributedLockService.LOCKS.ESCROW_AUTO_RELEASE,
+    'processEscrowAutoRelease',
+    async () => {
+      // Phase 2.9.3: Pull 10 campaigns at a time to prevent memory exhaustion, with deterministic ordering
+      const expiredEscrows = await dbPool.query(
+        `SELECT id FROM host_marketing_campaigns
+         WHERE escrow_status = 'holding' AND escrow_release_at <= CURRENT_TIMESTAMP
+         ORDER BY escrow_release_at ASC, id ASC
+         LIMIT 10`
+      );
 
-    for (const row of expiredEscrows.rows) {
-      const client = await dbPool.connect();
-      let shouldDispatch = false;
-      const campaignId = row.id;
-      
-      try {
-        await client.query('BEGIN');
-        
-        // 1. Lock campaign FOR UPDATE SKIP LOCKED
-        const campRes = await client.query(
-          `SELECT id, admin_approved, escrow_status FROM host_marketing_campaigns WHERE id = $1 FOR UPDATE SKIP LOCKED`, 
-          [campaignId]
-        );
-        
-        if (campRes.rows.length > 0 && campRes.rows[0].escrow_status === 'holding') {
-           const c = campRes.rows[0];
-           
-           // 2. Authorize Escrow Release
-           await client.query(
-             `UPDATE host_marketing_campaigns
-              SET escrow_status = 'released', updated_at = CURRENT_TIMESTAMP
-              WHERE id = $1`,
-             [campaignId]
-           );
-           
-           // 3. Pre-authorize Meta Dispatch if admin approved
-           if (c.admin_approved) {
-             const correlationId = crypto.randomUUID();
-             const idempotencyKey = `publish_meta_camp_${campaignId}`;
+      for (const row of expiredEscrows.rows) {
+        const client = await dbPool.connect();
+        let shouldDispatch = false;
+        const campaignId = row.id;
+
+        try {
+          await client.query('BEGIN');
+
+          // 1. Lock campaign FOR UPDATE SKIP LOCKED
+          const campRes = await client.query(
+            `SELECT id, admin_approved, escrow_status FROM host_marketing_campaigns WHERE id = $1 FOR UPDATE SKIP LOCKED`,
+            [campaignId]
+          );
+
+          if (campRes.rows.length > 0 && campRes.rows[0].escrow_status === 'holding') {
+             const c = campRes.rows[0];
+
+             // 2. Authorize Escrow Release
              await client.query(
-               `INSERT INTO meta_publishing_transactions (campaign_id, idempotency_key, correlation_id, publish_status) 
-                VALUES ($1, $2, $3, 'PRECHECK_RUNNING') 
-                ON CONFLICT (idempotency_key) DO NOTHING`,
-               [campaignId, idempotencyKey, correlationId]
+               `UPDATE host_marketing_campaigns
+                SET escrow_status = 'released', updated_at = CURRENT_TIMESTAMP
+                WHERE id = $1`,
+               [campaignId]
              );
-             shouldDispatch = true;
-           }
-           
-           await client.query('COMMIT');
-           console.log(`[ESCROW WORKER] 24-Hour Fraud Escrow auto-released transactionally for Campaign #${campaignId}`);
-        } else {
-           await client.query('ROLLBACK');
+
+             // 3. Pre-authorize Meta Dispatch if admin approved
+             if (c.admin_approved) {
+               const correlationId = crypto.randomUUID();
+               const idempotencyKey = `publish_meta_camp_${campaignId}`;
+               await client.query(
+                 `INSERT INTO meta_publishing_transactions (campaign_id, idempotency_key, correlation_id, publish_status)
+                  VALUES ($1, $2, $3, 'PRECHECK_RUNNING')
+                  ON CONFLICT (idempotency_key) DO NOTHING`,
+                 [campaignId, idempotencyKey, correlationId]
+               );
+               shouldDispatch = true;
+             }
+
+             await client.query('COMMIT');
+             console.log(`[ESCROW WORKER] 24-Hour Fraud Escrow auto-released transactionally for Campaign #${campaignId}`);
+          } else {
+             await client.query('ROLLBACK');
+          }
+        } catch (err) {
+          await client.query('ROLLBACK');
+          console.error(`[ESCROW WORKER ERROR] Campaign #${campaignId}:`, err);
+        } finally {
+          client.release();
         }
-      } catch (err) {
-        await client.query('ROLLBACK');
-        console.error(`[ESCROW WORKER ERROR] Campaign #${campaignId}:`, err);
-      } finally {
-        client.release();
-      }
-      
-      // 4. Dispatch Async (outside the tight DB lock)
-      if (shouldDispatch) {
-         dispatchMetaCampaign(campaignId, { protocol: 'https', get: () => 'localhost' } as any).catch(e => console.error(e));
-         dispatchGoogleAdsCampaign(campaignId, { protocol: 'https', get: () => 'localhost' } as any).catch(e => console.error(e));
+
+        // 4. Dispatch Async (outside the tight DB lock)
+        if (shouldDispatch) {
+           dispatchMetaCampaign(campaignId, { protocol: 'https', get: () => 'localhost' } as any).catch(e => console.error(e));
+           dispatchGoogleAdsCampaign(campaignId, { protocol: 'https', get: () => 'localhost' } as any).catch(e => console.error(e));
+        }
       }
     }
-  } catch (workerErr) {
-    console.error('[ESCROW WORKER POLLING ERROR]', workerErr);
-  }
+  );
 };
 
 if (!process.env.VERCEL && process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
@@ -15905,27 +16186,27 @@ app.post('/api/marketing/webhooks/meta-leads', verifyMetaWebhook, async (req, re
                  const leadId = change.value.leadgen_id;
                  const formId = change.value.form_id;
                  const adId = change.value.ad_id;
-                 
+
                  console.log(`[META WEBHOOK] Processing new lead ${leadId} from Ad ${adId}`);
-                 
+
                  // Simulated CRM Injection
                  const mockCampaignRes = await pool.query('SELECT id, host_id, listing_id FROM host_marketing_campaigns WHERE meta_ad_id = $1 LIMIT 1', [adId]);
                  if (mockCampaignRes.rows.length > 0) {
                      const { id: campaignId, host_id, listing_id } = mockCampaignRes.rows[0];
-                     
+
                      // 1. Inject into CRM (Walled Garden)
                      const newLeadId = `meta_lead_${leadId}`;
                      await pool.query(`
                         INSERT INTO host_outreach_leads (campaign_id, host_id, guest_name, guest_email, guest_phone, status, message_history)
                         VALUES ($1, $2, 'Meta Ad Lead', '[REDACTED]', '[REDACTED]', 'New Lead', $3)
                      `, [
-                        campaignId, 
-                        host_id, 
+                        campaignId,
+                        host_id,
                         JSON.stringify([{ timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), sender: 'Guest', text: 'Lead submitted via Meta Native Form. High intent detected.' }])
                      ]);
-                     
+
                      console.log(`[CRM] Injected Native Lead ${leadId} directly into Host ${host_id} Walled Garden Inbox`);
-                     
+
                      // 2. Trigger multi-channel alert
                      console.log(`[COLD START ALERT] Dispatching SMS via Twilio to Host ${host_id}: "You have a new Hot Lead for your property! Click to reply on Encho."`);
                      console.log(`[COLD START ALERT] Dispatching FCM Push Notification: "🔥 Hot Lead Alert! Open Encho now to reply."`);
@@ -16125,7 +16406,7 @@ async function startServer() {
 
   if (!process.env.VITEST && !process.env.VERCEL) httpServer.listen(PORT, '0.0.0.0', async () => {
     console.log(`Server running on http://localhost:${PORT}`);
-    
+
     // Print comprehensive Integration Inspection & Monitoring startup audit
     printStartupIntegrationReport();
 
@@ -16224,189 +16505,199 @@ if ((process.env.NODE_ENV !== 'production' || !process.env.VERCEL) && process.en
 
 
 
-// Gap 10: Automated A/B Testing (Dynamic Creative Optimization) Processor (Phase 2.9.5 Hardened)
+// Gap 10: Automated A/B Testing (Dynamic Creative Optimization) Processor (Phase 2.9.5 Hardened + Advisory Lock)
 export const processDynamicCreativeOptimization = async (overridePool?: any) => {
   const dbPool = overridePool || pool;
   if (!dbPool) return;
 
-  try {
-    const client = await dbPool.connect();
-    let claimedCampaigns: any[] = [];
+  await DistributedLockService.withAdvisoryLock(
+    dbPool,
+    DistributedLockService.LOCKS.DYNAMIC_CREATIVE_OPT,
+    'processDynamicCreativeOptimization',
+    async () => {
+      const client = await dbPool.connect();
+      let claimedCampaigns: any[] = [];
 
-    try {
-      await client.query('BEGIN');
-      const res = await client.query(`
-        SELECT id, media_urls
-        FROM host_marketing_campaigns
-        WHERE status = 'active'
-        AND media_urls IS NOT NULL
-        AND jsonb_array_length(media_urls) > 1
-        AND meta_dispatched_at <= CURRENT_TIMESTAMP - INTERVAL '24 hours'
-        AND (dco_last_evaluated_at IS NULL OR dco_last_evaluated_at <= CURRENT_TIMESTAMP - INTERVAL '24 hours')
-        ORDER BY meta_dispatched_at ASC, id ASC
-        LIMIT 20
-        FOR UPDATE SKIP LOCKED
-      `);
-
-      if (res.rows.length === 0) {
-        await client.query('COMMIT');
-        return;
-      }
-
-      const ids = res.rows.map(r => r.id);
-      await client.query(`
-        UPDATE host_marketing_campaigns
-        SET dco_last_evaluated_at = CURRENT_TIMESTAMP,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = ANY($1::int[])
-      `, [ids]);
-
-      await client.query('COMMIT');
-      claimedCampaigns = res.rows;
-    } catch (lockErr: any) {
-      await client.query('ROLLBACK');
-      if (lockErr.code === '55P03') return;
-      throw lockErr;
-    } finally {
-      client.release();
-    }
-
-    for (const row of claimedCampaigns) {
       try {
-        const variantCountRes = await dbPool.query('SELECT COUNT(*) as count FROM campaign_creative_variants WHERE campaign_id = $1', [row.id]);
-        const hasVariants = Number(variantCountRes.rows[0]?.count || 0) >= 2;
+        await client.query('BEGIN');
+        const res = await client.query(`
+          SELECT id, media_urls
+          FROM host_marketing_campaigns
+          WHERE status = 'active'
+          AND media_urls IS NOT NULL
+          AND jsonb_array_length(media_urls) > 1
+          AND meta_dispatched_at <= CURRENT_TIMESTAMP - INTERVAL '24 hours'
+          AND (dco_last_evaluated_at IS NULL OR dco_last_evaluated_at <= CURRENT_TIMESTAMP - INTERVAL '24 hours')
+          ORDER BY meta_dispatched_at ASC, id ASC
+          LIMIT 20
+          FOR UPDATE SKIP LOCKED
+        `);
 
-        if (hasVariants) {
-          console.log(`[DYNAMIC CREATIVE OPTIMIZATION] Evaluating campaign #${row.id} via DcoEngine...`);
-          const result = await DcoEngine.processCampaignDco(row.id, dbPool);
-          console.log(`[DYNAMIC CREATIVE OPTIMIZATION] Campaign #${row.id} evaluation completed: ${result.result} (${result.reason})`);
-        } else {
-          let urls: string[] = [];
-          try {
-            urls = typeof row.media_urls === 'string' ? JSON.parse(row.media_urls) : row.media_urls;
-          } catch (_parseErr) {
-            // Non-fatal parse fallback
-          }
-          if (urls && urls.length > 1) {
-            const winningMedia = [urls[0]];
-            await dbPool.query("UPDATE host_marketing_campaigns SET media_urls = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2", [JSON.stringify(winningMedia), row.id]);
-          }
+        if (res.rows.length === 0) {
+          await client.query('COMMIT');
+          return;
         }
-      } catch (e: any) {
-        console.error(`[DYNAMIC CREATIVE OPTIMIZATION] Failed to process campaign #${row.id}:`, e.message);
+
+        const ids = res.rows.map(r => r.id);
+        await client.query(`
+          UPDATE host_marketing_campaigns
+          SET dco_last_evaluated_at = CURRENT_TIMESTAMP,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ANY($1::int[])
+        `, [ids]);
+
+        await client.query('COMMIT');
+        claimedCampaigns = res.rows;
+      } catch (lockErr: any) {
+        await client.query('ROLLBACK');
+        if (lockErr.code === '55P03') return;
+        throw lockErr;
+      } finally {
+        client.release();
+      }
+
+      for (const row of claimedCampaigns) {
+        try {
+          const variantCountRes = await dbPool.query('SELECT COUNT(*) as count FROM campaign_creative_variants WHERE campaign_id = $1', [row.id]);
+          const hasVariants = Number(variantCountRes.rows[0]?.count || 0) >= 2;
+
+          if (hasVariants) {
+            console.log(`[DYNAMIC CREATIVE OPTIMIZATION] Evaluating campaign #${row.id} via DcoEngine...`);
+            const result = await DcoEngine.processCampaignDco(row.id, dbPool);
+            console.log(`[DYNAMIC CREATIVE OPTIMIZATION] Campaign #${row.id} evaluation completed: ${result.result} (${result.reason})`);
+          } else {
+            let urls: string[] = [];
+            try {
+              urls = typeof row.media_urls === 'string' ? JSON.parse(row.media_urls) : row.media_urls;
+            } catch (_parseErr) {
+              // Non-fatal parse fallback
+            }
+            if (urls && urls.length > 1) {
+              const winningMedia = [urls[0]];
+              await dbPool.query("UPDATE host_marketing_campaigns SET media_urls = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2", [JSON.stringify(winningMedia), row.id]);
+            }
+          }
+        } catch (e: any) {
+          console.error(`[DYNAMIC CREATIVE OPTIMIZATION] Failed to process campaign #${row.id}:`, e.message);
+        }
       }
     }
-  } catch (err) {
-    console.error('[DYNAMIC CREATIVE ERROR]', err);
-  }
+  );
 };
 if (process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
   setInterval(processDynamicCreativeOptimization, 60 * 60 * 1000); // Check every 1 hour
 }
 
-// Gap 11: Database Death by Analytics (Time-Series Rollups - Phase 2.6 & 2.9.5 Hardened Bounded Processor)
+// Gap 11: Database Death by Analytics (Time-Series Rollups - Phase 2.6 & 2.9.5 Hardened Bounded Processor + Advisory Lock)
 export const runAnalyticsRollup = async (overridePool?: any) => {
   const dbPool = overridePool || pool;
   if (!dbPool) return;
 
-  const client = await dbPool.connect();
-  try {
-    console.log('[ANALYTICS ROLLUP] Aggregating bounded raw ad metrics into lightweight time-series table...');
-    await client.query('BEGIN');
+  await DistributedLockService.withAdvisoryLock(
+    dbPool,
+    DistributedLockService.LOCKS.ANALYTICS_ROLLUP,
+    'runAnalyticsRollup',
+    async () => {
+      const client = await dbPool.connect();
+      try {
+        console.log('[ANALYTICS ROLLUP] Aggregating bounded raw ad metrics into lightweight time-series table...');
+        await client.query('BEGIN');
 
-    // 1. Fetch bounded chunk of unprocessed raw event log IDs with deterministic ordering and SKIP LOCKED
-    const rawEventsRes = await client.query(`
-      SELECT 
-        id,
-        campaign_id,
-        (created_at AT TIME ZONE 'UTC')::date::text as date,
-        impressions_delta,
-        clicks_delta,
-        conversions_delta,
-        spent_delta
-      FROM campaign_raw_event_logs
-      WHERE processed = false
-      ORDER BY id ASC
-      LIMIT 500
-      FOR UPDATE SKIP LOCKED
-    `);
+        // 1. Fetch bounded chunk of unprocessed raw event log IDs with deterministic ordering and SKIP LOCKED
+        const rawEventsRes = await client.query(`
+          SELECT
+            id,
+            campaign_id,
+            (created_at AT TIME ZONE 'UTC')::date::text as date,
+            impressions_delta,
+            clicks_delta,
+            conversions_delta,
+            spent_delta
+          FROM campaign_raw_event_logs
+          WHERE processed = false
+          ORDER BY id ASC
+          LIMIT 500
+          FOR UPDATE SKIP LOCKED
+        `);
 
-    if (rawEventsRes.rows.length === 0) {
-      await client.query('COMMIT');
-      return;
+        if (rawEventsRes.rows.length === 0) {
+          await client.query('COMMIT');
+          return;
+        }
+
+        const rawLogIds = rawEventsRes.rows.map(r => r.id);
+
+        // Composite grouping by campaign_id + event_date
+        const groupedMap = new Map<string, { campaign_id: number; date: string; impressions: number; clicks: number; conversions: number; spent: number }>();
+        for (const row of rawEventsRes.rows) {
+          const key = `${row.campaign_id}_${row.date}`;
+          const existing = groupedMap.get(key) || {
+            campaign_id: row.campaign_id,
+            date: row.date,
+            impressions: 0,
+            clicks: 0,
+            conversions: 0,
+            spent: 0
+          };
+          existing.impressions += Number(row.impressions_delta || 0);
+          existing.clicks += Number(row.clicks_delta || 0);
+          existing.conversions += Number(row.conversions_delta || 0);
+          existing.spent += Number(row.spent_delta || 0);
+          groupedMap.set(key, existing);
+        }
+
+        // 2. Daily Rollup Upsert
+        for (const item of groupedMap.values()) {
+          await client.query(`
+            INSERT INTO campaign_daily_rollups (campaign_id, date, impressions, clicks, conversions, spent_usd)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (campaign_id, date) DO UPDATE
+            SET impressions = campaign_daily_rollups.impressions + EXCLUDED.impressions,
+                clicks = campaign_daily_rollups.clicks + EXCLUDED.clicks,
+                conversions = campaign_daily_rollups.conversions + EXCLUDED.conversions,
+                spent_usd = campaign_daily_rollups.spent_usd + EXCLUDED.spent_usd
+          `, [item.campaign_id, item.date, item.impressions, item.clicks, item.conversions, item.spent]);
+        }
+
+        // 3. Sync cumulative stats back to host_marketing_campaigns for updated campaigns
+        const impactedCampaignIds = Array.from(new Set(rawEventsRes.rows.map(r => r.campaign_id)));
+        await client.query(`
+          UPDATE host_marketing_campaigns c
+          SET accumulated_impressions = COALESCE(r.total_impressions, 0),
+              accumulated_clicks = COALESCE(r.total_clicks, 0),
+              accumulated_conversions = COALESCE(r.total_conversions, 0),
+              accumulated_spent = COALESCE(r.total_spent, 0)
+          FROM (
+            SELECT campaign_id,
+                   SUM(impressions) as total_impressions,
+                   SUM(clicks) as total_clicks,
+                   SUM(conversions) as total_conversions,
+                   SUM(spent_usd) as total_spent
+            FROM campaign_daily_rollups
+            WHERE campaign_id = ANY($1::int[])
+            GROUP BY campaign_id
+          ) r
+          WHERE c.id = r.campaign_id;
+        `, [impactedCampaignIds]);
+
+        // 4. Mark processed raw event logs atomically by ID
+        await client.query(`
+          UPDATE campaign_raw_event_logs
+          SET processed = true
+          WHERE id = ANY($1::int[])
+        `, [rawLogIds]);
+
+        await client.query('COMMIT');
+        console.log(`[ANALYTICS ROLLUP] Successfully aggregated ${rawLogIds.length} raw event logs across ${impactedCampaignIds.length} campaigns.`);
+      } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('[ANALYTICS ROLLUP TRANSACTION ERROR]', err);
+        throw err;
+      } finally {
+        client.release();
+      }
     }
-
-    const rawLogIds = rawEventsRes.rows.map(r => r.id);
-
-    // Composite grouping by campaign_id + event_date
-    const groupedMap = new Map<string, { campaign_id: number; date: string; impressions: number; clicks: number; conversions: number; spent: number }>();
-    for (const row of rawEventsRes.rows) {
-      const key = `${row.campaign_id}_${row.date}`;
-      const existing = groupedMap.get(key) || {
-        campaign_id: row.campaign_id,
-        date: row.date,
-        impressions: 0,
-        clicks: 0,
-        conversions: 0,
-        spent: 0
-      };
-      existing.impressions += Number(row.impressions_delta || 0);
-      existing.clicks += Number(row.clicks_delta || 0);
-      existing.conversions += Number(row.conversions_delta || 0);
-      existing.spent += Number(row.spent_delta || 0);
-      groupedMap.set(key, existing);
-    }
-
-    // 2. Daily Rollup Upsert
-    for (const item of groupedMap.values()) {
-      await client.query(`
-        INSERT INTO campaign_daily_rollups (campaign_id, date, impressions, clicks, conversions, spent_usd)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT (campaign_id, date) DO UPDATE
-        SET impressions = campaign_daily_rollups.impressions + EXCLUDED.impressions,
-            clicks = campaign_daily_rollups.clicks + EXCLUDED.clicks,
-            conversions = campaign_daily_rollups.conversions + EXCLUDED.conversions,
-            spent_usd = campaign_daily_rollups.spent_usd + EXCLUDED.spent_usd
-      `, [item.campaign_id, item.date, item.impressions, item.clicks, item.conversions, item.spent]);
-    }
-
-    // 3. Sync cumulative stats back to host_marketing_campaigns for updated campaigns
-    const impactedCampaignIds = Array.from(new Set(rawEventsRes.rows.map(r => r.campaign_id)));
-    await client.query(`
-      UPDATE host_marketing_campaigns c
-      SET accumulated_impressions = COALESCE(r.total_impressions, 0),
-          accumulated_clicks = COALESCE(r.total_clicks, 0),
-          accumulated_conversions = COALESCE(r.total_conversions, 0),
-          accumulated_spent = COALESCE(r.total_spent, 0)
-      FROM (
-        SELECT campaign_id,
-               SUM(impressions) as total_impressions,
-               SUM(clicks) as total_clicks,
-               SUM(conversions) as total_conversions,
-               SUM(spent_usd) as total_spent
-        FROM campaign_daily_rollups
-        WHERE campaign_id = ANY($1::int[])
-        GROUP BY campaign_id
-      ) r
-      WHERE c.id = r.campaign_id;
-    `, [impactedCampaignIds]);
-
-    // 4. Mark processed raw event logs atomically by ID
-    await client.query(`
-      UPDATE campaign_raw_event_logs 
-      SET processed = true 
-      WHERE id = ANY($1::int[])
-    `, [rawLogIds]);
-
-    await client.query('COMMIT');
-    console.log(`[ANALYTICS ROLLUP] Successfully aggregated ${rawLogIds.length} raw event logs across ${impactedCampaignIds.length} campaigns.`);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('[ANALYTICS ROLLUP TRANSACTION ERROR]', err);
-    throw err;
-  } finally {
-    client.release();
-  }
+  );
 };
 if (process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
   setInterval(runAnalyticsRollup, 15 * 60 * 1000); // 15 mins
@@ -16463,16 +16754,31 @@ export const processScheduledSocialPosts = async (overridePool?: any) => {
     for (const row of claimedPosts) {
       console.log(`[SOCIAL STUDIO PUBLISHER] Scheduled post ID ${row.id} (${row.media_type}) is due. Dispatching to Instagram/Facebook...`);
       const currentAttempts = (row.publish_attempt_count || 1);
+      const idempotencyKey = row.idempotency_key || `social_pub_post_${row.id}`;
 
       try {
-        const publishResult = await publishToInstagram(row);
+        const publishResult = await publishToInstagram({ ...row, idempotency_key: idempotencyKey });
 
-        if (publishResult.success) {
+        if (publishResult && publishResult.success) {
+          const igMediaId = publishResult.ig_media_id || `ig_post_${row.id}`;
+          const providerCreationId = publishResult.provider_creation_id || row.provider_creation_id;
+
           await dbPool.query(
-            "UPDATE host_social_posts SET status = 'published', published_at = CURRENT_TIMESTAMP, lease_expires_at = NULL, likes = 0, comments = 0, shares = 0, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
-            [row.id]
+            `UPDATE host_social_posts
+             SET status = 'published',
+                 published_at = CURRENT_TIMESTAMP,
+                 external_media_id = $1,
+                 provider_creation_id = $2,
+                 idempotency_key = $3,
+                 lease_expires_at = NULL,
+                 likes = COALESCE(likes, 0),
+                 comments = COALESCE(comments, 0),
+                 shares = COALESCE(shares, 0),
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $4`,
+            [igMediaId, providerCreationId, idempotencyKey, row.id]
           );
-          console.log(`[SOCIAL STUDIO PUBLISHER] Post ID ${row.id} successfully published to @enchospace feed.`);
+          console.log(`[SOCIAL STUDIO PUBLISHER] Post ID ${row.id} successfully finalized (IG Media ID: ${igMediaId}).`);
         }
       } catch (publishErr: any) {
         console.error(`[SOCIAL STUDIO PUBLISHER ERROR] Failed to publish post ${row.id}:`, publishErr.message);
@@ -16497,88 +16803,91 @@ if (process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
   setInterval(processScheduledSocialPosts, 60 * 1000);
 }
 
-// Gap 18: Webhook Retry Jitter & Dead Letter Queue (DLQ) (Phase 2.9.5 Hardened Bounded Processor)
+// Gap 18: Webhook Retry Jitter & Dead Letter Queue (DLQ) (Phase 2.9.5 Hardened Bounded Processor + Advisory Lock)
 export const processWebhookDLQ = async (overridePool?: any) => {
   const dbPool = overridePool || pool;
   if (!dbPool) return;
 
-  try {
-    const client = await dbPool.connect();
-    let claimedItems: any[] = [];
+  await DistributedLockService.withAdvisoryLock(
+    dbPool,
+    DistributedLockService.LOCKS.WEBHOOK_DLQ,
+    'processWebhookDLQ',
+    async () => {
+      const client = await dbPool.connect();
+      let claimedItems: any[] = [];
 
-    try {
-      await client.query('BEGIN');
+      try {
+        await client.query('BEGIN');
 
-      const dlqItems = await client.query(`
-        SELECT *
-        FROM webhook_dlq
-        WHERE status = 'pending'
-        AND retry_count < 5
-        AND next_retry_at <= CURRENT_TIMESTAMP
-        AND (lease_expires_at IS NULL OR lease_expires_at <= CURRENT_TIMESTAMP)
-        ORDER BY next_retry_at ASC, id ASC
-        LIMIT 20
-        FOR UPDATE SKIP LOCKED
-      `);
+        const dlqItems = await client.query(`
+          SELECT *
+          FROM webhook_dlq
+          WHERE status = 'pending'
+          AND retry_count < 5
+          AND next_retry_at <= CURRENT_TIMESTAMP
+          AND (lease_expires_at IS NULL OR lease_expires_at <= CURRENT_TIMESTAMP)
+          ORDER BY next_retry_at ASC, id ASC
+          LIMIT 20
+          FOR UPDATE SKIP LOCKED
+        `);
 
-      if (dlqItems.rows.length === 0) {
+        if (dlqItems.rows.length === 0) {
+          await client.query('COMMIT');
+          return;
+        }
+
+        const ids = dlqItems.rows.map(r => r.id);
+        await client.query(`
+          UPDATE webhook_dlq
+          SET lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '5 minutes'
+          WHERE id = ANY($1::int[])
+        `, [ids]);
+
         await client.query('COMMIT');
-        return;
+        claimedItems = dlqItems.rows;
+      } catch (lockErr: any) {
+        await client.query('ROLLBACK');
+        if (lockErr.code === '55P03') return;
+        throw lockErr;
+      } finally {
+        client.release();
       }
 
-      const ids = dlqItems.rows.map(r => r.id);
-      await client.query(`
-        UPDATE webhook_dlq
-        SET lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '5 minutes'
-        WHERE id = ANY($1::int[])
-      `, [ids]);
+      for (const item of claimedItems) {
+        console.log(`[DLQ PROCESSOR] Retrying failed webhook ID ${item.id} from source '${item.source}' (Attempt ${item.retry_count + 1})`);
+        try {
+          const isFail = process.env.NODE_ENV === 'test' ? false : Math.random() < 0.3;
+          if (isFail) throw new Error("Simulated network failure");
 
-      await client.query('COMMIT');
-      claimedItems = dlqItems.rows;
-    } catch (lockErr: any) {
-      await client.query('ROLLBACK');
-      if (lockErr.code === '55P03') return;
-      throw lockErr;
-    } finally {
-      client.release();
-    }
+          // Success
+          await dbPool.query("DELETE FROM webhook_dlq WHERE id = $1", [item.id]);
+          console.log(`[DLQ PROCESSOR] Successfully recovered webhook ID ${item.id}`);
+        } catch (retryErr: any) {
+          const newRetryCount = item.retry_count + 1;
+          if (newRetryCount >= 5) {
+            await dbPool.query("UPDATE webhook_dlq SET status = 'failed', lease_expires_at = NULL WHERE id = $1", [item.id]);
+            console.log(`[DLQ PROCESSOR] Webhook ID ${item.id} permanently failed after 5 attempts.`);
+          } else {
+            // Exponential backoff with jitter
+            // Delay: base_delay * (2 ^ retry_count) + jitter
+            // base_delay = 5 mins, jitter = 0 to 60 secs
+            const baseDelayMs = 5 * 60 * 1000;
+            const exponentialDelayMs = baseDelayMs * Math.pow(2, item.retry_count);
+            const jitterMs = Math.floor(Math.random() * 60000);
+            const totalDelayMs = exponentialDelayMs + jitterMs;
+            const nextRetryDate = new Date(Date.now() + totalDelayMs);
 
-    for (const item of claimedItems) {
-      console.log(`[DLQ PROCESSOR] Retrying failed webhook ID ${item.id} from source '${item.source}' (Attempt ${item.retry_count + 1})`);
-      try {
-        const isFail = process.env.NODE_ENV === 'test' ? false : Math.random() < 0.3;
-        if (isFail) throw new Error("Simulated network failure");
-
-        // Success
-        await dbPool.query("DELETE FROM webhook_dlq WHERE id = $1", [item.id]);
-        console.log(`[DLQ PROCESSOR] Successfully recovered webhook ID ${item.id}`);
-      } catch (retryErr: any) {
-        const newRetryCount = item.retry_count + 1;
-        if (newRetryCount >= 5) {
-          await dbPool.query("UPDATE webhook_dlq SET status = 'failed', lease_expires_at = NULL WHERE id = $1", [item.id]);
-          console.log(`[DLQ PROCESSOR] Webhook ID ${item.id} permanently failed after 5 attempts.`);
-        } else {
-          // Exponential backoff with jitter
-          // Delay: base_delay * (2 ^ retry_count) + jitter
-          // base_delay = 5 mins, jitter = 0 to 60 secs
-          const baseDelayMs = 5 * 60 * 1000;
-          const exponentialDelayMs = baseDelayMs * Math.pow(2, item.retry_count);
-          const jitterMs = Math.floor(Math.random() * 60000);
-          const totalDelayMs = exponentialDelayMs + jitterMs;
-          const nextRetryDate = new Date(Date.now() + totalDelayMs);
-
-          await dbPool.query(`
-            UPDATE webhook_dlq 
-            SET retry_count = $1, next_retry_at = $2, lease_expires_at = NULL 
-            WHERE id = $3
-          `, [newRetryCount, nextRetryDate.toISOString(), item.id]);
-          console.log(`[DLQ PROCESSOR] Webhook ID ${item.id} failed. Scheduled next retry at ${nextRetryDate.toISOString()} (Delay: ${totalDelayMs}ms with jitter)`);
+            await dbPool.query(`
+              UPDATE webhook_dlq
+              SET retry_count = $1, next_retry_at = $2, lease_expires_at = NULL
+              WHERE id = $3
+            `, [newRetryCount, nextRetryDate.toISOString(), item.id]);
+            console.log(`[DLQ PROCESSOR] Webhook ID ${item.id} failed. Scheduled next retry at ${nextRetryDate.toISOString()} (Delay: ${totalDelayMs}ms with jitter)`);
+          }
         }
       }
     }
-  } catch (err) {
-    console.error('[DLQ PROCESSOR ERROR]', err);
-  }
+  );
 };
 if (process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
   setInterval(processWebhookDLQ, 5 * 60 * 1000);
@@ -16638,331 +16947,334 @@ export async function verifyMetaExternalObjectDetailed(
   }
 }
 
-// Phase 9 / P0-3: DB <-> Meta Active Reconciliation Engine & Quarantine Worker
+// Phase 9 / P0-3: DB <-> Meta Active Reconciliation Engine & Quarantine Worker (+ Advisory Lock)
 export const processMetaReconciliation = async (overridePool?: any, overrideAccessToken?: string) => {
   const dbPool = overridePool || pool;
   if (!dbPool) return;
   const accessToken = overrideAccessToken || process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN;
   if (!accessToken) return;
 
-  try {
-    await dbPool.query(`
-      CREATE TABLE IF NOT EXISTS meta_reconciliation_incidents (
-        id SERIAL PRIMARY KEY,
-        transaction_id INTEGER REFERENCES meta_publishing_transactions(id),
-        mismatch_type VARCHAR(100),
-        details JSONB,
-        resolved BOOLEAN DEFAULT false,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    await dbPool.query(`ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS quarantined_objects JSONB;`);
-        await dbPool.query(`ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS last_reconciled_at TIMESTAMP;`);
-    await dbPool.query(`ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS reconciliation_started_at TIMESTAMP;`);
-    await dbPool.query(`ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS reconciliation_lease_expires_at TIMESTAMP;`);
-    await dbPool.query(`ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS reconciliation_attempt_count INTEGER DEFAULT 0;`);
-    await dbPool.query(`ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS next_reconciliation_at TIMESTAMP;`);
-
-    // 1. STALE / UNKNOWN TRANSACTION RECOVERY 
-    const staleTxRes = await dbPool.query(`
-      SELECT * FROM meta_publishing_transactions
-      WHERE publish_status IN ('EXTERNAL_OUTCOME_UNKNOWN', 'RECONCILIATION_REQUIRED', 'ROLLBACK_FAILED', 'QUARANTINED')
-      AND (next_reconciliation_at IS NULL OR next_reconciliation_at <= CURRENT_TIMESTAMP)
-      AND (reconciliation_lease_expires_at IS NULL OR reconciliation_lease_expires_at <= CURRENT_TIMESTAMP)
-      ORDER BY next_reconciliation_at ASC NULLS FIRST, id ASC LIMIT 10
-      FOR UPDATE SKIP LOCKED
-    `);
-    
-    // Acquire leases
-    if (staleTxRes.rows.length > 0) {
+  await DistributedLockService.withAdvisoryLock(
+    dbPool,
+    DistributedLockService.LOCKS.META_RECONCILIATION,
+    'processMetaReconciliation',
+    async () => {
       await dbPool.query(`
-        UPDATE meta_publishing_transactions 
-        SET reconciliation_started_at = CURRENT_TIMESTAMP,
-            reconciliation_lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '5 minutes',
-            reconciliation_attempt_count = reconciliation_attempt_count + 1
-        WHERE id = ANY($1)
-      `, [staleTxRes.rows.map(r => r.id)]);
-    }
+        CREATE TABLE IF NOT EXISTS meta_reconciliation_incidents (
+          id SERIAL PRIMARY KEY,
+          transaction_id INTEGER REFERENCES meta_publishing_transactions(id),
+          mismatch_type VARCHAR(100),
+          details JSONB,
+          resolved BOOLEAN DEFAULT false,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
 
-    for (const staleTx of staleTxRes.rows) {
-      console.log(`[META RECONCILIATION] Reconciling stale transaction #${staleTx.id} (status: ${staleTx.publish_status})`);
+      await dbPool.query(`ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS quarantined_objects JSONB;`);
+      await dbPool.query(`ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS last_reconciled_at TIMESTAMP;`);
+      await dbPool.query(`ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS reconciliation_started_at TIMESTAMP;`);
+      await dbPool.query(`ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS reconciliation_lease_expires_at TIMESTAMP;`);
+      await dbPool.query(`ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS reconciliation_attempt_count INTEGER DEFAULT 0;`);
+      await dbPool.query(`ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS next_reconciliation_at TIMESTAMP;`);
 
-      const [campVerification, adsetVerification, adVerification] = await Promise.all([
-        staleTx.meta_campaign_id ? verifyMetaExternalObjectDetailed(staleTx.meta_campaign_id, accessToken) : Promise.resolve({ outcome: 'MISSING' as const }),
-        staleTx.meta_adset_id ? verifyMetaExternalObjectDetailed(staleTx.meta_adset_id, accessToken) : Promise.resolve({ outcome: 'MISSING' as const }),
-        staleTx.meta_ad_id ? verifyMetaExternalObjectDetailed(staleTx.meta_ad_id, accessToken) : Promise.resolve({ outcome: 'MISSING' as const })
-      ]);
+      // 1. STALE / UNKNOWN TRANSACTION RECOVERY
+      const staleTxRes = await dbPool.query(`
+        SELECT * FROM meta_publishing_transactions
+        WHERE publish_status IN ('EXTERNAL_OUTCOME_UNKNOWN', 'RECONCILIATION_REQUIRED', 'ROLLBACK_FAILED', 'QUARANTINED')
+        AND (next_reconciliation_at IS NULL OR next_reconciliation_at <= CURRENT_TIMESTAMP)
+        AND (reconciliation_lease_expires_at IS NULL OR reconciliation_lease_expires_at <= CURRENT_TIMESTAMP)
+        ORDER BY next_reconciliation_at ASC NULLS FIRST, id ASC LIMIT 10
+        FOR UPDATE SKIP LOCKED
+      `);
 
-      // Rule 3: If verification encounters network timeout or transport failure, PRESERVE EXTERNAL_OUTCOME_UNKNOWN
-      const hasUnknown = [campVerification, adsetVerification, adVerification].some(v => v.outcome === 'EXTERNAL_STATE_UNKNOWN');
-      if (hasUnknown) {
-        console.warn(`[META RECONCILIATION] Stale TX #${staleTx.id}: Meta transport error/timeout. Preserving EXTERNAL_OUTCOME_UNKNOWN.`);
+      // Acquire leases
+      if (staleTxRes.rows.length > 0) {
         await dbPool.query(`
           UPDATE meta_publishing_transactions
-          SET publish_status = 'EXTERNAL_OUTCOME_UNKNOWN', last_reconciled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-          WHERE id = $1
-        `, [staleTx.id]);
-
-        await dbPool.query(`
-          INSERT INTO meta_reconciliation_incidents (transaction_id, mismatch_type, details)
-          VALUES ($1, $2, $3)
-        `, [staleTx.id, 'EXTERNAL_STATE_UNKNOWN', JSON.stringify({
-          message: 'Network transport failure or timeout during verification. Outcome unknown, will retry.',
-          correlation_id: staleTx.correlation_id,
-          timestamp: new Date().toISOString()
-        })]);
-        continue;
+          SET reconciliation_started_at = CURRENT_TIMESTAMP,
+              reconciliation_lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '5 minutes',
+              reconciliation_attempt_count = reconciliation_attempt_count + 1
+          WHERE id = ANY($1)
+        `, [staleTxRes.rows.map(r => r.id)]);
       }
 
-      const campExists = campVerification.outcome === 'EXISTS';
-      const adsetExists = adsetVerification.outcome === 'EXISTS';
-      const adExists = adVerification.outcome === 'EXISTS';
+      for (const staleTx of staleTxRes.rows) {
+        console.log(`[META RECONCILIATION] Reconciling stale transaction #${staleTx.id} (status: ${staleTx.publish_status})`);
 
-      if (campExists && adsetExists && adExists) {
-        // Complete publish discovered! Auto-heal to SUCCESS
-        await dbPool.query(`
-          UPDATE meta_publishing_transactions
-          SET publish_status = 'SUCCESS', last_reconciled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-          WHERE id = $1
-        `, [staleTx.id]);
-        if (staleTx.campaign_id) {
+        const [campVerification, adsetVerification, adVerification] = await Promise.all([
+          staleTx.meta_campaign_id ? verifyMetaExternalObjectDetailed(staleTx.meta_campaign_id, accessToken) : Promise.resolve({ outcome: 'MISSING' as const }),
+          staleTx.meta_adset_id ? verifyMetaExternalObjectDetailed(staleTx.meta_adset_id, accessToken) : Promise.resolve({ outcome: 'MISSING' as const }),
+          staleTx.meta_ad_id ? verifyMetaExternalObjectDetailed(staleTx.meta_ad_id, accessToken) : Promise.resolve({ outcome: 'MISSING' as const })
+        ]);
+
+        // Rule 3: If verification encounters network timeout or transport failure, PRESERVE EXTERNAL_OUTCOME_UNKNOWN
+        const hasUnknown = [campVerification, adsetVerification, adVerification].some(v => v.outcome === 'EXTERNAL_STATE_UNKNOWN');
+        if (hasUnknown) {
+          console.warn(`[META RECONCILIATION] Stale TX #${staleTx.id}: Meta transport error/timeout. Preserving EXTERNAL_OUTCOME_UNKNOWN.`);
           await dbPool.query(`
-            UPDATE host_marketing_campaigns
-            SET meta_campaign_id = $1, meta_adset_id = $2, meta_creative_id = $3, meta_ad_id = $4
-            WHERE id = $5
-          `, [staleTx.meta_campaign_id, staleTx.meta_adset_id, staleTx.meta_creative_id, staleTx.meta_ad_id, staleTx.campaign_id]);
-          await transitionCampaignState({ campaignId: Number(staleTx.campaign_id), to: 'CAMPAIGN_LIVE', reason: 'Reconciliation auto-heal completed dispatch', actorType: 'system' });
-        }
-      } else if (campExists || adsetExists || staleTx.meta_creative_id) {
-        // Partial publication discovered -> QUARANTINE unsafe objects
-        console.log(`[META RECONCILIATION] Stale TX #${staleTx.id}: Partial objects found. Quarantining...`);
-        const rbRes = await executeMetaRollback({
-          metaCampaignId: staleTx.meta_campaign_id,
-          metaAdSetId: staleTx.meta_adset_id,
-          metaCreativeId: staleTx.meta_creative_id,
-          metaAdId: staleTx.meta_ad_id
-        }, staleTx.correlation_id || crypto.randomUUID(), dbPool);
+            UPDATE meta_publishing_transactions
+            SET publish_status = 'EXTERNAL_OUTCOME_UNKNOWN', last_reconciled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            WHERE id = $1
+          `, [staleTx.id]);
 
-        const newStatus = rbRes.quarantined ? 'QUARANTINED' : (rbRes.success ? 'ROLLBACK_SUCCESS' : 'ROLLBACK_FAILED');
-        await dbPool.query(`
-          UPDATE meta_publishing_transactions
-          SET publish_status = $1, rollback_status = $2, quarantined_objects = $3, last_reconciled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-          WHERE id = $4
-        `, [newStatus, rbRes.success ? 'SUCCESS' : (rbRes.quarantined ? 'QUARANTINED' : 'FAILED'), JSON.stringify(rbRes.quarantinedObjects || {}), staleTx.id]);
-
-        if (staleTx.campaign_id) {
-          await transitionCampaignState({ campaignId: Number(staleTx.campaign_id), to: 'failed_publish', reason: 'Reconciliation auto-heal quarantined stale partial transaction', actorType: 'system' });
+          await dbPool.query(`
+            INSERT INTO meta_reconciliation_incidents (transaction_id, mismatch_type, details)
+            VALUES ($1, $2, $3)
+          `, [staleTx.id, 'EXTERNAL_STATE_UNKNOWN', JSON.stringify({
+            message: 'Network transport failure or timeout during verification. Outcome unknown, will retry.',
+            correlation_id: staleTx.correlation_id,
+            timestamp: new Date().toISOString()
+          })]);
+          continue;
         }
 
-        await dbPool.query(`
-          INSERT INTO meta_reconciliation_incidents (transaction_id, mismatch_type, details)
-          VALUES ($1, $2, $3)
-        `, [staleTx.id, 'ORPHAN_UNSAFE_OBJECT_QUARANTINED', JSON.stringify({
-          incident_type: 'ORPHAN_PARTIAL_QUARANTINED',
-          campaign_id: staleTx.campaign_id,
-          local_state: staleTx.publish_status,
-          remediation_attempted: 'QUARANTINE_PAUSE_AND_RENAME',
-          remediation_result: newStatus,
-          quarantined_objects: rbRes.quarantinedObjects,
-          correlation_id: staleTx.correlation_id,
-          timestamp: new Date().toISOString()
-        })]);
-      } else {
-        // No objects exist on Meta -> Safe FAILED_PUBLISH
-        await dbPool.query(`
-          UPDATE meta_publishing_transactions
-          SET publish_status = 'FAILED_PUBLISH', last_reconciled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-          WHERE id = $1
-        `, [staleTx.id]);
-        if (staleTx.campaign_id) {
-          await transitionCampaignState({ campaignId: Number(staleTx.campaign_id), to: 'failed_publish', reason: 'Reconciliation auto-heal cleared stale uninitiated transaction', actorType: 'system' });
-        }
-      }
-    }
+        const campExists = campVerification.outcome === 'EXISTS';
+        const adsetExists = adsetVerification.outcome === 'EXISTS';
+        const adExists = adVerification.outcome === 'EXISTS';
 
-    // 2. COMPLETED / TERMINAL / LIVE TRANSACTIONS RECONCILIATION AND ACTIVE REMEDIATION
-    const txRes = await dbPool.query(`
-      SELECT t.*, c.budget as expected_budget FROM meta_publishing_transactions t
-      LEFT JOIN host_marketing_campaigns c ON t.campaign_id = c.id
-      WHERE t.publish_status IN ('SUCCESS', 'ROLLBACK_SUCCESS', 'ROLLBACK_FAILED', 'FAILED', 'FAILED_PUBLISH', 'LIVE', 'QUARANTINED', 'EXTERNAL_OUTCOME_UNKNOWN')
-      AND (t.meta_campaign_id IS NOT NULL OR t.meta_adset_id IS NOT NULL OR t.meta_creative_id IS NOT NULL OR t.meta_ad_id IS NOT NULL)
-      AND (t.last_reconciled_at IS NULL OR t.last_reconciled_at < CURRENT_TIMESTAMP - INTERVAL '1 minute')
-      ORDER BY t.last_reconciled_at ASC NULLS FIRST, t.updated_at DESC, t.id ASC LIMIT 20
-      FOR UPDATE OF t SKIP LOCKED
-    `);
-
-    for (const tx of txRes.rows) {
-      const [campV, adsetV, creativeV, adV] = await Promise.all([
-        tx.meta_campaign_id ? verifyMetaExternalObjectDetailed(tx.meta_campaign_id, accessToken) : Promise.resolve({ outcome: 'MISSING' as const }),
-        tx.meta_adset_id ? verifyMetaExternalObjectDetailed(tx.meta_adset_id, accessToken) : Promise.resolve({ outcome: 'MISSING' as const }),
-        tx.meta_creative_id ? verifyMetaExternalObjectDetailed(tx.meta_creative_id, accessToken) : Promise.resolve({ outcome: 'MISSING' as const }),
-        tx.meta_ad_id ? verifyMetaExternalObjectDetailed(tx.meta_ad_id, accessToken) : Promise.resolve({ outcome: 'MISSING' as const })
-      ]);
-
-      // Rule 3: Transport failure during verification -> PRESERVE EXTERNAL_OUTCOME_UNKNOWN
-      if ([campV, adsetV, creativeV, adV].some(v => v.outcome === 'EXTERNAL_STATE_UNKNOWN')) {
-        console.warn(`[META RECONCILIATION] TX #${tx.id}: Meta transport failure during audit. Preserving state without mutation.`);
-        await dbPool.query(`
-          UPDATE meta_publishing_transactions
-          SET last_reconciled_at = CURRENT_TIMESTAMP
-          WHERE id = $1
-        `, [tx.id]);
-
-        await dbPool.query(`
-          INSERT INTO meta_reconciliation_incidents (transaction_id, mismatch_type, details)
-          VALUES ($1, $2, $3)
-        `, [tx.id, 'EXTERNAL_STATE_UNKNOWN', JSON.stringify({
-          message: 'Transport failure inspecting Meta external state. Retrying in next reconciliation cycle.',
-          correlation_id: tx.correlation_id,
-          timestamp: new Date().toISOString()
-        })]);
-        continue;
-      }
-
-      const expectActiveOrLive = (tx.publish_status === 'SUCCESS' || tx.publish_status === 'LIVE');
-      const expectFailedOrQuarantined = !expectActiveOrLive;
-
-      // Check for orphaned / active / unsafe objects on failed or unknown transactions
-      const existingObjects = [
-        { type: 'CAMPAIGN', id: tx.meta_campaign_id, verification: campV },
-        { type: 'ADSET', id: tx.meta_adset_id, verification: adsetV },
-        { type: 'CREATIVE', id: tx.meta_creative_id, verification: creativeV },
-        { type: 'AD', id: tx.meta_ad_id, verification: adV }
-      ].filter(o => o.id && o.verification.outcome === 'EXISTS');
-
-      if (expectFailedOrQuarantined && existingObjects.length > 0) {
-        // Local state says transaction failed/rolled back/quarantined/unknown, BUT objects exist on Meta!
-        // Check if all existing objects are ALREADY safely quarantined (PAUSED and RENAMED)
-        const unquarantinedObjects = existingObjects.filter(o => {
-          const isPaused = o.verification.status === 'PAUSED' || o.verification.status === 'ARCHIVED';
-          const isQuarantineNamed = (o.verification.name || '').includes('FAILED_ROLLBACK');
-          return !(isPaused && isQuarantineNamed);
-        });
-
-        if (unquarantinedObjects.length > 0) {
-          // ACTIVE OR UNQUARANTINED ORPHAN OBJECT DISCOVERED -> ACTIVE REMEDIATION REQUIRED
-          console.warn(`[META RECONCILIATION] ACTIVE/UNQUARANTINED ORPHAN DISCOVERED on TX #${tx.id} (${tx.publish_status}):`, unquarantinedObjects.map(o => `${o.type}:${o.id}(${o.verification.status})`));
-
+        if (campExists && adsetExists && adExists) {
+          // Complete publish discovered! Auto-heal to SUCCESS
+          await dbPool.query(`
+            UPDATE meta_publishing_transactions
+            SET publish_status = 'SUCCESS', last_reconciled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            WHERE id = $1
+          `, [staleTx.id]);
+          if (staleTx.campaign_id) {
+            await dbPool.query(`
+              UPDATE host_marketing_campaigns
+              SET meta_campaign_id = $1, meta_adset_id = $2, meta_creative_id = $3, meta_ad_id = $4
+              WHERE id = $5
+            `, [staleTx.meta_campaign_id, staleTx.meta_adset_id, staleTx.meta_creative_id, staleTx.meta_ad_id, staleTx.campaign_id]);
+            await transitionCampaignState({ campaignId: Number(staleTx.campaign_id), to: 'CAMPAIGN_LIVE', reason: 'Reconciliation auto-heal completed dispatch', actorType: 'system' });
+          }
+        } else if (campExists || adsetExists || staleTx.meta_creative_id) {
+          // Partial publication discovered -> QUARANTINE unsafe objects
+          console.log(`[META RECONCILIATION] Stale TX #${staleTx.id}: Partial objects found. Quarantining...`);
           const rbRes = await executeMetaRollback({
-            metaCampaignId: tx.meta_campaign_id,
-            metaAdSetId: tx.meta_adset_id,
-            metaCreativeId: tx.meta_creative_id,
-            metaAdId: tx.meta_ad_id
-          }, tx.correlation_id || crypto.randomUUID(), dbPool);
+            metaCampaignId: staleTx.meta_campaign_id,
+            metaAdSetId: staleTx.meta_adset_id,
+            metaCreativeId: staleTx.meta_creative_id,
+            metaAdId: staleTx.meta_ad_id
+          }, staleTx.correlation_id || crypto.randomUUID(), dbPool);
 
-          const finalStatus = rbRes.quarantined ? 'QUARANTINED' : 'ROLLBACK_FAILED';
-
+          const newStatus = rbRes.quarantined ? 'QUARANTINED' : (rbRes.success ? 'ROLLBACK_SUCCESS' : 'ROLLBACK_FAILED');
           await dbPool.query(`
             UPDATE meta_publishing_transactions
             SET publish_status = $1, rollback_status = $2, quarantined_objects = $3, last_reconciled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
             WHERE id = $4
-          `, [finalStatus, rbRes.quarantined ? 'QUARANTINED' : 'FAILED', JSON.stringify(rbRes.quarantinedObjects || {}), tx.id]);
+          `, [newStatus, rbRes.success ? 'SUCCESS' : (rbRes.quarantined ? 'QUARANTINED' : 'FAILED'), JSON.stringify(rbRes.quarantinedObjects || {}), staleTx.id]);
 
-          // Persist reconciliation incident with full remediation details
-          for (const unq of unquarantinedObjects) {
-            await dbPool.query(`
-              INSERT INTO meta_reconciliation_incidents (transaction_id, mismatch_type, details)
-              VALUES ($1, $2, $3)
-            `, [
-              tx.id,
-              'ORPHAN_UNSAFE_OBJECT_QUARANTINED',
-              JSON.stringify({
-                incident_type: 'ORPHAN_ACTIVE_QUARANTINED',
-                campaign_id: tx.campaign_id,
-                meta_object_id: unq.id,
-                object_type: unq.type,
-                local_state: tx.publish_status,
-                external_state: unq.verification.status,
-                remediation_attempted: 'QUARANTINE_PAUSE_AND_RENAME',
-                remediation_result: finalStatus,
-                quarantined_objects: rbRes.quarantinedObjects,
-                correlation_id: tx.correlation_id,
-                timestamp: new Date().toISOString()
-              })
-            ]);
+          if (staleTx.campaign_id) {
+            await transitionCampaignState({ campaignId: Number(staleTx.campaign_id), to: 'failed_publish', reason: 'Reconciliation auto-heal quarantined stale partial transaction', actorType: 'system' });
           }
+
+          await dbPool.query(`
+            INSERT INTO meta_reconciliation_incidents (transaction_id, mismatch_type, details)
+            VALUES ($1, $2, $3)
+          `, [staleTx.id, 'ORPHAN_UNSAFE_OBJECT_QUARANTINED', JSON.stringify({
+            incident_type: 'ORPHAN_PARTIAL_QUARANTINED',
+            campaign_id: staleTx.campaign_id,
+            local_state: staleTx.publish_status,
+            remediation_attempted: 'QUARANTINE_PAUSE_AND_RENAME',
+            remediation_result: newStatus,
+            quarantined_objects: rbRes.quarantinedObjects,
+            correlation_id: staleTx.correlation_id,
+            timestamp: new Date().toISOString()
+          })]);
         } else {
-          // All existing objects are ALREADY PAUSED + RENAMED (Idempotent convergence)
-          console.log(`[META RECONCILIATION] TX #${tx.id} objects already safely quarantined. Ensuring QUARANTINED state.`);
-          if (tx.publish_status !== 'QUARANTINED') {
+          // No objects exist on Meta -> Safe FAILED_PUBLISH
+          await dbPool.query(`
+            UPDATE meta_publishing_transactions
+            SET publish_status = 'FAILED_PUBLISH', last_reconciled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            WHERE id = $1
+          `, [staleTx.id]);
+          if (staleTx.campaign_id) {
+            await transitionCampaignState({ campaignId: Number(staleTx.campaign_id), to: 'failed_publish', reason: 'Reconciliation auto-heal cleared stale uninitiated transaction', actorType: 'system' });
+          }
+        }
+      }
+
+      // 2. COMPLETED / TERMINAL / LIVE TRANSACTIONS RECONCILIATION AND ACTIVE REMEDIATION
+      const txRes = await dbPool.query(`
+        SELECT t.*, c.budget as expected_budget FROM meta_publishing_transactions t
+        LEFT JOIN host_marketing_campaigns c ON t.campaign_id = c.id
+        WHERE t.publish_status IN ('SUCCESS', 'ROLLBACK_SUCCESS', 'ROLLBACK_FAILED', 'FAILED', 'FAILED_PUBLISH', 'LIVE', 'QUARANTINED', 'EXTERNAL_OUTCOME_UNKNOWN')
+        AND (t.meta_campaign_id IS NOT NULL OR t.meta_adset_id IS NOT NULL OR t.meta_creative_id IS NOT NULL OR t.meta_ad_id IS NOT NULL)
+        AND (t.last_reconciled_at IS NULL OR t.last_reconciled_at < CURRENT_TIMESTAMP - INTERVAL '1 minute')
+        ORDER BY t.last_reconciled_at ASC NULLS FIRST, t.updated_at DESC, t.id ASC LIMIT 20
+        FOR UPDATE OF t SKIP LOCKED
+      `);
+
+      for (const tx of txRes.rows) {
+        const [campV, adsetV, creativeV, adV] = await Promise.all([
+          tx.meta_campaign_id ? verifyMetaExternalObjectDetailed(tx.meta_campaign_id, accessToken) : Promise.resolve({ outcome: 'MISSING' as const }),
+          tx.meta_adset_id ? verifyMetaExternalObjectDetailed(tx.meta_adset_id, accessToken) : Promise.resolve({ outcome: 'MISSING' as const }),
+          tx.meta_creative_id ? verifyMetaExternalObjectDetailed(tx.meta_creative_id, accessToken) : Promise.resolve({ outcome: 'MISSING' as const }),
+          tx.meta_ad_id ? verifyMetaExternalObjectDetailed(tx.meta_ad_id, accessToken) : Promise.resolve({ outcome: 'MISSING' as const })
+        ]);
+
+        // Rule 3: Transport failure during verification -> PRESERVE EXTERNAL_OUTCOME_UNKNOWN
+        if ([campV, adsetV, creativeV, adV].some(v => v.outcome === 'EXTERNAL_STATE_UNKNOWN')) {
+          console.warn(`[META RECONCILIATION] TX #${tx.id}: Meta transport failure during audit. Preserving state without mutation.`);
+          await dbPool.query(`
+            UPDATE meta_publishing_transactions
+            SET last_reconciled_at = CURRENT_TIMESTAMP
+            WHERE id = $1
+          `, [tx.id]);
+
+          await dbPool.query(`
+            INSERT INTO meta_reconciliation_incidents (transaction_id, mismatch_type, details)
+            VALUES ($1, $2, $3)
+          `, [tx.id, 'EXTERNAL_STATE_UNKNOWN', JSON.stringify({
+            message: 'Transport failure inspecting Meta external state. Retrying in next reconciliation cycle.',
+            correlation_id: tx.correlation_id,
+            timestamp: new Date().toISOString()
+          })]);
+          continue;
+        }
+
+        const expectActiveOrLive = (tx.publish_status === 'SUCCESS' || tx.publish_status === 'LIVE');
+        const expectFailedOrQuarantined = !expectActiveOrLive;
+
+        // Check for orphaned / active / unsafe objects on failed or unknown transactions
+        const existingObjects = [
+          { type: 'CAMPAIGN', id: tx.meta_campaign_id, verification: campV },
+          { type: 'ADSET', id: tx.meta_adset_id, verification: adsetV },
+          { type: 'CREATIVE', id: tx.meta_creative_id, verification: creativeV },
+          { type: 'AD', id: tx.meta_ad_id, verification: adV }
+        ].filter(o => o.id && o.verification.outcome === 'EXISTS');
+
+        if (expectFailedOrQuarantined && existingObjects.length > 0) {
+          // Local state says transaction failed/rolled back/quarantined/unknown, BUT objects exist on Meta!
+          // Check if all existing objects are ALREADY safely quarantined (PAUSED and RENAMED)
+          const unquarantinedObjects = existingObjects.filter(o => {
+            const isPaused = o.verification.status === 'PAUSED' || o.verification.status === 'ARCHIVED';
+            const isQuarantineNamed = (o.verification.name || '').includes('FAILED_ROLLBACK');
+            return !(isPaused && isQuarantineNamed);
+          });
+
+          if (unquarantinedObjects.length > 0) {
+            // ACTIVE OR UNQUARANTINED ORPHAN OBJECT DISCOVERED -> ACTIVE REMEDIATION REQUIRED
+            console.warn(`[META RECONCILIATION] ACTIVE/UNQUARANTINED ORPHAN DISCOVERED on TX #${tx.id} (${tx.publish_status}):`, unquarantinedObjects.map(o => `${o.type}:${o.id}(${o.verification.status})`));
+
+            const rbRes = await executeMetaRollback({
+              metaCampaignId: tx.meta_campaign_id,
+              metaAdSetId: tx.meta_adset_id,
+              metaCreativeId: tx.meta_creative_id,
+              metaAdId: tx.meta_ad_id
+            }, tx.correlation_id || crypto.randomUUID(), dbPool);
+
+            const finalStatus = rbRes.quarantined ? 'QUARANTINED' : 'ROLLBACK_FAILED';
+
             await dbPool.query(`
               UPDATE meta_publishing_transactions
-              SET publish_status = 'QUARANTINED', rollback_status = 'QUARANTINED', last_reconciled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-              WHERE id = $1
-            `, [tx.id]);
+              SET publish_status = $1, rollback_status = $2, quarantined_objects = $3, last_reconciled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+              WHERE id = $4
+            `, [finalStatus, rbRes.quarantined ? 'QUARANTINED' : 'FAILED', JSON.stringify(rbRes.quarantinedObjects || {}), tx.id]);
+
+            // Persist reconciliation incident with full remediation details
+            for (const unq of unquarantinedObjects) {
+              await dbPool.query(`
+                INSERT INTO meta_reconciliation_incidents (transaction_id, mismatch_type, details)
+                VALUES ($1, $2, $3)
+              `, [
+                tx.id,
+                'ORPHAN_UNSAFE_OBJECT_QUARANTINED',
+                JSON.stringify({
+                  incident_type: 'ORPHAN_ACTIVE_QUARANTINED',
+                  campaign_id: tx.campaign_id,
+                  meta_object_id: unq.id,
+                  object_type: unq.type,
+                  local_state: tx.publish_status,
+                  external_state: unq.verification.status,
+                  remediation_attempted: 'QUARANTINE_PAUSE_AND_RENAME',
+                  remediation_result: finalStatus,
+                  quarantined_objects: rbRes.quarantinedObjects,
+                  correlation_id: tx.correlation_id,
+                  timestamp: new Date().toISOString()
+                })
+              ]);
+            }
           } else {
-            await dbPool.query(`
-              UPDATE meta_publishing_transactions
-              SET last_reconciled_at = CURRENT_TIMESTAMP
-              WHERE id = $1
-            `, [tx.id]);
+            // All existing objects are ALREADY PAUSED + RENAMED (Idempotent convergence)
+            console.log(`[META RECONCILIATION] TX #${tx.id} objects already safely quarantined. Ensuring QUARANTINED state.`);
+            if (tx.publish_status !== 'QUARANTINED') {
+              await dbPool.query(`
+                UPDATE meta_publishing_transactions
+                SET publish_status = 'QUARANTINED', rollback_status = 'QUARANTINED', last_reconciled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                WHERE id = $1
+              `, [tx.id]);
+            } else {
+              await dbPool.query(`
+                UPDATE meta_publishing_transactions
+                SET last_reconciled_at = CURRENT_TIMESTAMP
+                WHERE id = $1
+              `, [tx.id]);
+            }
           }
-        }
-      } else if (expectActiveOrLive) {
-        // LIVE / SUCCESS transaction checking
-        const mismatches: { type: string; details: string; objId?: string; objType?: string; extState?: string }[] = [];
+        } else if (expectActiveOrLive) {
+          // LIVE / SUCCESS transaction checking
+          const mismatches: { type: string; details: string; objId?: string; objType?: string; extState?: string }[] = [];
 
-        if (tx.meta_campaign_id && campV.outcome === 'MISSING') mismatches.push({ type: 'MISSING_CAMPAIGN', details: `DB says ${tx.publish_status} but Meta Campaign ${tx.meta_campaign_id} is missing.`, objId: tx.meta_campaign_id, objType: 'CAMPAIGN' });
-        if (tx.meta_adset_id && adsetV.outcome === 'MISSING') mismatches.push({ type: 'MISSING_ADSET', details: `DB says ${tx.publish_status} but Meta AdSet ${tx.meta_adset_id} is missing.`, objId: tx.meta_adset_id, objType: 'ADSET' });
-        if (tx.meta_creative_id && creativeV.outcome === 'MISSING') mismatches.push({ type: 'MISSING_CREATIVE', details: `DB says ${tx.publish_status} but Meta Creative ${tx.meta_creative_id} is missing.`, objId: tx.meta_creative_id, objType: 'CREATIVE' });
-        if (tx.meta_ad_id && adV.outcome === 'MISSING') mismatches.push({ type: 'MISSING_AD', details: `DB says ${tx.publish_status} but Meta Ad ${tx.meta_ad_id} is missing.`, objId: tx.meta_ad_id, objType: 'AD' });
+          if (tx.meta_campaign_id && campV.outcome === 'MISSING') mismatches.push({ type: 'MISSING_CAMPAIGN', details: `DB says ${tx.publish_status} but Meta Campaign ${tx.meta_campaign_id} is missing.`, objId: tx.meta_campaign_id, objType: 'CAMPAIGN' });
+          if (tx.meta_adset_id && adsetV.outcome === 'MISSING') mismatches.push({ type: 'MISSING_ADSET', details: `DB says ${tx.publish_status} but Meta AdSet ${tx.meta_adset_id} is missing.`, objId: tx.meta_adset_id, objType: 'ADSET' });
+          if (tx.meta_creative_id && creativeV.outcome === 'MISSING') mismatches.push({ type: 'MISSING_CREATIVE', details: `DB says ${tx.publish_status} but Meta Creative ${tx.meta_creative_id} is missing.`, objId: tx.meta_creative_id, objType: 'CREATIVE' });
+          if (tx.meta_ad_id && adV.outcome === 'MISSING') mismatches.push({ type: 'MISSING_AD', details: `DB says ${tx.publish_status} but Meta Ad ${tx.meta_ad_id} is missing.`, objId: tx.meta_ad_id, objType: 'AD' });
 
-        // Configuration check: Budget mismatch
-        if (campV.outcome === 'EXISTS' && campV.dailyBudget && tx.expected_budget) {
-          const expectedCents = Math.round(Number(tx.expected_budget) * 100);
-          if (Math.abs(campV.dailyBudget - expectedCents) > 100) { // Difference > $1.00
-            mismatches.push({
-              type: 'CONFIGURATION_MISMATCH',
-              details: `Campaign budget mismatch: Local expects $${tx.expected_budget} (${expectedCents} cents), Meta has ${campV.dailyBudget} cents.`,
-              objId: tx.meta_campaign_id,
-              objType: 'CAMPAIGN',
-              extState: `budget:${campV.dailyBudget}`
-            });
+          // Configuration check: Budget mismatch
+          if (campV.outcome === 'EXISTS' && campV.dailyBudget && tx.expected_budget) {
+            const expectedCents = Math.round(Number(tx.expected_budget) * 100);
+            if (Math.abs(campV.dailyBudget - expectedCents) > 100) { // Difference > $1.00
+              mismatches.push({
+                type: 'CONFIGURATION_MISMATCH',
+                details: `Campaign budget mismatch: Local expects $${tx.expected_budget} (${expectedCents} cents), Meta has ${campV.dailyBudget} cents.`,
+                objId: tx.meta_campaign_id,
+                objType: 'CAMPAIGN',
+                extState: `budget:${campV.dailyBudget}`
+              });
+            }
           }
-        }
 
-        for (const mismatch of mismatches) {
-          const existing = await dbPool.query(
-            `SELECT id FROM meta_reconciliation_incidents WHERE transaction_id = $1 AND mismatch_type = $2 AND resolved = false`,
-            [tx.id, mismatch.type]
-          );
-          if (existing.rows.length === 0) {
-            console.warn(`[META RECONCILIATION INCIDENT] TX #${tx.id}: ${mismatch.type} - ${mismatch.details}`);
-            await dbPool.query(
-              `INSERT INTO meta_reconciliation_incidents (transaction_id, mismatch_type, details) VALUES ($1, $2, $3)`,
-              [tx.id, mismatch.type, JSON.stringify({
-                incident_type: mismatch.type,
-                campaign_id: tx.campaign_id,
-                meta_object_id: mismatch.objId,
-                object_type: mismatch.objType,
-                local_state: tx.publish_status,
-                external_state: mismatch.extState || 'MISSING',
-                correlation_id: tx.correlation_id,
-                message: mismatch.details,
-                timestamp: new Date().toISOString()
-              })]
+          for (const mismatch of mismatches) {
+            const existing = await dbPool.query(
+              `SELECT id FROM meta_reconciliation_incidents WHERE transaction_id = $1 AND mismatch_type = $2 AND resolved = false`,
+              [tx.id, mismatch.type]
             );
+            if (existing.rows.length === 0) {
+              console.warn(`[META RECONCILIATION INCIDENT] TX #${tx.id}: ${mismatch.type} - ${mismatch.details}`);
+              await dbPool.query(
+                `INSERT INTO meta_reconciliation_incidents (transaction_id, mismatch_type, details) VALUES ($1, $2, $3)`,
+                [tx.id, mismatch.type, JSON.stringify({
+                  incident_type: mismatch.type,
+                  campaign_id: tx.campaign_id,
+                  meta_object_id: mismatch.objId,
+                  object_type: mismatch.objType,
+                  local_state: tx.publish_status,
+                  external_state: mismatch.extState || 'MISSING',
+                  correlation_id: tx.correlation_id,
+                  message: mismatch.details,
+                  timestamp: new Date().toISOString()
+                })]
+              );
+            }
           }
-        }
 
-        await dbPool.query(`
-          UPDATE meta_publishing_transactions
-          SET last_reconciled_at = CURRENT_TIMESTAMP
-          WHERE id = $1
-        `, [tx.id]);
-      } else {
-        // Transaction is in rolled_back/failed/quarantined status and all objects are MISSING on Meta -> Clean convergence!
-        await dbPool.query(`
-          UPDATE meta_publishing_transactions
-          SET last_reconciled_at = CURRENT_TIMESTAMP
-          WHERE id = $1
-        `, [tx.id]);
+          await dbPool.query(`
+            UPDATE meta_publishing_transactions
+            SET last_reconciled_at = CURRENT_TIMESTAMP
+            WHERE id = $1
+          `, [tx.id]);
+        } else {
+          // Transaction is in rolled_back/failed/quarantined status and all objects are MISSING on Meta -> Clean convergence!
+          await dbPool.query(`
+            UPDATE meta_publishing_transactions
+            SET last_reconciled_at = CURRENT_TIMESTAMP
+            WHERE id = $1
+          `, [tx.id]);
+        }
       }
     }
-  } catch (err) {
-    console.error('[META RECONCILIATION ERROR]', err);
-  }
+  );
 };
 // Run every 10 minutes
 if (process.env.DISABLE_BACKGROUND_WORKERS !== 'true') {
@@ -16986,80 +17298,150 @@ export const recoverOrphanedMetaTransactions = async (overridePool?: any) => {
 
   const workerId = `recovery_${process.pid}_${Date.now()}`;
 
-  try {
-    // 1. Discover orphaned transactions with lease protection
-    const client = await dbPool.connect();
-    let orphans: any[] = [];
-
-    try {
-      await client.query('BEGIN');
-
-      const orphanRes = await client.query(`
-        SELECT id, campaign_id, publish_status, correlation_id, idempotency_key,
-               meta_campaign_id, meta_adset_id, meta_creative_id, meta_ad_id,
-               publish_attempt, reconciliation_attempt_count, updated_at
-        FROM meta_publishing_transactions
-        WHERE publish_status IN ('PRECHECK_RUNNING', 'PUBLISHING')
-        AND updated_at < CURRENT_TIMESTAMP - INTERVAL '${RECOVERY_LEASE_STALE_THRESHOLD_SECONDS} seconds'
-        AND (reconciliation_lease_expires_at IS NULL OR reconciliation_lease_expires_at <= CURRENT_TIMESTAMP)
-        AND (reconciliation_attempt_count IS NULL OR reconciliation_attempt_count < ${RECOVERY_MAX_ATTEMPTS})
-        ORDER BY updated_at ASC, id ASC
-        LIMIT 10
-        FOR UPDATE SKIP LOCKED
-      `);
-
-      if (orphanRes.rows.length === 0) {
-        await client.query('COMMIT');
-        return;
-      }
-
-      // 2. Claim lease on all discovered orphans
-      for (const orphan of orphanRes.rows) {
-        await client.query(`
-          UPDATE meta_publishing_transactions
-          SET reconciliation_started_at = CURRENT_TIMESTAMP,
-              reconciliation_lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '${RECOVERY_LEASE_DURATION_SECONDS} seconds',
-              reconciliation_attempt_count = COALESCE(reconciliation_attempt_count, 0) + 1,
-              updated_at = CURRENT_TIMESTAMP
-          WHERE id = $1
-        `, [orphan.id]);
-      }
-
-      await client.query('COMMIT');
-      orphans = orphanRes.rows;
-    } catch (err: any) {
-      await client.query('ROLLBACK');
-      if (err.code === '55P03') {
-        // Another worker holds the lock — expected, not an error
-        return;
-      }
-      throw err;
-    } finally {
-      client.release();
-    }
-
-    // 3. Process each orphan OUTSIDE the lease transaction (no long-held locks)
-    for (const orphan of orphans) {
-      const attemptCount = (orphan.reconciliation_attempt_count || 0) + 1;
-
-      console.log(`[RECOVERY WORKER ${workerId}] Processing orphan TX #${orphan.id} (status: ${orphan.publish_status}, campaign: ${orphan.campaign_id}, attempt: ${attemptCount})`);
+  await DistributedLockService.withAdvisoryLock(
+    dbPool,
+    DistributedLockService.LOCKS.ORPHAN_META_TX_RECOVERY,
+    'recoverOrphanedMetaTransactions',
+    async () => {
+      // 1. Discover orphaned transactions with lease protection
+      const client = await dbPool.connect();
+      let orphans: any[] = [];
 
       try {
-        if (orphan.publish_status === 'PRECHECK_RUNNING') {
-          // PRECHECK_RUNNING: dispatch intent was created but Meta API was never called.
-          // Safe to re-dispatch IF no Meta objects have been created yet.
+        await client.query('BEGIN');
 
-          const hasMetaObjects = orphan.meta_campaign_id || orphan.meta_adset_id || orphan.meta_creative_id || orphan.meta_ad_id;
+        const orphanRes = await client.query(`
+          SELECT id, campaign_id, publish_status, correlation_id, idempotency_key,
+                 meta_campaign_id, meta_adset_id, meta_creative_id, meta_ad_id,
+                 publish_attempt, reconciliation_attempt_count, updated_at
+          FROM meta_publishing_transactions
+          WHERE publish_status IN ('PRECHECK_RUNNING', 'PUBLISHING')
+          AND updated_at < CURRENT_TIMESTAMP - INTERVAL '${RECOVERY_LEASE_STALE_THRESHOLD_SECONDS} seconds'
+          AND (reconciliation_lease_expires_at IS NULL OR reconciliation_lease_expires_at <= CURRENT_TIMESTAMP)
+          AND (reconciliation_attempt_count IS NULL OR reconciliation_attempt_count < ${RECOVERY_MAX_ATTEMPTS})
+          ORDER BY updated_at ASC, id ASC
+          LIMIT 10
+          FOR UPDATE SKIP LOCKED
+        `);
 
-          if (hasMetaObjects) {
-            // Meta objects exist despite PRECHECK_RUNNING — should not happen, but be safe.
-            // Transition to EXTERNAL_OUTCOME_UNKNOWN for reconciliation.
-            console.warn(`[RECOVERY WORKER] TX #${orphan.id}: PRECHECK_RUNNING but Meta objects exist. Transitioning to EXTERNAL_OUTCOME_UNKNOWN.`);
+        if (orphanRes.rows.length === 0) {
+          await client.query('COMMIT');
+          return;
+        }
+
+        // 2. Claim lease on all discovered orphans
+        for (const orphan of orphanRes.rows) {
+          await client.query(`
+            UPDATE meta_publishing_transactions
+            SET reconciliation_started_at = CURRENT_TIMESTAMP,
+                reconciliation_lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '${RECOVERY_LEASE_DURATION_SECONDS} seconds',
+                reconciliation_attempt_count = COALESCE(reconciliation_attempt_count, 0) + 1,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $1
+          `, [orphan.id]);
+        }
+
+        await client.query('COMMIT');
+        orphans = orphanRes.rows;
+      } catch (err: any) {
+        await client.query('ROLLBACK');
+        if (err.code === '55P03') {
+          // Another worker holds the lock — expected, not an error
+          return;
+        }
+        throw err;
+      } finally {
+        client.release();
+      }
+
+      // 3. Process each orphan OUTSIDE the lease transaction (no long-held locks)
+      for (const orphan of orphans) {
+        const attemptCount = (orphan.reconciliation_attempt_count || 0) + 1;
+
+        console.log(`[RECOVERY WORKER ${workerId}] Processing orphan TX #${orphan.id} (status: ${orphan.publish_status}, campaign: ${orphan.campaign_id}, attempt: ${attemptCount})`);
+
+        try {
+          if (orphan.publish_status === 'PRECHECK_RUNNING') {
+            // PRECHECK_RUNNING: dispatch intent was created but Meta API was never called.
+            // Safe to re-dispatch IF no Meta objects have been created yet.
+
+            const hasMetaObjects = orphan.meta_campaign_id || orphan.meta_adset_id || orphan.meta_creative_id || orphan.meta_ad_id;
+
+            if (hasMetaObjects) {
+              // Meta objects exist despite PRECHECK_RUNNING — should not happen, but be safe.
+              // Transition to EXTERNAL_OUTCOME_UNKNOWN for reconciliation.
+              console.warn(`[RECOVERY WORKER] TX #${orphan.id}: PRECHECK_RUNNING but Meta objects exist. Transitioning to EXTERNAL_OUTCOME_UNKNOWN.`);
+              await dbPool.query(`
+                UPDATE meta_publishing_transactions
+                SET publish_status = 'EXTERNAL_OUTCOME_UNKNOWN', updated_at = CURRENT_TIMESTAMP
+                WHERE id = $1
+              `, [orphan.id]);
+
+              // Log audit event
+              await dbPool.query(`
+                INSERT INTO meta_publishing_events (transaction_id, campaign_id, event_type, from_state, to_state, actor_type, actor_id, reason, correlation_id, metadata)
+                VALUES ($1, $2, 'RECOVERY_TRANSITION', $3, 'EXTERNAL_OUTCOME_UNKNOWN', 'system', $4, $5, $6, $7)
+              `, [
+                orphan.id, orphan.campaign_id, orphan.publish_status, workerId,
+                'PRECHECK_RUNNING with existing Meta objects detected by recovery worker',
+                orphan.correlation_id,
+                JSON.stringify({ attempt: attemptCount, meta_campaign_id: orphan.meta_campaign_id })
+              ]);
+            } else {
+              // No Meta objects exist — safe to re-dispatch
+              console.log(`[RECOVERY WORKER] TX #${orphan.id}: Re-dispatching orphaned PRECHECK_RUNNING campaign #${orphan.campaign_id}`);
+
+              // Log audit event BEFORE dispatch attempt
+              await dbPool.query(`
+                INSERT INTO meta_publishing_events (transaction_id, campaign_id, event_type, from_state, to_state, actor_type, actor_id, reason, correlation_id, metadata)
+                VALUES ($1, $2, 'RECOVERY_DISPATCH', $3, 'PRECHECK_RUNNING', 'system', $4, $5, $6, $7)
+              `, [
+                orphan.id, orphan.campaign_id, orphan.publish_status, workerId,
+                'Recovery worker re-dispatching orphaned PRECHECK_RUNNING transaction',
+                orphan.correlation_id,
+                JSON.stringify({ attempt: attemptCount, idempotency_key: orphan.idempotency_key })
+              ]);
+
+              // Re-dispatch. dispatchMetaCampaign handles its own idempotency:
+              // - INSERT ON CONFLICT DO NOTHING on idempotency_key
+              // - SELECT FOR UPDATE NOWAIT for lease claim
+              // - 5-minute lease expiry check (our recovery only fires after 5 min, so lease is expired)
+              // - correlation_id mismatch detection for re-entry
+              try {
+                await dispatchMetaCampaign(orphan.campaign_id, { protocol: 'https', get: () => 'localhost' } as any);
+              } catch (dispatchErr: any) {
+                console.error(`[RECOVERY WORKER] TX #${orphan.id}: Re-dispatch failed:`, dispatchErr.message);
+                // dispatchMetaCampaign internally handles its own error recording and DLQ.
+                // The recovery worker's job is only to trigger the attempt.
+              }
+            }
+          } else if (orphan.publish_status === 'PUBLISHING') {
+            // PUBLISHING: dispatch execution was underway when the worker crashed.
+            // Meta objects MAY already exist. NOT safe to blindly re-dispatch.
+            // Transition to EXTERNAL_OUTCOME_UNKNOWN for safe reconciliation by processMetaReconciliation.
+
+            console.warn(`[RECOVERY WORKER] TX #${orphan.id}: Stale PUBLISHING state. Transitioning to EXTERNAL_OUTCOME_UNKNOWN for reconciliation.`);
+
             await dbPool.query(`
               UPDATE meta_publishing_transactions
               SET publish_status = 'EXTERNAL_OUTCOME_UNKNOWN', updated_at = CURRENT_TIMESTAMP
               WHERE id = $1
             `, [orphan.id]);
+
+            // Transition campaign state if possible
+            if (orphan.campaign_id) {
+              try {
+                await transitionCampaignState({
+                  campaignId: Number(orphan.campaign_id),
+                  to: 'EXTERNAL_OUTCOME_UNKNOWN',
+                  reason: 'Recovery worker detected stale PUBLISHING state — transitioning to EXTERNAL_OUTCOME_UNKNOWN for reconciliation',
+                  actorType: 'system'
+                });
+              } catch (fsmErr: any) {
+                // FSM transition may fail if campaign is already in a compatible state — non-fatal
+                console.warn(`[RECOVERY WORKER] TX #${orphan.id}: Campaign FSM transition failed (non-fatal):`, fsmErr.message);
+              }
+            }
 
             // Log audit event
             await dbPool.query(`
@@ -17067,102 +17449,35 @@ export const recoverOrphanedMetaTransactions = async (overridePool?: any) => {
               VALUES ($1, $2, 'RECOVERY_TRANSITION', $3, 'EXTERNAL_OUTCOME_UNKNOWN', 'system', $4, $5, $6, $7)
             `, [
               orphan.id, orphan.campaign_id, orphan.publish_status, workerId,
-              'PRECHECK_RUNNING with existing Meta objects detected by recovery worker',
+              'Stale PUBLISHING detected by recovery worker — Meta objects may exist, requires reconciliation',
               orphan.correlation_id,
-              JSON.stringify({ attempt: attemptCount, meta_campaign_id: orphan.meta_campaign_id })
+              JSON.stringify({
+                attempt: attemptCount,
+                meta_campaign_id: orphan.meta_campaign_id,
+                meta_adset_id: orphan.meta_adset_id,
+                meta_ad_id: orphan.meta_ad_id
+              })
             ]);
-          } else {
-            // No Meta objects exist — safe to re-dispatch
-            console.log(`[RECOVERY WORKER] TX #${orphan.id}: Re-dispatching orphaned PRECHECK_RUNNING campaign #${orphan.campaign_id}`);
-
-            // Log audit event BEFORE dispatch attempt
-            await dbPool.query(`
-              INSERT INTO meta_publishing_events (transaction_id, campaign_id, event_type, from_state, to_state, actor_type, actor_id, reason, correlation_id, metadata)
-              VALUES ($1, $2, 'RECOVERY_DISPATCH', $3, 'PRECHECK_RUNNING', 'system', $4, $5, $6, $7)
-            `, [
-              orphan.id, orphan.campaign_id, orphan.publish_status, workerId,
-              'Recovery worker re-dispatching orphaned PRECHECK_RUNNING transaction',
-              orphan.correlation_id,
-              JSON.stringify({ attempt: attemptCount, idempotency_key: orphan.idempotency_key })
-            ]);
-
-            // Re-dispatch. dispatchMetaCampaign handles its own idempotency:
-            // - INSERT ON CONFLICT DO NOTHING on idempotency_key
-            // - SELECT FOR UPDATE NOWAIT for lease claim
-            // - 5-minute lease expiry check (our recovery only fires after 5 min, so lease is expired)
-            // - correlation_id mismatch detection for re-entry
-            try {
-              await dispatchMetaCampaign(orphan.campaign_id, { protocol: 'https', get: () => 'localhost' } as any);
-            } catch (dispatchErr: any) {
-              console.error(`[RECOVERY WORKER] TX #${orphan.id}: Re-dispatch failed:`, dispatchErr.message);
-              // dispatchMetaCampaign internally handles its own error recording and DLQ.
-              // The recovery worker's job is only to trigger the attempt.
-            }
           }
-        } else if (orphan.publish_status === 'PUBLISHING') {
-          // PUBLISHING: dispatch execution was underway when the worker crashed.
-          // Meta objects MAY already exist. NOT safe to blindly re-dispatch.
-          // Transition to EXTERNAL_OUTCOME_UNKNOWN for safe reconciliation by processMetaReconciliation.
+        } catch (orphanErr: any) {
+          console.error(`[RECOVERY WORKER] TX #${orphan.id}: Recovery processing failed:`, orphanErr.message);
 
-          console.warn(`[RECOVERY WORKER] TX #${orphan.id}: Stale PUBLISHING state. Transitioning to EXTERNAL_OUTCOME_UNKNOWN for reconciliation.`);
-
-          await dbPool.query(`
-            UPDATE meta_publishing_transactions
-            SET publish_status = 'EXTERNAL_OUTCOME_UNKNOWN', updated_at = CURRENT_TIMESTAMP
-            WHERE id = $1
-          `, [orphan.id]);
-
-          // Transition campaign state if possible
-          if (orphan.campaign_id) {
-            try {
-              await transitionCampaignState({
-                campaignId: Number(orphan.campaign_id),
-                to: 'EXTERNAL_OUTCOME_UNKNOWN',
-                reason: 'Recovery worker detected stale PUBLISHING state — transitioning to EXTERNAL_OUTCOME_UNKNOWN for reconciliation',
-                actorType: 'system'
-              });
-            } catch (fsmErr: any) {
-              // FSM transition may fail if campaign is already in a compatible state — non-fatal
-              console.warn(`[RECOVERY WORKER] TX #${orphan.id}: Campaign FSM transition failed (non-fatal):`, fsmErr.message);
-            }
-          }
-
-          // Log audit event
+          // Record recovery failure as audit event
           await dbPool.query(`
             INSERT INTO meta_publishing_events (transaction_id, campaign_id, event_type, from_state, to_state, actor_type, actor_id, reason, correlation_id, metadata)
-            VALUES ($1, $2, 'RECOVERY_TRANSITION', $3, 'EXTERNAL_OUTCOME_UNKNOWN', 'system', $4, $5, $6, $7)
+            VALUES ($1, $2, 'RECOVERY_FAILED', $3, $3, 'system', $4, $5, $6, $7)
           `, [
             orphan.id, orphan.campaign_id, orphan.publish_status, workerId,
-            'Stale PUBLISHING detected by recovery worker — Meta objects may exist, requires reconciliation',
+            'Recovery worker failed: ' + (orphanErr.message || 'Unknown error'),
             orphan.correlation_id,
-            JSON.stringify({
-              attempt: attemptCount,
-              meta_campaign_id: orphan.meta_campaign_id,
-              meta_adset_id: orphan.meta_adset_id,
-              meta_ad_id: orphan.meta_ad_id
-            })
-          ]);
+            JSON.stringify({ attempt: attemptCount, error: orphanErr.message })
+          ]).catch(logErr => console.error('[RECOVERY WORKER] Failed to log recovery failure:', logErr));
         }
-      } catch (orphanErr: any) {
-        console.error(`[RECOVERY WORKER] TX #${orphan.id}: Recovery processing failed:`, orphanErr.message);
-
-        // Record recovery failure as audit event
-        await dbPool.query(`
-          INSERT INTO meta_publishing_events (transaction_id, campaign_id, event_type, from_state, to_state, actor_type, actor_id, reason, correlation_id, metadata)
-          VALUES ($1, $2, 'RECOVERY_FAILED', $3, $3, 'system', $4, $5, $6, $7)
-        `, [
-          orphan.id, orphan.campaign_id, orphan.publish_status, workerId,
-          'Recovery worker failed: ' + (orphanErr.message || 'Unknown error'),
-          orphan.correlation_id,
-          JSON.stringify({ attempt: attemptCount, error: orphanErr.message })
-        ]).catch(logErr => console.error('[RECOVERY WORKER] Failed to log recovery failure:', logErr));
       }
-    }
 
-    console.log(`[RECOVERY WORKER ${workerId}] Cycle complete. Processed ${orphans.length} orphan(s).`);
-  } catch (err) {
-    console.error('[RECOVERY WORKER ERROR]', err);
-  }
+      console.log(`[RECOVERY WORKER ${workerId}] Cycle complete. Processed ${orphans.length} orphan(s).`);
+    }
+  );
 };
 
 // Run every 2 minutes — orphans are only eligible after 5 min (RECOVERY_LEASE_STALE_THRESHOLD_SECONDS)

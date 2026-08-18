@@ -76,6 +76,22 @@ export class DoubleEntryLedgerService {
 
     // Floating-point delta check (within 0.001)
     if (Math.abs(totalDebits - totalCredits) > 0.009) {
+      try {
+        const { MetricsRegistry } = await import('./observability/metricsRegistry.js');
+        const { AlertService } = await import('./observability/alertService.js');
+        MetricsRegistry.recordLedgerImbalance();
+        AlertService.emitAlert(
+          'LEDGER_IMBALANCE',
+          'CRITICAL',
+          'Double-Entry Ledger Imbalance Violation',
+          `Transaction ${transactionRef} rejected: Debits (${totalDebits.toFixed(2)}) != Credits (${totalCredits.toFixed(2)})`,
+          'Investigate transaction construction and prevent corrupted ledger insertion.',
+          { transactionRef, totalDebits, totalCredits, lines }
+        );
+      } catch (e) {
+        // Continue to throw error
+      }
+
       throw new Error(
         `[LEDGER UNBALANCED] Transaction is unbalanced. Debits (${totalDebits.toFixed(2)}) != Credits (${totalCredits.toFixed(2)})`
       );
@@ -88,6 +104,13 @@ export class DoubleEntryLedgerService {
     );
 
     if (existingEntry.rows.length > 0) {
+      try {
+        const { MetricsRegistry } = await import('./observability/metricsRegistry.js');
+        MetricsRegistry.recordDuplicateTransactionAttempt();
+      } catch (e) {
+        // Continue
+      }
+
       return {
         entryId: existingEntry.rows[0].id,
         transactionRef,
