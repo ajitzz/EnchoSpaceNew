@@ -8611,7 +8611,7 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
           special_ad_category_country: ['US', 'IN'],
           is_adset_budget_sharing_enabled: false,
           buying_type: 'AUCTION',
-          status: 'PAUSED'
+          status: 'ACTIVE'
       };
       campData = await executeMetaRequest('campaign_creation', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/campaigns`, campPayload);
     }
@@ -8672,7 +8672,7 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
         promoted_object: { page_id: pageId },
         bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
         targeting: MetaTargetMapper.mapTargeting(campaign, campaign), // Note: campaign has listing fields injected
-        status: 'PAUSED'
+        status: 'ACTIVE'
       };
       adSetData = await executeMetaRequest('adset_creation', `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${cleanAdAccountId}/adsets`, adSetPayload);
     }
