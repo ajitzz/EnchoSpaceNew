@@ -27,7 +27,7 @@ import { MetaAdProvider, metaAdProvider } from '../lib/providers/meta/MetaAdProv
 import { GoogleAdsProvider, googleAdsProvider } from '../lib/providers/google/GoogleAdsProvider.js';
 import { MetaControlPlaneService } from '../lib/metaControlPlaneService.js';
 import { MetaExternalSyncEngine } from '../lib/metaExternalSyncEngine.js';
-import { ensureMarketingSchema, dispatchMetaCampaign } from '../../server.js';
+import { ensureMarketingSchema, dispatchMetaCampaign, executeCampaignStateMachine, computeCampaignApprovalHash } from '../../server.js';
 import { ProviderPublishRequest, ProviderControlRequest } from '../lib/providers/types.js';
 
 const { Pool } = pg;
@@ -328,5 +328,107 @@ describe('PHASE 3.7C: META AUTO-ACTIVATION & DELIVERY TRUTH REGRESSION SUITE', (
         pool
       )
     ).rejects.toThrow(/Tenant isolation prevents access/);
+  });
+
+  it('TEST 16: Clean End-to-End Application Approval FSM Flow -> executeCampaignStateMachine -> CAMPAIGN_LIVE without direct SQL mutation', async () => {
+    // 1. Seed a brand new draft campaign with complete preflight attributes
+    const seed = Math.floor(1000000 + Math.random() * 8000000);
+    const draftRes = await pool.query(`
+      INSERT INTO host_marketing_campaigns (
+        host_id, listing_id, title, description, feed_description, ad_format, platforms,
+        budget, status, admin_approved, policy_cleared, payment_status, escrow_status,
+        target_locations, target_radius_km, target_audience_persona, media_urls
+      ) VALUES (
+        $1, $2, 'FSM End-to-End Test Campaign', 'Luxurious stay in Beverly Hills with private pool and scenic views.',
+        'Special offer on luxury Beverly Hills stay! Book now for private luxury.', 'post',
+        '["facebook_feed", "instagram_feed"]'::jsonb, 1500, 'draft',
+        false, false, 'pending', 'holding', 'Mumbai', 50, 'everyone',
+        '["https://encho-space-897722694978-eu-north-1-an.s3.eu-north-1.amazonaws.com/listings/1787113144406-IMG_2258.jpg"]'::jsonb
+      ) RETURNING *
+    `, [hostAId, listingAId]);
+    const seededCamp = draftRes.rows[0];
+    const fsmCampId = seededCamp.id;
+
+    // Seed financial contract
+    await pool.query(`
+      INSERT INTO campaign_financial_contracts (
+        campaign_id, gross_host_charge, encho_fee_amount, meta_authorized_spend,
+        meta_actual_spend, meta_remaining_authorization, currency
+      ) VALUES ($1, 150000, 22500, 127500, 0, 127500, 'INR')
+      ON CONFLICT (campaign_id) DO NOTHING
+    `, [fsmCampId]);
+
+    // 2. Compute valid approval snapshot and hash
+    const campaignToSign = {
+      ...seededCamp,
+      admin_approved: true,
+      policy_cleared: true,
+      escrow_status: 'released',
+      payment_status: 'paid'
+    };
+    const { hash: approvalHash, snapshot: approvalSnapshot } = computeCampaignApprovalHash(campaignToSign);
+
+    await pool.query(`
+      UPDATE host_marketing_campaigns
+      SET admin_approved = true,
+          policy_cleared = true,
+          policy_cleared_at = CURRENT_TIMESTAMP,
+          payment_status = 'paid',
+          escrow_status = 'released',
+          escrow_release_at = CURRENT_TIMESTAMP,
+          approval_snapshot = $1,
+          approval_hash = $2
+      WHERE id = $3
+    `, [JSON.stringify(approvalSnapshot), approvalHash, fsmCampId]);
+
+    const req = {
+      user: { id: adminId, role: 'admin' },
+      ip: '127.0.0.1',
+      headers: {}
+    };
+
+    // Execute through the real application state machine
+    await executeCampaignStateMachine(fsmCampId, 'ADMIN_APPROVE', req);
+
+    // 3. Verify final DB state reached CAMPAIGN_LIVE solely via application FSM
+    const finalCampRes = await pool.query(
+      'SELECT status, meta_status, meta_effective_status, meta_campaign_id, meta_adset_id, meta_ad_id FROM host_marketing_campaigns WHERE id = $1',
+      [fsmCampId]
+    );
+    const finalCamp = finalCampRes.rows[0];
+
+    expect(finalCamp.status).toBe('CAMPAIGN_LIVE');
+    expect(finalCamp.meta_status).toBe('ACTIVE');
+    expect(finalCamp.meta_effective_status).toBe('ACTIVE');
+    expect(finalCamp.meta_campaign_id).toBeDefined();
+    expect(finalCamp.meta_adset_id).toBeDefined();
+
+    // 4. Verify FSM transition events in meta_publishing_events
+    const eventsRes = await pool.query(
+      'SELECT event_type, from_state, to_state FROM meta_publishing_events WHERE campaign_id = $1 ORDER BY id ASC',
+      [fsmCampId]
+    );
+    const eventTypes = eventsRes.rows.map(r => r.event_type);
+    expect(eventTypes).toContain('STATE_TRANSITION');
+    expect(eventTypes).toContain('AUTO_ACTIVATION_SUCCESS');
+  });
+
+  it('TEST 17: Provider Entities Ad-ID Synchronization & Reconciliation Invariant Assertion', async () => {
+    // Check provider_entities for all campaigns
+    const metaEntities = await pool.query(
+      `SELECT campaign_id, entity_type, external_id, parent_entity_id, configured_status, effective_status
+       FROM provider_entities
+       WHERE provider = 'META'
+       ORDER BY id ASC`
+    );
+
+    // Assert that every AD entity has a valid parent_entity_id (ADSET) or valid format
+    for (const entity of metaEntities.rows) {
+      expect(entity.external_id).toBeTruthy();
+      expect(entity.configured_status).toBe('ACTIVE');
+      if (entity.entity_type === 'AD') {
+        expect(entity.parent_entity_id).toBeTruthy();
+      }
+    }
   });
 });

@@ -6990,7 +6990,7 @@ async function dispatchGoogleAdsCampaign(campaignId: number, req: any) {
 
 
 // Milestone 3: The Campaign State Machine (Idempotent Launcher)
-async function executeCampaignStateMachine(campaignId: number, triggerEvent: string, req: any) {
+export async function executeCampaignStateMachine(campaignId: number, triggerEvent: string, req: any) {
     try {
         console.log(`[STATE MACHINE] Campaign #${campaignId} | Event: ${triggerEvent}`);
 
@@ -8912,14 +8912,23 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
     // Upsert provider_entities to maintain provider abstraction dual-read table
     try {
       await pool.query(`
-        INSERT INTO provider_entities (campaign_id, provider, entity_type, external_id, configured_status, effective_status)
+        INSERT INTO provider_entities (campaign_id, provider, entity_type, external_id, parent_entity_id, configured_status, effective_status)
         VALUES
-          ($1, 'META', 'CAMPAIGN', $2, 'ACTIVE', $3),
-          ($1, 'META', 'ADSET', $4, 'ACTIVE', $3),
-          ($1, 'META', 'AD', $5, 'ACTIVE', $3)
+          ($1, 'META', 'CAMPAIGN', $2, NULL, 'ACTIVE', $3),
+          ($1, 'META', 'ADSET', $4, $2, 'ACTIVE', $3)
         ON CONFLICT (provider, external_id)
-        DO UPDATE SET configured_status = 'ACTIVE', effective_status = $3, updated_at = CURRENT_TIMESTAMP
-      `, [campaignId, rollbackState.metaCampaignId, externalVerifiedStatus, rollbackState.metaAdSetId, primaryAdId]);
+        DO UPDATE SET configured_status = 'ACTIVE', effective_status = $3, parent_entity_id = EXCLUDED.parent_entity_id, updated_at = CURRENT_TIMESTAMP
+      `, [campaignId, rollbackState.metaCampaignId, externalVerifiedStatus, rollbackState.metaAdSetId]);
+
+      // Upsert all active ads created under this adset
+      for (const adId of createdAdIds) {
+        await pool.query(`
+          INSERT INTO provider_entities (campaign_id, provider, entity_type, external_id, parent_entity_id, configured_status, effective_status)
+          VALUES ($1, 'META', 'AD', $2, $3, 'ACTIVE', $4)
+          ON CONFLICT (provider, external_id)
+          DO UPDATE SET configured_status = 'ACTIVE', effective_status = $4, parent_entity_id = EXCLUDED.parent_entity_id, updated_at = CURRENT_TIMESTAMP
+        `, [campaignId, adId, rollbackState.metaAdSetId, externalVerifiedStatus]);
+      }
     } catch (peErr: any) {
       console.warn(`[PROVIDER ENTITIES] Non-blocking entity registration:`, peErr.message);
     }
