@@ -225,7 +225,7 @@ describe('PHASE 2.7 MILESTONE 8 — SAFE META CAMPAIGN MANAGEMENT CONTROL PLANE'
     );
     expect(firstRes.success).toBe(true);
     expect(firstRes.reused_idempotent_result).toBeFalsy();
-    expect(postCalls).toBe(1);
+    expect(postCalls).toBe(2); // 1 POST for campaign + 1 POST for adset
 
     // Second call with same idempotency key: Should return idempotent reuse without re-mutating Meta
     const secondRes = await MetaControlPlaneService.resumeCampaign(
@@ -236,7 +236,7 @@ describe('PHASE 2.7 MILESTONE 8 — SAFE META CAMPAIGN MANAGEMENT CONTROL PLANE'
     );
     expect(secondRes.success).toBe(true);
     expect(secondRes.reused_idempotent_result).toBe(true);
-    expect(postCalls).toBe(1); // Did not make a 2nd POST mutation
+    expect(postCalls).toBe(2); // Did not make a 2nd round of POST mutations
   });
 
   it('5. Executes Authoritative RESYNC & RECONCILE Actions', async () => {

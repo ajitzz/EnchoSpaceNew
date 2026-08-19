@@ -646,6 +646,26 @@ export class MetaControlPlaneService {
             // Test / simulated mode
             mutationSuccess = true;
           }
+
+          // If activating a Campaign, also ensure the child AdSet is unpaused on Meta
+          if ((action === 'RESUME' || action === 'CALENDAR_AUTO_RESUME') && lockedCamp.meta_adset_id && lockedCamp.meta_adset_id !== 'MOCK_ID') {
+            try {
+              if (options.customGraphFetcher) {
+                await options.customGraphFetcher(`/${lockedCamp.meta_adset_id}?status=ACTIVE`, {
+                  method: 'POST',
+                  body: JSON.stringify({ status: 'ACTIVE' })
+                });
+              } else if (accessToken) {
+                await fetch(`${baseUrl}/${lockedCamp.meta_adset_id}?status=ACTIVE&access_token=${accessToken}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ status: 'ACTIVE', access_token: accessToken })
+                });
+              }
+            } catch (adSetErr: any) {
+              console.warn(`[META CONTROL PLANE] Non-blocking adset activation error for ${lockedCamp.meta_adset_id}:`, adSetErr.message);
+            }
+          }
         } catch (mutErr: any) {
           console.error(`[META CONTROL PLANE] Unexpected mutation error:`, mutErr.message);
           isUnknownOutcome = true;

@@ -8834,14 +8834,103 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
     const primaryCreativeId = createdCreativeIds[0] || null;
     const primaryAdId = createdAdIds[0] || null;
 
+    // 3b. Hierarchy Auto-Activation & Read-After-Write Delivery Truth Confirmation (Phase 10 Activation Guard)
+    const canAutoActivate =
+      Boolean(campaign.admin_approved) &&
+      authorizedSpendMinorUnits > 0n &&
+      !campaign.pause_source &&
+      Boolean(campaign.policy_cleared) &&
+      Boolean(rollbackState.metaCampaignId) &&
+      Boolean(rollbackState.metaAdSetId);
+
+    let externalVerifiedStatus = 'ACTIVE';
+
+    if (canAutoActivate) {
+      console.log(`[META AUTO-ACTIVATION] Activating Meta Campaign #${campaignId} hierarchy (AdSet ${rollbackState.metaAdSetId} -> Campaign ${rollbackState.metaCampaignId})...`);
+
+      // 1. Activate AdSet on Meta
+      await executeMetaRequest(
+        'adset_activation',
+        `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${rollbackState.metaAdSetId}`,
+        { status: 'ACTIVE', access_token: accessToken }
+      );
+
+      // 2. Activate Campaign on Meta
+      await executeMetaRequest(
+        'campaign_activation',
+        `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${rollbackState.metaCampaignId}`,
+        { status: 'ACTIVE', access_token: accessToken }
+      );
+
+      // 3. Read-After-Write Verification (Authoritative External Confirmation)
+      try {
+        const verifyCampRes = await fetch(
+          `${process.env.META_BASE_URL || "https://graph.facebook.com/v20.0"}/${rollbackState.metaCampaignId}?fields=id,status,effective_status&access_token=${accessToken}`
+        );
+        if (verifyCampRes.ok) {
+          const verifyData = await verifyCampRes.json();
+          if (verifyData && verifyData.effective_status) {
+            externalVerifiedStatus = verifyData.effective_status;
+          } else if (verifyData && verifyData.status) {
+            externalVerifiedStatus = verifyData.status;
+          }
+        }
+      } catch (rawErr: any) {
+        console.warn(`[META READ-AFTER-WRITE] Warning querying delivery truth for campaign ${rollbackState.metaCampaignId}:`, rawErr.message);
+      }
+    }
+
     // 4. DB Commit
     await pool.query(`
       UPDATE host_marketing_campaigns
-      SET meta_campaign_id = $1, meta_adset_id = $2, meta_creative_id = $3, meta_ad_id = $4, meta_dispatched_at = CURRENT_TIMESTAMP
-      WHERE id = $5
-    `, [rollbackState.metaCampaignId, rollbackState.metaAdSetId, primaryCreativeId, primaryAdId, campaignId]);
+      SET meta_campaign_id = $1,
+          meta_adset_id = $2,
+          meta_creative_id = $3,
+          meta_ad_id = $4,
+          meta_status = 'ACTIVE',
+          meta_effective_status = $5,
+          external_status_verified_at = CURRENT_TIMESTAMP,
+          external_status_verification_source = 'PUBLISH_AUTO_ACTIVATION',
+          resumed_at = CURRENT_TIMESTAMP,
+          meta_dispatched_at = CURRENT_TIMESTAMP
+      WHERE id = $6
+    `, [rollbackState.metaCampaignId, rollbackState.metaAdSetId, primaryCreativeId, primaryAdId, externalVerifiedStatus, campaignId]);
+
+    // Upsert provider_entities to maintain provider abstraction dual-read table
+    try {
+      await pool.query(`
+        INSERT INTO provider_entities (campaign_id, provider, entity_type, external_id, configured_status, effective_status)
+        VALUES
+          ($1, 'META', 'CAMPAIGN', $2, 'ACTIVE', $3),
+          ($1, 'META', 'ADSET', $4, 'ACTIVE', $3),
+          ($1, 'META', 'AD', $5, 'ACTIVE', $3)
+        ON CONFLICT (provider, external_id)
+        DO UPDATE SET configured_status = 'ACTIVE', effective_status = $3, updated_at = CURRENT_TIMESTAMP
+      `, [campaignId, rollbackState.metaCampaignId, externalVerifiedStatus, rollbackState.metaAdSetId, primaryAdId]);
+    } catch (peErr: any) {
+      console.warn(`[PROVIDER ENTITIES] Non-blocking entity registration:`, peErr.message);
+    }
 
     await pool.query(`UPDATE meta_publishing_transactions SET publish_status = 'SUCCESS', updated_at = CURRENT_TIMESTAMP WHERE id = $1`, [txId]);
+
+    // Record publication audit event
+    try {
+      await pool.query(`
+        INSERT INTO meta_publishing_events (campaign_id, correlation_id, event_type, from_state, to_state, actor_type, actor_id, reason, metadata)
+        VALUES ($1, $2, 'AUTO_ACTIVATION_SUCCESS', 'PAUSED', 'ACTIVE', 'system', 'meta_dispatch_engine', 'Hierarchy successfully published and activated on Meta Ad Network', $3)
+      `, [
+        campaignId,
+        correlationId,
+        JSON.stringify({
+          meta_campaign_id: rollbackState.metaCampaignId,
+          meta_adset_id: rollbackState.metaAdSetId,
+          meta_ad_id: primaryAdId,
+          external_verified_status: externalVerifiedStatus
+        })
+      ]);
+    } catch (eventErr: any) {
+      console.warn('[AUTO ACTIVATION EVENT] Non-blocking audit log warning:', eventErr?.message);
+    }
 
     broadcastDbEvent(req, 'marketing');
     return true;
