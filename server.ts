@@ -8727,6 +8727,19 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
       );
 
       let variantId: number;
+      if (variantRes.rows.length > 0 && variantRes.rows[0].is_published && variantRes.rows[0].meta_creative_id && variantRes.rows[0].meta_ad_id) {
+        const existingVariant = variantRes.rows[0];
+        variantId = existingVariant.id;
+        createdCreativeIds.push(existingVariant.meta_creative_id);
+        createdAdIds.push(existingVariant.meta_ad_id);
+        if (i === 0) {
+          rollbackState.metaCreativeId = existingVariant.meta_creative_id;
+          rollbackState.metaAdId = existingVariant.meta_ad_id;
+          await pool.query(`UPDATE meta_publishing_transactions SET meta_creative_id = $1, meta_ad_id = $2 WHERE id = $3`, [existingVariant.meta_creative_id, existingVariant.meta_ad_id, txId]);
+        }
+        continue;
+      }
+
       if (variantRes.rows.length === 0) {
         const insRes = await pool.query(
           `INSERT INTO campaign_creative_variants (campaign_id, media_url, media_type, asset_sha256, status, is_published)
