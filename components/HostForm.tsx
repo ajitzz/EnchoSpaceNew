@@ -87,7 +87,10 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
     seo_description: existingListing?.seo_description || '',
     seo_keywords: existingListing?.seo_keywords || '',
     seo_image_url: existingListing?.seo_image_url || '',
-    dynamicPricing: existingListing?.dynamicPricing || { weekendMultiplier: 1.0, seasonalMultiplier: 1.0 }
+    dynamicPricing: existingListing?.dynamicPricing || { weekendMultiplier: 1.0, seasonalMultiplier: 1.0 },
+    amenity_clusters: existingListing?.amenity_clusters || { vibe: [], comfort: [], work: [], culinary: [] },
+    child_safety_specs: existingListing?.child_safety_specs || [],
+    nearby: existingListing?.nearby || []
   });
   
   const [photos, setPhotos] = useState<PhotoData[]>(() => {
@@ -215,6 +218,9 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
       rooms: [...prev.rooms, { 
         id: Math.random().toString(36).substring(2, 9), 
         name: `Luxury Suite ${prev.rooms.length + 1}`, 
+        type: prev.rooms.length === 0 ? 'master' : 'guest',
+        sqft: 450,
+        price_modifier: 1.0,
         price: parseFloat(formData.price) ? Math.round(parseFloat(formData.price) / 2) : 5000, 
         capacity: 2, 
         bedrooms: 1,
@@ -223,6 +229,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
         hasAttachedBathroom: true, 
         hasAc: true, 
         amenities: ['King Bed', 'En-suite Bathroom', 'Ocean View'], 
+        features: ['Panoramic View', 'Smart Lighting', 'Voice Controlled Setup'],
         photos: [] 
       }]
     }));
@@ -450,7 +457,10 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
         amenities: formData.amenities,
         lat: formData.lat,
         lng: formData.lng,
-        dynamicPricing: formData.dynamicPricing
+        dynamicPricing: formData.dynamicPricing,
+        amenity_clusters: formData.amenity_clusters,
+        child_safety_specs: formData.child_safety_specs,
+        nearby: formData.nearby
       };
 
       const endpoint = existingListing?.id ? `/api/listings/${existingListing.id}` : '/api/listings';
@@ -1221,6 +1231,58 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                       </div>
 
                       <AmenitiesPicker selected={formData.amenities} onChange={handleAmenitiesChange} />
+                    </div>
+
+                    {/* FAANG Experience Matrix & Safety (amenity_clusters & child_safety_specs) */}
+                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 4.3</span>
+                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Experience & Atmosphere Matrix</h2>
+                        <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Configure your FAANG-grade Experience Bento Grid (Vibe, Comfort, Work, Culinary).</p>
+                      </div>
+
+                      <div className="space-y-4">
+                        {(['vibe', 'comfort', 'work', 'culinary'] as const).map(category => (
+                          <div key={category}>
+                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{category} Architecture</label>
+                            <input 
+                              type="text" 
+                              className="w-full p-4 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm transition-all outline-none" 
+                              placeholder="Comma separated items (e.g. Ambient acoustics, Architectural lighting)"
+                              value={(formData.amenity_clusters[category] || []).join(', ')}
+                              onChange={e => {
+                                const arr = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                                setFormData(prev => ({
+                                  ...prev,
+                                  amenity_clusters: { ...prev.amenity_clusters, [category]: arr }
+                                }));
+                              }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Child Safety & Nearby */}
+                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 4.4</span>
+                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Safety & Geolocation Context</h2>
+                      </div>
+                      
+                      <div>
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Child Safety Profile</label>
+                        <textarea 
+                          rows={2}
+                          className="w-full p-4 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm transition-all outline-none" 
+                          placeholder="Comma separated items (e.g. Pool safety fence available, Tamper-proof smart outlets)"
+                          value={(formData.child_safety_specs || []).join(', ')}
+                          onChange={e => {
+                            const arr = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                            setFormData(prev => ({ ...prev, child_safety_specs: arr }));
+                          }}
+                        />
+                      </div>
                     </div>
                   </div>
                 )}

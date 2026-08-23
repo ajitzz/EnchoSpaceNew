@@ -46,6 +46,7 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
 
 const MapSidebar = lazyWithRetry(() => import('./components/MapSidebar'));
 const ListingDetails = lazyWithRetry(() => import('./components/ListingDetails'));
+const ListingDetailsNew = lazyWithRetry(() => import('./components/ListingDetailsNew').then(module => ({ default: module.ListingDetailsNew })));
 const WishlistPage = lazyWithRetry(() => import('./components/WishlistPage'));
 const BookingPage = lazyWithRetry(() => import('./components/BookingPage'));
 const CheckoutPage = lazyWithRetry(() => import('./components/CheckoutPage').then(module => ({ default: module.CheckoutPage })));
@@ -91,16 +92,21 @@ function useNetworkState() {
   return isOnline;
 }
 
-type ViewState = 'SEARCH' | 'DETAILS' | 'WISHLIST' | 'BOOKING' | 'CHECKOUT' | 'RESERVATIONS' | 'HOSTING' | 'HOSTING_EXPERIENCE' | 'ADMIN' | 'MESSAGES' | 'EXPERIENCES' | 'EXPERIENCE_DETAILS';
+type ViewState = 'SEARCH' | 'DETAILS' | 'DETAILS_BETA' | 'WISHLIST' | 'BOOKING' | 'CHECKOUT' | 'RESERVATIONS' | 'HOSTING' | 'HOSTING_EXPERIENCE' | 'ADMIN' | 'MESSAGES' | 'EXPERIENCES' | 'EXPERIENCE_DETAILS';
 
 let socket: any = null;
 
 interface BookingData {
     moveInDate: string;
+    checkOutDate?: string;
     configuration: string;
     name: string;
     phone: string;
     totalRent: number;
+    baseRent?: number;
+    fees?: number;
+    taxes?: number;
+    guests?: number;
     roomIds?: string[];
     isStartCheckout?: boolean;
 }
@@ -697,6 +703,7 @@ function App() {
             listingId: selectedListing.originalId || selectedListing.id,
             roomId: data.roomIds ? data.roomIds.join(',') : (selectedListing.selectedConfigId || (selectedListing.originalId ? selectedListing.id : undefined)),
             moveInDate: data.moveInDate,
+            checkOutDate: data.checkOutDate,
             configuration: data.configuration,
             name: data.name,
             phone: data.phone,
@@ -1088,47 +1095,45 @@ function App() {
 
     if (currentView === 'DETAILS' && selectedListing) {
         return (
-           <motion.div key="details" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition}>
-           {flyAnimation && (
-              <FlyToAnimation listing={flyAnimation.listing} target={flyAnimation.target} onComplete={handleAnimationComplete} />
-           )}
-           <ListingDetails 
-              listing={selectedListing} 
-              onBack={() => setCurrentView('SEARCH')}
-              similarListings={listings.filter(l => l.id !== selectedListing.id)}
-              onListingClick={handleListingClick}
-              isFavorite={isFavorite(selectedListing.id)}
-              onToggleFavorite={toggleFavorite}
-              onBook={handleBooking}
-              onRequestAuth={() => setShowAuthModal(true)}
-              onContactHost={async () => {
-                  if (!user) {
-                      setShowAuthModal(true);
-                      return;
-                  }
-                  try {
-                      const res = await fetch('/api/threads', {
-                          method: 'POST',
-                          headers: { 
-                              'Content-Type': 'application/json',
-                              'Authorization': `Bearer ${localStorage.getItem('token')}` 
-                          },
-                          body: JSON.stringify({ listingId: selectedListing.originalId || selectedListing.id, hostId: selectedListing.user_id })
-                      });
-                      if (!res.ok) {
-                          const errData = (res.headers.get('content-type')?.includes('json') ? await res.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res.text().catch(() => '')).slice(0, 150) } as any);
-                          console.error('Failed to create thread:', errData);
-                          alert('Could not start conversation. Listing might be unavailable.');
-                          return;
-                      }
-                      setCurrentView('MESSAGES');
-                  } catch (err) {
-                      console.error(err);
-                  }
-              }}
-           />
-           {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
-           </motion.div>
+            <motion.div key="details" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition}>
+                {flyAnimation && (
+                    <FlyToAnimation listing={flyAnimation.listing} target={flyAnimation.target} onComplete={handleAnimationComplete} />
+                )}
+                <ListingDetailsNew 
+                    listing={selectedListing} 
+                    onBack={() => setCurrentView('SEARCH')}
+                    similarListings={listings.filter(l => l.id !== selectedListing.id).slice(0, 4)}
+                    onListingClick={handleListingClick}
+                    isFavorite={isFavorite(selectedListing.id)}
+                    onToggleFavorite={toggleFavorite}
+                    onBook={handleBooking}
+                    onRequestAuth={() => setShowAuthModal(true)}
+                    onContactHost={async () => {
+                        if (!user) {
+                            setShowAuthModal(true);
+                            return;
+                        }
+                        try {
+                            const res = await fetch('/api/threads', {
+                                method: 'POST',
+                                headers: { 
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${localStorage.getItem('token')}` 
+                                },
+                                body: JSON.stringify({ listingId: selectedListing.originalId || selectedListing.id, hostId: selectedListing.user_id })
+                            });
+                            if (!res.ok) {
+                                alert('Could not start conversation.');
+                                return;
+                            }
+                            setCurrentView('MESSAGES');
+                        } catch (err) {
+                            console.error(err);
+                        }
+                    }}
+                />
+                {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
+            </motion.div>
         );
     }
 
@@ -1351,9 +1356,15 @@ function App() {
                     listing={selectedListing}
                     initialData={{
                       moveInDate: lastBooking?.moveInDate || new Date().toISOString().split('T')[0],
+                      checkOutDate: lastBooking?.checkOutDate,
                       configuration: lastBooking?.configuration || 'Entire Place',
                       name: lastBooking?.name || user?.name || '',
                       phone: lastBooking?.phone || '',
+                      totalRent: lastBooking?.totalRent,
+                      baseRent: lastBooking?.baseRent,
+                      fees: lastBooking?.fees,
+                      taxes: lastBooking?.taxes,
+                      guests: lastBooking?.guests
                     }}
                     onSuccess={(finalData) => {
                       handleBooking(finalData);

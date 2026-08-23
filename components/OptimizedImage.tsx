@@ -10,9 +10,18 @@ interface OptimizedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> 
   priority?: boolean;
   onClick?: (e: React.MouseEvent<HTMLImageElement>) => void;
   style?: React.CSSProperties;
+  aspectRatio?: '16:9' | '9:16' | '4:3' | '1:1';
 }
 
-export const getOptimizedUrl = (url: string, width?: number) => {
+export const getOptimizedUrl = (url: string, width?: number, aspectRatio?: '16:9' | '9:16' | '4:3' | '1:1') => {
+    let targetWidth = width || 800;
+    let targetHeight: number | undefined;
+
+    if (aspectRatio) {
+        const [w, h] = aspectRatio.split(':').map(Number);
+        targetHeight = Math.round((targetWidth / w) * h);
+    }
+
     const isUnsplash = url.includes('images.unsplash.com');
     if (isUnsplash) {
         try {
@@ -20,7 +29,8 @@ export const getOptimizedUrl = (url: string, width?: number) => {
             if (!urlObj.searchParams.has('auto')) urlObj.searchParams.set('auto', 'format');
             if (!urlObj.searchParams.has('fit')) urlObj.searchParams.set('fit', 'crop');
             if (!urlObj.searchParams.has('q')) urlObj.searchParams.set('q', '75');
-            if (width) urlObj.searchParams.set('w', width.toString());
+            urlObj.searchParams.set('w', targetWidth.toString());
+            if (targetHeight) urlObj.searchParams.set('h', targetHeight.toString());
             return urlObj.toString();
         } catch {
             return url;
@@ -35,7 +45,11 @@ export const getOptimizedUrl = (url: string, width?: number) => {
             proxyUrl.searchParams.set('url', url);
             proxyUrl.searchParams.set('output', 'webp');
             proxyUrl.searchParams.set('q', '75');
-            if (width) proxyUrl.searchParams.set('w', width.toString());
+            proxyUrl.searchParams.set('w', targetWidth.toString());
+            if (targetHeight) {
+                proxyUrl.searchParams.set('h', targetHeight.toString());
+                proxyUrl.searchParams.set('fit', 'cover');
+            }
             return proxyUrl.toString();
         } catch {
             return url;
@@ -89,15 +103,15 @@ export function OptimizedImage({
 
   const isUnsplash = cleanSrc.includes('images.unsplash.com');
 
-  const optimizedSrc = getOptimizedUrl(cleanSrc);
+  const optimizedSrc = getOptimizedUrl(cleanSrc, undefined, props.aspectRatio);
   
   // Unsplash LQIP
-  const unsplashLqip = isUnsplash ? getOptimizedUrl(cleanSrc, 20) + '&blur=50' : undefined;
+  const unsplashLqip = isUnsplash ? getOptimizedUrl(cleanSrc, 20, props.aspectRatio) + '&blur=50' : undefined;
   const placeholderSrc = lqipDataUri || unsplashLqip;
   
   // Generate responsive srcSet for all optimized images
   const srcSet = [320, 640, 768, 1024, 1536, 2048].map(w => 
-      `${getOptimizedUrl(cleanSrc, w)} ${w}w`
+      `${getOptimizedUrl(cleanSrc, w, props.aspectRatio)} ${w}w`
   ).join(', ');
 
   // Fallback image in case of failure

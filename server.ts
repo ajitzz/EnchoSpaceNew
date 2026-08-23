@@ -3433,7 +3433,7 @@ app.put('/api/listings/:id', authenticateToken, async (req: AuthRequest, res) =>
        return res.status(403).json({ error: 'Forbidden: You do not have permission to modify this listing.' });
     }
 
-    const { title, description, price, type, address, city, imageUrl, imageUrls, videoUrl, rentalMode, rooms, maxGuests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamicPricing, seo_title, seo_description, seo_keywords, seo_image_url } = req.body;
+    const { title, description, price, type, address, city, imageUrl, imageUrls, videoUrl, rentalMode, rooms, maxGuests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamicPricing, seo_title, seo_description, seo_keywords, seo_image_url, amenity_clusters, child_safety_specs, nearby } = req.body;
 
     // Gap 16 check old price
     let oldPrice = 0;
@@ -3446,14 +3446,19 @@ app.put('/api/listings/:id', authenticateToken, async (req: AuthRequest, res) =>
     const safeRooms = typeof rooms === 'string' ? rooms : JSON.stringify(rooms || []);
     const safeAmenities = typeof amenities === 'string' ? amenities : JSON.stringify(amenities || []);
     const safeDynamicPricing = typeof dynamicPricing === 'string' ? dynamicPricing : JSON.stringify(dynamicPricing || {});
+    
+    // New JSONB properties
+    const safeAmenityClusters = typeof amenity_clusters === 'object' ? JSON.stringify(amenity_clusters) : null;
+    const safeChildSafety = Array.isArray(child_safety_specs) ? JSON.stringify(child_safety_specs) : null;
+    const safeNearby = Array.isArray(nearby) ? JSON.stringify(nearby) : null;
 
     if (title) {
       await pool.query(`
         UPDATE listings
-        SET title=$1, description=$2, price=$3, type=$4, address=$5, city=$6, image_url=$7, image_urls=$8, video_url=$9, rental_mode=$10, rooms=$11, max_guests=$12, bedrooms=$13, beds=$14, bathrooms=$15, amenities=$16, lat=$18, lng=$19, dynamic_pricing=$20, seo_title=$21, seo_description=$22, seo_keywords=$23, seo_image_url=$24
+        SET title=$1, description=$2, price=$3, type=$4, address=$5, city=$6, image_url=$7, image_urls=$8, video_url=$9, rental_mode=$10, rooms=$11, max_guests=$12, bedrooms=$13, beds=$14, bathrooms=$15, amenities=$16, lat=$18, lng=$19, dynamic_pricing=$20, seo_title=$21, seo_description=$22, seo_keywords=$23, seo_image_url=$24, amenity_clusters=$25, child_safety_specs=$26, nearby=$27
         WHERE id=$17
       `, [
-        title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode, safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, req.params.id as string, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null
+        title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode, safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, req.params.id as string, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby
       ]);
       if (price) await syncDynamicPricingToMeta(req.params.id, oldPrice, price);
     } else if (videoUrl !== undefined) {
@@ -12343,21 +12348,24 @@ app.post('/api/listings', authenticateToken, async (req: AuthRequest, res) => {
     if (!userId) return res.status(401).json({ error: 'Unauthorized: User ID required.' });
 
     // Validate
-    if (!title || !price || !type || !address || !city) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    if (!title || !price || !type || !city) {
+      return res.status(400).json({ error: 'Title, price, type, and city are required' });
     }
 
-    // Format JSONB fields safely as valid JSON strings
-    const safeImageUrls = typeof imageUrls === 'string' ? imageUrls : JSON.stringify(imageUrls || []);
-    const safeRooms = typeof rooms === 'string' ? rooms : JSON.stringify(rooms || []);
-    const safeAmenities = typeof amenities === 'string' ? amenities : JSON.stringify(amenities || []);
-    const safeDynamicPricing = typeof dynamicPricing === 'string' ? dynamicPricing : JSON.stringify(dynamicPricing || {});
+    const { amenity_clusters, child_safety_specs, nearby } = req.body;
 
-    // Insert into DB
+    const safeAmenities = Array.isArray(amenities) ? JSON.stringify(amenities) : JSON.stringify([]);
+    const safeImageUrls = Array.isArray(imageUrls) ? JSON.stringify(imageUrls) : JSON.stringify([]);
+    const safeDynamicPricing = typeof dynamicPricing === 'object' ? JSON.stringify(dynamicPricing) : JSON.stringify({});
+    const safeRooms = Array.isArray(rooms) ? JSON.stringify(rooms) : null;
+    const safeAmenityClusters = typeof amenity_clusters === 'object' ? JSON.stringify(amenity_clusters) : null;
+    const safeChildSafety = Array.isArray(child_safety_specs) ? JSON.stringify(child_safety_specs) : null;
+    const safeNearby = Array.isArray(nearby) ? JSON.stringify(nearby) : null;
+
     const result = await pool.query(
-      `INSERT INTO listings (user_id, title, description, price, type, address, city, image_url, image_urls, video_url, rental_mode, rooms, max_guests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamic_pricing, seo_title, seo_description, seo_keywords, seo_image_url)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24) RETURNING *`,
-      [userId || null, title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode || 'entire_place', safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null]
+      `INSERT INTO listings (user_id, title, description, price, type, address, city, image_url, image_urls, video_url, rental_mode, rooms, max_guests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamic_pricing, seo_title, seo_description, seo_keywords, seo_image_url, amenity_clusters, child_safety_specs, nearby)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27) RETURNING *`,
+      [userId || null, title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode || 'entire_place', safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby]
     );
 
     const newListing = result.rows[0];
@@ -13780,7 +13788,7 @@ app.post('/api/bookings', authenticateToken, bookingLimiter, async (req: AuthReq
     return res.status(503).json({ error: 'DB not configured' });
   }
   try {
-    const { listingId, roomId, moveInDate, configuration, name, phone, totalRent, userId } = req.body;
+    const { listingId, roomId, moveInDate, checkOutDate, configuration, name, phone, totalRent, userId } = req.body;
 
     // Security check
     const authUserId = req.user?.id;
@@ -13793,12 +13801,15 @@ app.post('/api/bookings', authenticateToken, bookingLimiter, async (req: AuthReq
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const result = await pool.query(`
-      INSERT INTO bookings (user_id, listing_id, room_id, move_in_date, configuration, name, phone, total_rent)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *
-    `, [finalUserId, listingId, roomId || null, moveInDate, configuration || '', name, phone, totalRent]);
+    // Ensure Check Out Date column exists for the new Double Entry Ledger
+    await pool.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS check_out_date VARCHAR(50)');
 
-        const newBooking = result.rows[0];
+    const result = await pool.query(`
+      INSERT INTO bookings (user_id, listing_id, room_id, move_in_date, check_out_date, configuration, name, phone, total_rent)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *
+    `, [finalUserId, listingId, roomId || null, moveInDate, checkOutDate || null, configuration || '', name, phone, totalRent]);
+
+    const newBooking = result.rows[0];
     newBooking.id = String(newBooking.id);
     newBooking.listing_id = String(newBooking.listing_id);
 
@@ -17654,6 +17665,18 @@ app.post('/api/marketing/track/view', async (req, res) => {
         [campaignId || null, `vis_${Math.random().toString(36).substring(2, 10)}`, 'page_view']
      );
      res.json({ success: true });
+  } catch (error) {
+     res.json({ success: true });
+  }
+});
+
+// Fix: AI CRM Telemetry Hole
+app.post('/api/marketing/track/interaction', async (req, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+     const { listingId, event, data } = req.body;
+     // For now, just acknowledge. In Phase 5, this will feed into Lead Intent Scoring.
+     res.json({ success: true, acknowledged: true });
   } catch (error) {
      res.json({ success: true });
   }

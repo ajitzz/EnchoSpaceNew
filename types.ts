@@ -21,6 +21,9 @@ export interface Room {
   amenities?: string[];
   imageUrls?: string[];
   video_url?: string;
+  floor_plan_url?: string;
+  amenity_clusters?: Record<string, string[]>;
+  child_safety_specs?: string[];
   description?: string;
   inventory_count?: number; // Number of available units for this specific room type
   tiers?: RoomTier[]; // Pricing tiers
@@ -68,6 +71,9 @@ export interface Listing {
   imageUrl: string;
   imageUrls?: string[];
   video_url?: string;
+  floor_plan_url?: string;
+  amenity_clusters?: Record<string, string[]>;
+  child_safety_specs?: string[];
   imageCount: number;
   provider?: string;
   isVerified: boolean;

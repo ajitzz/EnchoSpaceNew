@@ -121,6 +121,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   const [traceModalOpen, setTraceModalOpen] = useState(false);
   const [currentTraces, setCurrentTraces] = useState<any[]>([]);
   const [loadingTraces, setLoadingTraces] = useState(false);
+  
+  // Phase 4 - FAANG Feature Control (amenity_clusters, child_safety_specs, nearby)
+  const [editingFeatures, setEditingFeatures] = useState<Listing | null>(null);
+  const [featuresFormData, setFeaturesFormData] = useState<{
+      vibe: string; comfort: string; work: string; culinary: string;
+      child_safety: string; nearby: string;
+  }>({ vibe: '', comfort: '', work: '', culinary: '', child_safety: '', nearby: '' });
 
   const fetchMetaTraces = async (campaignId: number) => {
     setTraceModalOpen(true);
@@ -900,6 +907,75 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
     }
   };
 
+  const openFaangFeaturesModal = (listing: Listing, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingFeatures(listing);
+    setFeaturesFormData({
+        vibe: (listing.amenity_clusters?.vibe || []).join(', '),
+        comfort: (listing.amenity_clusters?.comfort || []).join(', '),
+        work: (listing.amenity_clusters?.work || []).join(', '),
+        culinary: (listing.amenity_clusters?.culinary || []).join(', '),
+        child_safety: (listing.child_safety_specs || []).join(', '),
+        nearby: '' // nearby is an array of objects {name, distance, type}, so editing it simply via string is tricky, we can omit it for basic editing or JSON.stringify it.
+    });
+  };
+
+  const handleSaveFaangFeatures = async () => {
+    if (!editingFeatures) return;
+    try {
+        const payload = {
+            title: editingFeatures.title,
+            description: editingFeatures.description,
+            price: editingFeatures.price,
+            type: editingFeatures.type,
+            address: editingFeatures.address,
+            city: editingFeatures.city,
+            imageUrl: editingFeatures.imageUrl || editingFeatures.image_url,
+            imageUrls: editingFeatures.imageUrls || editingFeatures.image_urls,
+            videoUrl: editingFeatures.videoUrl || editingFeatures.video_url,
+            rentalMode: editingFeatures.rentalMode || editingFeatures.rental_mode,
+            rooms: editingFeatures.rooms,
+            maxGuests: editingFeatures.maxGuests || editingFeatures.max_guests,
+            bedrooms: editingFeatures.bedrooms,
+            beds: editingFeatures.beds,
+            bathrooms: editingFeatures.bathrooms,
+            amenities: editingFeatures.amenities,
+            lat: editingFeatures.lat,
+            lng: editingFeatures.lng,
+            dynamicPricing: editingFeatures.dynamicPricing || editingFeatures.dynamic_pricing,
+            seo_title: editingFeatures.seo_title,
+            seo_description: editingFeatures.seo_description,
+            seo_keywords: editingFeatures.seo_keywords,
+            seo_image_url: editingFeatures.seo_image_url,
+            nearby: editingFeatures.nearby,
+            amenity_clusters: {
+                vibe: featuresFormData.vibe.split(',').map(s => s.trim()).filter(Boolean),
+                comfort: featuresFormData.comfort.split(',').map(s => s.trim()).filter(Boolean),
+                work: featuresFormData.work.split(',').map(s => s.trim()).filter(Boolean),
+                culinary: featuresFormData.culinary.split(',').map(s => s.trim()).filter(Boolean),
+            },
+            child_safety_specs: featuresFormData.child_safety.split(',').map(s => s.trim()).filter(Boolean)
+        };
+        const res = await fetch(`/api/listings/${editingFeatures.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+            setListings(prev => prev.map(l => l.id === editingFeatures.id ? { 
+                ...l, 
+                amenity_clusters: payload.amenity_clusters, 
+                child_safety_specs: payload.child_safety_specs 
+            } : l));
+            setEditingFeatures(null);
+        } else {
+            alert("Failed to update FAANG features.");
+        }
+    } catch (e) {
+        console.error("Update error", e);
+    }
+  };
+
   const handleEditCoordinates = async (listing: Listing, e: React.MouseEvent) => {
     e.stopPropagation();
     const lat = prompt(`Edit Latitude for '${listing.title}':`, String(listing.lat || ''));
@@ -1371,6 +1447,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                           </button>
                                           <button onClick={(e) => handleEditType(listing, e)} title="Edit Type" className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-md transition-colors">
                                              <Map className="w-4 h-4" />
+                                          </button>
+                                          <button onClick={(e) => openFaangFeaturesModal(listing, e)} title="Edit FAANG Features" className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors">
+                                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
                                           </button>
                                           <button onClick={(e) => handleEditAmenities(listing, e)} title="Edit Amenities" className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-md transition-colors">
                                              <CheckCircle2Icon className="w-4 h-4" />
@@ -4279,6 +4358,54 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
               ) : null}
             </div>
         </div>
+        
+        {/* FAANG Features Edit Modal */}
+        {editingFeatures && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+               <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-100">
+                  <div className="p-6 border-b border-gray-100 flex justify-between items-center sticky top-0 bg-white z-10">
+                     <h2 className="text-xl font-black text-gray-900 tracking-tight">FAANG Features: {editingFeatures.title}</h2>
+                     <button onClick={() => setEditingFeatures(null)} className="p-2 bg-gray-50 text-gray-400 hover:text-gray-900 rounded-full transition-colors">
+                        <XIcon className="w-5 h-5" />
+                     </button>
+                  </div>
+                  <div className="p-6 space-y-6">
+                     <div className="space-y-4">
+                        <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Amenity Clusters (Comma Separated)</h3>
+                        
+                        <div>
+                           <label className="block text-xs font-semibold text-gray-500 mb-1">Vibe</label>
+                           <input type="text" value={featuresFormData.vibe} onChange={e => setFeaturesFormData({...featuresFormData, vibe: e.target.value})} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm" placeholder="e.g. Modern, Minimalist" />
+                        </div>
+                        <div>
+                           <label className="block text-xs font-semibold text-gray-500 mb-1">Comfort</label>
+                           <input type="text" value={featuresFormData.comfort} onChange={e => setFeaturesFormData({...featuresFormData, comfort: e.target.value})} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm" placeholder="e.g. Premium Bedding, AC" />
+                        </div>
+                        <div>
+                           <label className="block text-xs font-semibold text-gray-500 mb-1">Work</label>
+                           <input type="text" value={featuresFormData.work} onChange={e => setFeaturesFormData({...featuresFormData, work: e.target.value})} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm" placeholder="e.g. Fast WiFi, Ergonomic Desk" />
+                        </div>
+                        <div>
+                           <label className="block text-xs font-semibold text-gray-500 mb-1">Culinary</label>
+                           <input type="text" value={featuresFormData.culinary} onChange={e => setFeaturesFormData({...featuresFormData, culinary: e.target.value})} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm" placeholder="e.g. Chef's Kitchen, Espresso Machine" />
+                        </div>
+                     </div>
+
+                     <div className="space-y-4 pt-4 border-t border-gray-100">
+                        <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Child Safety Specs</h3>
+                        <div>
+                           <label className="block text-xs font-semibold text-gray-500 mb-1">Specs (Comma Separated)</label>
+                           <input type="text" value={featuresFormData.child_safety} onChange={e => setFeaturesFormData({...featuresFormData, child_safety: e.target.value})} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm" placeholder="e.g. Outlet Covers, Corner Guards" />
+                        </div>
+                     </div>
+                  </div>
+                  <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-3 rounded-b-3xl">
+                     <button onClick={() => setEditingFeatures(null)} className="px-5 py-2.5 bg-white border border-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-colors">Cancel</button>
+                     <button onClick={handleSaveFaangFeatures} className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-md shadow-indigo-200 transition-all">Save Features</button>
+                  </div>
+               </div>
+            </div>
+        )}
       </main>
     </div>
     </>

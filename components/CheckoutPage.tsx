@@ -131,9 +131,15 @@ interface CheckoutPageProps {
   numTickets?: number;
   initialData: {
     moveInDate: string;
+    checkOutDate?: string;
     configuration: string;
     name: string;
     phone: string;
+    totalRent?: number;
+    baseRent?: number;
+    fees?: number;
+    taxes?: number;
+    guests?: number;
   };
   onSuccess: (data: {
     moveInDate: string;
@@ -211,7 +217,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
       .catch(err => console.error("Error fetching payment rates:", err));
   }, []);
 
-  // Determine current room price based on selected configuration
+  // Determine current room price based on selected configuration (Legacy Fallback)
   const getSelectedPrice = () => {
     if (isExperience) {
       return (experience?.price || 0) * numTickets;
@@ -223,14 +229,25 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
     return foundRoom ? foundRoom.price : (listing?.price || 0);
   };
 
-  const baseAmount = getSelectedPrice();
-  const commissionFee = Math.round(baseAmount * (rates.commission_rate / 100));
-  const subtotal = baseAmount + commissionFee;
-  const taxFee = Math.round(subtotal * (rates.tax_rate / 100));
-  const systemFee = rates.system_fee;
+  // ENCHO DOUBLE-ENTRY LEDGER INVARIANT:
+  // If the listing details page calculated a strict date-based ledger, we MUST honor it to prevent tax/chargeback discrepancies.
+  const hasStrictLedger = !isExperience && initialData.totalRent !== undefined;
+
+  const baseAmount = hasStrictLedger ? (initialData.baseRent || 0) : getSelectedPrice();
+  const commissionFee = hasStrictLedger ? (initialData.fees || 0) : Math.round(baseAmount * (rates.commission_rate / 100));
+  
+  // Tax logic: If strict ledger is passed, use exactly that. Else fallback to subtotal * rate.
+  const taxFee = hasStrictLedger ? (initialData.taxes || 0) : Math.round((baseAmount + commissionFee) * (rates.tax_rate / 100));
+  
+  // System fee is waived if using the strict FAANG nightly ledger (already included in 15% optimization fee)
+  const systemFee = hasStrictLedger ? 0 : rates.system_fee;
   const protectionFee = protectionSelected ? 1499 : 0;
-  const finalTotal = baseAmount + commissionFee + taxFee + systemFee + protectionFee;
-  const deposit = isExperience ? 0 : baseAmount * 3;
+  
+  // Final total must match exactly what was quoted on the previous page + protection
+  const finalTotal = hasStrictLedger ? ((initialData.totalRent || 0) + protectionFee) : (baseAmount + commissionFee + taxFee + systemFee + protectionFee);
+  
+  // Deposit applies only for legacy monthly mode. Strict nightly ledger skips deposits.
+  const deposit = (isExperience || hasStrictLedger) ? 0 : baseAmount * 3;
 
   // EMI math helper
   const calculateEMI = (principal: number, annualRate: number, months: number) => {
@@ -524,24 +541,24 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
               <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Pricing breakdown</h4>
               <div className="space-y-2.5">
                 <div className="flex justify-between text-xs font-medium text-zinc-500">
-                  <span>{isExperience ? "Tickets base price" : "Base rent per month"}</span>
+                  <span>{isExperience ? "Tickets base price" : (hasStrictLedger ? `Base rate (${initialData.guests || 1} guests)` : "Base rent per month")}</span>
                   <span className="font-mono font-bold text-zinc-900">{formatPrice(baseAmount, 'INR')}</span>
                 </div>
                 {commissionFee > 0 && (
                   <div className="flex justify-between text-xs font-medium text-zinc-500">
-                    <span>Platform service fee ({rates.commission_rate}%)</span>
+                    <span>{hasStrictLedger ? 'Encho Optimization Fee (15%)' : `Platform service fee (${rates.commission_rate}%)`}</span>
                     <span className="font-mono font-bold text-zinc-900">{formatPrice(commissionFee, 'INR')}</span>
                   </div>
                 )}
                 {taxFee > 0 && (
                   <div className="flex justify-between text-xs font-medium text-zinc-500">
-                    <span>Estimated GST / Taxes ({rates.tax_rate}%)</span>
+                    <span>Estimated GST / Taxes (18%)</span>
                     <span className="font-mono font-bold text-zinc-900">{formatPrice(taxFee, 'INR')}</span>
                   </div>
                 )}
                 {systemFee > 0 && (
                   <div className="flex justify-between text-xs font-medium text-zinc-500">
-                    <span>Flat system booking fee</span>
+                    <span>System processing fee</span>
                     <span className="font-mono font-bold text-zinc-900">{formatPrice(systemFee, 'INR')}</span>
                   </div>
                 )}
@@ -642,6 +659,20 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                     className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-zinc-950 focus:outline-none transition-all text-xs font-bold text-zinc-850 disabled:opacity-75 disabled:cursor-not-allowed"
                   />
                 </div>
+
+                {hasStrictLedger && initialData.checkOutDate && (
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-zinc-400" /> Check-out Date
+                    </label>
+                    <input 
+                      type="date"
+                      value={initialData.checkOutDate}
+                      disabled
+                      className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-zinc-950 focus:outline-none transition-all text-xs font-bold text-zinc-850 disabled:opacity-75 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                )}
 
                 <div className="space-y-1">
                   <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1">
