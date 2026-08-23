@@ -35,6 +35,7 @@ const FALLBACK_IMAGES = [
 const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({ 
   listing, 
   onBack, 
+  onListingClick,
   similarListings, 
   isFavorite, 
   onToggleFavorite, 
@@ -48,8 +49,8 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   const [activeMobileImage, setActiveMobileImage] = useState(0);
 
   // M5: Dual-Date Engine State
-  const [checkIn, setCheckIn] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [checkOut, setCheckOut] = useState<string>(new Date(Date.now() + 86400000).toISOString().split('T')[0]);
+  const [checkIn, setCheckIn] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [checkOut, setCheckOut] = useState<string>(() => new Date(Date.now() + 86400000).toISOString().split('T')[0]);
   const [guests, setGuests] = useState<number>(1);
 
   // M5: Ledger Strict Math
@@ -396,10 +397,10 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         
                         <div className="flex items-center gap-5 relative z-10 w-full md:w-auto">
                             <div className="w-16 h-16 rounded-full bg-zinc-800 border-2 border-white/20 flex items-center justify-center overflow-hidden shrink-0">
-                                <span className="text-xl font-bold text-white uppercase tracking-widest">{listing.host_name ? listing.host_name.charAt(0) : 'E'}</span>
+                                <span className="text-xl font-bold text-white uppercase tracking-widest">{listing.provider ? listing.provider.charAt(0) : 'E'}</span>
                             </div>
                             <div>
-                                <h3 className="text-xl font-bold text-white tracking-tight">{listing.host_name || 'Encho Verified Host'}</h3>
+                                <h3 className="text-xl font-bold text-white tracking-tight">{listing.provider || 'Encho Verified Host'}</h3>
                                 <p className="text-zinc-400 text-sm font-medium mt-1">Superhost · Typically responds in 5 mins</p>
                             </div>
                         </div>

@@ -14,7 +14,7 @@ interface OptimizedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> 
 }
 
 export const getOptimizedUrl = (url: string, width?: number, aspectRatio?: '16:9' | '9:16' | '4:3' | '1:1') => {
-    let targetWidth = width || 800;
+    const targetWidth = width || 800;
     let targetHeight: number | undefined;
 
     if (aspectRatio) {
