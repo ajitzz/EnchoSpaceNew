@@ -75,7 +75,7 @@ export class GoogleAdsClient {
   /**
    * Encapsulated OAuth2 token refresher
    */
-  private async getFreshAccessToken(): Promise<string> {
+  public async getFreshAccessToken(): Promise<string> {
     if (this.isSandboxMode) {
       return 'SANDBOX_ACCESS_TOKEN_VALID';
     }
@@ -84,10 +84,36 @@ export class GoogleAdsClient {
       return this.cachedAccessToken;
     }
 
-    // Refresh token exchange simulation or real fetch
-    this.cachedAccessToken = 'VALIDATED_OAUTH_ACCESS_TOKEN';
-    this.tokenExpiryTime = Date.now() + 3600 * 1000;
-    return this.cachedAccessToken;
+    try {
+      const tokenUrl = 'https://oauth2.googleapis.com/token';
+      const body = new URLSearchParams({
+        client_id: this.credentials.clientId,
+        client_secret: this.credentials.clientSecret,
+        refresh_token: this.credentials.refreshToken,
+        grant_type: 'refresh_token'
+      });
+
+      const res = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`OAuth token exchange failed with HTTP ${res.status}: ${errText}`);
+      }
+
+      const data = (await res.json()) as any;
+      this.cachedAccessToken = data.access_token;
+      this.tokenExpiryTime = Date.now() + ((data.expires_in || 3600) * 1000);
+      return this.cachedAccessToken!;
+    } catch (err: any) {
+      throw new GoogleAdsError('GOOGLE_AUTH_EXPIRED', `Master MCC OAuth exchange failed: ${err.message}`, {
+        statusCode: 401,
+        errorClass: 'AUTHENTICATION'
+      });
+    }
   }
 
   /**
@@ -112,8 +138,47 @@ export class GoogleAdsClient {
       ];
     }
 
-    // Production gRPC/REST searchStream implementation
-    return [];
+    try {
+      const token = await this.getFreshAccessToken();
+      const cleanCustomer = customerId.replace(/-/g, '');
+      const url = `https://googleads.googleapis.com/v17/customers/${cleanCustomer}/googleAds:searchStream`;
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'developer-token': this.credentials.developerToken,
+          'login-customer-id': this.credentials.mccCustomerId.replace(/-/g, ''),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ query: gaqlQuery })
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        throw new GoogleAdsError('GOOGLE_HTTP_5XX', `SearchStream query failed: ${err}`, {
+          statusCode: res.status,
+          errorClass: 'UNKNOWN'
+        });
+      }
+
+      const rawBatches = (await res.json()) as any[];
+      const results: any[] = [];
+      if (Array.isArray(rawBatches)) {
+        for (const batch of rawBatches) {
+          if (batch.results && Array.isArray(batch.results)) {
+            results.push(...batch.results);
+          }
+        }
+      }
+      return results;
+    } catch (err: any) {
+      if (err instanceof GoogleAdsError) throw err;
+      throw new GoogleAdsError('GOOGLE_INTERNAL_ERROR', `SearchStream execution error: ${err.message}`, {
+        statusCode: 500,
+        errorClass: 'UNKNOWN'
+      });
+    }
   }
 
   /**
@@ -131,7 +196,57 @@ export class GoogleAdsClient {
       };
     }
 
-    return { results: [] };
+    try {
+      const token = await this.getFreshAccessToken();
+      const cleanCustomer = customerId.replace(/-/g, '');
+      const url = `https://googleads.googleapis.com/v17/customers/${cleanCustomer}/googleAds:mutate`;
+
+      const mutateOperations = mutations.map(m => {
+        const opType = m.operation === 'CREATE' ? 'create' : (m.operation === 'UPDATE' ? 'update' : 'remove');
+        return {
+          [`${m.resourceName.split('/')[0]}Operation`]: {
+            [opType]: m.payload
+          }
+        };
+      });
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'developer-token': this.credentials.developerToken,
+          'login-customer-id': this.credentials.mccCustomerId.replace(/-/g, ''),
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ mutateOperations })
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        throw new GoogleAdsError('GOOGLE_RATE_LIMIT', `Google Ads API Mutation failed: ${err}`, {
+          statusCode: res.status,
+          errorClass: 'RATE_LIMIT'
+        });
+      }
+
+      const data = (await res.json()) as any;
+      const results: Array<{ resourceName: string }> = [];
+      if (data.mutateOperationResponses && Array.isArray(data.mutateOperationResponses)) {
+        for (const resp of data.mutateOperationResponses) {
+          const firstKey = Object.keys(resp)[0];
+          if (firstKey && resp[firstKey]?.resourceName) {
+            results.push({ resourceName: resp[firstKey].resourceName });
+          }
+        }
+      }
+      return { results };
+    } catch (err: any) {
+      if (err instanceof GoogleAdsError) throw err;
+      throw new GoogleAdsError('GOOGLE_INTERNAL_ERROR', `Google Ads API Mutation failed: ${err.message}`, {
+        statusCode: 500,
+        errorClass: 'RATE_LIMIT'
+      });
+    }
   }
 }
 

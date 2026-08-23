@@ -113,10 +113,30 @@ export default defineConfig(() => {
       ],
       build: {
         sourcemap: true,
+        chunkSizeWarningLimit: 500,
         rollupOptions: {
           output: {
-            manualChunks: {
-              'vendor-react': ['react', 'react-dom'],
+            manualChunks(id) {
+              if (id.includes('node_modules')) {
+                if (id.includes('react') || id.includes('react-dom')) {
+                  return 'vendor-react';
+                }
+                if (id.includes('framer-motion')) {
+                  return 'vendor-motion';
+                }
+                if (id.includes('lucide-react')) {
+                  return 'vendor-icons';
+                }
+                if (id.includes('leaflet')) {
+                  return 'vendor-maps';
+                }
+                if (id.includes('@stripe') || id.includes('socket.io-client')) {
+                  return 'vendor-integrations';
+                }
+                if (id.includes('@google/genai')) {
+                  return 'vendor-ai';
+                }
+              }
             }
           }
         }

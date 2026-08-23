@@ -395,30 +395,22 @@ if (isDbConfigured) {
 
 const pool = new Pool(poolConfig);
 
-if (!isDbConfigured) {
-  pool.query = (async (...args: any[]) => {
-    const callback = typeof args[1] === 'function' ? args[1] : (typeof args[2] === 'function' ? args[2] : null);
-    const err = new Error("DATABASE_NOT_CONFIGURED: Please configure DATABASE_URL or POSTGRES_URL environment variables in your Vercel project settings.");
-    if (callback) {
-      callback(err);
-      return;
-    }
-    throw err;
-  }) as any;
-  pool.connect = (async (callback?: any) => {
-    const err = new Error("DATABASE_NOT_CONFIGURED: Please configure DATABASE_URL or POSTGRES_URL environment variables in your Vercel project settings.");
-    if (typeof callback === 'function') {
-      callback(err);
-      return;
-    }
-    throw err;
-  }) as any;
+// Dual-pool: Neon Read-Replica Configuration for high-frequency marketing telemetry & analytics
+const readPoolConfig: any = {
+  ...poolConfig,
+  max: process.env.VERCEL ? 4 : 25
+};
+if (isDbConfigured) {
+  readPoolConfig.connectionString = process.env.READ_DATABASE_URL || dbUrl;
 }
-
-// Handle pool background errors gracefully to prevent process crash or unhandled pool errors
-pool.on('error', (err) => {
-  console.error('[DATABASE POOL ERROR] Unexpected error on idle client:', err.message);
+export const readPool = new Pool(readPoolConfig);
+readPool.on('error', (err) => {
+  console.error('[DATABASE READ-POOL ERROR] Unexpected error on read replica idle client:', err.message);
 });
+
+export async function queryAnalyticsRead(text: string, params?: any[]) {
+  return await readPool.query(text, params);
+}
 
 // Wrap pool.query to support secure Row-Level Security session context propagation and resilient connection retries
 const originalPoolQuery = pool.query;

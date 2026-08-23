@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { SEO } from './SEO';
 import HostForm from './HostForm';
 import HostCalendar from './HostCalendar';
 import InboxPage from './InboxPage';
-import HostMarketing from './HostMarketing';
 import { Listing, Experience } from '../types';
 import { DashboardListingSkeleton, ReservationSkeleton } from './Skeletons';
-import { MapPin, Users, Calendar as CalendarIcon, DollarSign, Activity, Settings, Video } from 'lucide-react';
+import { MapPin, Users, Calendar as CalendarIcon, DollarSign, Activity, Settings, Video, Loader2 } from 'lucide-react';
 import { useCurrency } from './CurrencyContext';
+
+const HostMarketing = lazy(() => import('./HostMarketing'));
 
 interface HostDashboardProps {
   view: 'today' | 'calendar' | 'listings' | 'messages' | 'analytics' | 'marketing';
@@ -397,7 +398,14 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
     if (view === 'marketing') {
         return (
             <div className="w-full">
-                <HostMarketing user={user} listings={listings} />
+                <Suspense fallback={
+                    <div className="flex flex-col items-center justify-center min-h-[400px] text-sky-500 gap-3">
+                        <Loader2 className="w-8 h-8 animate-spin text-sky-500" />
+                        <p className="text-sm font-semibold text-gray-700">Loading Campaign Reactor Core...</p>
+                    </div>
+                }>
+                    <HostMarketing user={user} listings={listings} />
+                </Suspense>
             </div>
         );
     }
