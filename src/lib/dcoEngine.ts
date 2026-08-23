@@ -598,3 +598,94 @@ export class DcoEngine {
     }
   }
 }
+
+/**
+ * Milestone 15: 24-Hour Automated DCO Budget Rebalancing Engine
+ * Evaluates variant telemetry and algorithmically reallocates 80% of remaining spend to the statistical winner.
+ */
+export async function executeAutomatedDcoRebalancing(
+  campaignId: number,
+  poolClient: pg.PoolClient | pg.Pool,
+  now: Date = new Date()
+): Promise<{
+  rebalanced: boolean;
+  winnerVariantId: number | null;
+  budgetShiftPercent: number;
+  reason: string;
+  weights: Record<number, number>;
+}> {
+  // 1. Fetch published creative variants and telemetry
+  const variantsRes = await poolClient.query(`
+    SELECT v.*,
+           COALESCE(s.last_meta_impressions, 0) as impressions,
+           COALESCE(s.last_meta_clicks, 0) as clicks,
+           COALESCE(s.last_meta_conversions, 0) as conversions,
+           COALESCE(s.last_meta_spend, 0.0) as spend,
+           COALESCE(v.variant_activated_at, v.created_at) as activated_at,
+           s.last_meta_fetched_at
+    FROM campaign_creative_variants v
+    LEFT JOIN variant_meta_snapshots s ON v.id = s.variant_id
+    WHERE v.campaign_id = $1 AND v.is_published = true
+    ORDER BY v.id ASC
+  `, [campaignId]);
+
+  const variants = variantsRes.rows;
+  if (!variants || variants.length < 2) {
+    return {
+      rebalanced: false,
+      winnerVariantId: null,
+      budgetShiftPercent: 0,
+      reason: 'Insufficient published variants (< 2) for automated DCO rebalancing.',
+      weights: {}
+    };
+  }
+
+  // 2. Execute statistical comparison
+  const evaluation = evaluateVariantComparison(variants, now);
+  if (evaluation.result !== 'WINNER_IDENTIFIED' || !evaluation.winner_variant_id) {
+    return {
+      rebalanced: false,
+      winnerVariantId: null,
+      budgetShiftPercent: 0,
+      reason: `Evaluation status: ${evaluation.result} - ${evaluation.reason}`,
+      weights: {}
+    };
+  }
+
+  // 3. Compute 80/20 weights
+  const winnerId = evaluation.winner_variant_id;
+  const loserCount = variants.length - 1;
+  const loserWeight = Math.floor(20 / loserCount);
+  const winnerWeight = 100 - (loserWeight * loserCount); // e.g. 80%
+
+  const weights: Record<number, number> = {};
+  for (const v of variants) {
+    const assignedWeight = v.id === winnerId ? winnerWeight : loserWeight;
+    weights[v.id] = assignedWeight;
+
+    await poolClient.query(`
+      UPDATE campaign_creative_variants
+      SET status = CASE WHEN id = $1 THEN 'WINNER' ELSE 'ACTIVE' END,
+          updated_at = $2
+      WHERE id = $3
+    `, [winnerId, now, v.id]);
+  }
+
+  // 4. Update campaign DCO state
+  await poolClient.query(`
+    UPDATE host_marketing_campaigns
+    SET dco_last_evaluated_at = $1,
+        dco_status = 'WINNER_OPTIMIZED',
+        updated_at = $1
+    WHERE id = $2
+  `, [now, campaignId]);
+
+  return {
+    rebalanced: true,
+    winnerVariantId: winnerId,
+    budgetShiftPercent: winnerWeight,
+    reason: `Automated DCO rebalanced: Winner Variant #${winnerId} assigned ${winnerWeight}% budget (${evaluation.reason})`,
+    weights
+  };
+}
+

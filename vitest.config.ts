@@ -18,6 +18,8 @@ export default defineConfig({
     fileParallelism: false,
     testTimeout: 60000,
     hookTimeout: 120000,
+    include: ['src/test/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}', 'test_*.test.ts'],
+    exclude: ['e2e/**', 'node_modules/**', 'dist/**'],
   },
   resolve: {
     alias: {
