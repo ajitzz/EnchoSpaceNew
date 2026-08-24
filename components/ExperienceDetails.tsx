@@ -1295,7 +1295,13 @@ export const ExperienceDetails: React.FC<ExperienceDetailsProps> = ({
                                                         <div className="px-6 md:px-8 pb-6 md:pb-8 pt-2">
                                                             <div className="relative w-full h-48 md:h-64 rounded-2xl overflow-hidden border border-white/10">
                                                                 <OptimizedImage
-                                                                    src={`https://images.unsplash.com/photo-${1551632811 + idx}-561732d1e306?auto=format&fit=crop&q=80&w=800`}
+                                                                    src={
+                                                                        idx === 0 ? "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&q=80&w=800" :
+                                                                        idx === 1 ? "https://images.unsplash.com/photo-1551632811-561732d1e306?auto=format&fit=crop&q=80&w=800" :
+                                                                        idx === 2 ? "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&q=80&w=800" :
+                                                                        idx === 3 ? "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&q=80&w=800" :
+                                                                        "https://images.unsplash.com/photo-1533759413974-9e15f3b745ac?auto=format&fit=crop&q=80&w=800"
+                                                                    }
                                                                     alt={day.title || `Day ${idx + 1}`}
                                                                     className="w-full h-full object-cover transition-transform duration-700 hover:scale-105"
                                                                 />

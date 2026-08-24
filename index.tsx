@@ -34,6 +34,8 @@ const API_KEY =
   (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY ||
   '';
 
+const isMapsKeyConfigured = Boolean(API_KEY && API_KEY !== 'YOUR_API_KEY' && API_KEY.trim() !== '');
+
 const renderApp = (
   <HelmetProvider>
     <AuthProvider>
@@ -52,9 +54,13 @@ root.render(
   <React.StrictMode>
     <ErrorBoundary>
       <GoogleOAuthProvider clientId={clientId}>
-        <APIProvider apiKey={API_KEY || ''} version="weekly">
-          {renderApp}
-        </APIProvider>
+        {isMapsKeyConfigured ? (
+          <APIProvider apiKey={API_KEY} version="weekly">
+            {renderApp}
+          </APIProvider>
+        ) : (
+          renderApp
+        )}
       </GoogleOAuthProvider>
     </ErrorBoundary>
   </React.StrictMode>

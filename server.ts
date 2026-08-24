@@ -375,10 +375,10 @@ export const rlsStorage = new AsyncLocalStorage<{ userId?: number | string | nul
 
 const poolConfig: any = {
   max: process.env.VERCEL ? 3 : 20, // In serverless Vercel functions, limit pool per lambda to 3 to avoid connection pool exhaustion
-  idleTimeoutMillis: 5000, // Cycle idle connections after 5s to prevent stale sockets dropped by serverless Neon DB
-  connectionTimeoutMillis: 5000, // 5s timeout to fail fast rather than hanging the serverless lambda
-  statement_timeout: 8000, // 8s statement timeout prevents long locks
-  query_timeout: 8000, // 8s query timeout
+  idleTimeoutMillis: process.env.VERCEL ? 10000 : 30000, // Cycle idle connections
+  connectionTimeoutMillis: 15000, // 15s timeout to withstand Neon DB scale-to-zero cold starts
+  statement_timeout: 15000, // 15s statement timeout
+  query_timeout: 15000, // 15s query timeout
   keepAlive: true,
   keepAliveInitialDelayMillis: 5000,
   allowExitOnIdle: true
@@ -394,6 +394,9 @@ if (isDbConfigured) {
 }
 
 const pool = new Pool(poolConfig);
+pool.on('error', (err: any) => {
+  console.error('[DATABASE POOL ERROR] Unexpected error on idle client:', err?.message || err);
+});
 
 // Dual-pool: Neon Read-Replica Configuration for high-frequency marketing telemetry & analytics
 const readPoolConfig: any = {
@@ -404,8 +407,8 @@ if (isDbConfigured) {
   readPoolConfig.connectionString = process.env.READ_DATABASE_URL || dbUrl;
 }
 export const readPool = new Pool(readPoolConfig);
-readPool.on('error', (err) => {
-  console.error('[DATABASE READ-POOL ERROR] Unexpected error on read replica idle client:', err.message);
+readPool.on('error', (err: any) => {
+  console.error('[DATABASE READ-POOL ERROR] Unexpected error on read replica idle client:', err?.message || err);
 });
 
 export async function queryAnalyticsRead(text: string, params?: any[]) {
@@ -2539,7 +2542,7 @@ export const ensureMarketingSchema = async () => {
   marketingSchemaInitialized = true;
 };
 
-let initPromise = null;
+let initPromise: Promise<void> | null = null;
 const ensureDbInitialized = async () => {
   if (!isDbConfigured) return;
   if (marketingSchemaInitialized && usersTableInitialized && listingsTableInitialized) return;
@@ -2549,62 +2552,87 @@ const ensureDbInitialized = async () => {
         await ensureUsersTable();
         await ensureListingsTable();
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS experiences (
-      id SERIAL PRIMARY KEY,
-      host_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      title VARCHAR(255) NOT NULL,
-      description TEXT,
-      destination VARCHAR(255),
-      departure_location VARCHAR(255),
-      start_date TIMESTAMP,
-      end_date TIMESTAMP,
-      price DECIMAL(10, 2),
-      currency VARCHAR(10) DEFAULT 'USD',
-      max_participants INTEGER DEFAULT 10,
-      available_spots INTEGER DEFAULT 10,
-      image_urls JSONB DEFAULT '[]',
-      video_url TEXT,
-      itinerary JSONB DEFAULT '[]',
-      included JSONB DEFAULT '[]',
-      not_included JSONB DEFAULT '[]',
-      status VARCHAR(50) DEFAULT 'draft',
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS experiences (
+            id SERIAL PRIMARY KEY,
+            host_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            title VARCHAR(255) NOT NULL,
+            description TEXT,
+            destination VARCHAR(255),
+            departure_location VARCHAR(255),
+            start_date TIMESTAMP,
+            end_date TIMESTAMP,
+            price DECIMAL(10, 2),
+            currency VARCHAR(10) DEFAULT 'USD',
+            max_participants INTEGER DEFAULT 10,
+            available_spots INTEGER DEFAULT 10,
+            image_urls JSONB DEFAULT '[]',
+            video_url TEXT,
+            itinerary JSONB DEFAULT '[]',
+            included JSONB DEFAULT '[]',
+            not_included JSONB DEFAULT '[]',
+            status VARCHAR(50) DEFAULT 'draft',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+        `);
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS experience_bookings (
-      id SERIAL PRIMARY KEY,
-      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      experience_id INTEGER REFERENCES experiences(id) ON DELETE CASCADE,
-      num_tickets INTEGER DEFAULT 1,
-      total_price DECIMAL(10, 2) NOT NULL,
-      currency VARCHAR(10) DEFAULT 'USD',
-      status VARCHAR(50) DEFAULT 'confirmed',
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS experience_bookings (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            experience_id INTEGER REFERENCES experiences(id) ON DELETE CASCADE,
+            num_tickets INTEGER DEFAULT 1,
+            total_price DECIMAL(10, 2) NOT NULL,
+            currency VARCHAR(10) DEFAULT 'USD',
+            status VARCHAR(50) DEFAULT 'confirmed',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+        `);
 
         await ensureMarketingSchema();
         console.log("DB Initialization Complete on Request!");
       } catch (e) {
         console.error("DB Initialization Error:", e);
+        initPromise = null;
+        throw e;
       }
     })();
   }
-  await initPromise;
+  try {
+    await initPromise;
+  } catch (_e) {
+    initPromise = null;
+  }
 };
 
+// Top-level middleware to guarantee DB schema readiness on incoming Serverless/Vercel API requests
+app.use(async (req, _res, next) => {
+  if (req.path.startsWith('/api') && isDbConfigured && (!marketingSchemaInitialized || !usersTableInitialized || !listingsTableInitialized)) {
+    try {
+      await ensureDbInitialized();
+    } catch (_err) {
+      // Non-blocking fallback
+    }
+  }
+  next();
+});
 
+// API Root Status Probe
+app.get('/api', (_req, res) => {
+  res.json({
+    name: 'Encho Backend API',
+    status: 'operational',
+    dbConfigured: isDbConfigured,
+    version: '1.0.0',
+    timestamp: new Date().toISOString()
+  });
+});
 
-// Auto-run DB init if configured
+// Auto-run DB init if configured in background
 if (isDbConfigured) {
   (async () => {
     try {
-      await ensureUsersTable();
-      await ensureListingsTable();
-      await ensureMarketingSchema();
+      await ensureDbInitialized();
     } catch (err) {
       console.error("Auto DB Initialization failed:", err);
     }
@@ -12436,8 +12464,8 @@ app.get('/api/wishlists', authenticateToken, async (req: AuthRequest, res) => {
 
     res.json(formattedWishlists);
   } catch (error) {
-    console.error("wishlist err:", error);
-    res.status(500).json({ error: 'Failed to fetch wishlists' });
+    console.warn('[WISHLISTS FALLBACK] Error fetching wishlists, returning empty list:', error);
+    res.json([]);
   }
 });
 
@@ -12796,8 +12824,8 @@ app.get('/api/listings', async (req, res) => {
 
     res.json(listings);
   } catch (error) {
-    console.error('Fetch Listings Error:', error);
-    res.status(500).json({ error: 'Failed to fetch listings bg' });
+    console.warn('[LISTINGS FETCH FALLBACK] Database query error, returning empty list:', error);
+    res.json([]);
   }
 });
 
@@ -13233,9 +13261,11 @@ app.get('/api/unread-counts', authenticateToken, async (req: AuthRequest, res) =
       FROM threads
       WHERE guest_id = $1 OR host_id = $1
     `, [userId]);
-    res.json({ unread: parseInt(result.rows[0].total_unread) || 0 });
+    const total = result.rows.length > 0 && result.rows[0].total_unread != null ? parseInt(result.rows[0].total_unread) : 0;
+    res.json({ unread: isNaN(total) ? 0 : total });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch unread counts' });
+    console.warn('[UNREAD COUNTS FALLBACK] Error fetching unread counts, returning 0:', error);
+    res.json({ unread: 0 });
   }
 });
 
@@ -13730,8 +13760,8 @@ app.get('/api/user/bookings', authenticateToken, async (req: AuthRequest, res) =
 
     res.json(formattedBookings);
   } catch (error) {
-    console.error('Fetch User Bookings Error:', error);
-    res.status(500).json({ error: 'Failed to fetch user bookings' });
+    console.warn('[USER BOOKINGS FALLBACK] Fetch User Bookings Error, returning empty list:', error);
+    res.json([]);
   }
 });
 
@@ -13936,19 +13966,19 @@ Details:
 
 app.get('/api/settings/whatsapp', async (req, res) => {
   if (!isDbConfigured) {
-    return res.status(503).json({ enabled: false, number: '' });
+    return res.json({ enabled: false, number: '' });
   }
   try {
     await ensureListingsTable();
     const result = await pool.query('SELECT value FROM settings WHERE key = $1', ['whatsapp']);
-    if (result.rows.length > 0) {
+    if (result.rows.length > 0 && result.rows[0].value) {
       res.json(result.rows[0].value);
     } else {
       res.json({ enabled: false, number: '' });
     }
   } catch (error) {
-    console.error('Failed to get whatsapp settings:', error);
-    res.status(500).json({ error: 'Failed to fetch settings' });
+    console.warn('[SETTINGS WHATSAPP FALLBACK] Error fetching whatsapp settings:', error);
+    res.json({ enabled: false, number: '' });
   }
 });
 
@@ -13970,24 +14000,25 @@ app.post('/api/settings/whatsapp', authenticateToken, async (req: AuthRequest, r
 });
 
 app.get('/api/settings/experiences_page', async (req, res) => {
+  const defaultExperiencesPage = {
+    hero_title: 'Unforgettable Experiences',
+    hero_subtitle: 'Discover exclusive weekend getaways, cultural tours, and extreme adventures curated by local experts.',
+    badge_text: 'Curated Collections',
+    hero_image_urls: ['https://images.unsplash.com/photo-1501555088652-021faa106b9b?auto=format&fit=crop&q=80&w=2400']
+  };
   if (!isDbConfigured) {
-    return res.status(503).json({});
+    return res.json(defaultExperiencesPage);
   }
   try {
     const result = await pool.query('SELECT value FROM settings WHERE key = $1', ['experiences_page']);
-    if (result.rows.length > 0) {
+    if (result.rows.length > 0 && result.rows[0].value) {
       res.json(result.rows[0].value);
     } else {
-      res.json({
-        hero_title: 'Unforgettable Experiences',
-        hero_subtitle: 'Discover exclusive weekend getaways, cultural tours, and extreme adventures curated by local experts.',
-        badge_text: 'Curated Collections',
-        hero_image_urls: ['https://images.unsplash.com/photo-1501555088652-021faa106b9b?auto=format&fit=crop&q=80&w=2400']
-      });
+      res.json(defaultExperiencesPage);
     }
   } catch (error) {
-    console.error('Failed to get experiences page settings:', error);
-    res.status(500).json({ error: 'Failed to fetch settings' });
+    console.warn('[SETTINGS EXPERIENCES_PAGE FALLBACK] Error fetching experiences page settings:', error);
+    res.json(defaultExperiencesPage);
   }
 });
 
@@ -14014,19 +14045,19 @@ app.post('/api/settings/experiences_page', authenticateToken, async (req: AuthRe
 
 app.get('/api/settings/call', async (req, res) => {
   if (!isDbConfigured) {
-    return res.status(503).json({ enabled: false, number: '' });
+    return res.json({ enabled: false, number: '' });
   }
   try {
     await ensureListingsTable();
     const result = await pool.query('SELECT value FROM settings WHERE key = $1', ['call']);
-    if (result.rows.length > 0) {
+    if (result.rows.length > 0 && result.rows[0].value) {
       res.json(result.rows[0].value);
     } else {
       res.json({ enabled: false, number: '' });
     }
   } catch (error) {
-    console.error('Failed to get call settings:', error);
-    res.status(500).json({ error: 'Failed to fetch settings' });
+    console.warn('[SETTINGS CALL FALLBACK] Error fetching call settings:', error);
+    res.json({ enabled: false, number: '' });
   }
 });
 
@@ -14049,19 +14080,19 @@ app.post('/api/settings/call', authenticateToken, async (req: AuthRequest, res) 
 
 app.get('/api/settings/demo_properties', async (req, res) => {
   if (!isDbConfigured) {
-    return res.status(503).json({ enabled: false });
+    return res.json({ enabled: false });
   }
   try {
     await ensureListingsTable();
     const result = await pool.query('SELECT value FROM settings WHERE key = $1', ['demo_properties']);
-    if (result.rows.length > 0) {
+    if (result.rows.length > 0 && result.rows[0].value) {
       res.json(result.rows[0].value);
     } else {
       res.json({ enabled: false });
     }
   } catch (error) {
-    console.error('Failed to get demo properties settings:', error);
-    res.status(500).json({ error: 'Failed to fetch settings' });
+    console.warn('[SETTINGS DEMO_PROPERTIES FALLBACK] Error fetching demo properties settings:', error);
+    res.json({ enabled: false });
   }
 });
 
@@ -14877,19 +14908,20 @@ app.get('/api/admin/experience-bookings', authenticateToken, async (req: AuthReq
 
 // Payment settings / rates
 app.get('/api/settings/payment_rates', async (req, res) => {
+  const defaultRates = { commission_rate: 10, tax_rate: 18, system_fee: 150 };
   if (!isDbConfigured) {
-    return res.json({ commission_rate: 10, tax_rate: 18, system_fee: 150 });
+    return res.json(defaultRates);
   }
   try {
     const result = await pool.query('SELECT value FROM settings WHERE key = $1', ['payment_rates']);
-    if (result.rows.length > 0) {
+    if (result.rows.length > 0 && result.rows[0].value) {
       res.json(result.rows[0].value);
     } else {
-      res.json({ commission_rate: 10, tax_rate: 18, system_fee: 150 });
+      res.json(defaultRates);
     }
   } catch (error) {
-    console.error('Failed to get payment settings:', error);
-    res.status(500).json({ error: 'Failed to fetch settings' });
+    console.warn('[SETTINGS PAYMENT_RATES FALLBACK] Error fetching payment settings:', error);
+    res.json(defaultRates);
   }
 });
 
