@@ -100,6 +100,28 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
   // Chameleon UI Dynamic Dominant Color
   const dominantColor = listing.dominant_color_hex || '#06b6d4';
+  const [isVideoPlaying, setIsVideoPlaying] = useState(true);
+  const [isVideoMuted, setIsVideoMuted] = useState(true);
+  const [activeGalleryTab, setActiveGalleryTab] = useState('all');
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [showFloatingCapsule, setShowFloatingCapsule] = useState(false);
+  const zone1Ref = React.useRef<HTMLDivElement>(null);
+
+  // Scroll listener for floating booking capsule transition
+  useEffect(() => {
+    const handleScroll = () => {
+      if (zone1Ref.current) {
+        const rect = zone1Ref.current.getBoundingClientRect();
+        // When the bottom of Zone 1 passes the viewport top/middle, activate capsule
+        setShowFloatingCapsule(rect.bottom < 300);
+      } else {
+        setShowFloatingCapsule(window.scrollY > 800);
+      }
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
 
   // Sensory Tags
   const sensoryTags: string[] = React.useMemo(() => {
@@ -277,20 +299,61 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
             
             {/* Desktop Bento Grid (Hidden on Mobile) */}
             <div className="hidden md:grid grid-cols-4 grid-rows-2 gap-2.5 h-[65vh] lg:h-[75vh] rounded-3xl overflow-hidden bg-zinc-200 shadow-sm relative group">
-                {/* Main Hero Image */}
-                <div className="col-span-2 row-span-2 relative h-full overflow-hidden">
-                    <OptimizedImage 
-                        src={images[0]} 
-                        aspectRatio="4:3"
-                        priority={true}
-                        className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" 
-                        alt={`${listing.title} Main View`}
-                        onClick={() => { uiAudio.playClick(); trackPhotoView(0); }}
-                    />
+                {/* Main Hero Image with Ambient Video Loop */}
+                <div className="col-span-2 row-span-2 relative h-full overflow-hidden group/video">
+                    {listing.video_url ? (
+                      <video
+                        src={listing.video_url}
+                        poster={images[0]}
+                        autoPlay
+                        loop
+                        muted={isVideoMuted}
+                        playsInline
+                        className="w-full h-full object-cover cursor-pointer"
+                        onClick={() => {
+                          uiAudio.playClick();
+                          setLightboxIndex(0);
+                        }}
+                      />
+                    ) : (
+                      <div className="relative w-full h-full">
+                        <OptimizedImage 
+                            src={images[0]} 
+                            aspectRatio="4:3"
+                            priority={true}
+                            className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" 
+                            alt={`${listing.title} Main View`}
+                            onClick={() => { uiAudio.playClick(); trackPhotoView(0); setLightboxIndex(0); }}
+                        />
+                      </div>
+                    )}
+
+                    {/* Ambient Video Micro-HUD Controls */}
+                    {listing.video_url && (
+                      <div className="absolute top-4 left-4 z-20 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            uiAudio.playClick();
+                            setIsVideoMuted(!isVideoMuted);
+                          }}
+                          className="p-2 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-md transition-all shadow-md active:scale-95 cursor-pointer"
+                          title={isVideoMuted ? "Unmute Ambient Sound" : "Mute Sound"}
+                        >
+                          {isVideoMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
+                        </button>
+                        <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-black/40 text-white/90 backdrop-blur-md border border-white/10 flex items-center gap-1.5 font-display">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          Live Ambient Reel
+                        </span>
+                      </div>
+                    )}
+
                     {listing.isVerified && (
-                        <div className="absolute bottom-6 left-6 bg-white/80 backdrop-blur-xl px-4 py-2 rounded-xl shadow-lg border border-white/40 flex items-center gap-2 pointer-events-none">
+                        <div className="absolute bottom-6 left-6 bg-white/90 backdrop-blur-xl px-4 py-2 rounded-xl shadow-lg border border-white/40 flex items-center gap-2 pointer-events-none">
                             <ShieldCheck className="w-5 h-5 text-emerald-600" />
-                            <span className="text-xs font-bold tracking-widest text-zinc-900 uppercase">Verified Sanctuary</span>
+                            <span className="text-xs font-bold font-display tracking-widest text-zinc-900 uppercase">Verified Sanctuary</span>
                         </div>
                     )}
                 </div>
@@ -307,7 +370,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 </div>
                 
                 {/* View Gallery Overlay */}
-                <div className="relative overflow-hidden h-full group/gallery cursor-pointer" onClick={() => { uiAudio.playClick(); trackPhotoView(4); }}>
+                <div className="relative overflow-hidden h-full group/gallery cursor-pointer" onClick={() => { uiAudio.playClick(); trackPhotoView(4); setLightboxIndex(0); }}>
                     <OptimizedImage src={images[4]} aspectRatio="16:9" className="w-full h-full object-cover transition-transform duration-700 group-hover/gallery:scale-[1.03] group-hover/gallery:blur-sm" alt="View 5" />
                     <div className="absolute inset-0 bg-black/10 group-hover/gallery:bg-black/20 transition-colors duration-500" />
                     <div className="absolute bottom-4 right-4 bg-white/95 backdrop-blur-xl border border-white/50 text-zinc-900 px-5 py-3 rounded-xl flex items-center gap-2 shadow-lg hover:scale-[1.02] active:scale-95 transition-transform">
@@ -372,7 +435,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
         </div>
 
         {/* MILESTONE 3: Suite Showcase Matrix & Experience Bento */}
-        <div className="w-full md:max-w-7xl mx-auto px-4 md:px-6 lg:px-8 mt-12 md:mt-16 grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16">
+        <div ref={zone1Ref} className="w-full md:max-w-7xl mx-auto px-4 md:px-6 lg:px-8 mt-12 md:mt-16 grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16">
             
             {/* Left Column (Main Content) */}
             <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-12">
