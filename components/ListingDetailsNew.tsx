@@ -964,9 +964,9 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
         {/* ULTRA-DENSE SCATTERED PILE-OF-SHEETS EDITORIAL MOSAIC (100vw, Zero Gap)   */}
         {/* Zero Gray Background Visible · Multi-Layer Heavy Collisions & Hover Lift  */}
         {/* ========================================================================= */}
-        <div className="w-screen relative left-1/2 right-1/2 -mx-[50vw] overflow-hidden mt-8 md:mt-12 mb-0 py-4 bg-transparent">
+        <div className="w-screen relative left-1/2 right-1/2 -mx-[50vw] overflow-x-clip overflow-y-visible mt-6 md:mt-8 mb-0 pt-4 pb-20 md:pb-28 bg-transparent">
           <div 
-            className="flex overflow-x-auto gap-0 px-2 pb-2 scrollbar-hide snap-x snap-mandatory items-center h-[500px] sm:h-[580px] md:h-[680px]" 
+            className="flex overflow-x-auto gap-0 px-4 md:px-8 pt-4 pb-16 md:pb-24 scrollbar-hide snap-x snap-mandatory items-center min-h-[540px] sm:min-h-[620px] md:min-h-[720px]" 
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
             {/* 24 Heavily Colliding Scattered Cards Packing 100% of Space */}
@@ -1002,7 +1002,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   uiAudio.playClick();
                   setLightboxIndex(sheet.idx % uniqueMediaPool.length);
                 }}
-                className={`relative shrink-0 ${sheet.w} ${sheet.h} ${sheet.z} ${sheet.overlap} ${sheet.rotate} ${sheet.translateY} rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-[2.5px] border-white ring-1 ring-black/5 shadow-[0_12px_30px_rgba(0,0,0,0.18)] transition-all duration-500 ease-out cursor-pointer hover:!z-50 hover:scale-[1.12] hover:rotate-0 hover:shadow-[0_25px_60px_rgba(0,0,0,0.30)] hover:ring-black/10 group snap-center`}
+                className={`relative shrink-0 ${sheet.w} ${sheet.h} ${sheet.z} ${sheet.overlap} ${sheet.rotate} ${sheet.translateY} rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-[2.5px] border-white ring-1 ring-black/5 shadow-[0_12px_30px_rgba(0,0,0,0.18)] transition-all duration-500 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)] origin-center cursor-pointer hover:!z-50 hover:scale-[1.10] hover:rotate-0 hover:shadow-[0_25px_60px_rgba(0,0,0,0.28)] hover:ring-black/10 group snap-center`}
               >
                 <OptimizedImage
                   src={uniqueMediaPool[sheet.idx % uniqueMediaPool.length]}
