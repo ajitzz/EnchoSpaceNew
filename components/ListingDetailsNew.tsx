@@ -964,37 +964,37 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
         {/* ULTRA-DENSE SCATTERED PILE-OF-SHEETS EDITORIAL MOSAIC (100vw, Zero Gap)   */}
         {/* Zero Gray Background Visible · Multi-Layer Heavy Collisions & Hover Lift  */}
         {/* ========================================================================= */}
-        <div className="w-screen relative left-1/2 right-1/2 -mx-[50vw] overflow-hidden my-6 md:my-10 py-8 bg-transparent">
+        <div className="w-screen relative left-1/2 right-1/2 -mx-[50vw] overflow-hidden mt-8 md:mt-12 mb-0 py-4 bg-transparent">
           <div 
-            className="flex overflow-x-auto gap-0 px-2 pb-2 scrollbar-hide snap-x snap-mandatory items-center h-[420px] sm:h-[480px] md:h-[560px]" 
+            className="flex overflow-x-auto gap-0 px-2 pb-2 scrollbar-hide snap-x snap-mandatory items-center h-[500px] sm:h-[580px] md:h-[680px]" 
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
             {/* 24 Heavily Colliding Scattered Cards Packing 100% of Space */}
             {[
-              { idx: 0, w: 'w-[280px] sm:w-[360px] md:w-[460px]', h: 'h-[260px] sm:h-[300px] md:h-[360px]', z: 'z-10', overlap: 'ml-0', aspect: '16:9', rotate: '-rotate-2', translateY: '-translate-y-8 md:-translate-y-14' },
-              { idx: 1, w: 'w-[200px] sm:w-[260px] md:w-[320px]', h: 'h-[280px] sm:h-[330px] md:h-[390px]', z: 'z-25', overlap: '-ml-28 sm:-ml-36 md:-ml-48', aspect: '4:3', rotate: 'rotate-2', translateY: 'translate-y-10 md:translate-y-16' },
-              { idx: 2, w: 'w-[240px] sm:w-[300px] md:w-[380px]', h: 'h-[240px] sm:h-[280px] md:h-[330px]', z: 'z-15', overlap: '-ml-24 sm:-ml-32 md:-ml-40', aspect: '16:9', rotate: '-rotate-3', translateY: '-translate-y-6 md:-translate-y-10' },
-              { idx: 3, w: 'w-[210px] sm:w-[270px] md:w-[340px]', h: 'h-[290px] sm:h-[340px] md:h-[410px]', z: 'z-30', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '4:3', rotate: 'rotate-1', translateY: 'translate-y-6 md:translate-y-12' },
-              { idx: 4, w: 'w-[300px] sm:w-[380px] md:w-[480px]', h: 'h-[270px] sm:h-[310px] md:h-[370px]', z: 'z-10', overlap: '-ml-32 sm:-ml-40 md:-ml-52', aspect: '16:9', rotate: 'rotate-3', translateY: '-translate-y-10 md:-translate-y-16' },
-              { idx: 5, w: 'w-[220px] sm:w-[280px] md:w-[350px]', h: 'h-[280px] sm:h-[330px] md:h-[390px]', z: 'z-25', overlap: '-ml-28 sm:-ml-36 md:-ml-48', aspect: '4:3', rotate: '-rotate-2', translateY: 'translate-y-12 md:translate-y-18' },
-              { idx: 6, w: 'w-[260px] sm:w-[340px] md:w-[420px]', h: 'h-[250px] sm:h-[290px] md:h-[340px]', z: 'z-15', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '16:9', rotate: 'rotate-2', translateY: '-translate-y-8 md:-translate-y-14' },
-              { idx: 7, w: 'w-[200px] sm:w-[260px] md:w-[320px]', h: 'h-[290px] sm:h-[340px] md:h-[400px]', z: 'z-35', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '4:3', rotate: '-rotate-3', translateY: 'translate-y-4 md:translate-y-8' },
-              { idx: 8, w: 'w-[310px] sm:w-[390px] md:w-[490px]', h: 'h-[270px] sm:h-[310px] md:h-[370px]', z: 'z-10', overlap: '-ml-32 sm:-ml-44 md:-ml-56', aspect: '16:9', rotate: 'rotate-2', translateY: '-translate-y-12 md:-translate-y-18' },
-              { idx: 9, w: 'w-[210px] sm:w-[270px] md:w-[340px]', h: 'h-[280px] sm:h-[330px] md:h-[390px]', z: 'z-25', overlap: '-ml-28 sm:-ml-36 md:-ml-48', aspect: '4:3', rotate: '-rotate-1', translateY: 'translate-y-10 md:translate-y-16' },
-              { idx: 10, w: 'w-[270px] sm:w-[350px] md:w-[440px]', h: 'h-[250px] sm:h-[290px] md:h-[350px]', z: 'z-15', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '16:9', rotate: 'rotate-3', translateY: '-translate-y-8 md:-translate-y-12' },
-              { idx: 11, w: 'w-[220px] sm:w-[280px] md:w-[350px]', h: 'h-[290px] sm:h-[340px] md:h-[410px]', z: 'z-30', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '4:3', rotate: '-rotate-2', translateY: 'translate-y-6 md:translate-y-10' },
-              { idx: 12, w: 'w-[290px] sm:w-[370px] md:w-[470px]', h: 'h-[260px] sm:h-[300px] md:h-[360px]', z: 'z-10', overlap: '-ml-32 sm:-ml-40 md:-ml-52', aspect: '16:9', rotate: '-rotate-2', translateY: '-translate-y-10 md:-translate-y-16' },
-              { idx: 13, w: 'w-[200px] sm:w-[260px] md:w-[320px]', h: 'h-[280px] sm:h-[330px] md:h-[390px]', z: 'z-25', overlap: '-ml-28 sm:-ml-36 md:-ml-48', aspect: '4:3', rotate: 'rotate-2', translateY: 'translate-y-12 md:translate-y-18' },
-              { idx: 14, w: 'w-[250px] sm:w-[330px] md:w-[420px]', h: 'h-[240px] sm:h-[280px] md:h-[330px]', z: 'z-15', overlap: '-ml-24 sm:-ml-32 md:-ml-40', aspect: '16:9', rotate: '-rotate-1', translateY: '-translate-y-6 md:-translate-y-10' },
-              { idx: 15, w: 'w-[210px] sm:w-[270px] md:w-[340px]', h: 'h-[290px] sm:h-[340px] md:h-[400px]', z: 'z-30', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '4:3', rotate: 'rotate-3', translateY: 'translate-y-4 md:translate-y-8' },
-              { idx: 16, w: 'w-[300px] sm:w-[380px] md:w-[480px]', h: 'h-[270px] sm:h-[310px] md:h-[370px]', z: 'z-10', overlap: '-ml-32 sm:-ml-44 md:-ml-56', aspect: '16:9', rotate: 'rotate-1', translateY: '-translate-y-12 md:-translate-y-18' },
-              { idx: 17, w: 'w-[220px] sm:w-[280px] md:w-[350px]', h: 'h-[280px] sm:h-[330px] md:h-[390px]', z: 'z-25', overlap: '-ml-28 sm:-ml-36 md:-ml-48', aspect: '4:3', rotate: '-rotate-3', translateY: 'translate-y-10 md:translate-y-16' },
-              { idx: 18, w: 'w-[270px] sm:w-[350px] md:w-[440px]', h: 'h-[250px] sm:h-[290px] md:h-[350px]', z: 'z-15', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '16:9', rotate: 'rotate-2', translateY: '-translate-y-8 md:-translate-y-14' },
-              { idx: 19, w: 'w-[200px] sm:w-[260px] md:w-[320px]', h: 'h-[290px] sm:h-[340px] md:h-[410px]', z: 'z-35', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '4:3', rotate: '-rotate-1', translateY: 'translate-y-6 md:translate-y-12' },
-              { idx: 20, w: 'w-[310px] sm:w-[390px] md:w-[490px]', h: 'h-[270px] sm:h-[310px] md:h-[370px]', z: 'z-10', overlap: '-ml-32 sm:-ml-44 md:-ml-56', aspect: '16:9', rotate: '-rotate-2', translateY: '-translate-y-10 md:-translate-y-16' },
-              { idx: 21, w: 'w-[210px] sm:w-[270px] md:w-[340px]', h: 'h-[280px] sm:h-[330px] md:h-[390px]', z: 'z-25', overlap: '-ml-28 sm:-ml-36 md:-ml-48', aspect: '4:3', rotate: 'rotate-2', translateY: 'translate-y-12 md:translate-y-18' },
-              { idx: 22, w: 'w-[280px] sm:w-[360px] md:w-[460px]', h: 'h-[250px] sm:h-[290px] md:h-[340px]', z: 'z-15', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '16:9', rotate: '-rotate-3', translateY: '-translate-y-8 md:-translate-y-12' },
-              { idx: 23, w: 'w-[220px] sm:w-[280px] md:w-[350px]', h: 'h-[290px] sm:h-[340px] md:h-[410px]', z: 'z-30', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '4:3', rotate: 'rotate-1', translateY: 'translate-y-5 md:translate-y-10' }
+              { idx: 0, w: 'w-[280px] sm:w-[360px] md:w-[460px]', h: 'h-[320px] sm:h-[380px] md:h-[460px]', z: 'z-10', overlap: 'ml-0', aspect: '16:9', rotate: '-rotate-2', translateY: '-translate-y-8 md:-translate-y-14' },
+              { idx: 1, w: 'w-[200px] sm:w-[260px] md:w-[320px]', h: 'h-[350px] sm:h-[420px] md:h-[510px]', z: 'z-25', overlap: '-ml-28 sm:-ml-36 md:-ml-48', aspect: '4:3', rotate: 'rotate-2', translateY: 'translate-y-14 md:translate-y-24' },
+              { idx: 2, w: 'w-[240px] sm:w-[300px] md:w-[380px]', h: 'h-[300px] sm:h-[360px] md:h-[430px]', z: 'z-15', overlap: '-ml-24 sm:-ml-32 md:-ml-40', aspect: '16:9', rotate: '-rotate-3', translateY: '-translate-y-6 md:-translate-y-10' },
+              { idx: 3, w: 'w-[210px] sm:w-[270px] md:w-[340px]', h: 'h-[360px] sm:h-[430px] md:h-[530px]', z: 'z-30', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '4:3', rotate: 'rotate-1', translateY: 'translate-y-10 md:translate-y-18' },
+              { idx: 4, w: 'w-[300px] sm:w-[380px] md:w-[480px]', h: 'h-[330px] sm:h-[400px] md:h-[480px]', z: 'z-10', overlap: '-ml-32 sm:-ml-40 md:-ml-52', aspect: '16:9', rotate: 'rotate-3', translateY: '-translate-y-10 md:-translate-y-16' },
+              { idx: 5, w: 'w-[220px] sm:w-[280px] md:w-[350px]', h: 'h-[350px] sm:h-[420px] md:h-[510px]', z: 'z-25', overlap: '-ml-28 sm:-ml-36 md:-ml-48', aspect: '4:3', rotate: '-rotate-2', translateY: 'translate-y-16 md:translate-y-28' },
+              { idx: 6, w: 'w-[260px] sm:w-[340px] md:w-[420px]', h: 'h-[310px] sm:h-[370px] md:h-[450px]', z: 'z-15', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '16:9', rotate: 'rotate-2', translateY: '-translate-y-8 md:-translate-y-14' },
+              { idx: 7, w: 'w-[200px] sm:w-[260px] md:w-[320px]', h: 'h-[360px] sm:h-[430px] md:h-[520px]', z: 'z-35', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '4:3', rotate: '-rotate-3', translateY: 'translate-y-8 md:translate-y-14' },
+              { idx: 8, w: 'w-[310px] sm:w-[390px] md:w-[490px]', h: 'h-[330px] sm:h-[400px] md:h-[480px]', z: 'z-10', overlap: '-ml-32 sm:-ml-44 md:-ml-56', aspect: '16:9', rotate: 'rotate-2', translateY: '-translate-y-12 md:-translate-y-18' },
+              { idx: 9, w: 'w-[210px] sm:w-[270px] md:w-[340px]', h: 'h-[350px] sm:h-[420px] md:h-[510px]', z: 'z-25', overlap: '-ml-28 sm:-ml-36 md:-ml-48', aspect: '4:3', rotate: '-rotate-1', translateY: 'translate-y-14 md:translate-y-24' },
+              { idx: 10, w: 'w-[270px] sm:w-[350px] md:w-[440px]', h: 'h-[310px] sm:h-[370px] md:h-[450px]', z: 'z-15', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '16:9', rotate: 'rotate-3', translateY: '-translate-y-8 md:-translate-y-12' },
+              { idx: 11, w: 'w-[220px] sm:w-[280px] md:w-[350px]', h: 'h-[360px] sm:h-[430px] md:h-[530px]', z: 'z-30', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '4:3', rotate: '-rotate-2', translateY: 'translate-y-10 md:translate-y-16' },
+              { idx: 12, w: 'w-[290px] sm:w-[370px] md:w-[470px]', h: 'h-[320px] sm:h-[380px] md:h-[460px]', z: 'z-10', overlap: '-ml-32 sm:-ml-40 md:-ml-52', aspect: '16:9', rotate: '-rotate-2', translateY: '-translate-y-10 md:-translate-y-16' },
+              { idx: 13, w: 'w-[200px] sm:w-[260px] md:w-[320px]', h: 'h-[350px] sm:h-[420px] md:h-[510px]', z: 'z-25', overlap: '-ml-28 sm:-ml-36 md:-ml-48', aspect: '4:3', rotate: 'rotate-2', translateY: 'translate-y-16 md:translate-y-28' },
+              { idx: 14, w: 'w-[250px] sm:w-[330px] md:w-[420px]', h: 'h-[300px] sm:h-[360px] md:h-[430px]', z: 'z-15', overlap: '-ml-24 sm:-ml-32 md:-ml-40', aspect: '16:9', rotate: '-rotate-1', translateY: '-translate-y-6 md:-translate-y-10' },
+              { idx: 15, w: 'w-[210px] sm:w-[270px] md:w-[340px]', h: 'h-[360px] sm:h-[430px] md:h-[520px]', z: 'z-30', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '4:3', rotate: 'rotate-3', translateY: 'translate-y-8 md:translate-y-14' },
+              { idx: 16, w: 'w-[300px] sm:w-[380px] md:w-[480px]', h: 'h-[330px] sm:h-[400px] md:h-[480px]', z: 'z-10', overlap: '-ml-32 sm:-ml-44 md:-ml-56', aspect: '16:9', rotate: 'rotate-1', translateY: '-translate-y-12 md:-translate-y-18' },
+              { idx: 17, w: 'w-[220px] sm:w-[280px] md:w-[350px]', h: 'h-[350px] sm:h-[420px] md:h-[510px]', z: 'z-25', overlap: '-ml-28 sm:-ml-36 md:-ml-48', aspect: '4:3', rotate: '-rotate-3', translateY: 'translate-y-14 md:translate-y-24' },
+              { idx: 18, w: 'w-[270px] sm:w-[350px] md:w-[440px]', h: 'h-[310px] sm:h-[370px] md:h-[450px]', z: 'z-15', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '16:9', rotate: 'rotate-2', translateY: '-translate-y-8 md:-translate-y-14' },
+              { idx: 19, w: 'w-[200px] sm:w-[260px] md:w-[320px]', h: 'h-[360px] sm:h-[430px] md:h-[530px]', z: 'z-35', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '4:3', rotate: '-rotate-1', translateY: 'translate-y-10 md:translate-y-18' },
+              { idx: 20, w: 'w-[310px] sm:w-[390px] md:w-[490px]', h: 'h-[330px] sm:h-[400px] md:h-[480px]', z: 'z-10', overlap: '-ml-32 sm:-ml-44 md:-ml-56', aspect: '16:9', rotate: '-rotate-2', translateY: '-translate-y-10 md:-translate-y-16' },
+              { idx: 21, w: 'w-[210px] sm:w-[270px] md:w-[340px]', h: 'h-[350px] sm:h-[420px] md:h-[510px]', z: 'z-25', overlap: '-ml-28 sm:-ml-36 md:-ml-48', aspect: '4:3', rotate: 'rotate-2', translateY: 'translate-y-16 md:translate-y-28' },
+              { idx: 22, w: 'w-[280px] sm:w-[360px] md:w-[460px]', h: 'h-[310px] sm:h-[370px] md:h-[450px]', z: 'z-15', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '16:9', rotate: '-rotate-3', translateY: '-translate-y-8 md:-translate-y-12' },
+              { idx: 23, w: 'w-[220px] sm:w-[280px] md:w-[350px]', h: 'h-[360px] sm:h-[430px] md:h-[530px]', z: 'z-30', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '4:3', rotate: 'rotate-1', translateY: 'translate-y-8 md:translate-y-16' }
             ].map((sheet, sIndex) => (
               <div
                 key={sIndex}
@@ -1017,7 +1017,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
                 {/* ZONE 2: 100% FULL-WIDTH CINEMATIC IMMERSIVE SUITE                        */}
         {/* ========================================================================= */}
-        <div className="w-full md:max-w-7xl mx-auto px-4 md:px-6 lg:px-8 mt-16 md:mt-24 flex flex-col gap-16 md:gap-24">
+        <div className="w-full md:max-w-7xl mx-auto px-4 md:px-6 lg:px-8 mt-4 md:mt-6 flex flex-col gap-16 md:gap-24">
 
           {/* 1. 10/10 CINEMATIC HORIZONTAL SLIDING BENTO GALLERY */}
           <section className="space-y-8 pt-8 border-t border-zinc-200/80">
