@@ -964,7 +964,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
         {/* ULTRA-DENSE SCATTERED PILE-OF-SHEETS EDITORIAL MOSAIC (100vw, Zero Gap)   */}
         {/* Zero Gray Background Visible · Multi-Layer Heavy Collisions & Hover Lift  */}
         {/* ========================================================================= */}
-        <div className="w-screen relative left-1/2 right-1/2 -mx-[50vw] overflow-hidden my-10 md:my-14 py-2 bg-zinc-950">
+        <div className="w-screen relative left-1/2 right-1/2 -mx-[50vw] overflow-hidden my-10 md:my-14 py-2 bg-zinc-50/50 border-y border-zinc-200/60">
           <div 
             className="flex overflow-x-auto gap-0 px-2 pb-2 scrollbar-hide snap-x snap-mandatory items-center h-[420px] sm:h-[480px] md:h-[560px]" 
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
