@@ -588,12 +588,12 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
       {/* Content */}
       <div className="p-5 flex flex-col gap-3 flex-grow">
         <div className="flex justify-between items-start gap-2">
-            <h3 className="font-bold text-zinc-900 truncate text-[16px] sm:text-[17px] leading-snug group-hover:text-[#003B95] transition-colors duration-300" title={listing.displayTitle || listing.title}>
+            <h3 className="font-bold font-display text-zinc-900 truncate text-[16px] sm:text-[17px] leading-snug group-hover:text-[#003B95] transition-colors duration-300" title={listing.displayTitle || listing.title}>
                 {listing.displayTitle || listing.title}
             </h3>
             <div className="flex items-center gap-1 shrink-0 bg-zinc-50 px-2 py-0.5 rounded-lg border border-zinc-150/80">
                 <StarIcon className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                <span className="font-extrabold text-[13px] text-zinc-800">
+                <span className="font-extrabold text-[13px] text-zinc-800 tabular-nums">
                     {formatRating(listing.rating)}
                 </span>
             </div>
@@ -656,7 +656,7 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
                         <span className="text-[10px] text-zinc-400 font-medium">Multiple Rooms</span>
                     </div>
                     <div className="flex items-baseline gap-0.5">
-                        <span className="font-extrabold text-[#003B95] text-[18px] sm:text-[19px] tracking-tight">
+                        <span className="font-extrabold font-display tabular-nums text-[#003B95] text-[18px] sm:text-[19px] tracking-tight">
                             {formatPrice(listing.displayPrice ?? Math.min(...listing.rooms.map(r => r.price)), listing.currency)}
                         </span>
                         <span className="text-[#0369A1]/70 text-xs font-semibold">/{listing.period}</span>
@@ -666,7 +666,7 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
                 <div className="flex items-center justify-between w-full bg-zinc-50/40 px-3.5 py-2.5 rounded-2xl border border-zinc-100/40">
                     <span className="text-zinc-500 text-[10px] font-extrabold uppercase tracking-widest">Total Price</span>
                     <div className="flex items-baseline gap-0.5">
-                        <span className="font-extrabold text-zinc-900 text-[18px] tracking-tight">
+                        <span className="font-extrabold font-display tabular-nums text-zinc-900 text-[18px] tracking-tight">
                             {formatPrice(listing.displayPrice ?? listing.price, listing.currency)}
                         </span>
                         <span className="text-zinc-500 text-xs font-semibold">/{listing.period}</span>
