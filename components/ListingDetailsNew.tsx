@@ -952,7 +952,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
         {/* ========================================================================= */}
         <div className="w-full md:max-w-7xl mx-auto px-4 md:px-6 lg:px-8 mt-16 md:mt-24 flex flex-col gap-16 md:gap-24">
 
-                              {/* 1. 10/10 CINEMATIC HORIZONTAL SLIDING BENTO GALLERY (Left-Trio + Right-Hero + Floating Paddles) */}
+          {/* 1. 10/10 CINEMATIC HORIZONTAL SLIDING BENTO GALLERY */}
           <section className="space-y-8 pt-8 border-t border-zinc-200/80">
             {/* Header & Controls */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -1002,21 +1002,21 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
               </div>
             </div>
 
-            {/* Collection Category Pills (Synchronized Tap-to-Scroll HUD) */}
+            {/* Collection Category Pills (Synchronized Minimalist HUD) */}
             <div className="flex flex-wrap gap-2">
               {[
-                { id: 0, label: '01 · Architectural Vistas & Grounds' },
-                { id: 1, label: '02 · Master Living & Royal Suites' },
-                { id: 2, label: '03 · Wellness, Spa & Bespoke Dining' }
+                { id: 0, label: '01 · Vistas & Grounds' },
+                { id: 1, label: '02 · Master Living & Suites' },
+                { id: 2, label: '03 · Wellness & Dining' }
               ].map(cat => (
                 <button
                   key={cat.id}
                   type="button"
                   onClick={() => handleCategoryPillClick(cat.id)}
-                  className={`px-4 py-2.5 rounded-full text-xs font-bold font-display transition-all cursor-pointer flex items-center gap-2 ${
+                  className={`px-4 py-2 rounded-full text-xs font-bold font-display transition-all cursor-pointer flex items-center gap-2 ${
                     activeSlide === cat.id
-                      ? 'bg-zinc-900 text-white shadow-md'
-                      : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700'
+                      ? 'bg-zinc-900 text-white shadow-sm'
+                      : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200/60'
                   }`}
                 >
                   <span>{cat.label}</span>
@@ -1227,43 +1227,9 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
               </div>
             </div>
 
-                        {/* 10/10 DYNAMIC ISLAND MOTION STREAM (< 768px - 100% Pure Full-Bleed Imagery) */}
+            {/* 10/10 MINIMALIST CONTINUOUS MOBILE GESTURE STREAM (< 768px) */}
             <div className="md:hidden space-y-3">
-              
-              {/* Dynamic Island Subconscious Telemetry HUD */}
-              <div className="bg-zinc-900/95 text-white backdrop-blur-xl px-4 py-2.5 rounded-2xl border border-white/10 shadow-lg flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                  <span className="text-[11px] font-extrabold font-display uppercase tracking-wider text-amber-300">
-                    Chapter 0{activeSlide + 1}
-                  </span>
-                  <span className="text-zinc-400 text-xs">·</span>
-                  <span className="text-xs font-semibold text-zinc-300 truncate max-w-[140px]">
-                    {activeSlide === 0 ? 'Vistas & Grounds' : activeSlide === 1 ? 'Master Suites' : 'Wellness & Dining'}
-                  </span>
-                </div>
-
-                {/* Micro Segmented Progress Ticks */}
-                <div className="flex items-center gap-1.5 shrink-0 bg-white/10 px-2.5 py-1 rounded-full">
-                  {[1, 2, 3, 4].map((step) => {
-                    const currentSubStep = (mobileSpaceIndex % 4) + 1;
-                    const isFilled = step <= currentSubStep;
-                    return (
-                      <div
-                        key={step}
-                        className={`h-1.5 rounded-full transition-all duration-300 ${
-                          isFilled ? 'w-3.5 bg-amber-400' : 'w-1.5 bg-white/30'
-                        }`}
-                      />
-                    );
-                  })}
-                  <span className="text-[10px] font-bold text-zinc-300 font-mono ml-1">
-                    {(mobileSpaceIndex % 4) + 1}/4
-                  </span>
-                </div>
-              </div>
-
-              {/* 100% Pure Full-Bleed Continuous Swipe Track */}
+              {/* Pure Full-Bleed Continuous Swipe Track */}
               <div 
                 ref={mobileGalleryRef}
                 onScroll={handleMobileScroll}
@@ -1279,7 +1245,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         uiAudio.playClick();
                         setLightboxIndex(space.imgIndex);
                       }}
-                      className="snap-center shrink-0 w-[85vw] sm:w-[70vw] relative aspect-[4/3] rounded-3xl overflow-hidden bg-zinc-100 border border-zinc-200/80 shadow-md cursor-pointer group"
+                      className="snap-center shrink-0 w-[85vw] sm:w-[70vw] relative aspect-[4/3] rounded-3xl overflow-hidden bg-zinc-100 border border-zinc-200/80 shadow-sm cursor-pointer group"
                     >
                       <OptimizedImage
                         src={space.img}
@@ -1288,28 +1254,18 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         alt={space.title}
                       />
 
-                      {/* Chapter Entry Watermark Shimmer Badge (On First Space of each Collection) */}
-                      {item.isChapterStart && (
-                        <div className="absolute top-4 left-4 z-10 bg-zinc-950/80 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-amber-400/40 shadow-lg flex items-center gap-1.5 animate-fade-in">
-                          <Sparkles className="w-3 h-3 text-amber-300 animate-spin" />
-                          <span className="text-[10px] font-black uppercase tracking-widest text-amber-300 font-mono">
-                            {item.chapterName.split('·')[0].trim()} Anchor
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Bottom Caption Overlay */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent flex items-end p-5 text-white">
+                      {/* Clean Minimalist Bottom Caption */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-4 text-white">
                         <div className="w-full">
                           <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-amber-300 font-mono">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300 font-mono">
                               Space {item.globalIdx < 10 ? `0${item.globalIdx}` : item.globalIdx} · {space.tag}
                             </span>
                             <span className="text-[10px] text-zinc-300 font-medium font-mono">
-                              {item.subIdx}/4
+                              {item.globalIdx} / 12
                             </span>
                           </div>
-                          <h4 className="text-sm font-bold font-display mt-0.5 truncate">{space.title}</h4>
+                          <h4 className="text-sm font-bold font-display mt-0.5 truncate text-white">{space.title}</h4>
                         </div>
                       </div>
                     </div>
@@ -1317,10 +1273,9 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 })}
               </div>
 
-              <div className="flex items-center justify-between px-2 text-[11px] font-medium text-zinc-400">
-                <span>← Continuous Gesture Stream</span>
-                <span>Space {mobileSpaceIndex + 1} of 12</span>
-                <span>Tap for 4K Lightbox →</span>
+              <div className="flex items-center justify-between px-1 text-[11px] font-medium text-zinc-400">
+                <span>Swipe to explore 12 curated spaces</span>
+                <span>Tap for 4K inspection</span>
               </div>
             </div>
           </section>
