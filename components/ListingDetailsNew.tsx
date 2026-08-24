@@ -949,19 +949,21 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
         {/* ========================================================================= */}
         {/* ========================================================================= */}
-        {/* FULL-BLEED INTERLOCKING ASYMMETRICAL EDITORIAL MOSAIC (100vw, <3% Gap)     */}
+        {/* CENTERED DENSE COLLIDING ASYMMETRICAL EDITORIAL COLLAGE (100vw, ≤1% Gap)  */}
+        {/* Positioned Centered Exactly Between Host Section & Cinematic Sanctuary Gallery */}
         {/* ========================================================================= */}
-        <div className="w-screen relative left-1/2 right-1/2 -mx-[50vw] overflow-hidden py-3 bg-zinc-950/5 border-y border-zinc-200/60">
-          <div className="group/mosaic flex overflow-x-auto gap-2 md:gap-3 px-2 md:px-4 pb-2 scrollbar-hide snap-x snap-mandatory items-stretch h-[340px] sm:h-[380px] md:h-[430px]" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        <div className="w-screen relative left-1/2 right-1/2 -mx-[50vw] overflow-hidden my-12 md:my-16 py-6 bg-zinc-950/5 border-y border-zinc-200/60">
+          <div className="flex overflow-x-auto gap-0 md:gap-1 px-4 md:px-8 pb-3 scrollbar-hide snap-x snap-mandatory items-center min-h-[360px] sm:h-[400px] md:h-[450px]" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             
-            {/* Column 1: Dual Stacked Landscape (16:10 + 16:9) */}
-            <div className="w-[260px] sm:w-[320px] md:w-[390px] flex flex-col gap-2 md:gap-3 shrink-0 snap-center">
+            {/* CLUSTER 01: Vistas & Horizon Grounds (3 Overlapping Colliding Layers) */}
+            <div className="group/cluster shrink-0 flex items-center relative py-4 snap-center">
+              {/* Base Layer 01: Wide Landscape (16:9 Backdrop) */}
               <div
                 onClick={() => {
                   uiAudio.playClick();
                   setLightboxIndex(0);
                 }}
-                className="relative h-1/2 rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border border-white/80 shadow-xs cursor-pointer transition-all duration-500 ease-out group-hover/mosaic:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.05] hover:shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
+                className="relative z-10 w-[270px] sm:w-[340px] md:w-[460px] h-[220px] sm:h-[260px] md:h-[300px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-lg group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
               >
                 <OptimizedImage
                   src={uniqueMediaPool[0]}
@@ -970,46 +972,49 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   alt="Sanctuary Vista"
                 />
               </div>
+
+              {/* Layer 02: Tall Portrait (Colliding Overlap Top-Right by 30%) */}
               <div
                 onClick={() => {
                   uiAudio.playClick();
                   setLightboxIndex(1);
                 }}
-                className="relative h-1/2 rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border border-white/80 shadow-xs cursor-pointer transition-all duration-500 ease-out group-hover/mosaic:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.05] hover:shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
+                className="relative z-20 -ml-16 sm:-ml-20 md:-ml-28 mt-6 md:mt-10 w-[160px] sm:w-[200px] md:w-[250px] h-[240px] sm:h-[280px] md:h-[330px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-xl group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
               >
                 <OptimizedImage
                   src={uniqueMediaPool[1]}
+                  aspectRatio="4:3"
+                  className="w-full h-full object-cover"
+                  alt="Courtyard Detail"
+                />
+              </div>
+
+              {/* Layer 03: Landscape Accent (Colliding Overlap Bottom-Right by 25%) */}
+              <div
+                onClick={() => {
+                  uiAudio.playClick();
+                  setLightboxIndex(2);
+                }}
+                className="relative z-25 -ml-12 sm:-ml-16 md:-ml-22 -mt-6 md:-mt-10 w-[180px] sm:w-[220px] md:w-[280px] h-[190px] sm:h-[220px] md:h-[260px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-xl group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
+              >
+                <OptimizedImage
+                  src={uniqueMediaPool[2]}
                   aspectRatio="16:9"
                   className="w-full h-full object-cover"
-                  alt="Courtyard View"
+                  alt="Fire Lounge"
                 />
               </div>
             </div>
 
-            {/* Column 2: Tall Portrait Poster (3:4 Aspect) */}
-            <div
-              onClick={() => {
-                uiAudio.playClick();
-                setLightboxIndex(2);
-              }}
-              className="w-[180px] sm:w-[220px] md:w-[270px] h-full shrink-0 snap-center rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border border-white/80 shadow-xs cursor-pointer transition-all duration-500 ease-out group-hover/mosaic:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.05] hover:shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
-            >
-              <OptimizedImage
-                src={uniqueMediaPool[2]}
-                aspectRatio="4:3"
-                className="w-full h-full object-cover"
-                alt="Fire Lounge"
-              />
-            </div>
-
-            {/* Column 3: Asymmetrical Stack (Top 42% + Bottom 58%) */}
-            <div className="w-[280px] sm:w-[340px] md:w-[420px] flex flex-col gap-2 md:gap-3 shrink-0 snap-center">
+            {/* CLUSTER 02: Master Living & Royal Suites (3 Overlapping Colliding Layers) */}
+            <div className="group/cluster shrink-0 flex items-center relative py-4 snap-center -ml-10 sm:-ml-14 md:-ml-20 z-15">
+              {/* Base Layer 04: Panorama (16:10 Frame) */}
               <div
                 onClick={() => {
                   uiAudio.playClick();
                   setLightboxIndex(3);
                 }}
-                className="relative h-[44%] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border border-white/80 shadow-xs cursor-pointer transition-all duration-500 ease-out group-hover/mosaic:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.05] hover:shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
+                className="relative z-10 w-[260px] sm:w-[330px] md:w-[450px] h-[220px] sm:h-[260px] md:h-[300px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-lg group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
               >
                 <OptimizedImage
                   src={uniqueMediaPool[3]}
@@ -1018,46 +1023,49 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   alt="Facade Panorama"
                 />
               </div>
+
+              {/* Layer 05: Editorial Tall Poster (Colliding Overlap Top-Right by 35%) */}
               <div
                 onClick={() => {
                   uiAudio.playClick();
                   setLightboxIndex(4);
                 }}
-                className="relative h-[56%] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border border-white/80 shadow-xs cursor-pointer transition-all duration-500 ease-out group-hover/mosaic:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.05] hover:shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
+                className="relative z-20 -ml-16 sm:-ml-20 md:-ml-28 mt-8 md:mt-12 w-[170px] sm:w-[210px] md:w-[260px] h-[250px] sm:h-[290px] md:h-[340px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-xl group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
               >
                 <OptimizedImage
                   src={uniqueMediaPool[4]}
-                  aspectRatio="16:9"
+                  aspectRatio="4:3"
                   className="w-full h-full object-cover"
                   alt="Master Suite"
                 />
               </div>
+
+              {/* Layer 06: Square Accent (Colliding Overlap Bottom-Right by 25%) */}
+              <div
+                onClick={() => {
+                  uiAudio.playClick();
+                  setLightboxIndex(5);
+                }}
+                className="relative z-25 -ml-12 sm:-ml-16 md:-ml-22 -mt-6 md:-mt-10 w-[170px] sm:w-[210px] md:w-[270px] h-[190px] sm:h-[220px] md:h-[260px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-xl group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
+              >
+                <OptimizedImage
+                  src={uniqueMediaPool[5]}
+                  aspectRatio="4:3"
+                  className="w-full h-full object-cover"
+                  alt="Living Salon"
+                />
+              </div>
             </div>
 
-            {/* Column 4: Tall Portrait Poster (4:5 Aspect) */}
-            <div
-              onClick={() => {
-                uiAudio.playClick();
-                setLightboxIndex(5);
-              }}
-              className="w-[190px] sm:w-[230px] md:w-[280px] h-full shrink-0 snap-center rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border border-white/80 shadow-xs cursor-pointer transition-all duration-500 ease-out group-hover/mosaic:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.05] hover:shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
-            >
-              <OptimizedImage
-                src={uniqueMediaPool[5]}
-                aspectRatio="4:3"
-                className="w-full h-full object-cover"
-                alt="Living Salon"
-              />
-            </div>
-
-            {/* Column 5: Asymmetrical Stack (Top 58% + Bottom 42%) */}
-            <div className="w-[300px] sm:w-[360px] md:w-[440px] flex flex-col gap-2 md:gap-3 shrink-0 snap-center">
+            {/* CLUSTER 03: Wellness, Spa & Bespoke Dining (3 Overlapping Colliding Layers) */}
+            <div className="group/cluster shrink-0 flex items-center relative py-4 snap-center -ml-10 sm:-ml-14 md:-ml-20 z-20">
+              {/* Base Layer 07: Wide Chef Pavilion Backdrop */}
               <div
                 onClick={() => {
                   uiAudio.playClick();
                   setLightboxIndex(6);
                 }}
-                className="relative h-[56%] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border border-white/80 shadow-xs cursor-pointer transition-all duration-500 ease-out group-hover/mosaic:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.05] hover:shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
+                className="relative z-10 w-[270px] sm:w-[340px] md:w-[460px] h-[220px] sm:h-[260px] md:h-[300px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-lg group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
               >
                 <OptimizedImage
                   src={uniqueMediaPool[6]}
@@ -1066,46 +1074,49 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   alt="Marble Spa"
                 />
               </div>
+
+              {/* Layer 08: Portrait Spa Vignette */}
               <div
                 onClick={() => {
                   uiAudio.playClick();
                   setLightboxIndex(7);
                 }}
-                className="relative h-[44%] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border border-white/80 shadow-xs cursor-pointer transition-all duration-500 ease-out group-hover/mosaic:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.05] hover:shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
+                className="relative z-20 -ml-16 sm:-ml-20 md:-ml-28 mt-6 md:mt-10 w-[160px] sm:w-[200px] md:w-[250px] h-[240px] sm:h-[280px] md:h-[330px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-xl group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
               >
                 <OptimizedImage
                   src={uniqueMediaPool[7]}
-                  aspectRatio="16:9"
+                  aspectRatio="4:3"
                   className="w-full h-full object-cover"
                   alt="Terrace Vista"
                 />
               </div>
+
+              {/* Layer 09: Dining Landscape Frame */}
+              <div
+                onClick={() => {
+                  uiAudio.playClick();
+                  setLightboxIndex(8);
+                }}
+                className="relative z-25 -ml-12 sm:-ml-16 md:-ml-22 -mt-6 md:-mt-10 w-[180px] sm:w-[220px] md:w-[280px] h-[190px] sm:h-[220px] md:h-[260px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-xl group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
+              >
+                <OptimizedImage
+                  src={uniqueMediaPool[8]}
+                  aspectRatio="16:9"
+                  className="w-full h-full object-cover"
+                  alt="Culinary Deck"
+                />
+              </div>
             </div>
 
-            {/* Column 6: Tall Portrait Poster (3:4 Aspect) */}
-            <div
-              onClick={() => {
-                uiAudio.playClick();
-                setLightboxIndex(8);
-              }}
-              className="w-[180px] sm:w-[220px] md:w-[270px] h-full shrink-0 snap-center rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border border-white/80 shadow-xs cursor-pointer transition-all duration-500 ease-out group-hover/mosaic:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.05] hover:shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
-            >
-              <OptimizedImage
-                src={uniqueMediaPool[8]}
-                aspectRatio="4:3"
-                className="w-full h-full object-cover"
-                alt="Chef Pavilion"
-              />
-            </div>
-
-            {/* Column 7: Dual Stacked Landscape (16:9 + 16:9) */}
-            <div className="w-[260px] sm:w-[320px] md:w-[390px] flex flex-col gap-2 md:gap-3 shrink-0 snap-center">
+            {/* CLUSTER 04: Evening Atmosphere & Thermal Spa (3 Overlapping Colliding Layers) */}
+            <div className="group/cluster shrink-0 flex items-center relative py-4 snap-center -ml-10 sm:-ml-14 md:-ml-20 z-25">
+              {/* Base Layer 10: Wine Vault Backdrop */}
               <div
                 onClick={() => {
                   uiAudio.playClick();
                   setLightboxIndex(9);
                 }}
-                className="relative h-1/2 rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border border-white/80 shadow-xs cursor-pointer transition-all duration-500 ease-out group-hover/mosaic:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.05] hover:shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
+                className="relative z-10 w-[260px] sm:w-[330px] md:w-[450px] h-[220px] sm:h-[260px] md:h-[300px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-lg group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
               >
                 <OptimizedImage
                   src={uniqueMediaPool[9]}
@@ -1114,36 +1125,38 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   alt="Wine Vault"
                 />
               </div>
+
+              {/* Layer 11: Sauna Portrait */}
               <div
                 onClick={() => {
                   uiAudio.playClick();
                   setLightboxIndex(10);
                 }}
-                className="relative h-1/2 rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border border-white/80 shadow-xs cursor-pointer transition-all duration-500 ease-out group-hover/mosaic:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.05] hover:shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
+                className="relative z-20 -ml-16 sm:-ml-20 md:-ml-28 mt-8 md:mt-12 w-[160px] sm:w-[200px] md:w-[250px] h-[240px] sm:h-[280px] md:h-[330px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-xl group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
               >
                 <OptimizedImage
                   src={uniqueMediaPool[10]}
-                  aspectRatio="16:9"
+                  aspectRatio="4:3"
                   className="w-full h-full object-cover"
                   alt="Cedar Sauna"
                 />
               </div>
-            </div>
 
-            {/* Column 8: Tall Portrait Poster (4:5 Aspect) */}
-            <div
-              onClick={() => {
-                uiAudio.playClick();
-                setLightboxIndex(11);
-              }}
-              className="w-[190px] sm:w-[230px] md:w-[280px] h-full shrink-0 snap-center rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border border-white/80 shadow-xs cursor-pointer transition-all duration-500 ease-out group-hover/mosaic:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.05] hover:shadow-[0_20px_50px_rgba(0,0,0,0.5)]"
-            >
-              <OptimizedImage
-                src={uniqueMediaPool[11]}
-                aspectRatio="4:3"
-                className="w-full h-full object-cover"
-                alt="Evening Atmosphere"
-              />
+              {/* Layer 12: Evening Atmosphere Final Frame */}
+              <div
+                onClick={() => {
+                  uiAudio.playClick();
+                  setLightboxIndex(11);
+                }}
+                className="relative z-25 -ml-12 sm:-ml-16 md:-ml-22 -mt-6 md:-mt-10 w-[180px] sm:w-[220px] md:w-[280px] h-[190px] sm:h-[220px] md:h-[260px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-xl group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
+              >
+                <OptimizedImage
+                  src={uniqueMediaPool[11]}
+                  aspectRatio="16:9"
+                  className="w-full h-full object-cover"
+                  alt="Evening Atmosphere"
+                />
+              </div>
             </div>
 
           </div>
