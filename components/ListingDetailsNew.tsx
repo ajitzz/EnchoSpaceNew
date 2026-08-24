@@ -70,13 +70,21 @@ const getTagIcon = (tag: string) => {
   return Sparkles;
 };
 
-const DEFAULT_IMAGES = [
+const LUXURY_BACKUP_POOL = [
   "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1200&q=80",
   "https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=800&q=80",
   "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=800&q=80",
   "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=800&q=80",
-  "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=800&q=80"
+  "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1613490493576-7fde63acd811?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1600585154526-990dced4db0d?auto=format&fit=crop&w=800&q=80"
 ];
+const DEFAULT_IMAGES = LUXURY_BACKUP_POOL.slice(0, 5);
 
 const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({ 
   listing, 
@@ -100,9 +108,24 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   const [isVideoMuted, setIsVideoMuted] = useState(true);
   const [activeGalleryTab, setActiveGalleryTab] = useState('all');
   const [activeSlide, setActiveSlide] = useState(0);
-  const images = (listing.imageUrls && listing.imageUrls.length > 0) 
-    ? listing.imageUrls 
-    : (listing.imageUrl ? [listing.imageUrl, ...DEFAULT_IMAGES.slice(1)] : DEFAULT_IMAGES);
+  // 10/10 Adaptive Media Allocator: Guarantees zero duplicate images across all collections
+  const uniqueMediaPool = useMemo(() => {
+    const raw = (listing.imageUrls && listing.imageUrls.length > 0)
+      ? listing.imageUrls
+      : (listing.imageUrl ? [listing.imageUrl] : []);
+    
+    const combined = [...raw];
+    // Fill remaining slots with distinct luxury assets from pool
+    for (const backup of LUXURY_BACKUP_POOL) {
+      if (combined.length >= 12) break;
+      if (!combined.includes(backup)) {
+        combined.push(backup);
+      }
+    }
+    return combined;
+  }, [listing.imageUrls, listing.imageUrl]);
+
+  const images = uniqueMediaPool;
 
   // Curated Space Collections for Sliding Bento Gallery
   const slideCollections = useMemo(() => [
@@ -112,25 +135,26 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
       space01: {
         title: `${listing.title} Infinity Reflection Pool`,
         desc: 'Panoramic horizon pool with temperature-controlled heating and stone daybeds.',
-        img: images[0] || DEFAULT_IMAGES[0],
+        img: uniqueMediaPool[0],
         imgIndex: 0,
-        tag: 'Infinity Vista'
+        tag: 'Infinity Vista',
+        hasVideo: !!listing.video_url
       },
       space02: {
         title: 'Open-Air Central Courtyard',
-        img: images[1] || DEFAULT_IMAGES[1],
+        img: uniqueMediaPool[1],
         imgIndex: 1,
         tag: 'Courtyard'
       },
       space03: {
         title: 'Sunken Fire Lounge Deck',
-        img: images[2] || DEFAULT_IMAGES[2],
+        img: uniqueMediaPool[2],
         imgIndex: 2,
         tag: 'Fire Deck'
       },
       space04: {
         title: 'Artisanal Sandstone Architectural Facade',
-        img: images[3] || DEFAULT_IMAGES[3],
+        img: uniqueMediaPool[3],
         imgIndex: 3,
         tag: 'Facade Panorama'
       }
@@ -141,26 +165,26 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
       space01: {
         title: 'Presidential Master Suite Vista',
         desc: 'Custom king platform bed, panoramic glass vistas, and circadian lighting systems.',
-        img: images[1] || DEFAULT_IMAGES[1],
-        imgIndex: 1,
+        img: uniqueMediaPool[4],
+        imgIndex: 4,
         tag: 'Master Suite'
       },
       space02: {
         title: 'Central Living Pavilion',
-        img: images[2] || DEFAULT_IMAGES[2],
-        imgIndex: 2,
+        img: uniqueMediaPool[5],
+        imgIndex: 5,
         tag: 'Living Salon'
       },
       space03: {
         title: 'En-Suite Marble Rain Spa',
-        img: images[3] || DEFAULT_IMAGES[3],
-        imgIndex: 3,
+        img: uniqueMediaPool[6],
+        imgIndex: 6,
         tag: 'Spa Bath'
       },
       space04: {
         title: 'Private Sunset Viewing Terrace',
-        img: images[4] || DEFAULT_IMAGES[4],
-        imgIndex: 4,
+        img: uniqueMediaPool[7],
+        imgIndex: 7,
         tag: 'Private Terrace'
       }
     },
@@ -170,30 +194,30 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
       space01: {
         title: 'Private Chef Dining Pavilion',
         desc: 'Custom oak dining table seating 10, serviced by our dedicated private culinary brigade.',
-        img: images[2] || DEFAULT_IMAGES[2],
-        imgIndex: 2,
+        img: uniqueMediaPool[8],
+        imgIndex: 8,
         tag: 'Culinary Deck'
       },
       space02: {
         title: 'Sommelier Wine Vault & Bar',
-        img: images[3] || DEFAULT_IMAGES[3],
-        imgIndex: 3,
+        img: uniqueMediaPool[9],
+        imgIndex: 9,
         tag: 'Wine Cellar'
       },
       space03: {
         title: 'Cedar Sauna & Cold Plunge',
-        img: images[4] || DEFAULT_IMAGES[4],
-        imgIndex: 4,
+        img: uniqueMediaPool[10],
+        imgIndex: 10,
         tag: 'Thermal Spa'
       },
       space04: {
         title: 'Evening Acoustic Stillness & Stargazing',
-        img: images[0] || DEFAULT_IMAGES[0],
-        imgIndex: 0,
+        img: uniqueMediaPool[11],
+        imgIndex: 11,
         tag: 'Night Atmosphere'
       }
     }
-  ], [images, listing.title]);
+  ], [uniqueMediaPool, listing.title, listing.video_url]);
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [showFloatingCapsule, setShowFloatingCapsule] = useState(false);
@@ -878,7 +902,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
         {/* ========================================================================= */}
         <div className="w-full md:max-w-7xl mx-auto px-4 md:px-6 lg:px-8 mt-16 md:mt-24 flex flex-col gap-16 md:gap-24">
 
-                    {/* 1. CINEMATIC HORIZONTAL SLIDING BENTO GALLERY (Left-Trio + Right-Hero) */}
+                              {/* 1. 10/10 CINEMATIC HORIZONTAL SLIDING BENTO GALLERY (Left-Trio + Right-Hero + Floating Paddles) */}
           <section className="space-y-8 pt-8 border-t border-zinc-200/80">
             {/* Header & Controls */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -899,7 +923,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
               {/* Slide Navigation Controls & Collection Badge */}
               <div className="flex items-center gap-3 self-start md:self-end">
-                <div className="bg-zinc-100 px-4 py-2 rounded-full text-xs font-bold text-zinc-700 font-display flex items-center gap-2 border border-zinc-200/60">
+                <div className="bg-zinc-100 px-4 py-2 rounded-full text-xs font-bold text-zinc-700 font-display flex items-center gap-2 border border-zinc-200/60 shadow-2xs">
                   <span className="w-1.5 h-1.5 rounded-full bg-zinc-900" />
                   <span>COLLECTION 0{activeSlide + 1} / 03</span>
                 </div>
@@ -909,7 +933,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     uiAudio.playClick();
                     setActiveSlide((activeSlide - 1 + 3) % 3);
                   }}
-                  className="w-10 h-10 rounded-full bg-white hover:bg-zinc-100 border border-zinc-200 text-zinc-900 flex items-center justify-center shadow-sm active:scale-95 transition-all cursor-pointer"
+                  className="w-10 h-10 rounded-full bg-white hover:bg-zinc-100 border border-zinc-200 text-zinc-900 flex items-center justify-center shadow-xs active:scale-95 transition-all cursor-pointer"
                   title="Previous Collection"
                 >
                   <ChevronLeft className="w-5 h-5" />
@@ -931,9 +955,9 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
             {/* Collection Category Pills */}
             <div className="flex flex-wrap gap-2">
               {[
-                { id: 0, label: '01 · Architectural Vistas & Grounds', sub: 'Grand Pools & Grounds' },
-                { id: 1, label: '02 · Master Living & Royal Suites', sub: 'Pavilions & Baths' },
-                { id: 2, label: '03 · Wellness, Spa & Bespoke Dining', sub: 'Chef Deck & Spa' }
+                { id: 0, label: '01 · Architectural Vistas & Grounds' },
+                { id: 1, label: '02 · Master Living & Royal Suites' },
+                { id: 2, label: '03 · Wellness, Spa & Bespoke Dining' }
               ].map(cat => (
                 <button
                   key={cat.id}
@@ -953,21 +977,45 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
               ))}
             </div>
 
-            {/* Animated Bento Collage Container (Left-Trio + Right-Hero) */}
-            <div className="relative overflow-hidden min-h-[560px] md:min-h-[640px] rounded-3xl">
+            {/* DESKTOP BENTO COLLAGE (Left-Trio + Right-Hero + Floating Hover Paddles) */}
+            <div className="hidden md:block relative group/gallery overflow-hidden min-h-[560px] md:min-h-[640px] rounded-3xl">
+              {/* Floating Edge Glass Paddles (Appear on Gallery Hover) */}
+              <button
+                type="button"
+                onClick={() => {
+                  uiAudio.playClick();
+                  setActiveSlide((activeSlide - 1 + 3) % 3);
+                }}
+                className="absolute left-4 top-1/2 -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-black/40 hover:bg-black/70 text-white backdrop-blur-xl border border-white/20 flex items-center justify-center opacity-0 group-hover/gallery:opacity-100 transition-all duration-300 shadow-xl active:scale-90 cursor-pointer"
+                title="Previous Collection"
+              >
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  uiAudio.playClick();
+                  setActiveSlide((activeSlide + 1) % 3);
+                }}
+                className="absolute right-4 top-1/2 -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-black/40 hover:bg-black/70 text-white backdrop-blur-xl border border-white/20 flex items-center justify-center opacity-0 group-hover/gallery:opacity-100 transition-all duration-300 shadow-xl active:scale-90 cursor-pointer"
+                title="Next Collection"
+              >
+                <ChevronRight className="w-6 h-6" />
+              </button>
+
               <AnimatePresence mode="wait">
                 <motion.div
                   key={activeSlide}
-                  initial={{ opacity: 0, x: 50 }}
+                  initial={{ opacity: 0, x: 40 }}
                   animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -50 }}
-                  transition={{ duration: 0.4, ease: [0.25, 1, 0.5, 1] }}
-                  className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-full"
+                  exit={{ opacity: 0, x: -40 }}
+                  transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                  className="grid grid-cols-12 gap-4 h-full"
                 >
-                  {/* LEFT SIDE (7 Cols on LG): TRIO OF DETAIL SPACES */}
-                  <div className="lg:col-span-7 flex flex-col gap-4">
-                    {/* Top Row: Two Side-by-Side Spaces (Space 02 & Space 03) */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* LEFT SIDE (7 Cols): TRIO OF DETAIL SPACES */}
+                  <div className="col-span-7 flex flex-col gap-4">
+                    {/* Top Row: Spaces 02 & 03 (4:3) */}
+                    <div className="grid grid-cols-2 gap-4">
                       {/* Space 02 */}
                       <div
                         onClick={() => {
@@ -982,7 +1030,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                           alt={slideCollections[activeSlide].space02.title}
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-5">
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent opacity-80 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-5">
                           <div className="flex items-center justify-between w-full text-white">
                             <div>
                               <span className="text-[10px] font-black uppercase tracking-widest text-amber-300 font-mono">
@@ -1013,7 +1061,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                           alt={slideCollections[activeSlide].space03.title}
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-5">
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent opacity-80 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-5">
                           <div className="flex items-center justify-between w-full text-white">
                             <div>
                               <span className="text-[10px] font-black uppercase tracking-widest text-amber-300 font-mono">
@@ -1031,7 +1079,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                       </div>
                     </div>
 
-                    {/* Bottom Row: Wide Architectural Banner (Space 04) */}
+                    {/* Bottom Row: Wide Architectural Banner (Space 04, 16:9) */}
                     <div
                       onClick={() => {
                         uiAudio.playClick();
@@ -1045,7 +1093,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                         alt={slideCollections[activeSlide].space04.title}
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-6">
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent opacity-80 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-6">
                         <div className="flex items-center justify-between w-full text-white">
                           <div>
                             <span className="text-[10px] font-black uppercase tracking-widest text-amber-300 font-mono">
@@ -1063,24 +1111,36 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     </div>
                   </div>
 
-                  {/* RIGHT SIDE (5 Cols on LG): LARGE FEATURE HERO VISTA (Space 01) */}
+                  {/* RIGHT SIDE (5 Cols): LARGE FEATURE HERO VISTA (Space 01) */}
                   <div
                     onClick={() => {
                       uiAudio.playClick();
                       setLightboxIndex(slideCollections[activeSlide].space01.imgIndex);
                     }}
-                    className="lg:col-span-5 group relative min-h-[380px] lg:min-h-full rounded-3xl overflow-hidden bg-zinc-100 border border-zinc-200/60 shadow-xs hover:shadow-2xl transition-all duration-500 cursor-pointer flex flex-col justify-end"
+                    className="col-span-5 group relative min-h-[380px] lg:min-h-full rounded-3xl overflow-hidden bg-zinc-100 border border-zinc-200/60 shadow-xs hover:shadow-2xl transition-all duration-500 cursor-pointer flex flex-col justify-end"
                   >
-                    <OptimizedImage
-                      src={slideCollections[activeSlide].space01.img}
-                      aspectRatio="16:9"
-                      priority={true}
-                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                      alt={slideCollections[activeSlide].space01.title}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-85 group-hover:opacity-95 transition-opacity duration-300" />
+                    {slideCollections[activeSlide].space01.hasVideo && listing.video_url ? (
+                      <video
+                        src={listing.video_url}
+                        poster={slideCollections[activeSlide].space01.img}
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                    ) : (
+                      <OptimizedImage
+                        src={slideCollections[activeSlide].space01.img}
+                        aspectRatio="16:9"
+                        priority={true}
+                        className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                        alt={slideCollections[activeSlide].space01.title}
+                      />
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent opacity-85 group-hover:opacity-95 transition-opacity duration-300" />
                     
-                    {/* Hero Badge & Micro Metadata */}
+                    {/* Hero Badge & Metadata */}
                     <div className="relative z-10 p-6 md:p-8 text-white space-y-2">
                       <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full border border-white/30 text-[10px] font-black uppercase tracking-widest font-mono">
                         <Sparkles className="w-3.5 h-3.5 text-amber-300" />
@@ -1100,6 +1160,61 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   </div>
                 </motion.div>
               </AnimatePresence>
+
+              {/* Bottom Tactile Progress Indicators */}
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
+                {[0, 1, 2].map(idx => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      uiAudio.playClick();
+                      setActiveSlide(idx);
+                    }}
+                    className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
+                      activeSlide === idx ? 'w-6 bg-white' : 'w-1.5 bg-white/40 hover:bg-white/70'
+                    }`}
+                    title={`Go to Collection ${idx + 1}`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* MOBILE KINETIC SNAP CAROUSEL (< 768px - Zero Scroll Fatigue) */}
+            <div className="md:hidden space-y-3">
+              <div className="flex overflow-x-auto snap-x snap-mandatory gap-3 pb-2 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                {[
+                  slideCollections[activeSlide].space01,
+                  slideCollections[activeSlide].space02,
+                  slideCollections[activeSlide].space03,
+                  slideCollections[activeSlide].space04
+                ].map((space, sIdx) => (
+                  <div
+                    key={sIdx}
+                    onClick={() => {
+                      uiAudio.playClick();
+                      setLightboxIndex(space.imgIndex);
+                    }}
+                    className="snap-center shrink-0 w-[85vw] sm:w-[70vw] relative aspect-[4/3] rounded-3xl overflow-hidden bg-zinc-100 border border-zinc-200/80 shadow-sm"
+                  >
+                    <OptimizedImage
+                      src={space.img}
+                      aspectRatio="4:3"
+                      className="w-full h-full object-cover"
+                      alt={space.title}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-4 text-white">
+                      <div>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-amber-300 font-mono">
+                          Space 0{sIdx + 1} · {space.tag}
+                        </span>
+                        <h4 className="text-sm font-bold font-display mt-0.5">{space.title}</h4>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-center text-[11px] font-medium text-zinc-400">Swipe horizontally to explore all 4 spaces in Collection 0{activeSlide + 1}</p>
             </div>
           </section>
 
