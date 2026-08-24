@@ -948,7 +948,169 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
         </div>
 
         {/* ========================================================================= */}
-        {/* ZONE 2: 100% FULL-WIDTH CINEMATIC IMMERSIVE SUITE                        */}
+        {/* ========================================================================= */}
+        {/* FULL-BLEED OVERLAPPING LAYERED EDITORIAL COLLAGE RIBBON (100vw, Zero Text) */}
+        {/* ========================================================================= */}
+        <div className="w-screen relative left-1/2 right-1/2 -mx-[50vw] overflow-hidden py-8 bg-zinc-950/5 border-y border-zinc-200/60">
+          <div className="flex overflow-x-auto gap-8 md:gap-14 px-6 md:px-12 pb-4 scrollbar-hide snap-x snap-mandatory items-center min-h-[380px] md:min-h-[440px]" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+            
+            {/* CLUSTER 01: Vistas & Horizon Grounds */}
+            <div className="group/cluster shrink-0 flex items-center relative py-6 snap-center">
+              {/* Base Backdrop Card (16:9 Landscape) */}
+              <div
+                onClick={() => {
+                  uiAudio.playClick();
+                  setLightboxIndex(0);
+                }}
+                className="relative z-10 w-[280px] sm:w-[340px] md:w-[460px] h-[220px] md:h-[280px] rounded-3xl overflow-hidden bg-zinc-900 border border-zinc-200/80 shadow-md group-hover/cluster:opacity-75 hover:!opacity-100 hover:!z-50 hover:scale-[1.08] hover:shadow-[0_25px_60px_rgba(0,0,0,0.5)] transition-all duration-500 cursor-pointer"
+              >
+                <OptimizedImage
+                  src={uniqueMediaPool[0]}
+                  aspectRatio="16:9"
+                  className="w-full h-full object-cover"
+                  alt="Sanctuary Vista"
+                />
+              </div>
+
+              {/* Layer 02: Tall Portrait Poster (Overlapping Top-Right) */}
+              <div
+                onClick={() => {
+                  uiAudio.playClick();
+                  setLightboxIndex(1);
+                }}
+                className="relative z-20 -ml-16 sm:-ml-20 md:-ml-28 mt-8 md:mt-12 w-[160px] sm:w-[190px] md:w-[230px] h-[240px] md:h-[310px] rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-xl group-hover/cluster:opacity-75 hover:!opacity-100 hover:!z-50 hover:scale-[1.08] hover:shadow-[0_25px_60px_rgba(0,0,0,0.5)] transition-all duration-500 cursor-pointer"
+              >
+                <OptimizedImage
+                  src={uniqueMediaPool[1]}
+                  aspectRatio="4:3"
+                  className="w-full h-full object-cover"
+                  alt="Courtyard Detail"
+                />
+              </div>
+
+              {/* Layer 03: Vertical Accent Card (Overlapping Bottom-Right) */}
+              <div
+                onClick={() => {
+                  uiAudio.playClick();
+                  setLightboxIndex(2);
+                }}
+                className="relative z-15 -ml-10 sm:-ml-12 md:-ml-16 -mt-8 md:-mt-12 w-[140px] sm:w-[170px] md:w-[210px] h-[200px] md:h-[260px] rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-lg group-hover/cluster:opacity-75 hover:!opacity-100 hover:!z-50 hover:scale-[1.08] hover:shadow-[0_25px_60px_rgba(0,0,0,0.5)] transition-all duration-500 cursor-pointer"
+              >
+                <OptimizedImage
+                  src={uniqueMediaPool[2]}
+                  aspectRatio="4:3"
+                  className="w-full h-full object-cover"
+                  alt="Fire Deck"
+                />
+              </div>
+            </div>
+
+            {/* CLUSTER 02: Master Living & Royal Suites */}
+            <div className="group/cluster shrink-0 flex items-center relative py-6 snap-center">
+              {/* Base Backdrop Card (16:10 Landscape) */}
+              <div
+                onClick={() => {
+                  uiAudio.playClick();
+                  setLightboxIndex(3);
+                }}
+                className="relative z-10 w-[270px] sm:w-[330px] md:w-[440px] h-[220px] md:h-[280px] rounded-3xl overflow-hidden bg-zinc-900 border border-zinc-200/80 shadow-md group-hover/cluster:opacity-75 hover:!opacity-100 hover:!z-50 hover:scale-[1.08] hover:shadow-[0_25px_60px_rgba(0,0,0,0.5)] transition-all duration-500 cursor-pointer"
+              >
+                <OptimizedImage
+                  src={uniqueMediaPool[3]}
+                  aspectRatio="16:9"
+                  className="w-full h-full object-cover"
+                  alt="Facade Panorama"
+                />
+              </div>
+
+              {/* Layer 05: Editorial Tall Poster (Overlapping Top-Right) */}
+              <div
+                onClick={() => {
+                  uiAudio.playClick();
+                  setLightboxIndex(4);
+                }}
+                className="relative z-25 -ml-16 sm:-ml-20 md:-ml-28 mt-6 md:mt-10 w-[170px] sm:w-[200px] md:w-[240px] h-[250px] md:h-[320px] rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-xl group-hover/cluster:opacity-75 hover:!opacity-100 hover:!z-50 hover:scale-[1.08] hover:shadow-[0_25px_60px_rgba(0,0,0,0.5)] transition-all duration-500 cursor-pointer"
+              >
+                <OptimizedImage
+                  src={uniqueMediaPool[4]}
+                  aspectRatio="4:3"
+                  className="w-full h-full object-cover"
+                  alt="Master Suite"
+                />
+              </div>
+
+              {/* Layer 06: Underlying Vignette (Overlapping Bottom-Right) */}
+              <div
+                onClick={() => {
+                  uiAudio.playClick();
+                  setLightboxIndex(5);
+                }}
+                className="relative z-15 -ml-10 sm:-ml-12 md:-ml-16 -mt-8 md:-mt-12 w-[150px] sm:w-[180px] md:w-[220px] h-[210px] md:h-[270px] rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-lg group-hover/cluster:opacity-75 hover:!opacity-100 hover:!z-50 hover:scale-[1.08] hover:shadow-[0_25px_60px_rgba(0,0,0,0.5)] transition-all duration-500 cursor-pointer"
+              >
+                <OptimizedImage
+                  src={uniqueMediaPool[5]}
+                  aspectRatio="4:3"
+                  className="w-full h-full object-cover"
+                  alt="Living Salon"
+                />
+              </div>
+            </div>
+
+            {/* CLUSTER 03: Wellness, Spa & Bespoke Dining */}
+            <div className="group/cluster shrink-0 flex items-center relative py-6 snap-center">
+              {/* Base Backdrop Card (16:9 Landscape) */}
+              <div
+                onClick={() => {
+                  uiAudio.playClick();
+                  setLightboxIndex(6);
+                }}
+                className="relative z-10 w-[280px] sm:w-[340px] md:w-[460px] h-[220px] md:h-[280px] rounded-3xl overflow-hidden bg-zinc-900 border border-zinc-200/80 shadow-md group-hover/cluster:opacity-75 hover:!opacity-100 hover:!z-50 hover:scale-[1.08] hover:shadow-[0_25px_60px_rgba(0,0,0,0.5)] transition-all duration-500 cursor-pointer"
+              >
+                <OptimizedImage
+                  src={uniqueMediaPool[6]}
+                  aspectRatio="16:9"
+                  className="w-full h-full object-cover"
+                  alt="Marble Spa"
+                />
+              </div>
+
+              {/* Layer 08: Portrait Spa Vignette */}
+              <div
+                onClick={() => {
+                  uiAudio.playClick();
+                  setLightboxIndex(7);
+                }}
+                className="relative z-20 -ml-16 sm:-ml-20 md:-ml-28 mt-8 md:mt-12 w-[160px] sm:w-[190px] md:w-[230px] h-[240px] md:h-[310px] rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-xl group-hover/cluster:opacity-75 hover:!opacity-100 hover:!z-50 hover:scale-[1.08] hover:shadow-[0_25px_60px_rgba(0,0,0,0.5)] transition-all duration-500 cursor-pointer"
+              >
+                <OptimizedImage
+                  src={uniqueMediaPool[7]}
+                  aspectRatio="4:3"
+                  className="w-full h-full object-cover"
+                  alt="Terrace Vista"
+                />
+              </div>
+
+              {/* Layer 09: Atmospheric Dining Frame */}
+              <div
+                onClick={() => {
+                  uiAudio.playClick();
+                  setLightboxIndex(8);
+                }}
+                className="relative z-25 -ml-10 sm:-ml-12 md:-ml-16 -mt-8 md:-mt-12 w-[150px] sm:w-[180px] md:w-[220px] h-[210px] md:h-[270px] rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-lg group-hover/cluster:opacity-75 hover:!opacity-100 hover:!z-50 hover:scale-[1.08] hover:shadow-[0_25px_60px_rgba(0,0,0,0.5)] transition-all duration-500 cursor-pointer"
+              >
+                <OptimizedImage
+                  src={uniqueMediaPool[8]}
+                  aspectRatio="16:9"
+                  className="w-full h-full object-cover"
+                  alt="Culinary Deck"
+                />
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+                {/* ZONE 2: 100% FULL-WIDTH CINEMATIC IMMERSIVE SUITE                        */}
         {/* ========================================================================= */}
         <div className="w-full md:max-w-7xl mx-auto px-4 md:px-6 lg:px-8 mt-16 md:mt-24 flex flex-col gap-16 md:gap-24">
 
