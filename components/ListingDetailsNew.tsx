@@ -39,7 +39,9 @@ import {
   Send,
   Loader2,
   Tag,
-  Crown
+  Crown,
+  Plus,
+  Minus
 } from 'lucide-react';
 import { uiAudio } from './audio';
 import { useToast } from './ToastContext';
@@ -127,6 +129,22 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
     ];
   }, [listing.curated_guidelines]);
 
+
+  // Luxury Editorial Dossier Accordion State
+  const [openAccordion, setOpenAccordion] = useState<Record<string, boolean>>({
+    about: true, // open as default
+    guidelines: false,
+    safety: false,
+    services: false,
+  });
+
+  const toggleAccordion = (key: string) => {
+    uiAudio.playClick();
+    setOpenAccordion(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
 
   // M5: Dual-Date Engine State
   const [checkIn, setCheckIn] = useState<string>(() => new Date().toISOString().split('T')[0]);
@@ -442,75 +460,139 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
               </div>
             </section>
 
-            {/* EDITORIAL STORY / DESCRIPTION */}
-            <section className="space-y-4 pt-4">
-              <h2 className="text-xl md:text-2xl font-black tracking-tight text-slate-900">About The Sanctuary</h2>
-              <div className="prose prose-slate max-w-none text-slate-600 font-medium leading-relaxed space-y-4 text-base">
-                <p>{listing.description || "Designed as an acoustic and visual haven, this architectural masterpiece seamlessly merges raw volcanic stone, floor-to-ceiling glass, and tranquil open-air living."}</p>
+            {/* EDITORIAL SANCTUARY DOSSIER (Luxury Dropdown / Accordion Deck) */}
+            <section className="pt-2 border-t border-zinc-200/80">
+              {/* Accordion Item 1: About The Sanctuary */}
+              <div className="border-b border-zinc-200/80 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => toggleAccordion('about')}
+                  className="w-full py-5 flex items-center justify-between text-left group transition-all cursor-pointer"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <span className="text-zinc-400 font-editorial italic text-sm">01</span>
+                    <h3 className="text-lg md:text-xl font-bold text-zinc-900 tracking-tight group-hover:text-zinc-700 font-editorial">
+                      About The Sanctuary
+                    </h3>
+                  </div>
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-500 group-hover:bg-zinc-100 transition-all text-xl font-light">
+                    {openAccordion.about ? <Minus className="w-4 h-4 text-zinc-700" /> : <Plus className="w-4 h-4 text-zinc-700" />}
+                  </div>
+                </button>
+                {openAccordion.about && (
+                  <div className="pb-6 pt-1 text-zinc-600 text-sm md:text-base leading-relaxed space-y-4 font-normal animate-fade-in pl-8 pr-2">
+                    <p>{listing.description || "Designed as an acoustic and visual haven, this architectural masterpiece seamlessly merges raw volcanic stone, floor-to-ceiling glass, and tranquil open-air living."}</p>
+                    <div className="flex flex-wrap gap-2.5 pt-2 text-xs font-semibold text-zinc-700">
+                      <span className="bg-zinc-100/80 px-3 py-1.5 rounded-lg border border-zinc-200/60">{listing.maxGuests || 4} Guests Maximum</span>
+                      <span className="bg-zinc-100/80 px-3 py-1.5 rounded-lg border border-zinc-200/60">{listing.bedrooms || 2} Private Suites</span>
+                      <span className="bg-zinc-100/80 px-3 py-1.5 rounded-lg border border-zinc-200/60">{listing.bathrooms || 2} Luxury Baths</span>
+                      {listing.size && <span className="bg-zinc-100/80 px-3 py-1.5 rounded-lg border border-zinc-200/60">{listing.size} sq.ft Estate</span>}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Accordion Item 2: Aristocratic Hospitality Guidelines */}
+              <div className="border-b border-zinc-200/80 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => toggleAccordion('guidelines')}
+                  className="w-full py-5 flex items-center justify-between text-left group transition-all cursor-pointer"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <span className="text-zinc-400 font-editorial italic text-sm">02</span>
+                    <div className="flex items-center gap-2.5">
+                      <h3 className="text-lg md:text-xl font-bold text-zinc-900 tracking-tight group-hover:text-zinc-700 font-editorial">
+                        Aristocratic Hospitality Guidelines
+                      </h3>
+                      <span className="hidden sm:inline-flex px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200">
+                        Concierge Curated
+                      </span>
+                    </div>
+                  </div>
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-500 group-hover:bg-zinc-100 transition-all text-xl font-light">
+                    {openAccordion.guidelines ? <Minus className="w-4 h-4 text-zinc-700" /> : <Plus className="w-4 h-4 text-zinc-700" />}
+                  </div>
+                </button>
+                {openAccordion.guidelines && (
+                  <div className="pb-6 pt-1 text-zinc-600 text-sm md:text-base leading-relaxed space-y-3 font-normal animate-fade-in pl-8 pr-2">
+                    <p className="text-xs text-zinc-400 uppercase tracking-wider font-semibold mb-2">AI-Curated House Protocols for 5-Star Serenity</p>
+                    <div className="space-y-2.5">
+                      {parsedGuidelines.map((guideline, idx) => (
+                        <div key={idx} className="flex items-start gap-3 p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200/70">
+                          <span className="text-amber-700 font-editorial font-bold text-xs shrink-0 mt-0.5">0{idx + 1}.</span>
+                          <p className="text-xs md:text-sm text-zinc-700 font-medium leading-relaxed">{guideline}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Accordion Item 3: Family & Child Safety Protocols */}
+              <div className="border-b border-zinc-200/80 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => toggleAccordion('safety')}
+                  className="w-full py-5 flex items-center justify-between text-left group transition-all cursor-pointer"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <span className="text-zinc-400 font-editorial italic text-sm">03</span>
+                    <h3 className="text-lg md:text-xl font-bold text-zinc-900 tracking-tight group-hover:text-zinc-700 font-editorial">
+                      Family & Child Safety Protocols
+                    </h3>
+                  </div>
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-500 group-hover:bg-zinc-100 transition-all text-xl font-light">
+                    {openAccordion.safety ? <Minus className="w-4 h-4 text-zinc-700" /> : <Plus className="w-4 h-4 text-zinc-700" />}
+                  </div>
+                </button>
+                {openAccordion.safety && (
+                  <div className="pb-6 pt-1 text-zinc-600 text-sm md:text-base leading-relaxed space-y-4 font-normal animate-fade-in pl-8 pr-2">
+                    {listing.child_safety_specs && listing.child_safety_specs.length > 0 ? (
+                      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {listing.child_safety_specs.map((spec, i) => (
+                          <li key={i} className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-emerald-50/50 border border-emerald-100">
+                            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                            <span className="text-xs font-semibold text-emerald-950">{spec}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="p-4 rounded-2xl bg-zinc-50 border border-zinc-200/70 text-xs text-zinc-600 space-y-1.5">
+                        <p className="font-bold text-zinc-800">Standard luxury safety protocols observed.</p>
+                        <p className="leading-relaxed">While individual pavilions feature architectural water features and open vistas, dedicated pool barriers, stair gates, and baby cribs can be installed prior to arrival with advance notice.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Accordion Item 4: Bespoke Concierge & Culinary Privileges */}
+              <div className="border-b border-zinc-200/80 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => toggleAccordion('services')}
+                  className="w-full py-5 flex items-center justify-between text-left group transition-all cursor-pointer"
+                >
+                  <div className="flex items-center gap-3.5">
+                    <span className="text-zinc-400 font-editorial italic text-sm">04</span>
+                    <h3 className="text-lg md:text-xl font-bold text-zinc-900 tracking-tight group-hover:text-zinc-700 font-editorial">
+                      Concierge Privileges & Bespoke Services
+                    </h3>
+                  </div>
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-500 group-hover:bg-zinc-100 transition-all text-xl font-light">
+                    {openAccordion.services ? <Minus className="w-4 h-4 text-zinc-700" /> : <Plus className="w-4 h-4 text-zinc-700" />}
+                  </div>
+                </button>
+                {openAccordion.services && (
+                  <div className="pb-6 pt-1 text-zinc-600 text-sm md:text-base leading-relaxed space-y-3 font-normal animate-fade-in pl-8 pr-2">
+                    <p className="text-xs md:text-sm text-zinc-600 leading-relaxed">
+                      All guests at this Encho Sanctuary receive direct access to our Walled Garden Host Concierge. Private dining experiences, sommelier cellar curation, private driver transfers, and customized wellness sessions can be coordinated seamlessly inside your Encho guest inbox.
+                    </p>
+                  </div>
+                )}
               </div>
             </section>
-
-            {/* ARISTOCRATIC AI HOSPITALITY GUIDELINES */}
-            <section className="p-6 md:p-8 rounded-3xl bg-slate-900 text-slate-100 border border-amber-500/30 space-y-6 shadow-xl relative overflow-hidden">
-              <div
-                className="absolute top-0 right-0 w-64 h-64 opacity-10 pointer-events-none rounded-full blur-3xl"
-                style={{ backgroundColor: dominantColor }}
-              />
-
-              <div className="flex items-center justify-between relative z-10">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                    <Crown className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black text-white tracking-wide font-editorial">Aristocratic Hospitality Guidelines</h3>
-                    <p className="text-xs text-slate-400">AI-Curated House Protocols for 5-Star Serenity</p>
-                  </div>
-                </div>
-                <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                  Concierge Curated
-                </span>
-              </div>
-
-              <div className="space-y-3 relative z-10">
-                {parsedGuidelines.map((guideline, idx) => (
-                  <div key={idx} className="flex items-start gap-3.5 p-4 rounded-2xl bg-slate-950/60 border border-slate-800">
-                    <span className="text-amber-400 font-editorial font-bold text-sm shrink-0 mt-0.5">0{idx + 1}.</span>
-                    <p className="text-xs md:text-sm text-slate-200 font-medium leading-relaxed">{guideline}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            {/* Family & Child Safety Profile */}
-                <section className="space-y-6 pt-6 border-t border-zinc-200/60">
-                    <div className="flex items-center gap-3">
-                        <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-zinc-900">Family & Child Safety</h2>
-                        <ShieldCheck className="w-6 h-6 text-emerald-600" />
-                    </div>
-                    <div className="bg-white border border-zinc-200 rounded-3xl p-6 shadow-sm">
-                        {listing.child_safety_specs && listing.child_safety_specs.length > 0 ? (
-                            <ul className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {listing.child_safety_specs.map((spec, i) => (
-                                    <li key={i} className="flex items-start gap-3">
-                                        <div className="mt-0.5 bg-emerald-100 p-1 rounded-full"><ShieldCheck className="w-3.5 h-3.5 text-emerald-700" /></div>
-                                        <span className="text-sm font-medium text-zinc-700">{spec}</span>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <div className="flex flex-col items-center justify-center py-6 text-center">
-                                <div className="w-12 h-12 bg-zinc-100 rounded-full flex items-center justify-center mb-3">
-                                    <ShieldCheck className="w-6 h-6 text-zinc-400" />
-                                </div>
-                                <p className="text-sm font-medium text-zinc-500">Standard safety protocols observed.</p>
-                                <p className="text-xs text-zinc-400 mt-1">Contact host for specific child-proofing details.</p>
-                            </div>
-                        )}
-                    </div>
-                </section>
-
-                <div className="h-px bg-zinc-200/60 my-4 w-full" />
 
                 {/* ANALYTICAL TRUST ANCHOR */}
             <section className="space-y-4 pt-4">
@@ -676,9 +758,6 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     </section>
                 )}
 
-                <div className="text-center text-zinc-500 mb-12">
-                   Milestone 4 Trust Engine Complete. Awaiting Checkout Dock (M5).
-                </div>
             </div>
 
             {/* Right Column: Sticky Glass Checkout Dock (M5) */}
