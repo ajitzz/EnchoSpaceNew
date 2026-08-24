@@ -949,216 +949,44 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
         {/* ========================================================================= */}
         {/* ========================================================================= */}
-        {/* CENTERED DENSE COLLIDING ASYMMETRICAL EDITORIAL COLLAGE (100vw, ≤1% Gap)  */}
-        {/* Positioned Centered Exactly Between Host Section & Cinematic Sanctuary Gallery */}
+        {/* DENSE "PILE OF SHEETS" EDITORIAL MOSAIC (100vw, Zero Gap, Multi-Layer Collisions) */}
         {/* ========================================================================= */}
-        <div className="w-screen relative left-1/2 right-1/2 -mx-[50vw] overflow-hidden my-12 md:my-16 py-6 bg-zinc-950/5 border-y border-zinc-200/60">
-          <div className="flex overflow-x-auto gap-0 md:gap-1 px-4 md:px-8 pb-3 scrollbar-hide snap-x snap-mandatory items-center min-h-[360px] sm:h-[400px] md:h-[450px]" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-            
-            {/* CLUSTER 01: Vistas & Horizon Grounds (3 Overlapping Colliding Layers) */}
-            <div className="group/cluster shrink-0 flex items-center relative py-4 snap-center">
-              {/* Base Layer 01: Wide Landscape (16:9 Backdrop) */}
+        <div className="w-screen relative left-1/2 right-1/2 -mx-[50vw] overflow-hidden my-12 md:my-16 py-4 bg-zinc-950/10 border-y border-zinc-200/80">
+          <div 
+            className="flex overflow-x-auto gap-0 px-2 md:px-6 pb-2 scrollbar-hide snap-x snap-mandatory items-center h-[380px] sm:h-[420px] md:h-[480px]" 
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          >
+            {/* 12 Interlocking, Densely Colliding Scattered Cards with Negative Margins and Organic Layering */}
+            {[
+              { idx: 0, w: 'w-[280px] sm:w-[340px] md:w-[440px]', h: 'h-[240px] sm:h-[280px] md:h-[320px]', z: 'z-10', overlap: 'ml-0', aspect: '16:9', rotate: '-rotate-1', translateY: '-translate-y-4 md:-translate-y-6' },
+              { idx: 1, w: 'w-[180px] sm:w-[220px] md:w-[270px]', h: 'h-[270px] sm:h-[320px] md:h-[370px]', z: 'z-20', overlap: '-ml-20 sm:-ml-28 md:-ml-36', aspect: '4:3', rotate: 'rotate-1', translateY: 'translate-y-4 md:translate-y-8' },
+              { idx: 2, w: 'w-[220px] sm:w-[260px] md:w-[340px]', h: 'h-[200px] sm:h-[240px] md:h-[280px]', z: 'z-15', overlap: '-ml-16 sm:-ml-24 md:-ml-32', aspect: '16:9', rotate: '-rotate-2', translateY: '-translate-y-6 md:-translate-y-10' },
+              { idx: 3, w: 'w-[190px] sm:w-[230px] md:w-[290px]', h: 'h-[280px] sm:h-[330px] md:h-[390px]', z: 'z-30', overlap: '-ml-16 sm:-ml-24 md:-ml-32', aspect: '4:3', rotate: 'rotate-2', translateY: 'translate-y-2 md:translate-y-4' },
+              { idx: 4, w: 'w-[300px] sm:w-[360px] md:w-[460px]', h: 'h-[230px] sm:h-[270px] md:h-[310px]', z: 'z-10', overlap: '-ml-24 sm:-ml-32 md:-ml-40', aspect: '16:9', rotate: 'rotate-1', translateY: '-translate-y-4 md:-translate-y-6' },
+              { idx: 5, w: 'w-[200px] sm:w-[240px] md:w-[300px]', h: 'h-[260px] sm:h-[310px] md:h-[360px]', z: 'z-25', overlap: '-ml-20 sm:-ml-28 md:-ml-36', aspect: '4:3', rotate: '-rotate-1', translateY: 'translate-y-6 md:translate-y-10' },
+              { idx: 6, w: 'w-[240px] sm:w-[300px] md:w-[380px]', h: 'h-[210px] sm:h-[250px] md:h-[290px]', z: 'z-15', overlap: '-ml-16 sm:-ml-24 md:-ml-32', aspect: '16:9', rotate: 'rotate-2', translateY: '-translate-y-8 md:-translate-y-12' },
+              { idx: 7, w: 'w-[180px] sm:w-[220px] md:w-[280px]', h: 'h-[280px] sm:h-[330px] md:h-[380px]', z: 'z-30', overlap: '-ml-20 sm:-ml-28 md:-ml-36', aspect: '4:3', rotate: '-rotate-2', translateY: 'translate-y-3 md:translate-y-6' },
+              { idx: 8, w: 'w-[290px] sm:w-[350px] md:w-[450px]', h: 'h-[230px] sm:h-[270px] md:h-[310px]', z: 'z-10', overlap: '-ml-24 sm:-ml-32 md:-ml-40', aspect: '16:9', rotate: 'rotate-1', translateY: '-translate-y-5 md:-translate-y-7' },
+              { idx: 9, w: 'w-[190px] sm:w-[230px] md:w-[290px]', h: 'h-[270px] sm:h-[320px] md:h-[370px]', z: 'z-25', overlap: '-ml-20 sm:-ml-28 md:-ml-36', aspect: '4:3', rotate: '-rotate-1', translateY: 'translate-y-5 md:translate-y-9' },
+              { idx: 10, w: 'w-[250px] sm:w-[310px] md:w-[390px]', h: 'h-[210px] sm:h-[250px] md:h-[290px]', z: 'z-15', overlap: '-ml-16 sm:-ml-24 md:-ml-32', aspect: '16:9', rotate: 'rotate-2', translateY: '-translate-y-7 md:-translate-y-11' },
+              { idx: 11, w: 'w-[210px] sm:w-[250px] md:w-[310px]', h: 'h-[280px] sm:h-[330px] md:h-[380px]', z: 'z-30', overlap: '-ml-20 sm:-ml-28 md:-ml-36', aspect: '4:3', rotate: '-rotate-1', translateY: 'translate-y-4 md:translate-y-6' }
+            ].map((sheet, sIndex) => (
               <div
+                key={sIndex}
                 onClick={() => {
                   uiAudio.playClick();
-                  setLightboxIndex(0);
+                  setLightboxIndex(sheet.idx);
                 }}
-                className="relative z-10 w-[270px] sm:w-[340px] md:w-[460px] h-[220px] sm:h-[260px] md:h-[300px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-lg group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
+                className={`relative shrink-0 ${sheet.w} ${sheet.h} ${sheet.z} ${sheet.overlap} ${sheet.rotate} ${sheet.translateY} rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-[2.5px] border-white shadow-2xl transition-all duration-500 ease-out cursor-pointer hover:!z-50 hover:scale-[1.10] hover:rotate-0 hover:shadow-[0_30px_70px_rgba(0,0,0,0.65)] group snap-center`}
               >
                 <OptimizedImage
-                  src={uniqueMediaPool[0]}
-                  aspectRatio="16:9"
-                  className="w-full h-full object-cover"
-                  alt="Sanctuary Vista"
+                  src={uniqueMediaPool[sheet.idx]}
+                  aspectRatio={sheet.aspect as '16:9' | '4:3'}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                  alt={`Sanctuary Moment ${sheet.idx + 1}`}
                 />
               </div>
-
-              {/* Layer 02: Tall Portrait (Colliding Overlap Top-Right by 30%) */}
-              <div
-                onClick={() => {
-                  uiAudio.playClick();
-                  setLightboxIndex(1);
-                }}
-                className="relative z-20 -ml-16 sm:-ml-20 md:-ml-28 mt-6 md:mt-10 w-[160px] sm:w-[200px] md:w-[250px] h-[240px] sm:h-[280px] md:h-[330px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-xl group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
-              >
-                <OptimizedImage
-                  src={uniqueMediaPool[1]}
-                  aspectRatio="4:3"
-                  className="w-full h-full object-cover"
-                  alt="Courtyard Detail"
-                />
-              </div>
-
-              {/* Layer 03: Landscape Accent (Colliding Overlap Bottom-Right by 25%) */}
-              <div
-                onClick={() => {
-                  uiAudio.playClick();
-                  setLightboxIndex(2);
-                }}
-                className="relative z-25 -ml-12 sm:-ml-16 md:-ml-22 -mt-6 md:-mt-10 w-[180px] sm:w-[220px] md:w-[280px] h-[190px] sm:h-[220px] md:h-[260px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-xl group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
-              >
-                <OptimizedImage
-                  src={uniqueMediaPool[2]}
-                  aspectRatio="16:9"
-                  className="w-full h-full object-cover"
-                  alt="Fire Lounge"
-                />
-              </div>
-            </div>
-
-            {/* CLUSTER 02: Master Living & Royal Suites (3 Overlapping Colliding Layers) */}
-            <div className="group/cluster shrink-0 flex items-center relative py-4 snap-center -ml-10 sm:-ml-14 md:-ml-20 z-15">
-              {/* Base Layer 04: Panorama (16:10 Frame) */}
-              <div
-                onClick={() => {
-                  uiAudio.playClick();
-                  setLightboxIndex(3);
-                }}
-                className="relative z-10 w-[260px] sm:w-[330px] md:w-[450px] h-[220px] sm:h-[260px] md:h-[300px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-lg group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
-              >
-                <OptimizedImage
-                  src={uniqueMediaPool[3]}
-                  aspectRatio="16:9"
-                  className="w-full h-full object-cover"
-                  alt="Facade Panorama"
-                />
-              </div>
-
-              {/* Layer 05: Editorial Tall Poster (Colliding Overlap Top-Right by 35%) */}
-              <div
-                onClick={() => {
-                  uiAudio.playClick();
-                  setLightboxIndex(4);
-                }}
-                className="relative z-20 -ml-16 sm:-ml-20 md:-ml-28 mt-8 md:mt-12 w-[170px] sm:w-[210px] md:w-[260px] h-[250px] sm:h-[290px] md:h-[340px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-xl group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
-              >
-                <OptimizedImage
-                  src={uniqueMediaPool[4]}
-                  aspectRatio="4:3"
-                  className="w-full h-full object-cover"
-                  alt="Master Suite"
-                />
-              </div>
-
-              {/* Layer 06: Square Accent (Colliding Overlap Bottom-Right by 25%) */}
-              <div
-                onClick={() => {
-                  uiAudio.playClick();
-                  setLightboxIndex(5);
-                }}
-                className="relative z-25 -ml-12 sm:-ml-16 md:-ml-22 -mt-6 md:-mt-10 w-[170px] sm:w-[210px] md:w-[270px] h-[190px] sm:h-[220px] md:h-[260px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-xl group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
-              >
-                <OptimizedImage
-                  src={uniqueMediaPool[5]}
-                  aspectRatio="4:3"
-                  className="w-full h-full object-cover"
-                  alt="Living Salon"
-                />
-              </div>
-            </div>
-
-            {/* CLUSTER 03: Wellness, Spa & Bespoke Dining (3 Overlapping Colliding Layers) */}
-            <div className="group/cluster shrink-0 flex items-center relative py-4 snap-center -ml-10 sm:-ml-14 md:-ml-20 z-20">
-              {/* Base Layer 07: Wide Chef Pavilion Backdrop */}
-              <div
-                onClick={() => {
-                  uiAudio.playClick();
-                  setLightboxIndex(6);
-                }}
-                className="relative z-10 w-[270px] sm:w-[340px] md:w-[460px] h-[220px] sm:h-[260px] md:h-[300px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-lg group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
-              >
-                <OptimizedImage
-                  src={uniqueMediaPool[6]}
-                  aspectRatio="16:9"
-                  className="w-full h-full object-cover"
-                  alt="Marble Spa"
-                />
-              </div>
-
-              {/* Layer 08: Portrait Spa Vignette */}
-              <div
-                onClick={() => {
-                  uiAudio.playClick();
-                  setLightboxIndex(7);
-                }}
-                className="relative z-20 -ml-16 sm:-ml-20 md:-ml-28 mt-6 md:mt-10 w-[160px] sm:w-[200px] md:w-[250px] h-[240px] sm:h-[280px] md:h-[330px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-xl group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
-              >
-                <OptimizedImage
-                  src={uniqueMediaPool[7]}
-                  aspectRatio="4:3"
-                  className="w-full h-full object-cover"
-                  alt="Terrace Vista"
-                />
-              </div>
-
-              {/* Layer 09: Dining Landscape Frame */}
-              <div
-                onClick={() => {
-                  uiAudio.playClick();
-                  setLightboxIndex(8);
-                }}
-                className="relative z-25 -ml-12 sm:-ml-16 md:-ml-22 -mt-6 md:-mt-10 w-[180px] sm:w-[220px] md:w-[280px] h-[190px] sm:h-[220px] md:h-[260px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-xl group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
-              >
-                <OptimizedImage
-                  src={uniqueMediaPool[8]}
-                  aspectRatio="16:9"
-                  className="w-full h-full object-cover"
-                  alt="Culinary Deck"
-                />
-              </div>
-            </div>
-
-            {/* CLUSTER 04: Evening Atmosphere & Thermal Spa (3 Overlapping Colliding Layers) */}
-            <div className="group/cluster shrink-0 flex items-center relative py-4 snap-center -ml-10 sm:-ml-14 md:-ml-20 z-25">
-              {/* Base Layer 10: Wine Vault Backdrop */}
-              <div
-                onClick={() => {
-                  uiAudio.playClick();
-                  setLightboxIndex(9);
-                }}
-                className="relative z-10 w-[260px] sm:w-[330px] md:w-[450px] h-[220px] sm:h-[260px] md:h-[300px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-lg group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
-              >
-                <OptimizedImage
-                  src={uniqueMediaPool[9]}
-                  aspectRatio="16:9"
-                  className="w-full h-full object-cover"
-                  alt="Wine Vault"
-                />
-              </div>
-
-              {/* Layer 11: Sauna Portrait */}
-              <div
-                onClick={() => {
-                  uiAudio.playClick();
-                  setLightboxIndex(10);
-                }}
-                className="relative z-20 -ml-16 sm:-ml-20 md:-ml-28 mt-8 md:mt-12 w-[160px] sm:w-[200px] md:w-[250px] h-[240px] sm:h-[280px] md:h-[330px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-xl group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
-              >
-                <OptimizedImage
-                  src={uniqueMediaPool[10]}
-                  aspectRatio="4:3"
-                  className="w-full h-full object-cover"
-                  alt="Cedar Sauna"
-                />
-              </div>
-
-              {/* Layer 12: Evening Atmosphere Final Frame */}
-              <div
-                onClick={() => {
-                  uiAudio.playClick();
-                  setLightboxIndex(11);
-                }}
-                className="relative z-25 -ml-12 sm:-ml-16 md:-ml-22 -mt-6 md:-mt-10 w-[180px] sm:w-[220px] md:w-[280px] h-[190px] sm:h-[220px] md:h-[260px] rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-2 border-white shadow-xl group-hover/cluster:opacity-80 hover:!opacity-100 hover:!z-50 hover:scale-[1.07] hover:shadow-[0_25px_60px_rgba(0,0,0,0.55)] transition-all duration-500 cursor-pointer shrink-0"
-              >
-                <OptimizedImage
-                  src={uniqueMediaPool[11]}
-                  aspectRatio="16:9"
-                  className="w-full h-full object-cover"
-                  alt="Evening Atmosphere"
-                />
-              </div>
-            </div>
-
+            ))}
           </div>
         </div>
 
