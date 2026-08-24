@@ -964,7 +964,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
         {/* ULTRA-DENSE SCATTERED PILE-OF-SHEETS EDITORIAL MOSAIC (100vw, Zero Gap)   */}
         {/* Zero Gray Background Visible · Multi-Layer Heavy Collisions & Hover Lift  */}
         {/* ========================================================================= */}
-        <div className="w-screen relative left-1/2 right-1/2 -mx-[50vw] overflow-hidden my-10 md:my-14 py-2 bg-zinc-50/50 border-y border-zinc-200/60">
+        <div className="w-screen relative left-1/2 right-1/2 -mx-[50vw] overflow-hidden my-6 md:my-10 py-8 bg-transparent">
           <div 
             className="flex overflow-x-auto gap-0 px-2 pb-2 scrollbar-hide snap-x snap-mandatory items-center h-[420px] sm:h-[480px] md:h-[560px]" 
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
@@ -1002,7 +1002,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   uiAudio.playClick();
                   setLightboxIndex(sheet.idx % uniqueMediaPool.length);
                 }}
-                className={`relative shrink-0 ${sheet.w} ${sheet.h} ${sheet.z} ${sheet.overlap} ${sheet.rotate} ${sheet.translateY} rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-[2.5px] border-white shadow-[0_15px_35px_rgba(0,0,0,0.45)] transition-all duration-500 ease-out cursor-pointer hover:!z-50 hover:scale-[1.12] hover:rotate-0 hover:shadow-[0_30px_70px_rgba(0,0,0,0.75)] group snap-center`}
+                className={`relative shrink-0 ${sheet.w} ${sheet.h} ${sheet.z} ${sheet.overlap} ${sheet.rotate} ${sheet.translateY} rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-[2.5px] border-white ring-1 ring-black/5 shadow-[0_12px_30px_rgba(0,0,0,0.18)] transition-all duration-500 ease-out cursor-pointer hover:!z-50 hover:scale-[1.12] hover:rotate-0 hover:shadow-[0_25px_60px_rgba(0,0,0,0.30)] hover:ring-black/10 group snap-center`}
               >
                 <OptimizedImage
                   src={uniqueMediaPool[sheet.idx % uniqueMediaPool.length]}
