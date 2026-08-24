@@ -228,15 +228,6 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
         keywords={listing.seo_keywords || `luxury stay, ${listing.city}, ${listing.title}`}
       />
       
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,400;1,600;1,700&display=swap');
-        .font-editorial {
-          font-family: 'Playfair Display', serif;
-        }
-        .font-sans-luxury {
-          font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-      `}</style>
       <div 
         className="min-h-screen pb-32 font-sans antialiased text-slate-900 selection:bg-amber-500/20 relative"
         style={{
@@ -390,7 +381,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 {(listing.rental_mode === 'hybrid' || listing.rental_mode === 'private_rooms') && listing.rooms && listing.rooms.length > 0 && (
                     <section className="space-y-6">
                         <div className="flex items-center gap-3">
-                            <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 font-editorial">Suite Configurations</h2>
+                            <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-zinc-900">Suite Configurations</h2>
                             <span className="bg-amber-100 text-amber-800 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md border border-amber-200">Modular</span>
                         </div>
                         <p className="text-zinc-500 font-medium leading-relaxed max-w-2xl">
@@ -432,7 +423,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 {/* SENSORY ATMOSPHERE DECK (Tactile Chips) */}
             <section className="space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 font-editorial flex items-center gap-2.5">
+                <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-zinc-900 flex items-center gap-2.5">
                   <Sparkles className="w-5 h-5" style={{ color: dominantColor }} />
                   <span>Sensory Atmosphere Deck</span>
                 </h2>
@@ -473,8 +464,8 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   className="w-full py-5 flex items-center justify-between text-left group transition-all cursor-pointer"
                 >
                   <div className="flex items-center gap-3.5">
-                    <span className="text-zinc-400 font-editorial italic text-sm">01</span>
-                    <h3 className="text-lg md:text-xl font-bold text-zinc-900 tracking-tight group-hover:text-zinc-700 font-editorial">
+                    <span className="text-zinc-400 font-bold text-xs tracking-wider font-mono">01</span>
+                    <h3 className="text-lg md:text-xl font-bold text-zinc-900 tracking-tight group-hover:text-zinc-700">
                       About The Sanctuary
                     </h3>
                   </div>
@@ -503,9 +494,9 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   className="w-full py-5 flex items-center justify-between text-left group transition-all cursor-pointer"
                 >
                   <div className="flex items-center gap-3.5">
-                    <span className="text-zinc-400 font-editorial italic text-sm">02</span>
+                    <span className="text-zinc-400 font-bold text-xs tracking-wider font-mono">02</span>
                     <div className="flex items-center gap-2.5">
-                      <h3 className="text-lg md:text-xl font-bold text-zinc-900 tracking-tight group-hover:text-zinc-700 font-editorial">
+                      <h3 className="text-lg md:text-xl font-bold text-zinc-900 tracking-tight group-hover:text-zinc-700">
                         Aristocratic Hospitality Guidelines
                       </h3>
                       <span className="hidden sm:inline-flex px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200">
@@ -523,7 +514,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     <div className="space-y-2.5">
                       {parsedGuidelines.map((guideline, idx) => (
                         <div key={idx} className="flex items-start gap-3 p-3.5 rounded-2xl bg-zinc-50 border border-zinc-200/70">
-                          <span className="text-amber-700 font-editorial font-bold text-xs shrink-0 mt-0.5">0{idx + 1}.</span>
+                          <span className="text-amber-800 font-bold text-xs shrink-0 mt-0.5 font-mono">0{idx + 1}.</span>
                           <p className="text-xs md:text-sm text-zinc-700 font-medium leading-relaxed">{guideline}</p>
                         </div>
                       ))}
@@ -540,8 +531,8 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   className="w-full py-5 flex items-center justify-between text-left group transition-all cursor-pointer"
                 >
                   <div className="flex items-center gap-3.5">
-                    <span className="text-zinc-400 font-editorial italic text-sm">03</span>
-                    <h3 className="text-lg md:text-xl font-bold text-zinc-900 tracking-tight group-hover:text-zinc-700 font-editorial">
+                    <span className="text-zinc-400 font-bold text-xs tracking-wider font-mono">03</span>
+                    <h3 className="text-lg md:text-xl font-bold text-zinc-900 tracking-tight group-hover:text-zinc-700">
                       Family & Child Safety Protocols
                     </h3>
                   </div>
@@ -578,8 +569,8 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   className="w-full py-5 flex items-center justify-between text-left group transition-all cursor-pointer"
                 >
                   <div className="flex items-center gap-3.5">
-                    <span className="text-zinc-400 font-editorial italic text-sm">04</span>
-                    <h3 className="text-lg md:text-xl font-bold text-zinc-900 tracking-tight group-hover:text-zinc-700 font-editorial">
+                    <span className="text-zinc-400 font-bold text-xs tracking-wider font-mono">04</span>
+                    <h3 className="text-lg md:text-xl font-bold text-zinc-900 tracking-tight group-hover:text-zinc-700">
                       Concierge Privileges & Bespoke Services
                     </h3>
                   </div>
@@ -599,7 +590,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
                 {/* ANALYTICAL TRUST ANCHOR */}
             <section className="space-y-4 pt-4">
-              <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 font-editorial">Encho Trust & Safety Anchor</h2>
+              <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-zinc-900">Encho Trust & Safety Anchor</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-start gap-3.5">
                   <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
@@ -632,7 +623,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="text-xl font-bold text-zinc-900 font-editorial">{listing.provider || 'Encho Verified Host'}</h3>
+                      <h3 className="text-xl font-extrabold text-zinc-900 tracking-tight">{listing.provider || 'Encho Verified Host'}</h3>
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-50 text-amber-700 border border-amber-200">Superhost</span>
                     </div>
                     <p className="text-xs text-slate-500 font-medium mt-0.5">Sanctuary Curator · Fast response under 5 mins</p>
@@ -653,7 +644,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
               </div>
 
               {/* Host Editorial Quote */}
-              <div className="p-4 rounded-2xl bg-slate-50 border-l-4 border-amber-500 italic text-sm md:text-base text-slate-800 font-editorial leading-relaxed">
+              <div className="p-4 rounded-2xl bg-zinc-50 border-l-2 border-zinc-900 text-sm md:text-base text-zinc-700 font-medium italic leading-relaxed">
                 "{listing.editorial_quote || "Our design philosophy is to allow natural sunlight and acoustic stillness to heal the modern soul. Every detail here is intentional."}"
               </div>
             </section>
@@ -661,7 +652,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
             {/* Ambient Radar Map */}
                 <section className="space-y-6 pt-6 border-t border-zinc-200/60">
                     <div className="flex items-center justify-between">
-                        <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 font-editorial">Neighborhood Radar</h2>
+                        <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-zinc-900">Neighborhood Radar</h2>
                         <span className="text-sm font-bold text-indigo-600 flex items-center gap-1.5 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-100">
                             <MapPin className="w-4 h-4" /> {listing.city}
                         </span>
@@ -697,10 +688,10 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-1.5">
                             <Star className="w-6 h-6 text-amber-500 fill-amber-500" />
-                            <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 font-editorial">{listing.rating?.toFixed(2) || '4.95'}</h2>
+                            <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-zinc-900">{listing.rating?.toFixed(2) || '4.95'}</h2>
                         </div>
                         <span className="text-zinc-300">|</span>
-                        <span className="text-base font-semibold text-zinc-500 font-sans-luxury">{listing.reviewCount || 124} Verified Reviews</span>
+                        <span className="text-lg font-bold text-zinc-600">{listing.reviewCount || 124} Verified Reviews</span>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -730,7 +721,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 {/* Similar Sanctuaries (Retention Carousel) */}
                 {similarListings && similarListings.length > 0 && (
                     <section className="space-y-6 pt-6 border-t border-zinc-200/60 pb-12">
-                        <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-zinc-900 font-editorial">Similar Sanctuaries</h2>
+                        <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-zinc-900">Similar Sanctuaries</h2>
                         <div className="flex overflow-x-auto snap-x snap-mandatory gap-4 pb-4 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                             {similarListings.map(sim => (
                                 <div 
@@ -768,7 +759,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 <div className="sticky top-28 bg-white border border-zinc-200/80 shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-3xl p-6 flex flex-col">
                     <div className="flex items-end justify-between mb-6">
                         <div>
-                            <span className="text-3xl font-bold tracking-tight text-zinc-900 font-editorial">{listing.currency === 'USD' ? '$' : '₹'}{basePrice.toLocaleString()}</span>
+                            <span className="text-3xl font-extrabold tracking-tight text-zinc-900">{listing.currency === 'USD' ? '$' : '₹'}{basePrice.toLocaleString()}</span>
                             <span className="text-zinc-500 font-medium ml-1">night</span>
                         </div>
                         {listing.originalId && <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded">Suite Rate</span>}
@@ -844,7 +835,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     
                     <div className="h-px bg-zinc-200/80 my-4" />
                     
-                    <div className="flex justify-between items-center text-lg font-bold text-zinc-900 font-editorial">
+                    <div className="flex justify-between items-center text-lg font-extrabold text-zinc-900">
                         <span>Total Before Taxes</span>
                         <span>{listing.currency === 'USD' ? '$' : '₹'}{grandTotal.toLocaleString()}</span>
                     </div>
@@ -858,7 +849,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
             <div className="flex items-center justify-between gap-4 max-w-md mx-auto">
                 <div className="flex flex-col">
                     <div className="flex items-baseline gap-1">
-                        <span className="text-xl font-bold text-zinc-900 font-editorial">{listing.currency === 'USD' ? '$' : '₹'}{basePrice.toLocaleString()}</span>
+                        <span className="text-xl font-extrabold text-zinc-900">{listing.currency === 'USD' ? '$' : '₹'}{basePrice.toLocaleString()}</span>
                         <span className="text-xs font-semibold text-zinc-500">night</span>
                     </div>
                     <button 
