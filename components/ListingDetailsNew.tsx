@@ -108,6 +108,8 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   const [isVideoMuted, setIsVideoMuted] = useState(true);
   const [activeGalleryTab, setActiveGalleryTab] = useState('all');
   const [activeSlide, setActiveSlide] = useState(0);
+
+
   // 10/10 Adaptive Media Allocator: Guarantees zero duplicate images across all collections
   const uniqueMediaPool = useMemo(() => {
     const raw = (listing.imageUrls && listing.imageUrls.length > 0)
@@ -218,6 +220,72 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
       }
     }
   ], [uniqueMediaPool, listing.title, listing.video_url]);
+
+  const mobileGalleryRef = useRef<HTMLDivElement>(null);
+
+  // Mobile Continuous Stream Items (Spaces + Obsidian Chapter Transition Cards)
+  const mobileContinuousItems = useMemo(() => [
+    // Chapter 1 Spaces
+    { type: 'space' as const, data: slideCollections[0].space01, collectionIdx: 0, sIdx: 1 },
+    { type: 'space' as const, data: slideCollections[0].space02, collectionIdx: 0, sIdx: 2 },
+    { type: 'space' as const, data: slideCollections[0].space03, collectionIdx: 0, sIdx: 3 },
+    { type: 'space' as const, data: slideCollections[0].space04, collectionIdx: 0, sIdx: 4 },
+    // Chapter 2 Transition Card
+    {
+      type: 'chapter' as const,
+      chapterNum: '02',
+      title: 'Master Living & Royal Suites',
+      sub: '4 Curated Suites & Terraces Ahead',
+      desc: 'Step inside the presidential suites, marble rain spas, and private sunset pavilions.',
+      targetCollectionIdx: 1
+    },
+    // Chapter 2 Spaces
+    { type: 'space' as const, data: slideCollections[1].space01, collectionIdx: 1, sIdx: 5 },
+    { type: 'space' as const, data: slideCollections[1].space02, collectionIdx: 1, sIdx: 6 },
+    { type: 'space' as const, data: slideCollections[1].space03, collectionIdx: 1, sIdx: 7 },
+    { type: 'space' as const, data: slideCollections[1].space04, collectionIdx: 1, sIdx: 8 },
+    // Chapter 3 Transition Card
+    {
+      type: 'chapter' as const,
+      chapterNum: '03',
+      title: 'Wellness, Spa & Bespoke Dining',
+      sub: '4 Culinary & Spa Sanctuaries Ahead',
+      desc: 'Experience private chef dining, sommelier wine vaults, and cedar sauna thermal suites.',
+      targetCollectionIdx: 2
+    },
+    // Chapter 3 Spaces
+    { type: 'space' as const, data: slideCollections[2].space01, collectionIdx: 2, sIdx: 9 },
+    { type: 'space' as const, data: slideCollections[2].space02, collectionIdx: 2, sIdx: 10 },
+    { type: 'space' as const, data: slideCollections[2].space03, collectionIdx: 2, sIdx: 11 },
+    { type: 'space' as const, data: slideCollections[2].space04, collectionIdx: 2, sIdx: 12 }
+  ], [slideCollections]);
+
+  const handleMobileScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLDivElement;
+    const scrollLeft = target.scrollLeft;
+    const cardWidth = target.clientWidth * 0.85;
+    const currentIdx = Math.round(scrollLeft / cardWidth);
+
+    if (currentIdx >= 9) {
+      if (activeSlide !== 2) setActiveSlide(2);
+    } else if (currentIdx >= 4) {
+      if (activeSlide !== 1) setActiveSlide(1);
+    } else {
+      if (activeSlide !== 0) setActiveSlide(0);
+    }
+  };
+
+  const handleCategoryPillClick = (idx: number) => {
+    uiAudio.playClick();
+    setActiveSlide(idx);
+    if (mobileGalleryRef.current) {
+      const targetIndices = [0, 4, 9];
+      const targetCard = mobileGalleryRef.current.children[targetIndices[idx]] as HTMLElement;
+      if (targetCard) {
+        targetCard.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      }
+    }
+  };
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [showFloatingCapsule, setShowFloatingCapsule] = useState(false);
@@ -952,7 +1020,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
               </div>
             </div>
 
-            {/* Collection Category Pills */}
+            {/* Collection Category Pills (Synchronized Tap-to-Scroll HUD) */}
             <div className="flex flex-wrap gap-2">
               {[
                 { id: 0, label: '01 · Architectural Vistas & Grounds' },
@@ -962,10 +1030,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 <button
                   key={cat.id}
                   type="button"
-                  onClick={() => {
-                    uiAudio.playClick();
-                    setActiveSlide(cat.id);
-                  }}
+                  onClick={() => handleCategoryPillClick(cat.id)}
                   className={`px-4 py-2.5 rounded-full text-xs font-bold font-display transition-all cursor-pointer flex items-center gap-2 ${
                     activeSlide === cat.id
                       ? 'bg-zinc-900 text-white shadow-md'
@@ -1180,41 +1245,74 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
               </div>
             </div>
 
-            {/* MOBILE KINETIC SNAP CAROUSEL (< 768px - Zero Scroll Fatigue) */}
+            {/* 10/10 CONTINUOUS MOBILE SWIPE STREAM (< 768px with Obsidian Chapter Cards) */}
             <div className="md:hidden space-y-3">
-              <div className="flex overflow-x-auto snap-x snap-mandatory gap-3 pb-2 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                {[
-                  slideCollections[activeSlide].space01,
-                  slideCollections[activeSlide].space02,
-                  slideCollections[activeSlide].space03,
-                  slideCollections[activeSlide].space04
-                ].map((space, sIdx) => (
-                  <div
-                    key={sIdx}
-                    onClick={() => {
-                      uiAudio.playClick();
-                      setLightboxIndex(space.imgIndex);
-                    }}
-                    className="snap-center shrink-0 w-[85vw] sm:w-[70vw] relative aspect-[4/3] rounded-3xl overflow-hidden bg-zinc-100 border border-zinc-200/80 shadow-sm"
-                  >
-                    <OptimizedImage
-                      src={space.img}
-                      aspectRatio="4:3"
-                      className="w-full h-full object-cover"
-                      alt={space.title}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-4 text-white">
-                      <div>
-                        <span className="text-[9px] font-black uppercase tracking-widest text-amber-300 font-mono">
-                          Space 0{sIdx + 1} · {space.tag}
-                        </span>
-                        <h4 className="text-sm font-bold font-display mt-0.5">{space.title}</h4>
+              <div 
+                ref={mobileGalleryRef}
+                onScroll={handleMobileScroll}
+                className="flex overflow-x-auto snap-x snap-mandatory gap-3 pb-2 scrollbar-hide" 
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+              >
+                {mobileContinuousItems.map((item, mIdx) => {
+                  if (item.type === 'chapter') {
+                    return (
+                      <div
+                        key={`chapter-${mIdx}`}
+                        className="snap-center shrink-0 w-[78vw] sm:w-[65vw] rounded-3xl bg-zinc-950 text-white p-6 border border-white/15 shadow-xl flex flex-col justify-between"
+                      >
+                        <div>
+                          <div className="inline-flex items-center gap-2 bg-amber-400/10 border border-amber-400/30 px-3 py-1 rounded-full text-amber-300 text-[10px] font-black uppercase tracking-widest font-mono">
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>Chapter {item.chapterNum}</span>
+                          </div>
+                          <h3 className="text-xl font-extrabold font-display mt-3 leading-snug">
+                            {item.title}
+                          </h3>
+                          <p className="text-xs text-zinc-400 font-medium mt-2 leading-relaxed">
+                            {item.desc}
+                          </p>
+                        </div>
+                        <div className="pt-4 border-t border-white/10 flex items-center justify-between text-xs font-bold text-amber-300 font-display">
+                          <span>{item.sub}</span>
+                          <ArrowRight className="w-4 h-4 animate-pulse" />
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  const space = item.data;
+                  return (
+                    <div
+                      key={`space-${mIdx}`}
+                      onClick={() => {
+                        uiAudio.playClick();
+                        setLightboxIndex(space.imgIndex);
+                      }}
+                      className="snap-center shrink-0 w-[85vw] sm:w-[70vw] relative aspect-[4/3] rounded-3xl overflow-hidden bg-zinc-100 border border-zinc-200/80 shadow-sm cursor-pointer"
+                    >
+                      <OptimizedImage
+                        src={space.img}
+                        aspectRatio="4:3"
+                        className="w-full h-full object-cover"
+                        alt={space.title}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-4 text-white">
+                        <div>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-amber-300 font-mono">
+                            Space {item.sIdx < 10 ? `0${item.sIdx}` : item.sIdx} · {space.tag}
+                          </span>
+                          <h4 className="text-sm font-bold font-display mt-0.5">{space.title}</h4>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-              <p className="text-center text-[11px] font-medium text-zinc-400">Swipe horizontally to explore all 4 spaces in Collection 0{activeSlide + 1}</p>
+              <div className="flex items-center justify-between px-2 text-[11px] font-medium text-zinc-400">
+                <span>← Continuous Swipe Stream</span>
+                <span>Active: Collection 0{activeSlide + 1} / 03</span>
+                <span>Tap any space for 4K →</span>
+              </div>
             </div>
           </section>
 
