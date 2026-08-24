@@ -82,7 +82,19 @@ const LUXURY_BACKUP_POOL = [
   "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=800&q=80",
   "https://images.unsplash.com/photo-1600566753376-12c8ab7fb75b?auto=format&fit=crop&w=800&q=80",
   "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=800&q=80",
-  "https://images.unsplash.com/photo-1600585154526-990dced4db0d?auto=format&fit=crop&w=800&q=80"
+  "https://images.unsplash.com/photo-1600585154526-990dced4db0d?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1507652313519-d4e9174996dd?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1506059612708-99d6c258160e?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1578683010236-d716f9a3f461?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1584132967334-10e028bd69f7?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1576013551627-0cc20b96c2a7?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1544984243-ec57ea16fe25?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=800&q=80",
+  "https://images.unsplash.com/photo-1618773928121-c32242e63f39?auto=format&fit=crop&w=800&q=80"
 ];
 const DEFAULT_IMAGES = LUXURY_BACKUP_POOL.slice(0, 5);
 
@@ -119,7 +131,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
     const combined = [...raw];
     // Fill remaining slots with distinct luxury assets from pool
     for (const backup of LUXURY_BACKUP_POOL) {
-      if (combined.length >= 12) break;
+      if (combined.length >= 24) break;
       if (!combined.includes(backup)) {
         combined.push(backup);
       }
@@ -949,38 +961,51 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
         {/* ========================================================================= */}
         {/* ========================================================================= */}
-        {/* DENSE "PILE OF SHEETS" EDITORIAL MOSAIC (100vw, Zero Gap, Multi-Layer Collisions) */}
+        {/* ULTRA-DENSE SCATTERED PILE-OF-SHEETS EDITORIAL MOSAIC (100vw, Zero Gap)   */}
+        {/* Zero Gray Background Visible · Multi-Layer Heavy Collisions & Hover Lift  */}
         {/* ========================================================================= */}
-        <div className="w-screen relative left-1/2 right-1/2 -mx-[50vw] overflow-hidden my-12 md:my-16 py-4 bg-zinc-950/10 border-y border-zinc-200/80">
+        <div className="w-screen relative left-1/2 right-1/2 -mx-[50vw] overflow-hidden my-10 md:my-14 py-2 bg-zinc-950">
           <div 
-            className="flex overflow-x-auto gap-0 px-2 md:px-6 pb-2 scrollbar-hide snap-x snap-mandatory items-center h-[380px] sm:h-[420px] md:h-[480px]" 
+            className="flex overflow-x-auto gap-0 px-2 pb-2 scrollbar-hide snap-x snap-mandatory items-center h-[420px] sm:h-[480px] md:h-[560px]" 
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
-            {/* 12 Interlocking, Densely Colliding Scattered Cards with Negative Margins and Organic Layering */}
+            {/* 24 Heavily Colliding Scattered Cards Packing 100% of Space */}
             {[
-              { idx: 0, w: 'w-[280px] sm:w-[340px] md:w-[440px]', h: 'h-[240px] sm:h-[280px] md:h-[320px]', z: 'z-10', overlap: 'ml-0', aspect: '16:9', rotate: '-rotate-1', translateY: '-translate-y-4 md:-translate-y-6' },
-              { idx: 1, w: 'w-[180px] sm:w-[220px] md:w-[270px]', h: 'h-[270px] sm:h-[320px] md:h-[370px]', z: 'z-20', overlap: '-ml-20 sm:-ml-28 md:-ml-36', aspect: '4:3', rotate: 'rotate-1', translateY: 'translate-y-4 md:translate-y-8' },
-              { idx: 2, w: 'w-[220px] sm:w-[260px] md:w-[340px]', h: 'h-[200px] sm:h-[240px] md:h-[280px]', z: 'z-15', overlap: '-ml-16 sm:-ml-24 md:-ml-32', aspect: '16:9', rotate: '-rotate-2', translateY: '-translate-y-6 md:-translate-y-10' },
-              { idx: 3, w: 'w-[190px] sm:w-[230px] md:w-[290px]', h: 'h-[280px] sm:h-[330px] md:h-[390px]', z: 'z-30', overlap: '-ml-16 sm:-ml-24 md:-ml-32', aspect: '4:3', rotate: 'rotate-2', translateY: 'translate-y-2 md:translate-y-4' },
-              { idx: 4, w: 'w-[300px] sm:w-[360px] md:w-[460px]', h: 'h-[230px] sm:h-[270px] md:h-[310px]', z: 'z-10', overlap: '-ml-24 sm:-ml-32 md:-ml-40', aspect: '16:9', rotate: 'rotate-1', translateY: '-translate-y-4 md:-translate-y-6' },
-              { idx: 5, w: 'w-[200px] sm:w-[240px] md:w-[300px]', h: 'h-[260px] sm:h-[310px] md:h-[360px]', z: 'z-25', overlap: '-ml-20 sm:-ml-28 md:-ml-36', aspect: '4:3', rotate: '-rotate-1', translateY: 'translate-y-6 md:translate-y-10' },
-              { idx: 6, w: 'w-[240px] sm:w-[300px] md:w-[380px]', h: 'h-[210px] sm:h-[250px] md:h-[290px]', z: 'z-15', overlap: '-ml-16 sm:-ml-24 md:-ml-32', aspect: '16:9', rotate: 'rotate-2', translateY: '-translate-y-8 md:-translate-y-12' },
-              { idx: 7, w: 'w-[180px] sm:w-[220px] md:w-[280px]', h: 'h-[280px] sm:h-[330px] md:h-[380px]', z: 'z-30', overlap: '-ml-20 sm:-ml-28 md:-ml-36', aspect: '4:3', rotate: '-rotate-2', translateY: 'translate-y-3 md:translate-y-6' },
-              { idx: 8, w: 'w-[290px] sm:w-[350px] md:w-[450px]', h: 'h-[230px] sm:h-[270px] md:h-[310px]', z: 'z-10', overlap: '-ml-24 sm:-ml-32 md:-ml-40', aspect: '16:9', rotate: 'rotate-1', translateY: '-translate-y-5 md:-translate-y-7' },
-              { idx: 9, w: 'w-[190px] sm:w-[230px] md:w-[290px]', h: 'h-[270px] sm:h-[320px] md:h-[370px]', z: 'z-25', overlap: '-ml-20 sm:-ml-28 md:-ml-36', aspect: '4:3', rotate: '-rotate-1', translateY: 'translate-y-5 md:translate-y-9' },
-              { idx: 10, w: 'w-[250px] sm:w-[310px] md:w-[390px]', h: 'h-[210px] sm:h-[250px] md:h-[290px]', z: 'z-15', overlap: '-ml-16 sm:-ml-24 md:-ml-32', aspect: '16:9', rotate: 'rotate-2', translateY: '-translate-y-7 md:-translate-y-11' },
-              { idx: 11, w: 'w-[210px] sm:w-[250px] md:w-[310px]', h: 'h-[280px] sm:h-[330px] md:h-[380px]', z: 'z-30', overlap: '-ml-20 sm:-ml-28 md:-ml-36', aspect: '4:3', rotate: '-rotate-1', translateY: 'translate-y-4 md:translate-y-6' }
+              { idx: 0, w: 'w-[280px] sm:w-[360px] md:w-[460px]', h: 'h-[260px] sm:h-[300px] md:h-[360px]', z: 'z-10', overlap: 'ml-0', aspect: '16:9', rotate: '-rotate-2', translateY: '-translate-y-8 md:-translate-y-14' },
+              { idx: 1, w: 'w-[200px] sm:w-[260px] md:w-[320px]', h: 'h-[280px] sm:h-[330px] md:h-[390px]', z: 'z-25', overlap: '-ml-28 sm:-ml-36 md:-ml-48', aspect: '4:3', rotate: 'rotate-2', translateY: 'translate-y-10 md:translate-y-16' },
+              { idx: 2, w: 'w-[240px] sm:w-[300px] md:w-[380px]', h: 'h-[240px] sm:h-[280px] md:h-[330px]', z: 'z-15', overlap: '-ml-24 sm:-ml-32 md:-ml-40', aspect: '16:9', rotate: '-rotate-3', translateY: '-translate-y-6 md:-translate-y-10' },
+              { idx: 3, w: 'w-[210px] sm:w-[270px] md:w-[340px]', h: 'h-[290px] sm:h-[340px] md:h-[410px]', z: 'z-30', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '4:3', rotate: 'rotate-1', translateY: 'translate-y-6 md:translate-y-12' },
+              { idx: 4, w: 'w-[300px] sm:w-[380px] md:w-[480px]', h: 'h-[270px] sm:h-[310px] md:h-[370px]', z: 'z-10', overlap: '-ml-32 sm:-ml-40 md:-ml-52', aspect: '16:9', rotate: 'rotate-3', translateY: '-translate-y-10 md:-translate-y-16' },
+              { idx: 5, w: 'w-[220px] sm:w-[280px] md:w-[350px]', h: 'h-[280px] sm:h-[330px] md:h-[390px]', z: 'z-25', overlap: '-ml-28 sm:-ml-36 md:-ml-48', aspect: '4:3', rotate: '-rotate-2', translateY: 'translate-y-12 md:translate-y-18' },
+              { idx: 6, w: 'w-[260px] sm:w-[340px] md:w-[420px]', h: 'h-[250px] sm:h-[290px] md:h-[340px]', z: 'z-15', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '16:9', rotate: 'rotate-2', translateY: '-translate-y-8 md:-translate-y-14' },
+              { idx: 7, w: 'w-[200px] sm:w-[260px] md:w-[320px]', h: 'h-[290px] sm:h-[340px] md:h-[400px]', z: 'z-35', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '4:3', rotate: '-rotate-3', translateY: 'translate-y-4 md:translate-y-8' },
+              { idx: 8, w: 'w-[310px] sm:w-[390px] md:w-[490px]', h: 'h-[270px] sm:h-[310px] md:h-[370px]', z: 'z-10', overlap: '-ml-32 sm:-ml-44 md:-ml-56', aspect: '16:9', rotate: 'rotate-2', translateY: '-translate-y-12 md:-translate-y-18' },
+              { idx: 9, w: 'w-[210px] sm:w-[270px] md:w-[340px]', h: 'h-[280px] sm:h-[330px] md:h-[390px]', z: 'z-25', overlap: '-ml-28 sm:-ml-36 md:-ml-48', aspect: '4:3', rotate: '-rotate-1', translateY: 'translate-y-10 md:translate-y-16' },
+              { idx: 10, w: 'w-[270px] sm:w-[350px] md:w-[440px]', h: 'h-[250px] sm:h-[290px] md:h-[350px]', z: 'z-15', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '16:9', rotate: 'rotate-3', translateY: '-translate-y-8 md:-translate-y-12' },
+              { idx: 11, w: 'w-[220px] sm:w-[280px] md:w-[350px]', h: 'h-[290px] sm:h-[340px] md:h-[410px]', z: 'z-30', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '4:3', rotate: '-rotate-2', translateY: 'translate-y-6 md:translate-y-10' },
+              { idx: 12, w: 'w-[290px] sm:w-[370px] md:w-[470px]', h: 'h-[260px] sm:h-[300px] md:h-[360px]', z: 'z-10', overlap: '-ml-32 sm:-ml-40 md:-ml-52', aspect: '16:9', rotate: '-rotate-2', translateY: '-translate-y-10 md:-translate-y-16' },
+              { idx: 13, w: 'w-[200px] sm:w-[260px] md:w-[320px]', h: 'h-[280px] sm:h-[330px] md:h-[390px]', z: 'z-25', overlap: '-ml-28 sm:-ml-36 md:-ml-48', aspect: '4:3', rotate: 'rotate-2', translateY: 'translate-y-12 md:translate-y-18' },
+              { idx: 14, w: 'w-[250px] sm:w-[330px] md:w-[420px]', h: 'h-[240px] sm:h-[280px] md:h-[330px]', z: 'z-15', overlap: '-ml-24 sm:-ml-32 md:-ml-40', aspect: '16:9', rotate: '-rotate-1', translateY: '-translate-y-6 md:-translate-y-10' },
+              { idx: 15, w: 'w-[210px] sm:w-[270px] md:w-[340px]', h: 'h-[290px] sm:h-[340px] md:h-[400px]', z: 'z-30', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '4:3', rotate: 'rotate-3', translateY: 'translate-y-4 md:translate-y-8' },
+              { idx: 16, w: 'w-[300px] sm:w-[380px] md:w-[480px]', h: 'h-[270px] sm:h-[310px] md:h-[370px]', z: 'z-10', overlap: '-ml-32 sm:-ml-44 md:-ml-56', aspect: '16:9', rotate: 'rotate-1', translateY: '-translate-y-12 md:-translate-y-18' },
+              { idx: 17, w: 'w-[220px] sm:w-[280px] md:w-[350px]', h: 'h-[280px] sm:h-[330px] md:h-[390px]', z: 'z-25', overlap: '-ml-28 sm:-ml-36 md:-ml-48', aspect: '4:3', rotate: '-rotate-3', translateY: 'translate-y-10 md:translate-y-16' },
+              { idx: 18, w: 'w-[270px] sm:w-[350px] md:w-[440px]', h: 'h-[250px] sm:h-[290px] md:h-[350px]', z: 'z-15', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '16:9', rotate: 'rotate-2', translateY: '-translate-y-8 md:-translate-y-14' },
+              { idx: 19, w: 'w-[200px] sm:w-[260px] md:w-[320px]', h: 'h-[290px] sm:h-[340px] md:h-[410px]', z: 'z-35', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '4:3', rotate: '-rotate-1', translateY: 'translate-y-6 md:translate-y-12' },
+              { idx: 20, w: 'w-[310px] sm:w-[390px] md:w-[490px]', h: 'h-[270px] sm:h-[310px] md:h-[370px]', z: 'z-10', overlap: '-ml-32 sm:-ml-44 md:-ml-56', aspect: '16:9', rotate: '-rotate-2', translateY: '-translate-y-10 md:-translate-y-16' },
+              { idx: 21, w: 'w-[210px] sm:w-[270px] md:w-[340px]', h: 'h-[280px] sm:h-[330px] md:h-[390px]', z: 'z-25', overlap: '-ml-28 sm:-ml-36 md:-ml-48', aspect: '4:3', rotate: 'rotate-2', translateY: 'translate-y-12 md:translate-y-18' },
+              { idx: 22, w: 'w-[280px] sm:w-[360px] md:w-[460px]', h: 'h-[250px] sm:h-[290px] md:h-[340px]', z: 'z-15', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '16:9', rotate: '-rotate-3', translateY: '-translate-y-8 md:-translate-y-12' },
+              { idx: 23, w: 'w-[220px] sm:w-[280px] md:w-[350px]', h: 'h-[290px] sm:h-[340px] md:h-[410px]', z: 'z-30', overlap: '-ml-24 sm:-ml-32 md:-ml-44', aspect: '4:3', rotate: 'rotate-1', translateY: 'translate-y-5 md:translate-y-10' }
             ].map((sheet, sIndex) => (
               <div
                 key={sIndex}
                 onClick={() => {
                   uiAudio.playClick();
-                  setLightboxIndex(sheet.idx);
+                  setLightboxIndex(sheet.idx % uniqueMediaPool.length);
                 }}
-                className={`relative shrink-0 ${sheet.w} ${sheet.h} ${sheet.z} ${sheet.overlap} ${sheet.rotate} ${sheet.translateY} rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-[2.5px] border-white shadow-2xl transition-all duration-500 ease-out cursor-pointer hover:!z-50 hover:scale-[1.10] hover:rotate-0 hover:shadow-[0_30px_70px_rgba(0,0,0,0.65)] group snap-center`}
+                className={`relative shrink-0 ${sheet.w} ${sheet.h} ${sheet.z} ${sheet.overlap} ${sheet.rotate} ${sheet.translateY} rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-[2.5px] border-white shadow-[0_15px_35px_rgba(0,0,0,0.45)] transition-all duration-500 ease-out cursor-pointer hover:!z-50 hover:scale-[1.12] hover:rotate-0 hover:shadow-[0_30px_70px_rgba(0,0,0,0.75)] group snap-center`}
               >
                 <OptimizedImage
-                  src={uniqueMediaPool[sheet.idx]}
+                  src={uniqueMediaPool[sheet.idx % uniqueMediaPool.length]}
                   aspectRatio={sheet.aspect as '16:9' | '4:3'}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                   alt={`Sanctuary Moment ${sheet.idx + 1}`}
