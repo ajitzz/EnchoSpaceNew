@@ -99,6 +99,102 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
   const [isVideoMuted, setIsVideoMuted] = useState(true);
   const [activeGalleryTab, setActiveGalleryTab] = useState('all');
+  const [activeSlide, setActiveSlide] = useState(0);
+  const images = (listing.imageUrls && listing.imageUrls.length > 0) 
+    ? listing.imageUrls 
+    : (listing.imageUrl ? [listing.imageUrl, ...DEFAULT_IMAGES.slice(1)] : DEFAULT_IMAGES);
+
+  // Curated Space Collections for Sliding Bento Gallery
+  const slideCollections = useMemo(() => [
+    {
+      id: 'vistas',
+      name: 'Architectural Vistas & Grounds',
+      space01: {
+        title: `${listing.title} Infinity Reflection Pool`,
+        desc: 'Panoramic horizon pool with temperature-controlled heating and stone daybeds.',
+        img: images[0] || DEFAULT_IMAGES[0],
+        imgIndex: 0,
+        tag: 'Infinity Vista'
+      },
+      space02: {
+        title: 'Open-Air Central Courtyard',
+        img: images[1] || DEFAULT_IMAGES[1],
+        imgIndex: 1,
+        tag: 'Courtyard'
+      },
+      space03: {
+        title: 'Sunken Fire Lounge Deck',
+        img: images[2] || DEFAULT_IMAGES[2],
+        imgIndex: 2,
+        tag: 'Fire Deck'
+      },
+      space04: {
+        title: 'Artisanal Sandstone Architectural Facade',
+        img: images[3] || DEFAULT_IMAGES[3],
+        imgIndex: 3,
+        tag: 'Facade Panorama'
+      }
+    },
+    {
+      id: 'suites',
+      name: 'Master Living & Royal Suites',
+      space01: {
+        title: 'Presidential Master Suite Vista',
+        desc: 'Custom king platform bed, panoramic glass vistas, and circadian lighting systems.',
+        img: images[1] || DEFAULT_IMAGES[1],
+        imgIndex: 1,
+        tag: 'Master Suite'
+      },
+      space02: {
+        title: 'Central Living Pavilion',
+        img: images[2] || DEFAULT_IMAGES[2],
+        imgIndex: 2,
+        tag: 'Living Salon'
+      },
+      space03: {
+        title: 'En-Suite Marble Rain Spa',
+        img: images[3] || DEFAULT_IMAGES[3],
+        imgIndex: 3,
+        tag: 'Spa Bath'
+      },
+      space04: {
+        title: 'Private Sunset Viewing Terrace',
+        img: images[4] || DEFAULT_IMAGES[4],
+        imgIndex: 4,
+        tag: 'Private Terrace'
+      }
+    },
+    {
+      id: 'wellness',
+      name: 'Wellness, Spa & Bespoke Dining',
+      space01: {
+        title: 'Private Chef Dining Pavilion',
+        desc: 'Custom oak dining table seating 10, serviced by our dedicated private culinary brigade.',
+        img: images[2] || DEFAULT_IMAGES[2],
+        imgIndex: 2,
+        tag: 'Culinary Deck'
+      },
+      space02: {
+        title: 'Sommelier Wine Vault & Bar',
+        img: images[3] || DEFAULT_IMAGES[3],
+        imgIndex: 3,
+        tag: 'Wine Cellar'
+      },
+      space03: {
+        title: 'Cedar Sauna & Cold Plunge',
+        img: images[4] || DEFAULT_IMAGES[4],
+        imgIndex: 4,
+        tag: 'Thermal Spa'
+      },
+      space04: {
+        title: 'Evening Acoustic Stillness & Stargazing',
+        img: images[0] || DEFAULT_IMAGES[0],
+        imgIndex: 0,
+        tag: 'Night Atmosphere'
+      }
+    }
+  ], [images, listing.title]);
+
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [showFloatingCapsule, setShowFloatingCapsule] = useState(false);
   const zone1Ref = useRef<HTMLDivElement>(null);
@@ -168,9 +264,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  const images = (listing.imageUrls && listing.imageUrls.length > 0) 
-    ? listing.imageUrls 
-    : (listing.imageUrl ? [listing.imageUrl, ...DEFAULT_IMAGES.slice(1)] : DEFAULT_IMAGES);
+
 
   // Booking Form State
   const [checkIn, setCheckIn] = useState<string>(() => {
@@ -784,13 +878,16 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
         {/* ========================================================================= */}
         <div className="w-full md:max-w-7xl mx-auto px-4 md:px-6 lg:px-8 mt-16 md:mt-24 flex flex-col gap-16 md:gap-24">
 
-          {/* 1. CINEMATIC FULL-WIDTH MEDIA GALLERY */}
+                    {/* 1. CINEMATIC HORIZONTAL SLIDING BENTO GALLERY (Left-Trio + Right-Hero) */}
           <section className="space-y-8 pt-8 border-t border-zinc-200/80">
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            {/* Header & Controls */}
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
               <div>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 font-display">Architectural Portfolio</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 font-display">
+                    Curated Architectural Portfolio
+                  </span>
                 </div>
                 <h2 className="text-2xl md:text-4xl font-extrabold tracking-tight text-zinc-900 font-display">
                   Cinematic Sanctuary Gallery
@@ -800,66 +897,209 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 </p>
               </div>
 
-              {/* Category Filter Pills */}
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { id: 'all', label: 'All Spaces' },
-                  { id: 'vistas', label: 'Vistas & Outdoors' },
-                  { id: 'suites', label: 'Private Suites' },
-                  { id: 'pool', label: 'Pool & Wellness' },
-                  { id: 'dining', label: 'Bespoke Dining' }
-                ].map(tab => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => {
-                      uiAudio.playClick();
-                      setActiveGalleryTab(tab.id);
-                    }}
-                    className={`px-4 py-2 rounded-full text-xs font-bold font-display transition-all cursor-pointer ${
-                      activeGalleryTab === tab.id
-                        ? 'bg-zinc-900 text-white shadow-md'
-                        : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700'
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
+              {/* Slide Navigation Controls & Collection Badge */}
+              <div className="flex items-center gap-3 self-start md:self-end">
+                <div className="bg-zinc-100 px-4 py-2 rounded-full text-xs font-bold text-zinc-700 font-display flex items-center gap-2 border border-zinc-200/60">
+                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-900" />
+                  <span>COLLECTION 0{activeSlide + 1} / 03</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    uiAudio.playClick();
+                    setActiveSlide((activeSlide - 1 + 3) % 3);
+                  }}
+                  className="w-10 h-10 rounded-full bg-white hover:bg-zinc-100 border border-zinc-200 text-zinc-900 flex items-center justify-center shadow-sm active:scale-95 transition-all cursor-pointer"
+                  title="Previous Collection"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    uiAudio.playClick();
+                    setActiveSlide((activeSlide + 1) % 3);
+                  }}
+                  className="w-10 h-10 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white flex items-center justify-center shadow-md active:scale-95 transition-all cursor-pointer"
+                  title="Next Collection"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
               </div>
             </div>
 
-            {/* 100% Full-Width Media Grid (Bento Matrix) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredGalleryImages.map((img, idx) => (
-                <div
-                  key={idx}
+            {/* Collection Category Pills */}
+            <div className="flex flex-wrap gap-2">
+              {[
+                { id: 0, label: '01 · Architectural Vistas & Grounds', sub: 'Grand Pools & Grounds' },
+                { id: 1, label: '02 · Master Living & Royal Suites', sub: 'Pavilions & Baths' },
+                { id: 2, label: '03 · Wellness, Spa & Bespoke Dining', sub: 'Chef Deck & Spa' }
+              ].map(cat => (
+                <button
+                  key={cat.id}
+                  type="button"
                   onClick={() => {
                     uiAudio.playClick();
-                    setLightboxIndex(idx);
+                    setActiveSlide(cat.id);
                   }}
-                  className={`group relative overflow-hidden rounded-3xl bg-zinc-100 border border-zinc-200/60 shadow-xs hover:shadow-xl transition-all duration-500 cursor-pointer ${
-                    idx === 0 ? 'sm:col-span-2 sm:row-span-2 aspect-[16/10]' : 'aspect-[4/3]'
+                  className={`px-4 py-2.5 rounded-full text-xs font-bold font-display transition-all cursor-pointer flex items-center gap-2 ${
+                    activeSlide === cat.id
+                      ? 'bg-zinc-900 text-white shadow-md'
+                      : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700'
                   }`}
                 >
-                  <OptimizedImage
-                    src={img}
-                    aspectRatio={idx === 0 ? '16:9' : '4:3'}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                    alt={`${listing.title} Gallery Image ${idx + 1}`}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-6">
-                    <div className="flex items-center justify-between w-full text-white">
-                      <div>
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/80 font-mono">Space 0{idx + 1}</span>
-                        <h4 className="text-sm font-bold font-display">{listing.title}</h4>
+                  <span>{cat.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Animated Bento Collage Container (Left-Trio + Right-Hero) */}
+            <div className="relative overflow-hidden min-h-[560px] md:min-h-[640px] rounded-3xl">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeSlide}
+                  initial={{ opacity: 0, x: 50 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -50 }}
+                  transition={{ duration: 0.4, ease: [0.25, 1, 0.5, 1] }}
+                  className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-full"
+                >
+                  {/* LEFT SIDE (7 Cols on LG): TRIO OF DETAIL SPACES */}
+                  <div className="lg:col-span-7 flex flex-col gap-4">
+                    {/* Top Row: Two Side-by-Side Spaces (Space 02 & Space 03) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Space 02 */}
+                      <div
+                        onClick={() => {
+                          uiAudio.playClick();
+                          setLightboxIndex(slideCollections[activeSlide].space02.imgIndex);
+                        }}
+                        className="group relative h-64 md:h-72 rounded-3xl overflow-hidden bg-zinc-100 border border-zinc-200/60 shadow-xs hover:shadow-xl transition-all duration-500 cursor-pointer"
+                      >
+                        <OptimizedImage
+                          src={slideCollections[activeSlide].space02.img}
+                          aspectRatio="4:3"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                          alt={slideCollections[activeSlide].space02.title}
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-5">
+                          <div className="flex items-center justify-between w-full text-white">
+                            <div>
+                              <span className="text-[10px] font-black uppercase tracking-widest text-amber-300 font-mono">
+                                Space 02 · {slideCollections[activeSlide].space02.tag}
+                              </span>
+                              <h4 className="text-sm md:text-base font-bold font-display mt-0.5">
+                                {slideCollections[activeSlide].space02.title}
+                              </h4>
+                            </div>
+                            <div className="p-2 rounded-full bg-white/20 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                              <Eye className="w-4 h-4 text-white" />
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="p-2.5 rounded-full bg-white/20 backdrop-blur-md">
-                        <Eye className="w-4 h-4 text-white" />
+
+                      {/* Space 03 */}
+                      <div
+                        onClick={() => {
+                          uiAudio.playClick();
+                          setLightboxIndex(slideCollections[activeSlide].space03.imgIndex);
+                        }}
+                        className="group relative h-64 md:h-72 rounded-3xl overflow-hidden bg-zinc-100 border border-zinc-200/60 shadow-xs hover:shadow-xl transition-all duration-500 cursor-pointer"
+                      >
+                        <OptimizedImage
+                          src={slideCollections[activeSlide].space03.img}
+                          aspectRatio="4:3"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                          alt={slideCollections[activeSlide].space03.title}
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-5">
+                          <div className="flex items-center justify-between w-full text-white">
+                            <div>
+                              <span className="text-[10px] font-black uppercase tracking-widest text-amber-300 font-mono">
+                                Space 03 · {slideCollections[activeSlide].space03.tag}
+                              </span>
+                              <h4 className="text-sm md:text-base font-bold font-display mt-0.5">
+                                {slideCollections[activeSlide].space03.title}
+                              </h4>
+                            </div>
+                            <div className="p-2 rounded-full bg-white/20 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                              <Eye className="w-4 h-4 text-white" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bottom Row: Wide Architectural Banner (Space 04) */}
+                    <div
+                      onClick={() => {
+                        uiAudio.playClick();
+                        setLightboxIndex(slideCollections[activeSlide].space04.imgIndex);
+                      }}
+                      className="group relative h-56 md:h-64 rounded-3xl overflow-hidden bg-zinc-100 border border-zinc-200/60 shadow-xs hover:shadow-xl transition-all duration-500 cursor-pointer"
+                    >
+                      <OptimizedImage
+                        src={slideCollections[activeSlide].space04.img}
+                        aspectRatio="16:9"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                        alt={slideCollections[activeSlide].space04.title}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-6">
+                        <div className="flex items-center justify-between w-full text-white">
+                          <div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-amber-300 font-mono">
+                              Space 04 · {slideCollections[activeSlide].space04.tag}
+                            </span>
+                            <h4 className="text-base md:text-lg font-bold font-display mt-0.5">
+                              {slideCollections[activeSlide].space04.title}
+                            </h4>
+                          </div>
+                          <div className="p-2.5 rounded-full bg-white/20 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                            <Eye className="w-4 h-4 text-white" />
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+
+                  {/* RIGHT SIDE (5 Cols on LG): LARGE FEATURE HERO VISTA (Space 01) */}
+                  <div
+                    onClick={() => {
+                      uiAudio.playClick();
+                      setLightboxIndex(slideCollections[activeSlide].space01.imgIndex);
+                    }}
+                    className="lg:col-span-5 group relative min-h-[380px] lg:min-h-full rounded-3xl overflow-hidden bg-zinc-100 border border-zinc-200/60 shadow-xs hover:shadow-2xl transition-all duration-500 cursor-pointer flex flex-col justify-end"
+                  >
+                    <OptimizedImage
+                      src={slideCollections[activeSlide].space01.img}
+                      aspectRatio="16:9"
+                      priority={true}
+                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                      alt={slideCollections[activeSlide].space01.title}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-85 group-hover:opacity-95 transition-opacity duration-300" />
+                    
+                    {/* Hero Badge & Micro Metadata */}
+                    <div className="relative z-10 p-6 md:p-8 text-white space-y-2">
+                      <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full border border-white/30 text-[10px] font-black uppercase tracking-widest font-mono">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                        <span>Space 01 · Hero Feature Anchor</span>
+                      </div>
+                      <h3 className="text-xl md:text-2xl font-extrabold font-display leading-tight">
+                        {slideCollections[activeSlide].space01.title}
+                      </h3>
+                      <p className="text-xs md:text-sm text-zinc-300 font-medium leading-relaxed max-w-sm">
+                        {slideCollections[activeSlide].space01.desc}
+                      </p>
+                      <div className="pt-2 flex items-center gap-2 text-xs font-bold font-display text-amber-300 group-hover:translate-x-1 transition-transform">
+                        <span>Inspect in 4K Fullscreen</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              </AnimatePresence>
             </div>
           </section>
 
