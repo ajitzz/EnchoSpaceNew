@@ -221,52 +221,34 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
     }
   ], [uniqueMediaPool, listing.title, listing.video_url]);
 
-  const mobileGalleryRef = useRef<HTMLDivElement>(null);
+    const mobileGalleryRef = useRef<HTMLDivElement>(null);
+  const [mobileSpaceIndex, setMobileSpaceIndex] = useState(0);
 
-  // Mobile Continuous Stream Items (Spaces + Obsidian Chapter Transition Cards)
-  const mobileContinuousItems = useMemo(() => [
-    // Chapter 1 Spaces
-    { type: 'space' as const, data: slideCollections[0].space01, collectionIdx: 0, sIdx: 1 },
-    { type: 'space' as const, data: slideCollections[0].space02, collectionIdx: 0, sIdx: 2 },
-    { type: 'space' as const, data: slideCollections[0].space03, collectionIdx: 0, sIdx: 3 },
-    { type: 'space' as const, data: slideCollections[0].space04, collectionIdx: 0, sIdx: 4 },
-    // Chapter 2 Transition Card
-    {
-      type: 'chapter' as const,
-      chapterNum: '02',
-      title: 'Master Living & Royal Suites',
-      sub: '4 Curated Suites & Terraces Ahead',
-      desc: 'Step inside the presidential suites, marble rain spas, and private sunset pavilions.',
-      targetCollectionIdx: 1
-    },
-    // Chapter 2 Spaces
-    { type: 'space' as const, data: slideCollections[1].space01, collectionIdx: 1, sIdx: 5 },
-    { type: 'space' as const, data: slideCollections[1].space02, collectionIdx: 1, sIdx: 6 },
-    { type: 'space' as const, data: slideCollections[1].space03, collectionIdx: 1, sIdx: 7 },
-    { type: 'space' as const, data: slideCollections[1].space04, collectionIdx: 1, sIdx: 8 },
-    // Chapter 3 Transition Card
-    {
-      type: 'chapter' as const,
-      chapterNum: '03',
-      title: 'Wellness, Spa & Bespoke Dining',
-      sub: '4 Culinary & Spa Sanctuaries Ahead',
-      desc: 'Experience private chef dining, sommelier wine vaults, and cedar sauna thermal suites.',
-      targetCollectionIdx: 2
-    },
-    // Chapter 3 Spaces
-    { type: 'space' as const, data: slideCollections[2].space01, collectionIdx: 2, sIdx: 9 },
-    { type: 'space' as const, data: slideCollections[2].space02, collectionIdx: 2, sIdx: 10 },
-    { type: 'space' as const, data: slideCollections[2].space03, collectionIdx: 2, sIdx: 11 },
-    { type: 'space' as const, data: slideCollections[2].space04, collectionIdx: 2, sIdx: 12 }
+  // Pure 12-Space Continuous Media Stream (Zero Fake Text Cards)
+  const mobileContinuousSpaces = useMemo(() => [
+    { space: slideCollections[0].space01, collectionIdx: 0, globalIdx: 1, subIdx: 1, chapterName: '01 · Architectural Vistas & Grounds', isChapterStart: true },
+    { space: slideCollections[0].space02, collectionIdx: 0, globalIdx: 2, subIdx: 2, chapterName: '01 · Architectural Vistas & Grounds', isChapterStart: false },
+    { space: slideCollections[0].space03, collectionIdx: 0, globalIdx: 3, subIdx: 3, chapterName: '01 · Architectural Vistas & Grounds', isChapterStart: false },
+    { space: slideCollections[0].space04, collectionIdx: 0, globalIdx: 4, subIdx: 4, chapterName: '01 · Architectural Vistas & Grounds', isChapterStart: false },
+    { space: slideCollections[1].space01, collectionIdx: 1, globalIdx: 5, subIdx: 1, chapterName: '02 · Master Living & Royal Suites', isChapterStart: true },
+    { space: slideCollections[1].space02, collectionIdx: 1, globalIdx: 6, subIdx: 2, chapterName: '02 · Master Living & Royal Suites', isChapterStart: false },
+    { space: slideCollections[1].space03, collectionIdx: 1, globalIdx: 7, subIdx: 3, chapterName: '02 · Master Living & Royal Suites', isChapterStart: false },
+    { space: slideCollections[1].space04, collectionIdx: 1, globalIdx: 8, subIdx: 4, chapterName: '02 · Master Living & Royal Suites', isChapterStart: false },
+    { space: slideCollections[2].space01, collectionIdx: 2, globalIdx: 9, subIdx: 1, chapterName: '03 · Wellness, Spa & Bespoke Dining', isChapterStart: true },
+    { space: slideCollections[2].space02, collectionIdx: 2, globalIdx: 10, subIdx: 2, chapterName: '03 · Wellness, Spa & Bespoke Dining', isChapterStart: false },
+    { space: slideCollections[2].space03, collectionIdx: 2, globalIdx: 11, subIdx: 3, chapterName: '03 · Wellness, Spa & Bespoke Dining', isChapterStart: false },
+    { space: slideCollections[2].space04, collectionIdx: 2, globalIdx: 12, subIdx: 4, chapterName: '03 · Wellness, Spa & Bespoke Dining', isChapterStart: false }
   ], [slideCollections]);
 
   const handleMobileScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.target as HTMLDivElement;
     const scrollLeft = target.scrollLeft;
     const cardWidth = target.clientWidth * 0.85;
-    const currentIdx = Math.round(scrollLeft / cardWidth);
+    const currentIdx = Math.min(Math.max(Math.round(scrollLeft / cardWidth), 0), 11);
 
-    if (currentIdx >= 9) {
+    setMobileSpaceIndex(currentIdx);
+
+    if (currentIdx >= 8) {
       if (activeSlide !== 2) setActiveSlide(2);
     } else if (currentIdx >= 4) {
       if (activeSlide !== 1) setActiveSlide(1);
@@ -279,7 +261,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
     uiAudio.playClick();
     setActiveSlide(idx);
     if (mobileGalleryRef.current) {
-      const targetIndices = [0, 4, 9];
+      const targetIndices = [0, 4, 8];
       const targetCard = mobileGalleryRef.current.children[targetIndices[idx]] as HTMLElement;
       if (targetCard) {
         targetCard.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
@@ -1245,42 +1227,51 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
               </div>
             </div>
 
-            {/* 10/10 CONTINUOUS MOBILE SWIPE STREAM (< 768px with Obsidian Chapter Cards) */}
+                        {/* 10/10 DYNAMIC ISLAND MOTION STREAM (< 768px - 100% Pure Full-Bleed Imagery) */}
             <div className="md:hidden space-y-3">
+              
+              {/* Dynamic Island Subconscious Telemetry HUD */}
+              <div className="bg-zinc-900/95 text-white backdrop-blur-xl px-4 py-2.5 rounded-2xl border border-white/10 shadow-lg flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                  <span className="text-[11px] font-extrabold font-display uppercase tracking-wider text-amber-300">
+                    Chapter 0{activeSlide + 1}
+                  </span>
+                  <span className="text-zinc-400 text-xs">·</span>
+                  <span className="text-xs font-semibold text-zinc-300 truncate max-w-[140px]">
+                    {activeSlide === 0 ? 'Vistas & Grounds' : activeSlide === 1 ? 'Master Suites' : 'Wellness & Dining'}
+                  </span>
+                </div>
+
+                {/* Micro Segmented Progress Ticks */}
+                <div className="flex items-center gap-1.5 shrink-0 bg-white/10 px-2.5 py-1 rounded-full">
+                  {[1, 2, 3, 4].map((step) => {
+                    const currentSubStep = (mobileSpaceIndex % 4) + 1;
+                    const isFilled = step <= currentSubStep;
+                    return (
+                      <div
+                        key={step}
+                        className={`h-1.5 rounded-full transition-all duration-300 ${
+                          isFilled ? 'w-3.5 bg-amber-400' : 'w-1.5 bg-white/30'
+                        }`}
+                      />
+                    );
+                  })}
+                  <span className="text-[10px] font-bold text-zinc-300 font-mono ml-1">
+                    {(mobileSpaceIndex % 4) + 1}/4
+                  </span>
+                </div>
+              </div>
+
+              {/* 100% Pure Full-Bleed Continuous Swipe Track */}
               <div 
                 ref={mobileGalleryRef}
                 onScroll={handleMobileScroll}
                 className="flex overflow-x-auto snap-x snap-mandatory gap-3 pb-2 scrollbar-hide" 
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               >
-                {mobileContinuousItems.map((item, mIdx) => {
-                  if (item.type === 'chapter') {
-                    return (
-                      <div
-                        key={`chapter-${mIdx}`}
-                        className="snap-center shrink-0 w-[78vw] sm:w-[65vw] rounded-3xl bg-zinc-950 text-white p-6 border border-white/15 shadow-xl flex flex-col justify-between"
-                      >
-                        <div>
-                          <div className="inline-flex items-center gap-2 bg-amber-400/10 border border-amber-400/30 px-3 py-1 rounded-full text-amber-300 text-[10px] font-black uppercase tracking-widest font-mono">
-                            <Sparkles className="w-3.5 h-3.5" />
-                            <span>Chapter {item.chapterNum}</span>
-                          </div>
-                          <h3 className="text-xl font-extrabold font-display mt-3 leading-snug">
-                            {item.title}
-                          </h3>
-                          <p className="text-xs text-zinc-400 font-medium mt-2 leading-relaxed">
-                            {item.desc}
-                          </p>
-                        </div>
-                        <div className="pt-4 border-t border-white/10 flex items-center justify-between text-xs font-bold text-amber-300 font-display">
-                          <span>{item.sub}</span>
-                          <ArrowRight className="w-4 h-4 animate-pulse" />
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  const space = item.data;
+                {mobileContinuousSpaces.map((item, mIdx) => {
+                  const space = item.space;
                   return (
                     <div
                       key={`space-${mIdx}`}
@@ -1288,30 +1279,48 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         uiAudio.playClick();
                         setLightboxIndex(space.imgIndex);
                       }}
-                      className="snap-center shrink-0 w-[85vw] sm:w-[70vw] relative aspect-[4/3] rounded-3xl overflow-hidden bg-zinc-100 border border-zinc-200/80 shadow-sm cursor-pointer"
+                      className="snap-center shrink-0 w-[85vw] sm:w-[70vw] relative aspect-[4/3] rounded-3xl overflow-hidden bg-zinc-100 border border-zinc-200/80 shadow-md cursor-pointer group"
                     >
                       <OptimizedImage
                         src={space.img}
                         aspectRatio="4:3"
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                         alt={space.title}
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-4 text-white">
-                        <div>
-                          <span className="text-[9px] font-black uppercase tracking-widest text-amber-300 font-mono">
-                            Space {item.sIdx < 10 ? `0${item.sIdx}` : item.sIdx} · {space.tag}
+
+                      {/* Chapter Entry Watermark Shimmer Badge (On First Space of each Collection) */}
+                      {item.isChapterStart && (
+                        <div className="absolute top-4 left-4 z-10 bg-zinc-950/80 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-amber-400/40 shadow-lg flex items-center gap-1.5 animate-fade-in">
+                          <Sparkles className="w-3 h-3 text-amber-300 animate-spin" />
+                          <span className="text-[10px] font-black uppercase tracking-widest text-amber-300 font-mono">
+                            {item.chapterName.split('·')[0].trim()} Anchor
                           </span>
-                          <h4 className="text-sm font-bold font-display mt-0.5">{space.title}</h4>
+                        </div>
+                      )}
+
+                      {/* Bottom Caption Overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent flex items-end p-5 text-white">
+                        <div className="w-full">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-amber-300 font-mono">
+                              Space {item.globalIdx < 10 ? `0${item.globalIdx}` : item.globalIdx} · {space.tag}
+                            </span>
+                            <span className="text-[10px] text-zinc-300 font-medium font-mono">
+                              {item.subIdx}/4
+                            </span>
+                          </div>
+                          <h4 className="text-sm font-bold font-display mt-0.5 truncate">{space.title}</h4>
                         </div>
                       </div>
                     </div>
                   );
                 })}
               </div>
+
               <div className="flex items-center justify-between px-2 text-[11px] font-medium text-zinc-400">
-                <span>← Continuous Swipe Stream</span>
-                <span>Active: Collection 0{activeSlide + 1} / 03</span>
-                <span>Tap any space for 4K →</span>
+                <span>← Continuous Gesture Stream</span>
+                <span>Space {mobileSpaceIndex + 1} of 12</span>
+                <span>Tap for 4K Lightbox →</span>
               </div>
             </div>
           </section>
