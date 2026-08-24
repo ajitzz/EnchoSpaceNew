@@ -8,12 +8,15 @@ import {
   Eye,
   CheckCircle2,
   Play,
-  Volume2
+  Volume2,
+  VolumeX,
+  Film
 } from 'lucide-react';
 
 interface HostLiveCreativePreviewCardProps {
   title?: string;
   heroImageUrl?: string;
+  heroVideoUrl?: string;
   adFormat?: string;
   listingLocation?: string;
   currency?: string;
@@ -21,14 +24,16 @@ interface HostLiveCreativePreviewCardProps {
 }
 
 export const HostLiveCreativePreviewCard: React.FC<HostLiveCreativePreviewCardProps> = ({
-  title = 'Luxury Mountain Villa',
+  title = 'Luxury Mountain Sanctuary',
   heroImageUrl = 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1200&q=80',
+  heroVideoUrl,
   adFormat = 'ADVANTAGE_PLUS',
   listingLocation = 'Wayanad, Kerala',
   currency = 'INR',
   pricePerNight = '3,500'
 }) => {
   const [activeFormat, setActiveFormat] = useState<'reels' | 'feed' | 'facebook'>('reels');
+  const [isVideoMuted, setIsVideoMuted] = useState(true);
 
   const getCurrencySymbol = (curr: string) => {
     switch (curr?.toUpperCase()) {
@@ -61,6 +66,11 @@ export const HostLiveCreativePreviewCard: React.FC<HostLiveCreativePreviewCardPr
               <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-pink-500/10 text-pink-600 dark:text-pink-400 border border-pink-500/20">
                 Meta Advantage+
               </span>
+              {heroVideoUrl && (
+                <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 flex items-center gap-1">
+                  <Film className="w-3 h-3" /> 9:16 Video Asset
+                </span>
+              )}
             </div>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
               Interactive preview of how travelers experience your listing across Meta apps
@@ -107,24 +117,48 @@ export const HostLiveCreativePreviewCard: React.FC<HostLiveCreativePreviewCardPr
       <div className="mt-5 flex justify-center">
         {activeFormat === 'reels' ? (
           /* 9:16 Instagram Reel Mockup */
-          <div className="w-[280px] h-[498px] rounded-[36px] bg-black border-[6px] border-zinc-800 shadow-2xl relative overflow-hidden flex flex-col justify-between text-white">
-            {/* Background Image / Video Asset */}
-            <img
-              src={heroImageUrl}
-              alt={title}
-              className="absolute inset-0 w-full h-full object-cover opacity-90"
-            />
+          <div className="w-[280px] h-[498px] rounded-[36px] bg-black border-[6px] border-zinc-800 shadow-2xl relative overflow-hidden flex flex-col justify-between text-white group">
+            {/* Background Video or Image Asset */}
+            {heroVideoUrl ? (
+              <video
+                src={heroVideoUrl}
+                autoPlay
+                loop
+                muted={isVideoMuted}
+                playsInline
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            ) : (
+              <img
+                src={heroImageUrl}
+                alt={title}
+                className="absolute inset-0 w-full h-full object-cover opacity-90"
+              />
+            )}
+
             {/* Gradient Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/80" />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/80 pointer-events-none" />
 
             {/* Top Reel Navigation Bar */}
             <div className="relative z-10 p-4 flex items-center justify-between text-xs font-medium">
               <span className="flex items-center gap-1.5 drop-shadow">
                 <Video className="w-4 h-4" /> Reels
               </span>
-              <span className="px-2 py-0.5 rounded-full bg-black/40 backdrop-blur-sm text-[10px] font-bold border border-white/20">
-                Sponsored
-              </span>
+              <div className="flex items-center gap-2">
+                {heroVideoUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setIsVideoMuted(!isVideoMuted)}
+                    className="p-1.5 rounded-full bg-black/60 backdrop-blur-md text-white hover:bg-black/80 transition-colors"
+                    title={isVideoMuted ? 'Unmute preview' : 'Mute preview'}
+                  >
+                    {isVideoMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5 text-cyan-400" />}
+                  </button>
+                )}
+                <span className="px-2 py-0.5 rounded-full bg-black/40 backdrop-blur-sm text-[10px] font-bold border border-white/20">
+                  Sponsored
+                </span>
+              </div>
             </div>
 
             {/* Bottom Reel Caption & CTA */}
@@ -144,8 +178,8 @@ export const HostLiveCreativePreviewCard: React.FC<HostLiveCreativePreviewCardPr
               </p>
 
               {/* Action Button */}
-              <div className="w-full py-2.5 rounded-xl bg-white text-zinc-900 font-bold text-xs text-center shadow-lg hover:bg-zinc-100 flex items-center justify-center gap-1.5">
-                <span>Book Now on Encho</span>
+              <div className="w-full py-2.5 rounded-xl bg-white text-zinc-900 font-bold text-xs text-center shadow-lg hover:bg-zinc-100 flex items-center justify-center gap-1.5 cursor-pointer">
+                <span>Book Sanctuary on Encho</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </div>
             </div>

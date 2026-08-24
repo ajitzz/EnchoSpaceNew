@@ -424,10 +424,13 @@ export const HostCampaignControlCenter: React.FC<HostCampaignControlCenterProps>
         onSyncComplete={() => fetchCampaignTruth(false)}
       />
 
-      {/* 8. Live Ad Creative Preview Mockup */}
+      {/* 8. Live Ad Creative Preview Mockup (Milestone 5: 9:16 Video Sync) */}
       <HostLiveCreativePreviewCard
-        currency={truth.financial_safety?.currency}
-        listingLocation={truth.target_locations || 'Target Metro Area'}
+        title={truth.listing_title || truth.title || 'Luxury Sanctuary'}
+        heroImageUrl={truth.hero_fallback_url || truth.creative_assets?.[0]}
+        heroVideoUrl={truth.hero_video_url}
+        currency={truth.financial_safety?.currency || truth.currency}
+        listingLocation={truth.listing_city || truth.target_locations || 'Target Metro Area'}
       />
 
       {/* 8. Encho AI Co-Pilot Intelligence Advisor */}

@@ -101,6 +101,15 @@ export interface Listing {
   seo_image_url?: string;
   wishlist_count?: number;
   
+  // God-Level Luxury Fields
+  hero_video_url?: string;
+  hero_fallback_url?: string;
+  dominant_color_hex?: string;
+  raw_rules?: string;
+  curated_guidelines?: string | string[];
+  experience_tags?: string[];
+  editorial_quote?: string;
+  
   // Detailed fields
   description?: string;
   address?: string;
@@ -112,6 +121,15 @@ export interface Listing {
   bedrooms?: number;
   beds?: number;
   bathrooms?: number;
+}
+
+export interface SoftExitLead {
+  id: number;
+  listing_id: number;
+  listing_title?: string;
+  email: string;
+  status: string;
+  created_at: string;
 }
 
 export interface SearchState {

@@ -98,7 +98,8 @@ export class CampaignControlCenterService {
       dcoEvalRes,
       dcoActionsRes,
       dailyMetricsRes,
-      contractRes
+      contractRes,
+      listingRes
     ] = await Promise.all([
       client.query(`SELECT * FROM provider_publishing_transactions WHERE campaign_id = $1 ORDER BY id DESC LIMIT 1`, [numericCampaignId]),
       client.query(`SELECT * FROM provider_entities WHERE campaign_id = $1 ORDER BY id ASC`, [numericCampaignId]),
@@ -112,7 +113,11 @@ export class CampaignControlCenterService {
       client.query(`SELECT * FROM dco_evaluation_transactions WHERE campaign_id = $1 ORDER BY id DESC LIMIT 1`, [numericCampaignId]),
       client.query(`SELECT * FROM dco_external_actions WHERE campaign_id = $1 ORDER BY id DESC`, [numericCampaignId]),
       client.query(`SELECT * FROM campaign_daily_metrics WHERE campaign_id = $1 ORDER BY metric_date DESC LIMIT 30`, [numericCampaignId]),
-      client.query(`SELECT * FROM campaign_financial_contracts WHERE campaign_id = $1`, [numericCampaignId])    ]);
+      client.query(`SELECT * FROM campaign_financial_contracts WHERE campaign_id = $1`, [numericCampaignId]),
+      campaign.listing_id
+        ? client.query(`SELECT id, title, city, price, display_price, image_urls, image_url, hero_video_url, hero_fallback_url, dominant_color_hex FROM listings WHERE id = $1`, [campaign.listing_id])
+        : Promise.resolve({ rows: [] })
+    ]);
 
     // Dual-read strategy: Prefer provider_publishing_transactions, fall back to legacy meta_publishing_transactions
     let tx = providerTxRes.rows[0] || null;
@@ -132,6 +137,7 @@ export class CampaignControlCenterService {
     const dcoActions = dcoActionsRes.rows || [];
     const dailyMetrics = dailyMetricsRes.rows || [];
     const financialContract = contractRes.rows[0] || null;
+    const listingData = listingRes.rows[0] || null;
 
     // 3. Compute 3 Core State Axes
 
@@ -561,6 +567,11 @@ export class CampaignControlCenterService {
       traces: CampaignControlCenterService.sanitizeTracesForAdmin(traces),
       host_id: campaign.host_id,
       listing_id: campaign.listing_id || null,
+      listing_title: listingData?.title || null,
+      listing_city: listingData?.city || null,
+      hero_video_url: listingData?.hero_video_url || null,
+      hero_fallback_url: listingData?.hero_fallback_url || (listingData?.image_urls && listingData.image_urls.length > 0 ? listingData.image_urls[0] : listingData?.image_url) || null,
+      dominant_color_hex: listingData?.dominant_color_hex || null,
       created_at: campaign.created_at,
       budget: campaign.budget,
       currency: campaign.currency || 'USD',

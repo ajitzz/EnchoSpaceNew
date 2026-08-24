@@ -3,7 +3,7 @@ import { SEO } from './SEO';
 import { AdminSEOTab } from './AdminSEOTab';
 import { Listing } from '../types';
 import { HomeIcon, ListIcon,  TrashIcon, EditIcon, CheckCircle2Icon, UserIcon, XIcon } from './Icons';
-import { Map, Compass, MoreHorizontal, Edit3, Megaphone, Link, CreditCard, TrendingUp, Send, RefreshCw, Plus, Phone, Mail, Users, Globe, Building, Check, Search, Sparkles, Loader2, Upload, Zap, Shield, ShieldCheck, FileText, ChevronRight, AlertTriangle, Eye, CheckCircle, XCircle } from 'lucide-react';
+import { Map, Compass, MoreHorizontal, Edit3, Megaphone, Link, CreditCard, TrendingUp, Send, RefreshCw, Plus, Phone, Mail, Users, Globe, Building, Check, Search, Sparkles, Loader2, Upload, Zap, Shield, ShieldCheck, FileText, ChevronRight, AlertTriangle, Eye, CheckCircle, XCircle, Crown, Film, Palette, Tag, Play, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { useAuth, User } from './AuthContext';
 import AdminInbox from './AdminInbox';
 import { useCurrency } from './CurrencyContext';
@@ -128,6 +128,30 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
       vibe: string; comfort: string; work: string; culinary: string;
       child_safety: string; nearby: string;
   }>({ vibe: '', comfort: '', work: '', culinary: '', child_safety: '', nearby: '' });
+
+  // God-Level Luxury UI & Asset Moderation State (Milestone 3)
+  const [editingLuxuryListing, setEditingLuxuryListing] = useState<Listing | null>(null);
+  const [luxuryFormData, setLuxuryFormData] = useState<{
+    hero_video_url: string;
+    hero_fallback_url: string;
+    dominant_color_hex: string;
+    raw_rules: string;
+    curated_guidelines: string[];
+    experience_tags: string[];
+  }>({
+    hero_video_url: '',
+    hero_fallback_url: '',
+    dominant_color_hex: '#06b6d4',
+    raw_rules: '',
+    curated_guidelines: [],
+    experience_tags: []
+  });
+  const [curatingAiInAdmin, setCuratingAiInAdmin] = useState(false);
+  const [savingLuxuryAssets, setSavingLuxuryAssets] = useState(false);
+  const [adminSoftLeads, setAdminSoftLeads] = useState<any[]>([]);
+  const [loadingSoftLeads, setLoadingSoftLeads] = useState(false);
+  const [newGuidelineInput, setNewGuidelineInput] = useState('');
+  const [newExperienceTagInput, setNewExperienceTagInput] = useState('');
 
   const fetchMetaTraces = async (campaignId: number) => {
     setTraceModalOpen(true);
@@ -976,6 +1000,123 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
     }
   };
 
+  // God-Level Luxury UI Moderation Presets & Handlers (Milestone 3)
+  const LUXURY_PALETTE_OPTIONS = [
+    { name: 'Aegean Cyan', hex: '#06b6d4', description: 'Aegean Sea & Cobalt Blue' },
+    { name: 'Aman Terracotta', hex: '#ea580c', description: 'Desert Sunset & Sunbaked Earth' },
+    { name: 'Emerald Rainforest', hex: '#059669', description: 'Lush Jungle & Deep Rainforest' },
+    { name: 'Obsidian Gold', hex: '#d97706', description: 'Volcanic Rock & Champagne Gold' },
+    { name: 'Rose Sunset', hex: '#e11d48', description: 'Mediterranean Twilight & Rose Wine' },
+    { name: 'Alpine Slate', hex: '#475569', description: 'Minimalist Stone & Mountain Mist' },
+  ];
+
+  const PRESET_SENSORY_TAGS = [
+    'Ocean Waves', 'Forest Serenity', 'Heated Infinity Pool', 'Private Chef Available',
+    '1 Gbps Fiber WiFi', 'Panoramic Mountain View', 'Heli-Pad Access', 'Curated Wine Cellar',
+    'Private Spa & Sauna', 'Stargazing Sky Deck', 'Soundproof Media Studio', '24/7 Dedicated Butler'
+  ];
+
+  const openLuxuryStudioModal = async (listing: Listing, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingLuxuryListing(listing);
+    setLuxuryFormData({
+      hero_video_url: listing.hero_video_url || '',
+      hero_fallback_url: listing.hero_fallback_url || '',
+      dominant_color_hex: listing.dominant_color_hex || '#06b6d4',
+      raw_rules: listing.raw_rules || '',
+      curated_guidelines: Array.isArray(listing.curated_guidelines) ? [...listing.curated_guidelines] : [],
+      experience_tags: Array.isArray(listing.experience_tags) ? [...listing.experience_tags] : []
+    });
+    setNewGuidelineInput('');
+    setNewExperienceTagInput('');
+    setLoadingSoftLeads(true);
+    try {
+      const res = await fetch('/api/host/soft-leads', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAdminSoftLeads(Array.isArray(data) ? data.filter((lead: any) => lead.listing_id === listing.id) : []);
+      }
+    } catch (err) {
+      console.error('Failed to load soft leads', err);
+    } finally {
+      setLoadingSoftLeads(false);
+    }
+  };
+
+  const handleAdminCurateRules = async () => {
+    if (!luxuryFormData.raw_rules?.trim()) {
+      addToast('Please enter raw rules first to curate', 'error');
+      return;
+    }
+    setCuratingAiInAdmin(true);
+    try {
+      const res = await fetch('/api/ai/curate-rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          raw_rules: luxuryFormData.raw_rules,
+          listing_title: editingLuxuryListing?.title || 'Luxury Sanctuary',
+          property_type: editingLuxuryListing?.type || 'Villa'
+        })
+      });
+      const data = await res.json();
+      if (data.guidelines && Array.isArray(data.guidelines)) {
+        setLuxuryFormData(prev => ({ ...prev, curated_guidelines: data.guidelines }));
+        addToast(`✨ AI curated ${data.guidelines.length} aristocratic guidelines successfully!`, 'success');
+      } else {
+        addToast('AI rule curation returned unexpected format', 'error');
+      }
+    } catch (err) {
+      console.error('Admin curate rules error:', err);
+      addToast('Failed to curate rules with AI', 'error');
+    } finally {
+      setCuratingAiInAdmin(false);
+    }
+  };
+
+  const handleSaveLuxuryAssets = async () => {
+    if (!editingLuxuryListing) return;
+    setSavingLuxuryAssets(true);
+    try {
+      const payload = {
+        ...editingLuxuryListing,
+        hero_video_url: luxuryFormData.hero_video_url,
+        hero_fallback_url: luxuryFormData.hero_fallback_url,
+        dominant_color_hex: luxuryFormData.dominant_color_hex,
+        raw_rules: luxuryFormData.raw_rules,
+        curated_guidelines: luxuryFormData.curated_guidelines,
+        experience_tags: luxuryFormData.experience_tags
+      };
+      const res = await fetch(`/api/listings/${editingLuxuryListing.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        setListings(prev => prev.map(l => l.id === editingLuxuryListing.id ? {
+          ...l,
+          hero_video_url: luxuryFormData.hero_video_url,
+          hero_fallback_url: luxuryFormData.hero_fallback_url,
+          dominant_color_hex: luxuryFormData.dominant_color_hex,
+          raw_rules: luxuryFormData.raw_rules,
+          curated_guidelines: luxuryFormData.curated_guidelines,
+          experience_tags: luxuryFormData.experience_tags
+        } : l));
+        addToast('God-Level Luxury Assets & Guidelines saved successfully!', 'success');
+        setEditingLuxuryListing(null);
+      } else {
+        addToast('Failed to update luxury assets on server', 'error');
+      }
+    } catch (err) {
+      console.error('Save luxury assets error:', err);
+      addToast('Network error saving luxury assets', 'error');
+    } finally {
+      setSavingLuxuryAssets(false);
+    }
+  };
+
   const handleEditCoordinates = async (listing: Listing, e: React.MouseEvent) => {
     e.stopPropagation();
     const lat = prompt(`Edit Latitude for '${listing.title}':`, String(listing.lat || ''));
@@ -1412,7 +1553,32 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                              return <img src={`${imgUrl}?w=100&h=100&fit=crop`} alt="" className="w-full h-full object-cover" />;
                                           })()}
                                         </div>
-                                        <div className="font-semibold text-gray-900 max-w-[200px] truncate">{listing.title}</div>
+                                        <div className="flex flex-col min-w-0">
+                                            <div className="font-semibold text-gray-900 max-w-[200px] truncate">{listing.title}</div>
+                                            <div className="flex flex-wrap items-center gap-1 mt-1">
+                                               {listing.hero_video_url && (
+                                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-50 text-cyan-700 border border-cyan-200">
+                                                     <Film className="w-2.5 h-2.5" /> Video
+                                                  </span>
+                                               )}
+                                               {listing.dominant_color_hex && (
+                                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-700 border border-gray-200">
+                                                     <span className="w-2 h-2 rounded-full inline-block shrink-0 shadow-xs" style={{ backgroundColor: listing.dominant_color_hex }} />
+                                                     {listing.dominant_color_hex}
+                                                  </span>
+                                               )}
+                                               {Array.isArray(listing.curated_guidelines) && listing.curated_guidelines.length > 0 && (
+                                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                                     <Sparkles className="w-2.5 h-2.5" /> {listing.curated_guidelines.length} Rules
+                                                  </span>
+                                               )}
+                                               {Array.isArray(listing.experience_tags) && listing.experience_tags.length > 0 && (
+                                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                                     <Tag className="w-2.5 h-2.5" /> {listing.experience_tags.length} Tags
+                                                  </span>
+                                               )}
+                                            </div>
+                                         </div>
                                      </div>
                                   </td>
                                   <td className="px-6 py-4 text-gray-600 truncate max-w-[150px]">{listing.city}</td>
@@ -1439,6 +1605,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                   </td>
                                   <td className="px-6 py-4 text-right">
                                       <div className="flex justify-end items-center gap-2">
+                                          <button onClick={(e) => openLuxuryStudioModal(listing, e)} title="God-Level Luxury Studio & Assets Moderation" className="p-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-md transition-colors font-bold shadow-xs border border-amber-200">
+                                             <Crown className="w-4 h-4" />
+                                          </button>
                                           <button onClick={(e) => handleEditPrice(listing, e)} title="Edit Price" className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors">
                                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                           </button>
@@ -4402,6 +4571,434 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                   <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-3 rounded-b-3xl">
                      <button onClick={() => setEditingFeatures(null)} className="px-5 py-2.5 bg-white border border-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-colors">Cancel</button>
                      <button onClick={handleSaveFaangFeatures} className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-md shadow-indigo-200 transition-all">Save Features</button>
+                  </div>
+               </div>
+            </div>
+        )}
+
+        {/* God-Level Luxury Studio & Asset Moderation Modal (Milestone 3) */}
+        {editingLuxuryListing && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[110] p-4 overflow-y-auto animate-in fade-in duration-200">
+               <div className="bg-slate-900 text-slate-100 rounded-3xl w-full max-w-4xl max-h-[92vh] overflow-y-auto shadow-2xl border border-amber-500/30 flex flex-col">
+                  {/* Modal Header */}
+                  <div className="p-6 border-b border-slate-800 flex justify-between items-start sticky top-0 bg-slate-900/95 backdrop-blur-md z-20">
+                     <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                           <Crown className="w-6 h-6" />
+                        </div>
+                        <div>
+                           <div className="flex items-center gap-2">
+                              <h2 className="text-xl font-black text-white tracking-tight">Luxury Studio & Asset Moderation</h2>
+                              <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                 10.0 Aman Standard
+                              </span>
+                           </div>
+                           <p className="text-xs text-slate-400 mt-0.5">
+                              Moderating: <span className="text-slate-200 font-semibold">{editingLuxuryListing.title}</span> • {editingLuxuryListing.city}
+                           </p>
+                        </div>
+                     </div>
+                     <button
+                        onClick={() => setEditingLuxuryListing(null)}
+                        className="p-2.5 bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-colors"
+                     >
+                        <XIcon className="w-5 h-5" />
+                     </button>
+                  </div>
+
+                  {/* Modal Body */}
+                  <div className="p-6 space-y-8 flex-1">
+                     {/* Section 1: Cinematic Asset Suite & Chameleon Palette */}
+                     <div className="p-5 rounded-2xl bg-slate-800/60 border border-slate-700/60 space-y-5">
+                        <div className="flex items-center justify-between">
+                           <div className="flex items-center gap-2">
+                              <Film className="w-5 h-5 text-cyan-400" />
+                              <h3 className="text-sm font-black uppercase tracking-wider text-slate-200">1. Hero Cinematic Assets & Chameleon Aura</h3>
+                           </div>
+                           <span className="text-xs text-slate-400 font-mono">WebP + MP4/HLS</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-xs font-bold text-slate-300 mb-1.5 flex items-center gap-1.5">
+                                 <span>Hero Video Loop URL</span>
+                                 <span className="text-[10px] text-cyan-400 font-normal">(5-10s Silent Loop MP4/WebM)</span>
+                              </label>
+                              <input
+                                 type="text"
+                                 value={luxuryFormData.hero_video_url}
+                                 onChange={e => setLuxuryFormData({ ...luxuryFormData, hero_video_url: e.target.value })}
+                                 placeholder="https://assets.encho.space/villas/cinematic-hero.mp4"
+                                 className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 font-mono"
+                              />
+                           </div>
+                           <div>
+                              <label className="block text-xs font-bold text-slate-300 mb-1.5 flex items-center gap-1.5">
+                                 <span>Hero High-Res Fallback Image URL</span>
+                                 <span className="text-[10px] text-amber-400 font-normal">(Lossless WebP)</span>
+                              </label>
+                              <input
+                                 type="text"
+                                 value={luxuryFormData.hero_fallback_url}
+                                 onChange={e => setLuxuryFormData({ ...luxuryFormData, hero_fallback_url: e.target.value })}
+                                 placeholder="https://images.unsplash.com/photo-..."
+                                 className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 font-mono"
+                              />
+                           </div>
+                        </div>
+
+                        {/* Live Asset Stream Preview */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                           <div className="rounded-xl bg-slate-950 border border-slate-800 p-3 flex flex-col">
+                              <span className="text-xs font-bold text-slate-400 mb-2 flex items-center gap-1.5">
+                                 <Play className="w-3 h-3 text-cyan-400" /> Video Stream Live Preview
+                              </span>
+                              {luxuryFormData.hero_video_url ? (
+                                 <div className="w-full aspect-video rounded-lg overflow-hidden bg-black relative border border-cyan-500/20">
+                                    <video
+                                       src={luxuryFormData.hero_video_url}
+                                       autoPlay
+                                       loop
+                                       muted
+                                       playsInline
+                                       controls
+                                       className="w-full h-full object-cover"
+                                    />
+                                 </div>
+                              ) : (
+                                 <div className="w-full aspect-video rounded-lg bg-slate-900 border border-dashed border-slate-800 flex items-center justify-center text-slate-600 text-xs">
+                                    No video URL configured (Fallback image will render)
+                                 </div>
+                              )}
+                           </div>
+
+                           <div className="rounded-xl bg-slate-950 border border-slate-800 p-3 flex flex-col">
+                              <span className="text-xs font-bold text-slate-400 mb-2 flex items-center gap-1.5">
+                                 <Eye className="w-3 h-3 text-amber-400" /> Fallback Image Preview
+                              </span>
+                              {luxuryFormData.hero_fallback_url ? (
+                                 <div className="w-full aspect-video rounded-lg overflow-hidden bg-black relative border border-amber-500/20">
+                                    <img
+                                       src={luxuryFormData.hero_fallback_url}
+                                       alt="Fallback Preview"
+                                       className="w-full h-full object-cover"
+                                    />
+                                    <div
+                                       className="absolute inset-0 opacity-40 mix-blend-overlay pointer-events-none"
+                                       style={{ backgroundColor: luxuryFormData.dominant_color_hex }}
+                                    />
+                                 </div>
+                              ) : (
+                                 <div className="w-full aspect-video rounded-lg bg-slate-900 border border-dashed border-slate-800 flex items-center justify-center text-slate-600 text-xs">
+                                    Using primary property image as default fallback
+                                 </div>
+                              )}
+                           </div>
+                        </div>
+
+                        {/* Chameleon Palette Selector */}
+                        <div className="pt-3 border-t border-slate-700/60 space-y-3">
+                           <div className="flex items-center justify-between">
+                              <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                                 <Palette className="w-3.5 h-3.5 text-purple-400" /> Chameleon Aura Tone Palette
+                              </label>
+                              <div className="flex items-center gap-2">
+                                 <span className="w-3.5 h-3.5 rounded-full shadow-sm" style={{ backgroundColor: luxuryFormData.dominant_color_hex }} />
+                                 <span className="text-xs font-mono text-slate-300">{luxuryFormData.dominant_color_hex}</span>
+                              </div>
+                           </div>
+
+                           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                              {LUXURY_PALETTE_OPTIONS.map((pal) => (
+                                 <button
+                                    key={pal.hex}
+                                    type="button"
+                                    onClick={() => setLuxuryFormData({ ...luxuryFormData, dominant_color_hex: pal.hex })}
+                                    className={`p-2.5 rounded-xl border text-left flex flex-col items-center gap-1.5 transition-all ${
+                                       luxuryFormData.dominant_color_hex.toLowerCase() === pal.hex.toLowerCase()
+                                          ? 'border-white bg-slate-800 ring-2 ring-amber-400/50'
+                                          : 'border-slate-700/80 bg-slate-950 hover:border-slate-600'
+                                    }`}
+                                 >
+                                    <span className="w-6 h-6 rounded-full shadow-inner" style={{ backgroundColor: pal.hex }} />
+                                    <span className="text-[11px] font-bold text-slate-200 text-center leading-tight">{pal.name}</span>
+                                 </button>
+                              ))}
+                           </div>
+
+                           <div className="flex items-center gap-3 pt-2">
+                              <input
+                                 type="color"
+                                 value={luxuryFormData.dominant_color_hex}
+                                 onChange={e => setLuxuryFormData({ ...luxuryFormData, dominant_color_hex: e.target.value })}
+                                 className="w-9 h-9 rounded-lg cursor-pointer bg-transparent border-0"
+                              />
+                              <input
+                                 type="text"
+                                 value={luxuryFormData.dominant_color_hex}
+                                 onChange={e => setLuxuryFormData({ ...luxuryFormData, dominant_color_hex: e.target.value })}
+                                 placeholder="#06b6d4"
+                                 className="w-36 px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-xs font-mono text-slate-200"
+                              />
+                              <span className="text-xs text-slate-400">Custom Hex Code</span>
+                           </div>
+                        </div>
+                     </div>
+
+                     {/* Section 2: Sensory Atmosphere Deck (Experience Tags) */}
+                     <div className="p-5 rounded-2xl bg-slate-800/60 border border-slate-700/60 space-y-4">
+                        <div className="flex items-center justify-between">
+                           <div className="flex items-center gap-2">
+                              <Tag className="w-5 h-5 text-purple-400" />
+                              <h3 className="text-sm font-black uppercase tracking-wider text-slate-200">2. Sensory Atmosphere Deck (Aman Tags)</h3>
+                           </div>
+                           <span className="text-xs text-purple-300 font-bold">
+                              {luxuryFormData.experience_tags.length} Selected
+                           </span>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                           {PRESET_SENSORY_TAGS.map((tag) => {
+                              const isSelected = luxuryFormData.experience_tags.includes(tag);
+                              return (
+                                 <button
+                                    key={tag}
+                                    type="button"
+                                    onClick={() => {
+                                       setLuxuryFormData(prev => ({
+                                          ...prev,
+                                          experience_tags: isSelected
+                                             ? prev.experience_tags.filter(t => t !== tag)
+                                             : [...prev.experience_tags, tag]
+                                       }));
+                                    }}
+                                    className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                       isSelected
+                                          ? 'bg-purple-500/20 text-purple-200 border border-purple-400 shadow-xs'
+                                          : 'bg-slate-950 text-slate-400 border border-slate-800 hover:border-slate-600'
+                                    }`}
+                                 >
+                                    {isSelected ? <Check className="w-3 h-3 text-purple-400" /> : <Plus className="w-3 h-3 text-slate-500" />}
+                                    {tag}
+                                 </button>
+                              );
+                           })}
+                        </div>
+
+                        {/* Custom Sensory Tag Adder */}
+                        <div className="flex gap-2 pt-2 border-t border-slate-700/60">
+                           <input
+                              type="text"
+                              value={newExperienceTagInput}
+                              onChange={e => setNewExperienceTagInput(e.target.value)}
+                              onKeyDown={e => {
+                                 if (e.key === 'Enter' && newExperienceTagInput.trim()) {
+                                    e.preventDefault();
+                                    if (!luxuryFormData.experience_tags.includes(newExperienceTagInput.trim())) {
+                                       setLuxuryFormData(prev => ({ ...prev, experience_tags: [...prev.experience_tags, newExperienceTagInput.trim()] }));
+                                    }
+                                    setNewExperienceTagInput('');
+                                 }
+                              }}
+                              placeholder="Add custom experience tag (e.g. Private Vineyard Tour)..."
+                              className="flex-1 px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-100 placeholder-slate-500"
+                           />
+                           <button
+                              type="button"
+                              onClick={() => {
+                                 if (newExperienceTagInput.trim() && !luxuryFormData.experience_tags.includes(newExperienceTagInput.trim())) {
+                                    setLuxuryFormData(prev => ({ ...prev, experience_tags: [...prev.experience_tags, newExperienceTagInput.trim()] }));
+                                    setNewExperienceTagInput('');
+                                 }
+                              }}
+                              className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-xs transition-colors"
+                           >
+                              Add Tag
+                           </button>
+                        </div>
+                     </div>
+
+                     {/* Section 3: AI Rule Abstraction Studio */}
+                     <div className="p-5 rounded-2xl bg-slate-800/60 border border-slate-700/60 space-y-4">
+                        <div className="flex items-center justify-between">
+                           <div className="flex items-center gap-2">
+                              <Sparkles className="w-5 h-5 text-amber-400" />
+                              <h3 className="text-sm font-black uppercase tracking-wider text-slate-200">3. AI Rule Abstraction & Aristocratic Guidelines</h3>
+                           </div>
+                           <button
+                              type="button"
+                              disabled={curatingAiInAdmin || !luxuryFormData.raw_rules?.trim()}
+                              onClick={handleAdminCurateRules}
+                              className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-50 text-slate-950 font-black rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-md"
+                           >
+                              {curatingAiInAdmin ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                              <span>{curatingAiInAdmin ? 'Curating via AI...' : '✨ Polish with AI'}</span>
+                           </button>
+                        </div>
+
+                        <div>
+                           <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                              Host's Raw Rules (Unfiltered)
+                           </label>
+                           <textarea
+                              rows={3}
+                              value={luxuryFormData.raw_rules}
+                              onChange={e => setLuxuryFormData({ ...luxuryFormData, raw_rules: e.target.value })}
+                              placeholder="e.g. No smoking anywhere. No loud noise after 9 PM. Don't touch master thermostat. Keep shoes off inside."
+                              className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                           />
+                        </div>
+
+                        {/* Curated Aristocratic Guidelines List */}
+                        <div className="space-y-2 pt-2 border-t border-slate-700/60">
+                           <label className="block text-xs font-bold text-amber-300 flex items-center justify-between">
+                              <span>Curated Aristocratic Hospitality Guidelines ({luxuryFormData.curated_guidelines.length})</span>
+                              <span className="text-[10px] text-slate-400">Rendered in Guest UI</span>
+                           </label>
+
+                           {luxuryFormData.curated_guidelines.length === 0 ? (
+                              <p className="text-xs text-slate-500 italic py-2">
+                                 No curated guidelines yet. Click "✨ Polish with AI" above to transform harsh rules into 5-star hospitality guidelines.
+                              </p>
+                           ) : (
+                              <div className="space-y-2">
+                                 {luxuryFormData.curated_guidelines.map((guideline, idx) => (
+                                    <div key={idx} className="flex items-start gap-2 p-2.5 bg-slate-950 rounded-xl border border-slate-800 group">
+                                       <span className="text-amber-400 font-serif font-bold text-xs mt-0.5">0{idx + 1}.</span>
+                                       <input
+                                          type="text"
+                                          value={guideline}
+                                          onChange={e => {
+                                             const updated = [...luxuryFormData.curated_guidelines];
+                                             updated[idx] = e.target.value;
+                                             setLuxuryFormData({ ...luxuryFormData, curated_guidelines: updated });
+                                          }}
+                                          className="flex-1 bg-transparent border-0 text-xs text-slate-200 focus:ring-0 focus:outline-none"
+                                       />
+                                       <button
+                                          type="button"
+                                          onClick={() => {
+                                             setLuxuryFormData(prev => ({
+                                                ...prev,
+                                                curated_guidelines: prev.curated_guidelines.filter((_, i) => i !== idx)
+                                             }));
+                                          }}
+                                          className="text-slate-500 hover:text-rose-400 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                       >
+                                          <XIcon className="w-3.5 h-3.5" />
+                                       </button>
+                                    </div>
+                                 ))}
+                              </div>
+                           )}
+
+                           {/* Add Manual Guideline */}
+                           <div className="flex gap-2 pt-2">
+                              <input
+                                 type="text"
+                                 value={newGuidelineInput}
+                                 onChange={e => setNewGuidelineInput(e.target.value)}
+                                 onKeyDown={e => {
+                                    if (e.key === 'Enter' && newGuidelineInput.trim()) {
+                                       e.preventDefault();
+                                       setLuxuryFormData(prev => ({
+                                          ...prev,
+                                          curated_guidelines: [...prev.curated_guidelines, newGuidelineInput.trim()]
+                                       }));
+                                       setNewGuidelineInput('');
+                                    }
+                                 }}
+                                 placeholder="Add manual guideline (e.g. Pure Mountain Atmosphere: We preserve serenity...)"
+                                 className="flex-1 px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-100 placeholder-slate-500"
+                              />
+                              <button
+                                 type="button"
+                                 onClick={() => {
+                                    if (newGuidelineInput.trim()) {
+                                       setLuxuryFormData(prev => ({
+                                          ...prev,
+                                          curated_guidelines: [...prev.curated_guidelines, newGuidelineInput.trim()]
+                                       }));
+                                       setNewGuidelineInput('');
+                                    }
+                                 }}
+                                 className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs transition-colors"
+                              >
+                                 Add
+                              </button>
+                           </div>
+                        </div>
+                     </div>
+
+                     {/* Section 4: Soft Exit Leads & Inbound Analytics */}
+                     <div className="p-5 rounded-2xl bg-slate-800/60 border border-slate-700/60 space-y-4">
+                        <div className="flex items-center justify-between">
+                           <div className="flex items-center gap-2">
+                              <Mail className="w-5 h-5 text-emerald-400" />
+                              <h3 className="text-sm font-black uppercase tracking-wider text-slate-200">4. Soft Exit Leads Captured ({adminSoftLeads.length})</h3>
+                           </div>
+                           <span className="text-xs text-emerald-300 font-bold">
+                              Exit Intent Conversions
+                           </span>
+                        </div>
+
+                        {loadingSoftLeads ? (
+                           <div className="py-6 flex items-center justify-center gap-2 text-slate-400 text-xs">
+                              <Loader2 className="w-4 h-4 animate-spin text-emerald-400" /> Loading leads...
+                           </div>
+                        ) : adminSoftLeads.length === 0 ? (
+                           <p className="text-xs text-slate-500 italic py-2">
+                              No exit-intent leads captured yet for this listing. High-intent modal triggers automatically on desktop exit or mobile timer.
+                           </p>
+                        ) : (
+                           <div className="overflow-x-auto max-h-48 rounded-xl border border-slate-800 bg-slate-950">
+                              <table className="w-full text-left text-xs whitespace-nowrap">
+                                 <thead className="bg-slate-900 text-slate-400 border-b border-slate-800">
+                                    <tr>
+                                       <th className="px-4 py-2.5 font-bold">Email</th>
+                                       <th className="px-4 py-2.5 font-bold">Captured At</th>
+                                       <th className="px-4 py-2.5 font-bold">Source</th>
+                                       <th className="px-4 py-2.5 font-bold">Status</th>
+                                    </tr>
+                                 </thead>
+                                 <tbody className="divide-y divide-slate-800/50">
+                                    {adminSoftLeads.map((lead, idx) => (
+                                       <tr key={lead.id || idx} className="hover:bg-slate-900/50">
+                                          <td className="px-4 py-2.5 font-mono text-emerald-300">{lead.email}</td>
+                                          <td className="px-4 py-2.5 text-slate-400">{new Date(lead.created_at).toLocaleString()}</td>
+                                          <td className="px-4 py-2.5 text-slate-400">{lead.source || 'exit_intent_modal'}</td>
+                                          <td className="px-4 py-2.5">
+                                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                                {lead.status || 'captured'}
+                                             </span>
+                                          </td>
+                                       </tr>
+                                    ))}
+                                 </tbody>
+                              </table>
+                           </div>
+                        )}
+                     </div>
+                  </div>
+
+                  {/* Modal Footer */}
+                  <div className="p-6 border-t border-slate-800 bg-slate-900/90 flex justify-end gap-3 rounded-b-3xl sticky bottom-0 z-20 backdrop-blur-md">
+                     <button
+                        type="button"
+                        onClick={() => setEditingLuxuryListing(null)}
+                        className="px-5 py-2.5 bg-slate-800 border border-slate-700 text-slate-300 font-semibold rounded-xl hover:bg-slate-700 transition-colors text-sm"
+                     >
+                        Cancel
+                     </button>
+                     <button
+                        type="button"
+                        disabled={savingLuxuryAssets}
+                        onClick={handleSaveLuxuryAssets}
+                        className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-50 text-slate-950 font-black rounded-xl text-sm transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2"
+                     >
+                        {savingLuxuryAssets ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                        <span>{savingLuxuryAssets ? 'Saving Assets...' : 'Save & Moderate Assets'}</span>
+                     </button>
                   </div>
                </div>
             </div>

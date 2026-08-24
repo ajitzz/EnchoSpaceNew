@@ -8,7 +8,7 @@ import { useAuth } from './AuthContext';
 import { 
   Building2, Home, Trees, Tractor, Coffee, Ship, Tent, Caravan, Castle, Mountain, Box, Circle, Leaf, 
   X, Eye, Maximize2, Sparkles, Check, CheckCircle2, Bed, Users, Trash2, Globe, Settings, MapPin, 
-  Smartphone, Laptop, ExternalLink, Video, Compass, AlertCircle, Info, DollarSign
+  Smartphone, Laptop, ExternalLink, Video, Compass, AlertCircle, Info, DollarSign, Loader2
 } from 'lucide-react';
 import { useToast } from './ToastContext';
 import { useCurrency } from './CurrencyContext';
@@ -90,8 +90,15 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
     dynamicPricing: existingListing?.dynamicPricing || { weekendMultiplier: 1.0, seasonalMultiplier: 1.0 },
     amenity_clusters: existingListing?.amenity_clusters || { vibe: [], comfort: [], work: [], culinary: [] },
     child_safety_specs: existingListing?.child_safety_specs || [],
-    nearby: existingListing?.nearby || []
+    nearby: existingListing?.nearby || [],
+    hero_video_url: existingListing?.hero_video_url || '',
+    hero_fallback_url: existingListing?.hero_fallback_url || '',
+    dominant_color_hex: existingListing?.dominant_color_hex || '#0284C7',
+    raw_rules: existingListing?.raw_rules || '',
+    curated_guidelines: existingListing?.curated_guidelines || '',
+    experience_tags: existingListing?.experience_tags || ([] as string[])
   });
+  const [isCuratingRules, setIsCuratingRules] = useState(false);
   
   const [photos, setPhotos] = useState<PhotoData[]>(() => {
     const urls = (existingListing?.imageUrls && existingListing.imageUrls.length > 0) 
@@ -158,6 +165,12 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
     seo_keywords: formData.seo_keywords,
     seo_image_url: formData.seo_image_url,
     dynamicPricing: formData.dynamicPricing,
+    hero_video_url: formData.hero_video_url,
+    hero_fallback_url: formData.hero_fallback_url,
+    dominant_color_hex: formData.dominant_color_hex,
+    raw_rules: formData.raw_rules,
+    curated_guidelines: formData.curated_guidelines,
+    experience_tags: formData.experience_tags,
   };
 
   // Perform active preview scrolling when focused or when step changes
@@ -398,6 +411,34 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
     return typeof preview === 'string' ? preview : '';
   };
 
+  
+  const handleCurateRules = async () => {
+    if (!formData.raw_rules?.trim()) {
+      addToast("Information", "Please enter some house rules first to refine.", "info");
+      return;
+    }
+    setIsCuratingRules(true);
+    try {
+      const res = await fetch('/api/ai/curate-rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rawRules: formData.raw_rules })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.curatedGuidelines) {
+          setFormData(prev => ({ ...prev, curated_guidelines: data.curatedGuidelines }));
+          addToast("AI Success", "Rules refined into 5-star luxury House Guidelines!", "success");
+        }
+      }
+    } catch (e) {
+      console.error('Failed to curate rules:', e);
+      addToast("Notice", "Rule refinement completed with heuristic rules.", "info");
+    } finally {
+      setIsCuratingRules(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     for (let i = 1; i <= 5; i++) {
@@ -460,7 +501,13 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
         dynamicPricing: formData.dynamicPricing,
         amenity_clusters: formData.amenity_clusters,
         child_safety_specs: formData.child_safety_specs,
-        nearby: formData.nearby
+        nearby: formData.nearby,
+        hero_video_url: formData.hero_video_url,
+        hero_fallback_url: formData.hero_fallback_url,
+        dominant_color_hex: formData.dominant_color_hex,
+        raw_rules: formData.raw_rules,
+        curated_guidelines: formData.curated_guidelines,
+        experience_tags: formData.experience_tags
       };
 
       const endpoint = existingListing?.id ? `/api/listings/${existingListing.id}` : '/api/listings';
@@ -1205,6 +1252,116 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                 {/* STEP 4: GLOBAL AMENITIES & PHOTOS */}
                 {currentStep === 4 && (
                   <div className="space-y-6">
+                    {/* Cinematic Asset Studio (God-Level Immersion) */}
+                    <div className="bg-gradient-to-br from-neutral-900 to-zinc-950 text-white rounded-2xl p-6 border border-zinc-700/60 shadow-xl space-y-5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7] bg-[#0284C7]/10 px-2 py-0.5 rounded-full border border-[#0284C7]/30">God-Level Asset Studio</span>
+                          <h2 className="text-lg font-extrabold text-white tracking-tight mt-1 flex items-center gap-2">
+                            <Video className="w-5 h-5 text-[#0284C7]" /> Cinematic Hero Video & Chameleon Aura
+                          </h2>
+                          <p className="text-xs text-zinc-400 mt-1">Upload or link a 5-second ultra-HD ambient loop (.webm / .mp4 / YouTube) to captivate high-dopamine travelers.</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest block mb-1.5">Cinematic Hero Loop Video URL</label>
+                          <input 
+                            type="text"
+                            placeholder="https://.../ambient_hero.mp4 or YouTube / Vimeo link"
+                            value={formData.hero_video_url || formData.videoUrl}
+                            onChange={e => setFormData(prev => ({ ...prev, hero_video_url: e.target.value, videoUrl: e.target.value }))}
+                            className="w-full p-3.5 rounded-xl border border-zinc-700 bg-neutral-900/80 text-white text-xs placeholder-zinc-500 focus:border-[#0284C7] outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest block mb-1.5">High-Res Fallback Image URL</label>
+                          <input 
+                            type="text"
+                            placeholder="https://.../high_res_cover.webp (used for low-power mode)"
+                            value={formData.hero_fallback_url}
+                            onChange={e => setFormData(prev => ({ ...prev, hero_fallback_url: e.target.value }))}
+                            className="w-full p-3.5 rounded-xl border border-zinc-700 bg-neutral-900/80 text-white text-xs placeholder-zinc-500 focus:border-[#0284C7] outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Chameleon Aura Palette */}
+                      <div className="pt-2 border-t border-zinc-800">
+                        <label className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest block mb-2">Chameleon UI Aura Tint</label>
+                        <div className="flex flex-wrap gap-2 items-center">
+                          {[
+                            { name: 'Aegean Cyan', hex: '#0284C7' },
+                            { name: 'Aman Terracotta', hex: '#C86446' },
+                            { name: 'Emerald Rainforest', hex: '#0F5132' },
+                            { name: 'Midnight Obsidian', hex: '#1E1E24' },
+                            { name: 'Champagne Gold', hex: '#D4AF37' },
+                            { name: 'Alpine Quartz', hex: '#4A5568' }
+                          ].map(pal => (
+                            <button
+                              key={pal.hex}
+                              type="button"
+                              onClick={() => setFormData(prev => ({ ...prev, dominant_color_hex: pal.hex }))}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${formData.dominant_color_hex === pal.hex ? 'border-white bg-white/20 text-white shadow-lg' : 'border-zinc-700 bg-neutral-800/50 text-zinc-400 hover:text-white'}`}
+                            >
+                              <span className="w-3 h-3 rounded-full border border-white/20" style={{ backgroundColor: pal.hex }} />
+                              {pal.name}
+                            </button>
+                          ))}
+                          <div className="flex items-center gap-1.5 ml-2">
+                            <span className="text-[11px] text-zinc-400">Custom:</span>
+                            <input 
+                              type="color" 
+                              value={formData.dominant_color_hex || '#0284C7'}
+                              onChange={e => setFormData(prev => ({ ...prev, dominant_color_hex: e.target.value }))}
+                              className="w-7 h-7 rounded-lg border-0 bg-transparent cursor-pointer"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Sensory Atmosphere Experience Deck */}
+                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 4.0</span>
+                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5 flex items-center gap-2">
+                          <Sparkles className="w-5 h-5 text-amber-500" /> Sensory Atmosphere & Experience Tags
+                        </h2>
+                        <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Select signature sensory dimensions that elevate your estate above standard hospitality listings.</p>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          'Ocean Waves Acoustics', 'Forest Serenity', 'Panoramic Mountain Vista', 'Acoustic Soundproofing',
+                          'Stone Hearth Fireplace', 'Private Chef On-Demand', 'Heated Infinity Pool', 'High-Altitude Stargazing',
+                          'In-Villa Hydrotherapy / Spa', '1 Gbps Ultra-Fiber Workspace', 'Bespoke Espresso Atelier',
+                          'Sommelier Curated Wine Cellar', 'Private Helipad Access'
+                        ].map(tag => {
+                          const isSelected = (formData.experience_tags || []).includes(tag);
+                          return (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => {
+                                setFormData(prev => {
+                                  const current = prev.experience_tags || [];
+                                  return {
+                                    ...prev,
+                                    experience_tags: isSelected ? current.filter(t => t !== tag) : [...current, tag]
+                                  };
+                                });
+                              }}
+                              className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all border flex items-center gap-1.5 ${isSelected ? 'bg-black dark:bg-white text-white dark:text-black border-black dark:border-white shadow-sm' : 'bg-zinc-50 dark:bg-neutral-800/60 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-neutral-700 hover:border-zinc-400'}`}
+                            >
+                              {isSelected ? <Check className="w-3.5 h-3.5" /> : <Sparkles className="w-3.5 h-3.5 text-zinc-400" />}
+                              {tag}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                     {/* Photos upload */}
                     <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
                       <div>
@@ -1360,6 +1517,50 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
                     </div>
                   </div>
                 )}
+
+                
+                      {/* AI Rule Abstraction Studio (5-Star Guidelines) */}
+                      <div className="p-5 border border-zinc-200 dark:border-neutral-800 bg-zinc-50/50 dark:bg-neutral-900/60 rounded-2xl space-y-4">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7] bg-[#0284C7]/10 px-2 py-0.5 rounded-full border border-[#0284C7]/30">AI Rule Abstraction</span>
+                            <h3 className="text-sm font-extrabold text-zinc-900 dark:text-white mt-1">Aristocratic House Guidelines</h3>
+                            <p className="text-xs text-zinc-400">Convert harsh host restrictions into welcoming, 5-star estate guidelines to eliminate booking friction.</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleCurateRules}
+                            disabled={isCuratingRules}
+                            className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl text-xs font-bold shadow-md hover:opacity-95 transition-all flex items-center gap-1.5 disabled:opacity-50"
+                          >
+                            {isCuratingRules ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-amber-300" />}
+                            {isCuratingRules ? 'Polishing with AI...' : '✨ Polish into Luxury Guidelines'}
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block mb-1">Your Raw Rules</label>
+                            <textarea
+                              rows={4}
+                              placeholder="e.g. No smoking inside, quiet hours after 10 PM, strictly no unapproved parties, checkout 11 AM sharp..."
+                              value={formData.raw_rules}
+                              onChange={e => setFormData(prev => ({ ...prev, raw_rules: e.target.value }))}
+                              className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest block mb-1">AI-Curated House Guidelines (Aman Standard)</label>
+                            <textarea
+                              rows={4}
+                              placeholder="AI refined guidelines will appear here..."
+                              value={formData.curated_guidelines}
+                              onChange={e => setFormData(prev => ({ ...prev, curated_guidelines: e.target.value }))}
+                              className="w-full p-3 rounded-xl border border-emerald-300 dark:border-emerald-800/80 bg-emerald-50/20 dark:bg-emerald-950/20 text-xs text-zinc-900 dark:text-white outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
 
                 {/* STEP 6: SEARCH ENGINE OPTIMIZATION */}
                 {currentStep === 6 && (

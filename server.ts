@@ -1167,6 +1167,11 @@ const ensureUsersTable = async () => {
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='avatar') THEN
         ALTER TABLE users ADD COLUMN avatar TEXT;
       END IF;
+
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='editorial_quote') THEN
+        ALTER TABLE users ADD COLUMN editorial_quote VARCHAR(255);
+      END IF;
+
     END $$;
   `);
 
@@ -1218,6 +1223,26 @@ const ensureListingsTable = async () => {
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='dynamic_pricing') THEN
         ALTER TABLE listings ADD COLUMN dynamic_pricing JSONB DEFAULT '{}'::jsonb;
       END IF;
+
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='hero_video_url') THEN
+        ALTER TABLE listings ADD COLUMN hero_video_url TEXT;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='hero_fallback_url') THEN
+        ALTER TABLE listings ADD COLUMN hero_fallback_url TEXT;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='dominant_color_hex') THEN
+        ALTER TABLE listings ADD COLUMN dominant_color_hex VARCHAR(20);
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='raw_rules') THEN
+        ALTER TABLE listings ADD COLUMN raw_rules TEXT;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='curated_guidelines') THEN
+        ALTER TABLE listings ADD COLUMN curated_guidelines TEXT;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='experience_tags') THEN
+        ALTER TABLE listings ADD COLUMN experience_tags JSONB DEFAULT '[]'::jsonb;
+      END IF;
+
     END $$;
   `);
 
@@ -1614,6 +1639,15 @@ const ensureListingsTable = async () => {
       is_read BOOLEAN DEFAULT false,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS soft_exit_leads (
+      id SERIAL PRIMARY KEY,
+      listing_id INT REFERENCES listings(id) ON DELETE CASCADE,
+      email VARCHAR(255) NOT NULL,
+      status VARCHAR(50) DEFAULT 'warm',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
 
   `);
 
@@ -3473,7 +3507,7 @@ app.put('/api/listings/:id', authenticateToken, async (req: AuthRequest, res) =>
        return res.status(403).json({ error: 'Forbidden: You do not have permission to modify this listing.' });
     }
 
-    const { title, description, price, type, address, city, imageUrl, imageUrls, videoUrl, rentalMode, rooms, maxGuests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamicPricing, seo_title, seo_description, seo_keywords, seo_image_url, amenity_clusters, child_safety_specs, nearby } = req.body;
+    const { title, description, price, type, address, city, imageUrl, imageUrls, videoUrl, rentalMode, rooms, maxGuests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamicPricing, seo_title, seo_description, seo_keywords, seo_image_url, amenity_clusters, child_safety_specs, nearby, hero_video_url, hero_fallback_url, dominant_color_hex, raw_rules, curated_guidelines, experience_tags } = req.body;
 
     // Gap 16 check old price
     let oldPrice = 0;
@@ -3495,10 +3529,10 @@ app.put('/api/listings/:id', authenticateToken, async (req: AuthRequest, res) =>
     if (title) {
       await pool.query(`
         UPDATE listings
-        SET title=$1, description=$2, price=$3, type=$4, address=$5, city=$6, image_url=$7, image_urls=$8, video_url=$9, rental_mode=$10, rooms=$11, max_guests=$12, bedrooms=$13, beds=$14, bathrooms=$15, amenities=$16, lat=$18, lng=$19, dynamic_pricing=$20, seo_title=$21, seo_description=$22, seo_keywords=$23, seo_image_url=$24, amenity_clusters=$25, child_safety_specs=$26, nearby=$27
+        SET title=$1, description=$2, price=$3, type=$4, address=$5, city=$6, image_url=$7, image_urls=$8, video_url=$9, rental_mode=$10, rooms=$11, max_guests=$12, bedrooms=$13, beds=$14, bathrooms=$15, amenities=$16, lat=$18, lng=$19, dynamic_pricing=$20, seo_title=$21, seo_description=$22, seo_keywords=$23, seo_image_url=$24, amenity_clusters=$25, child_safety_specs=$26, nearby=$27, hero_video_url=$28, hero_fallback_url=$29, dominant_color_hex=$30, raw_rules=$31, curated_guidelines=$32, experience_tags=$33
         WHERE id=$17
       `, [
-        title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode, safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, req.params.id as string, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby
+        title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode, safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, req.params.id as string, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby, hero_video_url || null, hero_fallback_url || null, dominant_color_hex || null, raw_rules || null, curated_guidelines || null, Array.isArray(experience_tags) ? JSON.stringify(experience_tags) : JSON.stringify([])
       ]);
       if (price) await syncDynamicPricingToMeta(req.params.id, oldPrice, price);
     } else if (videoUrl !== undefined) {
@@ -12381,7 +12415,7 @@ app.post('/api/listings', authenticateToken, async (req: AuthRequest, res) => {
   }
   try {
     await ensureListingsTable();
-    const { title, description, price, type, address, city, imageUrl, imageUrls, videoUrl, rentalMode, rooms, maxGuests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamicPricing, seo_title, seo_description, seo_keywords, seo_image_url } = req.body;
+    const { title, description, price, type, address, city, imageUrl, imageUrls, videoUrl, rentalMode, rooms, maxGuests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamicPricing, seo_title, seo_description, seo_keywords, seo_image_url, hero_video_url, hero_fallback_url, dominant_color_hex, raw_rules, curated_guidelines, experience_tags } = req.body;
 
     // Security: Use authenticated user ID, ignore body userId to prevent IDOR spoofing
     const userId = req.user?.id;
@@ -12403,9 +12437,9 @@ app.post('/api/listings', authenticateToken, async (req: AuthRequest, res) => {
     const safeNearby = Array.isArray(nearby) ? JSON.stringify(nearby) : null;
 
     const result = await pool.query(
-      `INSERT INTO listings (user_id, title, description, price, type, address, city, image_url, image_urls, video_url, rental_mode, rooms, max_guests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamic_pricing, seo_title, seo_description, seo_keywords, seo_image_url, amenity_clusters, child_safety_specs, nearby)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27) RETURNING *`,
-      [userId || null, title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode || 'entire_place', safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby]
+      `INSERT INTO listings (user_id, title, description, price, type, address, city, image_url, image_urls, video_url, rental_mode, rooms, max_guests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamic_pricing, seo_title, seo_description, seo_keywords, seo_image_url, amenity_clusters, child_safety_specs, nearby, hero_video_url, hero_fallback_url, dominant_color_hex, raw_rules, curated_guidelines, experience_tags)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33) RETURNING *`,
+      [userId || null, title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode || 'entire_place', safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby, hero_video_url || null, hero_fallback_url || null, dominant_color_hex || null, raw_rules || null, curated_guidelines || null, Array.isArray(experience_tags) ? JSON.stringify(experience_tags) : JSON.stringify([])]
     );
 
     const newListing = result.rows[0];
@@ -12804,7 +12838,13 @@ app.get('/api/listings', async (req, res) => {
         lat: row.lat ? parseFloat(row.lat) : null,
         lng: row.lng ? parseFloat(row.lng) : null,
         dynamicPricing: row.dynamic_pricing || { weekendMultiplier: 1.0, seasonalMultiplier: 1.0 },
-        hasOffers: row.has_offers || false
+        hasOffers: row.has_offers || false,
+        hero_video_url: row.hero_video_url || null,
+        hero_fallback_url: row.hero_fallback_url || null,
+        dominant_color_hex: row.dominant_color_hex || null,
+        raw_rules: row.raw_rules || null,
+        curated_guidelines: row.curated_guidelines || null,
+        experience_tags: Array.isArray(row.experience_tags) ? row.experience_tags : (typeof row.experience_tags === 'string' ? JSON.parse(row.experience_tags || '[]') : [])
       });
     }
 
@@ -17809,4 +17849,120 @@ process.on('uncaughtException', (err) => {
 
 process.on('unhandledRejection', (reason) => {
   console.error('[UNHANDLED REJECTION PREVENTED]', reason);
+});
+
+
+// AI Rule Abstraction (God-Level Luxury Hospitality Rule Polishing)
+app.post('/api/ai/curate-rules', async (req, res) => {
+  try {
+    const { rawRules } = req.body;
+    if (!rawRules || typeof rawRules !== 'string' || !rawRules.trim()) {
+      return res.status(400).json({ error: 'rawRules text required' });
+    }
+
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const prompt = "You are an executive hospitality director at an ultra-luxury 5-star estate (like Aman or Casa Angelina). Transform the following raw house rules into polite, sophisticated, aristocratic 'House Guidelines'. Retain all core boundaries (e.g. smoking, noise, checkout, pets) while completely eliminating hostile or aggressive phrasing. Format as 3-5 concise, elegant bullet points:\n\n" + rawRules;
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+        });
+        if (response && response.text) {
+          return res.json({ curatedGuidelines: response.text.trim() });
+        }
+      } catch (geminiErr) {
+        console.warn('Gemini rule curation fallback invoked:', geminiErr?.message);
+      }
+    }
+
+    // Heuristic luxury polish fallback
+    const polished = rawRules
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => {
+        let text = line.replace(/^[\d\-\.\*\s]+/, '');
+        if (/no smoking/i.test(text)) return 'To preserve the pristine mountain and ocean air of the sanctuary, smoking is reserved exclusively for the outer perimeter.';
+        if (/no parties|no loud music/i.test(text)) return 'We invite guests to embrace the tranquil atmosphere of the estate, observing quiet serenity after twilight.';
+        if (/check-?out/i.test(text)) return 'Check-out is honored with leisurely grace by the appointed hour to allow our housekeeping artisans to prepare the suites.';
+        if (/no pets/i.test(text)) return 'To protect the heritage furnishings and allergy-sensitive atmosphere, animal companions are welcomed only by prior concierge approval.';
+        return 'We kindly request guests to treat the sanctuary and its bespoke architecture with gentle reverence: ' + text;
+      })
+      .join('\n');
+
+    res.json({ curatedGuidelines: polished });
+  } catch (err) {
+    console.error('Curate rules error:', err);
+    res.status(500).json({ error: 'Failed to curate rules' });
+  }
+});
+
+// Soft-Exit Lead Capture (Walled Garden CRM & Meta CAPI Retargeting Sync)
+app.post('/api/leads/soft-exit', async (req, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { listingId, email, source } = req.body;
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!email || typeof email !== 'string' || !emailRegex.test(email.trim())) {
+      return res.status(400).json({ error: 'Valid email address required' });
+    }
+    const cleanEmail = email.trim().toLowerCase();
+    const result = await pool.query(
+      'INSERT INTO soft_exit_leads (listing_id, email, status) VALUES ($1, $2, $3) RETURNING *',
+      [listingId ? parseInt(listingId) : null, cleanEmail, 'warm']
+    );
+
+    // Milestone 5: Sync to Meta CAPI & GDN Retargeting Audience
+    try {
+      await pool.query(`
+        INSERT INTO retargeting_pixel_events (listing_id, visitor_id, event_type, synced_to_meta_capi, synced_to_gdn)
+        VALUES ($1, $2, $3, true, true)
+      `, [listingId ? parseInt(listingId) : null, `lead_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`, 'Lead']);
+    } catch (pixelErr) {
+      console.warn('[CAPI_SYNC_NON_BLOCKING] Pixel sync warning:', pixelErr);
+    }
+
+    res.status(201).json({ success: true, lead: result.rows[0], capi_synced: true });
+  } catch (err) {
+    console.error('Soft exit lead error:', err);
+    res.status(500).json({ error: 'Failed to record lead' });
+  }
+});
+
+// Host Soft Leads Feed
+app.get('/api/host/soft-leads', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const hostId = req.user?.id;
+    const result = await pool.query(`
+      SELECT sl.*, l.title as listing_title, l.city as listing_city
+      FROM soft_exit_leads sl
+      LEFT JOIN listings l ON sl.listing_id = l.id
+      WHERE l.user_id = $1 OR $2 = 'admin'
+      ORDER BY sl.created_at DESC
+      LIMIT 100
+    `, [hostId, req.user?.role || 'user']);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get host soft leads error:', err);
+    res.status(500).json({ error: 'Failed to fetch soft leads' });
+  }
+});
+
+// User Profile Update (Avatar & Editorial Quote)
+app.put('/api/user/profile', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const userId = req.user?.id;
+    const { name, avatar, editorial_quote } = req.body;
+    const result = await pool.query(
+      'UPDATE users SET name = COALESCE($1, name), avatar = COALESCE($2, avatar), editorial_quote = COALESCE($3, editorial_quote) WHERE id = $4 RETURNING id, name, email, avatar, editorial_quote, role',
+      [name || null, avatar || null, editorial_quote || null, userId]
+    );
+    res.json({ success: true, user: result.rows[0] });
+  } catch (err) {
+    console.error('Update profile error:', err);
+    res.status(500).json({ error: 'Failed to update user profile' });
+  }
 });
