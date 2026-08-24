@@ -507,7 +507,9 @@ pool.query = async function (this: any, ...args: any[]) {
 
 let dbConnectionError: string | null = null;
 if (isDbConfigured) {
-  pool.query('SELECT 1').catch((err: any) => {
+  pool.query('SELECT 1').then(() => {
+    dbConnectionError = null;
+  }).catch((err: any) => {
     dbConnectionError = (err as Error).message || String(err);
     console.error("CRITICAL DB STARTUP ERROR:", dbConnectionError);
   });
@@ -2716,9 +2718,9 @@ async function checkCanHostExperiences(email: string, role: string) {
 
 app.post('/api/auth/register', authLimiter, async (req, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  if (dbConnectionError) return res.status(503).json({ error: `Database Connection Failed: ${dbConnectionError}` });
   try {
     await ensureUsersTable();
+    dbConnectionError = null;
     const { email, password, name } = req.body;
     if (!email || !password || !name) return res.status(400).json({ error: 'All fields required' });
 
@@ -2746,22 +2748,30 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
     const token = jwt.sign({ id: user.id, role: user.role, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
     const can_host_experiences = await checkCanHostExperiences(user.email, user.role);
     res.status(201).json({ user: { ...user, can_host_experiences }, token });
-  } catch (error) {
-    console.error('Register error:', error);
-    res.status(500).json({ error: 'Registration failed' });
+  } catch (error: any) {
+    const msg = error?.message || String(error);
+    console.error('Register error:', msg);
+    if (msg.includes('exceeded the compute time quota')) {
+      return res.status(503).json({ error: 'Database Quota Exceeded: Your Neon database has exceeded its compute time quota. Please check your Neon project/account.' });
+    }
+    if (msg.includes('password authentication failed')) {
+      return res.status(503).json({ error: 'Database Authentication Failed: Check DATABASE_URL password in Vercel settings.' });
+    }
+    res.status(500).json({ error: msg || 'Registration failed' });
   }
 });
 
 app.post('/api/auth/login', authLimiter, async (req, res) => {
-  if (!isDbConfigured || dbConnectionError) {
+  if (!isDbConfigured) {
     if (req.body.email === 'ajithsabzz@gmail.com') {
       const token = jwt.sign({ id: 1, role: 'admin', email: 'ajithsabzz@gmail.com' }, JWT_SECRET, { expiresIn: '7d' });
       return res.json({ token, user: { id: 1, name: 'Ajith', email: 'ajithsabzz@gmail.com', role: 'admin' } });
     }
-    return res.status(503).json({ error: 'Database Connection Failed. Check your Neon password.' });
+    return res.status(503).json({ error: 'Database not configured.' });
   }
   try {
     await ensureUsersTable();
+    dbConnectionError = null;
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'All fields required' });
 
@@ -2789,17 +2799,24 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     const token = jwt.sign({ id: user.id, role: user.role, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
     const can_host_experiences = await checkCanHostExperiences(user.email, user.role);
     res.json({ user: { id: user.id, email: user.email, name: user.name, role: user.role, can_host_experiences }, token });
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed' });
+  } catch (error: any) {
+    const msg = error?.message || String(error);
+    console.error('Login error:', msg);
+    if (msg.includes('exceeded the compute time quota')) {
+      return res.status(503).json({ error: 'Database Quota Exceeded: Your Neon database has exceeded its compute time quota. Please check your Neon project/account.' });
+    }
+    if (msg.includes('password authentication failed')) {
+      return res.status(503).json({ error: 'Database Authentication Failed: Check DATABASE_URL password in Vercel settings.' });
+    }
+    res.status(500).json({ error: msg || 'Login failed' });
   }
 });
 
 app.post('/api/auth/google', async (req, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  if (dbConnectionError) return res.status(503).json({ error: `Database Connection Failed: ${dbConnectionError}.` });
   try {
     await ensureUsersTable();
+    dbConnectionError = null;
     const { googleId, email, name } = req.body;
 
     if (!googleId || !email || !name) {
@@ -2823,33 +2840,28 @@ app.post('/api/auth/google', async (req, res) => {
       user = insertResult.rows[0];
     } else {
       user = result.rows[0];
-      // Update google_id and role if needed
-      const updateQueries = [];
-      const updateValues = [];
-      let nextIndex = 1;
-
+      if (isAdminAccount && user.role !== 'admin') {
+        await pool.query("UPDATE users SET role = 'admin' WHERE id = $1", [user.id]);
+        user.role = 'admin';
+      }
       if (!user.google_id) {
-        updateQueries.push(`google_id = $${nextIndex++}`);
-        updateValues.push(googleId);
-      }
-
-      if (expectedRole === 'admin' && user.role !== 'admin') {
-         updateQueries.push(`role = $${nextIndex++}`);
-         updateValues.push('admin');
-         user.role = 'admin';
-      }
-
-      if (updateQueries.length > 0) {
-        updateValues.push(email);
-        await pool.query(`UPDATE users SET ${updateQueries.join(', ')} WHERE email = $${nextIndex}`, updateValues);
+        await pool.query('UPDATE users SET google_id = $1 WHERE id = $2', [googleId, user.id]);
       }
     }
+
     const token = jwt.sign({ id: user.id, role: user.role, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
     const can_host_experiences = await checkCanHostExperiences(user.email, user.role);
     res.json({ user: { id: user.id, email: user.email, name: user.name, role: user.role, can_host_experiences }, token });
-  } catch (error) {
-    console.error('Google Auth Error:', error);
-    res.status(500).json({ error: 'Google authentication failed' });
+  } catch (error: any) {
+    const msg = error?.message || String(error);
+    console.error('Google auth error:', msg);
+    if (msg.includes('exceeded the compute time quota')) {
+      return res.status(503).json({ error: 'Database Quota Exceeded: Your Neon database has exceeded its compute time quota. Please check your Neon project/account.' });
+    }
+    if (msg.includes('password authentication failed')) {
+      return res.status(503).json({ error: 'Database Authentication Failed: Check DATABASE_URL password in Vercel settings.' });
+    }
+    res.status(500).json({ error: msg || 'Google auth failed' });
   }
 });
 
