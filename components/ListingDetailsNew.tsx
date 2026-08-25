@@ -1559,7 +1559,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
             </div>
           </section>
 
-          {/* 2. AMBIENT NEIGHBORHOOD RADAR (Top-Right Floating HUD & Camera Zoom & Direct Nav Arrow) */}
+          {/* 2. AMBIENT NEIGHBORHOOD RADAR (Apple-Grade Glass Architecture & Camera Zoom) */}
           <section className="space-y-6 pt-8 border-t border-zinc-200/80">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
@@ -1616,7 +1616,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     {/* Header: Title & Camera Reset Button */}
                     <div className="flex items-center justify-between pb-1.5 border-b border-zinc-100">
                       <div className="flex items-center gap-1.5 truncate">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className={`w-2 h-2 rounded-full ${activeTouristPlace.isHome ? 'bg-indigo-600' : 'bg-emerald-500'} animate-pulse`} />
                         <h4 className="text-xs font-extrabold text-zinc-900 truncate font-display">{activeTouristPlace.name}</h4>
                       </div>
                       <button
@@ -1649,8 +1649,12 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                           <span>{activeTouristPlace.rating}</span>
                           <span className="text-[10px] text-zinc-400 font-normal">({activeTouristPlace.reviewCount.toLocaleString()})</span>
                         </div>
-                        <span className="inline-block text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
-                          🚗 {activeTouristPlace.distance}
+                        <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                          activeTouristPlace.isHome 
+                            ? 'text-indigo-700 bg-indigo-50 border-indigo-100'
+                            : 'text-emerald-700 bg-emerald-50 border-emerald-100'
+                        }`}>
+                          {activeTouristPlace.isHome ? '🏠 Your Residence' : `🚗 ${activeTouristPlace.distance}`}
                         </span>
                       </div>
                     </div>
@@ -1666,16 +1670,20 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                       href={activeTouristPlace.googleMapsUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all hover:shadow-md cursor-pointer"
+                      className={`w-full text-white text-xs font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all hover:shadow-md cursor-pointer ${
+                        activeTouristPlace.isHome 
+                          ? 'bg-zinc-900 hover:bg-zinc-800' 
+                          : 'bg-emerald-600 hover:bg-emerald-700'
+                      }`}
                     >
-                      <span>Open in Google Maps</span>
+                      <span>{activeTouristPlace.isHome ? 'Directions to Residence' : 'Open in Google Maps'}</span>
                       <ArrowUpRight className="w-3.5 h-3.5" />
                     </a>
                   </motion.div>
                 )}
               </AnimatePresence>
 
-              {/* Interactive Glowing Radar Map Pins (Home Epicenter Beacon + Tourist Landmark Pins) */}
+              {/* Interactive Glowing Radar Map Pins (Apple Glass Home Puck + Numbered Landmark Pins) */}
               {filteredPOIs.map((poi, pIdx) => {
                 const isActive = activeTouristPlace?.id === poi.id;
                 const isHome = poi.isHome;
@@ -1689,51 +1697,46 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         activeTouristPlace && !isActive ? 'opacity-50 scale-95' : 'opacity-100'
                       }`}
                     >
+                      {/* Apple Glass Puck for Sanctuary Home */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           uiAudio.playClick();
                           setActiveTouristPlace(isActive ? null : poi);
                         }}
-                        className="relative flex items-center justify-center focus:outline-none cursor-pointer"
-                      >
-                        {/* Golden Expanding Epicenter Pulse */}
-                        <span className={`absolute rounded-full transition-all ${
+                        className={`relative flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/95 backdrop-blur-xl border border-white/80 shadow-[0_8px_25px_rgba(0,0,0,0.12)] transition-all duration-300 cursor-pointer ${
                           isActive 
-                            ? 'w-12 h-12 bg-amber-400/60 animate-ping' 
-                            : 'w-8 h-8 bg-amber-400/40 animate-ping'
-                        }`} />
-                        <div className={`rounded-full flex items-center justify-center shadow-2xl border-2 border-amber-300 transition-all ${
-                          isActive
-                            ? 'w-10 h-10 bg-zinc-950 text-amber-300 text-sm scale-110 shadow-amber-500/50 ring-4 ring-amber-400/30'
-                            : 'w-9 h-9 bg-zinc-950 text-amber-400 hover:scale-105 shadow-xl ring-2 ring-amber-300/40'
-                        }`}>
-                          <Sparkles className="w-4 h-4 text-amber-400" />
-                        </div>
-                      </button>
+                            ? 'ring-2 ring-zinc-900 scale-105 shadow-xl' 
+                            : 'hover:scale-105 hover:shadow-lg'
+                        }`}
+                      >
+                        {/* Soft Breathing Emerald Status Dot */}
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                        </span>
 
-                      {/* Home Epicenter Badge Tooltip */}
-                      <div className={`flex items-center gap-1.5 transition-all bg-zinc-950/95 backdrop-blur-md text-amber-300 text-[10px] font-extrabold px-2.5 py-1 rounded-full border border-amber-400/40 whitespace-nowrap shadow-xl mt-1.5 ${
-                        isActive ? 'opacity-100 scale-105' : 'opacity-90 group-hover/pin:opacity-100'
-                      }`}>
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                        <span>SANCTUARY (HOME)</span>
+                        <span className="text-[11px] font-bold text-zinc-900 tracking-tight font-display flex items-center gap-1">
+                          <span>🏠</span>
+                          <span className="max-w-[120px] truncate">{listing.title || 'Sanctuary Home'}</span>
+                        </span>
+
                         <a
                           href={poi.googleMapsUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          className="hover:text-white ml-0.5 p-0.5 rounded hover:bg-white/20 transition-colors"
-                          title="Directions to Sanctuary"
+                          className="hover:text-emerald-600 text-zinc-400 p-0.5 rounded transition-colors"
+                          title="Directions to Residence"
                         >
                           <ArrowUpRight className="w-3 h-3" />
                         </a>
-                      </div>
+                      </button>
                     </div>
                   );
                 }
 
-                const touristIndex = pIdx; // Index for numbered landmark pins
+                const touristIndex = pIdx; // Numbered pin index
                 return (
                   <div
                     key={poi.id}
@@ -1784,49 +1787,12 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 );
               })}
 
-              {/* Existing Clean Frosted Glass Bottom Carousel (Home Base Card + Tourist Landmark Cards) */}
+              {/* UNIFIED FROSTED GLASS CAROUSEL (100% Visual Rhythm · Clean Frosted Architecture) */}
               <div className="absolute bottom-4 sm:bottom-6 left-4 sm:left-6 right-4 sm:right-6 z-20">
                 <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide gap-3 pb-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                   {filteredPOIs.map((poi, idx) => {
                     const isSelected = activeTouristPlace?.id === poi.id;
                     const isHome = poi.isHome;
-
-                    if (isHome) {
-                      return (
-                        <div 
-                          key={poi.id} 
-                          onClick={() => {
-                            uiAudio.playClick();
-                            setActiveTouristPlace(isSelected ? null : poi);
-                          }}
-                          className={`snap-center shrink-0 backdrop-blur-md px-5 py-4 rounded-2xl border transition-all duration-300 min-w-[220px] cursor-pointer group/pill ${
-                            isSelected
-                              ? 'bg-zinc-950 text-white border-amber-400 shadow-2xl ring-2 ring-amber-400/30 scale-[1.03]'
-                              : 'bg-zinc-900/90 text-white border-zinc-700/80 shadow-xl hover:bg-zinc-950 hover:scale-[1.02] hover:shadow-2xl'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2 mb-1.5">
-                            <div className="flex items-center gap-1.5">
-                              <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-                              <span className="text-[10px] font-black uppercase tracking-widest text-amber-300 font-mono">YOUR RESIDENCE</span>
-                            </div>
-                            <div className="flex items-center gap-0.5 text-[11px] font-bold text-amber-300 bg-white/10 px-1.5 py-0.5 rounded-md">
-                              <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                              <span>{poi.rating}</span>
-                            </div>
-                          </div>
-                          <h4 className="text-sm font-bold truncate font-display text-white group-hover/pill:text-amber-300 transition-colors">
-                            {poi.name}
-                          </h4>
-                          <p className="text-xs font-semibold text-amber-300/90 mt-1 flex items-center justify-between">
-                            <span>✦ Home Epicenter</span>
-                            <span className="text-[10px] text-zinc-400 font-normal flex items-center gap-0.5">
-                              {isSelected ? '✦ Centered' : 'Focus'} <ArrowUpRight className="w-3 h-3" />
-                            </span>
-                          </p>
-                        </div>
-                      );
-                    }
 
                     return (
                       <div 
@@ -1837,14 +1803,28 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         }}
                         className={`snap-center shrink-0 backdrop-blur-md px-5 py-4 rounded-2xl border transition-all duration-300 min-w-[210px] cursor-pointer group/pill ${
                           isSelected
-                            ? 'bg-white border-emerald-500 shadow-xl ring-2 ring-emerald-500/20 scale-[1.03]'
+                            ? isHome
+                              ? 'bg-white border-zinc-900 shadow-xl ring-2 ring-zinc-900/10 scale-[1.03]'
+                              : 'bg-white border-emerald-500 shadow-xl ring-2 ring-emerald-500/20 scale-[1.03]'
                             : 'bg-white/90 border-white/70 shadow-lg hover:bg-white hover:scale-[1.02] hover:shadow-xl'
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2 mb-1.5">
                           <div className="flex items-center gap-1.5">
-                            <Navigation className={`w-3.5 h-3.5 ${isSelected ? 'text-emerald-600' : 'text-zinc-500'}`} />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">{poi.type}</span>
+                            {isHome ? (
+                              <>
+                                <span className="relative flex h-2 w-2">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                                </span>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-900 font-mono">RESIDENCE</span>
+                              </>
+                            ) : (
+                              <>
+                                <Navigation className={`w-3.5 h-3.5 ${isSelected ? 'text-emerald-600' : 'text-zinc-500'}`} />
+                                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">{poi.type}</span>
+                              </>
+                            )}
                           </div>
                           <div className="flex items-center gap-0.5 text-[11px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-md">
                             <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
@@ -1852,14 +1832,16 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                           </div>
                         </div>
                         <h4 className={`text-sm font-bold truncate font-display transition-colors ${
-                          isSelected ? 'text-emerald-700' : 'text-zinc-900 group-hover/pill:text-emerald-700'
+                          isSelected ? (isHome ? 'text-zinc-900' : 'text-emerald-700') : 'text-zinc-900 group-hover/pill:text-emerald-700'
                         }`}>
                           {poi.name}
                         </h4>
-                        <p className="text-xs font-semibold text-emerald-700 mt-1 flex items-center justify-between">
-                          <span>{poi.distance}</span>
+                        <p className={`text-xs font-semibold mt-1 flex items-center justify-between ${
+                          isHome ? 'text-zinc-700' : 'text-emerald-700'
+                        }`}>
+                          <span>{isHome ? '✦ You Are Here' : poi.distance}</span>
                           <span className="text-[10px] text-zinc-400 font-normal flex items-center gap-0.5">
-                            {isSelected ? '✦ Zoomed' : 'Explore'} <ArrowUpRight className="w-3 h-3" />
+                            {isSelected ? '✦ Focused' : 'Explore'} <ArrowUpRight className="w-3 h-3" />
                           </span>
                         </p>
                       </div>
