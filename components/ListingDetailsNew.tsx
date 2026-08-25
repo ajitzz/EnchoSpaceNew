@@ -317,94 +317,97 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   }, [curatedNeighborhoodPOIs, radarCategory, sanctuaryHomePOI]);
 
 
-  // Curated Space Collections for Sliding Bento Gallery
+  // Curated Room Inventory Collections (Suites, Double Rooms, Single Rooms)
   const slideCollections = useMemo(() => [
     {
-      id: 'vistas',
-      name: 'Architectural Vistas & Grounds',
+      id: 'suites',
+      name: '01 · Presidential Suites',
       space01: {
-        title: `${listing.title} Infinity Reflection Pool`,
-        desc: 'Panoramic horizon pool with temperature-controlled heating and stone daybeds.',
+        title: `${listing.title ? listing.title.split('•')[0].trim() : 'Sanctuary'} Presidential Panorama Suite`,
+        desc: 'Panoramic master glass suite with custom king platform bed, private jacuzzi lounge, and valley vistas.',
         img: uniqueMediaPool[0],
         imgIndex: 0,
-        tag: 'Infinity Vista',
+        tag: 'Presidential Suite',
+        unitType: 'Suite',
         hasVideo: !!listing.video_url
       },
       space02: {
-        title: 'Open-Air Central Courtyard',
+        title: 'Private Glass Balcony & Horizon Deck',
         img: uniqueMediaPool[1],
         imgIndex: 1,
-        tag: 'Courtyard'
+        tag: 'Horizon Balcony'
       },
       space03: {
-        title: 'Sunken Fire Lounge Deck',
+        title: 'Ensuite Italian Marble Spa Bath',
         img: uniqueMediaPool[2],
         imgIndex: 2,
-        tag: 'Fire Deck'
+        tag: 'Spa Ensuite'
       },
       space04: {
-        title: 'Artisanal Sandstone Architectural Facade',
+        title: 'Acoustic Hearth & Evening Reading Salon',
         img: uniqueMediaPool[3],
         imgIndex: 3,
-        tag: 'Facade Panorama'
+        tag: 'Master Salon'
       }
     },
     {
-      id: 'suites',
-      name: 'Master Living & Royal Suites',
+      id: 'double-rooms',
+      name: '02 · Deluxe Double Rooms',
       space01: {
-        title: 'Presidential Master Suite Vista',
-        desc: 'Custom king platform bed, panoramic glass vistas, and circadian lighting systems.',
+        title: 'The Deluxe Garden Double Room',
+        desc: 'Spacious double room featuring twin plush organic cotton beds, garden terrace, and en-suite marble bath.',
         img: uniqueMediaPool[4],
         imgIndex: 4,
-        tag: 'Master Suite'
+        tag: 'Deluxe Double',
+        unitType: 'Double Room'
       },
       space02: {
-        title: 'Central Living Pavilion',
+        title: 'Twin Plush Organic Cotton Bedding',
         img: uniqueMediaPool[5],
         imgIndex: 5,
-        tag: 'Living Salon'
+        tag: 'Twin Suite'
       },
       space03: {
-        title: 'En-Suite Marble Rain Spa',
+        title: 'Rainforest View Ensuite Bath',
         img: uniqueMediaPool[6],
         imgIndex: 6,
-        tag: 'Spa Bath'
+        tag: 'Garden Bath'
       },
       space04: {
-        title: 'Private Sunset Viewing Terrace',
+        title: 'Private Sunlit Verandah & Lounge',
         img: uniqueMediaPool[7],
         imgIndex: 7,
-        tag: 'Private Terrace'
+        tag: 'Verandah'
       }
     },
     {
-      id: 'wellness',
-      name: 'Wellness, Spa & Bespoke Dining',
+      id: 'single-rooms',
+      name: '03 · Executive Single Rooms',
       space01: {
-        title: 'Private Chef Dining Pavilion',
-        desc: 'Custom oak dining table seating 10, serviced by our dedicated private culinary brigade.',
+        title: 'The Executive Studio Sanctuary',
+        desc: 'Minimalist private single room with dedicated ergonomic work enclave, rain shower pod, and courtyard terrace.',
         img: uniqueMediaPool[8],
         imgIndex: 8,
-        tag: 'Culinary Deck'
+        tag: 'Executive Single',
+        unitType: 'Single Room'
       },
       space02: {
-        title: 'Sommelier Wine Vault & Bar',
+        title: 'Dedicated Ergonomic Work Enclave',
         img: uniqueMediaPool[9],
         imgIndex: 9,
-        tag: 'Wine Cellar'
+        tag: 'Work Enclave'
       },
       space03: {
-        title: 'Cedar Sauna & Cold Plunge',
+        title: 'Minimalist Walk-In Rain Shower Pod',
         img: uniqueMediaPool[10],
         imgIndex: 10,
-        tag: 'Thermal Spa'
+        tag: 'Rain Shower'
       },
       space04: {
-        title: 'Evening Acoustic Stillness & Stargazing',
+        title: 'Courtyard Zen Garden Reading Nook',
         img: uniqueMediaPool[11],
         imgIndex: 11,
-        tag: 'Night Atmosphere'
+        tag: 'Zen Garden'
       }
     }
   ], [uniqueMediaPool, listing.title, listing.video_url]);
@@ -414,18 +417,18 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
   // Pure 12-Space Continuous Media Stream (Zero Fake Text Cards)
   const mobileContinuousSpaces = useMemo(() => [
-    { space: slideCollections[0].space01, collectionIdx: 0, globalIdx: 1, subIdx: 1, chapterName: '01 · Architectural Vistas & Grounds', isChapterStart: true },
-    { space: slideCollections[0].space02, collectionIdx: 0, globalIdx: 2, subIdx: 2, chapterName: '01 · Architectural Vistas & Grounds', isChapterStart: false },
-    { space: slideCollections[0].space03, collectionIdx: 0, globalIdx: 3, subIdx: 3, chapterName: '01 · Architectural Vistas & Grounds', isChapterStart: false },
-    { space: slideCollections[0].space04, collectionIdx: 0, globalIdx: 4, subIdx: 4, chapterName: '01 · Architectural Vistas & Grounds', isChapterStart: false },
-    { space: slideCollections[1].space01, collectionIdx: 1, globalIdx: 5, subIdx: 1, chapterName: '02 · Master Living & Royal Suites', isChapterStart: true },
-    { space: slideCollections[1].space02, collectionIdx: 1, globalIdx: 6, subIdx: 2, chapterName: '02 · Master Living & Royal Suites', isChapterStart: false },
-    { space: slideCollections[1].space03, collectionIdx: 1, globalIdx: 7, subIdx: 3, chapterName: '02 · Master Living & Royal Suites', isChapterStart: false },
-    { space: slideCollections[1].space04, collectionIdx: 1, globalIdx: 8, subIdx: 4, chapterName: '02 · Master Living & Royal Suites', isChapterStart: false },
-    { space: slideCollections[2].space01, collectionIdx: 2, globalIdx: 9, subIdx: 1, chapterName: '03 · Wellness, Spa & Bespoke Dining', isChapterStart: true },
-    { space: slideCollections[2].space02, collectionIdx: 2, globalIdx: 10, subIdx: 2, chapterName: '03 · Wellness, Spa & Bespoke Dining', isChapterStart: false },
-    { space: slideCollections[2].space03, collectionIdx: 2, globalIdx: 11, subIdx: 3, chapterName: '03 · Wellness, Spa & Bespoke Dining', isChapterStart: false },
-    { space: slideCollections[2].space04, collectionIdx: 2, globalIdx: 12, subIdx: 4, chapterName: '03 · Wellness, Spa & Bespoke Dining', isChapterStart: false }
+    { space: slideCollections[0].space01, collectionIdx: 0, globalIdx: 1, subIdx: 1, chapterName: '01 · Presidential Suites', isChapterStart: true },
+    { space: slideCollections[0].space02, collectionIdx: 0, globalIdx: 2, subIdx: 2, chapterName: '01 · Presidential Suites', isChapterStart: false },
+    { space: slideCollections[0].space03, collectionIdx: 0, globalIdx: 3, subIdx: 3, chapterName: '01 · Presidential Suites', isChapterStart: false },
+    { space: slideCollections[0].space04, collectionIdx: 0, globalIdx: 4, subIdx: 4, chapterName: '01 · Presidential Suites', isChapterStart: false },
+    { space: slideCollections[1].space01, collectionIdx: 1, globalIdx: 5, subIdx: 1, chapterName: '02 · Deluxe Double Rooms', isChapterStart: true },
+    { space: slideCollections[1].space02, collectionIdx: 1, globalIdx: 6, subIdx: 2, chapterName: '02 · Deluxe Double Rooms', isChapterStart: false },
+    { space: slideCollections[1].space03, collectionIdx: 1, globalIdx: 7, subIdx: 3, chapterName: '02 · Deluxe Double Rooms', isChapterStart: false },
+    { space: slideCollections[1].space04, collectionIdx: 1, globalIdx: 8, subIdx: 4, chapterName: '02 · Deluxe Double Rooms', isChapterStart: false },
+    { space: slideCollections[2].space01, collectionIdx: 2, globalIdx: 9, subIdx: 1, chapterName: '03 · Executive Single Rooms', isChapterStart: true },
+    { space: slideCollections[2].space02, collectionIdx: 2, globalIdx: 10, subIdx: 2, chapterName: '03 · Executive Single Rooms', isChapterStart: false },
+    { space: slideCollections[2].space03, collectionIdx: 2, globalIdx: 11, subIdx: 3, chapterName: '03 · Executive Single Rooms', isChapterStart: false },
+    { space: slideCollections[2].space04, collectionIdx: 2, globalIdx: 12, subIdx: 4, chapterName: '03 · Executive Single Rooms', isChapterStart: false }
   ], [slideCollections]);
 
   const handleMobileScroll = (e: React.UIEvent<HTMLDivElement>) => {
@@ -1251,12 +1254,12 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
               </div>
             </div>
 
-            {/* Collection Category Pills (Synchronized Minimalist HUD) */}
+            {/* Collection Category Pills (Room Inventory Taxonomy) */}
             <div className="flex flex-wrap gap-2">
               {[
-                { id: 0, label: '01 · Vistas & Grounds' },
-                { id: 1, label: '02 · Master Living & Suites' },
-                { id: 2, label: '03 · Wellness & Dining' }
+                { id: 0, label: '01 · Presidential Suites' },
+                { id: 1, label: '02 · Deluxe Double Rooms' },
+                { id: 2, label: '03 · Executive Single Rooms' }
               ].map(cat => (
                 <button
                   key={cat.id}
@@ -1448,9 +1451,24 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                       <p className="text-xs md:text-sm text-zinc-300 font-medium leading-relaxed max-w-sm">
                         {slideCollections[activeSlide].space01.desc}
                       </p>
-                      <div className="pt-2 flex items-center gap-2 text-xs font-bold font-display text-amber-300 group-hover:translate-x-1 transition-transform">
-                        <span>Inspect in 4K Fullscreen</span>
-                        <ArrowRight className="w-4 h-4" />
+                      <div className="pt-3 flex items-center justify-between gap-3">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            uiAudio.playClick();
+                            handleReserve();
+                          }}
+                          className="px-4 py-2 rounded-xl bg-white hover:bg-zinc-100 text-zinc-900 font-bold text-xs shadow-md active:scale-95 hover:scale-[1.02] transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <CreditCard className="w-3.5 h-3.5 text-zinc-900" />
+                          <span>Book This Space</span>
+                        </button>
+
+                        <div className="flex items-center gap-1.5 text-xs font-bold font-display text-amber-300 group-hover:translate-x-1 transition-transform">
+                          <span>Inspect in 4K</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1484,7 +1502,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 <div className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-zinc-900" />
                   <span className="text-xs font-bold font-display text-zinc-800 tracking-tight">
-                    {activeSlide === 0 ? 'Vistas & Grounds' : activeSlide === 1 ? 'Master Living & Suites' : 'Wellness & Dining'}
+                    {activeSlide === 0 ? 'Presidential Suites' : activeSlide === 1 ? 'Deluxe Double Rooms' : 'Executive Single Rooms'}
                   </span>
                 </div>
 
