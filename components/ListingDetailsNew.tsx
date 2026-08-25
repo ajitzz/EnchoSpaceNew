@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SEO } from './SEO';
 import { Listing } from '../types';
@@ -122,6 +122,8 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   const [activeSlide, setActiveSlide] = useState(0);
   const [radarCategory, setRadarCategory] = useState<string>("DESTINATION");
   const [activeTouristPlace, setActiveTouristPlace] = useState<any | null>(null);
+  const [activeCollageCenterIndex, setActiveCollageCenterIndex] = useState<number | null>(null);
+  const collageTrackRef = useRef<HTMLDivElement>(null);
 
 
   // 10/10 Adaptive Media Allocator: Guarantees zero duplicate images across all collections
@@ -140,6 +142,28 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
     }
     return combined;
   }, [listing.imageUrls, listing.imageUrl]);
+
+
+  // Mobile Center-Pivot Scroll Spotlight for Monochrome-to-Color Collage
+  const handleCollageTrackScroll = useCallback(() => {
+    if (!collageTrackRef.current) return;
+    const container = collageTrackRef.current;
+    const centerPoint = container.scrollLeft + container.clientWidth / 2;
+    const cards = container.children;
+    let closestIndex = null;
+    let minDistance = Infinity;
+
+    for (let i = 0; i < cards.length; i++) {
+      const card = cards[i] as HTMLElement;
+      const cardCenter = card.offsetLeft + card.offsetWidth / 2;
+      const dist = Math.abs(cardCenter - centerPoint);
+      if (dist < minDistance) {
+        minDistance = dist;
+        closestIndex = i;
+      }
+    }
+    setActiveCollageCenterIndex(closestIndex);
+  }, []);
 
   const images = uniqueMediaPool;
 
@@ -1087,11 +1111,13 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
         {/* ========================================================================= */}
         {/* ========================================================================= */}
-        {/* ULTRA-DENSE SCATTERED PILE-OF-SHEETS EDITORIAL MOSAIC (100vw, Zero Gap)   */}
-        {/* Zero Gray Background Visible · Multi-Layer Heavy Collisions & Hover Lift  */}
+        {/* MONOCHROME-TO-COLOR SPOTLIGHT SCATTERED EDITORIAL COLLAGE (100vw)          */}
+        {/* Quiet Grayscale Resting State · Desktop Hover Bloom · Mobile Center Pivot */}
         {/* ========================================================================= */}
         <div className="w-screen relative left-1/2 right-1/2 -mx-[50vw] overflow-x-clip overflow-y-visible mt-6 md:mt-8 mb-0 pt-4 pb-20 md:pb-28 bg-transparent">
           <div 
+            ref={collageTrackRef}
+            onScroll={handleCollageTrackScroll}
             className="flex overflow-x-auto gap-0 px-4 md:px-8 pt-4 pb-16 md:pb-24 scrollbar-hide snap-x snap-mandatory items-center min-h-[540px] sm:min-h-[620px] md:min-h-[720px]" 
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
@@ -1128,7 +1154,11 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   uiAudio.playClick();
                   setLightboxIndex(sheet.idx % uniqueMediaPool.length);
                 }}
-                className={`relative shrink-0 ${sheet.w} ${sheet.h} ${sheet.z} ${sheet.overlap} ${sheet.rotate} ${sheet.translateY} rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-[2.5px] border-white ring-1 ring-black/5 shadow-[0_12px_30px_rgba(0,0,0,0.18)] transition-all duration-500 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)] origin-center cursor-pointer hover:!z-50 hover:scale-[1.10] hover:rotate-0 hover:shadow-[0_25px_60px_rgba(0,0,0,0.28)] hover:ring-black/10 group snap-center`}
+                className={`relative shrink-0 ${sheet.w} ${sheet.h} ${sheet.z} ${sheet.overlap} ${sheet.rotate} ${sheet.translateY} rounded-2xl md:rounded-3xl overflow-hidden bg-zinc-900 border-[2.5px] border-white ring-1 ring-black/5 shadow-[0_12px_30px_rgba(0,0,0,0.18)] transition-all duration-700 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)] origin-center cursor-pointer hover:!z-50 hover:scale-[1.10] hover:rotate-0 hover:grayscale-0 hover:opacity-100 hover:shadow-[0_25px_60px_rgba(0,0,0,0.35)] hover:ring-black/10 group snap-center ${
+                  activeCollageCenterIndex === sIndex 
+                    ? '!grayscale-0 !opacity-100 scale-[1.04] !z-40 shadow-xl' 
+                    : 'grayscale contrast-95 opacity-55'
+                }`}
               >
                 <OptimizedImage
                   src={uniqueMediaPool[sheet.idx % uniqueMediaPool.length]}
