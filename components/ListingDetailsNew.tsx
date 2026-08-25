@@ -167,11 +167,31 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
   const images = uniqueMediaPool;
 
-  // Curated AI Tourist Concierge Dataset (Dynamic Category Pruning: Destinations, Restaurants, Shopping)
+  // Curated AI Tourist Concierge Dataset (Home Epicenter + Dynamic Category Pruning)
+  const sanctuaryHomePOI = useMemo(() => ({
+    id: 'sanctuary-home',
+    isHome: true,
+    name: listing.title || 'Misty Peak Sanctuary',
+    localScript: 'നിങ്ങളുടെ വസതി · Sanctuary Residence',
+    category: 'HOME',
+    type: 'SANCTUARY RESIDENCE',
+    distance: 'Home Epicenter',
+    rating: listing.rating || 4.95,
+    reviewCount: listing.reviewCount || 128,
+    photo: listing.imageUrl || listing.imageUrls?.[0] || 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=1200&q=80',
+    summary: 'Your central private luxury retreat from which all regional expeditions and mountain treks begin. 100% verified security and privacy.',
+    address: `${listing.city || 'Wayanad'}, Kerala`,
+    pinCode: 'Verified Sanctuary Coordinates',
+    googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((listing.title || 'Sanctuary') + ' ' + (listing.city || 'Kerala'))}`,
+    pinTop: '50%',
+    pinLeft: '50%'
+  }), [listing]);
+
   const curatedNeighborhoodPOIs = useMemo(() => {
     return [
       {
         id: 'poi-1',
+        isHome: false,
         name: 'Chembra Peak',
         localScript: 'ചെമ്പ്ര കൊടുമുടി',
         category: 'DESTINATION',
@@ -189,6 +209,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
       },
       {
         id: 'poi-2',
+        isHome: false,
         name: 'Soochipara Waterfalls',
         localScript: 'സൂചിപ്പാറ വെള്ളച്ചാട്ടം',
         category: 'DESTINATION',
@@ -206,6 +227,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
       },
       {
         id: 'poi-3',
+        isHome: false,
         name: 'Banasura Sagar Dam',
         localScript: 'ബാണാസുര സാഗർ അണക്കെട്ട്',
         category: 'DESTINATION',
@@ -223,6 +245,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
       },
       {
         id: 'poi-4',
+        isHome: false,
         name: 'Edakkal Prehistoric Caves',
         localScript: 'എടക്കൽ ഗുഹകൾ',
         category: 'DESTINATION',
@@ -240,6 +263,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
       },
       {
         id: 'poi-5',
+        isHome: false,
         name: 'Wilton Heritage Organic Bistro',
         localScript: 'വിൽട്ടൺ ഓർഗാനിക് കഫേ',
         category: 'RESTAURANT',
@@ -257,6 +281,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
       },
       {
         id: 'poi-6',
+        isHome: false,
         name: "1980's Nostalgic Kitchen",
         localScript: '1980സ് റെസ്റ്റോറന്റ്',
         category: 'RESTAURANT',
@@ -287,8 +312,9 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   }, [curatedNeighborhoodPOIs]);
 
   const filteredPOIs = useMemo(() => {
-    return curatedNeighborhoodPOIs.filter(p => p.category === radarCategory);
-  }, [curatedNeighborhoodPOIs, radarCategory]);
+    const list = curatedNeighborhoodPOIs.filter(p => p.category === radarCategory);
+    return [sanctuaryHomePOI, ...list];
+  }, [curatedNeighborhoodPOIs, radarCategory, sanctuaryHomePOI]);
 
 
   // Curated Space Collections for Sliding Bento Gallery
@@ -1649,9 +1675,65 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 )}
               </AnimatePresence>
 
-              {/* Interactive Glowing Radar Map Pins with Camera Zoom Synchronized */}
+              {/* Interactive Glowing Radar Map Pins (Home Epicenter Beacon + Tourist Landmark Pins) */}
               {filteredPOIs.map((poi, pIdx) => {
                 const isActive = activeTouristPlace?.id === poi.id;
+                const isHome = poi.isHome;
+
+                if (isHome) {
+                  return (
+                    <div
+                      key={poi.id}
+                      style={{ position: 'absolute', top: poi.pinTop, left: poi.pinLeft }}
+                      className={`z-25 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center group/pin transition-all duration-500 ${
+                        activeTouristPlace && !isActive ? 'opacity-50 scale-95' : 'opacity-100'
+                      }`}
+                    >
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          uiAudio.playClick();
+                          setActiveTouristPlace(isActive ? null : poi);
+                        }}
+                        className="relative flex items-center justify-center focus:outline-none cursor-pointer"
+                      >
+                        {/* Golden Expanding Epicenter Pulse */}
+                        <span className={`absolute rounded-full transition-all ${
+                          isActive 
+                            ? 'w-12 h-12 bg-amber-400/60 animate-ping' 
+                            : 'w-8 h-8 bg-amber-400/40 animate-ping'
+                        }`} />
+                        <div className={`rounded-full flex items-center justify-center shadow-2xl border-2 border-amber-300 transition-all ${
+                          isActive
+                            ? 'w-10 h-10 bg-zinc-950 text-amber-300 text-sm scale-110 shadow-amber-500/50 ring-4 ring-amber-400/30'
+                            : 'w-9 h-9 bg-zinc-950 text-amber-400 hover:scale-105 shadow-xl ring-2 ring-amber-300/40'
+                        }`}>
+                          <Sparkles className="w-4 h-4 text-amber-400" />
+                        </div>
+                      </button>
+
+                      {/* Home Epicenter Badge Tooltip */}
+                      <div className={`flex items-center gap-1.5 transition-all bg-zinc-950/95 backdrop-blur-md text-amber-300 text-[10px] font-extrabold px-2.5 py-1 rounded-full border border-amber-400/40 whitespace-nowrap shadow-xl mt-1.5 ${
+                        isActive ? 'opacity-100 scale-105' : 'opacity-90 group-hover/pin:opacity-100'
+                      }`}>
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                        <span>SANCTUARY (HOME)</span>
+                        <a
+                          href={poi.googleMapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="hover:text-white ml-0.5 p-0.5 rounded hover:bg-white/20 transition-colors"
+                          title="Directions to Sanctuary"
+                        >
+                          <ArrowUpRight className="w-3 h-3" />
+                        </a>
+                      </div>
+                    </div>
+                  );
+                }
+
+                const touristIndex = pIdx; // Index for numbered landmark pins
                 return (
                   <div
                     key={poi.id}
@@ -1678,7 +1760,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                           ? 'w-9 h-9 bg-emerald-600 text-white text-xs scale-110 shadow-emerald-500/50'
                           : 'w-7 h-7 bg-zinc-900 text-white text-[11px] hover:bg-emerald-600'
                       }`}>
-                        {pIdx + 1}
+                        {touristIndex}
                       </div>
                     </button>
 
@@ -1702,11 +1784,50 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 );
               })}
 
-              {/* Existing Clean Frosted Glass Bottom Carousel (Tapping any card triggers camera zoom + top-right HUD) */}
+              {/* Existing Clean Frosted Glass Bottom Carousel (Home Base Card + Tourist Landmark Cards) */}
               <div className="absolute bottom-4 sm:bottom-6 left-4 sm:left-6 right-4 sm:right-6 z-20">
                 <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide gap-3 pb-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                   {filteredPOIs.map((poi, idx) => {
                     const isSelected = activeTouristPlace?.id === poi.id;
+                    const isHome = poi.isHome;
+
+                    if (isHome) {
+                      return (
+                        <div 
+                          key={poi.id} 
+                          onClick={() => {
+                            uiAudio.playClick();
+                            setActiveTouristPlace(isSelected ? null : poi);
+                          }}
+                          className={`snap-center shrink-0 backdrop-blur-md px-5 py-4 rounded-2xl border transition-all duration-300 min-w-[220px] cursor-pointer group/pill ${
+                            isSelected
+                              ? 'bg-zinc-950 text-white border-amber-400 shadow-2xl ring-2 ring-amber-400/30 scale-[1.03]'
+                              : 'bg-zinc-900/90 text-white border-zinc-700/80 shadow-xl hover:bg-zinc-950 hover:scale-[1.02] hover:shadow-2xl'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                              <span className="text-[10px] font-black uppercase tracking-widest text-amber-300 font-mono">YOUR RESIDENCE</span>
+                            </div>
+                            <div className="flex items-center gap-0.5 text-[11px] font-bold text-amber-300 bg-white/10 px-1.5 py-0.5 rounded-md">
+                              <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                              <span>{poi.rating}</span>
+                            </div>
+                          </div>
+                          <h4 className="text-sm font-bold truncate font-display text-white group-hover/pill:text-amber-300 transition-colors">
+                            {poi.name}
+                          </h4>
+                          <p className="text-xs font-semibold text-amber-300/90 mt-1 flex items-center justify-between">
+                            <span>✦ Home Epicenter</span>
+                            <span className="text-[10px] text-zinc-400 font-normal flex items-center gap-0.5">
+                              {isSelected ? '✦ Centered' : 'Focus'} <ArrowUpRight className="w-3 h-3" />
+                            </span>
+                          </p>
+                        </div>
+                      );
+                    }
+
                     return (
                       <div 
                         key={poi.id} 
