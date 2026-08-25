@@ -1,3 +1,4 @@
+import { useAuth } from './AuthContext';
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SEO } from './SEO';
@@ -109,6 +110,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   onContactHost, 
   onRequestAuth 
 }) => {
+  const { user } = useAuth();
   const { addToast } = useToast();
   const { trackPhotoView, trackDateSelection } = useListingTelemetry(listing.id);
   const [liveViewers, setLiveViewers] = useState(1);
@@ -573,16 +575,20 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
     uiAudio.playSuccess();
     if (onBook) {
       onBook({
+        isStartCheckout: true,
         listingId: listing.id,
-        checkIn,
-        checkOut,
-        guests,
-        totalPrice: grandTotal,
-        basePrice,
-        enchoFee,
-        taxAmount,
+        moveInDate: checkIn,
+        checkOutDate: checkOut,
+        configuration: 'Entire Place',
+        name: user?.name || '',
+        phone: '',
+        totalRent: grandTotal,
+        baseRent: baseRentTotal,
+        fees: enchoFee,
+        taxes: taxAmount,
+        guests: guests,
         currency: listing.currency || 'INR'
-      });
+      } as any);
     }
   };
 
@@ -1719,7 +1725,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         <div className="flex items-center gap-1.5 text-xs font-extrabold text-zinc-900">
                           <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                           <span>{activeTouristPlace.rating}</span>
-                          <span className="text-[10px] text-zinc-400 font-normal">({activeTouristPlace.reviewCount.toLocaleString()})</span>
+                          <span className="text-[10px] text-zinc-400 font-normal">({(activeTouristPlace.reviewCount ?? 100).toLocaleString()})</span>
                         </div>
                         <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-md border ${
                           activeTouristPlace.isHome 

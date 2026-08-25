@@ -46,7 +46,9 @@ const BookingPage: React.FC<BookingPageProps> = ({ listing, bookingDetails, onBa
     if (!whatsappConfig?.number) return;
     
     // Formatting the message
-    const message = `Hello! I have just placed a booking request on ENCHO Space.\n\n*Property:* ${listing.title}\n*Location:* ${listing.address}\n*Move-in Date:* ${new Date(bookingDetails.moveInDate).toLocaleDateString()}\n*Name:* ${bookingDetails.name}`;
+    const safeMoveInDate = bookingDetails?.moveInDate ? new Date(bookingDetails.moveInDate).toLocaleDateString() : new Date().toLocaleDateString();
+    const safeName = bookingDetails?.name || 'Guest';
+    const message = `Hello! I have just placed a booking request on ENCHO Space.\n\n*Property:* ${listing?.title || 'Sanctuary'}\n*Location:* ${listing?.address || ''}\n*Move-in Date:* ${safeMoveInDate}\n*Name:* ${safeName}`;
     
     const encodedMessage = encodeURIComponent(message);
     const whatsappUrl = `https://wa.me/${whatsappConfig.number}?text=${encodedMessage}`;
@@ -131,19 +133,19 @@ const BookingPage: React.FC<BookingPageProps> = ({ listing, bookingDetails, onBa
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 mb-8">
                   <div>
                       <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Move-in Date</label>
-                      <div className="font-semibold text-gray-900 text-lg">{new Date(bookingDetails.moveInDate).toLocaleDateString(undefined, { dateStyle: 'long' })}</div>
+                      <div className="font-semibold text-gray-900 text-lg">{bookingDetails?.moveInDate ? new Date(bookingDetails.moveInDate).toLocaleDateString(undefined, { dateStyle: 'long' }) : "Immediate"}</div>
                   </div>
                   <div>
                       <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Configuration</label>
-                      <div className="font-semibold text-gray-900 text-lg">{bookingDetails.configuration}</div>
+                      <div className="font-semibold text-gray-900 text-lg">{bookingDetails?.configuration || "Entire Sanctuary"}</div>
                   </div>
                    <div>
                       <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Guest Name</label>
-                      <div className="font-semibold text-gray-900 text-lg">{bookingDetails.name}</div>
+                      <div className="font-semibold text-gray-900 text-lg">{bookingDetails?.name || "Verified Guest"}</div>
                   </div>
                    <div>
                       <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Contact</label>
-                      <div className="font-semibold text-gray-900 text-lg">{bookingDetails.phone}</div>
+                      <div className="font-semibold text-gray-900 text-lg">{bookingDetails?.phone || "Confidential"}</div>
                   </div>
               </div>
 
@@ -151,7 +153,7 @@ const BookingPage: React.FC<BookingPageProps> = ({ listing, bookingDetails, onBa
               <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 mb-8">
                   <div className="flex justify-between items-center mb-4">
                       <span className="text-gray-600 font-medium">Estimated Monthly Rent</span>
-                      <span className="font-bold text-gray-900 text-xl">₹{bookingDetails.totalRent.toLocaleString()}</span>
+                      <span className="font-bold text-gray-900 text-xl">₹{(bookingDetails?.totalRent ?? 0).toLocaleString()}</span>
                   </div>
                   <div className="text-xs text-gray-500 leading-relaxed">
                       * This is an estimate. Final lease terms including deposit and maintenance fees will be confirmed by the property manager upon approval of your application.
