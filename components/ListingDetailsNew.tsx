@@ -43,7 +43,7 @@ import {
   Crown,
   Plus,
   Minus
-, Search, Bookmark, Share2, Compass } from 'lucide-react';
+, Search, Bookmark, Share2, Compass , ArrowUpRight } from 'lucide-react';
 import { uiAudio } from './audio';
 import { useToast } from './ToastContext';
 
@@ -1533,7 +1533,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
             </div>
           </section>
 
-          {/* 2. AMBIENT NEIGHBORHOOD RADAR (100% UI Geometry Preserved + AI Tourist Intelligence) */}
+          {/* 2. AMBIENT NEIGHBORHOOD RADAR (Top-Right Floating HUD & Camera Zoom & Direct Nav Arrow) */}
           <section className="space-y-6 pt-8 border-t border-zinc-200/80">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
@@ -1545,11 +1545,18 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
               </span>
             </div>
 
-            <div className="relative w-full h-[360px] md:h-[420px] bg-zinc-100 rounded-3xl overflow-hidden border border-zinc-200 shadow-inner group">
-              <div className="absolute inset-0 opacity-50 bg-[url('https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=1600&q=80')] bg-cover bg-center grayscale group-hover:grayscale-0 transition-all duration-1000" />
-              <div className="absolute inset-0 bg-gradient-to-t from-white/95 via-white/30 to-transparent" />
+            <div className="relative w-full h-[380px] sm:h-[420px] md:h-[460px] bg-zinc-100 rounded-3xl overflow-hidden border border-zinc-200 shadow-inner group">
+              {/* Locked "Dormant to Life" Chromatic Shift Layer with Dynamic Camera Zoom */}
+              <div 
+                className="absolute inset-0 opacity-50 bg-[url('https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=1600&q=80')] bg-cover bg-center grayscale group-hover:grayscale-0 transition-all duration-1000 ease-out" 
+                style={{
+                  transform: activeTouristPlace ? 'scale(1.35)' : 'scale(1.0)',
+                  transformOrigin: activeTouristPlace ? `${activeTouristPlace.pinLeft} ${activeTouristPlace.pinTop}` : 'center center'
+                }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-white/95 via-white/30 to-transparent pointer-events-none" />
 
-              {/* Dynamic AI Category Filter Pills inside Top-Left of Map */}
+              {/* Dynamic AI Category Filter Pills (Top-Left) */}
               <div className="absolute top-4 left-4 z-20 flex items-center gap-1.5 p-1 bg-white/90 backdrop-blur-md rounded-2xl border border-white/70 shadow-sm">
                 {availableRadarCategories.map((cat) => (
                   <button
@@ -1570,218 +1577,177 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 ))}
               </div>
 
-              {/* Interactive Glowing Radar Map Pins */}
-              {filteredPOIs.map((poi, pIdx) => (
-                <button
-                  key={poi.id}
-                  style={{ position: 'absolute', top: poi.pinTop, left: poi.pinLeft }}
-                  onClick={() => {
-                    uiAudio.playClick();
-                    setActiveTouristPlace(poi);
-                  }}
-                  className="z-10 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center group/pin transition-transform hover:scale-110 focus:outline-none"
-                >
-                  <div className="relative flex items-center justify-center">
-                    <span className="absolute w-6 h-6 rounded-full bg-emerald-400/50 animate-ping" />
-                    <div className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-lg border-2 border-white text-[11px] font-black">
-                      {pIdx + 1}
+              {/* TOP-RIGHT FLOATING GLASS HUD CARD (Leaving 70%+ of Map Open & Visible) */}
+              <AnimatePresence>
+                {activeTouristPlace && (
+                  <motion.div
+                    initial={{ opacity: 0, x: 20, scale: 0.95 }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    exit={{ opacity: 0, x: 20, scale: 0.95 }}
+                    transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                    className="absolute top-4 right-4 z-30 w-[280px] sm:w-[320px] bg-white/95 backdrop-blur-md rounded-2xl border border-white/80 shadow-2xl p-3.5 space-y-2.5"
+                  >
+                    {/* Header: Title & Camera Reset Button */}
+                    <div className="flex items-center justify-between pb-1.5 border-b border-zinc-100">
+                      <div className="flex items-center gap-1.5 truncate">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <h4 className="text-xs font-extrabold text-zinc-900 truncate font-display">{activeTouristPlace.name}</h4>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          uiAudio.playClick();
+                          setActiveTouristPlace(null);
+                        }}
+                        className="w-5 h-5 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-500 flex items-center justify-center transition-colors shrink-0 cursor-pointer"
+                        title="Reset Map Camera"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+
+                    {/* Image & Key Telemetry */}
+                    <div className="flex gap-2.5 items-center">
+                      <div className="relative w-20 h-16 rounded-xl overflow-hidden bg-zinc-100 shrink-0 border border-zinc-200/60 shadow-xs">
+                        <OptimizedImage
+                          src={activeTouristPlace.photo}
+                          aspectRatio="16:9"
+                          className="w-full h-full object-cover"
+                          alt={activeTouristPlace.name}
+                        />
+                      </div>
+                      <div className="min-w-0 space-y-0.5">
+                        <p className="text-[10px] font-semibold text-zinc-500 truncate">{activeTouristPlace.localScript}</p>
+                        <div className="flex items-center gap-1.5 text-xs font-extrabold text-zinc-900">
+                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                          <span>{activeTouristPlace.rating}</span>
+                          <span className="text-[10px] text-zinc-400 font-normal">({activeTouristPlace.reviewCount.toLocaleString()})</span>
+                        </div>
+                        <span className="inline-block text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                          🚗 {activeTouristPlace.distance}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* AI Concierge Summary */}
+                    <div className="bg-zinc-50 border border-zinc-200/60 rounded-xl p-2 text-[11px] text-zinc-600 font-medium leading-relaxed">
+                      <span className="font-bold text-zinc-800">AI Concierge: </span>
+                      {activeTouristPlace.summary}
+                    </div>
+
+                    {/* Minimal Direct Navigation Button */}
+                    <a
+                      href={activeTouristPlace.googleMapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all hover:shadow-md cursor-pointer"
+                    >
+                      <span>Open in Google Maps</span>
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    </a>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Interactive Glowing Radar Map Pins with Camera Zoom Synchronized */}
+              {filteredPOIs.map((poi, pIdx) => {
+                const isActive = activeTouristPlace?.id === poi.id;
+                return (
+                  <div
+                    key={poi.id}
+                    style={{ position: 'absolute', top: poi.pinTop, left: poi.pinLeft }}
+                    className={`z-20 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center group/pin transition-all duration-500 ${
+                      activeTouristPlace && !isActive ? 'opacity-40 scale-90' : 'opacity-100'
+                    }`}
+                  >
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        uiAudio.playClick();
+                        setActiveTouristPlace(isActive ? null : poi);
+                      }}
+                      className="relative flex items-center justify-center focus:outline-none cursor-pointer"
+                    >
+                      <span className={`absolute rounded-full transition-all ${
+                        isActive 
+                          ? 'w-10 h-10 bg-emerald-400/60 animate-ping' 
+                          : 'w-6 h-6 bg-emerald-400/40 animate-ping'
+                      }`} />
+                      <div className={`rounded-full flex items-center justify-center shadow-xl border-2 border-white font-black transition-all ${
+                        isActive
+                          ? 'w-9 h-9 bg-emerald-600 text-white text-xs scale-110 shadow-emerald-500/50'
+                          : 'w-7 h-7 bg-zinc-900 text-white text-[11px] hover:bg-emerald-600'
+                      }`}>
+                        {pIdx + 1}
+                      </div>
+                    </button>
+
+                    {/* Minimal Pin Navigation Tooltip */}
+                    <div className={`flex items-center gap-1 transition-all bg-zinc-900/90 backdrop-blur-md text-white text-[10px] font-bold px-2 py-0.5 rounded-md border border-white/20 whitespace-nowrap shadow-md mt-1 ${
+                      isActive ? 'opacity-100 scale-105 bg-emerald-950 border-emerald-400/50' : 'opacity-0 group-hover/pin:opacity-100'
+                    }`}>
+                      <span>{poi.name} · {poi.distance}</span>
+                      <a
+                        href={poi.googleMapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="hover:text-emerald-300 ml-1 p-0.5 rounded hover:bg-white/20 transition-colors"
+                        title="Direct Google Maps Directions"
+                      >
+                        <ArrowUpRight className="w-3 h-3" />
+                      </a>
                     </div>
                   </div>
-                  <span className="opacity-0 group-hover/pin:opacity-100 transition-opacity bg-zinc-900/90 backdrop-blur-md text-white text-[10px] font-bold px-2 py-0.5 rounded-md border border-white/20 whitespace-nowrap shadow-md mt-1 pointer-events-none">
-                    {poi.name} · {poi.distance}
-                  </span>
-                </button>
-              ))}
+                );
+              })}
 
-              {/* Existing Clean Frosted Glass Carousel (Pills Upgraded to Tourist Highlights) */}
-              <div className="absolute bottom-6 left-6 right-6 z-20">
-                <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide gap-3 pb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                  {filteredPOIs.map((poi, idx) => (
-                    <div 
-                      key={poi.id} 
-                      onClick={() => {
-                        uiAudio.playClick();
-                        setActiveTouristPlace(poi);
-                      }}
-                      className="snap-center shrink-0 bg-white/90 backdrop-blur-md px-5 py-4 rounded-2xl border border-white/70 shadow-lg min-w-[210px] cursor-pointer hover:bg-white hover:scale-[1.02] hover:shadow-xl transition-all duration-300 group/pill"
-                    >
-                      <div className="flex items-center justify-between gap-2 mb-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <Navigation className="w-3.5 h-3.5 text-emerald-600" />
-                          <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">{poi.type}</span>
+              {/* Existing Clean Frosted Glass Bottom Carousel (Tapping any card triggers camera zoom + top-right HUD) */}
+              <div className="absolute bottom-4 sm:bottom-6 left-4 sm:left-6 right-4 sm:right-6 z-20">
+                <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide gap-3 pb-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                  {filteredPOIs.map((poi, idx) => {
+                    const isSelected = activeTouristPlace?.id === poi.id;
+                    return (
+                      <div 
+                        key={poi.id} 
+                        onClick={() => {
+                          uiAudio.playClick();
+                          setActiveTouristPlace(isSelected ? null : poi);
+                        }}
+                        className={`snap-center shrink-0 backdrop-blur-md px-5 py-4 rounded-2xl border transition-all duration-300 min-w-[210px] cursor-pointer group/pill ${
+                          isSelected
+                            ? 'bg-white border-emerald-500 shadow-xl ring-2 ring-emerald-500/20 scale-[1.03]'
+                            : 'bg-white/90 border-white/70 shadow-lg hover:bg-white hover:scale-[1.02] hover:shadow-xl'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <Navigation className={`w-3.5 h-3.5 ${isSelected ? 'text-emerald-600' : 'text-zinc-500'}`} />
+                            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 font-mono">{poi.type}</span>
+                          </div>
+                          <div className="flex items-center gap-0.5 text-[11px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-md">
+                            <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                            <span>{poi.rating}</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-0.5 text-[11px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-md">
-                          <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                          <span>{poi.rating}</span>
-                        </div>
+                        <h4 className={`text-sm font-bold truncate font-display transition-colors ${
+                          isSelected ? 'text-emerald-700' : 'text-zinc-900 group-hover/pill:text-emerald-700'
+                        }`}>
+                          {poi.name}
+                        </h4>
+                        <p className="text-xs font-semibold text-emerald-700 mt-1 flex items-center justify-between">
+                          <span>{poi.distance}</span>
+                          <span className="text-[10px] text-zinc-400 font-normal flex items-center gap-0.5">
+                            {isSelected ? '✦ Zoomed' : 'Explore'} <ArrowUpRight className="w-3 h-3" />
+                          </span>
+                        </p>
                       </div>
-                      <h4 className="text-sm font-bold text-zinc-900 truncate font-display group-hover/pill:text-emerald-700 transition-colors">{poi.name}</h4>
-                      <p className="text-xs font-semibold text-emerald-700 mt-1 flex items-center justify-between">
-                        <span>{poi.distance}</span>
-                        <span className="text-[10px] text-zinc-400 font-normal">View guide →</span>
-                      </p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
           </section>
-
-          {/* ========================================================================= */}
-          {/* GOOGLE PLACES-STYLE LUXURY TOURIST DETAIL SHEET MODAL                     */}
-          {/* ========================================================================= */}
-          <AnimatePresence>
-            {activeTouristPlace && (
-              <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-zinc-950/60 backdrop-blur-xs">
-                <motion.div
-                  initial={{ opacity: 0, y: 40 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 40 }}
-                  transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-                  className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden border border-zinc-200/80 max-h-[90vh] flex flex-col"
-                >
-                  {/* Search Header Bar with Close Button */}
-                  <div className="p-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/80">
-                    <div className="flex items-center gap-3 bg-white px-3.5 py-2 rounded-2xl border border-zinc-200/80 shadow-2xs flex-1 mr-3">
-                      <Search className="w-4 h-4 text-zinc-400" />
-                      <span className="text-sm font-bold text-zinc-900">{activeTouristPlace.name}</span>
-                    </div>
-                    <button
-                      onClick={() => setActiveTouristPlace(null)}
-                      className="w-9 h-9 rounded-full bg-zinc-100 hover:bg-zinc-200 flex items-center justify-center text-zinc-600 transition-colors"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-
-                  {/* Scrollable Modal Content */}
-                  <div className="overflow-y-auto p-5 space-y-5">
-                    {/* Panoramic Hero Photo */}
-                    <div className="relative h-[220px] w-full rounded-2xl overflow-hidden bg-zinc-900 shadow-inner">
-                      <OptimizedImage
-                        src={activeTouristPlace.photo}
-                        aspectRatio="16:9"
-                        className="w-full h-full object-cover"
-                        alt={activeTouristPlace.name}
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
-                    </div>
-
-                    {/* Place Title, Local Script & Star Ratings */}
-                    <div className="space-y-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="text-2xl font-black text-zinc-900 font-display tracking-tight">
-                          {activeTouristPlace.name}
-                        </h3>
-                        <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100 shrink-0">
-                          {activeTouristPlace.distance}
-                        </span>
-                      </div>
-                      <p className="text-sm font-medium text-zinc-500 font-sans">
-                        {activeTouristPlace.localScript}
-                      </p>
-                      <div className="flex items-center gap-2 pt-1">
-                        <span className="text-sm font-extrabold text-zinc-900 tabular-nums">{activeTouristPlace.rating}</span>
-                        <div className="flex items-center text-amber-500">
-                          {[...Array(5)].map((_, i) => (
-                            <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                          ))}
-                        </div>
-                        <span className="text-xs text-zinc-400">({activeTouristPlace.reviewCount.toLocaleString()})</span>
-                        <span className="text-zinc-300">·</span>
-                        <span className="text-xs font-semibold text-zinc-600 uppercase tracking-wider">{activeTouristPlace.type}</span>
-                      </div>
-                    </div>
-
-                    {/* Google Action Buttons Row */}
-                    <div className="flex items-center justify-between gap-2 pt-2 border-y border-zinc-100 py-3">
-                      <a
-                        href={activeTouristPlace.googleMapsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex flex-col items-center gap-1.5 text-center flex-1 group"
-                      >
-                        <div className="w-11 h-11 rounded-full bg-emerald-600 group-hover:bg-emerald-700 text-white flex items-center justify-center shadow-md transition-colors">
-                          <Navigation className="w-5 h-5" />
-                        </div>
-                        <span className="text-[11px] font-bold text-emerald-700">Directions</span>
-                      </a>
-
-                      <button
-                        onClick={() => {
-                          uiAudio.playClick();
-                          addToast('Saved destination to your trip itinerary', 'success');
-                        }}
-                        className="flex flex-col items-center gap-1.5 text-center flex-1 group"
-                      >
-                        <div className="w-11 h-11 rounded-full bg-sky-50 text-sky-700 group-hover:bg-sky-100 flex items-center justify-center transition-colors">
-                          <Bookmark className="w-5 h-5" />
-                        </div>
-                        <span className="text-[11px] font-bold text-zinc-700">Save</span>
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          uiAudio.playClick();
-                          addToast('Nearby landmarks updated on map', 'info');
-                        }}
-                        className="flex flex-col items-center gap-1.5 text-center flex-1 group"
-                      >
-                        <div className="w-11 h-11 rounded-full bg-sky-50 text-sky-700 group-hover:bg-sky-100 flex items-center justify-center transition-colors">
-                          <Compass className="w-5 h-5" />
-                        </div>
-                        <span className="text-[11px] font-bold text-zinc-700">Nearby</span>
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          if (navigator.share) {
-                            navigator.share({
-                              title: activeTouristPlace.name,
-                              text: activeTouristPlace.summary,
-                              url: activeTouristPlace.googleMapsUrl
-                            }).catch(() => {});
-                          } else {
-                            navigator.clipboard.writeText(activeTouristPlace.googleMapsUrl);
-                            addToast('Copied landmark link to clipboard', 'info');
-                          }
-                        }}
-                        className="flex flex-col items-center gap-1.5 text-center flex-1 group"
-                      >
-                        <div className="w-11 h-11 rounded-full bg-sky-50 text-sky-700 group-hover:bg-sky-100 flex items-center justify-center transition-colors">
-                          <Share2 className="w-5 h-5" />
-                        </div>
-                        <span className="text-[11px] font-bold text-zinc-700">Share</span>
-                      </button>
-                    </div>
-
-                    {/* AI Concierge Summary Description */}
-                    <div className="bg-zinc-50 border border-zinc-200/70 rounded-2xl p-4 space-y-1">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-900">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                        <span>AI Tourist Concierge Summary</span>
-                      </div>
-                      <p className="text-sm text-zinc-600 leading-relaxed font-medium">
-                        {activeTouristPlace.summary}
-                      </p>
-                    </div>
-
-                    {/* Address & Local Landmark Coordinates */}
-                    <div className="space-y-2.5 text-xs text-zinc-600 pt-1">
-                      <div className="flex items-center gap-3">
-                        <MapPin className="w-4 h-4 text-zinc-400 shrink-0" />
-                        <span>{activeTouristPlace.address}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Compass className="w-4 h-4 text-zinc-400 shrink-0" />
-                        <span className="font-mono">{activeTouristPlace.pinCode}</span>
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              </div>
-            )}
-          </AnimatePresence>
 
           {/* 3. VERIFIED GUEST REVIEWS */}
           <section className="space-y-6 pt-8 border-t border-zinc-200/80">
