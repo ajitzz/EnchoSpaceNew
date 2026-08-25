@@ -1816,13 +1816,13 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                             uiAudio.playClick();
                             setActiveTouristPlace(isSelected ? null : poi);
                           }}
-                          className={`snap-center shrink-0 backdrop-blur-md p-2.5 rounded-2xl border transition-all duration-300 min-w-[190px] sm:min-w-[210px] cursor-pointer group/pill flex items-center gap-2.5 ${
+                          className={`snap-center shrink-0 backdrop-blur-md p-2.5 rounded-2xl border transition-all duration-300 min-w-[190px] sm:min-w-[205px] cursor-pointer group/pill flex items-center gap-2.5 ${
                             isSelected
                               ? 'bg-white border-zinc-900 shadow-xl ring-2 ring-zinc-900/10 scale-[1.02]'
                               : 'bg-white/90 border-white/70 shadow-md hover:bg-white hover:scale-[1.01] hover:shadow-lg'
                           }`}
                         >
-                          {/* Micro Avatar in Dock Card */}
+                          {/* Micro Photo Avatar */}
                           <div className="relative w-9 h-9 rounded-xl overflow-hidden ring-1 ring-zinc-200 shadow-2xs shrink-0 bg-zinc-100">
                             <OptimizedImage
                               src={poi.photo}
@@ -1833,9 +1833,13 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                           </div>
 
                           <div className="min-w-0 flex-1">
+                            {/* Top Line: Red Pulse Dot + OUR SANCTUARY + Star Rating */}
                             <div className="flex items-center justify-between gap-1">
-                              <span className="text-[9px] font-black uppercase tracking-widest text-zinc-900 font-mono flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              <span className="text-[9px] font-black uppercase tracking-widest text-zinc-900 font-mono flex items-center gap-1.5">
+                                <span className="relative flex h-1.5 w-1.5">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-rose-500" />
+                                </span>
                                 <span>OUR SANCTUARY</span>
                               </span>
                               <span className="text-[10px] font-bold text-amber-600 flex items-center gap-0.5">
@@ -1843,14 +1847,16 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                                 <span>{poi.rating}</span>
                               </span>
                             </div>
-                            <h4 className="text-xs font-bold truncate font-display text-zinc-900 mt-0.5">
+
+                            {/* Middle Line: Shortened Clean Property Title (Max 15 Chars) */}
+                            <h4 className="text-xs font-bold truncate font-display text-zinc-900 mt-0.5 max-w-[125px]">
                               {poi.name}
                             </h4>
-                            <p className="text-[10px] font-semibold text-zinc-500 mt-0.5 flex items-center justify-between">
-                              <span>✦ Base Enclave</span>
-                              <span className="text-[9px] text-zinc-400 font-normal flex items-center gap-0.5">
-                                {isSelected ? '✦ Focused' : 'Explore'} <ArrowUpRight className="w-2.5 h-2.5" />
-                              </span>
+
+                            {/* Bottom Line: Direct Directions Action Trigger */}
+                            <p className="text-[10px] font-semibold text-zinc-700 group-hover/pill:text-emerald-700 mt-0.5 flex items-center gap-0.5 transition-colors">
+                              <span>Directions</span>
+                              <ArrowUpRight className="w-2.5 h-2.5" />
                             </p>
                           </div>
                         </div>
