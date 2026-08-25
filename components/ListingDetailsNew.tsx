@@ -414,6 +414,17 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
     const mobileGalleryRef = useRef<HTMLDivElement>(null);
   const [mobileSpaceIndex, setMobileSpaceIndex] = useState(0);
+  const [isMorphingReservation, setIsMorphingReservation] = useState(false);
+
+  const triggerKineticReservation = () => {
+    if (isMorphingReservation) return;
+    uiAudio.playSuccess();
+    setIsMorphingReservation(true);
+    setTimeout(() => {
+      handleReserve();
+      setIsMorphingReservation(false);
+    }, 750);
+  };
 
   // Pure 12-Space Continuous Media Stream (Zero Fake Text Cards)
   const mobileContinuousSpaces = useMemo(() => [
@@ -1456,13 +1467,21 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            uiAudio.playClick();
-                            handleReserve();
+                            triggerKineticReservation();
                           }}
                           className="px-4 py-2 rounded-xl bg-white hover:bg-zinc-100 text-zinc-900 font-bold text-xs shadow-md active:scale-95 hover:scale-[1.02] transition-all flex items-center gap-1.5 cursor-pointer"
                         >
-                          <CreditCard className="w-3.5 h-3.5 text-zinc-900" />
-                          <span>Book This Space</span>
+                          {isMorphingReservation ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-900" />
+                              <span>Booking...</span>
+                            </>
+                          ) : (
+                            <>
+                              <CreditCard className="w-3.5 h-3.5 text-zinc-900" />
+                              <span>Book This Space</span>
+                            </>
+                          )}
                         </button>
 
                         <div className="flex items-center gap-1.5 text-xs font-bold font-display text-amber-300 group-hover:translate-x-1 transition-transform">
@@ -1496,7 +1515,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
             {/* 10/10 APPLE FLOATING DYNAMIC CAPSULE STREAM (< 768px) */}
             <div className="md:hidden space-y-3">
-              {/* 1. Pure Full-Bleed Continuous Swipe Track (Image First) */}
+              {/* 1. Pure Full-Bleed Continuous Swipe Track (with Kinetic Shrink-Jump Arc on Reserve) */}
               <div 
                 ref={mobileGalleryRef}
                 onScroll={handleMobileScroll}
@@ -1505,14 +1524,25 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
               >
                 {mobileContinuousSpaces.map((item, mIdx) => {
                   const space = item.space;
+                  const isCurrentActive = mobileSpaceIndex === mIdx;
                   return (
-                    <div
+                    <motion.div
                       key={`space-${mIdx}`}
                       onClick={() => {
                         uiAudio.playClick();
                         setLightboxIndex(space.imgIndex);
                       }}
-                      className="snap-center shrink-0 w-[86vw] sm:w-[72vw] relative aspect-[4/3] rounded-3xl overflow-hidden bg-zinc-100 border border-zinc-200/80 shadow-md cursor-pointer group"
+                      animate={isMorphingReservation && isCurrentActive ? {
+                        scale: [1, 0.88, 0.4, 0.15],
+                        y: [0, -30, 80, 140],
+                        opacity: [1, 0.9, 0.4, 0],
+                        transition: { duration: 0.65, ease: [0.16, 1, 0.3, 1] }
+                      } : {
+                        scale: 1,
+                        y: 0,
+                        opacity: 1
+                      }}
+                      className="snap-center shrink-0 w-[86vw] sm:w-[72vw] relative aspect-[4/3] rounded-3xl overflow-hidden bg-zinc-100 border border-zinc-200/80 shadow-md cursor-pointer group origin-bottom"
                     >
                       <OptimizedImage
                         src={space.img}
@@ -1526,7 +1556,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         <div className="w-full">
                           <div className="flex items-center justify-between">
                             <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300 font-mono">
-                              Space {item.globalIdx < 10 ? `0${item.globalIdx}` : item.globalIdx} · {space.tag}
+                              {activeSlide === 0 ? 'Suites' : activeSlide === 1 ? 'Deluxe' : 'Executive'} 0{(item.subIdx)} · {space.tag}
                             </span>
                             <span className="text-[10px] text-zinc-300 font-medium font-mono">
                               {item.globalIdx} / 12
@@ -1535,22 +1565,22 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                           <h4 className="text-sm font-bold font-display mt-0.5 truncate text-white">{space.title}</h4>
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   );
                 })}
               </div>
 
-              {/* 2. 10/10 APPLE FLOATING DYNAMIC CAPSULE (Centered · Weightless · VisionOS Polish) */}
+              {/* 2. 10/10 APPLE FLOATING DYNAMIC CAPSULE (Dynamic Tier Naming · Kinetic Morphing · VisionOS Polish) */}
               <div className="flex justify-center px-2">
                 <div className="bg-white/95 backdrop-blur-2xl px-4 py-2 rounded-full border border-white/80 shadow-[0_12px_35px_rgba(0,0,0,0.12)] flex items-center gap-3.5 max-w-[95vw] ring-1 ring-black/5">
-                  {/* Left: Micro Space Tracker with Live Breathing Emerald Dot */}
+                  {/* Left: Dynamic Tier Label (Suites 01/04, Deluxe 01/04, Executive 01/04) */}
                   <div className="flex items-center gap-1.5 shrink-0">
                     <span className="relative flex h-2 w-2">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                     </span>
                     <span className="text-[11px] font-extrabold text-zinc-900 font-mono tracking-tight">
-                      Space 0{(mobileSpaceIndex % 4) + 1}
+                      {activeSlide === 0 ? 'Suites' : activeSlide === 1 ? 'Deluxe' : 'Executive'} 0{(mobileSpaceIndex % 4) + 1}
                       <span className="text-zinc-400 font-normal">/04</span>
                     </span>
                   </div>
@@ -1563,19 +1593,25 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     />
                   </div>
 
-                  {/* Right: Tactile Spring Action Pill */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      uiAudio.playClick();
-                      handleReserve();
-                    }}
-                    className="bg-zinc-950 hover:bg-zinc-800 text-white text-xs font-extrabold px-3.5 py-1.5 rounded-full shadow-xs active:scale-90 hover:scale-105 transition-all flex items-center gap-1 shrink-0 cursor-pointer"
-                  >
-                    <span>Reserve</span>
-                    <ArrowUpRight className="w-3 h-3 text-zinc-300" />
-                  </button>
+                  {/* Right: Tactile Spring Action Pill with Auto 'Booking...' Morph Loader */}
+                  {isMorphingReservation ? (
+                    <div className="bg-zinc-950 text-white text-xs font-bold px-3.5 py-1.5 rounded-full shadow-xs flex items-center gap-1.5 shrink-0 animate-pulse font-mono">
+                      <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+                      <span>Booking...</span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        triggerKineticReservation();
+                      }}
+                      className="bg-zinc-950 hover:bg-zinc-800 text-white text-xs font-extrabold px-3.5 py-1.5 rounded-full shadow-xs active:scale-90 hover:scale-105 transition-all flex items-center gap-1 shrink-0 cursor-pointer"
+                    >
+                      <span>Reserve</span>
+                      <ArrowUpRight className="w-3 h-3 text-zinc-300" />
+                    </button>
+                  )}
                 </div>
               </div>
 
