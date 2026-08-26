@@ -598,7 +598,13 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
     d.setDate(d.getDate() + 3);
     return d.toISOString().split('T')[0];
   });
-  const [guests, setGuests] = useState<number>(2);
+  
+  // Luxury Granular Occupancy Engine (Adults, Children, Infants)
+  const [adultsCount, setAdultsCount] = useState<number>(2);
+  const [childrenCount, setChildrenCount] = useState<number>(0);
+  const [infantsCount, setInfantsCount] = useState<number>(0);
+  const [showOccupancyPicker, setShowOccupancyPicker] = useState<boolean>(false);
+  const guests = adultsCount + childrenCount;
 
   // Double-Entry Ledger Calculation per Selected Room Tier
   const activeTierObj = ROOM_TIER_CONFIG[selectedRoomTier];
@@ -654,6 +660,9 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
         fees: fee,
         taxes: tax,
         guests: Math.min(guests, tierMeta.capacity),
+        adultsCount,
+        childrenCount,
+        infantsCount,
         currency: listing.currency || 'INR'
       } as any);
     }
@@ -1220,15 +1229,118 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                                 />
                             </div>
                         </div>
-                        <div className="p-3">
-                            <label className="block text-[10px] font-bold uppercase tracking-widest text-zinc-900 mb-1 font-display">Guests</label>
-                            <select 
-                                value={guests}
-                                onChange={(e) => setGuests(Number(e.target.value))}
-                                className="w-full bg-transparent border-none p-0 text-sm font-medium text-zinc-700 focus:ring-0 cursor-pointer"
+                        <div className="p-3 relative">
+                            <label className="block text-[10px] font-bold uppercase tracking-widest text-zinc-900 mb-1 font-display flex items-center justify-between">
+                              <span>Occupancy</span>
+                              <span className="text-[9px] text-zinc-400 font-mono">Max {activeTierObj.capacity} Guests</span>
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => { uiAudio.playClick(); setShowOccupancyPicker(prev => !prev); }}
+                              className="w-full text-left bg-white px-2.5 py-1.5 rounded-xl border border-zinc-200/80 text-xs font-semibold text-zinc-800 flex items-center justify-between cursor-pointer hover:border-zinc-400 transition-colors"
                             >
-                                {[1,2,3,4,5,6].map(n => <option key={n} value={n}>{n} guest{n > 1 ? 's' : ''}</option>)}
-                            </select>
+                              <span>
+                                {adultsCount} Adult{adultsCount > 1 ? 's' : ''}
+                                {childrenCount > 0 ? ` · ${childrenCount} Child${childrenCount > 1 ? 'ren' : ''}` : ''}
+                                {infantsCount > 0 ? ` · ${infantsCount} Infant${infantsCount > 1 ? 's' : ''}` : ''}
+                              </span>
+                              <span className="text-zinc-400 text-[10px]">▼</span>
+                            </button>
+
+                            {/* Frosted Occupancy Stepper Popover */}
+                            {showOccupancyPicker && (
+                              <div className="absolute top-full left-0 right-0 mt-2 bg-white/95 backdrop-blur-xl border border-zinc-200/90 shadow-2xl rounded-2xl p-4 z-50 space-y-3.5">
+                                {/* Adults Stepper */}
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <span className="text-xs font-bold text-zinc-900 block">Adults</span>
+                                    <span className="text-[10px] text-zinc-400 font-medium">Age 13+</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={adultsCount <= 1}
+                                      onClick={() => { uiAudio.playClick(); setAdultsCount(prev => Math.max(1, prev - 1)); }}
+                                      className="w-7 h-7 rounded-lg bg-zinc-100 hover:bg-zinc-200 disabled:opacity-40 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                    >-</button>
+                                    <span className="w-5 text-center font-mono font-bold text-xs">{adultsCount}</span>
+                                    <button
+                                      type="button"
+                                      disabled={adultsCount + childrenCount >= activeTierObj.capacity}
+                                      onClick={() => { 
+                                        uiAudio.playClick(); 
+                                        if (adultsCount + childrenCount < activeTierObj.capacity) {
+                                          setAdultsCount(prev => prev + 1);
+                                        } else if (selectedRoomTier !== 'suites') {
+                                          // Auto-upgrade suggestion
+                                          setSelectedRoomTier('suites');
+                                          setAdultsCount(prev => prev + 1);
+                                        }
+                                      }}
+                                      className="w-7 h-7 rounded-lg bg-zinc-100 hover:bg-zinc-200 disabled:opacity-40 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                    >+</button>
+                                  </div>
+                                </div>
+
+                                {/* Children Stepper */}
+                                <div className="flex items-center justify-between pt-2 border-t border-zinc-100">
+                                  <div>
+                                    <span className="text-xs font-bold text-zinc-900 block">Children</span>
+                                    <span className="text-[10px] text-zinc-400 font-medium">Ages 2–12</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={childrenCount <= 0}
+                                      onClick={() => { uiAudio.playClick(); setChildrenCount(prev => Math.max(0, prev - 1)); }}
+                                      className="w-7 h-7 rounded-lg bg-zinc-100 hover:bg-zinc-200 disabled:opacity-40 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                    >-</button>
+                                    <span className="w-5 text-center font-mono font-bold text-xs">{childrenCount}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => { 
+                                        uiAudio.playClick(); 
+                                        if (selectedRoomTier !== 'suites') {
+                                          setSelectedRoomTier('suites'); // Upgrade to suite for family
+                                        }
+                                        setChildrenCount(prev => Math.min(1, prev + 1));
+                                      }}
+                                      className="w-7 h-7 rounded-lg bg-zinc-100 hover:bg-zinc-200 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                    >+</button>
+                                  </div>
+                                </div>
+
+                                {/* Infants Stepper */}
+                                <div className="flex items-center justify-between pt-2 border-t border-zinc-100">
+                                  <div>
+                                    <span className="text-xs font-bold text-zinc-900 block">Infants</span>
+                                    <span className="text-[10px] text-emerald-600 font-medium">Under 2 (Free Crib)</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={infantsCount <= 0}
+                                      onClick={() => { uiAudio.playClick(); setInfantsCount(prev => Math.max(0, prev - 1)); }}
+                                      className="w-7 h-7 rounded-lg bg-zinc-100 hover:bg-zinc-200 disabled:opacity-40 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                    >-</button>
+                                    <span className="w-5 text-center font-mono font-bold text-xs">{infantsCount}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => { uiAudio.playClick(); setInfantsCount(prev => Math.min(2, prev + 1)); }}
+                                      className="w-7 h-7 rounded-lg bg-zinc-100 hover:bg-zinc-200 font-bold text-xs flex items-center justify-center cursor-pointer"
+                                    >+</button>
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setShowOccupancyPicker(false)}
+                                  className="w-full py-2 bg-zinc-900 text-white font-bold text-xs rounded-xl mt-2 cursor-pointer"
+                                >
+                                  Apply Occupancy
+                                </button>
+                              </div>
+                            )}
                         </div>
                     </div>
 
