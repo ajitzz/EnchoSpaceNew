@@ -53,6 +53,15 @@ class UIAudio {
     setTimeout(() => this.playTone(554.37, 'sine', 0.1, 0.1), 100);
     setTimeout(() => this.playTone(659.25, 'sine', 0.3, 0.1), 200);
   }
+
+  playError() {
+    this.playTone(220, 'sawtooth', 0.15, 0.08);
+    setTimeout(() => this.playTone(180, 'sawtooth', 0.2, 0.08), 80);
+  }
+
+  playSnap() {
+    this.playTone(800, 'triangle', 0.05, 0.05);
+  }
 }
 
 export const uiAudio = new UIAudio();

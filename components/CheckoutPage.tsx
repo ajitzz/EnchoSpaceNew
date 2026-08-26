@@ -1,36 +1,32 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { 
   CreditCard, 
   ShieldCheck, 
   Sparkles, 
-  Percent, 
-  Calculator, 
-  Check, 
   Smartphone, 
-  Wallet, 
   ChevronRight, 
-  TrendingUp, 
-  Building2, 
   Building,
-  Info,
-  ArrowRight,
-  ShieldAlert,
   Calendar,
   User,
   Phone,
   CheckCircle2,
   Lock,
   ArrowLeft,
-  Briefcase,
-  Layers,
-  Sparkle,
   QrCode,
   Clock,
-  Mail,
   Loader2,
-  ArrowUpRight
+  MapPin,
+  Check,
+  Zap,
+  Info,
+  Shield,
+  HelpCircle,
+  Plus,
+  Minus,
+  Sparkle
 } from 'lucide-react';
 import { Listing, Experience } from '../types';
 import { loadRazorpayScript, verifyRazorpayPayment } from '../lib/razorpay';
@@ -43,9 +39,9 @@ const stripePromise = loadStripe((import.meta as any).env?.VITE_STRIPE_PUBLIC_KE
 const EMI_BANKS = [
   { id: 'hdfc', name: 'HDFC Bank', rate: 13.5, logo: 'HDFC' },
   { id: 'icici', name: 'ICICI Bank', rate: 14.0, logo: 'ICICI' },
-  { id: 'sbi', name: 'State Bank of India (SBI)', rate: 13.0, logo: 'SBI' },
+  { id: 'sbi', name: 'State Bank of India', rate: 13.0, logo: 'SBI' },
   { id: 'axis', name: 'Axis Bank', rate: 14.5, logo: 'AXIS' },
-  { id: 'kotak', name: 'Kotak Mahindra Bank', rate: 15.0, logo: 'KOTAK' },
+  { id: 'kotak', name: 'Kotak Mahindra', rate: 15.0, logo: 'KOTAK' },
 ];
 
 const EMI_TENURES = [3, 6, 9, 12];
@@ -58,7 +54,7 @@ const ROOM_TIER_META = {
     icon: '👑',
     price: 18500,
     priceUsd: 220,
-    capacity: 2,
+    capacity: 3,
     specs: '1,200 sq.ft · 270° Valley View · Heated Jacuzzi',
     tag: 'Master Luxury'
   },
@@ -71,7 +67,7 @@ const ROOM_TIER_META = {
     priceUsd: 140,
     capacity: 2,
     specs: '650 sq.ft · Garden Verandah · Twin Plush Beds',
-    tag: 'Recommended'
+    tag: 'Recommended Anchor'
   },
   executive: {
     id: 'executive' as const,
@@ -158,7 +154,7 @@ const StripeCheckoutForm = ({ amount, onPaymentSuccess, onCancel }: { amount: nu
       <button 
         disabled={processing || !stripe} 
         type="submit" 
-        className="w-full py-4 bg-zinc-950 hover:bg-zinc-900 text-white font-bold rounded-2xl transition-all shadow-xl disabled:opacity-50 text-sm active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+        className="w-full py-4 bg-zinc-950 hover:bg-zinc-900 text-white font-bold rounded-2xl transition-all shadow-xl disabled:opacity-50 text-sm active:scale-95 cursor-pointer flex items-center justify-center gap-2 font-display tracking-wide"
       >
         <Lock className="w-4 h-4 text-emerald-400" />
         <span>{processing ? 'Authorizing Card...' : `Pay ${formatPrice(amount, 'INR')} Securely`}</span>
@@ -213,7 +209,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
     return 'deluxe';
   });
 
-  // Funnel Details
+  // Stay Dates State
   const [moveInDate, setMoveInDate] = useState(
     isExperience 
       ? (experience?.start_date || new Date().toISOString().split('T')[0])
@@ -228,17 +224,19 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
     })()
   );
 
+  // Guest Identity Dossier
   const [guestName, setGuestName] = useState(initialData.name || '');
   const [guestPhone, setGuestPhone] = useState(initialData.phone || '');
   const [guestEmail, setGuestEmail] = useState('');
 
-  // Granular Occupancy in Checkout
+  // Granular Occupancy
   const [adultsCount, setAdultsCount] = useState<number>(initialData.adultsCount || 2);
   const [childrenCount, setChildrenCount] = useState<number>(initialData.childrenCount || 0);
   const [infantsCount, setInfantsCount] = useState<number>(initialData.infantsCount || 0);
-  const [showOccupancyModifier, setShowOccupancyModifier] = useState<boolean>(false);
-  
-  // Payment Router State
+  const [showOccupancyModal, setShowOccupancyModal] = useState<boolean>(false);
+  const [showDateModal, setShowDateModal] = useState<boolean>(false);
+
+  // Smart Payment Router State
   const [paymentMethod, setPaymentMethod] = useState<'upi' | 'card' | 'emi'>('upi');
   const [upiMode, setUpiMode] = useState<'qr' | 'vpa'>('qr');
   const [upiId, setUpiId] = useState('');
@@ -263,7 +261,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
     return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  // Dynamic Double-Entry Ledger Recalculation per Room Tier
+  // Dynamic Double-Entry Ledger Calculation per Room Tier
   const tierMeta = ROOM_TIER_META[activeRoomTier];
   const nights = useMemo(() => {
     const start = new Date(moveInDate).getTime();
@@ -303,16 +301,18 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
   // Real Razorpay Execution with Server-Side HMAC SHA-256 Verification
   const handleExecutePayment = async () => {
     if (!guestName || guestName.trim().length < 2) {
-      alert("Please enter guest name.");
+      uiAudio.playError();
+      alert("Please enter primary guest name.");
       return;
     }
     if (!guestPhone || guestPhone.replace(/\D/g, '').length < 6) {
-      alert("Please enter a valid phone or WhatsApp number.");
+      uiAudio.playError();
+      alert("Please enter a valid WhatsApp or phone number.");
       return;
     }
 
     setIsProcessingPayment(true);
-    setProcessingStatusText('Initializing Escrow Lock...');
+    setProcessingStatusText('Securing Escrow Lock...');
     uiAudio.playClick();
 
     try {
@@ -363,6 +363,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
             });
 
             if (verifyData.success) {
+              uiAudio.playSuccess();
               setIsProcessingPayment(false);
               onSuccess({
                 moveInDate,
@@ -373,6 +374,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                 roomIds: []
               });
             } else {
+              uiAudio.playError();
               alert(`Signature Verification Failed: ${verifyData.error}`);
               setIsProcessingPayment(false);
             }
@@ -391,12 +393,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
       } else {
         // High-Fidelity Sandbox Execution with Verified HMAC Signature
         setTimeout(async () => {
-          setProcessingStatusText('Simulating Bank Confirmation...');
+          setProcessingStatusText('Connecting Bank Protocol...');
           const mockPaymentId = `pay_sim_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
           const mockSignature = `sim_sig_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
           
           setTimeout(async () => {
-            setProcessingStatusText('Finalizing Sanctuary Lock...');
+            setProcessingStatusText('Locking Sanctuary in Escrow...');
             const verifyData = await verifyRazorpayPayment({
               razorpay_order_id: orderData.order_id,
               razorpay_payment_id: mockPaymentId,
@@ -407,6 +409,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
 
             setIsProcessingPayment(false);
             if (verifyData.success) {
+              uiAudio.playSuccess();
               onSuccess({
                 moveInDate,
                 configuration: isExperience ? `${numTickets} Tickets` : tierMeta.name,
@@ -416,12 +419,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                 roomIds: []
               });
             } else {
+              uiAudio.playError();
               alert(`Payment Verification Error: ${verifyData.error}`);
             }
-          }, 800);
-        }, 800);
+          }, 700);
+        }, 600);
       }
     } catch (err: any) {
+      uiAudio.playError();
       alert(`Payment Error: ${err.message}`);
       setIsProcessingPayment(false);
     }
@@ -444,27 +449,28 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
   };
 
   return (
-    <div className="min-h-screen bg-[#fcfcfc] flex flex-col font-sans selection:bg-amber-500/20 text-zinc-900">
+    <div className="min-h-screen bg-[#fcfcfd] flex flex-col font-sans selection:bg-amber-500/20 text-zinc-900 pb-28 lg:pb-16">
       
       {/* Top Header: Focused Luxury Navigation */}
-      <header className="w-full bg-white/90 backdrop-blur-xl border-b border-zinc-200/80 sticky top-0 z-40">
+      <header className="w-full bg-white/95 backdrop-blur-2xl border-b border-zinc-200/80 sticky top-0 z-40 shadow-xs">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <button 
             type="button"
-            onClick={onCancel}
-            className="flex items-center gap-1.5 text-xs font-extrabold text-zinc-600 hover:text-zinc-950 transition-all cursor-pointer bg-zinc-100 hover:bg-zinc-200 px-3 py-1.5 rounded-full"
+            onClick={() => { uiAudio.playClick(); onCancel(); }}
+            className="flex items-center gap-2 text-xs font-bold text-zinc-600 hover:text-zinc-950 transition-all cursor-pointer bg-zinc-100/80 hover:bg-zinc-200/80 px-3.5 py-1.5 rounded-full"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Back to Sanctuary</span>
+            <span className="hidden sm:inline">Back to Sanctuary</span>
+            <span className="sm:hidden">Back</span>
           </button>
 
           <div className="flex items-center gap-1.5 select-none">
             <span className="font-black text-xl tracking-tighter text-zinc-950 font-display">ENCHO</span>
-            <div className="w-1.5 h-1.5 rounded-full bg-zinc-950" />
+            <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
             <span className="text-[9px] font-bold tracking-[0.3em] text-zinc-400 uppercase font-mono">Vault</span>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-full border border-emerald-200/60 shadow-2xs">
+          <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-full border border-emerald-200/70 shadow-2xs">
             <Lock className="w-3 h-3 text-emerald-600" />
             <span className="text-[10px] font-black uppercase tracking-wider font-mono">256-Bit Escrow</span>
           </div>
@@ -472,54 +478,56 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
       </header>
 
       {/* 10-Minute Escrow Lock Reassurance Banner */}
-      <div className="bg-zinc-900 text-white py-2 px-4 text-center text-xs font-medium flex items-center justify-center gap-2">
+      <div className="bg-zinc-950 text-white py-2.5 px-4 text-center text-xs font-medium flex items-center justify-center gap-2 border-b border-zinc-800">
         <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-        <span>Selected dates and room are temporarily held in escrow for</span>
-        <span className="font-mono font-bold text-amber-300 bg-zinc-800 px-2 py-0.5 rounded-md">
+        <span className="text-zinc-300">Selected dates and room are held in escrow for</span>
+        <span className="font-mono font-bold text-amber-300 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-md text-[11px]">
           {formatEscrowTime(escrowTimeLeft)}
         </span>
       </div>
 
       {/* Main Single-Screen Cockpit */}
-      <main className="flex-grow max-w-6xl w-full mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <main className="flex-grow max-w-6xl w-full mx-auto px-4 py-6 md:py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         
         {/* ========================================================================= */}
         {/* LEFT COLUMN (45% / 5 Cols): LIVE SANCTUARY DOSSIER                        */}
         {/* ========================================================================= */}
         <div className="lg:col-span-5 space-y-6">
-          <div className="bg-white rounded-3xl p-6 border border-zinc-200/80 shadow-[0_8px_30px_rgb(0,0,0,0.04)] space-y-5">
+          <div className="bg-white rounded-3xl p-6 md:p-7 border border-zinc-200/80 shadow-[0_10px_30px_rgba(0,0,0,0.03)] space-y-6">
             
             {/* Property & Selected Room Header */}
             <div className="flex gap-4 items-center">
-              <div className="w-20 h-20 rounded-2xl overflow-hidden bg-zinc-100 shrink-0 border border-zinc-200/60 shadow-2xs">
+              <div className="w-20 h-20 rounded-2xl overflow-hidden bg-zinc-100 shrink-0 border border-zinc-200/80 shadow-2xs relative group">
                 <img 
                   src={isExperience ? (experience?.image_urls?.[0] || undefined) : (listing?.imageUrl || undefined)} 
                   alt={isExperience ? experience?.title : listing?.title} 
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
               </div>
               <div className="min-w-0 flex-1">
-                <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 font-mono bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-100">
-                  {isExperience ? "Curated Experience" : "Boutique Sanctuary"}
-                </span>
-                <h3 className="font-extrabold text-zinc-950 text-base leading-tight mt-1 truncate font-display">
+                <div className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-200/60 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider font-mono mb-1">
+                  <span>{tierMeta.icon}</span>
+                  <span>{isExperience ? "Curated Experience" : tierMeta.tag}</span>
+                </div>
+                <h3 className="font-extrabold text-zinc-950 text-base leading-tight truncate font-display">
                   {isExperience ? experience?.title : listing?.title}
                 </h3>
-                <p className="text-xs text-zinc-400 font-medium truncate mt-0.5">
-                  {isExperience ? experience?.destination : listing?.address}
+                <p className="text-xs text-zinc-400 font-medium truncate mt-0.5 flex items-center gap-1">
+                  <MapPin className="w-3 h-3 text-zinc-400 shrink-0" />
+                  <span>{isExperience ? experience?.destination : listing?.address}</span>
                 </p>
               </div>
             </div>
 
             {/* 1-Tap In-Checkout Room Switcher */}
             {!isExperience && (
-              <div className="pt-4 border-t border-zinc-100 space-y-2.5">
+              <div className="pt-5 border-t border-zinc-100 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono">
                     Room Category
                   </span>
                   <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                    {tierMeta.tag}
+                    Max {tierMeta.capacity} Guests
                   </span>
                 </div>
 
@@ -535,10 +543,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                         onClick={() => {
                           uiAudio.playClick();
                           setActiveRoomTier(tierKey);
+                          // Ensure occupancy respects room limits
+                          if (tierKey === 'executive') setAdultsCount(1);
                         }}
-                        className={`py-2 px-1.5 rounded-xl text-center transition-all cursor-pointer flex flex-col items-center justify-center ${
+                        className={`py-2 px-1.5 rounded-xl text-center transition-all cursor-pointer flex flex-col items-center justify-center relative ${
                           isSelected
-                            ? 'bg-white text-zinc-950 shadow-sm ring-1 ring-zinc-900/10 font-bold scale-[1.02]'
+                            ? 'bg-white text-zinc-950 shadow-xs ring-1 ring-zinc-900/10 font-bold scale-[1.02]'
                             : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/60'
                         }`}
                       >
@@ -557,19 +567,19 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
               </div>
             )}
 
-            {/* Interactive Stay Dates & Occupancy Engine */}
-            <div className="pt-4 border-t border-zinc-100 space-y-3">
+            {/* Interactive Stay Dates & Granular Occupancy Engine */}
+            <div className="pt-5 border-t border-zinc-100 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono">
-                  Stay Dates & Occupancy
+                  Stay Dates & Guests
                 </span>
-                <span className="font-mono font-bold text-zinc-900 bg-zinc-100 px-2 py-0.5 rounded-md text-[11px]">
+                <span className="font-mono font-bold text-zinc-900 bg-zinc-100 px-2.5 py-0.5 rounded-md text-[11px]">
                   {nights} {nights === 1 ? 'Night' : 'Nights'}
                 </span>
               </div>
 
               {/* Inline Date Pickers */}
-              <div className="grid grid-cols-2 gap-2 bg-zinc-50 p-2.5 rounded-2xl border border-zinc-200/70">
+              <div className="grid grid-cols-2 gap-2.5 bg-zinc-50/80 p-3 rounded-2xl border border-zinc-200/70">
                 <div>
                   <label className="block text-[9px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono mb-1">Check-in</label>
                   <input
@@ -580,7 +590,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                       uiAudio.playClick();
                       setMoveInDate(e.target.value);
                     }}
-                    className="w-full bg-white border border-zinc-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-zinc-800 outline-none cursor-pointer"
+                    className="w-full bg-white border border-zinc-200 rounded-xl px-2.5 py-2 text-xs font-semibold text-zinc-800 outline-none cursor-pointer focus:ring-1 focus:ring-zinc-900 transition-all font-mono"
                   />
                 </div>
                 <div>
@@ -593,31 +603,33 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                       uiAudio.playClick();
                       setCheckOutDate(e.target.value);
                     }}
-                    className="w-full bg-white border border-zinc-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-zinc-800 outline-none cursor-pointer"
+                    className="w-full bg-white border border-zinc-200 rounded-xl px-2.5 py-2 text-xs font-semibold text-zinc-800 outline-none cursor-pointer focus:ring-1 focus:ring-zinc-900 transition-all font-mono"
                   />
                 </div>
               </div>
 
-              {/* Occupancy Trigger & Dropdown */}
+              {/* Occupancy Trigger & Popover */}
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => { uiAudio.playClick(); setShowOccupancyModifier(prev => !prev); }}
-                  className="w-full bg-zinc-50 hover:bg-zinc-100/80 border border-zinc-200/70 rounded-2xl px-3.5 py-2 text-xs font-semibold text-zinc-800 flex items-center justify-between transition-colors cursor-pointer"
+                  onClick={() => { uiAudio.playClick(); setShowOccupancyModal(prev => !prev); }}
+                  className="w-full bg-zinc-50/80 hover:bg-zinc-100/90 border border-zinc-200/70 rounded-2xl px-4 py-2.5 text-xs font-semibold text-zinc-800 flex items-center justify-between transition-all cursor-pointer group"
                 >
                   <div className="flex items-center gap-2">
-                    <User className="w-3.5 h-3.5 text-zinc-400" />
+                    <User className="w-3.5 h-3.5 text-zinc-500" />
                     <span>
                       {adultsCount} Adult{adultsCount > 1 ? 's' : ''}
                       {childrenCount > 0 ? ` · ${childrenCount} Child${childrenCount > 1 ? 'ren' : ''}` : ''}
                       {infantsCount > 0 ? ` · ${infantsCount} Infant${infantsCount > 1 ? 's' : ''}` : ''}
                     </span>
                   </div>
-                  <span className="text-[10px] text-zinc-400 font-mono">Modify ✎</span>
+                  <span className="text-[10px] font-bold text-zinc-500 group-hover:text-zinc-900 font-mono bg-white px-2 py-0.5 rounded-md border border-zinc-200 shadow-2xs">
+                    Modify ✎
+                  </span>
                 </button>
 
-                {showOccupancyModifier && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-white/95 backdrop-blur-xl border border-zinc-200/90 shadow-2xl rounded-2xl p-4 z-50 space-y-3">
+                {showOccupancyModal && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white/95 backdrop-blur-2xl border border-zinc-200/90 shadow-2xl rounded-2xl p-4 z-50 space-y-3.5">
                     {/* Adults Stepper */}
                     <div className="flex items-center justify-between">
                       <div>
@@ -701,8 +713,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
 
                     <button
                       type="button"
-                      onClick={() => setShowOccupancyModifier(false)}
-                      className="w-full py-2 bg-zinc-900 text-white font-bold text-xs rounded-xl mt-1 cursor-pointer"
+                      onClick={() => setShowOccupancyModal(false)}
+                      className="w-full py-2.5 bg-zinc-900 text-white font-bold text-xs rounded-xl mt-1 cursor-pointer"
                     >
                       Done
                     </button>
@@ -712,21 +724,19 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
             </div>
 
             {/* Double-Entry Transparent Financial Ledger */}
-            <div className="pt-4 border-t border-zinc-100 space-y-2.5">
+            <div className="pt-5 border-t border-zinc-100 space-y-3">
               <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono">
                 <span>Transparent Ledger</span>
                 <span className="text-emerald-600 font-bold">Guaranteed Price</span>
               </div>
 
-              <div className="space-y-2 text-xs text-zinc-600 font-medium">
+              <div className="space-y-2.5 text-xs text-zinc-600 font-medium">
                 <div className="flex justify-between">
                   <span>{tierMeta.name} ({formatPrice(nightlyRate, listing?.currency || 'INR')} × {nights} nts)</span>
                   <span className="font-mono font-bold text-zinc-900">{formatPrice(baseRentTotal, listing?.currency || 'INR')}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="flex items-center gap-1">
-                    <span>Concierge & Escrow Fee (15%)</span>
-                  </span>
+                  <span>Concierge & Escrow Fee (15%)</span>
                   <span className="font-mono font-bold text-zinc-900">{formatPrice(enchoOptimizationFee, listing?.currency || 'INR')}</span>
                 </div>
                 <div className="flex justify-between">
@@ -735,10 +745,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-zinc-100 flex justify-between items-baseline">
+              <div className="pt-3.5 border-t border-zinc-100 flex justify-between items-baseline">
                 <div>
-                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-900 block font-display">Total Amount</span>
-                  <span className="text-[10px] text-zinc-400 font-medium">Includes taxes & fees</span>
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-zinc-900 block font-display">Total Amount</span>
+                  <span className="text-[10px] text-zinc-400 font-medium">Includes all taxes & escrow fee</span>
                 </div>
                 <span className="text-2xl font-black text-zinc-950 font-display tabular-nums tracking-tight">
                   {formatPrice(grandTotal, listing?.currency || 'INR')}
@@ -746,12 +756,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
               </div>
             </div>
 
-            {/* Trust Reassurance Badge */}
-            <div className="bg-zinc-50 rounded-2xl p-3.5 border border-zinc-100 flex items-start gap-2.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              <div className="text-[11px] text-zinc-600 leading-tight">
-                <strong className="text-zinc-900 block mb-0.5">Encho Walled Garden Escrow Protection</strong>
-                Your payment is safely held in escrow until successful check-in at the sanctuary.
+            {/* Escrow Trust Reassurance Badge */}
+            <div className="bg-emerald-50/60 rounded-2xl p-4 border border-emerald-200/60 flex items-start gap-3">
+              <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="text-[11px] text-zinc-600 leading-relaxed">
+                <strong className="text-emerald-950 block mb-0.5 font-bold">Encho Walled Garden Escrow Protection</strong>
+                Your funds are held securely in escrow until successful check-in at the sanctuary. Zero risk.
               </div>
             </div>
 
@@ -761,13 +771,16 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
         {/* ========================================================================= */}
         {/* RIGHT COLUMN (55% / 7 Cols): 1-CLICK VAULT CHECKOUT & SMART ROUTER        */}
         {/* ========================================================================= */}
-        <div className="lg:col-span-7 bg-white rounded-3xl p-6 md:p-8 border border-zinc-200/80 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative min-h-[500px] space-y-6">
+        <div className="lg:col-span-7 bg-white rounded-3xl p-6 md:p-8 border border-zinc-200/80 shadow-[0_10px_30px_rgba(0,0,0,0.03)] space-y-7">
           
           {/* Section 1: Guest Identity Dossier */}
           <div>
-            <div className="flex items-center gap-2 mb-4">
-              <span className="w-5 h-5 rounded-full bg-zinc-900 text-white text-[11px] font-black flex items-center justify-center font-mono">1</span>
-              <h3 className="text-sm font-extrabold text-zinc-900 tracking-tight uppercase font-display">Guest Identity Dossier</h3>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-zinc-900 text-white text-[10px] font-black flex items-center justify-center font-mono">1</span>
+                <h3 className="text-sm font-extrabold text-zinc-900 tracking-tight uppercase font-display">Guest Identity Dossier</h3>
+              </div>
+              <span className="text-[10px] font-mono text-zinc-400">Fast 1-Click Autofill</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -782,14 +795,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                     value={guestName}
                     onChange={(e) => setGuestName(e.target.value)}
                     placeholder="e.g. Johnathan Doe"
-                    className="w-full pl-10 pr-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-900 focus:bg-white focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 transition-all outline-none"
+                    className="w-full pl-10 pr-4 py-3 bg-zinc-50/80 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-900 focus:bg-white focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 transition-all outline-none"
                   />
                 </div>
               </div>
 
               <div>
                 <label className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 mb-1.5 font-mono">
-                  WhatsApp / Phone Number
+                  WhatsApp / Contact Phone
                 </label>
                 <div className="relative">
                   <Phone className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
@@ -798,7 +811,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                     value={guestPhone}
                     onChange={(e) => setGuestPhone(e.target.value)}
                     placeholder="+91 98765 43210"
-                    className="w-full pl-10 pr-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-900 focus:bg-white focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 transition-all outline-none font-mono"
+                    className="w-full pl-10 pr-4 py-3 bg-zinc-50/80 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-900 focus:bg-white focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 transition-all outline-none font-mono"
                   />
                 </div>
               </div>
@@ -809,63 +822,69 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
 
           {/* Section 2: Smart Payment Router */}
           <div>
-            <div className="flex items-center gap-2 mb-4">
-              <span className="w-5 h-5 rounded-full bg-zinc-900 text-white text-[11px] font-black flex items-center justify-center font-mono">2</span>
-              <h3 className="text-sm font-extrabold text-zinc-900 tracking-tight uppercase font-display">Smart Payment Router</h3>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-zinc-900 text-white text-[10px] font-black flex items-center justify-center font-mono">2</span>
+                <h3 className="text-sm font-extrabold text-zinc-900 tracking-tight uppercase font-display">Smart Payment Router</h3>
+              </div>
+              <span className="text-[10px] font-mono text-emerald-600 font-bold flex items-center gap-1">
+                <Zap className="w-3 h-3 text-emerald-500" />
+                <span>Instant Confirmation</span>
+              </span>
             </div>
 
-            {/* Payment Method Selector Pills */}
+            {/* Tactile Payment Method Selector Pills */}
             <div className="grid grid-cols-3 gap-2 mb-5">
               <button
                 type="button"
                 onClick={() => { uiAudio.playClick(); setPaymentMethod('upi'); }}
-                className={`py-3 px-2 rounded-2xl border transition-all text-center flex flex-col items-center gap-1 cursor-pointer ${
+                className={`py-3.5 px-2 rounded-2xl border transition-all text-center flex flex-col items-center gap-1 cursor-pointer ${
                   paymentMethod === 'upi'
-                    ? 'bg-zinc-900 text-white border-zinc-900 shadow-md font-bold'
+                    ? 'bg-zinc-950 text-white border-zinc-950 shadow-md font-bold'
                     : 'bg-zinc-50 border-zinc-200/80 text-zinc-600 hover:bg-zinc-100'
                 }`}
               >
                 <Smartphone className="w-4 h-4" />
-                <span className="text-xs font-bold">Instant UPI</span>
+                <span className="text-xs font-bold font-display">Instant UPI</span>
                 <span className="text-[9px] opacity-75 font-mono">GPay · PhonePe</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => { uiAudio.playClick(); setPaymentMethod('card'); }}
-                className={`py-3 px-2 rounded-2xl border transition-all text-center flex flex-col items-center gap-1 cursor-pointer ${
+                className={`py-3.5 px-2 rounded-2xl border transition-all text-center flex flex-col items-center gap-1 cursor-pointer ${
                   paymentMethod === 'card'
-                    ? 'bg-zinc-900 text-white border-zinc-900 shadow-md font-bold'
+                    ? 'bg-zinc-950 text-white border-zinc-950 shadow-md font-bold'
                     : 'bg-zinc-50 border-zinc-200/80 text-zinc-600 hover:bg-zinc-100'
                 }`}
               >
                 <CreditCard className="w-4 h-4" />
-                <span className="text-xs font-bold">Luxury Card</span>
+                <span className="text-xs font-bold font-display">Luxury Card</span>
                 <span className="text-[9px] opacity-75 font-mono">Stripe · Visa</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => { uiAudio.playClick(); setPaymentMethod('emi'); }}
-                className={`py-3 px-2 rounded-2xl border transition-all text-center flex flex-col items-center gap-1 cursor-pointer ${
+                className={`py-3.5 px-2 rounded-2xl border transition-all text-center flex flex-col items-center gap-1 cursor-pointer ${
                   paymentMethod === 'emi'
-                    ? 'bg-zinc-900 text-white border-zinc-900 shadow-md font-bold'
+                    ? 'bg-zinc-950 text-white border-zinc-950 shadow-md font-bold'
                     : 'bg-zinc-50 border-zinc-200/80 text-zinc-600 hover:bg-zinc-100'
                 }`}
               >
                 <Building className="w-4 h-4" />
-                <span className="text-xs font-bold">Low-Cost EMI</span>
+                <span className="text-xs font-bold font-display">Low-Cost EMI</span>
                 <span className="text-[9px] opacity-75 font-mono">3 – 12 Months</span>
               </button>
             </div>
 
             {/* Payment Method Panel Details */}
             {paymentMethod === 'upi' && (
-              <div className="bg-zinc-50 rounded-2xl p-5 border border-zinc-200/60 space-y-4">
+              <div className="bg-zinc-50/80 rounded-2xl p-5 border border-zinc-200/70 space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-zinc-800">One-Tap UPI Authorization</span>
-                  <div className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-md border border-zinc-200 text-[10px] font-mono text-zinc-600 font-bold">
-                    <span>⚡ Instant Approval</span>
+                  <div className="flex items-center gap-1 bg-white px-2.5 py-1 rounded-md border border-zinc-200 text-[10px] font-mono text-zinc-700 font-bold">
+                    <span>⚡ Real-Time Webhook</span>
                   </div>
                 </div>
 
@@ -897,10 +916,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                 </div>
 
                 {upiMode === 'qr' ? (
-                  <div className="bg-white rounded-2xl p-4 border border-zinc-200/80 flex flex-col items-center text-center space-y-2">
-                    <div className="w-40 h-40 bg-zinc-100 rounded-xl flex items-center justify-center border border-zinc-200 p-2 shadow-inner relative">
+                  <div className="bg-white rounded-2xl p-5 border border-zinc-200/80 flex flex-col items-center text-center space-y-3 shadow-2xs">
+                    <div className="w-44 h-44 bg-zinc-50 rounded-2xl flex items-center justify-center border border-zinc-200 p-2.5 shadow-inner relative">
                       <img 
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(`upi://pay?pa=encho.space@icici&pn=ENCHO_SPACE&am=${grandTotal}&cu=INR`)}`}
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=170x170&data=${encodeURIComponent(`upi://pay?pa=encho.space@icici&pn=ENCHO_SPACE&am=${grandTotal}&cu=INR`)}`}
                         alt="UPI Payment QR Code"
                         className="w-full h-full object-contain"
                       />
@@ -914,7 +933,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                       value={upiId}
                       onChange={(e) => setUpiId(e.target.value)}
                       placeholder="e.g. yourname@okhdfcbank"
-                      className="w-full px-4 py-3 bg-white border border-zinc-200 rounded-xl text-sm font-medium text-zinc-900 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 outline-none font-mono"
+                      className="w-full px-4 py-3.5 bg-white border border-zinc-200 rounded-xl text-sm font-medium text-zinc-900 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 outline-none font-mono"
                     />
                   </div>
                 )}
@@ -922,7 +941,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
             )}
 
             {paymentMethod === 'card' && (
-              <div className="bg-zinc-50 rounded-2xl p-5 border border-zinc-200/60">
+              <div className="bg-zinc-50/80 rounded-2xl p-5 border border-zinc-200/70">
                 <Elements stripe={stripePromise} options={stripeOptions}>
                   <StripeCheckoutForm 
                     amount={grandTotal} 
@@ -943,16 +962,16 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
             )}
 
             {paymentMethod === 'emi' && (
-              <div className="bg-zinc-50 rounded-2xl p-5 border border-zinc-200/60 space-y-4">
+              <div className="bg-zinc-50/80 rounded-2xl p-5 border border-zinc-200/70 space-y-4">
                 <div>
-                  <label className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 mb-1.5 font-mono">Select Bank</label>
+                  <label className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 mb-1.5 font-mono">Select Partner Bank</label>
                   <select
                     value={selectedBank.id}
                     onChange={(e) => {
                       const b = EMI_BANKS.find(x => x.id === e.target.value);
                       if (b) setSelectedBank(b);
                     }}
-                    className="w-full px-3.5 py-2.5 bg-white border border-zinc-200 rounded-xl text-xs font-bold text-zinc-800 outline-none"
+                    className="w-full px-3.5 py-2.5 bg-white border border-zinc-200 rounded-xl text-xs font-bold text-zinc-800 outline-none cursor-pointer"
                   >
                     {EMI_BANKS.map(b => (
                       <option key={b.id} value={b.id}>{b.name} ({b.rate}% p.a.)</option>
@@ -968,8 +987,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                       onClick={() => setSelectedTenure(t)}
                       className={`py-2 rounded-xl text-center transition-all cursor-pointer ${
                         selectedTenure === t 
-                          ? 'bg-zinc-900 text-white font-bold' 
-                          : 'bg-white border border-zinc-200 text-zinc-600'
+                          ? 'bg-zinc-950 text-white font-bold shadow-xs' 
+                          : 'bg-white border border-zinc-200 text-zinc-600 hover:bg-zinc-50'
                       }`}
                     >
                       <span className="text-xs font-bold">{t} Mo</span>
@@ -977,9 +996,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                   ))}
                 </div>
 
-                <div className="bg-white rounded-xl p-3 border border-zinc-200/80 flex items-center justify-between text-xs">
+                <div className="bg-white rounded-xl p-3.5 border border-zinc-200/80 flex items-center justify-between text-xs shadow-2xs">
                   <span className="text-zinc-600 font-medium">Monthly Installment:</span>
-                  <span className="font-mono font-bold text-zinc-900 text-sm">₹{emiDetails.monthly.toLocaleString()} / mo</span>
+                  <span className="font-mono font-bold text-zinc-950 text-sm">₹{emiDetails.monthly.toLocaleString()} / mo</span>
                 </div>
               </div>
             )}
@@ -992,7 +1011,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                 type="button"
                 onClick={handleExecutePayment}
                 disabled={isProcessingPayment}
-                className="w-full bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 text-white font-bold font-display py-4 rounded-2xl shadow-xl hover:shadow-2xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 text-sm"
+                className="w-full bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 hover:from-zinc-900 hover:to-zinc-900 text-white font-bold font-display py-4.5 rounded-2xl shadow-xl hover:shadow-2xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 text-sm tracking-wide"
               >
                 {isProcessingPayment ? (
                   <>
@@ -1007,15 +1026,44 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                 )}
               </button>
               
-              <p className="text-[10px] text-zinc-400 text-center font-medium mt-2 flex items-center justify-center gap-1">
-                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                <span>Instant confirmation via WhatsApp & Email with zero lock-in fee</span>
-              </p>
+              <div className="flex items-center justify-center gap-4 text-[10px] text-zinc-400 font-medium mt-3">
+                <span className="flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                  <span>Instant WhatsApp Confirmation</span>
+                </span>
+                <span>·</span>
+                <span className="flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                  <span>Escrow Date Lock</span>
+                </span>
+              </div>
             </div>
           )}
 
         </div>
       </main>
+
+      {/* ========================================================================= */}
+      {/* MOBILE STICKY BOTTOM VAULT BAR (For Effortless 1-Thumb Booking on Mobile)  */}
+      {/* ========================================================================= */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t border-zinc-200/80 shadow-[0_-10px_30px_rgba(0,0,0,0.08)] z-50 px-4 py-3 pb-safe safe-area-bottom">
+        <div className="flex items-center justify-between gap-4 max-w-md mx-auto">
+          <div className="flex flex-col">
+            <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">{tierMeta.shortName} · {nights} nts</span>
+            <span className="text-lg font-black text-zinc-950 font-display tabular-nums">
+              {formatPrice(grandTotal, listing?.currency || 'INR')}
+            </span>
+          </div>
+          <button 
+            onClick={paymentMethod === 'card' ? () => {} : handleExecutePayment}
+            disabled={isProcessingPayment}
+            className="bg-zinc-950 hover:bg-zinc-900 text-white font-bold font-display uppercase tracking-wider text-xs py-3.5 px-6 rounded-full active:scale-95 transition-all shadow-md flex-1 max-w-[200px] cursor-pointer flex items-center justify-center gap-1.5"
+          >
+            <Lock className="w-3.5 h-3.5 text-emerald-400" />
+            <span>{isProcessingPayment ? 'Securing...' : 'Lock Room ↗'}</span>
+          </button>
+        </div>
+      </div>
 
     </div>
   );
