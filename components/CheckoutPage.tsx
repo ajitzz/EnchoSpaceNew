@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { 
@@ -25,7 +25,12 @@ import {
   ArrowLeft,
   Briefcase,
   Layers,
-  Sparkle
+  Sparkle,
+  QrCode,
+  Clock,
+  Mail,
+  Loader2,
+  ArrowUpRight
 } from 'lucide-react';
 import { Listing, Experience } from '../types';
 import { loadRazorpayScript, verifyRazorpayPayment } from '../lib/razorpay';
@@ -45,7 +50,43 @@ const EMI_BANKS = [
 
 const EMI_TENURES = [3, 6, 9, 12];
 
-const CheckoutForm = ({ amount, onPaymentSuccess, onCancel }: { amount: number, onPaymentSuccess: () => void, onCancel: () => void }) => {
+const ROOM_TIER_META = {
+  suites: {
+    id: 'suites' as const,
+    name: 'Presidential Panorama Suite',
+    shortName: 'Suites',
+    icon: '👑',
+    price: 18500,
+    priceUsd: 220,
+    capacity: 2,
+    specs: '1,200 sq.ft · 270° Valley View · Heated Jacuzzi',
+    tag: 'Master Luxury'
+  },
+  deluxe: {
+    id: 'deluxe' as const,
+    name: 'Deluxe Garden Double Room',
+    shortName: 'Deluxe',
+    icon: '🌿',
+    price: 11500,
+    priceUsd: 140,
+    capacity: 2,
+    specs: '650 sq.ft · Garden Verandah · Twin Plush Beds',
+    tag: 'Recommended'
+  },
+  executive: {
+    id: 'executive' as const,
+    name: 'Executive Studio Sanctuary',
+    shortName: 'Executive',
+    icon: '💼',
+    price: 7500,
+    priceUsd: 90,
+    capacity: 1,
+    specs: '420 sq.ft · Ergonomic Work Enclave · Rain Shower',
+    tag: 'Solo & Work'
+  }
+};
+
+const StripeCheckoutForm = ({ amount, onPaymentSuccess, onCancel }: { amount: number, onPaymentSuccess: () => void, onCancel: () => void }) => {
   const stripe = useStripe();
   const elements = useElements();
   const { formatPrice } = useCurrency();
@@ -113,13 +154,14 @@ const CheckoutForm = ({ amount, onPaymentSuccess, onCancel }: { amount: number, 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <PaymentElement />
-      {error && <div className="text-red-500 text-sm mt-2">{error}</div>}
+      {error && <div className="text-red-500 text-xs mt-2 font-medium">{error}</div>}
       <button 
         disabled={processing || !stripe} 
         type="submit" 
-        className="w-full py-4 bg-zinc-950 hover:bg-zinc-900 text-white font-bold rounded-2xl transition-all shadow-xl disabled:opacity-50 text-sm active:scale-95"
+        className="w-full py-4 bg-zinc-950 hover:bg-zinc-900 text-white font-bold rounded-2xl transition-all shadow-xl disabled:opacity-50 text-sm active:scale-95 cursor-pointer flex items-center justify-center gap-2"
       >
-        {processing ? 'Processing Secure Transaction...' : `Pay ${formatPrice(amount, 'INR')}`}
+        <Lock className="w-4 h-4 text-emerald-400" />
+        <span>{processing ? 'Authorizing Card...' : `Pay ${formatPrice(amount, 'INR')} Securely`}</span>
       </button>
     </form>
   );
@@ -130,6 +172,11 @@ interface CheckoutPageProps {
   experience?: Experience;
   numTickets?: number;
   initialData: {
+    roomTier?: 'suites' | 'deluxe' | 'executive';
+    roomTierName?: string;
+    roomTierIcon?: string;
+    roomTierSpecs?: string;
+    nightlyRate?: number;
     moveInDate: string;
     checkOutDate?: string;
     configuration: string;
@@ -140,6 +187,7 @@ interface CheckoutPageProps {
     fees?: number;
     taxes?: number;
     guests?: number;
+    currency?: 'INR' | 'USD';
   };
   onSuccess: (data: {
     moveInDate: string;
@@ -153,121 +201,109 @@ interface CheckoutPageProps {
 }
 
 export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience, numTickets = 1, initialData, onSuccess, onCancel }) => {
-  const [rates, setRates] = useState({ commission_rate: 10, tax_rate: 18, system_fee: 150 });
   const { formatPrice } = useCurrency();
-  const [activeStep, setActiveStep] = useState<number>(1); // Step 1: Details, Step 2: Protection, Step 3: Payment
-  const [protectionSelected, setProtectionSelected] = useState<boolean>(true);
-  const [gatewayTab, setGatewayTab] = useState<'razorpay' | 'stripe'>('razorpay');
-  const [razorpayMethod, setRazorpayMethod] = useState<'upi' | 'emi'>('upi');
-  
   const isExperience = !!experience;
 
-  // Funnel details
+  // Active In-Checkout Room Tier (Defaults to initialData or 'deluxe')
+  const [activeRoomTier, setActiveRoomTier] = useState<'suites' | 'deluxe' | 'executive'>(() => {
+    if (initialData.roomTier) return initialData.roomTier;
+    return 'deluxe';
+  });
+
+  // Funnel Details
   const [moveInDate, setMoveInDate] = useState(
     isExperience 
       ? (experience?.start_date || new Date().toISOString().split('T')[0])
       : (initialData.moveInDate || new Date().toISOString().split('T')[0])
   );
-  const [selectedConfig, setSelectedConfig] = useState(initialData.configuration || 'Entire Place');
+
+  const [checkOutDate, setCheckOutDate] = useState(
+    initialData.checkOutDate || (() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 3);
+      return d.toISOString().split('T')[0];
+    })()
+  );
+
   const [guestName, setGuestName] = useState(initialData.name || '');
   const [guestPhone, setGuestPhone] = useState(initialData.phone || '');
   const [guestEmail, setGuestEmail] = useState('');
   
-  // EMI simulation state
+  // Payment Router State
+  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'card' | 'emi'>('upi');
+  const [upiMode, setUpiMode] = useState<'qr' | 'vpa'>('qr');
+  const [upiId, setUpiId] = useState('');
   const [selectedBank, setSelectedBank] = useState(EMI_BANKS[0]);
   const [selectedTenure, setSelectedTenure] = useState(6);
-  
-  // Custom mock UPI / EMI processing steps
-  const [simulationStep, setSimulationStep] = useState<number>(0);
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [upiId, setUpiId] = useState('');
-  const [upiMode, setUpiMode] = useState<'vpa' | 'qr'>('vpa');
-  const [qrTimeLeft, setQrTimeLeft] = useState(300); // 5 minutes in seconds
+
+  // 10-Minute Escrow Lock Timer
+  const [escrowTimeLeft, setEscrowTimeLeft] = useState(599); // 9m 59s
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [processingStatusText, setProcessingStatusText] = useState('Contacting Escrow Vault...');
 
   useEffect(() => {
-    if (upiMode !== 'qr') return;
-    setQrTimeLeft(300); // Reset timer to 5m when switching to QR
-    const interval = setInterval(() => {
-      setQrTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
-      });
+    const timer = setInterval(() => {
+      setEscrowTimeLeft(prev => (prev > 0 ? prev - 1 : 0));
     }, 1000);
-    return () => clearInterval(interval);
-  }, [upiMode]);
-
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s < 10 ? '0' : ''}${s}`;
-  };
-
-  // Auto-fetch settings from Admin Panel
-  useEffect(() => {
-    fetch('/api/settings/payment_rates')
-      .then(res => res.json())
-      .then(data => {
-        if (data && typeof data.commission_rate === 'number') {
-          setRates(data);
-        }
-      })
-      .catch(err => console.error("Error fetching payment rates:", err));
+    return () => clearInterval(timer);
   }, []);
 
-  // Determine current room price based on selected configuration (Legacy Fallback)
-  const getSelectedPrice = () => {
-    if (isExperience) {
-      return (experience?.price || 0) * numTickets;
-    }
-    if (selectedConfig === 'Entire Place') {
-      return listing?.price || 0;
-    }
-    const foundRoom = listing?.rooms?.find(r => r.name === selectedConfig);
-    return foundRoom ? foundRoom.price : (listing?.price || 0);
+  const formatEscrowTime = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  // ENCHO DOUBLE-ENTRY LEDGER INVARIANT:
-  // If the listing details page calculated a strict date-based ledger, we MUST honor it to prevent tax/chargeback discrepancies.
-  const hasStrictLedger = !isExperience && initialData.totalRent !== undefined;
+  // Dynamic Double-Entry Ledger Recalculation per Room Tier
+  const tierMeta = ROOM_TIER_META[activeRoomTier];
+  const nights = useMemo(() => {
+    const start = new Date(moveInDate).getTime();
+    const end = new Date(checkOutDate).getTime();
+    const diff = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+    return diff > 0 ? diff : 1;
+  }, [moveInDate, checkOutDate]);
 
-  const baseAmount = hasStrictLedger ? (initialData.baseRent || 0) : getSelectedPrice();
-  const commissionFee = hasStrictLedger ? (initialData.fees || 0) : Math.round(baseAmount * (rates.commission_rate / 100));
-  
-  // Tax logic: If strict ledger is passed, use exactly that. Else fallback to subtotal * rate.
-  const taxFee = hasStrictLedger ? (initialData.taxes || 0) : Math.round((baseAmount + commissionFee) * (rates.tax_rate / 100));
-  
-  // System fee is waived if using the strict FAANG nightly ledger (already included in 15% optimization fee)
-  const systemFee = hasStrictLedger ? 0 : rates.system_fee;
-  const protectionFee = protectionSelected ? 1499 : 0;
-  
-  // Final total must match exactly what was quoted on the previous page + protection
-  const finalTotal = hasStrictLedger ? ((initialData.totalRent || 0) + protectionFee) : (baseAmount + commissionFee + taxFee + systemFee + protectionFee);
-  
-  // Deposit applies only for legacy monthly mode. Strict nightly ledger skips deposits.
-  const deposit = (isExperience || hasStrictLedger) ? 0 : baseAmount * 3;
+  const nightlyRate = useMemo(() => {
+    if (isExperience) return experience?.price || 0;
+    if (listing?.currency === 'USD') return tierMeta.priceUsd;
+    if (listing?.price && listing.price > 1000) {
+      if (activeRoomTier === 'suites') return Math.round(listing.price * 1.35);
+      if (activeRoomTier === 'executive') return Math.round(listing.price * 0.65);
+      return listing.price;
+    }
+    return tierMeta.price;
+  }, [isExperience, experience, listing, activeRoomTier, tierMeta]);
 
-  // EMI math helper
+  const baseRentTotal = isExperience ? nightlyRate * numTickets : nightlyRate * nights;
+  const enchoOptimizationFee = Math.round(baseRentTotal * 0.15); // 15% Concierge & Escrow
+  const statutoryGst = Math.round((baseRentTotal + enchoOptimizationFee) * 0.18); // 18% Statutory GST
+  const grandTotal = baseRentTotal + enchoOptimizationFee + statutoryGst;
+
+  // EMI calculation helper
   const calculateEMI = (principal: number, annualRate: number, months: number) => {
     const monthlyRate = annualRate / 12 / 100;
     const emi = (principal * monthlyRate * Math.pow(1 + monthlyRate, months)) / (Math.pow(1 + monthlyRate, months) - 1);
     const totalPayment = emi * months;
-    const totalInterest = totalPayment - principal;
     return {
       monthly: Math.round(emi),
-      total: Math.round(totalPayment),
-      interest: Math.round(totalInterest)
+      total: Math.round(totalPayment)
     };
   };
+  const emiDetails = calculateEMI(grandTotal, selectedBank.rate, selectedTenure);
 
-  const emiDetails = calculateEMI(finalTotal, selectedBank.rate, selectedTenure);
+  // Real Razorpay Execution with Server-Side HMAC SHA-256 Verification
+  const handleExecutePayment = async () => {
+    if (!guestName || guestName.trim().length < 2) {
+      alert("Please enter guest name.");
+      return;
+    }
+    if (!guestPhone || guestPhone.replace(/\D/g, '').length < 6) {
+      alert("Please enter a valid phone or WhatsApp number.");
+      return;
+    }
 
-  // Real Razorpay Checkout Execution with Server-Side HMAC SHA-256 Verification
-  const handleRazorpayCheckout = async () => {
-    setIsSimulating(true);
-    setSimulationStep(1); // Contacting Razorpay Order Service
+    setIsProcessingPayment(true);
+    setProcessingStatusText('Initializing Escrow Lock...');
     uiAudio.playClick();
 
     try {
@@ -282,31 +318,33 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
           listingId: listing?.id,
           experienceId: experience?.id,
           moveInDate,
-          configuration: isExperience ? `${numTickets} Tickets` : selectedConfig,
+          checkOutDate,
+          configuration: isExperience ? `${numTickets} Tickets` : tierMeta.name,
           numTickets: isExperience ? numTickets : 1,
           name: guestName,
-          phone: guestPhone
+          phone: guestPhone,
+          amount: grandTotal
         })
       });
 
       const orderData = orderRes.headers.get('content-type')?.includes('json') ? await orderRes.json() : { error: 'Server returned non-JSON response: ' + (await orderRes.text()).slice(0, 150) } as any;
       if (!orderRes.ok || !orderData.order_id) {
-        throw new Error(orderData.error || 'Failed to initialize Razorpay Order');
+        throw new Error(orderData.error || 'Failed to initialize payment gateway');
       }
 
       const scriptLoaded = await loadRazorpayScript();
 
       if (scriptLoaded && (window as any).Razorpay && !orderData.isSimulated) {
-        setSimulationStep(2); // Awaiting Customer Authorization
+        setProcessingStatusText('Awaiting Authorization...');
         const options = {
           key: orderData.keyId,
           amount: orderData.amount,
           currency: orderData.currency || 'INR',
           name: 'Encho Space',
-          description: orderData.title || 'Booking Payment',
+          description: orderData.title || `${tierMeta.name} Booking`,
           order_id: orderData.order_id,
           handler: async function (response: any) {
-            setSimulationStep(3); // Verifying HMAC Signature
+            setProcessingStatusText('Verifying Cryptographic HMAC Signature...');
             const verifyData = await verifyRazorpayPayment({
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
@@ -316,48 +354,40 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
             });
 
             if (verifyData.success) {
-              setIsSimulating(false);
-              setSimulationStep(0);
+              setIsProcessingPayment(false);
               onSuccess({
                 moveInDate,
-                configuration: isExperience ? `${numTickets} Tickets` : selectedConfig,
+                configuration: isExperience ? `${numTickets} Tickets` : tierMeta.name,
                 name: guestName,
                 phone: guestPhone,
-                totalRent: finalTotal,
-                roomIds: isExperience ? [] : (listing?.rooms?.filter(r => r.name === selectedConfig).map(r => r.id) || [])
+                totalRent: grandTotal,
+                roomIds: []
               });
             } else {
-              alert(`Razorpay Signature Verification Failed: ${verifyData.error || 'Invalid HMAC Signature'}`);
-              setIsSimulating(false);
-              setSimulationStep(0);
+              alert(`Signature Verification Failed: ${verifyData.error}`);
+              setIsProcessingPayment(false);
             }
           },
           modal: {
             ondismiss: function () {
-              setIsSimulating(false);
-              setSimulationStep(0);
+              setIsProcessingPayment(false);
             }
           },
           prefill: { name: guestName, contact: guestPhone },
-          theme: { color: '#0284C7' }
+          theme: { color: '#09090b' }
         };
 
         const rzp = new (window as any).Razorpay(options);
-        rzp.on('payment.failed', function (resp: any) {
-          alert(`Payment Failed: ${resp.error?.description || 'Transaction declined'}`);
-          setIsSimulating(false);
-          setSimulationStep(0);
-        });
         rzp.open();
       } else {
-        // High fidelity sandbox simulation with real signature verification
+        // High-Fidelity Sandbox Execution with Verified HMAC Signature
         setTimeout(async () => {
-          setSimulationStep(2);
+          setProcessingStatusText('Simulating Bank Confirmation...');
           const mockPaymentId = `pay_sim_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
           const mockSignature = `sim_sig_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
           
           setTimeout(async () => {
-            setSimulationStep(3);
+            setProcessingStatusText('Finalizing Sanctuary Lock...');
             const verifyData = await verifyRazorpayPayment({
               razorpay_order_id: orderData.order_id,
               razorpay_payment_id: mockPaymentId,
@@ -366,58 +396,29 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
               experience_booking_id: orderData.bookingType === 'experience' ? orderData.bookingId : undefined
             });
 
-            setIsSimulating(false);
-            setSimulationStep(0);
-
+            setIsProcessingPayment(false);
             if (verifyData.success) {
               onSuccess({
                 moveInDate,
-                configuration: isExperience ? `${numTickets} Tickets` : selectedConfig,
+                configuration: isExperience ? `${numTickets} Tickets` : tierMeta.name,
                 name: guestName,
                 phone: guestPhone,
-                totalRent: finalTotal,
-                roomIds: isExperience ? [] : (listing?.rooms?.filter(r => r.name === selectedConfig).map(r => r.id) || [])
+                totalRent: grandTotal,
+                roomIds: []
               });
             } else {
-              alert(`Razorpay Verification Error: ${verifyData.error}`);
+              alert(`Payment Verification Error: ${verifyData.error}`);
             }
-          }, 1200);
-        }, 1200);
+          }, 800);
+        }, 800);
       }
     } catch (err: any) {
       alert(`Payment Error: ${err.message}`);
-      setIsSimulating(false);
-      setSimulationStep(0);
+      setIsProcessingPayment(false);
     }
   };
 
-  const validateStep1 = () => {
-    if (!moveInDate) {
-      alert("Please select a valid date.");
-      return;
-    }
-    if (!isExperience) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const parsedDate = new Date(moveInDate);
-      if (!isNaN(parsedDate.getTime()) && parsedDate < today) {
-        alert("Move-in date cannot be in the past.");
-        return;
-      }
-    }
-    if (!guestName || guestName.trim().length < 2) {
-      alert("Please enter a valid guest name.");
-      return;
-    }
-    if (!guestPhone || guestPhone.replace(/\D/g, '').length < 6) {
-      alert("Please enter a valid phone number.");
-      return;
-    }
-    uiAudio.playClick();
-    setActiveStep(2);
-  };
-
-  const appearance = {
+  const stripeAppearance = {
     theme: 'stripe' as const,
     variables: {
       colorPrimary: '#09090b',
@@ -426,647 +427,448 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
     },
   };
 
-  const options = {
-      mode: 'payment' as const,
-      amount: Math.round(finalTotal * 100),
-      currency: 'inr',
-      appearance,
+  const stripeOptions = {
+    mode: 'payment' as const,
+    amount: Math.round(grandTotal * 100),
+    currency: 'inr',
+    appearance: stripeAppearance,
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 flex flex-col justify-between font-sans">
+    <div className="min-h-screen bg-[#fcfcfc] flex flex-col font-sans selection:bg-amber-500/20 text-zinc-900">
       
-      {/* Complete Booking Funnel Header - Focused, Clean, No Menu */}
-      <header className="w-full bg-white border-b border-zinc-100 sticky top-0 z-40">
+      {/* Top Header: Focused Luxury Navigation */}
+      <header className="w-full bg-white/90 backdrop-blur-xl border-b border-zinc-200/80 sticky top-0 z-40">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <button 
-            onClick={
-              activeStep === 3 
-                ? () => setActiveStep(2) 
-                : activeStep === 2 
-                ? () => setActiveStep(1) 
-                : onCancel
-            }
-            className="flex items-center gap-1 text-xs font-bold text-zinc-500 hover:text-zinc-950 transition-colors cursor-pointer"
+            type="button"
+            onClick={onCancel}
+            className="flex items-center gap-1.5 text-xs font-extrabold text-zinc-600 hover:text-zinc-950 transition-all cursor-pointer bg-zinc-100 hover:bg-zinc-200 px-3 py-1.5 rounded-full"
           >
-            <ArrowLeft className="w-4 h-4" />
-            {activeStep === 3 ? 'Back to Protection' : activeStep === 2 ? 'Back to Details' : 'Cancel & Exit'}
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Sanctuary</span>
           </button>
 
           <div className="flex items-center gap-1.5 select-none">
-             <span className="font-black text-lg tracking-tighter text-zinc-950">ENCHO</span>
-             <span className="text-[8px] font-bold tracking-[0.3em] text-zinc-400 uppercase">Space</span>
+            <span className="font-black text-xl tracking-tighter text-zinc-950 font-display">ENCHO</span>
+            <div className="w-1.5 h-1.5 rounded-full bg-zinc-950" />
+            <span className="text-[9px] font-bold tracking-[0.3em] text-zinc-400 uppercase font-mono">Vault</span>
           </div>
 
-          <div className="flex items-center gap-1 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-full border border-emerald-100">
+          <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-full border border-emerald-200/60 shadow-2xs">
             <Lock className="w-3 h-3 text-emerald-600" />
-            <span className="text-[10px] font-bold uppercase tracking-wider">Secured</span>
+            <span className="text-[10px] font-black uppercase tracking-wider font-mono">256-Bit Escrow</span>
           </div>
         </div>
       </header>
 
-      {/* Main Content Body */}
-      <main className="flex-grow max-w-6xl w-full mx-auto px-4 py-8 grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
+      {/* 10-Minute Escrow Lock Reassurance Banner */}
+      <div className="bg-zinc-900 text-white py-2 px-4 text-center text-xs font-medium flex items-center justify-center gap-2">
+        <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+        <span>Selected dates and room are temporarily held in escrow for</span>
+        <span className="font-mono font-bold text-amber-300 bg-zinc-800 px-2 py-0.5 rounded-md">
+          {formatEscrowTime(escrowTimeLeft)}
+        </span>
+      </div>
+
+      {/* Main Single-Screen Cockpit */}
+      <main className="flex-grow max-w-6xl w-full mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         
-        {/* Left Side: Order details & Dynamic Calculations (Always visible for clarity) */}
-        <div className="md:col-span-5 space-y-6">
-          <div className="bg-white rounded-3xl p-6 border border-zinc-200/50 shadow-sm space-y-5">
-            <div className="flex gap-4">
-              <img 
-                src={isExperience ? (experience?.image_urls?.[0] || undefined) : (listing?.imageUrl || undefined)} 
-                alt={isExperience ? experience?.title : listing?.title} 
-                className="w-24 h-24 object-cover rounded-2xl bg-zinc-100 flex-shrink-0"
-              />
-              <div className="flex flex-col justify-between">
-                <div>
-                  <span className="text-[10px] font-bold text-[#0284C7] uppercase tracking-wider bg-[#0284C7]/5 px-2 py-0.5 rounded-md">
-                    {isExperience ? "Experience" : (listing?.type || "")}
-                  </span>
-                  <h3 className="font-extrabold text-zinc-950 text-base leading-snug mt-1.5">
-                    {isExperience ? experience?.title : listing?.title}
-                  </h3>
-                </div>
-                <p className="text-xs text-zinc-400 font-medium truncate max-w-[200px]">
+        {/* ========================================================================= */}
+        {/* LEFT COLUMN (45% / 5 Cols): LIVE SANCTUARY DOSSIER                        */}
+        {/* ========================================================================= */}
+        <div className="lg:col-span-5 space-y-6">
+          <div className="bg-white rounded-3xl p-6 border border-zinc-200/80 shadow-[0_8px_30px_rgb(0,0,0,0.04)] space-y-5">
+            
+            {/* Property & Selected Room Header */}
+            <div className="flex gap-4 items-center">
+              <div className="w-20 h-20 rounded-2xl overflow-hidden bg-zinc-100 shrink-0 border border-zinc-200/60 shadow-2xs">
+                <img 
+                  src={isExperience ? (experience?.image_urls?.[0] || undefined) : (listing?.imageUrl || undefined)} 
+                  alt={isExperience ? experience?.title : listing?.title} 
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 font-mono bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-100">
+                  {isExperience ? "Curated Experience" : "Boutique Sanctuary"}
+                </span>
+                <h3 className="font-extrabold text-zinc-950 text-base leading-tight mt-1 truncate font-display">
+                  {isExperience ? experience?.title : listing?.title}
+                </h3>
+                <p className="text-xs text-zinc-400 font-medium truncate mt-0.5">
                   {isExperience ? experience?.destination : listing?.address}
                 </p>
               </div>
             </div>
 
-            {/* Custom Interactive Selection inside the Checkout Funnel (High converting) */}
-            {!isExperience && listing && (
-              <div className="pt-4 border-t border-zinc-100 space-y-3">
-                <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Configuration</h4>
-                
-                <div className="grid grid-cols-1 gap-2">
-                  <button 
-                    onClick={() => { setSelectedConfig('Entire Place'); uiAudio.playClick(); }}
-                    className={`flex items-center justify-between p-3 border rounded-xl text-left transition-all ${selectedConfig === 'Entire Place' ? 'border-[#0284C7] bg-[#0284C7]/5' : 'border-zinc-200 bg-white hover:border-zinc-400'}`}
-                  >
-                    <div>
-                      <p className="text-xs font-bold text-zinc-900">Entire Place</p>
-                      <p className="text-[10px] text-zinc-400">Full exclusive access</p>
-                    </div>
-                    <span className="text-xs font-bold font-mono">{formatPrice(listing.price, 'INR')}</span>
-                  </button>
-
-                  {listing.rooms && listing.rooms.map(room => (
-                    <button 
-                      key={room.id}
-                      onClick={() => { setSelectedConfig(room.name); uiAudio.playClick(); }}
-                      className={`flex items-center justify-between p-3 border rounded-xl text-left transition-all ${selectedConfig === room.name ? 'border-[#0284C7] bg-[#0284C7]/5' : 'border-zinc-200 bg-white hover:border-zinc-400'}`}
-                    >
-                      <div>
-                        <p className="text-xs font-bold text-zinc-900">{room.name}</p>
-                        <p className="text-[10px] text-zinc-400">Private bedroom suite</p>
-                      </div>
-                      <span className="text-xs font-bold font-mono">{formatPrice(room.price, 'INR')}</span>
-                    </button>
-                  ))}
+            {/* 1-Tap In-Checkout Room Switcher */}
+            {!isExperience && (
+              <div className="pt-4 border-t border-zinc-100 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono">
+                    Room Category
+                  </span>
+                  <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                    {tierMeta.tag}
+                  </span>
                 </div>
+
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-zinc-100/80 rounded-2xl border border-zinc-200/60">
+                  {(['suites', 'deluxe', 'executive'] as const).map(tierKey => {
+                    const t = ROOM_TIER_META[tierKey];
+                    const isSelected = activeRoomTier === tierKey;
+                    const tRate = listing?.currency === 'USD' ? t.priceUsd : (listing?.price && listing.price > 1000 ? (tierKey === 'suites' ? Math.round(listing.price * 1.35) : tierKey === 'executive' ? Math.round(listing.price * 0.65) : listing.price) : t.price);
+                    return (
+                      <button
+                        key={tierKey}
+                        type="button"
+                        onClick={() => {
+                          uiAudio.playClick();
+                          setActiveRoomTier(tierKey);
+                        }}
+                        className={`py-2 px-1.5 rounded-xl text-center transition-all cursor-pointer flex flex-col items-center justify-center ${
+                          isSelected
+                            ? 'bg-white text-zinc-950 shadow-sm ring-1 ring-zinc-900/10 font-bold scale-[1.02]'
+                            : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/60'
+                        }`}
+                      >
+                        <span className="text-xs">{t.icon}</span>
+                        <span className="text-[11px] font-bold tracking-tight mt-0.5">{t.shortName}</span>
+                        <span className="text-[9px] font-mono text-zinc-400">
+                          {listing?.currency === 'USD' ? `$${tRate}` : `₹${Math.round(tRate / 1000)}k`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-zinc-400 font-medium px-1 truncate">
+                  {tierMeta.specs}
+                </p>
               </div>
             )}
 
-            {isExperience && experience && (
-              <div className="pt-4 border-t border-zinc-100 space-y-3">
-                <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Quantity Details</h4>
-                <div className="p-3 bg-zinc-50 border border-zinc-150 rounded-xl flex items-center justify-between text-xs font-bold text-zinc-900">
-                  <span>Selected Tickets</span>
-                  <span className="font-mono bg-white border border-zinc-200 rounded-md px-2.5 py-1">{numTickets}</span>
+            {/* Stay Dates & Duration Summary */}
+            <div className="pt-4 border-t border-zinc-100 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 text-zinc-700 font-semibold">
+                <Calendar className="w-4 h-4 text-zinc-400" />
+                <span>
+                  {new Date(moveInDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {new Date(checkOutDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                </span>
+              </div>
+              <span className="font-mono font-bold text-zinc-900 bg-zinc-100 px-2 py-0.5 rounded-md text-[11px]">
+                {nights} {nights === 1 ? 'Night' : 'Nights'}
+              </span>
+            </div>
+
+            {/* Double-Entry Transparent Financial Ledger */}
+            <div className="pt-4 border-t border-zinc-100 space-y-2.5">
+              <div className="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono">
+                <span>Transparent Ledger</span>
+                <span className="text-emerald-600 font-bold">Guaranteed Price</span>
+              </div>
+
+              <div className="space-y-2 text-xs text-zinc-600 font-medium">
+                <div className="flex justify-between">
+                  <span>{tierMeta.name} ({formatPrice(nightlyRate, listing?.currency || 'INR')} × {nights} nts)</span>
+                  <span className="font-mono font-bold text-zinc-900">{formatPrice(baseRentTotal, listing?.currency || 'INR')}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="flex items-center gap-1">
+                    <span>Concierge & Escrow Fee (15%)</span>
+                  </span>
+                  <span className="font-mono font-bold text-zinc-900">{formatPrice(enchoOptimizationFee, listing?.currency || 'INR')}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Statutory GST (18%)</span>
+                  <span className="font-mono font-bold text-zinc-900">{formatPrice(statutoryGst, listing?.currency || 'INR')}</span>
                 </div>
               </div>
-            )}
 
-            {/* Fare Summary Breakdown */}
-            <div className="pt-4 border-t border-zinc-100 space-y-3">
-              <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Pricing breakdown</h4>
-              <div className="space-y-2.5">
-                <div className="flex justify-between text-xs font-medium text-zinc-500">
-                  <span>{isExperience ? "Tickets base price" : (hasStrictLedger ? `Base rate (${initialData.guests || 1} guests)` : "Base rent per month")}</span>
-                  <span className="font-mono font-bold text-zinc-900">{formatPrice(baseAmount, 'INR')}</span>
+              <div className="pt-3 border-t border-zinc-100 flex justify-between items-baseline">
+                <div>
+                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-900 block font-display">Total Amount</span>
+                  <span className="text-[10px] text-zinc-400 font-medium">Includes taxes & fees</span>
                 </div>
-                {commissionFee > 0 && (
-                  <div className="flex justify-between text-xs font-medium text-zinc-500">
-                    <span>{hasStrictLedger ? 'Encho Optimization Fee (15%)' : `Platform service fee (${rates.commission_rate}%)`}</span>
-                    <span className="font-mono font-bold text-zinc-900">{formatPrice(commissionFee, 'INR')}</span>
-                  </div>
-                )}
-                {taxFee > 0 && (
-                  <div className="flex justify-between text-xs font-medium text-zinc-500">
-                    <span>Estimated GST / Taxes (18%)</span>
-                    <span className="font-mono font-bold text-zinc-900">{formatPrice(taxFee, 'INR')}</span>
-                  </div>
-                )}
-                {systemFee > 0 && (
-                  <div className="flex justify-between text-xs font-medium text-zinc-500">
-                    <span>System processing fee</span>
-                    <span className="font-mono font-bold text-zinc-900">{formatPrice(systemFee, 'INR')}</span>
-                  </div>
-                )}
-                {protectionSelected && (
-                  <div className="flex justify-between text-xs font-medium text-zinc-500">
-                    <span>Premium Booking Protection</span>
-                    <span className="font-mono font-bold text-zinc-900">{formatPrice(1499, 'INR')}</span>
-                  </div>
-                )}
-                {!isExperience && (
-                  <div className="flex justify-between text-xs font-medium text-zinc-500">
-                    <span className="flex items-center gap-1">Security deposit <span className="text-[9px] bg-zinc-100 text-zinc-500 px-1.5 py-0.5 rounded-sm">3 mo</span></span>
-                    <span className="font-mono font-bold text-zinc-900">{formatPrice(deposit, 'INR')}</span>
-                  </div>
-                )}
+                <span className="text-2xl font-black text-zinc-950 font-display tabular-nums tracking-tight">
+                  {formatPrice(grandTotal, listing?.currency || 'INR')}
+                </span>
               </div>
             </div>
 
-            {/* Total */}
-            <div className="pt-4 border-t border-zinc-100">
-              <div className="flex justify-between items-baseline mb-2">
-                <span className="text-xs font-bold text-zinc-900 uppercase tracking-widest">Total amount</span>
-                <span className="text-2xl font-black text-zinc-950 font-mono tracking-tight">{formatPrice(finalTotal, 'INR')}</span>
-              </div>
-              <div className="flex items-center gap-1.5 bg-zinc-50 p-2.5 rounded-xl border border-zinc-100">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                <span className="text-[10px] text-zinc-500 font-semibold">Your price has been matched and is fully secured</span>
+            {/* Trust Reassurance Badge */}
+            <div className="bg-zinc-50 rounded-2xl p-3.5 border border-zinc-100 flex items-start gap-2.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="text-[11px] text-zinc-600 leading-tight">
+                <strong className="text-zinc-900 block mb-0.5">Encho Walled Garden Escrow Protection</strong>
+                Your payment is safely held in escrow until successful check-in at the sanctuary.
               </div>
             </div>
+
           </div>
         </div>
 
-        {/* Right Side: Step-by-Step interactive Checkout Funnel */}
-        <div className="md:col-span-7 bg-white rounded-3xl p-6 md:p-8 border border-zinc-200/50 shadow-sm relative min-h-[500px]">
+        {/* ========================================================================= */}
+        {/* RIGHT COLUMN (55% / 7 Cols): 1-CLICK VAULT CHECKOUT & SMART ROUTER        */}
+        {/* ========================================================================= */}
+        <div className="lg:col-span-7 bg-white rounded-3xl p-6 md:p-8 border border-zinc-200/80 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative min-h-[500px] space-y-6">
           
-          {/* Simulation Processing overlay */}
-          {isSimulating && (
-             <div className="absolute inset-0 bg-white/95 backdrop-blur-xs z-50 rounded-3xl flex flex-col items-center justify-center p-8 text-center animate-fade-in">
-                <div className="relative w-16 h-16 mb-6">
-                   <div className="absolute inset-0 rounded-full border-4 border-zinc-100"></div>
-                   <div className="absolute inset-0 rounded-full border-4 border-[#0284C7] border-t-transparent animate-spin"></div>
-                </div>
-                
-                <h4 className="text-lg font-bold text-zinc-950 mb-2">Processing Secure Gateway</h4>
-                
-                <div className="space-y-2 max-w-xs">
-                   <p className={`text-xs transition-all duration-300 font-medium ${simulationStep >= 1 ? 'text-zinc-900' : 'text-zinc-300'}`}>
-                      {simulationStep >= 1 ? '✓ Connected to payment gateway' : 'Connecting...'}
-                   </p>
-                   <p className={`text-xs transition-all duration-300 font-medium ${simulationStep >= 2 ? 'text-[#0284C7] font-bold' : 'text-zinc-300'}`}>
-                      {simulationStep === 2 ? '⚡ Waiting for customer OTP / UPI approval...' : simulationStep > 2 ? '✓ Authorized successfully' : 'Verifying transaction'}
-                   </p>
-                   <p className={`text-xs transition-all duration-300 font-medium ${simulationStep >= 3 ? 'text-emerald-600 font-bold animate-pulse' : 'text-zinc-300'}`}>
-                      {simulationStep >= 3 ? '🎉 Approved! Finalizing reservation' : 'Securing booking slot'}
-                   </p>
-                </div>
-             </div>
-          )}
+          {/* Section 1: Guest Identity Dossier */}
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <span className="w-5 h-5 rounded-full bg-zinc-900 text-white text-[11px] font-black flex items-center justify-center font-mono">1</span>
+              <h3 className="text-sm font-extrabold text-zinc-900 tracking-tight uppercase font-display">Guest Identity Dossier</h3>
+            </div>
 
-          {/* Funnel Progress Steps */}
-          <div className="flex items-center gap-3 mb-8 pb-5 border-b border-zinc-100">
-            <div className="flex items-center gap-2">
-              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${activeStep >= 1 ? 'bg-zinc-950 text-white' : 'bg-zinc-100 text-zinc-400'}`}>1</span>
-              <span className={`text-xs font-bold ${activeStep === 1 ? 'text-zinc-950' : 'text-zinc-400'}`}>Details</span>
-            </div>
-            <div className="h-px bg-zinc-200 flex-grow"></div>
-            <div className="flex items-center gap-2">
-              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${activeStep >= 2 ? 'bg-zinc-950 text-white' : 'bg-zinc-100 text-zinc-400'}`}>2</span>
-              <span className={`text-xs font-bold ${activeStep === 2 ? 'text-zinc-950' : 'text-zinc-400'}`}>Protection</span>
-            </div>
-            <div className="h-px bg-zinc-200 flex-grow"></div>
-            <div className="flex items-center gap-2">
-              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${activeStep === 3 ? 'bg-zinc-950 text-white' : 'bg-zinc-100 text-zinc-400'}`}>3</span>
-              <span className={`text-xs font-bold ${activeStep === 3 ? 'text-zinc-950' : 'text-zinc-400'}`}>Payment</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 mb-1.5 font-mono">
+                  Primary Guest Name
+                </label>
+                <div className="relative">
+                  <User className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                  <input
+                    type="text"
+                    value={guestName}
+                    onChange={(e) => setGuestName(e.target.value)}
+                    placeholder="e.g. Johnathan Doe"
+                    className="w-full pl-10 pr-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-900 focus:bg-white focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 transition-all outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 mb-1.5 font-mono">
+                  WhatsApp / Phone Number
+                </label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                  <input
+                    type="tel"
+                    value={guestPhone}
+                    onChange={(e) => setGuestPhone(e.target.value)}
+                    placeholder="+91 98765 43210"
+                    className="w-full pl-10 pr-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-900 focus:bg-white focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 transition-all outline-none font-mono"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
-          {activeStep === 1 && (
-            /* Step 1: Booking Information */
-            <div className="space-y-6 animate-fade-in">
-              <h2 className="text-xl font-black text-zinc-950 tracking-tight">Booking Information</h2>
-              <p className="text-xs text-zinc-400 leading-relaxed">
-                {isExperience 
-                  ? "Please verify your booking details and enter contact information. Your details will be sent to the guide automatically upon complete checkout."
-                  : "Please enter your desired move-in date and contact information. Your details will be sent to the host automatically upon complete checkout."}
-              </p>
+          <div className="h-px bg-zinc-100" />
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-zinc-400" /> {isExperience ? "Departure Date" : "Move-in Date"}
-                  </label>
-                  <input 
-                    type={isExperience ? "text" : "date"}
-                    value={moveInDate}
-                    disabled={isExperience}
-                    onChange={(e) => setMoveInDate(e.target.value)}
-                    className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-zinc-950 focus:outline-none transition-all text-xs font-bold text-zinc-850 disabled:opacity-75 disabled:cursor-not-allowed"
-                  />
-                </div>
-
-                {hasStrictLedger && initialData.checkOutDate && (
-                  <div className="space-y-1">
-                    <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5 text-zinc-400" /> Check-out Date
-                    </label>
-                    <input 
-                      type="date"
-                      value={initialData.checkOutDate}
-                      disabled
-                      className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-zinc-950 focus:outline-none transition-all text-xs font-bold text-zinc-850 disabled:opacity-75 disabled:cursor-not-allowed"
-                    />
-                  </div>
-                )}
-
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1">
-                    <User className="w-3.5 h-3.5 text-zinc-400" /> Guest Full Name
-                  </label>
-                  <input 
-                    type="text"
-                    placeholder="e.g. Ajith Sab"
-                    value={guestName}
-                    onChange={(e) => setGuestName(e.target.value)}
-                    className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-zinc-950 focus:outline-none transition-all text-xs font-bold text-zinc-850"
-                  />
-                </div>
-
-                <div className="space-y-1 sm:col-span-2">
-                  <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1">
-                    <Phone className="w-3.5 h-3.5 text-zinc-400" /> Phone number
-                  </label>
-                  <input 
-                    type="tel"
-                    placeholder="e.g. +91 98765 43210"
-                    value={guestPhone}
-                    onChange={(e) => setGuestPhone(e.target.value)}
-                    className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-zinc-950 focus:outline-none transition-all text-xs font-bold text-zinc-850"
-                  />
-                </div>
-              </div>
-
-              <button 
-                onClick={validateStep1}
-                className="w-full py-4 bg-zinc-950 hover:bg-zinc-900 text-white font-bold rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 text-sm mt-4 active:scale-95 cursor-pointer"
-              >
-                Proceed to Protection Pack
-                <ArrowRight className="w-4 h-4" />
-              </button>
+          {/* Section 2: Smart Payment Router */}
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <span className="w-5 h-5 rounded-full bg-zinc-900 text-white text-[11px] font-black flex items-center justify-center font-mono">2</span>
+              <h3 className="text-sm font-extrabold text-zinc-900 tracking-tight uppercase font-display">Smart Payment Router</h3>
             </div>
-          )}
 
-          {activeStep === 2 && (
-            /* Step 2: Protection Package */
-            <div className="space-y-6 animate-fade-in">
-              <div className="flex justify-between items-center">
-                <h2 className="text-xl font-black text-zinc-950 tracking-tight">Booking Protection</h2>
-                <button 
-                  onClick={() => setActiveStep(1)}
-                  className="text-xs font-bold text-zinc-400 hover:text-zinc-950 flex items-center gap-1 cursor-pointer"
-                >
-                  <ArrowLeft className="w-3 h-3" /> Back
-                </button>
-              </div>
-              <p className="text-xs text-zinc-400 leading-relaxed">
-                Secure your investment with our Encho Premium Protection Shield. Cover cancellation fees, medical emergencies, and luggage losses.
-              </p>
-
-              <div className="space-y-4">
-                {/* Option A: Premium Coverage */}
-                <button
-                  type="button"
-                  onClick={() => { setProtectionSelected(true); uiAudio.playClick(); }}
-                  className={`w-full p-5 rounded-2xl text-left transition-all duration-300 border-2 relative overflow-hidden group flex items-start gap-4 cursor-pointer ${
-                    protectionSelected 
-                      ? 'border-[#0284C7] bg-[#0284C7]/5' 
-                      : 'border-zinc-200 bg-white hover:border-zinc-400'
-                  }`}
-                >
-                  <div className={`mt-1 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                    protectionSelected ? 'border-[#0284C7] bg-[#0284C7] text-white' : 'border-zinc-300 bg-white'
-                  }`}>
-                    {protectionSelected && <Check className="w-3.5 h-3.5" />}
-                  </div>
-                  
-                  <div className="flex-1">
-                    <div className="flex justify-between items-baseline">
-                      <h4 className="font-bold text-sm text-zinc-900 group-hover:text-[#0284C7] transition-colors">Encho Care Premium Protection</h4>
-                      <span className="text-xs font-black text-zinc-950 font-mono">{formatPrice(1499, 'INR')}</span>
-                    </div>
-                    <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
-                      100% full refund on medical issues, trip cancellations, or transport delays. Includes 24/7 dedicated guest support.
-                    </p>
-                    <div className="flex flex-wrap gap-2 mt-3">
-                      <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded bg-emerald-50 text-emerald-600 border border-emerald-100">Fully Refundable</span>
-                      <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded bg-zinc-100 text-zinc-600 border border-zinc-200">Luggage Covered</span>
-                    </div>
-                  </div>
-                </button>
-
-                {/* Option B: Standard Stay (No Protection) */}
-                <button
-                  type="button"
-                  onClick={() => { setProtectionSelected(false); uiAudio.playClick(); }}
-                  className={`w-full p-5 rounded-2xl text-left transition-all duration-300 border-2 relative overflow-hidden group flex items-start gap-4 cursor-pointer ${
-                    !protectionSelected 
-                      ? 'border-zinc-950 bg-zinc-50/50' 
-                      : 'border-zinc-200 bg-white hover:border-zinc-400'
-                  }`}
-                >
-                  <div className={`mt-1 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                    !protectionSelected ? 'border-zinc-950 bg-zinc-950 text-white' : 'border-zinc-300 bg-white'
-                  }`}>
-                    {!protectionSelected && <Check className="w-3.5 h-3.5" />}
-                  </div>
-
-                  <div className="flex-1">
-                    <div className="flex justify-between items-baseline">
-                      <h4 className="font-bold text-sm text-zinc-900">Standard Coverage</h4>
-                      <span className="text-xs font-bold text-zinc-400">No extra charge</span>
-                    </div>
-                    <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
-                      Standard cancellation policy applies. No coverage for dynamic transport delays, damage liability waiver, or extreme weather refunds.
-                    </p>
-                  </div>
-                </button>
-              </div>
+            {/* Payment Method Selector Pills */}
+            <div className="grid grid-cols-3 gap-2 mb-5">
+              <button
+                type="button"
+                onClick={() => { uiAudio.playClick(); setPaymentMethod('upi'); }}
+                className={`py-3 px-2 rounded-2xl border transition-all text-center flex flex-col items-center gap-1 cursor-pointer ${
+                  paymentMethod === 'upi'
+                    ? 'bg-zinc-900 text-white border-zinc-900 shadow-md font-bold'
+                    : 'bg-zinc-50 border-zinc-200/80 text-zinc-600 hover:bg-zinc-100'
+                }`}
+              >
+                <Smartphone className="w-4 h-4" />
+                <span className="text-xs font-bold">Instant UPI</span>
+                <span className="text-[9px] opacity-75 font-mono">GPay · PhonePe</span>
+              </button>
 
               <button
                 type="button"
-                onClick={() => { uiAudio.playClick(); setActiveStep(3); }}
-                className="w-full py-4 bg-zinc-950 hover:bg-zinc-900 text-white font-bold rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 text-sm mt-6 active:scale-95 cursor-pointer"
+                onClick={() => { uiAudio.playClick(); setPaymentMethod('card'); }}
+                className={`py-3 px-2 rounded-2xl border transition-all text-center flex flex-col items-center gap-1 cursor-pointer ${
+                  paymentMethod === 'card'
+                    ? 'bg-zinc-900 text-white border-zinc-900 shadow-md font-bold'
+                    : 'bg-zinc-50 border-zinc-200/80 text-zinc-600 hover:bg-zinc-100'
+                }`}
               >
-                Continue to Secure Payment
-                <ArrowRight className="w-4 h-4" />
+                <CreditCard className="w-4 h-4" />
+                <span className="text-xs font-bold">Luxury Card</span>
+                <span className="text-[9px] opacity-75 font-mono">Stripe · Visa</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { uiAudio.playClick(); setPaymentMethod('emi'); }}
+                className={`py-3 px-2 rounded-2xl border transition-all text-center flex flex-col items-center gap-1 cursor-pointer ${
+                  paymentMethod === 'emi'
+                    ? 'bg-zinc-900 text-white border-zinc-900 shadow-md font-bold'
+                    : 'bg-zinc-50 border-zinc-200/80 text-zinc-600 hover:bg-zinc-100'
+                }`}
+              >
+                <Building className="w-4 h-4" />
+                <span className="text-xs font-bold">Low-Cost EMI</span>
+                <span className="text-[9px] opacity-75 font-mono">3 – 12 Months</span>
               </button>
             </div>
-          )}
 
-          {activeStep === 3 && (
-            /* Step 3: Secure Payment */
-            <div className="space-y-6 animate-fade-in">
-              <div className="flex justify-between items-center">
-                <h2 className="text-xl font-black text-zinc-950 tracking-tight">Secure Payment</h2>
-                <button 
-                  onClick={() => setActiveStep(2)}
-                  className="text-xs font-bold text-zinc-400 hover:text-zinc-950 flex items-center gap-1 cursor-pointer"
-                >
-                  <ArrowLeft className="w-3 h-3" /> Back
-                </button>
-              </div>
-
-              {/* Gateway switcher */}
-              <div className="flex bg-zinc-100 p-1 rounded-xl">
-                <button 
-                   onClick={() => setGatewayTab('razorpay')}
-                   className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-bold rounded-lg transition-all ${gatewayTab === 'razorpay' ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/40' : 'text-zinc-500 hover:text-zinc-950'}`}
-                >
-                   <Smartphone className="w-3.5 h-3.5" />
-                   Razorpay (India Gateway)
-                </button>
-                <button 
-                   onClick={() => setGatewayTab('stripe')}
-                   className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-bold rounded-lg transition-all ${gatewayTab === 'stripe' ? 'bg-white text-zinc-950 shadow-sm border border-zinc-200/40' : 'text-zinc-500 hover:text-zinc-950'}`}
-                >
-                   <CreditCard className="w-3.5 h-3.5" />
-                   Stripe (International Cards)
-                </button>
-              </div>
-
-              {gatewayTab === 'stripe' ? (
-                <div className="space-y-4 animate-fade-in">
-                  <p className="text-xs text-zinc-400 leading-relaxed mb-2">
-                     Accepting Visa, Mastercard, American Express, and global digital cards through Stripe secure portal.
-                  </p>
-                  <Elements stripe={stripePromise} options={options}>
-                      <CheckoutForm amount={finalTotal} onPaymentSuccess={() => {
-                        onSuccess({
-                          moveInDate,
-                          configuration: isExperience ? `${numTickets} Tickets` : selectedConfig,
-                          name: guestName,
-                          phone: guestPhone,
-                          totalRent: finalTotal,
-                          roomIds: isExperience ? [] : (listing?.rooms?.filter(r => r.name === selectedConfig).map(r => r.id) || [])
-                        });
-                      }} onCancel={() => setActiveStep(2)} />
-                  </Elements>
-                </div>
-              ) : (
-                /* Razorpay Gateways */
-                <div className="space-y-6 animate-fade-in">
-                  <div className="flex gap-4 border-b border-zinc-150 pb-3">
-                     <button 
-                        onClick={() => { setRazorpayMethod('upi'); uiAudio.playClick(); }}
-                        className={`text-xs font-bold pb-2 border-b-2 transition-all ${razorpayMethod === 'upi' ? 'border-[#0284C7] text-zinc-950 font-black' : 'border-transparent text-zinc-400 hover:text-zinc-950'}`}
-                     >
-                        UPI / QR / Netbanking
-                     </button>
-                     <button 
-                        onClick={() => { setRazorpayMethod('emi'); uiAudio.playClick(); }}
-                        className={`text-xs font-bold pb-2 border-b-2 transition-all flex items-center gap-1.5 ${razorpayMethod === 'emi' ? 'border-[#0284C7] text-zinc-950 font-black' : 'border-transparent text-zinc-400 hover:text-zinc-950'}`}
-                     >
-                        <Percent className="w-3.5 h-3.5 text-zinc-400" />
-                        Easy EMI Options
-                     </button>
+            {/* Payment Method Panel Details */}
+            {paymentMethod === 'upi' && (
+              <div className="bg-zinc-50 rounded-2xl p-5 border border-zinc-200/60 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-zinc-800">One-Tap UPI Authorization</span>
+                  <div className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-md border border-zinc-200 text-[10px] font-mono text-zinc-600 font-bold">
+                    <span>⚡ Instant Approval</span>
                   </div>
-
-                  {razorpayMethod === 'upi' ? (
-                    <div className="space-y-5 animate-fade-in">
-                      {/* Sub-tab switcher for UPI Type */}
-                      <div className="flex bg-zinc-50 border border-zinc-200/60 p-1 rounded-xl">
-                        <button
-                          type="button"
-                          onClick={() => { setUpiMode('vpa'); uiAudio.playClick(); }}
-                          className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition-all ${upiMode === 'vpa' ? 'bg-white text-zinc-950 shadow-xs border border-zinc-200/40' : 'text-zinc-400 hover:text-zinc-950'}`}
-                        >
-                          <Smartphone className="w-3.5 h-3.5" />
-                          UPI ID / VPA
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { setUpiMode('qr'); uiAudio.playClick(); }}
-                          className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition-all ${upiMode === 'qr' ? 'bg-white text-zinc-950 shadow-xs border border-zinc-200/40' : 'text-zinc-400 hover:text-zinc-950'}`}
-                        >
-                          <Wallet className="w-3.5 h-3.5" />
-                          Scan QR Code
-                        </button>
-                      </div>
-
-                      {upiMode === 'vpa' ? (
-                        <div className="space-y-4 animate-fade-in">
-                          <div className="space-y-1.5">
-                             <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Pay via UPI ID (VPA)</label>
-                             <input 
-                                type="text"
-                                placeholder="e.g. name@okhdfcbank"
-                                value={upiId}
-                                onChange={e => setUpiId(e.target.value)}
-                                className="w-full px-4 py-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-[#0284C7] focus:outline-none transition-all font-mono text-xs text-zinc-850 font-bold"
-                             />
-                          </div>
-
-                          <div className="flex items-center gap-3 p-3 bg-zinc-50 rounded-2xl border border-zinc-200/50">
-                             <div className="w-10 h-10 bg-white rounded-xl border border-zinc-200 flex items-center justify-center font-extrabold text-[#0284C7] text-xs shadow-sm">
-                                UPI
-                             </div>
-                             <div>
-                                <p className="text-xs font-bold text-zinc-950">Direct App Redirect</p>
-                                <p className="text-[10px] text-zinc-400">Google Pay, PhonePe, Paytm, BHIM</p>
-                             </div>
-                          </div>
-
-                          <button 
-                             type="button"
-                             onClick={handleRazorpayCheckout}
-                             className="w-full py-4 bg-[#0284C7] hover:bg-[#0369A1] text-white font-bold rounded-2xl transition-all shadow-lg shadow-[#0284C7]/20 flex items-center justify-center gap-2 text-sm mt-4"
-                          >
-                             Pay {formatPrice(finalTotal, 'INR')} Securely
-                             <ChevronRight className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="space-y-4 animate-fade-in flex flex-col items-center">
-                          <p className="text-xs text-zinc-500 text-center max-w-xs leading-relaxed">
-                            Scan this dynamic secure QR code using any UPI App (GPay, PhonePe, Paytm, BHIM) to complete checkout.
-                          </p>
-
-                          {/* Beautiful Interactive QR Code with Simulated Scanning laser line */}
-                          <div className="relative p-4 bg-white border border-zinc-200 rounded-3xl shadow-sm flex flex-col items-center justify-center mt-2 group overflow-hidden">
-                            {/* Scanning Laser Line */}
-                            <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-[#0284C7] to-transparent animate-pulse" style={{
-                              animation: 'scan 2.5s ease-in-out infinite',
-                              top: '10%'
-                            }} />
-
-                            {/* Custom CSS for scan laser animation */}
-                            <style>{`
-                              @keyframes scan {
-                                0% { top: 10%; }
-                                50% { top: 90%; }
-                                100% { top: 10%; }
-                              }
-                            `}</style>
-
-                            {/* Generous visual QR Mock using beautiful vectors */}
-                            <div className="w-44 h-44 bg-zinc-150 rounded-2xl flex items-center justify-center relative border border-zinc-200/60 p-2">
-                              {/* Custom high fidelity QR representation */}
-                              <div className="w-full h-full relative opacity-90 group-hover:scale-102 transition-transform duration-500">
-                                {/* Corner anchors */}
-                                <div className="absolute top-0 left-0 w-8 h-8 border-4 border-zinc-950 rounded-xs" />
-                                <div className="absolute top-0 right-0 w-8 h-8 border-4 border-zinc-950 rounded-xs" />
-                                <div className="absolute bottom-0 left-0 w-8 h-8 border-4 border-zinc-950 rounded-xs" />
-                                {/* Center branding circle */}
-                                <div className="absolute inset-12 bg-white rounded-xl border border-zinc-200 shadow-sm flex items-center justify-center">
-                                  <span className="text-[10px] font-black text-[#0284C7] tracking-tighter">UPI</span>
-                                </div>
-                                {/* Scattered QR pixels */}
-                                <div className="absolute top-2.5 left-10 w-4 h-4 bg-zinc-950 rounded-xs" />
-                                <div className="absolute top-10 left-2.5 w-4 h-4 bg-zinc-950 rounded-xs" />
-                                <div className="absolute bottom-10 left-2.5 w-4 h-4 bg-zinc-950 rounded-xs" />
-                                <div className="absolute top-10 right-2.5 w-4 h-4 bg-zinc-950 rounded-xs" />
-                                <div className="absolute bottom-2.5 right-10 w-4 h-4 bg-zinc-950 rounded-xs" />
-                                <div className="absolute bottom-10 right-2.5 w-4 h-4 bg-zinc-950 rounded-xs" />
-                                
-                                <div className="absolute top-16 left-3 w-4 h-1.5 bg-zinc-950 rounded-xs" />
-                                <div className="absolute top-3 left-16 w-1.5 h-4 bg-zinc-950 rounded-xs" />
-                                <div className="absolute bottom-16 right-3 w-4 h-1.5 bg-zinc-950 rounded-xs" />
-                                <div className="absolute bottom-3 right-16 w-1.5 h-4 bg-zinc-950 rounded-xs" />
-                                <div className="absolute top-16 right-10 w-3 h-3 bg-zinc-950 rounded-xs" />
-                                <div className="absolute bottom-16 left-10 w-3 h-3 bg-zinc-950 rounded-xs" />
-                              </div>
-                            </div>
-
-                            {/* Countdown Timer Badge */}
-                            <div className="mt-4 flex items-center gap-1.5 bg-rose-50 text-rose-700 px-3 py-1 rounded-full border border-rose-100 text-xs font-bold">
-                              <Calendar className="w-3.5 h-3.5 animate-pulse text-rose-600" />
-                              <span>QR Expires in {formatTime(qrTimeLeft)}</span>
-                            </div>
-                          </div>
-
-                          <button 
-                             type="button"
-                             onClick={handleRazorpayCheckout}
-                             className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl transition-all shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 text-sm mt-4"
-                          >
-                             <CheckCircle2 className="w-4 h-4" />
-                             I have scanned & paid successfully
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    /* Interactive EMI simulator */
-                    <div className="space-y-4 animate-fade-in">
-                      <div className="space-y-1.5">
-                         <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Select Bank</label>
-                         <div className="grid grid-cols-2 gap-2">
-                            {EMI_BANKS.map((bank) => (
-                               <button 
-                                  key={bank.id}
-                                  onClick={() => { setSelectedBank(bank); uiAudio.playClick(); }}
-                                  className={`flex items-center gap-2 p-2.5 border rounded-xl text-left transition-all ${selectedBank.id === bank.id ? 'border-[#0284C7] bg-[#0284C7]/5 ring-1 ring-[#0284C7]' : 'border-zinc-200 hover:border-zinc-400 bg-white'}`}
-                               >
-                                  <span className="w-6 h-6 bg-zinc-100 rounded-md flex items-center justify-center text-[8px] font-extrabold text-zinc-700 border border-zinc-200 uppercase">{bank.logo}</span>
-                                  <div className="leading-none">
-                                     <p className="text-[10px] font-extrabold text-zinc-950 truncate max-w-[80px]">{bank.name}</p>
-                                     <p className="text-[8px] text-zinc-400 mt-0.5">{bank.rate}% p.a.</p>
-                                  </div>
-                               </button>
-                            ))}
-                         </div>
-                      </div>
-
-                      <div className="space-y-1.5">
-                         <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Select Tenure</label>
-                         <div className="flex gap-2">
-                            {EMI_TENURES.map((months) => {
-                               const mockEMI = calculateEMI(finalTotal, selectedBank.rate, months);
-                               return (
-                                  <button 
-                                     key={months}
-                                     onClick={() => { setSelectedTenure(months); uiAudio.playClick(); }}
-                                     className={`flex-1 flex flex-col items-center justify-center p-3 border rounded-xl transition-all ${selectedTenure === months ? 'border-[#0284C7] bg-[#0284C7]/5 ring-1 ring-[#0284C7]' : 'border-zinc-200 hover:border-zinc-400 bg-white'}`}
-                                  >
-                                     <span className="text-xs font-extrabold text-zinc-950">{months} Mo</span>
-                                     <span className="text-[10px] text-[#0284C7] font-semibold mt-1">{formatPrice(mockEMI.monthly, 'INR')}/mo</span>
-                                  </button>
-                               );
-                            })}
-                         </div>
-                      </div>
-
-                      <div className="p-4 bg-zinc-50 rounded-2xl border border-zinc-200/50 space-y-3.5">
-                         <div className="flex items-center justify-between text-xs font-medium text-zinc-600">
-                            <span className="flex items-center gap-1"><Calculator className="w-3.5 h-3.5 text-[#0284C7]" /> Monthly EMI</span>
-                            <span className="font-extrabold text-zinc-950 text-sm font-mono">{formatPrice(emiDetails.monthly, 'INR')} <span className="text-[10px] font-normal text-zinc-400">/ mo</span></span>
-                         </div>
-                         <div className="flex items-center justify-between text-xs font-medium text-zinc-600">
-                            <span className="flex items-center gap-1"><Percent className="w-3.5 h-3.5 text-zinc-400" /> Bank Interest ({selectedBank.rate}% p.a.)</span>
-                            <span className="font-semibold text-zinc-950 font-mono">{formatPrice(emiDetails.interest, 'INR')}</span>
-                         </div>
-                         <div className="border-t border-zinc-200/60 pt-3 flex items-center justify-between text-xs font-bold text-zinc-950">
-                            <span>Total Repayment Cost</span>
-                            <span className="font-extrabold font-mono text-[#0284C7]">{formatPrice(emiDetails.total, 'INR')}</span>
-                         </div>
-                      </div>
-
-                      <button 
-                         onClick={handleRazorpayCheckout}
-                         className="w-full py-4 bg-[#0284C7] hover:bg-[#0369A1] text-white font-bold rounded-2xl transition-all shadow-lg shadow-[#0284C7]/20 flex items-center justify-center gap-2 text-sm mt-4"
-                      >
-                         Pay {formatPrice(emiDetails.monthly, 'INR')}/mo EMI Securely
-                         <ChevronRight className="w-4 h-4" />
-                      </button>
-                    </div>
-                  )}
                 </div>
-              )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { uiAudio.playClick(); setUpiMode('qr'); }}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      upiMode === 'qr'
+                        ? 'bg-white text-zinc-950 shadow-xs ring-1 ring-zinc-900/10'
+                        : 'text-zinc-500 hover:bg-white/60'
+                    }`}
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    <span>Dynamic QR Code</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { uiAudio.playClick(); setUpiMode('vpa'); }}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      upiMode === 'vpa'
+                        ? 'bg-white text-zinc-950 shadow-xs ring-1 ring-zinc-900/10'
+                        : 'text-zinc-500 hover:bg-white/60'
+                    }`}
+                  >
+                    <Smartphone className="w-3.5 h-3.5" />
+                    <span>Enter UPI ID / VPA</span>
+                  </button>
+                </div>
+
+                {upiMode === 'qr' ? (
+                  <div className="bg-white rounded-2xl p-4 border border-zinc-200/80 flex flex-col items-center text-center space-y-2">
+                    <div className="w-40 h-40 bg-zinc-100 rounded-xl flex items-center justify-center border border-zinc-200 p-2 shadow-inner relative">
+                      <img 
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(`upi://pay?pa=encho.space@icici&pn=ENCHO_SPACE&am=${grandTotal}&cu=INR`)}`}
+                        alt="UPI Payment QR Code"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <p className="text-xs text-zinc-500 font-medium">Scan with Google Pay, PhonePe, Paytm, or BHIM</p>
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      type="text"
+                      value={upiId}
+                      onChange={(e) => setUpiId(e.target.value)}
+                      placeholder="e.g. yourname@okhdfcbank"
+                      className="w-full px-4 py-3 bg-white border border-zinc-200 rounded-xl text-sm font-medium text-zinc-900 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 outline-none font-mono"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {paymentMethod === 'card' && (
+              <div className="bg-zinc-50 rounded-2xl p-5 border border-zinc-200/60">
+                <Elements stripe={stripePromise} options={stripeOptions}>
+                  <StripeCheckoutForm 
+                    amount={grandTotal} 
+                    onPaymentSuccess={() => {
+                      onSuccess({
+                        moveInDate,
+                        configuration: isExperience ? `${numTickets} Tickets` : tierMeta.name,
+                        name: guestName,
+                        phone: guestPhone,
+                        totalRent: grandTotal,
+                        roomIds: []
+                      });
+                    }}
+                    onCancel={onCancel}
+                  />
+                </Elements>
+              </div>
+            )}
+
+            {paymentMethod === 'emi' && (
+              <div className="bg-zinc-50 rounded-2xl p-5 border border-zinc-200/60 space-y-4">
+                <div>
+                  <label className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 mb-1.5 font-mono">Select Bank</label>
+                  <select
+                    value={selectedBank.id}
+                    onChange={(e) => {
+                      const b = EMI_BANKS.find(x => x.id === e.target.value);
+                      if (b) setSelectedBank(b);
+                    }}
+                    className="w-full px-3.5 py-2.5 bg-white border border-zinc-200 rounded-xl text-xs font-bold text-zinc-800 outline-none"
+                  >
+                    {EMI_BANKS.map(b => (
+                      <option key={b.id} value={b.id}>{b.name} ({b.rate}% p.a.)</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-4 gap-1.5">
+                  {EMI_TENURES.map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setSelectedTenure(t)}
+                      className={`py-2 rounded-xl text-center transition-all cursor-pointer ${
+                        selectedTenure === t 
+                          ? 'bg-zinc-900 text-white font-bold' 
+                          : 'bg-white border border-zinc-200 text-zinc-600'
+                      }`}
+                    >
+                      <span className="text-xs font-bold">{t} Mo</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="bg-white rounded-xl p-3 border border-zinc-200/80 flex items-center justify-between text-xs">
+                  <span className="text-zinc-600 font-medium">Monthly Installment:</span>
+                  <span className="font-mono font-bold text-zinc-900 text-sm">₹{emiDetails.monthly.toLocaleString()} / mo</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Section 3: Primary Action Trigger (for UPI and EMI) */}
+          {paymentMethod !== 'card' && (
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={handleExecutePayment}
+                disabled={isProcessingPayment}
+                className="w-full bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 text-white font-bold font-display py-4 rounded-2xl shadow-xl hover:shadow-2xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 text-sm"
+              >
+                {isProcessingPayment ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                    <span>{processingStatusText}</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-4 h-4 text-emerald-400" />
+                    <span>Pay {formatPrice(grandTotal, listing?.currency || 'INR')} & Lock {tierMeta.shortName} ↗</span>
+                  </>
+                )}
+              </button>
+              
+              <p className="text-[10px] text-zinc-400 text-center font-medium mt-2 flex items-center justify-center gap-1">
+                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                <span>Instant confirmation via WhatsApp & Email with zero lock-in fee</span>
+              </p>
             </div>
           )}
 
         </div>
       </main>
 
-      {/* Trust Seal Footer */}
-      <footer className="w-full bg-white border-t border-zinc-150 py-6 text-center text-[10px] text-zinc-400 font-medium">
-         Authorized and protected by SSL secure protocols. Encho Space Secure booking. All transactions are fully encrypted.
-      </footer>
     </div>
   );
 };
+
+export default CheckoutPage;

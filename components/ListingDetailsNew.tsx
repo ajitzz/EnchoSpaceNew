@@ -48,6 +48,43 @@ import {
 import { uiAudio } from './audio';
 import { useToast } from './ToastContext';
 
+// 10/10 Luxury Room Tier Definitions for Boutique Hotels & Resorts
+export const ROOM_TIER_CONFIG = {
+  suites: {
+    id: 'suites' as const,
+    name: 'Presidential Panorama Suite',
+    shortName: 'Suites',
+    icon: '👑',
+    price: 18500,
+    priceUsd: 220,
+    capacity: 2,
+    specs: '1,200 sq.ft · 270° Valley View · Heated Jacuzzi',
+    tag: 'Master Luxury'
+  },
+  deluxe: {
+    id: 'deluxe' as const,
+    name: 'Deluxe Garden Double Room',
+    shortName: 'Deluxe',
+    icon: '🌿',
+    price: 11500,
+    priceUsd: 140,
+    capacity: 2,
+    specs: '650 sq.ft · Garden Verandah · Twin Plush Beds',
+    tag: 'Recommended Anchor'
+  },
+  executive: {
+    id: 'executive' as const,
+    name: 'Executive Studio Sanctuary',
+    shortName: 'Executive',
+    icon: '💼',
+    price: 7500,
+    priceUsd: 90,
+    capacity: 1,
+    specs: '420 sq.ft · Ergonomic Work Enclave · Rain Shower',
+    tag: 'Solo & Work'
+  }
+};
+
 interface ListingDetailsNewProps {
   listing: Listing;
   onBack: () => void;
@@ -418,12 +455,14 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   const [mobileSpaceIndex, setMobileSpaceIndex] = useState(0);
   const [isMorphingReservation, setIsMorphingReservation] = useState(false);
 
-  const triggerKineticReservation = () => {
+  const triggerKineticReservation = (overrideTier?: 'suites' | 'deluxe' | 'executive') => {
     if (isMorphingReservation) return;
+    const targetTier = overrideTier || (activeSlide === 0 ? 'suites' : activeSlide === 1 ? 'deluxe' : 'executive');
+    setSelectedRoomTier(targetTier);
     uiAudio.playSuccess();
     setIsMorphingReservation(true);
     setTimeout(() => {
-      handleReserve();
+      handleReserve(targetTier);
       setIsMorphingReservation(false);
     }, 750);
   };
@@ -464,6 +503,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   const handleCategoryPillClick = (idx: number) => {
     uiAudio.playClick();
     setActiveSlide(idx);
+    setSelectedRoomTier(idx === 0 ? 'suites' : idx === 1 ? 'deluxe' : 'executive');
     if (mobileGalleryRef.current) {
       const targetIndices = [0, 4, 8];
       const targetCard = mobileGalleryRef.current.children[targetIndices[idx]] as HTMLElement;
@@ -544,6 +584,9 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
 
 
+  // Selected Room Tier: Defaults to 'deluxe' (Psychological Revenue Anchor)
+  const [selectedRoomTier, setSelectedRoomTier] = useState<'suites' | 'deluxe' | 'executive'>('deluxe');
+
   // Booking Form State
   const [checkIn, setCheckIn] = useState<string>(() => {
     const today = new Date();
@@ -555,10 +598,20 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
     d.setDate(d.getDate() + 3);
     return d.toISOString().split('T')[0];
   });
-  const [guests, setGuests] = useState<number>(1);
+  const [guests, setGuests] = useState<number>(2);
 
-  // Double-Entry Ledger Calculation
-  const basePrice = listing.displayPrice ?? listing.price;
+  // Double-Entry Ledger Calculation per Selected Room Tier
+  const activeTierObj = ROOM_TIER_CONFIG[selectedRoomTier];
+  const activeNightlyRate = useMemo(() => {
+    if (listing.currency === 'USD') return activeTierObj.priceUsd;
+    if (listing.price && listing.price > 1000) {
+      if (selectedRoomTier === 'suites') return Math.round(listing.price * 1.35);
+      if (selectedRoomTier === 'executive') return Math.round(listing.price * 0.65);
+      return listing.price;
+    }
+    return activeTierObj.price;
+  }, [listing.currency, listing.price, selectedRoomTier, activeTierObj]);
+
   const nights = useMemo(() => {
     const start = new Date(checkIn).getTime();
     const end = new Date(checkOut).getTime();
@@ -566,27 +619,41 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
     return diff > 0 ? diff : 1;
   }, [checkIn, checkOut]);
 
-  const baseRentTotal = basePrice * nights;
+  const baseRentTotal = activeNightlyRate * nights;
   const enchoFee = Math.round(baseRentTotal * 0.15); // 15% SaaS Optimization Fee
   const taxAmount = Math.round((baseRentTotal + enchoFee) * 0.18); // 18% Statutory GST
   const grandTotal = baseRentTotal + enchoFee + taxAmount;
 
-  const handleReserve = () => {
+  const handleReserve = (overrideTier?: 'suites' | 'deluxe' | 'executive') => {
     uiAudio.playSuccess();
+    const tierKey = overrideTier || selectedRoomTier;
+    const tierMeta = ROOM_TIER_CONFIG[tierKey];
+    const nightly = listing.currency === 'USD' ? tierMeta.priceUsd : (listing.price && listing.price > 1000 ? (tierKey === 'suites' ? Math.round(listing.price * 1.35) : tierKey === 'executive' ? Math.round(listing.price * 0.65) : listing.price) : tierMeta.price);
+    const rent = nightly * nights;
+    const fee = Math.round(rent * 0.15);
+    const tax = Math.round((rent + fee) * 0.18);
+    const total = rent + fee + tax;
+
     if (onBook) {
       onBook({
         isStartCheckout: true,
         listingId: listing.id,
+        listingTitle: listing.title,
+        roomTier: tierKey,
+        roomTierName: tierMeta.name,
+        roomTierIcon: tierMeta.icon,
+        roomTierSpecs: tierMeta.specs,
+        nightlyRate: nightly,
         moveInDate: checkIn,
         checkOutDate: checkOut,
-        configuration: 'Entire Place',
+        configuration: tierMeta.name,
         name: user?.name || '',
         phone: '',
-        totalRent: grandTotal,
-        baseRent: baseRentTotal,
-        fees: enchoFee,
-        taxes: taxAmount,
-        guests: guests,
+        totalRent: total,
+        baseRent: rent,
+        fees: fee,
+        taxes: tax,
+        guests: Math.min(guests, tierMeta.capacity),
         currency: listing.currency || 'INR'
       } as any);
     }
@@ -1068,12 +1135,59 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
             {/* Right Column: Sticky Glass Checkout Dock (Zone 1 Stays Mounted Here) */}
             <div className="hidden lg:block lg:col-span-5 xl:col-span-4 relative pb-12">
                 <div className="sticky top-28 bg-white border border-zinc-200/80 shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-3xl p-6 flex flex-col">
-                    <div className="flex items-end justify-between mb-6">
+                    <div className="flex items-end justify-between mb-4">
                         <div>
-                            <span className="text-3xl font-extrabold tracking-tight text-zinc-900 font-display tabular-nums">{listing.currency === 'USD' ? '$' : '₹'}{basePrice.toLocaleString()}</span>
-                            <span className="text-zinc-500 font-medium ml-1 text-sm">night</span>
+                            <span className="text-3xl font-extrabold tracking-tight text-zinc-900 font-display tabular-nums">{listing.currency === 'USD' ? '$' : '₹'}{activeNightlyRate.toLocaleString()}</span>
+                            <span className="text-zinc-500 font-medium ml-1 text-sm">/ night</span>
                         </div>
-                        {listing.originalId && <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded">Suite Rate</span>}
+                        <span className="bg-amber-50 text-amber-800 border border-amber-200/80 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full flex items-center gap-1">
+                          <span>{activeTierObj.icon}</span>
+                          <span>{activeTierObj.shortName}</span>
+                        </span>
+                    </div>
+
+                    {/* 1-Tap Room Inventory Tier Selector Pill */}
+                    <div className="mb-5">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono">
+                          Room Category
+                        </label>
+                        <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                          {activeTierObj.tag}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5 p-1 bg-zinc-100/80 rounded-2xl border border-zinc-200/60">
+                        {(['suites', 'deluxe', 'executive'] as const).map(tierKey => {
+                          const t = ROOM_TIER_CONFIG[tierKey];
+                          const isSelected = selectedRoomTier === tierKey;
+                          const tRate = listing.currency === 'USD' ? t.priceUsd : (listing.price && listing.price > 1000 ? (tierKey === 'suites' ? Math.round(listing.price * 1.35) : tierKey === 'executive' ? Math.round(listing.price * 0.65) : listing.price) : t.price);
+                          return (
+                            <button
+                              key={tierKey}
+                              type="button"
+                              onClick={() => {
+                                uiAudio.playClick();
+                                setSelectedRoomTier(tierKey);
+                                setActiveSlide(tierKey === 'suites' ? 0 : tierKey === 'deluxe' ? 1 : 2);
+                              }}
+                              className={`py-2 px-1.5 rounded-xl text-center transition-all cursor-pointer flex flex-col items-center justify-center ${
+                                isSelected
+                                  ? 'bg-white text-zinc-950 shadow-sm ring-1 ring-zinc-900/10 font-bold scale-[1.02]'
+                                  : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/60'
+                              }`}
+                            >
+                              <span className="text-xs">{t.icon}</span>
+                              <span className="text-[11px] font-bold tracking-tight mt-0.5">{t.shortName}</span>
+                              <span className="text-[9px] font-mono text-zinc-400">
+                                {listing.currency === 'USD' ? `$${tRate}` : `₹${Math.round(tRate / 1000)}k`}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[10px] text-zinc-400 font-medium mt-1.5 px-1 truncate">
+                        {activeTierObj.specs}
+                      </p>
                     </div>
 
                     {/* Dual-Date Engine */}
@@ -1119,7 +1233,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     </div>
 
                     <button 
-                        onClick={handleReserve}
+                        onClick={() => handleReserve()}
                         className="w-full bg-gradient-to-r from-zinc-900 to-zinc-800 text-white font-bold font-display py-4 rounded-2xl shadow-[0_4px_14px_rgba(0,0,0,0.15)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.2)] active:scale-[0.98] transition-all flex items-center justify-center gap-2 mb-4 cursor-pointer"
                     >
                         <CreditCard className="w-4 h-4" />
@@ -1131,15 +1245,15 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     {/* Visual Split-Cost Calculator (Strict Ledger) */}
                     <div className="space-y-3 text-sm text-zinc-600 font-medium">
                         <div className="flex justify-between">
-                            <span>{listing.currency === 'USD' ? '$' : '₹'}{basePrice.toLocaleString()} × {nights} nights</span>
+                            <span>{activeTierObj.shortName} ({listing.currency === 'USD' ? '$' : '₹'}{activeNightlyRate.toLocaleString()} × {nights} nts)</span>
                             <span className="tabular-nums font-semibold text-zinc-900">{listing.currency === 'USD' ? '$' : '₹'}{baseRentTotal.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between">
-                            <span>Optimization Fee (15%)</span>
+                            <span>Concierge & Escrow (15%)</span>
                             <span className="tabular-nums font-semibold text-zinc-900">{listing.currency === 'USD' ? '$' : '₹'}{enchoFee.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between">
-                            <span>Taxes (18%)</span>
+                            <span>Statutory GST (18%)</span>
                             <span className="tabular-nums font-semibold text-zinc-900">{listing.currency === 'USD' ? '$' : '₹'}{taxAmount.toLocaleString()}</span>
                         </div>
                     </div>
@@ -2094,7 +2208,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   <div className="flex flex-col">
                     <div className="flex items-baseline gap-1">
                       <span className="text-lg font-extrabold text-white font-display tabular-nums">
-                        {listing.currency === 'USD' ? '$' : '₹'}{basePrice.toLocaleString()}
+                        {listing.currency === 'USD' ? '$' : '₹'}{activeNightlyRate.toLocaleString()}
                       </span>
                       <span className="text-xs text-zinc-400 font-medium">/ night</span>
                     </div>
@@ -2108,7 +2222,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
                 <button
                   type="button"
-                  onClick={handleReserve}
+                  onClick={() => handleReserve()}
                   className="bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-zinc-950 text-xs md:text-sm font-extrabold font-display uppercase tracking-wider px-7 py-3 rounded-full shadow-lg shadow-amber-500/20 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
                 >
                   <span>RESERVE</span>
@@ -2124,7 +2238,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
             <div className="flex items-center justify-between gap-4 max-w-md mx-auto">
                 <div className="flex flex-col">
                     <div className="flex items-baseline gap-1">
-                        <span className="text-xl font-extrabold text-zinc-900 font-display tabular-nums">{listing.currency === 'USD' ? '$' : '₹'}{basePrice.toLocaleString()}</span>
+                        <span className="text-xl font-extrabold text-zinc-900 font-display tabular-nums">{listing.currency === 'USD' ? '$' : '₹'}{activeNightlyRate.toLocaleString()}</span>
                         <span className="text-xs font-semibold text-zinc-500">night</span>
                     </div>
                     <span className="text-xs font-bold text-zinc-500 mt-0.5">
@@ -2132,7 +2246,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     </span>
                 </div>
                 <button 
-                    onClick={handleReserve}
+                    onClick={() => handleReserve()}
                     className="bg-zinc-900 hover:bg-zinc-800 text-white font-bold font-display uppercase tracking-wider text-xs py-3.5 px-8 rounded-full active:scale-95 transition-all shadow-[0_4px_14px_rgba(0,0,0,0.15)] flex-1 max-w-[160px] cursor-pointer"
                 >
                     RESERVE
