@@ -1037,8 +1037,18 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
 
           </div>
 
-          {/* SECTION 3: Primary Action Trigger */}
-          <div className="pt-2">
+          {/* SECTION 3: Primary Action Trigger with Clear "OR" Divider */}
+          <div className="pt-2 space-y-3">
+            {selectedPaymentType === 'upi' && (
+              <div className="relative flex items-center justify-center my-2">
+                <div className="border-t border-zinc-200 w-full" />
+                <span className="bg-white px-3 text-[10px] font-extrabold text-zinc-400 uppercase tracking-widest font-mono shrink-0">
+                  OR PAY VIA RAZORPAY GATEWAY
+                </span>
+                <div className="border-t border-zinc-200 w-full" />
+              </div>
+            )}
+
             <button
               type="button"
               onClick={() => handleExecutePayment(selectedPaymentType === 'upi' ? (upiSubTab === 'vpa' && customUpiId ? 'upi' : 'upi') : selectedPaymentType)}
