@@ -231,22 +231,35 @@ const BookingPage: React.FC<BookingPageProps> = ({ listing, bookingDetails, onBa
                 </div>
               </div>
 
-              {/* Action Buttons: Calendar Sync & Home */}
-              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              {/* Action Buttons: View in Account, Calendar Sync & Printable Invoice */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={downloadCalendarEvent}
-                  className="flex-1 py-3 px-4 rounded-xl bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-900 font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="py-3 px-3 rounded-xl bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-900 font-bold text-xs shadow-2xs active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <Calendar className="w-4 h-4 text-zinc-600" />
-                  <span>Add to Apple / Google Calendar</span>
+                  <Calendar className="w-3.5 h-3.5 text-zinc-600" />
+                  <span>Sync Calendar</span>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    uiAudio.playClick();
+                    window.print();
+                  }}
+                  className="py-3 px-3 rounded-xl bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-900 font-bold text-xs shadow-2xs active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 text-zinc-600" />
+                  <span>Print Tax Invoice</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={onBackToHome}
-                  className="flex-1 py-3 px-4 rounded-xl bg-zinc-950 hover:bg-zinc-900 text-white font-bold text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="py-3 px-3 rounded-xl bg-zinc-950 hover:bg-zinc-900 text-white font-bold text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <span>Explore More Sanctuaries</span>
+                  <span>View in My Account ↗</span>
                 </button>
               </div>
 

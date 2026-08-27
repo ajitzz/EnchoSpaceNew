@@ -776,12 +776,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
               </div>
             </div>
 
-            {/* Escrow Trust Reassurance Badge */}
-            <div className="bg-emerald-50/60 rounded-2xl p-4 border border-emerald-200/60 flex items-start gap-3">
-              <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-              <div className="text-[11px] text-zinc-600 leading-relaxed">
-                <strong className="text-emerald-950 block mb-0.5 font-bold">Encho Walled Garden Escrow Protection</strong>
-                Your funds are held securely in escrow until successful check-in at the sanctuary. Zero risk.
+            {/* Dynamic Cancellation Policy & Escrow Trust Reassurance */}
+            <div className="bg-emerald-50/70 rounded-2xl p-4 border border-emerald-200/80 space-y-2">
+              <div className="flex items-start gap-2.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <div className="text-[11px] text-zinc-700 leading-relaxed">
+                  <strong className="text-emerald-950 block font-bold">100% Escrow Refund Guarantee</strong>
+                  Free cancellation before {new Date(new Date(moveInDate).getTime() - 48*3600*1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, 2:00 PM. Instant refund directly to your source account.
+                </div>
               </div>
             </div>
 
@@ -803,7 +805,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
               <span className="text-[10px] font-mono text-zinc-400">Fast 1-Click Autofill</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 mb-1.5 font-mono">
                   Primary Guest Name
@@ -836,6 +838,42 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                 </div>
               </div>
             </div>
+
+            {/* Email with Smart 1-Tap Autocomplete Chips */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono">
+                  Confirmation & Tax Invoice Email
+                </label>
+                <span className="text-[9px] text-emerald-600 font-bold font-mono">✓ PDF Invoice Sent Instantly</span>
+              </div>
+              <div className="relative">
+                <input
+                  type="email"
+                  value={guestEmail}
+                  onChange={(e) => setGuestEmail(e.target.value)}
+                  placeholder="e.g. johnathan.doe@gmail.com"
+                  className="w-full px-4 py-3 bg-zinc-50/80 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-900 focus:bg-white focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 transition-all outline-none font-mono"
+                />
+              </div>
+              <div className="flex items-center gap-1.5 mt-2">
+                <span className="text-[10px] text-zinc-400 font-medium">Quick add:</span>
+                {['@gmail.com', '@icloud.com', '@outlook.com'].map(domain => (
+                  <button
+                    key={domain}
+                    type="button"
+                    onClick={() => {
+                      uiAudio.playClick();
+                      const prefix = guestEmail.split('@')[0] || (guestName.toLowerCase().replace(/\s+/g, '.') || 'guest');
+                      setGuestEmail(prefix + domain);
+                    }}
+                    className="text-[10px] font-mono font-bold bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-2 py-0.5 rounded-md border border-zinc-200/80 cursor-pointer transition-colors"
+                  >
+                    {domain}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div className="h-px bg-zinc-100" />
@@ -851,6 +889,37 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                 <Zap className="w-3 h-3 text-emerald-500" />
                 <span>Instant Webhook Sync</span>
               </span>
+            </div>
+
+            {/* 1-Tap Express Pay Dock (Google Pay, PhonePe, Paytm, Apple Pay, Razorpay) */}
+            <div className="mb-5 p-3.5 bg-gradient-to-r from-zinc-900 via-zinc-950 to-zinc-900 rounded-2xl text-white space-y-2.5 shadow-lg border border-zinc-800">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-300 font-mono flex items-center gap-1">
+                  <Zap className="w-3 h-3 text-amber-400" />
+                  <span>1-Tap Express Fast Checkout</span>
+                </span>
+                <span className="text-[9px] text-zinc-400 font-mono">Zero Login Required</span>
+              </div>
+              
+              <div className="grid grid-cols-5 gap-1.5">
+                {[
+                  { name: 'GPay', icon: '⚡', action: () => { setPaymentMethod('upi'); setUpiMode('qr'); handleExecutePayment(); } },
+                  { name: 'PhonePe', icon: '🟣', action: () => { setPaymentMethod('upi'); setUpiMode('qr'); handleExecutePayment(); } },
+                  { name: 'Paytm', icon: '💠', action: () => { setPaymentMethod('upi'); setUpiMode('qr'); handleExecutePayment(); } },
+                  { name: 'Apple Pay', icon: '', action: () => { setPaymentMethod('card'); } },
+                  { name: 'Razorpay', icon: '💳', action: () => { setPaymentMethod('upi'); handleExecutePayment(); } }
+                ].map((ep) => (
+                  <button
+                    key={ep.name}
+                    type="button"
+                    onClick={() => { uiAudio.playClick(); ep.action(); }}
+                    className="py-2 px-1 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-center flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-all cursor-pointer group"
+                  >
+                    <span className="text-xs">{ep.icon}</span>
+                    <span className="text-[10px] font-bold text-white tracking-tight truncate w-full">{ep.name}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Tactile Payment Method Selector Pills */}
