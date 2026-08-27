@@ -7,7 +7,7 @@ import { get, set, del, keys } from 'idb-keyval';
  */
 
 export async function fetchWithCache<T>(url: string, cacheKey: string, options?: RequestInit): Promise<T | null> {
-    const isOnline = navigator.onLine;
+    const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
     let cachedData: T | null = null;
     
     try {
@@ -17,18 +17,25 @@ export async function fetchWithCache<T>(url: string, cacheKey: string, options?:
     }
 
     if (!isOnline && cachedData) {
-        console.log(`[Offline] Using cached data for ${cacheKey}`);
         return cachedData;
     }
 
     try {
         const response = await fetch(url, options);
         if (response.ok) {
-            const data = response.headers.get('content-type')?.includes('json') ? await response.json() : { error: 'Server returned non-JSON response: ' + (await response.text()).slice(0, 150) } as any;
-            await set(cacheKey, data); // store to idle cache
-            return data;
+            const isJson = response.headers.get('content-type')?.includes('json');
+            const data = isJson ? await response.json() : null;
+            if (data !== null) {
+                // Safely save to cache without crashing on quota exceeded
+                try {
+                    await set(cacheKey, data);
+                } catch (quotaErr) {
+                    console.warn('[IDB QUOTA] Safe ignore quota error:', quotaErr);
+                }
+                return data;
+            }
+            return cachedData;
         } else if (cachedData) {
-            console.log(`[Fetch Failed] Using cached data for ${cacheKey}`);
             return cachedData;
         }
         return null;
@@ -59,150 +66,108 @@ export function registerCustomSyncHandler(id: string, handler: CustomMutationHan
     customHandlers[id] = handler;
 }
 
-export async function queueMutation(url: string, method: string, body?: any, headers?: Record<string, string>, isRaw?: boolean): Promise<boolean> {
-    if (navigator.onLine && !isRaw) {
+export async function queueMutation(url: string, method: string, body?: any, headers?: Record<string, string>): Promise<boolean> {
+    const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+    if (isOnline) {
         try {
-            const fetchOptions: RequestInit = { method };
-            if (!isRaw) {
-                fetchOptions.headers = { 'Content-Type': 'application/json', ...headers };
-                fetchOptions.body = body ? JSON.stringify(body) : undefined;
-            } else {
-                fetchOptions.headers = headers;
-                fetchOptions.body = body;
-            }
-            const response = await fetch(url, fetchOptions);
+            const response = await fetch(url, {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...headers,
+                },
+                body: body ? JSON.stringify(body) : undefined,
+            });
             if (response.ok) {
-                return true; // Successfully synced immediately
+                return true;
             }
         } catch (e) {
-            console.warn(`Direct fetch failed for ${url}, queueing for offline sync`, e);
+            console.warn(`Direct mutation failed for ${url}, queuing offline`, e);
         }
     }
 
-    const queue: OfflineQueueItem[] = await get(SYNC_QUEUE_KEY) || [];
-    queue.push({
-        id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(),
-        url,
-        method,
-        body,
-        headers,
-        timestamp: Date.now(),
-        type: 'FETCH'
-    });
-    await set(SYNC_QUEUE_KEY, queue);
-    
-    // Register background sync if supported
-    if ('serviceWorker' in navigator && 'SyncManager' in window) {
-        try {
-            const registration = await navigator.serviceWorker.ready;
-            await (registration as any).sync.register('sync-mutations');
-        } catch (e) {
-            console.warn('Background sync registration failed', e);
-        }
+    try {
+        const queue: OfflineQueueItem[] = (await get(SYNC_QUEUE_KEY)) || [];
+        const newItem: OfflineQueueItem = {
+            id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(),
+            url,
+            method,
+            body,
+            headers,
+            timestamp: Date.now(),
+        };
+        queue.push(newItem);
+        await set(SYNC_QUEUE_KEY, queue);
+        return false;
+    } catch (e) {
+        console.error('Failed to queue mutation offline', e);
+        return false;
     }
-    
-    return false; // Queued for later
 }
 
-export async function queueCustomMutation(customId: string, body: any): Promise<boolean> {
-    if (navigator.onLine) {
-        const handler = customHandlers[customId];
-        if (handler) {
+export async function processOfflineQueue(): Promise<void> {
+    const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+    if (!isOnline) return;
+
+    try {
+        const queue: OfflineQueueItem[] = (await get(SYNC_QUEUE_KEY)) || [];
+        if (queue.length === 0) return;
+
+        const remainingQueue: OfflineQueueItem[] = [];
+
+        for (const item of queue) {
             try {
-                // Fake a queue item for the handler
-                const success = await handler({
-                    id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(),
-                    url: '', method: '', timestamp: Date.now(),
-                    type: 'CUSTOM_MUTATION', customId, body
-                });
-                if (success) return true;
-            } catch (e) {
-                console.warn(`Direct custom mutation failed for ${customId}, queueing for offline sync`, e);
-            }
-        }
-    }
-
-    const queue: OfflineQueueItem[] = await get(SYNC_QUEUE_KEY) || [];
-    queue.push({
-        id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(),
-        url: '', // Handled by custom handler
-        method: '',
-        body,
-        timestamp: Date.now(),
-        type: 'CUSTOM_MUTATION',
-        customId
-    });
-    await set(SYNC_QUEUE_KEY, queue);
-    
-    // Register background sync if supported
-    if ('serviceWorker' in navigator && 'SyncManager' in window) {
-        try {
-            const registration = await navigator.serviceWorker.ready;
-            await (registration as any).sync.register('sync-mutations');
-        } catch (e) {
-            console.warn('Background sync registration failed', e);
-        }
-    }
-    
-    return false; 
-}
-
-export async function processSyncQueue(): Promise<void> {
-    if (!navigator.onLine) return;
-    
-    const queue: OfflineQueueItem[] = await get(SYNC_QUEUE_KEY) || [];
-    if (queue.length === 0) return;
-
-    console.log(`Processing ${queue.length} offline mutations`);
-    
-    const newQueue: OfflineQueueItem[] = [];
-    
-    for (const item of queue) {
-        try {
-            if (item.type === 'CUSTOM_MUTATION' && item.customId) {
-                const handler = customHandlers[item.customId];
-                if (handler) {
-                    const success = await handler(item);
-                    if (!success) newQueue.push(item);
+                if (item.type === 'CUSTOM_MUTATION' && item.customId && customHandlers[item.customId]) {
+                    const success = await customHandlers[item.customId](item);
+                    if (!success) remainingQueue.push(item);
                 } else {
-                    console.warn(`No handler found for custom mutation ${item.customId}`);
-                    newQueue.push(item); // Keep in queue 
-                }
-            } else {
-                const fetchOptions: RequestInit = {
-                    method: item.method,
-                    headers: item.headers
-                };
-                if (item.headers?.['Content-Type'] !== 'multipart/form-data') {
-                    fetchOptions.headers = { 'Content-Type': 'application/json', ...item.headers };
-                    fetchOptions.body = item.body ? JSON.stringify(item.body) : undefined;
-                } else {
-                    // Raw body handling if needed, though FormData can't be easily stored in IDB.
-                    fetchOptions.body = item.body;
-                    // Delete Content-Type so browser sets boundary correctly
-                    if (fetchOptions.headers) {
-                        const newHeaders = { ...fetchOptions.headers } as Record<string, string>;
-                        delete newHeaders['Content-Type'];
-                        fetchOptions.headers = newHeaders;
+                    const response = await fetch(item.url, {
+                        method: item.method,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...item.headers,
+                        },
+                        body: item.body ? JSON.stringify(item.body) : undefined,
+                    });
+                    if (!response.ok) {
+                        remainingQueue.push(item);
                     }
                 }
-                
-                const response = await fetch(item.url, fetchOptions);
-                
-                if (!response.ok) {
-                    console.error(`Offline sync failed for ${item.url}`, await response.text());
-                }
+            } catch (e) {
+                console.warn(`Failed to process queued mutation ${item.id}`, e);
+                remainingQueue.push(item);
             }
-        } catch (e) {
-            console.warn('Sync failed, keeping in queue', e);
-            newQueue.push(item);
         }
+
+        await set(SYNC_QUEUE_KEY, remainingQueue);
+    } catch (e) {
+        console.error('Error processing offline queue', e);
     }
-    
-    await set(SYNC_QUEUE_KEY, newQueue);
 }
 
-// Event listener to process queue when back online
 if (typeof window !== 'undefined') {
-    window.addEventListener('online', processSyncQueue);
+    window.addEventListener('online', () => {
+        processOfflineQueue();
+    });
+}
+
+export async function queueCustomMutation(customId: string, payload: any): Promise<boolean> {
+    try {
+        const queue: OfflineQueueItem[] = (await get(SYNC_QUEUE_KEY)) || [];
+        const newItem: OfflineQueueItem = {
+            id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(),
+            url: '',
+            method: 'CUSTOM',
+            body: payload,
+            timestamp: Date.now(),
+            type: 'CUSTOM_MUTATION',
+            customId
+        };
+        queue.push(newItem);
+        await set(SYNC_QUEUE_KEY, queue);
+        return false;
+    } catch (e) {
+        console.error('Failed to queue custom mutation', e);
+        return false;
+    }
 }

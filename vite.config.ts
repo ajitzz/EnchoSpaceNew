@@ -51,11 +51,12 @@ export default defineConfig(() => {
                 options: {
                   cacheName: 'unsplash-images-cache',
                   expiration: {
-                    maxEntries: 100,
-                    maxAgeSeconds: 60 * 60 * 24 * 30 // 30 Days
+                    maxEntries: 40,
+                    maxAgeSeconds: 60 * 60 * 24 * 7, // 7 Days
+                    purgeOnQuotaError: true
                   },
                   cacheableResponse: {
-                    statuses: [0, 200]
+                    statuses: [200]
                   }
                 }
               },
@@ -79,11 +80,12 @@ export default defineConfig(() => {
                 options: {
                   cacheName: 'optimized-image-cache',
                   expiration: {
-                    maxEntries: 300,
-                    maxAgeSeconds: 30 * 24 * 60 * 60 // 30 Days
+                    maxEntries: 50,
+                    maxAgeSeconds: 7 * 24 * 60 * 60, // 7 Days
+                    purgeOnQuotaError: true
                   },
                   cacheableResponse: {
-                    statuses: [0, 200]
+                    statuses: [200]
                   }
                 }
               },
@@ -94,11 +96,12 @@ export default defineConfig(() => {
                 options: {
                   cacheName: 'image-assets-cache',
                   expiration: {
-                    maxEntries: 100,
-                    maxAgeSeconds: 30 * 24 * 60 * 60 // 30 Days
+                    maxEntries: 50,
+                    maxAgeSeconds: 7 * 24 * 60 * 60, // 7 Days
+                    purgeOnQuotaError: true
                   },
                   cacheableResponse: {
-                    statuses: [0, 200]
+                    statuses: [200]
                   }
                 }
               },

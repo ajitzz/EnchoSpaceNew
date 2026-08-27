@@ -1,5 +1,4 @@
-import { get, set } from 'idb-keyval';
-import { safeParseResponse } from './apiClient.js';
+import { get, set, del, keys } from 'idb-keyval';
 
 /**
  * Local-First Sync Service
@@ -8,28 +7,35 @@ import { safeParseResponse } from './apiClient.js';
  */
 
 export async function fetchWithCache<T>(url: string, cacheKey: string, options?: RequestInit): Promise<T | null> {
-    const isOnline = navigator.onLine;
+    const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
     let cachedData: T | null = null;
     
     try {
-        cachedData = await get(cacheKey);
+        cachedData = (await get(cacheKey)) || null;
     } catch (e) {
         console.warn('IDB get failed', e);
     }
 
     if (!isOnline && cachedData) {
-        console.log(`[Offline] Using cached data for ${cacheKey}`);
         return cachedData;
     }
 
     try {
         const response = await fetch(url, options);
-        const parsed = await safeParseResponse<T>(response);
-        if (parsed.ok && parsed.data !== null) {
-            await set(cacheKey, parsed.data); // store to idle cache
-            return parsed.data;
+        if (response.ok) {
+            const isJson = response.headers.get('content-type')?.includes('json');
+            const data = isJson ? await response.json() : null;
+            if (data !== null) {
+                // Safely save to cache without crashing on quota exceeded
+                try {
+                    await set(cacheKey, data);
+                } catch (quotaErr) {
+                    console.warn('[IDB QUOTA] Safe ignore quota error:', quotaErr);
+                }
+                return data;
+            }
+            return cachedData;
         } else if (cachedData) {
-            console.log(`[Fetch Failed] Using cached data for ${cacheKey}`);
             return cachedData;
         }
         return null;
@@ -44,15 +50,25 @@ export interface OfflineQueueItem {
     id: string;
     url: string;
     method: string;
-    body?: unknown;
+    body?: any;
     headers?: Record<string, string>;
     timestamp: number;
+    type?: 'FETCH' | 'CUSTOM_MUTATION';
+    customId?: string;
 }
 
 const SYNC_QUEUE_KEY = 'offline_sync_queue';
 
-export async function queueMutation(url: string, method: string, body?: unknown, headers?: Record<string, string>): Promise<boolean> {
-    if (navigator.onLine) {
+type CustomMutationHandler = (item: OfflineQueueItem) => Promise<boolean>;
+const customHandlers: Record<string, CustomMutationHandler> = {};
+
+export function registerCustomSyncHandler(id: string, handler: CustomMutationHandler) {
+    customHandlers[id] = handler;
+}
+
+export async function queueMutation(url: string, method: string, body?: any, headers?: Record<string, string>): Promise<boolean> {
+    const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+    if (isOnline) {
         try {
             const response = await fetch(url, {
                 method,
@@ -63,74 +79,95 @@ export async function queueMutation(url: string, method: string, body?: unknown,
                 body: body ? JSON.stringify(body) : undefined,
             });
             if (response.ok) {
-                return true; // Successfully synced immediately
+                return true;
             }
         } catch (e) {
-            console.warn(`Direct fetch failed for ${url}, queueing for offline sync`, e);
+            console.warn(`Direct mutation failed for ${url}, queuing offline`, e);
         }
     }
 
-    const queue: OfflineQueueItem[] = await get(SYNC_QUEUE_KEY) || [];
-    queue.push({
-        id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(),
-        url,
-        method,
-        body,
-        headers,
-        timestamp: Date.now()
-    });
-    await set(SYNC_QUEUE_KEY, queue);
-    
-    // Register background sync if supported
-    if ('serviceWorker' in navigator && 'SyncManager' in window) {
-        try {
-            const registration = await navigator.serviceWorker.ready;
-            if ('sync' in registration) {
-                await (registration.sync as { register: (tag: string) => Promise<void> }).register('sync-mutations');
-            }
-        } catch (e) {
-            console.warn('Background sync registration failed', e);
-        }
+    try {
+        const queue: OfflineQueueItem[] = (await get(SYNC_QUEUE_KEY)) || [];
+        const newItem: OfflineQueueItem = {
+            id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(),
+            url,
+            method,
+            body,
+            headers,
+            timestamp: Date.now(),
+        };
+        queue.push(newItem);
+        await set(SYNC_QUEUE_KEY, queue);
+        return false;
+    } catch (e) {
+        console.error('Failed to queue mutation offline', e);
+        return false;
     }
-    
-    return false; // Queued for later
 }
 
-export async function processSyncQueue(): Promise<void> {
-    if (!navigator.onLine) return;
-    
-    const queue: OfflineQueueItem[] = await get(SYNC_QUEUE_KEY) || [];
-    if (queue.length === 0) return;
+export async function processOfflineQueue(): Promise<void> {
+    const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+    if (!isOnline) return;
 
-    console.log(`Processing ${queue.length} offline mutations`);
-    
-    const newQueue: OfflineQueueItem[] = [];
-    
-    for (const item of queue) {
-        try {
-            const response = await fetch(item.url, {
-                method: item.method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...item.headers,
-                },
-                body: item.body ? JSON.stringify(item.body) : undefined,
-            });
-            
-            if (!response.ok) {
-                console.error(`Offline sync failed for ${item.url}`, await response.text());
-                // Depending on error, could push back to queue. For now, assume retry logic or drop.
+    try {
+        const queue: OfflineQueueItem[] = (await get(SYNC_QUEUE_KEY)) || [];
+        if (queue.length === 0) return;
+
+        const remainingQueue: OfflineQueueItem[] = [];
+
+        for (const item of queue) {
+            try {
+                if (item.type === 'CUSTOM_MUTATION' && item.customId && customHandlers[item.customId]) {
+                    const success = await customHandlers[item.customId](item);
+                    if (!success) remainingQueue.push(item);
+                } else {
+                    const response = await fetch(item.url, {
+                        method: item.method,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...item.headers,
+                        },
+                        body: item.body ? JSON.stringify(item.body) : undefined,
+                    });
+                    if (!response.ok) {
+                        remainingQueue.push(item);
+                    }
+                }
+            } catch (e) {
+                console.warn(`Failed to process queued mutation ${item.id}`, e);
+                remainingQueue.push(item);
             }
-        } catch (e) {
-            console.warn('Sync failed, keeping in queue', e);
-            newQueue.push(item);
         }
+
+        await set(SYNC_QUEUE_KEY, remainingQueue);
+    } catch (e) {
+        console.error('Error processing offline queue', e);
     }
-    
-    await set(SYNC_QUEUE_KEY, newQueue);
 }
 
-// Event listener to process queue when back online
 if (typeof window !== 'undefined') {
-    window.addEventListener('online', processSyncQueue);
+    window.addEventListener('online', () => {
+        processOfflineQueue();
+    });
+}
+
+export async function queueCustomMutation(customId: string, payload: any): Promise<boolean> {
+    try {
+        const queue: OfflineQueueItem[] = (await get(SYNC_QUEUE_KEY)) || [];
+        const newItem: OfflineQueueItem = {
+            id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(),
+            url: '',
+            method: 'CUSTOM',
+            body: payload,
+            timestamp: Date.now(),
+            type: 'CUSTOM_MUTATION',
+            customId
+        };
+        queue.push(newItem);
+        await set(SYNC_QUEUE_KEY, queue);
+        return false;
+    } catch (e) {
+        console.error('Failed to queue custom mutation', e);
+        return false;
+    }
 }

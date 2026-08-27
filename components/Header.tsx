@@ -199,18 +199,18 @@ const Header: React.FC<HeaderProps> = ({
 
   useEffect(() => {
     fetch('/api/settings/whatsapp')
-      .then(res => res.json())
+      .then(res => (res.ok && res.headers.get('content-type')?.includes('json') ? res.json() : null))
       .then(data => {
         if (data && data.enabled && data.number) setWhatsappConfig(data);
       })
-      .catch(console.error);
+      .catch(() => {});
       
     fetch('/api/settings/call')
-      .then(res => res.json())
+      .then(res => (res.ok && res.headers.get('content-type')?.includes('json') ? res.json() : null))
       .then(data => {
         if (data && data.enabled && data.number) setCallConfig(data);
       })
-      .catch(console.error);
+      .catch(() => {});
   }, []);
 
   useEffect(() => {

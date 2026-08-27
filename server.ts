@@ -14067,7 +14067,6 @@ app.get('/api/settings/whatsapp', async (req, res) => {
     return res.json({ enabled: false, number: '' });
   }
   try {
-    await ensureListingsTable();
     const result = await pool.query('SELECT value FROM settings WHERE key = $1', ['whatsapp']);
     if (result.rows.length > 0 && result.rows[0].value) {
       res.json(result.rows[0].value);
@@ -14146,7 +14145,6 @@ app.get('/api/settings/call', async (req, res) => {
     return res.json({ enabled: false, number: '' });
   }
   try {
-    await ensureListingsTable();
     const result = await pool.query('SELECT value FROM settings WHERE key = $1', ['call']);
     if (result.rows.length > 0 && result.rows[0].value) {
       res.json(result.rows[0].value);
@@ -14255,7 +14253,7 @@ const demoExperiences = [
     price: 2499,
     total_spots: 30,
     available_spots: 30,
-    image_urls: ['https://images.unsplash.com/photo-1590396495147-380d3ec62b08?auto=format&fit=crop&q=80&w=800'],
+    image_urls: ['https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&q=80&w=800'],
     target_audience: 'all',
     status: 'upcoming'
   },
@@ -14270,7 +14268,7 @@ const demoExperiences = [
     price: 4500,
     total_spots: 15,
     available_spots: 15,
-    image_urls: ['https://images.unsplash.com/photo-1610996112117-d04b8ce271ea?auto=format&fit=crop&q=80&w=800'],
+    image_urls: ['https://images.unsplash.com/photo-1511497584788-87676104235f?auto=format&fit=crop&q=80&w=800'],
     target_audience: 'all',
     status: 'upcoming'
   },
@@ -14285,7 +14283,7 @@ const demoExperiences = [
     price: 5500,
     total_spots: 20,
     available_spots: 20,
-    image_urls: ['https://images.unsplash.com/photo-1593693397690-362cb9666c89?auto=format&fit=crop&q=80&w=800'],
+    image_urls: ['https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&q=80&w=800'],
     target_audience: 'corporate',
     status: 'upcoming'
   },
@@ -14300,7 +14298,7 @@ const demoExperiences = [
     price: 8500,
     total_spots: 10,
     available_spots: 10,
-    image_urls: ['https://images.unsplash.com/photo-1587399881640-6218d6cc86bd?auto=format&fit=crop&q=80&w=800'],
+    image_urls: ['https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&q=80&w=800'],
     target_audience: 'couples',
     status: 'upcoming'
   }
@@ -14370,7 +14368,6 @@ app.get('/api/experiences', async (req, res) => {
       return res.json(demoExperiences);
   }
   try {
-    await ensureListingsTable();
     const { host_id } = req.query;
 
     const cacheKey = host_id ? `experiences:host:${host_id}` : 'experiences:all';
@@ -14433,7 +14430,7 @@ app.get('/api/experiences/seed', authenticateToken, async (req: AuthRequest, res
         2499,
         30,
         30,
-        '["https://images.unsplash.com/photo-1590396495147-380d3ec62b08?auto=format&fit=crop&q=80&w=800"]'::jsonb,
+        '["https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&q=80&w=800"]'::jsonb,
         'all',
         'upcoming',
         '["Trek across 5 beaches", "Beachside Camping", "Sunset View points", "Bonfire & Music", "Stargazing"]'::jsonb,
@@ -14454,7 +14451,7 @@ app.get('/api/experiences/seed', authenticateToken, async (req: AuthRequest, res
         4500,
         15,
         15,
-        '["https://images.unsplash.com/photo-1610996112117-d04b8ce271ea?auto=format&fit=crop&q=80&w=800"]'::jsonb,
+        '["https://images.unsplash.com/photo-1511497584788-87676104235f?auto=format&fit=crop&q=80&w=800"]'::jsonb,
         'all',
         'upcoming'
       )
@@ -14473,7 +14470,7 @@ app.get('/api/experiences/seed', authenticateToken, async (req: AuthRequest, res
         5500,
         20,
         20,
-        '["https://images.unsplash.com/photo-1593693397690-362cb9666c89?auto=format&fit=crop&q=80&w=800"]'::jsonb,
+        '["https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&q=80&w=800"]'::jsonb,
         'corporate',
         'upcoming'
       )
@@ -14492,7 +14489,7 @@ app.get('/api/experiences/seed', authenticateToken, async (req: AuthRequest, res
         8500,
         10,
         10,
-        '["https://images.unsplash.com/photo-1587399881640-6218d6cc86bd?auto=format&fit=crop&q=80&w=800"]'::jsonb,
+        '["https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&q=80&w=800"]'::jsonb,
         'couples',
         'upcoming'
       )
