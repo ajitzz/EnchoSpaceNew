@@ -30,6 +30,47 @@ import { uiAudio } from './audio';
 import { useCurrency } from './CurrencyContext';
 import { useAuth } from './AuthContext';
 
+// Official High-Fidelity SVG Brand Icons
+export const GPayIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none">
+    <path d="M23.49 12.28c0-.79-.07-1.54-.19-2.28H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.81z" fill="#4285F4"/>
+    <path d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.33 21.46 7.37 24 12 24z" fill="#34A853"/>
+    <path d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09z" fill="#FBBC05"/>
+    <path d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.33 2.54 1.29 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96z" fill="#EA4335"/>
+  </svg>
+);
+
+export const PhonePeIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none">
+    <circle cx="12" cy="12" r="12" fill="#5F259F"/>
+    <path d="M14.8 6.5h-4.3c-1.1 0-2 .9-2 2v7c0 1.1.9 2 2 2h1.5v-3.8h1.8c2.1 0 3.8-1.7 3.8-3.8s-1.7-3.4-3.8-3.4zm-.2 4.6h-2.6V8.7h2.6c.9 0 1.6.7 1.6 1.6s-.7 1.6-1.6 1.6z" fill="#FFFFFF"/>
+    <path d="M13.2 13.7l2.8 4.8h-2.3l-2.4-4.2 1.9-.6z" fill="#FFFFFF"/>
+  </svg>
+);
+
+export const PaytmIcon = ({ className = "w-7 h-5" }: { className?: string }) => (
+  <svg viewBox="0 0 40 24" className={className} fill="none">
+    <rect width="40" height="24" rx="4" fill="#002E6E"/>
+    <text x="4" y="16" fontFamily="Arial, sans-serif" fontWeight="900" fontSize="12" fill="#00BAF2">Pay</text>
+    <text x="24" y="16" fontFamily="Arial, sans-serif" fontWeight="900" fontSize="12" fill="#FFFFFF">tm</text>
+  </svg>
+);
+
+export const UpiIcon = ({ className = "w-6 h-5" }: { className?: string }) => (
+  <svg viewBox="0 0 32 24" className={className} fill="none">
+    <rect width="32" height="24" rx="4" fill="#09090B"/>
+    <path d="M7 6l5 12h3L10 6H7z" fill="#00B9F5"/>
+    <path d="M15 6l5 12h3l-5-12h-3z" fill="#78BE20"/>
+    <path d="M23 6l3 7.5L29 6h-6z" fill="#FF5F00"/>
+  </svg>
+);
+
+export const ApplePayIcon = ({ className = "w-5 h-5" }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="currentColor">
+    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.62-.75 1.04-1.8 1.01-2.87-.9.04-2 .6-2.65 1.36-.58.67-.99 1.74-.94 2.78 1.01.08 1.96-.52 2.58-1.27z"/>
+  </svg>
+);
+
 // Clean International Country Codes
 const COUNTRY_CODES = [
   { code: '+91', flag: '🇮🇳', name: 'India' },
@@ -167,10 +208,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
   const [infantsCount, setInfantsCount] = useState<number>(initialData.infantsCount || 0);
   const [showOccupancyModal, setShowOccupancyModal] = useState<boolean>(false);
 
-  // Unified Payment State (Default: Razorpay / Auto UPI QR)
+  // Unified Payment State
   const [selectedPaymentType, setSelectedPaymentType] = useState<'upi' | 'card' | 'emi'>('upi');
-  const [upiSubMode, setUpiSubMode] = useState<'qr' | 'vpa'>('qr');
+  const [selectedUpiApp, setSelectedUpiApp] = useState<'gpay' | 'phonepe' | 'paytm' | 'bhim'>('gpay');
   const [customUpiId, setCustomUpiId] = useState('');
+  const [upiSubTab, setUpiSubTab] = useState<'qr' | 'vpa'>('qr');
   const [copiedVpa, setCopiedVpa] = useState<boolean>(false);
 
   // EMI State
@@ -300,7 +342,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
             contact: effectivePhone,
             email: effectiveEmail,
             method: activeMethod === 'upi' ? 'upi' : undefined,
-            vpa: customUpiId.trim() ? customUpiId.trim() : undefined
+            vpa: (upiSubTab === 'vpa' && customUpiId.trim()) ? customUpiId.trim() : undefined
           },
           theme: { color: '#09090b', backdrop_color: 'rgba(0,0,0,0.85)' },
           handler: async function (response: any) {
@@ -380,6 +422,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
       setIsProcessingPayment(false);
     }
   };
+
+  const activeAppName = selectedUpiApp === 'gpay' ? 'Google Pay' : selectedUpiApp === 'phonepe' ? 'PhonePe' : selectedUpiApp === 'paytm' ? 'Paytm' : 'BHIM UPI';
 
   return (
     <div className="min-h-screen bg-[#fafafa] flex flex-col font-sans text-zinc-900 pb-28 lg:pb-16 selection:bg-amber-500/20">
@@ -708,7 +752,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                     <button
                       type="button"
                       onClick={() => setIsEditingGuest(false)}
-                      className="text-xs font-bold text-zinc-700 hover:text-zinc-950 font-mono"
+                      className="text-xs font-bold text-zinc-700 hover:text-zinc-950 font-mono cursor-pointer"
                     >
                       Done Editing ✓
                     </button>
@@ -720,7 +764,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
 
           <div className="h-px bg-zinc-100" />
 
-          {/* SECTION 2: Unified Razorpay & Auto-Generated UPI QR Hub */}
+          {/* SECTION 2: Unified Razorpay & Original App Brand QR Hub */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -778,56 +822,107 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
               </button>
             </div>
 
-            {/* UPI & AUTO-GENERATED QR SCANNER PANEL */}
+            {/* UPI & AUTO-GENERATED APP BRAND QR SCANNER PANEL */}
             {selectedPaymentType === 'upi' && (
               <div className="bg-zinc-50 rounded-2xl p-5 border border-zinc-200/80 space-y-4">
                 
-                {/* Mode Selector: Direct QR vs UPI ID Input */}
-                <div className="flex items-center justify-between pb-2 border-b border-zinc-200/60">
+                {/* 1. Official App Brand Selectors */}
+                <div>
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 mb-2 font-mono block">
+                    Select Your UPI App:
+                  </span>
+                  
+                  <div className="grid grid-cols-4 gap-2">
+                    {[
+                      { id: 'gpay', name: 'Google Pay', icon: <GPayIcon className="w-5 h-5" /> },
+                      { id: 'phonepe', name: 'PhonePe', icon: <PhonePeIcon className="w-5 h-5" /> },
+                      { id: 'paytm', name: 'Paytm', icon: <PaytmIcon className="w-6 h-4" /> },
+                      { id: 'bhim', name: 'Any UPI', icon: <UpiIcon className="w-5 h-4" /> },
+                    ].map(app => {
+                      const isSelected = selectedUpiApp === app.id;
+                      return (
+                        <button
+                          key={app.id}
+                          type="button"
+                          onClick={() => {
+                            uiAudio.playClick();
+                            setSelectedUpiApp(app.id as any);
+                            setUpiSubTab('qr');
+                          }}
+                          className={`py-3 px-1.5 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer ${
+                            isSelected
+                              ? 'bg-white text-zinc-950 border-zinc-950 shadow-xs ring-1 ring-zinc-900 font-bold'
+                              : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-100'
+                          }`}
+                        >
+                          <div className="h-5 flex items-center justify-center">
+                            {app.icon}
+                          </div>
+                          <span className="text-[11px] font-bold truncate w-full font-display">{app.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Sub-Mode Toggle: Scan QR vs Type VPA */}
+                <div className="flex items-center justify-between pt-1">
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => { uiAudio.playClick(); setUpiSubMode('qr'); }}
-                      className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
-                        upiSubMode === 'qr'
-                          ? 'bg-zinc-950 text-white shadow-xs'
+                      onClick={() => { uiAudio.playClick(); setUpiSubTab('qr'); }}
+                      className={`text-[11px] font-bold px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                        upiSubTab === 'qr'
+                          ? 'bg-zinc-900 text-white'
                           : 'bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-100'
                       }`}
                     >
-                      📱 Scan Dynamic QR
+                      📱 {activeAppName} QR Scanner
                     </button>
                     <button
                       type="button"
-                      onClick={() => { uiAudio.playClick(); setUpiSubMode('vpa'); }}
-                      className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
-                        upiSubMode === 'vpa'
-                          ? 'bg-zinc-950 text-white shadow-xs'
+                      onClick={() => { uiAudio.playClick(); setUpiSubTab('vpa'); }}
+                      className={`text-[11px] font-bold px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+                        upiSubTab === 'vpa'
+                          ? 'bg-zinc-900 text-white'
                           : 'bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-100'
                       }`}
                     >
-                      ⚡ Enter UPI ID / VPA
+                      ⚡ Enter UPI ID
                     </button>
                   </div>
                   <span className="text-[10px] font-mono text-zinc-400 hidden sm:inline">Zero Gateway Fee</span>
                 </div>
 
-                {/* Sub-Mode 1: Live Auto-Generated Dynamic QR Code */}
-                {upiSubMode === 'qr' ? (
+                {/* Sub-Mode 1: App Brand-Customized Live QR Code */}
+                {upiSubTab === 'qr' ? (
                   <div className="bg-white rounded-2xl p-5 border border-zinc-200 flex flex-col items-center text-center space-y-3 shadow-2xs">
+                    
+                    {/* Brand Banner */}
+                    <div className="flex items-center gap-2 bg-zinc-50 border border-zinc-200 px-3 py-1 rounded-full">
+                      {selectedUpiApp === 'gpay' && <GPayIcon className="w-4 h-4" />}
+                      {selectedUpiApp === 'phonepe' && <PhonePeIcon className="w-4 h-4" />}
+                      {selectedUpiApp === 'paytm' && <PaytmIcon className="w-5 h-3" />}
+                      {selectedUpiApp === 'bhim' && <UpiIcon className="w-4 h-3" />}
+                      <span className="text-xs font-bold text-zinc-800">
+                        {activeAppName} Fast QR Code
+                      </span>
+                    </div>
+
                     <div className="w-44 h-44 bg-zinc-50 rounded-2xl flex items-center justify-center border border-zinc-200 p-2 shadow-inner">
                       <img 
                         src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`upi://pay?pa=encho.space@icici&pn=ENCHO_SPACE&am=${grandTotal}&cu=INR&tn=${encodeURIComponent(tierMeta.name)}`)}`}
-                        alt="Auto Generated UPI Payment QR Code"
+                        alt={`${activeAppName} Payment QR Code`}
                         className="w-full h-full object-contain"
                       />
                     </div>
                     
                     <div>
                       <span className="text-xs font-bold text-zinc-900 block">
-                        Scan with Google Pay, PhonePe, Paytm, or BHIM
+                        Scan from your {activeAppName} app to pay
                       </span>
                       <p className="text-[11px] text-zinc-500 font-medium mt-0.5">
-                        Open your camera or UPI app on your phone and scan the code above
+                        Open {activeAppName} on your phone, point camera, and approve ₹{grandTotal.toLocaleString()}
                       </p>
                     </div>
 
@@ -863,7 +958,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[10px] text-zinc-400">Popular handles:</span>
+                      <span className="text-[10px] text-zinc-400">Quick add:</span>
                       {['@okaxis', '@okhdfcbank', '@oksbi', '@paytm', '@ybl'].map(handle => (
                         <button
                           key={handle}
@@ -946,7 +1041,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
           <div className="pt-2">
             <button
               type="button"
-              onClick={() => handleExecutePayment(selectedPaymentType === 'upi' ? (upiSubMode === 'vpa' && customUpiId ? 'upi' : 'upi') : selectedPaymentType)}
+              onClick={() => handleExecutePayment(selectedPaymentType === 'upi' ? (upiSubTab === 'vpa' && customUpiId ? 'upi' : 'upi') : selectedPaymentType)}
               disabled={isProcessingPayment}
               className="w-full bg-zinc-950 hover:bg-zinc-900 text-white font-bold font-display py-4 rounded-2xl shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 text-sm tracking-wide"
             >
