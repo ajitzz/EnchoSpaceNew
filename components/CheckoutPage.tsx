@@ -26,7 +26,13 @@ import {
   HelpCircle,
   Plus,
   Minus,
-  Sparkle
+  Copy,
+  Star,
+  Compass,
+  ArrowUpRight,
+  ShieldAlert,
+  Layers,
+  ChevronDown
 } from 'lucide-react';
 import { Listing, Experience } from '../types';
 import { loadRazorpayScript, verifyRazorpayPayment } from '../lib/razorpay';
@@ -41,7 +47,7 @@ const EMI_BANKS = [
   { id: 'icici', name: 'ICICI Bank', rate: 14.0, logo: 'ICICI' },
   { id: 'sbi', name: 'State Bank of India', rate: 13.0, logo: 'SBI' },
   { id: 'axis', name: 'Axis Bank', rate: 14.5, logo: 'AXIS' },
-  { id: 'kotak', name: 'Kotak Mahindra', rate: 15.0, logo: 'KOTAK' },
+  { id: 'kotak', name: 'Kotak Mahindra Bank', rate: 15.0, logo: 'KOTAK' },
 ];
 
 const EMI_TENURES = [3, 6, 9, 12];
@@ -56,7 +62,8 @@ const ROOM_TIER_META = {
     priceUsd: 220,
     capacity: 3,
     specs: '1,200 sq.ft · 270° Valley View · Heated Jacuzzi',
-    tag: 'Master Luxury'
+    tag: 'Master Luxury',
+    badgeBg: 'bg-amber-50 text-amber-900 border-amber-200'
   },
   deluxe: {
     id: 'deluxe' as const,
@@ -67,7 +74,8 @@ const ROOM_TIER_META = {
     priceUsd: 140,
     capacity: 2,
     specs: '650 sq.ft · Garden Verandah · Twin Plush Beds',
-    tag: 'Recommended Anchor'
+    tag: 'Recommended Anchor',
+    badgeBg: 'bg-emerald-50 text-emerald-900 border-emerald-200'
   },
   executive: {
     id: 'executive' as const,
@@ -78,7 +86,8 @@ const ROOM_TIER_META = {
     priceUsd: 90,
     capacity: 1,
     specs: '420 sq.ft · Ergonomic Work Enclave · Rain Shower',
-    tag: 'Solo & Work'
+    tag: 'Solo & Work',
+    badgeBg: 'bg-blue-50 text-blue-900 border-blue-200'
   }
 };
 
@@ -234,7 +243,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
   const [childrenCount, setChildrenCount] = useState<number>(initialData.childrenCount || 0);
   const [infantsCount, setInfantsCount] = useState<number>(initialData.infantsCount || 0);
   const [showOccupancyModal, setShowOccupancyModal] = useState<boolean>(false);
-  const [showDateModal, setShowDateModal] = useState<boolean>(false);
+  const [copiedVpa, setCopiedVpa] = useState<boolean>(false);
 
   // Smart Payment Router State
   const [paymentMethod, setPaymentMethod] = useState<'upi' | 'card' | 'emi'>('upi');
@@ -298,6 +307,13 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
   };
   const emiDetails = calculateEMI(grandTotal, selectedBank.rate, selectedTenure);
 
+  const handleCopyVpa = () => {
+    navigator.clipboard.writeText('encho.space@icici');
+    setCopiedVpa(true);
+    uiAudio.playClick();
+    setTimeout(() => setCopiedVpa(false), 2000);
+  };
+
   // Real Razorpay Execution with Server-Side HMAC SHA-256 Verification
   const handleExecutePayment = async () => {
     if (!guestName || guestName.trim().length < 2) {
@@ -307,7 +323,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
     }
     if (!guestPhone || guestPhone.replace(/\D/g, '').length < 6) {
       uiAudio.playError();
-      alert("Please enter a valid WhatsApp or phone number.");
+      alert("Please enter a valid WhatsApp or contact number.");
       return;
     }
 
@@ -449,89 +465,94 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
   };
 
   return (
-    <div className="min-h-screen bg-[#fcfcfd] flex flex-col font-sans selection:bg-amber-500/20 text-zinc-900 pb-28 lg:pb-16">
+    <div className="min-h-screen bg-[#fbfbfb] flex flex-col font-sans selection:bg-amber-500/20 text-zinc-900 pb-32 lg:pb-16">
       
-      {/* Top Header: Focused Luxury Navigation */}
-      <header className="w-full bg-white/95 backdrop-blur-2xl border-b border-zinc-200/80 sticky top-0 z-40 shadow-xs">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      {/* Top Header: Ultra-Sleek Luxury Navigation */}
+      <header className="w-full bg-white/90 backdrop-blur-2xl border-b border-zinc-200/80 sticky top-0 z-40 shadow-xs">
+        <div className="max-w-6xl mx-auto px-4 md:px-8 h-16 flex items-center justify-between">
           <button 
             type="button"
             onClick={() => { uiAudio.playClick(); onCancel(); }}
-            className="flex items-center gap-2 text-xs font-bold text-zinc-600 hover:text-zinc-950 transition-all cursor-pointer bg-zinc-100/80 hover:bg-zinc-200/80 px-3.5 py-1.5 rounded-full"
+            className="flex items-center gap-2 text-xs font-bold text-zinc-700 hover:text-zinc-950 transition-all cursor-pointer bg-zinc-100/90 hover:bg-zinc-200/80 px-3.5 py-1.5 rounded-full group"
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
+            <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
             <span className="hidden sm:inline">Back to Sanctuary</span>
             <span className="sm:hidden">Back</span>
           </button>
 
-          <div className="flex items-center gap-1.5 select-none">
+          <div className="flex items-center gap-2 select-none">
             <span className="font-black text-xl tracking-tighter text-zinc-950 font-display">ENCHO</span>
-            <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-            <span className="text-[9px] font-bold tracking-[0.3em] text-zinc-400 uppercase font-mono">Vault</span>
+            <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+            <span className="text-[10px] font-bold tracking-[0.3em] text-zinc-400 uppercase font-mono">Vault</span>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-full border border-emerald-200/70 shadow-2xs">
-            <Lock className="w-3 h-3 text-emerald-600" />
+          <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-900 px-3.5 py-1.5 rounded-full border border-emerald-200/80 shadow-2xs">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
             <span className="text-[10px] font-black uppercase tracking-wider font-mono">256-Bit Escrow</span>
           </div>
         </div>
       </header>
 
       {/* 10-Minute Escrow Lock Reassurance Banner */}
-      <div className="bg-zinc-950 text-white py-2.5 px-4 text-center text-xs font-medium flex items-center justify-center gap-2 border-b border-zinc-800">
+      <div className="bg-zinc-950 text-white py-2.5 px-4 text-center text-xs font-medium flex items-center justify-center gap-2 border-b border-zinc-800/80">
         <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
         <span className="text-zinc-300">Selected dates and room are held in escrow for</span>
-        <span className="font-mono font-bold text-amber-300 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded-md text-[11px]">
+        <span className="font-mono font-bold text-amber-300 bg-zinc-900 border border-zinc-700 px-2.5 py-0.5 rounded-md text-[11px]">
           {formatEscrowTime(escrowTimeLeft)}
         </span>
       </div>
 
       {/* Main Single-Screen Cockpit */}
-      <main className="flex-grow max-w-6xl w-full mx-auto px-4 py-6 md:py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <main className="flex-grow max-w-6xl w-full mx-auto px-4 md:px-8 py-6 md:py-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         
         {/* ========================================================================= */}
         {/* LEFT COLUMN (45% / 5 Cols): LIVE SANCTUARY DOSSIER                        */}
         {/* ========================================================================= */}
         <div className="lg:col-span-5 space-y-6">
-          <div className="bg-white rounded-3xl p-6 md:p-7 border border-zinc-200/80 shadow-[0_10px_30px_rgba(0,0,0,0.03)] space-y-6">
+          <div className="bg-white rounded-3xl p-6 md:p-7 border border-zinc-200/80 shadow-[0_12px_40px_rgba(0,0,0,0.03)] space-y-6">
             
-            {/* Property & Selected Room Header */}
-            <div className="flex gap-4 items-center">
-              <div className="w-20 h-20 rounded-2xl overflow-hidden bg-zinc-100 shrink-0 border border-zinc-200/80 shadow-2xs relative group">
+            {/* Cinematic Hero Bento Banner */}
+            <div className="space-y-3">
+              <div className="w-full h-44 rounded-2xl overflow-hidden bg-zinc-100 border border-zinc-200/80 shadow-2xs relative group">
                 <img 
                   src={isExperience ? (experience?.image_urls?.[0] || undefined) : (listing?.imageUrl || undefined)} 
                   alt={isExperience ? experience?.title : listing?.title} 
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                 />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-200/60 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider font-mono mb-1">
-                  <span>{tierMeta.icon}</span>
-                  <span>{isExperience ? "Curated Experience" : tierMeta.tag}</span>
+                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/80 via-zinc-950/20 to-transparent pointer-events-none" />
+                
+                <div className="absolute top-3 left-3 flex items-center gap-1.5">
+                  <span className="bg-zinc-900/90 backdrop-blur-md text-amber-300 border border-white/15 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider font-mono flex items-center gap-1 shadow-lg">
+                    <span>{tierMeta.icon}</span>
+                    <span>{tierMeta.shortName}</span>
+                  </span>
                 </div>
-                <h3 className="font-extrabold text-zinc-950 text-base leading-tight truncate font-display">
-                  {isExperience ? experience?.title : listing?.title}
-                </h3>
-                <p className="text-xs text-zinc-400 font-medium truncate mt-0.5 flex items-center gap-1">
-                  <MapPin className="w-3 h-3 text-zinc-400 shrink-0" />
-                  <span>{isExperience ? experience?.destination : listing?.address}</span>
-                </p>
+
+                <div className="absolute bottom-3 left-3 right-3 text-white">
+                  <h3 className="font-extrabold text-base md:text-lg leading-tight truncate font-display drop-shadow-md">
+                    {isExperience ? experience?.title : listing?.title}
+                  </h3>
+                  <p className="text-xs text-zinc-200 font-medium truncate mt-0.5 flex items-center gap-1 drop-shadow-sm">
+                    <MapPin className="w-3 h-3 text-amber-400 shrink-0" />
+                    <span>{isExperience ? experience?.destination : listing?.address}</span>
+                  </p>
+                </div>
               </div>
             </div>
 
-            {/* 1-Tap In-Checkout Room Switcher */}
+            {/* Tactile 3-Tier Room Inventory Switcher */}
             {!isExperience && (
-              <div className="pt-5 border-t border-zinc-100 space-y-2.5">
+              <div className="pt-2 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono">
-                    Room Category
+                    Select Suite / Room Tier
                   </span>
                   <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
                     Max {tierMeta.capacity} Guests
                   </span>
                 </div>
 
-                <div className="grid grid-cols-3 gap-1.5 p-1 bg-zinc-100/80 rounded-2xl border border-zinc-200/60">
+                <div className="grid grid-cols-3 gap-2 p-1.5 bg-zinc-100/90 rounded-2xl border border-zinc-200/70">
                   {(['suites', 'deluxe', 'executive'] as const).map(tierKey => {
                     const t = ROOM_TIER_META[tierKey];
                     const isSelected = activeRoomTier === tierKey;
@@ -543,35 +564,34 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                         onClick={() => {
                           uiAudio.playClick();
                           setActiveRoomTier(tierKey);
-                          // Ensure occupancy respects room limits
                           if (tierKey === 'executive') setAdultsCount(1);
                         }}
-                        className={`py-2 px-1.5 rounded-xl text-center transition-all cursor-pointer flex flex-col items-center justify-center relative ${
+                        className={`py-2.5 px-1.5 rounded-xl text-center transition-all cursor-pointer flex flex-col items-center justify-center relative ${
                           isSelected
-                            ? 'bg-white text-zinc-950 shadow-xs ring-1 ring-zinc-900/10 font-bold scale-[1.02]'
+                            ? 'bg-white text-zinc-950 shadow-sm ring-1 ring-zinc-900/10 font-bold scale-[1.02]'
                             : 'text-zinc-500 hover:text-zinc-900 hover:bg-white/60'
                         }`}
                       >
-                        <span className="text-xs">{t.icon}</span>
-                        <span className="text-[11px] font-bold tracking-tight mt-0.5">{t.shortName}</span>
-                        <span className="text-[9px] font-mono text-zinc-400">
+                        <span className="text-sm">{t.icon}</span>
+                        <span className="text-[11px] font-bold tracking-tight mt-0.5 font-display">{t.shortName}</span>
+                        <span className="text-[10px] font-mono font-bold text-zinc-700 mt-0.5">
                           {listing?.currency === 'USD' ? `$${tRate}` : `₹${Math.round(tRate / 1000)}k`}
                         </span>
                       </button>
                     );
                   })}
                 </div>
-                <p className="text-[10px] text-zinc-400 font-medium px-1 truncate">
+                <p className="text-[11px] text-zinc-500 font-medium px-1 truncate">
                   {tierMeta.specs}
                 </p>
               </div>
             )}
 
             {/* Interactive Stay Dates & Granular Occupancy Engine */}
-            <div className="pt-5 border-t border-zinc-100 space-y-3">
+            <div className="pt-5 border-t border-zinc-100 space-y-3.5">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono">
-                  Stay Dates & Guests
+                  Stay Dates & Occupancy
                 </span>
                 <span className="font-mono font-bold text-zinc-900 bg-zinc-100 px-2.5 py-0.5 rounded-md text-[11px]">
                   {nights} {nights === 1 ? 'Night' : 'Nights'}
@@ -579,7 +599,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
               </div>
 
               {/* Inline Date Pickers */}
-              <div className="grid grid-cols-2 gap-2.5 bg-zinc-50/80 p-3 rounded-2xl border border-zinc-200/70">
+              <div className="grid grid-cols-2 gap-2.5 bg-zinc-50/90 p-3 rounded-2xl border border-zinc-200/70">
                 <div>
                   <label className="block text-[9px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono mb-1">Check-in</label>
                   <input
@@ -613,7 +633,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                 <button
                   type="button"
                   onClick={() => { uiAudio.playClick(); setShowOccupancyModal(prev => !prev); }}
-                  className="w-full bg-zinc-50/80 hover:bg-zinc-100/90 border border-zinc-200/70 rounded-2xl px-4 py-2.5 text-xs font-semibold text-zinc-800 flex items-center justify-between transition-all cursor-pointer group"
+                  className="w-full bg-zinc-50/90 hover:bg-zinc-100 border border-zinc-200/70 rounded-2xl px-4 py-2.5 text-xs font-semibold text-zinc-800 flex items-center justify-between transition-all cursor-pointer group"
                 >
                   <div className="flex items-center gap-2">
                     <User className="w-3.5 h-3.5 text-zinc-500" />
@@ -623,7 +643,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                       {infantsCount > 0 ? ` · ${infantsCount} Infant${infantsCount > 1 ? 's' : ''}` : ''}
                     </span>
                   </div>
-                  <span className="text-[10px] font-bold text-zinc-500 group-hover:text-zinc-900 font-mono bg-white px-2 py-0.5 rounded-md border border-zinc-200 shadow-2xs">
+                  <span className="text-[10px] font-bold text-zinc-500 group-hover:text-zinc-900 font-mono bg-white px-2.5 py-0.5 rounded-md border border-zinc-200 shadow-2xs">
                     Modify ✎
                   </span>
                 </button>
@@ -680,7 +700,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                           onClick={() => { 
                             uiAudio.playClick(); 
                             if (activeRoomTier !== 'suites') {
-                              setActiveRoomTier('suites'); // Upgrade to suite for child daybed
+                              setActiveRoomTier('suites');
                             }
                             setChildrenCount(prev => Math.min(1, prev + 1));
                           }}
@@ -716,7 +736,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                       onClick={() => setShowOccupancyModal(false)}
                       className="w-full py-2.5 bg-zinc-900 text-white font-bold text-xs rounded-xl mt-1 cursor-pointer"
                     >
-                      Done
+                      Apply Occupancy
                     </button>
                   </div>
                 )}
@@ -736,7 +756,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                   <span className="font-mono font-bold text-zinc-900">{formatPrice(baseRentTotal, listing?.currency || 'INR')}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Concierge & Escrow Fee (15%)</span>
+                  <span>Concierge & Escrow Protection (15%)</span>
                   <span className="font-mono font-bold text-zinc-900">{formatPrice(enchoOptimizationFee, listing?.currency || 'INR')}</span>
                 </div>
                 <div className="flex justify-between">
@@ -771,7 +791,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
         {/* ========================================================================= */}
         {/* RIGHT COLUMN (55% / 7 Cols): 1-CLICK VAULT CHECKOUT & SMART ROUTER        */}
         {/* ========================================================================= */}
-        <div className="lg:col-span-7 bg-white rounded-3xl p-6 md:p-8 border border-zinc-200/80 shadow-[0_10px_30px_rgba(0,0,0,0.03)] space-y-7">
+        <div className="lg:col-span-7 bg-white rounded-3xl p-6 md:p-8 border border-zinc-200/80 shadow-[0_12px_40px_rgba(0,0,0,0.03)] space-y-7">
           
           {/* Section 1: Guest Identity Dossier */}
           <div>
@@ -829,12 +849,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
               </div>
               <span className="text-[10px] font-mono text-emerald-600 font-bold flex items-center gap-1">
                 <Zap className="w-3 h-3 text-emerald-500" />
-                <span>Instant Confirmation</span>
+                <span>Instant Webhook Sync</span>
               </span>
             </div>
 
             {/* Tactile Payment Method Selector Pills */}
-            <div className="grid grid-cols-3 gap-2 mb-5">
+            <div className="grid grid-cols-3 gap-2.5 mb-5">
               <button
                 type="button"
                 onClick={() => { uiAudio.playClick(); setPaymentMethod('upi'); }}
@@ -880,7 +900,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
 
             {/* Payment Method Panel Details */}
             {paymentMethod === 'upi' && (
-              <div className="bg-zinc-50/80 rounded-2xl p-5 border border-zinc-200/70 space-y-4">
+              <div className="bg-zinc-50/90 rounded-2xl p-5 border border-zinc-200/70 space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-zinc-800">One-Tap UPI Authorization</span>
                   <div className="flex items-center gap-1 bg-white px-2.5 py-1 rounded-md border border-zinc-200 text-[10px] font-mono text-zinc-700 font-bold">
@@ -924,6 +944,19 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                         className="w-full h-full object-contain"
                       />
                     </div>
+                    
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-zinc-600 bg-zinc-100 px-3 py-1 rounded-lg border border-zinc-200">encho.space@icici</span>
+                      <button
+                        type="button"
+                        onClick={handleCopyVpa}
+                        className="text-xs font-bold text-zinc-800 bg-zinc-100 hover:bg-zinc-200 px-2.5 py-1 rounded-lg border border-zinc-200 transition-colors flex items-center gap-1 cursor-pointer"
+                      >
+                        <Copy className="w-3 h-3 text-zinc-600" />
+                        <span>{copiedVpa ? 'Copied!' : 'Copy'}</span>
+                      </button>
+                    </div>
+
                     <p className="text-xs text-zinc-500 font-medium">Scan with Google Pay, PhonePe, Paytm, or BHIM</p>
                   </div>
                 ) : (
@@ -941,7 +974,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
             )}
 
             {paymentMethod === 'card' && (
-              <div className="bg-zinc-50/80 rounded-2xl p-5 border border-zinc-200/70">
+              <div className="bg-zinc-50/90 rounded-2xl p-5 border border-zinc-200/70">
                 <Elements stripe={stripePromise} options={stripeOptions}>
                   <StripeCheckoutForm 
                     amount={grandTotal} 
@@ -962,7 +995,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
             )}
 
             {paymentMethod === 'emi' && (
-              <div className="bg-zinc-50/80 rounded-2xl p-5 border border-zinc-200/70 space-y-4">
+              <div className="bg-zinc-50/90 rounded-2xl p-5 border border-zinc-200/70 space-y-4">
                 <div>
                   <label className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 mb-1.5 font-mono">Select Partner Bank</label>
                   <select
@@ -1046,7 +1079,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
       {/* ========================================================================= */}
       {/* MOBILE STICKY BOTTOM VAULT BAR (For Effortless 1-Thumb Booking on Mobile)  */}
       {/* ========================================================================= */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t border-zinc-200/80 shadow-[0_-10px_30px_rgba(0,0,0,0.08)] z-50 px-4 py-3 pb-safe safe-area-bottom">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-2xl border-t border-zinc-200/80 shadow-[0_-12px_40px_rgba(0,0,0,0.08)] z-50 px-4 py-3.5 pb-safe safe-area-bottom">
         <div className="flex items-center justify-between gap-4 max-w-md mx-auto">
           <div className="flex flex-col">
             <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">{tierMeta.shortName} · {nights} nts</span>
