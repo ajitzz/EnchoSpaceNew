@@ -783,18 +783,29 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                 </div>
               </div>
 
-              {/* Copyable UPI VPA Pill */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono text-zinc-600 bg-white px-3 py-1 rounded-lg border border-zinc-200">
-                  encho.space@icici
-                </span>
+              {/* Copyable UPI VPA Pill & Instant Confirm Action */}
+              <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-mono text-zinc-600 bg-white px-3 py-1.5 rounded-xl border border-zinc-200 shadow-2xs">
+                    encho.space@icici
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCopyVpa}
+                    className="text-xs font-bold text-zinc-800 bg-white hover:bg-zinc-100 px-3 py-1.5 rounded-xl border border-zinc-200 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                  >
+                    <Copy className="w-3 h-3 text-zinc-600" />
+                    <span>{copiedVpa ? 'Copied!' : 'Copy'}</span>
+                  </button>
+                </div>
+
                 <button
                   type="button"
-                  onClick={handleCopyVpa}
-                  className="text-xs font-bold text-zinc-800 bg-white hover:bg-zinc-100 px-2.5 py-1 rounded-lg border border-zinc-200 transition-colors flex items-center gap-1 cursor-pointer"
+                  onClick={() => handleExecutePayment()}
+                  className="text-xs font-bold text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 px-3.5 py-1.5 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
                 >
-                  <Copy className="w-3 h-3 text-zinc-600" />
-                  <span>{copiedVpa ? 'Copied!' : 'Copy UPI ID'}</span>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>I have completed UPI payment ↗</span>
                 </button>
               </div>
 
