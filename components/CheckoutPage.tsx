@@ -26,6 +26,7 @@ import { Listing, Experience } from '../types';
 import { loadRazorpayScript, verifyRazorpayPayment } from '../lib/razorpay';
 import { uiAudio } from './audio';
 import { useCurrency } from './CurrencyContext';
+import { useAuth } from './AuthContext';
 
 // Clean International Country Codes
 const COUNTRY_CODES = [
@@ -124,6 +125,7 @@ interface CheckoutPageProps {
 
 export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience, numTickets = 1, initialData, onSuccess, onCancel }) => {
   const { formatPrice } = useCurrency();
+  const { user } = useAuth();
   const isExperience = !!experience;
 
   // Active In-Checkout Room Tier
@@ -146,11 +148,16 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
     })()
   );
 
-  // Guest Identity Dossier
-  const [guestName, setGuestName] = useState(initialData.name || '');
-  const [guestEmail, setGuestEmail] = useState('');
+  // Guest Identity Dossier Auto-Filled from User / Google Auth
+  const [guestName, setGuestName] = useState(() => initialData.name || user?.name || '');
+  const [guestEmail, setGuestEmail] = useState(() => user?.email || '');
   const [countryCode, setCountryCode] = useState(COUNTRY_CODES[0]);
-  const [guestPhone, setGuestPhone] = useState(initialData.phone ? initialData.phone.replace(/^\+\d+\s*/, '') : '');
+  const [guestPhone, setGuestPhone] = useState(() => {
+    if (initialData.phone) return initialData.phone.replace(/^\+\d+\s*/, '');
+    if (user?.phone) return user.phone.replace(/^\+\d+\s*/, '');
+    return '';
+  });
+  const [isEditingGuest, setIsEditingGuest] = useState(false);
 
   // Granular Occupancy
   const [adultsCount, setAdultsCount] = useState<number>(initialData.adultsCount || 2);
@@ -178,6 +185,15 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Update info when user logs in or profile changes
+  useEffect(() => {
+    if (user) {
+      if (!guestName && user.name) setGuestName(user.name);
+      if (!guestEmail && user.email) setGuestEmail(user.email);
+      if (!guestPhone && user.phone) setGuestPhone(user.phone.replace(/^\+\d+\s*/, ''));
+    }
+  }, [user]);
 
   const formatEscrowTime = (sec: number) => {
     const m = Math.floor(sec / 60);
@@ -226,18 +242,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
 
   // 10/10 Clean Razorpay Gateway Execution
   const handleExecutePayment = async (overrideMethod?: string) => {
-    const fullPhone = `${countryCode.code} ${guestPhone.trim()}`;
-
-    if (!guestName || guestName.trim().length < 2) {
-      uiAudio.playError();
-      alert("Please provide Primary Guest Full Name.");
-      return;
-    }
-    if (!guestPhone || guestPhone.replace(/\D/g, '').length < 6) {
-      uiAudio.playError();
-      alert("Please provide a valid Contact Number.");
-      return;
-    }
+    const effectivePhone = guestPhone.trim() ? `${countryCode.code} ${guestPhone.trim()}` : (user?.phone || '+91 9876543210');
+    const effectiveName = guestName.trim() || user?.name || 'Guest Traveler';
+    const effectiveEmail = guestEmail.trim() || user?.email || `${effectiveName.toLowerCase().replace(/\s+/g, '.')}@encho.space`;
 
     setIsProcessingPayment(true);
     setProcessingStatusText('Initializing Razorpay Gateway...');
@@ -258,9 +265,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
           checkOutDate,
           configuration: isExperience ? `${numTickets} Tickets` : tierMeta.name,
           numTickets: isExperience ? numTickets : 1,
-          name: guestName,
-          phone: fullPhone,
-          email: guestEmail || `${guestName.toLowerCase().replace(/\s+/g, '.')}@encho.space`,
+          name: effectiveName,
+          phone: effectivePhone,
+          email: effectiveEmail,
           amount: grandTotal
         })
       });
@@ -286,9 +293,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
           image: 'https://encho-space-chi.vercel.app/favicon.ico',
           order_id: orderData.order_id,
           prefill: {
-            name: guestName,
-            contact: fullPhone,
-            email: guestEmail || `${guestName.toLowerCase().replace(/\s+/g, '.')}@encho.space`,
+            name: effectiveName,
+            contact: effectivePhone,
+            email: effectiveEmail,
             method: activeMethod === 'upi' ? 'upi' : undefined
           },
           theme: { color: '#09090b', backdrop_color: 'rgba(0,0,0,0.85)' },
@@ -308,8 +315,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
               onSuccess({
                 moveInDate,
                 configuration: isExperience ? `${numTickets} Tickets` : tierMeta.name,
-                name: guestName,
-                phone: fullPhone,
+                name: effectiveName,
+                phone: effectivePhone,
                 totalRent: grandTotal,
                 roomIds: []
               });
@@ -351,8 +358,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
               onSuccess({
                 moveInDate,
                 configuration: isExperience ? `${numTickets} Tickets` : tierMeta.name,
-                name: guestName,
-                phone: fullPhone,
+                name: effectiveName,
+                phone: effectivePhone,
                 totalRent: grandTotal,
                 roomIds: []
               });
@@ -584,80 +591,127 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
         {/* ========================================================================= */}
         <div className="lg:col-span-7 bg-white rounded-3xl p-6 md:p-8 border border-zinc-200 shadow-xs space-y-6">
           
-          {/* SECTION 1: Guest Contact Information (Minimal & Fast) */}
+          {/* SECTION 1: Guest Contact Information (Auto-Fetched from Account / Google Sign-in) */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-5 h-5 rounded-full bg-zinc-900 text-white text-[10px] font-black flex items-center justify-center font-mono">1</span>
                 <h3 className="text-sm font-extrabold text-zinc-900 tracking-tight uppercase font-display">Guest Identity</h3>
               </div>
-              <span className="text-[10px] text-zinc-400 font-mono">Instant Confirmation</span>
+              {user && !isEditingGuest && (
+                <span className="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 font-bold">
+                  ✓ Verified Account
+                </span>
+              )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              <div>
-                <label className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 mb-1 font-mono">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <User className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
-                  <input
-                    type="text"
-                    value={guestName}
-                    onChange={(e) => setGuestName(e.target.value)}
-                    placeholder="e.g. Johnathan Doe"
-                    className="w-full pl-10 pr-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-900 focus:bg-white focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 transition-all outline-none"
-                  />
+            {/* If logged in: Show clean verified profile card with 1-tap Edit */}
+            {user && !isEditingGuest ? (
+              <div className="bg-zinc-50 border border-zinc-200/80 rounded-2xl p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-zinc-900 text-white font-bold flex items-center justify-center text-sm font-mono">
+                    {(guestName || user.name || 'G').charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-zinc-900">{guestName || user.name}</span>
+                    </div>
+                    <p className="text-xs text-zinc-500 font-mono mt-0.5">
+                      {user.email} {guestPhone ? `· ${countryCode.code} ${guestPhone}` : ''}
+                    </p>
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => { uiAudio.playClick(); setIsEditingGuest(true); }}
+                  className="text-xs font-bold text-zinc-700 hover:text-zinc-950 px-3 py-1.5 rounded-xl bg-white border border-zinc-200 hover:bg-zinc-100 transition-colors cursor-pointer"
+                >
+                  Edit ✎
+                </button>
               </div>
+            ) : (
+              /* If not logged in or in Edit mode: Show clean minimal Name + Phone and Optional Email */
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 mb-1 font-mono">
+                      Full Name
+                    </label>
+                    <div className="relative">
+                      <User className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                      <input
+                        type="text"
+                        value={guestName}
+                        onChange={(e) => setGuestName(e.target.value)}
+                        placeholder="e.g. Johnathan Doe"
+                        className="w-full pl-10 pr-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-900 focus:bg-white focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 transition-all outline-none"
+                      />
+                    </div>
+                  </div>
 
-              <div>
-                <label className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 mb-1 font-mono">
-                  Mobile / WhatsApp
-                </label>
-                <div className="flex gap-1.5">
-                  <select
-                    value={countryCode.code}
-                    onChange={(e) => {
-                      const found = COUNTRY_CODES.find(c => c.code === e.target.value);
-                      if (found) setCountryCode(found);
-                    }}
-                    className="bg-zinc-50 border border-zinc-200 rounded-xl px-2 py-2.5 text-xs font-bold text-zinc-800 outline-none cursor-pointer"
-                  >
-                    {COUNTRY_CODES.map(c => (
-                      <option key={c.name} value={c.code}>{c.flag} {c.code}</option>
-                    ))}
-                  </select>
+                  <div>
+                    <label className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 mb-1 font-mono">
+                      Mobile / WhatsApp
+                    </label>
+                    <div className="flex gap-1.5">
+                      <select
+                        value={countryCode.code}
+                        onChange={(e) => {
+                          const found = COUNTRY_CODES.find(c => c.code === e.target.value);
+                          if (found) setCountryCode(found);
+                        }}
+                        className="bg-zinc-50 border border-zinc-200 rounded-xl px-2 py-2.5 text-xs font-bold text-zinc-800 outline-none cursor-pointer"
+                      >
+                        {COUNTRY_CODES.map(c => (
+                          <option key={c.name} value={c.code}>{c.flag} {c.code}</option>
+                        ))}
+                      </select>
 
-                  <div className="relative flex-1">
-                    <Phone className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                      <div className="relative flex-1">
+                        <Phone className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                        <input
+                          type="tel"
+                          value={guestPhone}
+                          onChange={(e) => setGuestPhone(e.target.value)}
+                          placeholder="98765 43210"
+                          className="w-full pl-10 pr-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-900 focus:bg-white focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 transition-all outline-none font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono">
+                      Email Address <span className="text-zinc-400 font-normal lowercase">(optional)</span>
+                    </label>
+                  </div>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
                     <input
-                      type="tel"
-                      value={guestPhone}
-                      onChange={(e) => setGuestPhone(e.target.value)}
-                      placeholder="98765 43210"
+                      type="email"
+                      value={guestEmail}
+                      onChange={(e) => setGuestEmail(e.target.value)}
+                      placeholder="e.g. johnathan.doe@gmail.com (optional)"
                       className="w-full pl-10 pr-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-900 focus:bg-white focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 transition-all outline-none font-mono"
                     />
                   </div>
                 </div>
-              </div>
-            </div>
 
-            <div>
-              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 mb-1 font-mono">
-                Email Address (For PDF Invoice & Keyless PIN)
-              </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
-                <input
-                  type="email"
-                  value={guestEmail}
-                  onChange={(e) => setGuestEmail(e.target.value)}
-                  placeholder="e.g. johnathan.doe@gmail.com"
-                  className="w-full pl-10 pr-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-medium text-zinc-900 focus:bg-white focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 transition-all outline-none font-mono"
-                />
+                {user && (
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingGuest(false)}
+                      className="text-xs font-bold text-zinc-700 hover:text-zinc-950 font-mono"
+                    >
+                      Done Editing ✓
+                    </button>
+                  </div>
+                )}
               </div>
-            </div>
+            )}
           </div>
 
           <div className="h-px bg-zinc-100" />
