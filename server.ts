@@ -15570,7 +15570,11 @@ app.post('/api/checkout/razorpay/order', optionalAuthenticateToken, async (req: 
 
       const commissionFee = (baseRent * commissionRate) / 100;
       const taxFee = (baseRent * taxRate) / 100;
-      finalAmount = Math.round(baseRent + commissionFee + taxFee + systemFee);
+      if (req.body.amount && Number(req.body.amount) > 0) {
+        finalAmount = Math.round(Number(req.body.amount));
+      } else {
+        finalAmount = Math.round(baseRent + commissionFee + taxFee + systemFee);
+      }
       title = `Stay at ${listing.title}`;
 
       await pool.query(`

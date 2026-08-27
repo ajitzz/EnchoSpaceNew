@@ -36,7 +36,9 @@ import {
   Globe,
   HeartHandshake,
   Luggage,
-  Sparkle
+  Sparkle,
+  BadgeCheck,
+  ExternalLink
 } from 'lucide-react';
 import { Listing, Experience } from '../types';
 import { loadRazorpayScript, verifyRazorpayPayment } from '../lib/razorpay';
@@ -45,28 +47,32 @@ import { useCurrency } from './CurrencyContext';
 
 const stripePromise = loadStripe((import.meta as any).env?.VITE_STRIPE_PUBLIC_KEY || 'pk_dummy');
 
-// Country Codes for International Luxury Travelers
+// International Country Hubs for Luxury Guests
 const COUNTRY_CODES = [
   { code: '+91', flag: '🇮🇳', country: 'India' },
   { code: '+1', flag: '🇺🇸', country: 'United States' },
   { code: '+44', flag: '🇬🇧', country: 'United Kingdom' },
-  { code: '+971', flag: '🇦🇪', country: 'UAE' },
+  { code: '+971', flag: '🇦🇪', country: 'UAE / Dubai' },
   { code: '+65', flag: '🇸🇬', country: 'Singapore' },
   { code: '+49', flag: '🇩🇪', country: 'Germany' },
-  { code: '+61', flag: '🇦🇺', country: 'Australia' },
   { code: '+33', flag: '🇫🇷', country: 'France' },
+  { code: '+61', flag: '🇦🇺', country: 'Australia' },
+  { code: '+41', flag: '🇨🇭', country: 'Switzerland' },
+  { code: '+81', flag: '🇯🇵', country: 'Japan' },
+  { code: '+1', flag: '🇨🇦', country: 'Canada' },
 ];
 
-// Sanctuary Arrival Preferences Options
+// VIP Sanctuary Arrival Preferences
 const SANCTUARY_PREFERENCES = [
-  { id: 'transfer', label: 'Airport Chauffeur Transfer', icon: '✈️' },
-  { id: 'champagne', label: 'Chilled Champagne on Arrival', icon: '🍾' },
-  { id: 'vegan', label: 'Pure Veg / Vegan Dining', icon: '🌿' },
-  { id: 'late_checkin', label: 'Late Flight Arrival (Post 9 PM)', icon: '🌙' },
-  { id: 'high_floor', label: 'Quiet Scenic View Room', icon: '🏔️' },
+  { id: 'transfer', label: 'Private Airport Chauffeur', icon: '✈️' },
+  { id: 'champagne', label: 'Chilled Champagne & Fruits', icon: '🍾' },
+  { id: 'vegan', label: 'Pure Vegan / Sattvic Dining', icon: '🌿' },
+  { id: 'late_checkin', label: 'Late Flight Check-in (Post 9 PM)', icon: '🌙' },
+  { id: 'high_floor', label: 'Quiet Upper Floor View', icon: '🏔️' },
+  { id: 'extra_bed', label: 'Complimentary Baby Crib', icon: '🛏️' },
 ];
 
-// EMI Bank Options with interest rates (per annum)
+// EMI Bank Options
 const EMI_BANKS = [
   { id: 'hdfc', name: 'HDFC Bank', rate: 13.5, logo: 'HDFC' },
   { id: 'icici', name: 'ICICI Bank', rate: 14.0, logo: 'ICICI' },
@@ -400,7 +406,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
       if (scriptLoaded && (window as any).Razorpay && !orderData.isSimulated) {
         setProcessingStatusText('Awaiting Payment Authorization...');
 
-        // Configure prefilled payment blocks
         const razorpayPrefill: any = {
           name: guestName,
           contact: fullPhone,
@@ -417,11 +422,31 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
           currency: orderData.currency || 'INR',
           name: 'Encho Space Sanctuary',
           description: orderData.title || `${tierMeta.name} Escrow Booking`,
+          image: 'https://encho-space-chi.vercel.app/favicon.ico',
           order_id: orderData.order_id,
           prefill: razorpayPrefill,
           notes: {
             preferences: selectedPreferences.join(', '),
-            room_tier: tierMeta.name
+            room_tier: tierMeta.name,
+            sanctuary_id: String(listing?.id || experience?.id)
+          },
+          config: {
+            display: {
+              blocks: {
+                banks: {
+                  name: 'Preferred Instant Options',
+                  instruments: [
+                    { method: 'upi', apps: ['google_pay', 'phonepe', 'paytm'] },
+                    { method: 'card' },
+                    { method: 'netbanking' }
+                  ]
+                }
+              },
+              sequence: ['block.banks', 'block.other'],
+              preferences: {
+                show_default_blocks: true
+              }
+            }
           },
           handler: async function (response: any) {
             setProcessingStatusText('Verifying Cryptographic HMAC Signature...');
@@ -455,7 +480,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
               setIsProcessingPayment(false);
             }
           },
-          theme: { color: '#09090b' }
+          theme: { color: '#09090b', backdrop_color: 'rgba(0,0,0,0.85)' }
         };
 
         const rzp = new (window as any).Razorpay(options);
@@ -845,23 +870,24 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
         </div>
 
         {/* ========================================================================= */}
-        {/* RIGHT COLUMN (55% / 7 Cols): GUEST DOSSIER & 10/10 RAZORPAY CHECKOUT      */}
+        {/* RIGHT COLUMN (55% / 7 Cols): 10/10 GUEST DOSSIER & RAZORPAY VAULT         */}
         {/* ========================================================================= */}
         <div className="lg:col-span-7 bg-white rounded-3xl p-6 md:p-8 border border-zinc-200/80 shadow-[0_12px_40px_rgba(0,0,0,0.03)] space-y-7">
           
-          {/* Section 1: Guest Identity Dossier (High-End Tactile UI) */}
+          {/* Section 1: 10/10 International Guest Identity Dossier */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-5 h-5 rounded-full bg-zinc-900 text-white text-[10px] font-black flex items-center justify-center font-mono">1</span>
                 <h3 className="text-sm font-extrabold text-zinc-900 tracking-tight uppercase font-display">Guest Identity Dossier</h3>
               </div>
-              <span className="text-[10px] font-mono text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                🔒 Verified Guest Profile
+              <span className="text-[10px] font-mono text-emerald-800 font-bold bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                <BadgeCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Verified Escrow Dossier</span>
               </span>
             </div>
 
-            {/* Name and Phone with Country Flag Selector */}
+            {/* Name & Phone with International Country Selector */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <div className="flex items-center justify-between mb-1.5">
@@ -889,7 +915,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono">
-                    WhatsApp / Phone
+                    WhatsApp / Contact Phone
                   </label>
                   {guestPhone.trim().length >= 6 && (
                     <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5">
@@ -904,10 +930,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                       const found = COUNTRY_CODES.find(c => c.code === e.target.value);
                       if (found) setCountryCode(found);
                     }}
-                    className="bg-zinc-50/80 border border-zinc-200 rounded-xl px-2 py-3 text-xs font-bold text-zinc-800 outline-none cursor-pointer hover:bg-zinc-100"
+                    className="bg-zinc-50/80 border border-zinc-200 rounded-xl px-2.5 py-3 text-xs font-bold text-zinc-800 outline-none cursor-pointer hover:bg-zinc-100"
                   >
                     {COUNTRY_CODES.map(c => (
-                      <option key={c.code} value={c.code}>{c.flag} {c.code}</option>
+                      <option key={c.country} value={c.code}>{c.flag} {c.code}</option>
                     ))}
                   </select>
 
@@ -944,7 +970,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
               </div>
               <div className="flex items-center gap-1.5 mt-2">
                 <span className="text-[10px] text-zinc-400 font-medium">Quick add:</span>
-                {['@gmail.com', '@icloud.com', '@outlook.com'].map(domain => (
+                {['@gmail.com', '@icloud.com', '@outlook.com', '@yahoo.com'].map(domain => (
                   <button
                     key={domain}
                     type="button"
@@ -961,12 +987,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
               </div>
             </div>
 
-            {/* Special Sanctuary Preferences & Arrival Concierge Notes (Expandable) */}
+            {/* VIP Sanctuary Preferences & Arrival Concierge Notes */}
             <div className="pt-2">
               <button
                 type="button"
                 onClick={() => { uiAudio.playClick(); setShowPreferences(prev => !prev); }}
-                className="text-xs font-bold text-zinc-700 hover:text-zinc-950 flex items-center gap-1.5 cursor-pointer"
+                className="text-xs font-bold text-zinc-700 hover:text-zinc-950 flex items-center gap-1.5 cursor-pointer group"
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                 <span>Special Sanctuary Arrival Requests ({selectedPreferences.length} Selected)</span>
@@ -1004,7 +1030,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
 
           <div className="h-px bg-zinc-100" />
 
-          {/* Section 2: Smart Payment Router (Razorpay Primary) */}
+          {/* Section 2: 10/10 Real Razorpay Gateway Router */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -1107,20 +1133,20 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
               </button>
             </div>
 
-            {/* Direct QR / VPA Fallback Panel */}
+            {/* Direct QR Scanner Panel with Live Countdown */}
             {paymentMethod === 'upi' && (
               <div className="bg-zinc-50/90 rounded-2xl p-5 border border-zinc-200/70 space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-zinc-800">Direct UPI Scan & Pay</span>
+                  <span className="text-xs font-bold text-zinc-800">Dynamic High-Density UPI QR</span>
                   <div className="flex items-center gap-1 bg-white px-2.5 py-1 rounded-md border border-zinc-200 text-[10px] font-mono text-zinc-700 font-bold">
-                    <span>⚡ Instant Webhook</span>
+                    <span>⚡ Instant Webhook Sync</span>
                   </div>
                 </div>
 
                 <div className="bg-white rounded-2xl p-5 border border-zinc-200/80 flex flex-col items-center text-center space-y-3 shadow-2xs">
-                  <div className="w-44 h-44 bg-zinc-50 rounded-2xl flex items-center justify-center border border-zinc-200 p-2.5 shadow-inner relative">
+                  <div className="w-48 h-48 bg-zinc-50 rounded-2xl flex items-center justify-center border border-zinc-200 p-2.5 shadow-inner relative group">
                     <img 
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=170x170&data=${encodeURIComponent(`upi://pay?pa=encho.space@icici&pn=ENCHO_SPACE&am=${grandTotal}&cu=INR`)}`}
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`upi://pay?pa=encho.space@icici&pn=ENCHO_SPACE&am=${grandTotal}&cu=INR&tn=${encodeURIComponent(tierMeta.name)}`)}`}
                       alt="UPI Payment QR Code"
                       className="w-full h-full object-contain"
                     />
