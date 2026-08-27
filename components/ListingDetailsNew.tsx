@@ -2350,18 +2350,19 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
             <div className="flex items-center justify-between gap-4 max-w-md mx-auto">
                 <div className="flex flex-col">
                     <div className="flex items-baseline gap-1">
-                        <span className="text-xl font-extrabold text-zinc-900 font-display tabular-nums">{listing.currency === 'USD' ? '$' : '₹'}{activeNightlyRate.toLocaleString()}</span>
-                        <span className="text-xs font-semibold text-zinc-500">night</span>
+                        <span className="text-lg font-black text-zinc-900 font-display tabular-nums">{listing.currency === 'USD' ? '$' : '₹'}{activeNightlyRate.toLocaleString()}</span>
+                        <span className="text-[10px] font-bold text-zinc-400 uppercase font-mono">/ nt</span>
                     </div>
-                    <span className="text-xs font-bold text-zinc-500 mt-0.5">
-                        {new Date(checkIn).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {new Date(checkOut).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 mt-0.5 truncate max-w-[140px]">
+                        {ROOM_TIER_CONFIG[selectedRoomTier].icon} {ROOM_TIER_CONFIG[selectedRoomTier].name}
                     </span>
                 </div>
                 <button 
                     onClick={() => handleReserve()}
-                    className="bg-zinc-900 hover:bg-zinc-800 text-white font-bold font-display uppercase tracking-wider text-xs py-3.5 px-8 rounded-full active:scale-95 transition-all shadow-[0_4px_14px_rgba(0,0,0,0.15)] flex-1 max-w-[160px] cursor-pointer"
+                    className="bg-zinc-950 hover:bg-zinc-900 text-white font-bold font-display uppercase tracking-wider text-xs py-3.5 px-6 rounded-full active:scale-95 transition-all shadow-md flex-1 max-w-[160px] cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                    RESERVE
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    <span>RESERVE ↗</span>
                 </button>
             </div>
         </div>

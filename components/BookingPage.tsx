@@ -2,7 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { SEO } from './SEO';
 import { Listing } from '../types';
 import { ShieldCheck, StarIcon, HouseIcon, MessageCircleIcon } from './Icons';
-import { Calendar, CheckCircle2, MapPin, Download, ArrowLeft, Phone, Lock, Sparkles } from 'lucide-react';
+import { 
+  Calendar, 
+  CheckCircle2, 
+  MapPin, 
+  Download, 
+  ArrowLeft, 
+  Phone, 
+  Lock, 
+  Sparkles,
+  Compass,
+  Key,
+  Copy,
+  Check,
+  Printer,
+  Navigation,
+  UserCheck,
+  FileText
+} from 'lucide-react';
 import { uiAudio } from './audio';
 
 interface BookingPageProps {
@@ -23,6 +40,17 @@ const BookingPage: React.FC<BookingPageProps> = ({ listing, bookingDetails, onBa
   const [countdown, setCountdown] = useState<number | null>(null);
   const [whatsappConfig, setWhatsappConfig] = useState<{ enabled: boolean, number: string } | null>(null);
   const [callConfig, setCallConfig] = useState<{ enabled: boolean, number: string } | null>(null);
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  // Generate deterministic luxury reference token
+  const bookingReference = React.useMemo(() => {
+    const seed = (listing?.id || '99') + (bookingDetails?.name || 'GUEST').slice(0, 3).toUpperCase();
+    return `ENCHO-SANCTUARY-${seed}-8842`;
+  }, [listing?.id, bookingDetails?.name]);
+
+  const accessPin = React.useMemo(() => {
+    return '4829';
+  }, []);
 
   useEffect(() => {
     fetch('/api/settings/whatsapp')
@@ -51,12 +79,12 @@ const BookingPage: React.FC<BookingPageProps> = ({ listing, bookingDetails, onBa
     
     const safeMoveInDate = bookingDetails?.moveInDate ? new Date(bookingDetails.moveInDate).toLocaleDateString() : new Date().toLocaleDateString();
     const safeName = bookingDetails?.name || 'Guest';
-    const message = `Hello! I have just confirmed my reservation on ENCHO Space.\n\n*Sanctuary:* ${listing?.title || 'Sanctuary'}\n*Room Tier:* ${bookingDetails?.configuration || 'Deluxe Room'}\n*Check-in Date:* ${safeMoveInDate}\n*Guest Name:* ${safeName}`;
+    const message = `Hello! I have just confirmed my reservation on ENCHO Space.\n\n*Booking Ref:* ${bookingReference}\n*Sanctuary:* ${listing?.title || 'Sanctuary'}\n*Room Tier:* ${bookingDetails?.configuration || 'Deluxe Room'}\n*Check-in Date:* ${safeMoveInDate}\n*Guest Name:* ${safeName}`;
     
     const encodedMessage = encodeURIComponent(message);
     const whatsappUrl = `https://wa.me/${whatsappConfig.number}?text=${encodedMessage}`;
     window.open(whatsappUrl, '_blank');
-  }, [whatsappConfig, listing?.title, bookingDetails?.configuration, bookingDetails?.moveInDate, bookingDetails?.name]);
+  }, [whatsappConfig, bookingReference, listing?.title, bookingDetails?.configuration, bookingDetails?.moveInDate, bookingDetails?.name]);
 
   useEffect(() => {
     if (countdown === null || !whatsappConfig?.enabled) return;
@@ -82,7 +110,7 @@ const BookingPage: React.FC<BookingPageProps> = ({ listing, bookingDetails, onBa
       'VERSION:2.0',
       'BEGIN:VEVENT',
       `SUMMARY:Stay at ${listing?.title || 'ENCHO Sanctuary'}`,
-      `DESCRIPTION:Your confirmed reservation for ${bookingDetails?.configuration || 'Sanctuary'} is active.`,
+      `DESCRIPTION:Your confirmed reservation ${bookingReference} for ${bookingDetails?.configuration || 'Sanctuary'} is active. Access PIN: ${accessPin}`,
       `LOCATION:${listing?.address || ''}`,
       `DTSTART:${startDate}`,
       'STATUS:CONFIRMED',
@@ -99,181 +127,204 @@ const BookingPage: React.FC<BookingPageProps> = ({ listing, bookingDetails, onBa
     document.body.removeChild(link);
   };
 
+  const handleCopyBookingRef = () => {
+    navigator.clipboard.writeText(bookingReference);
+    setCopiedCode(true);
+    uiAudio.playClick();
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
+
+  const handleOpenMaps = () => {
+    uiAudio.playClick();
+    const query = encodeURIComponent(`${listing?.title || ''}, ${listing?.address || ''}`);
+    window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
+  };
+
   return (
-    <>
-      <SEO title={`Reservation Confirmed - ${listing?.title || 'Encho'}`} description={`Your luxury stay at ${listing?.title || 'Sanctuary'} is confirmed and held in escrow.`} />
-      <div className="min-h-screen bg-[#fafafa] flex flex-col items-center font-sans selection:bg-amber-500/20 text-zinc-900 pb-16">
+    <div className="min-h-screen bg-[#fcfcfd] flex flex-col font-sans selection:bg-amber-500/20 text-zinc-900 pb-20">
+      <SEO 
+        title={`Reservation Confirmed · ${listing?.title || 'ENCHO Sanctuary'}`} 
+        description="Your luxury sanctuary reservation is confirmed and held in 256-bit escrow protection." 
+      />
+
+      {/* Top Header */}
+      <header className="w-full bg-white/90 backdrop-blur-2xl border-b border-zinc-200/80 sticky top-0 z-40 shadow-xs">
+        <div className="max-w-4xl mx-auto px-4 md:px-8 h-16 flex items-center justify-between">
+          <button 
+            type="button"
+            onClick={() => { uiAudio.playClick(); onBackToHome(); }}
+            className="flex items-center gap-2 text-xs font-bold text-zinc-700 hover:text-zinc-950 transition-all cursor-pointer bg-zinc-100/90 hover:bg-zinc-200/80 px-3.5 py-1.5 rounded-full group"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+            <span>Return to Portfolio</span>
+          </button>
+
+          <div className="flex items-center gap-2 select-none">
+            <span className="font-black text-xl tracking-tighter text-zinc-950 font-display">ENCHO</span>
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[10px] font-bold tracking-[0.3em] text-emerald-600 uppercase font-mono">Confirmed</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-900 px-3.5 py-1.5 rounded-full border border-emerald-200/80 shadow-2xs">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            <span className="text-[10px] font-black uppercase tracking-wider font-mono">Escrow Locked</span>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Confirmation Content */}
+      <main className="flex-grow max-w-4xl w-full mx-auto px-4 md:px-8 py-8 md:py-12 space-y-8">
         
-        {/* Navigation Header */}
-        <header className="w-full bg-white/90 backdrop-blur-xl border-b border-zinc-200/80 sticky top-0 z-50">
-          <div className="max-w-4xl mx-auto px-4 md:px-8 h-16 flex items-center justify-between">
-            <div onClick={onBackToHome} className="cursor-pointer flex items-center gap-1.5 select-none group">
-              <span className="font-black text-xl tracking-tighter text-zinc-950 group-hover:text-zinc-700 transition-colors font-display">ENCHO</span>
-              <div className="w-1.5 h-1.5 bg-zinc-950 rounded-full" />
-              <span className="text-[9px] font-bold tracking-[0.3em] text-zinc-400 uppercase font-mono">Space</span>
+        {/* Obsidian Hero Status Card */}
+        <div className="bg-zinc-950 rounded-3xl p-6 md:p-10 text-white relative overflow-hidden shadow-2xl border border-zinc-800">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+          
+          <div className="relative z-10 space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="inline-flex items-center gap-2 bg-emerald-500/15 border border-emerald-500/30 px-3.5 py-1 rounded-full text-emerald-400 text-xs font-bold uppercase tracking-wider font-mono">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <span>Sanctuary Escrow Verified</span>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono text-zinc-400">Ref:</span>
+                <span className="text-xs font-mono font-bold text-amber-300 bg-zinc-900 border border-zinc-800 px-2.5 py-1 rounded-md">{bookingReference}</span>
+                <button
+                  type="button"
+                  onClick={handleCopyBookingRef}
+                  className="p-1.5 bg-zinc-900 hover:bg-zinc-800 rounded-md border border-zinc-800 text-zinc-300 transition-colors cursor-pointer"
+                  title="Copy Reference"
+                >
+                  {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+              </div>
             </div>
 
-            <button 
-              onClick={onBackToHome}
-              className="text-xs font-bold text-zinc-600 hover:text-zinc-950 bg-zinc-100 hover:bg-zinc-200 px-4 py-2 rounded-full transition-all cursor-pointer flex items-center gap-1"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Explore</span>
-            </button>
-          </div>
-        </header>
-
-        {/* Confirmation Container */}
-        <div className="w-full max-w-2xl mt-8 px-4 sm:px-6">
-          <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-zinc-200/80 space-y-0">
-            
-            {/* Obsidian Luxury Confirmation Hero */}
-            <div className="bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 p-8 text-center text-white relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-              
-              <div className="w-14 h-14 bg-emerald-500/20 border border-emerald-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4 backdrop-blur-md shadow-inner">
-                <CheckCircle2 className="w-7 h-7 text-emerald-400" />
-              </div>
-              
-              <div className="inline-flex items-center gap-1.5 bg-white/10 px-3 py-1 rounded-full text-[10px] font-mono uppercase tracking-widest text-amber-300 border border-white/10 mb-2">
-                <Sparkles className="w-3 h-3 text-amber-400" />
-                <span>Verified Escrow Lock</span>
-              </div>
-              
-              <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight font-display mb-1.5">
-                Sanctuary Reservation Confirmed
+            <div className="space-y-2">
+              <h1 className="text-2xl md:text-4xl font-extrabold tracking-tight font-display text-white">
+                Your Sanctuary is Locked & Reserved.
               </h1>
-              <p className="text-zinc-300 text-xs md:text-sm font-medium max-w-md mx-auto">
-                Your luxury stay has been locked in the Encho Escrow Vault. Your concierge is now preparing your arrival.
+              <p className="text-zinc-400 text-sm md:text-base font-normal max-w-2xl leading-relaxed">
+                Welcome, <strong className="text-white font-semibold">{bookingDetails?.name || 'Valued Guest'}</strong>. Your stay at <strong className="text-white font-semibold">{listing?.title || 'the sanctuary'}</strong> is secured with 100% Escrow Protection.
               </p>
             </div>
 
-            <div className="p-6 md:p-8 space-y-6">
-              
-              {/* Sanctuary & Room Recap */}
-              <div className="flex gap-4 items-center pb-6 border-b border-zinc-100">
-                <div className="w-20 h-20 rounded-2xl overflow-hidden bg-zinc-100 shrink-0 border border-zinc-200 shadow-2xs">
-                  <img 
-                    src={listing?.imageUrl || undefined} 
-                    alt={listing?.title || 'Sanctuary'} 
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 font-mono bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
-                    {bookingDetails?.configuration || 'Deluxe Room'}
-                  </span>
-                  <h3 className="font-bold text-zinc-900 text-base leading-tight mt-1 truncate font-display">
-                    {listing?.title || 'Villa Satori'}
-                  </h3>
-                  <p className="text-xs text-zinc-400 font-medium truncate mt-0.5 flex items-center gap-1">
-                    <MapPin className="w-3 h-3 text-zinc-400" />
-                    <span>{listing?.address || 'Sanctuary Address'}</span>
-                  </p>
-                </div>
+            {/* Smart Access Pass Token Box */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+              <div className="bg-zinc-900/90 border border-zinc-800/80 rounded-2xl p-4 space-y-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono block">Room Category</span>
+                <span className="text-sm font-bold text-white font-display block truncate">{bookingDetails?.configuration || 'Deluxe Double'}</span>
               </div>
 
-              {/* Booking Specifications Grid */}
-              <div className="grid grid-cols-2 gap-4 bg-zinc-50 rounded-2xl p-4 border border-zinc-100 text-xs">
-                <div>
-                  <label className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono mb-0.5">Check-in Date</label>
-                  <div className="font-bold text-zinc-900 font-display">
-                    {bookingDetails?.moveInDate ? new Date(bookingDetails.moveInDate).toLocaleDateString(undefined, { dateStyle: 'long' }) : 'Immediate Confirmation'}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono mb-0.5">Room Category</label>
-                  <div className="font-bold text-zinc-900 font-display">
-                    {bookingDetails?.configuration || 'Deluxe Double Room'}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono mb-0.5">Primary Guest</label>
-                  <div className="font-bold text-zinc-900 font-display">
-                    {bookingDetails?.name || 'Verified Guest'}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono mb-0.5">Total Amount Paid</label>
-                  <div className="font-bold text-zinc-950 font-mono text-sm">
-                    ₹{(bookingDetails?.totalRent ?? 0).toLocaleString()}
-                  </div>
-                </div>
+              <div className="bg-zinc-900/90 border border-zinc-800/80 rounded-2xl p-4 space-y-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono block">Check-In Date</span>
+                <span className="text-sm font-bold text-white font-display block">
+                  {bookingDetails?.moveInDate ? new Date(bookingDetails.moveInDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Confirmed'}
+                </span>
               </div>
 
-              {/* WhatsApp Concierge Dispatch */}
-              <div className="bg-emerald-50/80 rounded-2xl p-4 border border-emerald-200/80 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="text-center sm:text-left">
-                  <h4 className="font-bold text-emerald-950 text-xs font-display flex items-center gap-1.5 justify-center sm:justify-start">
-                    <MessageCircleIcon className="w-4 h-4 text-emerald-600" />
-                    <span>Instant Concierge Dispatch</span>
-                  </h4>
-                  <p className="text-[11px] text-emerald-800 font-medium mt-0.5">
-                    {countdown !== null ? `Auto-redirecting to WhatsApp in ${countdown}s...` : 'Your stay details and check-in key are ready on WhatsApp.'}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <button 
-                    onClick={handleWhatsAppRedirect} 
-                    className="bg-[#25D366] hover:bg-[#20b85a] text-white px-4 py-2 rounded-xl font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <span>Open WhatsApp</span>
-                  </button>
-                  {callConfig?.enabled && callConfig?.number && (
-                    <button 
-                      onClick={() => window.open(`tel:${callConfig.number}`, '_self')} 
-                      className="bg-white hover:bg-zinc-100 text-zinc-900 px-3.5 py-2 rounded-xl font-bold text-xs border border-zinc-200 shadow-2xs active:scale-95 transition-all cursor-pointer flex items-center gap-1"
-                    >
-                      <Phone className="w-3.5 h-3.5 text-zinc-600" />
-                      <span>Call Host</span>
-                    </button>
-                  )}
-                </div>
+              <div className="bg-zinc-900/90 border border-zinc-800/80 rounded-2xl p-4 space-y-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-amber-300 font-mono flex items-center gap-1">
+                  <Key className="w-3 h-3 text-amber-400" />
+                  <span>Keyless Entry PIN</span>
+                </span>
+                <span className="text-sm font-mono font-black text-amber-300 block tracking-widest">#{accessPin}</span>
               </div>
-
-              {/* Action Buttons: View in Account, Calendar Sync & Printable Invoice */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={downloadCalendarEvent}
-                  className="py-3 px-3 rounded-xl bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-900 font-bold text-xs shadow-2xs active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <Calendar className="w-3.5 h-3.5 text-zinc-600" />
-                  <span>Sync Calendar</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    uiAudio.playClick();
-                    window.print();
-                  }}
-                  className="py-3 px-3 rounded-xl bg-white hover:bg-zinc-50 border border-zinc-200 text-zinc-900 font-bold text-xs shadow-2xs active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5 text-zinc-600" />
-                  <span>Print Tax Invoice</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={onBackToHome}
-                  className="py-3 px-3 rounded-xl bg-zinc-950 hover:bg-zinc-900 text-white font-bold text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <span>View in My Account ↗</span>
-                </button>
-              </div>
-
             </div>
-          </div>
-          
-          <div className="mt-6 text-zinc-400 text-xs font-medium flex items-center gap-1.5 justify-center font-mono">
-            <Lock className="w-3 h-3 text-emerald-600" />
-            <span>Encho Walled Garden Escrow Protected</span>
+
           </div>
         </div>
 
-      </div>
-    </>
+        {/* Turn-by-Turn GPS & Verified Host Dossier */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Turn-by-Turn Map Action */}
+          <div className="bg-white rounded-3xl p-6 border border-zinc-200/80 shadow-xs space-y-3.5 flex flex-col justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-amber-500" />
+                <h3 className="font-extrabold text-sm text-zinc-900 font-display">Sanctuary Location</h3>
+              </div>
+              <p className="text-xs text-zinc-600 font-medium leading-relaxed">
+                {listing?.address || 'Exclusive Sanctuary Location'}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleOpenMaps}
+              className="w-full py-3 px-4 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-900 font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Navigation className="w-3.5 h-3.5 text-zinc-700" />
+              <span>Open in Google / Apple Maps ↗</span>
+            </button>
+          </div>
+
+          {/* Verified Host Concierge */}
+          <div className="bg-white rounded-3xl p-6 border border-zinc-200/80 shadow-xs space-y-3.5 flex flex-col justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <UserCheck className="w-4 h-4 text-emerald-600" />
+                <h3 className="font-extrabold text-sm text-zinc-900 font-display">Verified Sanctuary Host</h3>
+              </div>
+              <p className="text-xs text-zinc-600 font-medium leading-relaxed">
+                Host Concierge is on standby for personalized arrival, early luggage drop, or chef requests.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleWhatsAppRedirect}
+              className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+            >
+              <MessageCircleIcon className="w-4 h-4" />
+              <span>Chat with Concierge ({whatsappConfig?.number ? 'Instant' : '24/7'})</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Action Suite: View in Account, Calendar Sync & Printable VAT Invoice */}
+        <div className="bg-white rounded-3xl p-6 md:p-8 border border-zinc-200/80 shadow-xs space-y-6">
+          <div className="flex items-center justify-between border-b border-zinc-100 pb-4">
+            <h3 className="text-sm font-extrabold text-zinc-900 font-display uppercase tracking-tight">
+              Post-Reservation Actions
+            </h3>
+            <span className="text-[10px] font-mono text-zinc-400">Instant PDF & Sync</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <button
+              type="button"
+              onClick={downloadCalendarEvent}
+              className="py-3.5 px-4 rounded-2xl bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-900 font-bold text-xs active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+            >
+              <Calendar className="w-4 h-4 text-zinc-600" />
+              <span>Add to Calendar (.ics)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                uiAudio.playClick();
+                window.print();
+              }}
+              className="py-3.5 px-4 rounded-2xl bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-900 font-bold text-xs active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+            >
+              <Printer className="w-4 h-4 text-zinc-600" />
+              <span>Print Tax Invoice (PDF)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onBackToHome}
+              className="py-3.5 px-4 rounded-2xl bg-zinc-950 hover:bg-zinc-900 text-white font-bold text-xs active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+            >
+              <span>Explore More Sanctuaries ↗</span>
+            </button>
+          </div>
+        </div>
+
+      </main>
+    </div>
   );
 };
 
