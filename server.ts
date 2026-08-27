@@ -1281,6 +1281,30 @@ const ensureListingsTable = async () => {
       status VARCHAR(50) DEFAULT 'Confirmed',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+    ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_intent_id VARCHAR(255);
+    ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_gateway VARCHAR(50);
+    ALTER TABLE bookings ADD COLUMN IF NOT EXISTS check_out_date VARCHAR(255);
+    ALTER TABLE bookings ADD COLUMN IF NOT EXISTS adults_count INT DEFAULT 2;
+    ALTER TABLE bookings ADD COLUMN IF NOT EXISTS children_count INT DEFAULT 0;
+    ALTER TABLE bookings ADD COLUMN IF NOT EXISTS infants_count INT DEFAULT 0;
+    ALTER TABLE bookings ADD COLUMN IF NOT EXISTS special_requests TEXT;
+    ALTER TABLE bookings ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+
+    CREATE TABLE IF NOT EXISTS experience_bookings (
+      id SERIAL PRIMARY KEY,
+      user_id INT,
+      experience_id INT,
+      num_tickets INT,
+      total_amount NUMERIC,
+      name VARCHAR(255),
+      phone VARCHAR(255),
+      status VARCHAR(50) DEFAULT 'pending',
+      payment_intent_id VARCHAR(255),
+      payment_gateway VARCHAR(50),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    ALTER TABLE experience_bookings ADD COLUMN IF NOT EXISTS payment_intent_id VARCHAR(255);
+    ALTER TABLE experience_bookings ADD COLUMN IF NOT EXISTS payment_gateway VARCHAR(50);
   `);
 
   await pool.query(`
@@ -15591,7 +15615,11 @@ app.post('/api/checkout/razorpay/order', optionalAuthenticateToken, async (req: 
           status VARCHAR(50) DEFAULT 'pending',
           payment_intent_id VARCHAR(255),
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
+        );
+        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_intent_id VARCHAR(255);
+        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_gateway VARCHAR(50);
+        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS check_out_date VARCHAR(255);
+        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS email VARCHAR(255);
       `);
 
       const bookInsert = await pool.query(`
@@ -15795,11 +15823,16 @@ app.post('/api/payments/razorpay/verify', async (req, res) => {
 
       // Handle Listing Booking
       if (booking_id) {
+        await client.query(`
+          ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_intent_id VARCHAR(255);
+          ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_gateway VARCHAR(50);
+        `);
         const bookRes = await client.query('SELECT * FROM bookings WHERE id = $1 FOR UPDATE', [booking_id]);
         if (bookRes.rows.length > 0) {
           await client.query(`
             UPDATE bookings
             SET status = 'confirmed',
+                payment_gateway = 'razorpay',
                 payment_intent_id = $1
             WHERE id = $2
           `, [razorpay_payment_id, booking_id]);
@@ -15814,11 +15847,16 @@ app.post('/api/payments/razorpay/verify', async (req, res) => {
 
       // Handle Experience Booking
       if (experience_booking_id) {
+        await client.query(`
+          ALTER TABLE experience_bookings ADD COLUMN IF NOT EXISTS payment_intent_id VARCHAR(255);
+          ALTER TABLE experience_bookings ADD COLUMN IF NOT EXISTS payment_gateway VARCHAR(50);
+        `);
         const expBookRes = await client.query('SELECT * FROM experience_bookings WHERE id = $1 FOR UPDATE', [experience_booking_id]);
         if (expBookRes.rows.length > 0) {
           await client.query(`
             UPDATE experience_bookings
             SET status = 'confirmed',
+                payment_gateway = 'razorpay',
                 payment_intent_id = $1
             WHERE id = $2
           `, [razorpay_payment_id, experience_booking_id]);
