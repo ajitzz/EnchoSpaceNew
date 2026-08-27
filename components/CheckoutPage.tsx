@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
+  RefreshCw,
   CreditCard, 
   ShieldCheck, 
   Sparkles, 
@@ -194,6 +195,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
 
   const [copiedVpa, setCopiedVpa] = useState<boolean>(false);
 
+  // Dynamic QR Expiry (5:00 minutes) & Retry State
+  const [qrSecondsLeft, setQrSecondsLeft] = useState(300);
+  const [qrNonce, setQrNonce] = useState(() => Date.now());
+  const [isRegeneratingQr, setIsRegeneratingQr] = useState(false);
+
   // 10-Minute Escrow Lock Timer
   const [escrowTimeLeft, setEscrowTimeLeft] = useState(599);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
@@ -202,9 +208,26 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
   useEffect(() => {
     const timer = setInterval(() => {
       setEscrowTimeLeft(prev => (prev > 0 ? prev - 1 : 0));
+      setQrSecondsLeft(prev => (prev > 0 ? prev - 1 : 0));
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  const handleRegenerateQr = () => {
+    uiAudio.playClick();
+    setIsRegeneratingQr(true);
+    setTimeout(() => {
+      setQrNonce(Date.now());
+      setQrSecondsLeft(300);
+      setIsRegeneratingQr(false);
+    }, 500);
+  };
+
+  const formatQrTime = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+  };
 
   // Update info when user logs in or profile changes
   useEffect(() => {
@@ -751,13 +774,62 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                 </p>
               </div>
 
-              {/* Dynamic Live QR Canvas */}
-              <div className="w-48 h-48 bg-white rounded-2xl flex items-center justify-center border border-zinc-200/90 p-2.5 shadow-sm">
-                <img 
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`upi://pay?pa=encho.space@icici&pn=ENCHO_SPACE&am=${grandTotal}&cu=INR&tn=${encodeURIComponent(tierMeta.name)}`)}`}
-                  alt="Universal UPI Payment QR Code"
-                  className="w-full h-full object-contain"
-                />
+              {/* Dynamic Live QR Canvas with Expiry & Retry System */}
+              <div className="relative w-52 h-52 bg-white rounded-2xl flex items-center justify-center border border-zinc-200/90 p-2.5 shadow-sm overflow-hidden">
+                {isRegeneratingQr ? (
+                  <div className="flex flex-col items-center justify-center gap-2 text-zinc-500">
+                    <RefreshCw className="w-6 h-6 animate-spin text-zinc-900" />
+                    <span className="text-[10px] font-bold font-mono">Generating New QR...</span>
+                  </div>
+                ) : qrSecondsLeft > 0 ? (
+                  <>
+                    <img 
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`upi://pay?pa=encho.space@icici&pn=ENCHO_SPACE&am=${grandTotal}&cu=INR&tn=${encodeURIComponent(tierMeta.name)}&tr=enc_${qrNonce}`)}`}
+                      alt="Universal UPI Payment QR Code"
+                      className="w-full h-full object-contain"
+                    />
+                    {/* Live Expiry Corner Badge */}
+                    <div className="absolute top-2 right-2 bg-zinc-950/80 backdrop-blur-md text-white text-[9px] font-mono font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-white/10">
+                      <Clock className="w-2.5 h-2.5 text-amber-400" />
+                      <span>{formatQrTime(qrSecondsLeft)}</span>
+                    </div>
+                  </>
+                ) : (
+                  /* Expired Overlay */
+                  <div className="absolute inset-0 bg-zinc-950/90 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center space-y-2.5 z-10 text-white">
+                    <Clock className="w-6 h-6 text-amber-400 animate-pulse" />
+                    <div>
+                      <span className="text-xs font-bold font-display block">QR Code Expired</span>
+                      <p className="text-[10px] text-zinc-300 mt-0.5">Session timed out for security</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRegenerateQr}
+                      className="bg-white hover:bg-zinc-100 text-zinc-950 text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all shadow-md flex items-center gap-1.5 cursor-pointer active:scale-95"
+                    >
+                      <RefreshCw className="w-3 h-3 text-zinc-950" />
+                      <span>Retry & Refresh QR</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Sub-QR Actions Bar (Expiry Timer & Manual Retry Button) */}
+              <div className="flex items-center justify-between w-full max-w-xs text-[11px] px-1">
+                <span className="text-zinc-500 font-medium flex items-center gap-1">
+                  <span className={`w-1.5 h-1.5 rounded-full ${qrSecondsLeft > 60 ? 'bg-emerald-500 animate-pulse' : qrSecondsLeft > 0 ? 'bg-amber-500 animate-pulse' : 'bg-rose-500'}`} />
+                  <span>{qrSecondsLeft > 0 ? `Valid for ${formatQrTime(qrSecondsLeft)}` : 'Expired'}</span>
+                </span>
+                
+                <button
+                  type="button"
+                  onClick={handleRegenerateQr}
+                  disabled={isRegeneratingQr}
+                  className="text-zinc-700 hover:text-zinc-950 font-bold flex items-center gap-1 text-[11px] bg-white hover:bg-zinc-100 px-2 py-0.5 rounded-lg border border-zinc-200 shadow-2xs transition-colors cursor-pointer"
+                >
+                  <RefreshCw className={`w-3 h-3 text-zinc-600 ${isRegeneratingQr ? 'animate-spin' : ''}`} />
+                  <span>Retry QR</span>
+                </button>
               </div>
 
               {/* Official Brand Logo Trust Badges */}
