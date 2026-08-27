@@ -15601,26 +15601,7 @@ app.post('/api/checkout/razorpay/order', optionalAuthenticateToken, async (req: 
       }
       title = `Stay at ${listing.title}`;
 
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS bookings (
-          id SERIAL PRIMARY KEY,
-          user_id INT,
-          listing_id INT,
-          room_id VARCHAR(255),
-          move_in_date VARCHAR(255),
-          configuration TEXT,
-          name VARCHAR(255),
-          phone VARCHAR(255),
-          total_rent NUMERIC,
-          status VARCHAR(50) DEFAULT 'pending',
-          payment_intent_id VARCHAR(255),
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_intent_id VARCHAR(255);
-        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_gateway VARCHAR(50);
-        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS check_out_date VARCHAR(255);
-        ALTER TABLE bookings ADD COLUMN IF NOT EXISTS email VARCHAR(255);
-      `);
+      // Table structure ensured at boot time for ultra-fast query execution
 
       const bookInsert = await pool.query(`
         INSERT INTO bookings (user_id, listing_id, room_id, move_in_date, configuration, name, phone, total_rent, status)

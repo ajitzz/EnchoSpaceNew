@@ -223,6 +223,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
   const [processingStatusText, setProcessingStatusText] = useState('Securing Escrow Vault...');
 
   useEffect(() => {
+    loadRazorpayScript().catch(() => {});
     const timer = setInterval(() => {
       setEscrowTimeLeft(prev => (prev > 0 ? prev - 1 : 0));
       setQrSecondsLeft(prev => (prev > 0 ? prev - 1 : 0));
@@ -386,39 +387,34 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
         const rzp = new (window as any).Razorpay(options);
         rzp.open();
       } else {
-        // High-Fidelity Test Mode
-        setTimeout(async () => {
-          setProcessingStatusText('Connecting Razorpay Gateway Sandbox...');
-          const mockPaymentId = `pay_rzp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-          const mockSignature = `rzp_sig_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-          
-          setTimeout(async () => {
-            setProcessingStatusText('Locking Sanctuary in Escrow...');
-            const verifyData = await verifyRazorpayPayment({
-              razorpay_order_id: orderData.order_id,
-              razorpay_payment_id: mockPaymentId,
-              razorpay_signature: mockSignature,
-              booking_id: orderData.bookingType === 'listing' ? orderData.bookingId : undefined,
-              experience_booking_id: orderData.bookingType === 'experience' ? orderData.bookingId : undefined
-            });
+        // Ultra-Fast Sandbox Execution (<100ms)
+        const mockPaymentId = `pay_rzp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+        const mockSignature = `rzp_sig_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+        
+        const verifyData = await verifyRazorpayPayment({
+          razorpay_order_id: orderData.order_id,
+          razorpay_payment_id: mockPaymentId,
+          razorpay_signature: mockSignature,
+          booking_id: orderData.bookingType === 'listing' ? orderData.bookingId : undefined,
+          experience_booking_id: orderData.bookingType === 'experience' ? orderData.bookingId : undefined
+        });
 
-            setIsProcessingPayment(false);
-            if (verifyData.success) {
-              uiAudio.playSuccess();
-              onSuccess({
-                moveInDate,
-                configuration: isExperience ? `${numTickets} Tickets` : tierMeta.name,
-                name: effectiveName,
-                phone: effectivePhone,
-                totalRent: grandTotal,
-                roomIds: []
-              });
-            } else {
-              uiAudio.playError();
-              alert(`Payment Verification Error: ${verifyData.error}`);
-            }
-          }, 600);
-        }, 500);
+        setIsProcessingPayment(false);
+        if (verifyData.success) {
+          uiAudio.playSuccess();
+          onSuccess({
+            moveInDate,
+            configuration: isExperience ? `${numTickets} Tickets` : tierMeta.name,
+            name: effectiveName,
+            phone: effectivePhone,
+            totalRent: grandTotal,
+            roomIds: [],
+            bookingId: orderData.bookingId
+          } as any);
+        } else {
+          uiAudio.playError();
+          alert(`Payment Verification Error: ${verifyData.error}`);
+        }
       }
     } catch (err: any) {
       uiAudio.playError();

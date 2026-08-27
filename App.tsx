@@ -1376,7 +1376,19 @@ function App() {
                       currency: (lastBooking as any)?.currency
                     }}
                     onSuccess={(finalData) => {
-                      handleBooking(finalData);
+                      const newReservation: Reservation = {
+                        id: (finalData as any).bookingId || crypto.randomUUID?.() || Math.random().toString(),
+                        listing: selectedListing,
+                        bookingDate: new Date().toISOString(),
+                        ...finalData
+                      };
+                      setReservations(prev => [newReservation, ...prev]);
+                      setLastBooking({
+                        ...finalData,
+                        listing: selectedListing,
+                      });
+                      setCurrentView('BOOKING');
+                      window.scrollTo(0, 0);
                     }}
                     onCancel={() => {
                       setCurrentView('DETAILS');
