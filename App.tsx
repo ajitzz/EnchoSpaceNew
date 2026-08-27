@@ -1355,6 +1355,11 @@ function App() {
                   <CheckoutPage 
                     listing={selectedListing}
                     initialData={{
+                      roomTier: (lastBooking as any)?.roomTier,
+                      roomTierName: (lastBooking as any)?.roomTierName,
+                      roomTierIcon: (lastBooking as any)?.roomTierIcon,
+                      roomTierSpecs: (lastBooking as any)?.roomTierSpecs,
+                      nightlyRate: (lastBooking as any)?.nightlyRate,
                       moveInDate: lastBooking?.moveInDate || new Date().toISOString().split('T')[0],
                       checkOutDate: lastBooking?.checkOutDate,
                       configuration: lastBooking?.configuration || 'Entire Place',
@@ -1364,7 +1369,11 @@ function App() {
                       baseRent: lastBooking?.baseRent,
                       fees: lastBooking?.fees,
                       taxes: lastBooking?.taxes,
-                      guests: lastBooking?.guests
+                      guests: lastBooking?.guests,
+                      adultsCount: (lastBooking as any)?.adultsCount,
+                      childrenCount: (lastBooking as any)?.childrenCount,
+                      infantsCount: (lastBooking as any)?.infantsCount,
+                      currency: (lastBooking as any)?.currency
                     }}
                     onSuccess={(finalData) => {
                       handleBooking(finalData);

@@ -156,10 +156,27 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
   const { user } = useAuth();
   const isExperience = !!experience;
 
-  // Active In-Checkout Room Tier
+  // Helper to smartly resolve room tier from key or configuration string
+  const resolveRoomTier = (tier?: string, config?: string): 'suites' | 'deluxe' | 'executive' => {
+    if (tier === 'suites' || tier === 'deluxe' || tier === 'executive') return tier;
+    if (config) {
+      const lower = config.toLowerCase();
+      if (lower.includes('suite')) return 'suites';
+      if (lower.includes('executive')) return 'executive';
+      if (lower.includes('deluxe')) return 'deluxe';
+    }
+    return 'deluxe';
+  };
+
+  // Active In-Checkout Room Tier initialized from user's selection in ListingDetails
   const [activeRoomTier, setActiveRoomTier] = useState<'suites' | 'deluxe' | 'executive'>(() => {
-    return initialData.roomTier || 'deluxe';
+    return resolveRoomTier(initialData.roomTier, initialData.configuration);
   });
+
+  useEffect(() => {
+    const resolved = resolveRoomTier(initialData.roomTier, initialData.configuration);
+    setActiveRoomTier(resolved);
+  }, [initialData.roomTier, initialData.configuration]);
 
   // Stay Dates State
   const [moveInDate, setMoveInDate] = useState(
