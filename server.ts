@@ -653,6 +653,28 @@ async function sendWhatsAppMessage(toPhone: string, messageText: string): Promis
 }
 
 // Auth Middleware
+// Optional Auth Middleware for Seamless Guest Checkouts
+export const optionalAuthenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    req.user = { id: 1, role: 'guest', email: 'guest@encho.space' };
+    return next();
+  }
+
+  jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
+    if (err) {
+      req.user = { id: 1, role: 'guest', email: 'guest@encho.space' };
+      return next();
+    }
+    req.user = user;
+    rlsStorage.run({ userId: user.id, isRequest: true, bypassRls: user.role === 'admin' }, () => {
+      next();
+    });
+  });
+};
+
 export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -13824,7 +13846,7 @@ app.put('/api/user/bookings/:id/cancel', authenticateToken, async (req: AuthRequ
 
     // Security: Use authenticated user ID
     const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    const effectiveUserId = userId || 1;
 
     const checkRes = await pool.query('SELECT status FROM bookings WHERE id = $1 AND user_id = $2', [id, userId]);
     if (checkRes.rows.length === 0) return res.status(404).json({ error: 'Booking not found' });
@@ -15503,13 +15525,13 @@ app.post('/api/marketing/simulate-webhook', authenticateToken, async (req: AuthR
 });
 
 // Razorpay Secure Guest Checkout Order Creation (Server-Calculated Amount)
-app.post('/api/checkout/razorpay/order', authenticateToken, async (req: AuthRequest, res) => {
+app.post('/api/checkout/razorpay/order', optionalAuthenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
     const { listingId, experienceId, roomId, moveInDate, configuration, numTickets, name, phone } = req.body;
     const userId = req.user?.id;
 
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    const effectiveUserId = userId || 1;
 
     let finalAmount = 0;
     let title = 'Booking';
@@ -15571,7 +15593,7 @@ app.post('/api/checkout/razorpay/order', authenticateToken, async (req: AuthRequ
       const bookInsert = await pool.query(`
         INSERT INTO bookings (user_id, listing_id, room_id, move_in_date, configuration, name, phone, total_rent, status)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending') RETURNING id
-      `, [userId, listingId, roomId || null, moveInDate || new Date().toISOString(), configuration || '', name || 'Guest', phone || '', finalAmount]);
+      `, [effectiveUserId, listingId, roomId || null, moveInDate || new Date().toISOString(), configuration || '', name || 'Guest', phone || '', finalAmount]);
 
       bookingId = bookInsert.rows[0].id;
     } else if (experienceId) {
@@ -15605,7 +15627,7 @@ app.post('/api/checkout/razorpay/order', authenticateToken, async (req: AuthRequ
       const expBookInsert = await pool.query(`
         INSERT INTO experience_bookings (user_id, experience_id, num_tickets, total_amount, name, phone, status)
         VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id
-      `, [userId, experienceId, tickets, finalAmount, name || 'Guest', phone || '', status]);
+      `, [effectiveUserId, experienceId, tickets, finalAmount, name || 'Guest', phone || '', status]);
 
       bookingId = expBookInsert.rows[0].id;
     } else {
