@@ -1495,6 +1495,10 @@ const ensureListingsTable = async () => {
       await pool.query(`ALTER TABLE listings ALTER COLUMN amenities SET DEFAULT '[]'::jsonb`);
   } catch { /* ignore */ }
 
+  try {
+      await pool.query(`ALTER TABLE listings ADD COLUMN IF NOT EXISTS photos JSONB DEFAULT '[]'::jsonb`);
+  } catch { /* ignore */ }
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS experience_bookings (
       id SERIAL PRIMARY KEY,
@@ -12867,6 +12871,7 @@ app.get('/api/listings', async (req, res) => {
         user_id: row.user_id,
         imageUrl: row.image_url || '',
         imageUrls: row.image_urls || [],
+        photos: row.photos || [],
         video_url: row.video_url || null,
         rental_mode: row.rental_mode || 'entire_place',
         rooms: row.rooms || [],

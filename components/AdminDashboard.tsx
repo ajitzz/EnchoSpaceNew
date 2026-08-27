@@ -956,6 +956,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
             city: editingFeatures.city,
             imageUrl: editingFeatures.imageUrl,
             imageUrls: editingFeatures.imageUrls,
+            photos: editingFeatures.photos,
             videoUrl: editingFeatures.video_url,
             rentalMode: editingFeatures.rental_mode,
             rooms: editingFeatures.rooms,

@@ -47,6 +47,7 @@ import {
 , Search, Bookmark, Share2, Compass , ArrowUpRight } from 'lucide-react';
 import { uiAudio } from './audio';
 import { useToast } from './ToastContext';
+import { SanctuaryGalleryModal, GalleryCategoryKey } from './SanctuaryGalleryModal';
 
 // 10/10 Luxury Room Tier Definitions for Boutique Hotels & Resorts
 export const ROOM_TIER_CONFIG = {
@@ -514,6 +515,9 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   };
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  const [galleryInitialCategory, setGalleryInitialCategory] = useState<GalleryCategoryKey>('all');
+  const [galleryInitialIndex, setGalleryInitialIndex] = useState(0);
   const [showFloatingCapsule, setShowFloatingCapsule] = useState(false);
   const zone1Ref = useRef<HTMLDivElement>(null);
 
@@ -755,7 +759,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                             priority={true}
                             className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" 
                             alt={`${listing.title} Main View`}
-                            onClick={() => { uiAudio.playClick(); trackPhotoView(0); setLightboxIndex(0); }}
+                            onClick={() => { uiAudio.playClick(); trackPhotoView(0); setGalleryInitialIndex(0); setGalleryInitialCategory('all'); setIsGalleryOpen(true); }}
                         />
                       </div>
                     )}
@@ -792,17 +796,17 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 
                 {/* Bento Grid Sub-Images */}
                 <div className="relative overflow-hidden h-full">
-                    <OptimizedImage src={images[1]} aspectRatio="16:9" className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" alt="View 2" onClick={() => { uiAudio.playClick(); trackPhotoView(1); setLightboxIndex(1); }} />
+                    <OptimizedImage src={images[1]} aspectRatio="16:9" className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" alt="View 2" onClick={() => { uiAudio.playClick(); trackPhotoView(1); setGalleryInitialIndex(1); setGalleryInitialCategory('all'); setIsGalleryOpen(true); }} />
                 </div>
                 <div className="relative overflow-hidden h-full">
-                    <OptimizedImage src={images[2]} aspectRatio="16:9" className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" alt="View 3" onClick={() => { uiAudio.playClick(); trackPhotoView(2); setLightboxIndex(2); }} />
+                    <OptimizedImage src={images[2]} aspectRatio="16:9" className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" alt="View 3" onClick={() => { uiAudio.playClick(); trackPhotoView(2); setGalleryInitialIndex(2); setGalleryInitialCategory('all'); setIsGalleryOpen(true); }} />
                 </div>
                 <div className="relative overflow-hidden h-full">
-                    <OptimizedImage src={images[3]} aspectRatio="16:9" className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" alt="View 4" onClick={() => { uiAudio.playClick(); trackPhotoView(3); setLightboxIndex(3); }} />
+                    <OptimizedImage src={images[3]} aspectRatio="16:9" className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" alt="View 4" onClick={() => { uiAudio.playClick(); trackPhotoView(3); setGalleryInitialIndex(3); setGalleryInitialCategory('all'); setIsGalleryOpen(true); }} />
                 </div>
                 
                 {/* View Gallery Overlay */}
-                <div className="relative overflow-hidden h-full group/gallery cursor-pointer" onClick={() => { uiAudio.playClick(); trackPhotoView(4); setLightboxIndex(0); }}>
+                <div className="relative overflow-hidden h-full group/gallery cursor-pointer" onClick={() => { uiAudio.playClick(); trackPhotoView(4); setGalleryInitialIndex(0); setGalleryInitialCategory('all'); setIsGalleryOpen(true); }}>
                     <OptimizedImage src={images[4]} aspectRatio="16:9" className="w-full h-full object-cover transition-transform duration-700 group-hover/gallery:scale-[1.03] group-hover/gallery:blur-sm" alt="View 5" />
                     <div className="absolute inset-0 bg-black/10 group-hover/gallery:bg-black/20 transition-colors duration-500" />
                     <div className="absolute bottom-4 right-4 bg-white/95 backdrop-blur-xl border border-white/50 text-zinc-900 px-5 py-3 rounded-xl flex items-center gap-2 shadow-lg hover:scale-[1.02] active:scale-95 transition-transform">
@@ -2368,73 +2372,16 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
         </div>
 
         {/* ========================================================================= */}
-        {/* FULLSCREEN LIGHTBOX MODAL                                                */}
+        {/* AWARD-WINNING SANCTUARY SPATIAL GALLERY (iF & RED DOT STANDARD)           */}
         {/* ========================================================================= */}
-        {lightboxIndex !== null && (
-          <div
-            className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-2xl flex flex-col justify-between p-4 md:p-8 animate-fade-in"
-            onClick={() => setLightboxIndex(null)}
-          >
-            {/* Top Bar */}
-            <div className="flex items-center justify-between text-white z-10" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-bold uppercase tracking-widest text-zinc-400 font-mono">
-                  {lightboxIndex + 1} / {images.length}
-                </span>
-                <span className="text-sm font-bold font-display hidden sm:inline">{listing.title}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setLightboxIndex(null)}
-                className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-all cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Main Lightbox Image & Nav */}
-            <div className="relative flex-1 flex items-center justify-center my-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-              <button
-                type="button"
-                onClick={() => setLightboxIndex((lightboxIndex - 1 + images.length) % images.length)}
-                className="absolute left-2 md:left-6 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all cursor-pointer z-10"
-              >
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-
-              <OptimizedImage
-                src={images[lightboxIndex]}
-                aspectRatio="16:9"
-                className="max-h-[75vh] max-w-full object-contain rounded-2xl shadow-2xl"
-                alt={`Photo ${lightboxIndex + 1}`}
-              />
-
-              <button
-                type="button"
-                onClick={() => setLightboxIndex((lightboxIndex + 1) % images.length)}
-                className="absolute right-2 md:right-6 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur-md transition-all cursor-pointer z-10"
-              >
-                <ChevronRight className="w-6 h-6" />
-              </button>
-            </div>
-
-            {/* Bottom Thumbnails */}
-            <div className="flex justify-center gap-2 overflow-x-auto pb-2 scrollbar-hide z-10" onClick={(e) => e.stopPropagation()}>
-              {images.map((img, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => setLightboxIndex(i)}
-                  className={`w-14 h-14 rounded-xl overflow-hidden border-2 transition-all cursor-pointer shrink-0 ${
-                    lightboxIndex === i ? 'border-white scale-105' : 'border-transparent opacity-50 hover:opacity-100'
-                  }`}
-                >
-                  <img src={img} className="w-full h-full object-cover" alt={`Thumb ${i + 1}`} />
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        <SanctuaryGalleryModal
+          isOpen={isGalleryOpen}
+          onClose={() => setIsGalleryOpen(false)}
+          listing={listing}
+          initialIndex={galleryInitialIndex}
+          initialCategory={galleryInitialCategory}
+          onReserve={() => handleReserve()}
+        />
 
       </div>
     </>

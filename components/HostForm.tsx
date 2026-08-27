@@ -451,10 +451,19 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
     try {
       const token = localStorage.getItem('token');
       const uploadedImageUrls: string[] = [];
+      const spatialPhotos: any[] = [];
       for (const photo of photos) {
         const url = await resolveAndUploadPhoto(photo);
         if (url && !url.startsWith('blob:')) {
           uploadedImageUrls.push(url);
+          spatialPhotos.push({
+            id: photo.id || `${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+            url,
+            category: photo.category || 'living_room',
+            title: photo.title || '',
+            description: photo.description || '',
+            specs: photo.specs || ''
+          });
         }
       }
 
@@ -488,6 +497,7 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
         city: formData.city,
         imageUrl: uploadedImageUrls[0] || '',
         imageUrls: uploadedImageUrls,
+        photos: spatialPhotos,
         videoUrl: formData.videoUrl || '',
         rentalMode: formData.rentalMode,
         rooms: processedRooms,

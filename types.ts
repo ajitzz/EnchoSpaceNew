@@ -45,6 +45,18 @@ export interface CalendarDay {
   offer?: Offer;
 }
 
+export interface SpatialPhoto {
+  id: string;
+  url: string;
+  category: 'living_room' | 'dining' | 'bedroom' | 'bathroom' | 'garden' | 'exterior' | 'pool' | 'details' | 'other';
+  categoryLabel?: string;
+  title: string;
+  description: string;
+  specs?: string;
+  lightingTime?: string;
+  isHero?: boolean;
+}
+
 export interface NearbyPoint {
   name: string;
   type: 'TRANSPORT' | 'GROCERY' | 'PARK' | 'CAFE' | 'GYM';
@@ -70,6 +82,7 @@ export interface Listing {
   displayPrice?: number;
   imageUrl: string;
   imageUrls?: string[];
+  photos?: SpatialPhoto[];
   video_url?: string;
   floor_plan_url?: string;
   amenity_clusters?: Record<string, string[]>;

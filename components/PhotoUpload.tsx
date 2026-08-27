@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -16,19 +16,64 @@ import {
   useSortable
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ImagePlus, X, GripHorizontal } from 'lucide-react';
+import { ImagePlus, X, GripHorizontal, Tag, Sparkles, ChevronDown } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import { encodeImageToBlurhash } from '../lib/blurhash';
+
+export type SpatialCategory = 
+  | 'living_room' 
+  | 'dining' 
+  | 'bedroom' 
+  | 'bathroom' 
+  | 'garden' 
+  | 'exterior' 
+  | 'pool' 
+  | 'details' 
+  | 'other';
+
+export const SPATIAL_CATEGORIES: { key: SpatialCategory; label: string; icon: string }[] = [
+  { key: 'living_room', label: 'Living Room', icon: '🏛️' },
+  { key: 'dining', label: 'Dining Area', icon: '🍽️' },
+  { key: 'bedroom', label: 'Bedroom', icon: '🛏️' },
+  { key: 'bathroom', label: 'Full Bathroom', icon: '🚿' },
+  { key: 'garden', label: 'Back Garden', icon: '🌿' },
+  { key: 'exterior', label: 'Exterior Facade', icon: '🏰' },
+  { key: 'pool', label: 'Pool & Deck', icon: '🏊' },
+  { key: 'details', label: 'Additional Details', icon: '✨' },
+];
+
+export interface PhotoData {
+  id: string; // unique internal id for sorting
+  file?: File;
+  previewUrl: string;
+  blurhash?: string;
+  category?: SpatialCategory;
+  title?: string;
+  description?: string;
+  specs?: string;
+}
 
 interface SortablePhotoProps {
   id: string;
   url: string;
   file?: File;
+  photo: PhotoData;
   onRemove: (id: string) => void;
+  onUpdateMetadata: (id: string, metadata: Partial<PhotoData>) => void;
   isMain?: boolean;
 }
 
-const SortablePhoto: React.FC<SortablePhotoProps> = ({ id, url, onRemove, isMain }) => {
+const SortablePhoto: React.FC<SortablePhotoProps> = ({ 
+  id, 
+  url, 
+  photo, 
+  onRemove, 
+  onUpdateMetadata, 
+  isMain 
+}) => {
+  const [showTagMenu, setShowTagMenu] = useState(false);
+  const [isEditingText, setIsEditingText] = useState(false);
+
   const {
     attributes,
     listeners,
@@ -41,62 +86,131 @@ const SortablePhoto: React.FC<SortablePhotoProps> = ({ id, url, onRemove, isMain
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    zIndex: isDragging ? 10 : 1,
+    zIndex: isDragging ? 20 : 1,
   };
+
+  const activeCategory = SPATIAL_CATEGORIES.find(c => c.key === photo.category) || SPATIAL_CATEGORIES[0];
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`relative aspect-video rounded-2xl overflow-hidden group border-2 transition-shadow ${isMain ? 'border-[#0284C7]' : 'border-gray-200'} ${isDragging ? 'shadow-2xl scale-105 z-50 ring-4 ring-[#0284C7]/30' : 'hover:shadow-md'}`}
+      className={`relative rounded-2xl overflow-hidden group border-2 transition-all bg-white flex flex-col ${
+        isMain ? 'border-amber-500 shadow-md' : 'border-zinc-200 hover:border-zinc-300'
+      } ${isDragging ? 'shadow-2xl scale-105 z-50 ring-4 ring-amber-500/30' : 'hover:shadow-lg'}`}
     >
-      <div className="w-full h-full bg-gray-100">
-        <img src={url} alt="Space" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
-      </div>
-      
-      {/* Overlay to dim on drag */}
-      {isDragging && <div className="absolute inset-0 bg-white/20 backdrop-blur-[2px]" />}
+      <div className="relative aspect-video w-full bg-zinc-100 overflow-hidden">
+        <img src={url} alt="Space" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+        
+        {/* Dim on drag */}
+        {isDragging && <div className="absolute inset-0 bg-white/20 backdrop-blur-[2px]" />}
 
-      {/* Drag Handle */}
-      <div 
-        className="absolute top-3 left-3 p-2 bg-black/60 backdrop-blur-md rounded-xl text-white opacity-0 group-hover:opacity-100 transition-all cursor-grab active:cursor-grabbing hover:bg-black hover:scale-105 shadow-sm"
-        {...attributes}
-        {...listeners}
-      >
-        <GripHorizontal className="w-5 h-5 pointer-events-none" />
-      </div>
-
-      {isMain && (
-        <div className="absolute bottom-3 left-3 bg-[#0284C7] text-white px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider shadow-md z-10 flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-          Cover Photo
+        {/* Drag Handle */}
+        <div 
+          className="absolute top-2.5 left-2.5 p-1.5 bg-black/60 backdrop-blur-md rounded-lg text-white opacity-0 group-hover:opacity-100 transition-all cursor-grab active:cursor-grabbing hover:bg-black hover:scale-105 shadow-xs z-10"
+          {...attributes}
+          {...listeners}
+          title="Drag to re-order"
+        >
+          <GripHorizontal className="w-4 h-4 pointer-events-none" />
         </div>
-      )}
 
-      {/* Remove Button */}
-      <button 
-        type="button"
-        onPointerDown={(e) => {
-          e.stopPropagation(); // prevent drag
-        }}
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemove(id);
-        }}
-        className="absolute top-3 right-3 p-2 bg-white/90 backdrop-blur-md rounded-xl shadow-sm hover:bg-white transition-all opacity-0 group-hover:opacity-100 hover:scale-105 hover:text-red-500"
-      >
-        <X className="w-5 h-5" />
-      </button>
+        {/* Cover Photo Pill */}
+        {isMain && (
+          <div className="absolute top-2.5 right-11 bg-amber-500 text-zinc-950 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider shadow-md z-10 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-zinc-950 animate-pulse" />
+            Cover Hero
+          </div>
+        )}
+
+        {/* Remove Button */}
+        <button 
+          type="button"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove(id);
+          }}
+          className="absolute top-2.5 right-2.5 p-1.5 bg-white/90 backdrop-blur-md rounded-lg shadow-xs hover:bg-white transition-all text-zinc-600 hover:text-red-500 hover:scale-105 z-10 cursor-pointer"
+          title="Delete photo"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Architectural Spatial Tag & Metadata Bar */}
+      <div className="p-3 bg-zinc-50 border-t border-zinc-100 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          {/* Category Dropdown Selector */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowTagMenu(prev => !prev)}
+              className="px-2.5 py-1 rounded-lg bg-zinc-200/80 hover:bg-zinc-300/80 text-zinc-800 text-[11px] font-bold font-display flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <span>{activeCategory.icon}</span>
+              <span>{activeCategory.label}</span>
+              <ChevronDown className="w-3 h-3 text-zinc-500" />
+            </button>
+
+            {showTagMenu && (
+              <div className="absolute top-full left-0 mt-1 w-44 bg-white rounded-xl shadow-xl border border-zinc-200 p-1 z-30 space-y-0.5 animate-fade-in">
+                {SPATIAL_CATEGORIES.map(cat => (
+                  <button
+                    key={cat.key}
+                    type="button"
+                    onClick={() => {
+                      onUpdateMetadata(id, { category: cat.key });
+                      setShowTagMenu(false);
+                    }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-display flex items-center gap-2 transition-all cursor-pointer ${
+                      photo.category === cat.key ? 'bg-amber-50 text-amber-900 font-bold' : 'hover:bg-zinc-100 text-zinc-700'
+                    }`}
+                  >
+                    <span>{cat.icon}</span>
+                    <span>{cat.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsEditingText(prev => !prev)}
+            className="text-[10px] font-mono font-bold text-amber-700 hover:text-amber-800 underline cursor-pointer"
+          >
+            {isEditingText ? 'Done' : (photo.title ? 'Edit Story' : '+ Add Story')}
+          </button>
+        </div>
+
+        {/* Spatial Description / Title Inputs */}
+        {isEditingText ? (
+          <div className="space-y-1.5 pt-1 animate-fade-in">
+            <input
+              type="text"
+              placeholder="Spatial Title (e.g. Sunken Fireside Salon)"
+              value={photo.title || ''}
+              onChange={(e) => onUpdateMetadata(id, { title: e.target.value })}
+              className="w-full text-xs p-2 rounded-lg border border-zinc-200 bg-white focus:outline-none focus:border-amber-400 font-display"
+            />
+            <input
+              type="text"
+              placeholder="Architectural note / lighting / materials..."
+              value={photo.description || ''}
+              onChange={(e) => onUpdateMetadata(id, { description: e.target.value })}
+              className="w-full text-[11px] p-2 rounded-lg border border-zinc-200 bg-white focus:outline-none focus:border-amber-400 font-sans"
+            />
+          </div>
+        ) : photo.title ? (
+          <p className="text-[11px] font-bold text-zinc-800 font-display truncate">
+            {photo.title}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 };
-
-export interface PhotoData {
-  id: string; // unique internal id for sorting
-  file?: File;
-  previewUrl: string;
-  blurhash?: string;
-}
 
 interface PhotoUploadProps {
   photos: PhotoData[];
@@ -105,8 +219,12 @@ interface PhotoUploadProps {
   setIsCompressing?: (val: boolean) => void;
 }
 
-
-export const PhotoUpload: React.FC<PhotoUploadProps> = ({ photos, setPhotos, isCompressing, setIsCompressing }) => {
+export const PhotoUpload: React.FC<PhotoUploadProps> = ({ 
+  photos, 
+  setPhotos, 
+  isCompressing, 
+  setIsCompressing 
+}) => {
   const [isDragActive, setIsDragActive] = React.useState(false);
   const [localCompressing, setLocalCompressing] = React.useState(false);
   
@@ -127,13 +245,17 @@ export const PhotoUpload: React.FC<PhotoUploadProps> = ({ photos, setPhotos, isC
     }
   };
 
+  const handleUpdateMetadata = (id: string, metadata: Partial<PhotoData>) => {
+    setPhotos(photos.map(p => p.id === id ? { ...p, ...metadata } : p));
+  };
+
   const processFiles = async (files: FileList | File[]) => {
     const activeSetCompressing = setIsCompressing || setLocalCompressing;
     activeSetCompressing(true);
     
     try {
         const compressedFiles = await Promise.all(
-          Array.from(files).map(async (file) => {
+          Array.from(files).map(async (file, idx) => {
             const options = {
               maxSizeMB: 0.5,
               maxWidthOrHeight: 1600,
@@ -142,6 +264,9 @@ export const PhotoUpload: React.FC<PhotoUploadProps> = ({ photos, setPhotos, isC
               initialQuality: 0.8,
             };
             
+            const categoryKeys: SpatialCategory[] = ['exterior', 'living_room', 'pool', 'bedroom', 'bathroom', 'dining', 'garden', 'details'];
+            const defaultCat = categoryKeys[(photos.length + idx) % categoryKeys.length];
+
             try {
               const compressedFile = await imageCompression(file, options);
               let blurhash = undefined;
@@ -153,7 +278,8 @@ export const PhotoUpload: React.FC<PhotoUploadProps> = ({ photos, setPhotos, isC
               return {
                 id: Math.random().toString(36).substr(2, 9),
                 file: compressedFile,
-                previewUrl: URL.createObjectURL(compressedFile), // URL.createObjectURL works with Blob/File
+                previewUrl: URL.createObjectURL(compressedFile),
+                category: defaultCat,
                 blurhash
               };
             } catch (error) {
@@ -161,7 +287,8 @@ export const PhotoUpload: React.FC<PhotoUploadProps> = ({ photos, setPhotos, isC
               return {
                 id: Math.random().toString(36).substr(2, 9),
                 file,
-                previewUrl: URL.createObjectURL(file)
+                previewUrl: URL.createObjectURL(file),
+                category: defaultCat
               };
             }
           })
@@ -176,7 +303,6 @@ export const PhotoUpload: React.FC<PhotoUploadProps> = ({ photos, setPhotos, isC
     if (e.target.files && e.target.files.length > 0) {
       processFiles(e.target.files);
     }
-    // clear value to allow adding same file again
     e.target.value = '';
   };
 
@@ -219,7 +345,7 @@ export const PhotoUpload: React.FC<PhotoUploadProps> = ({ photos, setPhotos, isC
           collisionDetection={closestCenter}
           onDragEnd={handleDragEnd}
         >
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
             <SortableContext 
               items={photos.map(p => p.id)}
               strategy={rectSortingStrategy}
@@ -230,7 +356,9 @@ export const PhotoUpload: React.FC<PhotoUploadProps> = ({ photos, setPhotos, isC
                   id={photo.id}
                   url={photo.previewUrl}
                   file={photo.file}
+                  photo={photo}
                   onRemove={handleRemove}
+                  onUpdateMetadata={handleUpdateMetadata}
                   isMain={index === 0}
                 />
               ))}
@@ -241,10 +369,10 @@ export const PhotoUpload: React.FC<PhotoUploadProps> = ({ photos, setPhotos, isC
 
       {/* Upload Zone */}
       <div 
-        className={`border-2 border-dashed rounded-3xl p-12 text-center transition-all cursor-pointer relative group ${
+        className={`border-2 border-dashed rounded-3xl p-10 text-center transition-all cursor-pointer relative group ${
           isDragActive 
-            ? 'border-[#0284C7] bg-[#0284C7]/5 scale-[1.02]' 
-            : 'border-gray-200 hover:bg-gray-50 hover:border-gray-300'
+            ? 'border-amber-500 bg-amber-500/5 scale-[1.01]' 
+            : 'border-zinc-200 hover:bg-zinc-50 hover:border-zinc-300'
         }`}
         onDragOver={handleDragOver}
         onDragEnter={handleDragEnter}
@@ -259,20 +387,20 @@ export const PhotoUpload: React.FC<PhotoUploadProps> = ({ photos, setPhotos, isC
           onChange={handleFileChange} 
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
         />
-        <div className="flex flex-col items-center gap-4">
-          <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${
+        <div className="flex flex-col items-center gap-3">
+          <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${
             isDragActive 
-              ? 'bg-[#0284C7]/10 text-[#0284C7] scale-110 animate-pulse' 
-              : 'bg-gray-100 text-gray-400 group-hover:bg-gray-200 group-hover:text-gray-600 group-hover:scale-105'
+              ? 'bg-amber-500/10 text-amber-600 scale-110 animate-pulse' 
+              : 'bg-zinc-100 text-zinc-400 group-hover:bg-zinc-200 group-hover:text-zinc-600 group-hover:scale-105'
           }`}>
-            <ImagePlus className="w-8 h-8" />
+            <ImagePlus className="w-7 h-7" />
           </div>
           <div>
-            <p className={`text-lg font-bold transition-colors ${isDragActive ? 'text-[#0284C7]' : 'text-gray-900'}`}>
-              {(isCompressing || localCompressing) ? 'Compressing images...' : isDragActive ? 'Drop your photos here' : photos.length > 0 ? 'Add more photos' : 'Add photos of your space'}
+            <p className={`text-base font-bold font-display transition-colors ${isDragActive ? 'text-amber-600' : 'text-zinc-900'}`}>
+              {(isCompressing || localCompressing) ? 'Compressing high-res images...' : isDragActive ? 'Drop sanctuary photos here' : photos.length > 0 ? 'Add more spatial perspectives' : 'Upload sanctuary photos & assign spatial zones'}
             </p>
-            <p className="text-gray-500 mt-1">
-               {(isCompressing || localCompressing) ? 'Please wait a moment' : 'Drag & drop photos here, or click to browse'}
+            <p className="text-xs text-zinc-500 mt-1">
+               {(isCompressing || localCompressing) ? 'Generating blurhashes & WebP...' : 'Categorize Living Room, Dining, Bedroom, Bathroom, Garden, Pool, and Details'}
             </p>
           </div>
         </div>
