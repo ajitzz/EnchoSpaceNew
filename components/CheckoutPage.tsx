@@ -20,7 +20,9 @@ import {
   Check,
   Zap,
   Copy,
-  ChevronDown
+  ChevronDown,
+  ExternalLink,
+  Shield
 } from 'lucide-react';
 import { Listing, Experience } from '../types';
 import { loadRazorpayScript, verifyRazorpayPayment } from '../lib/razorpay';
@@ -165,9 +167,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
   const [infantsCount, setInfantsCount] = useState<number>(initialData.infantsCount || 0);
   const [showOccupancyModal, setShowOccupancyModal] = useState<boolean>(false);
 
-  // Unified Payment State (Apple/Stripe Standard)
+  // Unified Payment State (Default: Razorpay / Auto UPI QR)
   const [selectedPaymentType, setSelectedPaymentType] = useState<'upi' | 'card' | 'emi'>('upi');
-  const [selectedUpiApp, setSelectedUpiApp] = useState<'gpay' | 'phonepe' | 'paytm' | 'qr'>('gpay');
+  const [upiSubMode, setUpiSubMode] = useState<'qr' | 'vpa'>('qr');
+  const [customUpiId, setCustomUpiId] = useState('');
   const [copiedVpa, setCopiedVpa] = useState<boolean>(false);
 
   // EMI State
@@ -240,7 +243,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
     setTimeout(() => setCopiedVpa(false), 2000);
   };
 
-  // 10/10 Clean Razorpay Gateway Execution
+  // 10/10 Razorpay Default Gateway Execution
   const handleExecutePayment = async (overrideMethod?: string) => {
     const effectivePhone = guestPhone.trim() ? `${countryCode.code} ${guestPhone.trim()}` : (user?.phone || '+91 9876543210');
     const effectiveName = guestName.trim() || user?.name || 'Guest Traveler';
@@ -296,7 +299,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
             name: effectiveName,
             contact: effectivePhone,
             email: effectiveEmail,
-            method: activeMethod === 'upi' ? 'upi' : undefined
+            method: activeMethod === 'upi' ? 'upi' : undefined,
+            vpa: customUpiId.trim() ? customUpiId.trim() : undefined
           },
           theme: { color: '#09090b', backdrop_color: 'rgba(0,0,0,0.85)' },
           handler: async function (response: any) {
@@ -716,16 +720,16 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
 
           <div className="h-px bg-zinc-100" />
 
-          {/* SECTION 2: Unified Razorpay Payment Hub */}
+          {/* SECTION 2: Unified Razorpay & Auto-Generated UPI QR Hub */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-5 h-5 rounded-full bg-zinc-900 text-white text-[10px] font-black flex items-center justify-center font-mono">2</span>
-                <h3 className="text-sm font-extrabold text-zinc-900 tracking-tight uppercase font-display">Select Payment Method</h3>
+                <h3 className="text-sm font-extrabold text-zinc-900 tracking-tight uppercase font-display">Payment via Razorpay</h3>
               </div>
               <span className="text-[10px] font-mono text-emerald-600 font-bold flex items-center gap-1">
                 <Zap className="w-3 h-3 text-emerald-500" />
-                <span>Razorpay Secured</span>
+                <span>Instant Auto-QR Sync</span>
               </span>
             </div>
 
@@ -741,8 +745,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                 }`}
               >
                 <span className="text-sm">⚡</span>
-                <span className="text-xs font-bold font-display">Instant UPI</span>
-                <span className="text-[9px] text-zinc-400 font-mono">GPay · PhonePe</span>
+                <span className="text-xs font-bold font-display">Scan QR & UPI</span>
+                <span className="text-[9px] text-zinc-400 font-mono">GPay · PhonePe · Paytm</span>
               </button>
 
               <button
@@ -774,55 +778,106 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
               </button>
             </div>
 
-            {/* UPI Option Panel */}
+            {/* UPI & AUTO-GENERATED QR SCANNER PANEL */}
             {selectedPaymentType === 'upi' && (
-              <div className="bg-zinc-50 rounded-2xl p-4 border border-zinc-200/80 space-y-3.5">
-                <span className="text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono block">
-                  Select Fast UPI App
-                </span>
-
-                <div className="grid grid-cols-4 gap-2">
-                  {[
-                    { id: 'gpay', name: 'Google Pay', icon: '⚡' },
-                    { id: 'phonepe', name: 'PhonePe', icon: '🟣' },
-                    { id: 'paytm', name: 'Paytm', icon: '💠' },
-                    { id: 'qr', name: 'Scan QR', icon: '📱' },
-                  ].map(app => (
+              <div className="bg-zinc-50 rounded-2xl p-5 border border-zinc-200/80 space-y-4">
+                
+                {/* Mode Selector: Direct QR vs UPI ID Input */}
+                <div className="flex items-center justify-between pb-2 border-b border-zinc-200/60">
+                  <div className="flex items-center gap-2">
                     <button
-                      key={app.id}
                       type="button"
-                      onClick={() => {
-                        uiAudio.playClick();
-                        setSelectedUpiApp(app.id as any);
-                      }}
-                      className={`py-2.5 px-1 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
-                        selectedUpiApp === app.id
-                          ? 'bg-zinc-950 text-white border-zinc-950 shadow-xs font-bold'
-                          : 'bg-white text-zinc-700 border-zinc-200 hover:bg-zinc-100'
+                      onClick={() => { uiAudio.playClick(); setUpiSubMode('qr'); }}
+                      className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                        upiSubMode === 'qr'
+                          ? 'bg-zinc-950 text-white shadow-xs'
+                          : 'bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-100'
                       }`}
                     >
-                      <span className="text-xs">{app.icon}</span>
-                      <span className="text-[10px] font-bold truncate w-full">{app.name}</span>
+                      📱 Scan Dynamic QR
                     </button>
-                  ))}
+                    <button
+                      type="button"
+                      onClick={() => { uiAudio.playClick(); setUpiSubMode('vpa'); }}
+                      className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                        upiSubMode === 'vpa'
+                          ? 'bg-zinc-950 text-white shadow-xs'
+                          : 'bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-100'
+                      }`}
+                    >
+                      ⚡ Enter UPI ID / VPA
+                    </button>
+                  </div>
+                  <span className="text-[10px] font-mono text-zinc-400 hidden sm:inline">Zero Gateway Fee</span>
                 </div>
 
-                {selectedUpiApp === 'qr' && (
-                  <div className="bg-white rounded-xl p-4 border border-zinc-200 flex flex-col items-center text-center space-y-2">
-                    <img 
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`upi://pay?pa=encho.space@icici&pn=ENCHO_SPACE&am=${grandTotal}&cu=INR&tn=${encodeURIComponent(tierMeta.name)}`)}`}
-                      alt="UPI Payment QR Code"
-                      className="w-36 h-36 object-contain"
-                    />
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono text-zinc-600 bg-zinc-100 px-2.5 py-1 rounded">encho.space@icici</span>
+                {/* Sub-Mode 1: Live Auto-Generated Dynamic QR Code */}
+                {upiSubMode === 'qr' ? (
+                  <div className="bg-white rounded-2xl p-5 border border-zinc-200 flex flex-col items-center text-center space-y-3 shadow-2xs">
+                    <div className="w-44 h-44 bg-zinc-50 rounded-2xl flex items-center justify-center border border-zinc-200 p-2 shadow-inner">
+                      <img 
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(`upi://pay?pa=encho.space@icici&pn=ENCHO_SPACE&am=${grandTotal}&cu=INR&tn=${encodeURIComponent(tierMeta.name)}`)}`}
+                        alt="Auto Generated UPI Payment QR Code"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    
+                    <div>
+                      <span className="text-xs font-bold text-zinc-900 block">
+                        Scan with Google Pay, PhonePe, Paytm, or BHIM
+                      </span>
+                      <p className="text-[11px] text-zinc-500 font-medium mt-0.5">
+                        Open your camera or UPI app on your phone and scan the code above
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <span className="text-xs font-mono text-zinc-600 bg-zinc-100 px-3 py-1 rounded-lg border border-zinc-200">
+                        encho.space@icici
+                      </span>
                       <button
                         type="button"
                         onClick={handleCopyVpa}
-                        className="text-xs font-bold text-zinc-800 bg-zinc-100 hover:bg-zinc-200 px-2 py-1 rounded transition-colors"
+                        className="text-xs font-bold text-zinc-800 bg-zinc-100 hover:bg-zinc-200 px-2.5 py-1 rounded-lg border border-zinc-200 transition-colors flex items-center gap-1 cursor-pointer"
                       >
-                        {copiedVpa ? 'Copied!' : 'Copy'}
+                        <Copy className="w-3 h-3 text-zinc-600" />
+                        <span>{copiedVpa ? 'Copied!' : 'Copy UPI ID'}</span>
                       </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Sub-Mode 2: UPI ID Collect Input */
+                  <div className="bg-white rounded-2xl p-4 border border-zinc-200 space-y-3">
+                    <div>
+                      <label className="block text-[10px] font-extrabold uppercase tracking-widest text-zinc-400 mb-1 font-mono">
+                        Your UPI ID (VPA)
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={customUpiId}
+                          onChange={(e) => setCustomUpiId(e.target.value)}
+                          placeholder="e.g. yourname@okhdfcbank or 9876543210@paytm"
+                          className="flex-1 px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-mono text-zinc-900 focus:bg-white focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[10px] text-zinc-400">Popular handles:</span>
+                      {['@okaxis', '@okhdfcbank', '@oksbi', '@paytm', '@ybl'].map(handle => (
+                        <button
+                          key={handle}
+                          type="button"
+                          onClick={() => {
+                            uiAudio.playClick();
+                            const prefix = customUpiId.split('@')[0] || (guestPhone || '9876543210');
+                            setCustomUpiId(prefix + handle);
+                          }}
+                          className="text-[10px] font-mono bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-2 py-0.5 rounded border border-zinc-200/80 cursor-pointer"
+                        >
+                          {handle}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -834,10 +889,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
               <div className="bg-zinc-50 rounded-2xl p-4 border border-zinc-200/80 text-xs text-zinc-600 space-y-2">
                 <div className="flex items-center gap-2 font-bold text-zinc-900">
                   <CreditCard className="w-4 h-4 text-zinc-700" />
-                  <span>Razorpay Card & Apple Pay Checkout</span>
+                  <span>Razorpay Card & Apple Pay Gateway</span>
                 </div>
                 <p className="text-[11px] leading-relaxed text-zinc-500">
-                  Clicking the button below will securely launch Razorpay Checkout to process all International & Domestic Cards (Visa, Mastercard, RuPay, Amex, Apple Pay) with 256-bit tokenized security.
+                  Clicking the payment button will securely launch Razorpay Checkout to process all International & Domestic Cards (Visa, Mastercard, RuPay, Amex, Apple Pay) with 256-bit tokenized security.
                 </p>
               </div>
             )}
@@ -891,7 +946,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
           <div className="pt-2">
             <button
               type="button"
-              onClick={() => handleExecutePayment(selectedPaymentType === 'upi' ? selectedUpiApp : selectedPaymentType)}
+              onClick={() => handleExecutePayment(selectedPaymentType === 'upi' ? (upiSubMode === 'vpa' && customUpiId ? 'upi' : 'upi') : selectedPaymentType)}
               disabled={isProcessingPayment}
               className="w-full bg-zinc-950 hover:bg-zinc-900 text-white font-bold font-display py-4 rounded-2xl shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 text-sm tracking-wide"
             >
@@ -934,7 +989,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
             </span>
           </div>
           <button 
-            onClick={() => handleExecutePayment(selectedPaymentType === 'upi' ? selectedUpiApp : selectedPaymentType)}
+            onClick={() => handleExecutePayment(selectedPaymentType === 'upi' ? 'upi' : selectedPaymentType)}
             disabled={isProcessingPayment}
             className="bg-zinc-950 hover:bg-zinc-900 text-white font-bold font-display uppercase tracking-wider text-xs py-3.5 px-6 rounded-full active:scale-95 transition-all shadow-md flex-1 max-w-[200px] cursor-pointer flex items-center justify-center gap-1.5"
           >
