@@ -273,6 +273,15 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
 
   const nightlyRate = useMemo(() => {
     if (isExperience) return experience?.price || 0;
+    
+    // CMS Phase F: True Database Room Pricing
+    if (listing?.rooms && Array.isArray(listing.rooms) && listing.rooms.length > 0) {
+      const room = listing.rooms.find((r: any) => r.id === activeRoomTier || r.type === activeRoomTier || r.name.toLowerCase().includes(activeRoomTier));
+      if (room && room.price) {
+         return room.price;
+      }
+    }
+
     if (listing?.currency === 'USD') return tierMeta.priceUsd;
     if (listing?.price && listing.price > 1000) {
       if (activeRoomTier === 'suites') return Math.round(listing.price * 1.35);
@@ -510,7 +519,15 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                   {(['suites', 'deluxe', 'executive'] as const).map(tierKey => {
                     const t = ROOM_TIER_META[tierKey];
                     const isSelected = activeRoomTier === tierKey;
-                    const tRate = listing?.currency === 'USD' ? t.priceUsd : (listing?.price && listing.price > 1000 ? (tierKey === 'suites' ? Math.round(listing.price * 1.35) : tierKey === 'executive' ? Math.round(listing.price * 0.65) : listing.price) : t.price);
+                    let tRate = t.price;
+                    if (listing?.rooms && Array.isArray(listing.rooms) && listing.rooms.length > 0) {
+                      const room = listing.rooms.find((r: any) => r.id === tierKey || r.type === tierKey || r.name.toLowerCase().includes(tierKey));
+                      if (room && room.price) tRate = room.price;
+                    } else if (listing?.currency === 'USD') {
+                      tRate = t.priceUsd;
+                    } else if (listing?.price && listing.price > 1000) {
+                      tRate = tierKey === 'suites' ? Math.round(listing.price * 1.35) : tierKey === 'executive' ? Math.round(listing.price * 0.65) : listing.price;
+                    }
                     return (
                       <button
                         key={tierKey}

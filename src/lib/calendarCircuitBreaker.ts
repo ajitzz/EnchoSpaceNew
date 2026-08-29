@@ -107,7 +107,14 @@ export class CalendarCircuitBreaker {
       [numListingId]
     );
 
-    const isFullyBooked = bookingsRes.rows.length > 0;
+    // CMS Phase C Upgrade: Calculate true inventory across all room types
+    const inventoryRes = await pool.query(
+      `SELECT SUM(inventory_count) as total_inventory FROM room_types WHERE listing_id = $1`,
+      [numListingId]
+    );
+    const totalInventory = inventoryRes.rows[0]?.total_inventory || 1; // Fallback to 1 for legacy properties
+
+    const isFullyBooked = bookingsRes.rows.length >= totalInventory;
 
     // 3. Fetch all marketing campaigns linked to this listing
     const campaignsRes = await pool.query(

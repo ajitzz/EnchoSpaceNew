@@ -17,16 +17,7 @@ export interface SanctuaryGalleryModalProps {
   onReserve?: () => void;
 }
 
-export type GalleryCategoryKey = 
-  | 'all'
-  | 'living_room'
-  | 'dining'
-  | 'bedroom'
-  | 'bathroom'
-  | 'garden'
-  | 'exterior'
-  | 'pool'
-  | 'details';
+export type GalleryCategoryKey = string;
 
 interface CategoryConfig {
   key: GalleryCategoryKey;
@@ -37,80 +28,54 @@ interface CategoryConfig {
   description: string;
 }
 
-export const GALLERY_CATEGORIES: CategoryConfig[] = [
-  {
-    key: 'all',
-    label: 'All Spaces',
-    shortLabel: 'All',
-    icon: '✨',
-    headline: 'Complete Sanctuary Panorama',
-    description: 'A curated visual journey through every architectural zone, living space, and tranquil outdoor sanctuary.'
-  },
-  {
-    key: 'living_room',
-    label: 'Grand Living Salon',
-    shortLabel: 'Living Room',
-    icon: '🏛️',
-    headline: '01 · Grand Living Salon & Glass Atrium',
-    description: 'Double-height acoustic glazing framing natural ridge views, sunken fireside lounges, and warm 2700K ambient architectural illumination.'
-  },
-  {
-    key: 'dining',
-    label: 'Dining & Kitchen',
-    shortLabel: 'Dining Area',
-    icon: '🍽️',
-    headline: '02 · Epicurean Dining & Private Chef Alcove',
-    description: 'Custom live-edge walnut dining table, professional culinary suite with induction cooktops, and twilight pendant fixtures for intimate gatherings.'
-  },
-  {
-    key: 'bedroom',
-    label: 'Master Suites',
-    shortLabel: 'Bedrooms',
-    icon: '🛏️',
-    headline: '03 · Master Sanctuary & Panoramic Suites',
-    description: 'Organic Belgian linen bedding, private sunrise balconies, acoustically isolated timber walls, and seamless integrated wardrobe suites.'
-  },
-  {
-    key: 'bathroom',
-    label: 'Spa Bathrooms',
-    shortLabel: 'Full Bathroom',
-    icon: '🚿',
-    headline: '04 · Spa Oasis & En-Suite Bathrooms',
-    description: 'Hand-carved freestanding stone soaking tubs, dual rainforest showers, heated Italian travertine tiles, and organic botanical amenities.'
-  },
-  {
-    key: 'garden',
-    label: 'Private Garden',
-    shortLabel: 'Back Garden',
-    icon: '🌿',
-    headline: '05 · Private Courtyard & Zen Back Garden',
-    description: 'Lush indigenous flora, secluded stone meditation pathways, twilight firebowls, and sheltered open-air reading daybeds.'
-  },
-  {
-    key: 'exterior',
-    label: 'Exterior Grounds',
-    shortLabel: 'Exterior',
-    icon: '🏰',
-    headline: '06 · Architectural Facade & Sanctuary Grounds',
-    description: 'Monolithic organic silhouettes nestled harmoniously into the topography, with sweeping horizon vistas and private gated driveways.'
-  },
-  {
-    key: 'pool',
-    label: 'Infinity Pool',
-    shortLabel: 'Pool & Deck',
-    icon: '🏊',
-    headline: '07 · Horizon Infinity Pool & Sunset Deck',
-    description: 'Temperature-regulated mineral infinity waters seamlessly meeting the skyline, flanked by cantilevered teak sunbeds and dusk fire lanterns.'
-  },
-  {
-    key: 'details',
-    label: 'Atmosphere & Art',
-    shortLabel: 'Details',
-    icon: '🎨',
-    headline: '08 · Curated Atmospheric & Design Vignettes',
-    description: 'Tactile natural textures, bespoke bronze sculptures, artisanal ceramics, and subtle lighting choreography throughout the residence.'
+// ADR-005: Gallery tabs are now driven by host-defined room names from listing.rooms[]
+export function buildGalleryCategories(listing: Listing): CategoryConfig[] {
+  const categories: CategoryConfig[] = [
+    {
+      key: 'all',
+      label: 'All Spaces',
+      shortLabel: 'All',
+      icon: '✨',
+      headline: listing.title || 'Complete Property Panorama',
+      description: (listing.description || '').substring(0, 120) || 'A curated visual journey through every space.'
+    },
+    {
+      key: 'common',
+      label: 'Property & Amenities',
+      shortLabel: 'Amenities',
+      icon: '🏗️',
+      headline: 'Sanctuary Grounds & Shared Spaces',
+      description: 'Pool, gardens, restaurant, lobby, and property-wide amenities.'
+    }
+  ];
+  
+  // Add a tab per host-defined room type
+  if (listing.rooms && (listing.rooms as any[]).length > 0) {
+    (listing.rooms as any[]).forEach((room: any) => {
+      const tierKey = room.type || `room_${room.name?.replace(/\s+/g, '_').toLowerCase()}`;
+      categories.push({
+        key: tierKey,
+        label: room.name || tierKey,
+        shortLabel: room.name ? (room.name.length > 12 ? room.name.substring(0, 11) + '…' : room.name) : tierKey,
+        icon: room.icon || '🛏️',
+        headline: room.name || tierKey,
+        description: room.description || room.specs || `Explore the ${room.name || tierKey}.`
+      });
+    });
+  } else {
+    // Legacy fallback for listings without room config
+    categories.push(
+      { key: 'suites', label: 'Presidential Suites', shortLabel: 'Suites', icon: '👑', headline: 'Presidential Panorama Suites', description: 'Flagship luxury accommodations.' },
+      { key: 'deluxe', label: 'Deluxe Rooms', shortLabel: 'Deluxe', icon: '🛏️', headline: 'Deluxe Garden Sanctuaries', description: 'Spacious comfort with garden access.' },
+      { key: 'executive', label: 'Executive Studios', shortLabel: 'Executive', icon: '💻', headline: 'Executive Work Enclaves', description: 'Ergonomic productivity spaces.' }
+    );
   }
-];
+  return categories;
+}
+
+// Keep GALLERY_CATEGORIES as static export for any backward-compat usage:
+export const GALLERY_CATEGORIES = buildGalleryCategories({ rooms: [] } as any);
+
 
 /**
  * Intelligent Fallback Classifier:
@@ -118,10 +83,20 @@ export const GALLERY_CATEGORIES: CategoryConfig[] = [
  * with rich contextual titles, descriptions, lighting time, and spatial specs.
  */
 export function classifyListingPhotos(listing: Listing): SpatialPhoto[] {
+  const result: SpatialPhoto[] = [];
+  
   if (listing.photos && listing.photos.length > 0) {
-    return listing.photos;
+    listing.photos.forEach((photo: any, idx: number) => {
+       result.push({
+         ...photo,
+         tier: photo.tier || 'common',
+         category: photo.category || 'other',
+       });
+    });
+    return result;
   }
 
+  // Fallback if no structured photos
   const rawUrls: string[] = [];
   if (listing.imageUrl) rawUrls.push(listing.imageUrl);
   if (listing.imageUrls && Array.isArray(listing.imageUrls)) {
@@ -130,86 +105,31 @@ export function classifyListingPhotos(listing: Listing): SpatialPhoto[] {
     });
   }
 
-  // Curated fallback architectural story sequence
-  const categorySequence: {
-    category: SpatialPhoto['category'];
-    title: string;
-    description: string;
-    specs: string;
-    lightingTime: string;
-  }[] = [
-    {
-      category: 'exterior',
-      title: 'Architectural Arrival & Sanctuary Facade',
-      description: 'Monolithic clean lines and natural timber louvers framing the dramatic landscape entry.',
-      specs: 'Gated Private Compound · Mountain Ridge View',
-      lightingTime: 'Golden Hour · 6:15 PM'
-    },
-    {
-      category: 'living_room',
-      title: 'Double-Height Atrium Living Salon',
-      description: 'Sunken conversation pit with floor-to-ceiling glass doors opening directly to the cantilevered terrace.',
-      specs: '1,250 sqft · Italian Travertine · Bang & Olufsen Sound',
-      lightingTime: 'Afternoon Sunlight · 3:30 PM'
-    },
-    {
-      category: 'pool',
-      title: 'Heated Mineral Horizon Pool & Sun Deck',
-      description: 'Zero-edge pool suspended over the valley with integrated submerged daybeds and ambient starlight fiber optics.',
-      specs: '50ft Length · Heated Mineral Water · Teak Decking',
-      lightingTime: 'Twilight Dusk · 6:45 PM'
-    },
-    {
-      category: 'bedroom',
-      title: 'Presidential Master Suite & Sunrise Terrace',
-      description: 'King-sized organic plush mattress dressed in Italian sateen linens with direct eastern sunrise exposure.',
-      specs: '680 sqft · King Bed · Acoustically Isolated Walls',
-      lightingTime: 'Morning Glow · 7:00 AM'
-    },
-    {
-      category: 'bathroom',
-      title: 'Spa En-Suite with Monolithic Stone Tub',
-      description: 'Freestanding volcanic stone soak tub overlooking private bamboo courtyard with rainfall shower enclave.',
-      specs: 'Heated Marble Floors · Rainfall Shower · Aesop Botanicals',
-      lightingTime: 'Diffused Daylight · 11:00 AM'
-    },
-    {
-      category: 'dining',
-      title: 'Epicurean Dining Room & Wine Showcase',
-      description: 'Handcrafted live-edge walnut table seating ten, complemented by a temperature-controlled vintage cellar vault.',
-      specs: 'Seating for 10 · Custom Brass Chandelier',
-      lightingTime: 'Evening Dinner · 8:00 PM'
-    },
-    {
-      category: 'garden',
-      title: 'Zen Courtyard & Midnight Firepit',
-      description: 'Secluded gravel meditation garden surrounded by mature Japanese maples and a sunken basalt firebowl.',
-      specs: 'Private Zen Enclave · Gas Firepit · Ambient Starlight',
-      lightingTime: 'Starry Night · 9:30 PM'
-    },
-    {
-      category: 'details',
-      title: 'Artisanal Ceramics & Warm Ambient Accents',
-      description: 'Bespoke hand-thrown earthenware, textured linen drapery, and calibrated 2700K recessed lighting.',
-      specs: 'Curated Local Artwork · Architectural Luminescence',
-      lightingTime: 'Soft Twilight · 7:15 PM'
-    }
+  const fallbacks: { tier: any; category: any; title: string; desc: string; }[] = [
+    { tier: 'common', category: 'exterior', title: 'Architectural Facade', desc: 'Monolithic clean lines framing the landscape.' },
+    { tier: 'common', category: 'pool', title: 'Infinity Horizon Pool', desc: 'Heated mineral waters suspended over the valley.' },
+    { tier: 'suites', category: 'bedroom', title: 'Presidential Master Suite', desc: 'King-sized organic plush mattress.' },
+    { tier: 'suites', category: 'bathroom', title: 'Spa En-Suite', desc: 'Freestanding volcanic stone soak tub.' },
+    { tier: 'deluxe', category: 'bedroom', title: 'Deluxe Garden Room', desc: 'Private bamboo courtyard access.' },
+    { tier: 'executive', category: 'living_room', title: 'Executive Studio', desc: 'Ergonomic architectural workstation.' }
   ];
 
-  return rawUrls.map((url, idx) => {
-    const template = categorySequence[idx % categorySequence.length];
-    return {
-      id: `${listing.id}-spatial-photo-${idx}`,
+  rawUrls.forEach((url, idx) => {
+    const template = fallbacks[idx % fallbacks.length];
+    result.push({
+      id: `fallback-photo-${idx}`,
       url,
+      tier: template.tier,
       category: template.category,
-      categoryLabel: GALLERY_CATEGORIES.find(c => c.key === template.category)?.label,
-      title: idx < categorySequence.length ? template.title : `${template.title} (Perspective ${Math.floor(idx / categorySequence.length) + 1})`,
-      description: template.description,
-      specs: template.specs,
-      lightingTime: template.lightingTime,
+      categoryLabel: template.category,
+      title: template.title,
+      description: template.desc,
+      specs: '',
       isHero: idx === 0
-    };
+    });
   });
+
+  return result;
 }
 
 export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
@@ -220,6 +140,7 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
   initialCategory = 'all',
   onReserve
 }) => {
+  const galleryCategories = useMemo(() => buildGalleryCategories(listing), [listing]);
   const [selectedCategory, setSelectedCategory] = useState<GalleryCategoryKey>(initialCategory as GalleryCategoryKey);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [isZoomed, setIsZoomed] = useState(false);
@@ -228,23 +149,65 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
   const [viewMode, setViewMode] = useState<'bento' | 'cinematic'>('bento');
   const [isStoryDrawerOpen, setIsStoryDrawerOpen] = useState(true);
 
+  // Sync initial state when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      if (initialCategory) setSelectedCategory(initialCategory as GalleryCategoryKey);
+      if (initialIndex !== undefined) setLightboxIndex(initialIndex);
+    }
+  }, [isOpen, initialCategory, initialIndex]);
+
   // Classify and curate photos
   const allPhotos = useMemo(() => classifyListingPhotos(listing), [listing]);
 
-  // Filtered photos for active tab
+  // Filtered photos for active tab (2D Matrix Injection)
   const filteredPhotos = useMemo(() => {
     if (selectedCategory === 'all') return allPhotos;
-    return allPhotos.filter(p => p.category === selectedCategory);
+    if (selectedCategory === 'common') return allPhotos.filter(p => p.tier === 'common');
+    // For a specific room tier: show that tier's photos + common photos
+    return allPhotos.filter(p => p.tier === selectedCategory || p.tier === 'common');
   }, [allPhotos, selectedCategory]);
 
-  // Category counts map
+  // Group filtered photos by their Spatial Category for Bento Rendering
+  const groupedPhotos = useMemo(() => {
+    const groups: Record<string, SpatialPhoto[]> = {};
+    filteredPhotos.forEach(p => {
+      const cat = p.category || 'other';
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(p);
+    });
+    return groups;
+  }, [filteredPhotos]);
+
+  const SPATIAL_LABELS: Record<string, string> = {
+    living_room: 'Living Room & Atrium',
+    dining: 'Dining & Kitchen',
+    bedroom: 'Bedrooms & Sleeping Quarters',
+    bathroom: 'Bathrooms & Spa',
+    garden: 'Gardens & Courtyards',
+    exterior: 'Exterior Architecture',
+    pool: 'Pool & Wellness',
+    details: 'Curated Details',
+    balcony: 'Balconies & Terraces',
+    parking: 'Arrival & Parking',
+    other: 'Spaces'
+  };
+
+  // Category counts map (by Tier)
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = { all: allPhotos.length };
     allPhotos.forEach(p => {
-      counts[p.category] = (counts[p.category] || 0) + 1;
+      counts[p.tier] = (counts[p.tier] || 0) + 1;
+    });
+    // Add common photos to each non-common tier count
+    const commonCount = counts['common'] || 0;
+    galleryCategories.forEach(cat => {
+      if (cat.key !== 'all' && cat.key !== 'common') {
+        counts[cat.key] = (counts[cat.key] || 0) + commonCount;
+      }
     });
     return counts;
-  }, [allPhotos]);
+  }, [allPhotos, galleryCategories]);
 
   // Handle open lightbox
   const openLightboxAt = useCallback((indexInFiltered: number) => {
@@ -415,7 +378,7 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
         {/* ========================================================================= */}
         <nav className="px-4 sm:px-8 py-3 bg-zinc-950/60 backdrop-blur-md border-b border-zinc-900/80 overflow-x-auto scrollbar-hide z-30 shrink-0">
           <div className="flex items-center gap-2 min-w-max mx-auto max-w-7xl">
-            {GALLERY_CATEGORIES.map(cat => {
+            {galleryCategories.map(cat => {
               const count = categoryCounts[cat.key] || 0;
               if (count === 0 && cat.key !== 'all') return null;
 
@@ -451,93 +414,181 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
         {/* ========================================================================= */}
         {/* MAIN BODY: EDITORIAL BENTO FEED                                            */}
         {/* ========================================================================= */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-8 lg:p-12 scrollbar-thin scrollbar-thumb-zinc-800">
-          <div className="max-w-7xl mx-auto space-y-12">
-            {/* Active Category Header Banner */}
-            <div className="space-y-2 max-w-3xl">
-              <span className="text-[11px] font-mono font-bold uppercase tracking-widest text-amber-400">
-                Architectural Taxonomy · {selectedCategory.toUpperCase()}
-              </span>
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold font-display text-white tracking-tight">
-                {GALLERY_CATEGORIES.find(c => c.key === selectedCategory)?.headline || 'Curated Spaces'}
-              </h1>
-              <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
-                {GALLERY_CATEGORIES.find(c => c.key === selectedCategory)?.description}
-              </p>
-            </div>
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-8 lg:p-12 scrollbar-thin scrollbar-thumb-zinc-800 bg-[#050505]">
+          <AnimatePresence mode="wait">
+            <motion.div 
+              key={selectedCategory}
+              initial={{ opacity: 0, y: 15, filter: 'blur(10px)' }}
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, y: -15, filter: 'blur(10px)' }}
+              transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+              className="max-w-[1400px] mx-auto space-y-32 pb-32"
+            >
+              
+              {/* Active Category Header Banner */}
+              <div className="space-y-6 max-w-4xl pb-12 pt-8 sm:pt-12 border-b border-white/10">
+                <motion.span 
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.2, duration: 0.8 }}
+                  className="inline-block text-[10px] sm:text-xs font-mono font-bold uppercase tracking-[0.3em] text-amber-500"
+                >
+                  Architectural Taxonomy &mdash; {selectedCategory}
+                </motion.span>
+                <h1 className="text-5xl sm:text-7xl lg:text-[80px] font-extrabold font-display text-white tracking-tighter leading-[0.9]">
+                  {galleryCategories.find(c => c.key === selectedCategory)?.headline || 'Curated Spaces'}
+                </h1>
+                <p className="text-base sm:text-lg text-zinc-400 leading-relaxed max-w-2xl font-light">
+                  {galleryCategories.find(c => c.key === selectedCategory)?.description}
+                </p>
+              </div>
 
-            {/* Asymmetrical Bento Gallery Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 sm:gap-6">
-              {filteredPhotos.map((photo, index) => {
-                // Determine responsive bento column span for iF award magazine rhythm
-                const isLargeHero = index % 5 === 0;
-                const isMediumTile = index % 5 === 1 || index % 5 === 2;
-                const colSpan = isLargeHero ? 'lg:col-span-8' : isMediumTile ? 'lg:col-span-4' : 'lg:col-span-6';
-                const heightClass = isLargeHero ? 'h-[380px] sm:h-[480px]' : 'h-[300px] sm:h-[360px]';
+              {/* SPLIT LAYOUT SPATIAL TOUR */}
+              <div className="space-y-40">
+                {Object.entries(groupedPhotos).map(([spatialCat, photosInCat], sectionIdx) => {
+                   const firstPhoto = photosInCat[0];
+                   const isCommon = photosInCat.some(p => p.tier === 'common') && selectedCategory !== 'common';
+                   
+                   return (
+                     <motion.div 
+                       key={spatialCat} 
+                       initial={{ opacity: 0 }}
+                       whileInView={{ opacity: 1 }}
+                       viewport={{ once: true, margin: "-20%" }}
+                       transition={{ duration: 1 }}
+                       className="flex flex-col lg:flex-row gap-12 lg:gap-24"
+                     >
+                       {/* LEFT COLUMN: Context & Description (Sticky) */}
+                       <div className="w-full lg:w-1/3">
+                          <div className="sticky top-32 space-y-8">
+                             <div className="space-y-4">
+                               {isCommon && (
+                                 <div className="flex items-center gap-2 mb-4">
+                                   <div className="h-[1px] w-8 bg-amber-500"></div>
+                                   <span className="text-[10px] text-amber-500 font-mono uppercase tracking-[0.2em] font-bold">Shared Amenity</span>
+                                 </div>
+                               )}
+                               <h2 className="text-4xl sm:text-5xl font-display font-medium text-white tracking-tight leading-none">
+                                 {SPATIAL_LABELS[spatialCat] || spatialCat}
+                               </h2>
+                               <div className="w-12 h-[2px] bg-white/20"></div>
+                             </div>
+                             
+                             {(firstPhoto.description || firstPhoto.specs) ? (
+                               <div className="space-y-6 pt-4">
+                                 {firstPhoto.description && (
+                                   <p className="text-zinc-400 text-base leading-loose font-light">
+                                     {firstPhoto.description}
+                                   </p>
+                                 )}
+                                 {firstPhoto.specs && (
+                                   <p className="text-xs font-mono text-zinc-500 uppercase tracking-widest border-l border-amber-500/50 pl-4 py-1">
+                                     {firstPhoto.specs}
+                                   </p>
+                                 )}
+                               </div>
+                             ) : (
+                               <p className="text-zinc-500 text-base leading-loose font-light pt-4">
+                                 Experience the meticulously crafted details and architectural harmony of this space. Designed for ultimate comfort and aesthetic brilliance.
+                               </p>
+                             )}
 
-                return (
-                  <motion.div
-                    key={photo.id}
-                    layout
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4, delay: index * 0.05 }}
-                    onClick={() => openLightboxAt(index)}
-                    className={`${colSpan} ${heightClass} group relative rounded-3xl overflow-hidden bg-zinc-900 border border-zinc-800/80 hover:border-amber-400/50 transition-all duration-500 shadow-lg hover:shadow-2xl hover:shadow-amber-500/5 cursor-pointer`}
-                  >
-                    {/* High-Resolution Image */}
-                    <OptimizedImage
-                      src={photo.url}
-                      aspectRatio="16:9"
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
-                      alt={photo.title}
-                    />
+                             {/* Minimalist Index Indicator */}
+                             <div className="pt-8 text-[10px] font-mono text-zinc-700 tracking-widest">
+                               0{sectionIdx + 1} &mdash; {Object.keys(groupedPhotos).length < 10 ? `0${Object.keys(groupedPhotos).length}` : Object.keys(groupedPhotos).length}
+                             </div>
+                          </div>
+                       </div>
+                       
+                       {/* RIGHT COLUMN: Awwwards-Level Asymmetrical Grid */}
+                       <div className="w-full lg:w-2/3">
+                          <div className="grid grid-cols-12 gap-3 md:gap-5 lg:gap-8">
+                             {photosInCat.map((photo, idx) => {
+                               const absoluteIndex = filteredPhotos.findIndex(p => p.id === photo.id);
+                               const total = photosInCat.length;
+                               
+                               // AWWWARDS-LEVEL BENTO LOGIC
+                               let spanClass = "col-span-12";
+                               let heightClass = "h-[300px] sm:h-[400px]";
+                               let aspect: any = "16:9";
 
-                    {/* Gradient Protection Overlays */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-80 group-hover:opacity-95 transition-opacity duration-300" />
+                               if (total === 1) {
+                                 spanClass = "col-span-12";
+                                 heightClass = "h-[350px] sm:h-[550px] lg:h-[750px]";
+                               } else if (total === 2) {
+                                 spanClass = "col-span-12 sm:col-span-6";
+                                 heightClass = "h-[350px] sm:h-[450px] lg:h-[600px]";
+                                 aspect = "4:3";
+                               } else if (total === 3) {
+                                 if (idx === 0) {
+                                   spanClass = "col-span-12 sm:col-span-8";
+                                   heightClass = "h-[350px] sm:h-[500px] lg:h-[700px]";
+                                 } else {
+                                   spanClass = "col-span-6 sm:col-span-4";
+                                   heightClass = "h-[170px] sm:h-[242px] lg:h-[334px]";
+                                   aspect = "4:3";
+                                 }
+                               } else {
+                                 // 4+ Photos: High-End Editorial Rhythm
+                                 const pattern = idx % 6;
+                                 if (pattern === 0) {
+                                   spanClass = "col-span-12";
+                                   heightClass = "h-[350px] sm:h-[450px] lg:h-[600px]";
+                                 } else if (pattern === 1 || pattern === 2) {
+                                   spanClass = "col-span-6";
+                                   heightClass = "h-[200px] sm:h-[300px] lg:h-[450px]";
+                                   aspect = "4:3";
+                                 } else if (pattern === 3) {
+                                   spanClass = "col-span-12 sm:col-span-7";
+                                   heightClass = "h-[250px] sm:h-[350px] lg:h-[500px]";
+                                 } else {
+                                   spanClass = idx === 4 && total === 5 ? "col-span-12 sm:col-span-5" : (pattern === 4 ? "col-span-6 sm:col-span-5" : "col-span-6 sm:col-span-12"); 
+                                   heightClass = "h-[250px] sm:h-[350px] lg:h-[500px]";
+                                 }
+                               }
 
-                    {/* Top Lighting & Zone Pill */}
-                    <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-10">
-                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-black/60 backdrop-blur-md text-amber-300 border border-white/10">
-                        {photo.categoryLabel || photo.category}
-                      </span>
-                      {photo.lightingTime && (
-                        <span className="text-[10px] font-mono text-zinc-300 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center gap-1">
-                          <Sun className="w-3 h-3 text-amber-400" />
-                          <span>{photo.lightingTime}</span>
-                        </span>
-                      )}
-                    </div>
+                               // Override for mobile specific Awwwards touch (first image always massive, next two split)
+                               if (total > 3 && idx === 0) spanClass = "col-span-12";
+                               if (total > 3 && (idx === 1 || idx === 2)) spanClass = "col-span-6 sm:col-span-6";
 
-                    {/* Bottom Architectural Story Drawer */}
-                    <div className="absolute bottom-0 left-0 right-0 p-5 sm:p-6 z-10 flex flex-col justify-end space-y-1.5">
-                      <div className="flex items-center justify-between w-full">
-                        <h3 className="text-base sm:text-lg font-bold font-display text-white group-hover:text-amber-300 transition-colors tracking-tight line-clamp-1">
-                          {photo.title}
-                        </h3>
-                        <div className="p-2 rounded-full bg-white/10 backdrop-blur-md text-white opacity-0 group-hover:opacity-100 transition-all duration-300 shrink-0">
-                          <Eye className="w-4 h-4" />
-                        </div>
-                      </div>
-
-                      <p className="text-xs text-zinc-300 line-clamp-2 leading-relaxed opacity-90 group-hover:opacity-100 transition-opacity">
-                        {photo.description}
-                      </p>
-
-                      {photo.specs && (
-                        <div className="flex items-center gap-2 pt-1">
-                          <Compass className="w-3 h-3 text-zinc-400 shrink-0" />
-                          <span className="text-[10px] font-mono text-zinc-400 truncate">
-                            {photo.specs}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </div>
+                               return (
+                                 <motion.div 
+                                   key={photo.id}
+                                   initial={{ opacity: 0, y: 50, scale: 0.95 }}
+                                   whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                                   viewport={{ once: true, margin: "-15%" }}
+                                   transition={{ duration: 1, ease: [0.16, 1, 0.3, 1], delay: (idx % 3) * 0.1 }}
+                                   onClick={() => openLightboxAt(absoluteIndex)}
+                                   className={`${spanClass} ${heightClass} group relative overflow-hidden bg-[#0A0A0A] cursor-pointer will-change-transform`}
+                                 >
+                                    <div className="absolute inset-0 w-full h-full">
+                                       <OptimizedImage
+                                         src={photo.url}
+                                         aspectRatio={aspect}
+                                         className="w-full h-full object-cover group-hover:scale-[1.05] transition-transform duration-[1500ms] ease-[cubic-bezier(0.16,1,0.3,1)] opacity-90 group-hover:opacity-100"
+                                         alt={photo.title || 'Space'}
+                                       />
+                                       
+                                       <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors duration-700" />
+                                       
+                                       <div className="absolute bottom-6 left-6 right-6 text-white translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-700 ease-out">
+                                         <div className="flex items-center gap-3 mb-2">
+                                            <div className="h-[1px] w-8 bg-amber-400"></div>
+                                            <span className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-amber-400">Inspect 4K</span>
+                                         </div>
+                                       </div>
+                                    </div>
+                                 </motion.div>
+                               );
+                             })}
+                          </div>
+                       </div>
+                     </motion.div>
+                   );
+                })}
+              </div>
+            </motion.div>
+          </AnimatePresence>
         </main>
 
         {/* ========================================================================= */}

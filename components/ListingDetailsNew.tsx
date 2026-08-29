@@ -49,42 +49,16 @@ import { uiAudio } from './audio';
 import { useToast } from './ToastContext';
 import { SanctuaryGalleryModal, GalleryCategoryKey } from './SanctuaryGalleryModal';
 
-// 10/10 Luxury Room Tier Definitions for Boutique Hotels & Resorts
-export const ROOM_TIER_CONFIG = {
-  suites: {
-    id: 'suites' as const,
-    name: 'Presidential Panorama Suite',
-    shortName: 'Suites',
-    icon: '👑',
-    price: 18500,
-    priceUsd: 220,
-    capacity: 2,
-    specs: '1,200 sq.ft · 270° Valley View · Heated Jacuzzi',
-    tag: 'Master Luxury'
-  },
-  deluxe: {
-    id: 'deluxe' as const,
-    name: 'Deluxe Garden Double Room',
-    shortName: 'Deluxe',
-    icon: '🌿',
-    price: 11500,
-    priceUsd: 140,
-    capacity: 2,
-    specs: '650 sq.ft · Garden Verandah · Twin Plush Beds',
-    tag: 'Recommended Anchor'
-  },
-  executive: {
-    id: 'executive' as const,
-    name: 'Executive Studio Sanctuary',
-    shortName: 'Executive',
-    icon: '💼',
-    price: 7500,
-    priceUsd: 90,
-    capacity: 1,
-    specs: '420 sq.ft · Ergonomic Work Enclave · Rain Shower',
-    tag: 'Solo & Work'
-  }
+// LEGACY fallback — used only when listing.rooms[] is empty (MIG-001)
+export const LEGACY_ROOM_TIER_CONFIG: Record<string, {
+  name: string; price: number; priceUsd: number; capacity: number; specs: string; tag: string; icon: string;
+}> = {
+  suites:    { name: 'Presidential Panorama Suite', price: 18500, priceUsd: 220, capacity: 2, specs: '1,200 sq.ft · 270° Valley View · Heated Jacuzzi', tag: 'Master Luxury', icon: '👑' },
+  deluxe:    { name: 'Deluxe Garden Double Room',   price: 11500, priceUsd: 140, capacity: 2, specs: '650 sq.ft · Garden Verandah · Twin Plush Beds', tag: 'Recommended', icon: '🛏️' },
+  executive: { name: 'Executive Studio Sanctuary',  price: 7500,  priceUsd: 90,  capacity: 1, specs: '420 sq.ft · Work Enclave · Rain Shower', tag: 'Solo & Work', icon: '💻' }
 };
+// Backward-compat alias — preserves existing imports
+export const ROOM_TIER_CONFIG = LEGACY_ROOM_TIER_CONFIG;
 
 interface ListingDetailsNewProps {
   listing: Listing;
@@ -207,6 +181,36 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
   const images = uniqueMediaPool;
 
+  // MIG-001: Dual-read — live room data takes precedence over LEGACY_ROOM_TIER_CONFIG
+  const liveRoomConfigs = useMemo(() => {
+    if (!listing.rooms || listing.rooms.length === 0) return null;
+    const configs: Record<string, { name: string; price: number; capacity: number; specs: string; tag: string; icon: string; description: string; features: string[]; }> = {};
+    (listing.rooms as any[]).forEach(room => {
+      const key = room.type || room.id || `room_${room.name}`;
+      configs[key] = {
+        name: room.name || key,
+        price: Number(room.price) || 0,
+        capacity: room.capacity || 2,
+        specs: room.specs || (Array.isArray(room.features) ? room.features.join(' · ') : ''),
+        tag: room.tag || '',
+        icon: room.icon || '🛏️',
+        description: room.description || '',
+        features: Array.isArray(room.features) ? room.features : []
+      };
+    });
+    return Object.keys(configs).length > 0 ? configs : null;
+  }, [listing.rooms]);
+
+  const availableRoomTiers = useMemo(() => {
+    if (liveRoomConfigs) return Object.keys(liveRoomConfigs);
+    return ['suites', 'deluxe', 'executive'];
+  }, [liveRoomConfigs]);
+
+  const getRoomConfig = useCallback((tierKey: string) => {
+    if (liveRoomConfigs && liveRoomConfigs[tierKey]) return liveRoomConfigs[tierKey];
+    return LEGACY_ROOM_TIER_CONFIG[tierKey] || LEGACY_ROOM_TIER_CONFIG['deluxe'];
+  }, [liveRoomConfigs]);
+
   // Curated AI Tourist Concierge Dataset (Home Epicenter + Dynamic Category Pruning)
   const sanctuaryHomePOI = useMemo(() => ({
     id: 'sanctuary-home',
@@ -228,117 +232,25 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   }), [listing]);
 
   const curatedNeighborhoodPOIs = useMemo(() => {
-    return [
-      {
-        id: 'poi-1',
+    if (listing.nearby && Array.isArray(listing.nearby) && (listing.nearby as any[]).length > 0) {
+      return (listing.nearby as any[]).map((poi: any) => ({
+        id: Math.random().toString(),
         isHome: false,
-        name: 'Chembra Peak',
-        localScript: 'ചെമ്പ്ര കൊടുമുടി',
-        category: 'DESTINATION',
-        type: 'MOUNTAIN PEAK',
-        distance: '30 min drive',
-        rating: 4.5,
-        reviewCount: 2194,
+        name: poi.name || '',
+        distance: poi.distance || '',
+        type: poi.type || 'attraction',
+        description: poi.description || '',
+        summary: poi.description || '',
         photo: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80',
-        summary: 'Almost 7,000 ft. above sea level, this high peak features scenic trekking trails and a natural heart-shaped lake (Hridaya Saras).',
-        address: `${listing.city || 'Kerala'}, 673577`,
-        pinCode: 'G36Q+PF, High Altitude Reserve',
-        googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent('Chembra Peak ' + (listing.city || ''))}`,
-        pinTop: '32%',
-        pinLeft: '28%'
-      },
-      {
-        id: 'poi-2',
-        isHome: false,
-        name: 'Soochipara Waterfalls',
-        localScript: 'സൂചിപ്പാറ വെള്ളച്ചാട്ടം',
         category: 'DESTINATION',
-        type: 'HERITAGE WATERFALL',
-        distance: '20 min drive',
-        rating: 4.6,
-        reviewCount: 3820,
-        photo: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80',
-        summary: 'A three-tiered cascade nestled in dense evergreen forest with natural rock pools for freshwater swimming.',
-        address: `${listing.city || 'Kerala'}, 673577`,
-        pinCode: 'H42R+8M, Forest Range',
-        googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent('Soochipara Falls ' + (listing.city || ''))}`,
-        pinTop: '58%',
-        pinLeft: '48%'
-      },
-      {
-        id: 'poi-3',
-        isHome: false,
-        name: 'Banasura Sagar Dam',
-        localScript: 'ബാണാസുര സാഗർ അണക്കെട്ട്',
-        category: 'DESTINATION',
-        type: 'EARTHEN DAM & ISLANDS',
-        distance: '25 min drive',
-        rating: 4.5,
-        reviewCount: 5410,
-        photo: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80',
-        summary: 'Largest earthen dam in India featuring speedboating across mist-covered submerged hill island chains.',
-        address: `${listing.city || 'Kerala'}, 673575`,
-        pinCode: 'K89V+2L, Reservoir Road',
-        googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent('Banasura Sagar Dam ' + (listing.city || ''))}`,
-        pinTop: '25%',
-        pinLeft: '72%'
-      },
-      {
-        id: 'poi-4',
-        isHome: false,
-        name: 'Edakkal Prehistoric Caves',
-        localScript: 'എടക്കൽ ഗുഹകൾ',
-        category: 'DESTINATION',
-        type: 'PREHISTORIC HERITAGE',
-        distance: '35 min drive',
-        rating: 4.4,
-        reviewCount: 4230,
-        photo: 'https://images.unsplash.com/photo-1599837565318-67429bde7162?auto=format&fit=crop&w=1200&q=80',
-        summary: 'Neolithic petroglyphs and stone engravings dating back over 6,000 years inside Ambukuthi Hills.',
-        address: `${listing.city || 'Kerala'}, 673592`,
-        pinCode: 'P23M+7K, Heritage Hill',
-        googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent('Edakkal Caves ' + (listing.city || ''))}`,
-        pinTop: '68%',
-        pinLeft: '82%'
-      },
-      {
-        id: 'poi-5',
-        isHome: false,
-        name: 'Wilton Heritage Organic Bistro',
-        localScript: 'വിൽട്ടൺ ഓർഗാനിക് കഫേ',
-        category: 'RESTAURANT',
-        type: 'ARTISANAL DINING',
-        distance: '10 min drive',
-        rating: 4.7,
-        reviewCount: 1650,
-        photo: 'https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?auto=format&fit=crop&w=1200&q=80',
-        summary: 'Farm-to-table organic plantation cuisine, wood-fired heritage breads, and freshly roasted single-origin Robusta.',
-        address: `${listing.city || 'Kerala'}, 673577`,
-        pinCode: 'G12X+5A, Estate Bypass',
-        googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent('Wilton Cafe ' + (listing.city || ''))}`,
-        pinTop: '45%',
-        pinLeft: '60%'
-      },
-      {
-        id: 'poi-6',
-        isHome: false,
-        name: "1980's Nostalgic Kitchen",
-        localScript: '1980സ് റെസ്റ്റോറന്റ്',
-        category: 'RESTAURANT',
-        type: 'LOCAL HERITAGE FEAST',
-        distance: '15 min drive',
-        rating: 4.6,
-        reviewCount: 3900,
-        photo: 'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&w=1200&q=80',
-        summary: 'Authentic regional clay-pot cooking, bamboo rice delicacies, and traditional spiced tea in a retro village setting.',
-        address: `${listing.city || 'Kerala'}, 673577`,
-        pinCode: 'F88Q+9J, Kalpetta Road',
-        googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent("1980s Restaurant " + (listing.city || ''))}`,
         pinTop: '50%',
-        pinLeft: '38%'
-      }
-    ];
-  }, [listing.city]);
+        pinLeft: '50%',
+        googleMapsUrl: '#',
+        rating: 4.5
+      }));
+    }
+    return []; // ADR-004: Return empty — no hardcoded location-specific POIs
+  }, [listing.nearby]);
 
   // AI Dynamic Category Pruning: Only show categories that have high-quality items
   const availableRadarCategories = useMemo(() => {
@@ -358,99 +270,114 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
 
   // Curated Room Inventory Collections (Suites, Double Rooms, Single Rooms)
-  const slideCollections = useMemo(() => [
-    {
-      id: 'suites',
-      name: '01 · Presidential Suites',
-      space01: {
-        title: `${listing.title ? listing.title.split('•')[0].trim() : 'Sanctuary'} Presidential Panorama Suite`,
-        desc: 'Panoramic master glass suite with custom king platform bed, private jacuzzi lounge, and valley vistas.',
-        img: uniqueMediaPool[0],
-        imgIndex: 0,
-        tag: 'Presidential Suite',
-        unitType: 'Suite',
-        hasVideo: !!listing.video_url
-      },
-      space02: {
-        title: 'Private Glass Balcony & Horizon Deck',
-        img: uniqueMediaPool[1],
-        imgIndex: 1,
-        tag: 'Horizon Balcony'
-      },
-      space03: {
-        title: 'Ensuite Italian Marble Spa Bath',
-        img: uniqueMediaPool[2],
-        imgIndex: 2,
-        tag: 'Spa Ensuite'
-      },
-      space04: {
-        title: 'Acoustic Hearth & Evening Reading Salon',
-        img: uniqueMediaPool[3],
-        imgIndex: 3,
-        tag: 'Master Salon'
-      }
-    },
-    {
-      id: 'double-rooms',
-      name: '02 · Deluxe Double Rooms',
-      space01: {
-        title: 'The Deluxe Garden Double Room',
-        desc: 'Spacious double room featuring twin plush organic cotton beds, garden terrace, and en-suite marble bath.',
-        img: uniqueMediaPool[4],
-        imgIndex: 4,
-        tag: 'Deluxe Double',
-        unitType: 'Double Room'
-      },
-      space02: {
-        title: 'Twin Plush Organic Cotton Bedding',
-        img: uniqueMediaPool[5],
-        imgIndex: 5,
-        tag: 'Twin Suite'
-      },
-      space03: {
-        title: 'Rainforest View Ensuite Bath',
-        img: uniqueMediaPool[6],
-        imgIndex: 6,
-        tag: 'Garden Bath'
-      },
-      space04: {
-        title: 'Private Sunlit Verandah & Lounge',
-        img: uniqueMediaPool[7],
-        imgIndex: 7,
-        tag: 'Verandah'
-      }
-    },
-    {
-      id: 'single-rooms',
-      name: '03 · Executive Single Rooms',
-      space01: {
-        title: 'The Executive Studio Sanctuary',
-        desc: 'Minimalist private single room with dedicated ergonomic work enclave, rain shower pod, and courtyard terrace.',
-        img: uniqueMediaPool[8],
-        imgIndex: 8,
-        tag: 'Executive Single',
-        unitType: 'Single Room'
-      },
-      space02: {
-        title: 'Dedicated Ergonomic Work Enclave',
-        img: uniqueMediaPool[9],
-        imgIndex: 9,
-        tag: 'Work Enclave'
-      },
-      space03: {
-        title: 'Minimalist Walk-In Rain Shower Pod',
-        img: uniqueMediaPool[10],
-        imgIndex: 10,
-        tag: 'Rain Shower'
-      },
-      space04: {
-        title: 'Courtyard Zen Garden Reading Nook',
-        img: uniqueMediaPool[11],
-        imgIndex: 11,
-        tag: 'Zen Garden'
-      }
+  const slideCollections = useMemo(() => {
+    // MIG-002: Use structured photos if available
+    if (listing.photos && (listing.photos as any[]).length > 0) {
+      const byTier: Record<string, any[]> = {};
+      (listing.photos as any[]).forEach((photo: any) => {
+        const tier = photo.tier || 'common';
+        if (!byTier[tier]) byTier[tier] = [];
+        byTier[tier].push(photo);
+      });
+      const commonPhotos = byTier['common'] || [];
+      
+      return availableRoomTiers.map((tierKey, index) => {
+        const roomCfg = getRoomConfig(tierKey);
+        const tierPhotos = [
+          ...(byTier[tierKey] || []),
+          ...commonPhotos.slice(0, 2)
+        ].filter(p => p.url);
+        
+        const spaces = tierPhotos.slice(0, 6).map((photo: any) => ({
+          title: photo.title || roomCfg.name,
+          caption: photo.description || roomCfg.specs || '',
+          img: photo.url,
+          imgIndex: 0,
+          desc: photo.description || roomCfg.specs || '',
+          tag: photo.tag || '',
+          hasVideo: false
+        }));
+        
+        // Pad to ensure space01 - space04 exist
+        while (spaces.length < 4) {
+          spaces.push({
+            title: roomCfg.name,
+            caption: '',
+            img: uniqueMediaPool[0],
+            imgIndex: 0,
+            desc: '',
+            tag: '',
+            hasVideo: false
+          });
+        }
+
+        return {
+          id: tierKey,
+          name: `${String(index + 1).padStart(2, '0')} · ${roomCfg.name}`,
+          description: (roomCfg as any).description || roomCfg.specs,
+          spaces: spaces,
+          space01: spaces[0],
+          space02: spaces[1],
+          space03: spaces[2],
+          space04: spaces[3]
+        };
+      }).filter(col => col.spaces.length > 0);
     }
-  ], [uniqueMediaPool, listing.title, listing.video_url]);
+    
+    // Legacy positional fallback
+    const pool = uniqueMediaPool;
+    return [
+      {
+        id: 'suites',
+        name: '01 · ' + LEGACY_ROOM_TIER_CONFIG.suites.name,
+        description: LEGACY_ROOM_TIER_CONFIG.suites.specs,
+        spaces: [
+          { title: LEGACY_ROOM_TIER_CONFIG.suites.name, caption: LEGACY_ROOM_TIER_CONFIG.suites.specs, img: pool[0] },
+          { title: 'Master En-Suite', caption: 'Volcanic stone soaking tub', img: pool[1] },
+          { title: 'Panorama Terrace', caption: 'Private wraparound verandah', img: pool[2] },
+          { title: 'Valley Study', caption: 'Integrated architectural workspace', img: pool[3] }
+        ],
+        space01: {
+          title: `${listing.title ? listing.title.split('•')[0].trim() : 'Sanctuary'} Presidential Panorama Suite`,
+          desc: 'Panoramic master glass suite with custom king platform bed, private jacuzzi lounge, and valley vistas.',
+          img: pool[0], imgIndex: 0, tag: 'Presidential Suite', unitType: 'Suite', hasVideo: !!listing.video_url
+        },
+        space02: { title: 'Private Glass Balcony & Horizon Deck', img: pool[1], imgIndex: 1, tag: 'Horizon Balcony' },
+        space03: { title: 'Ensuite Italian Marble Spa Bath', img: pool[2], imgIndex: 2, tag: 'Spa Ensuite' },
+        space04: { title: 'Acoustic Hearth & Evening Reading Salon', img: pool[3], imgIndex: 3, tag: 'Master Salon' }
+      },
+      {
+        id: 'deluxe',
+        name: '02 · ' + LEGACY_ROOM_TIER_CONFIG.deluxe.name,
+        description: LEGACY_ROOM_TIER_CONFIG.deluxe.specs,
+        spaces: [
+          { title: LEGACY_ROOM_TIER_CONFIG.deluxe.name, caption: LEGACY_ROOM_TIER_CONFIG.deluxe.specs, img: pool[4] },
+          { title: 'Garden Bath', caption: 'Private bamboo-screen terrace shower', img: pool[5] },
+          { title: 'Bamboo Garden', caption: 'Private courtyard access', img: pool[6] },
+          { title: 'Deluxe Studio', caption: 'Integrated workspace', img: pool[7] }
+        ],
+        space01: { title: 'The Deluxe Garden Double Room', desc: 'Spacious double room featuring twin plush organic cotton beds, garden terrace, and en-suite marble bath.', img: pool[4], imgIndex: 4, tag: 'Deluxe Double', unitType: 'Double Room' },
+        space02: { title: 'Twin Plush Organic Cotton Bedding', img: pool[5], imgIndex: 5, tag: 'Twin Suite' },
+        space03: { title: 'Rainforest View Ensuite Bath', img: pool[6], imgIndex: 6, tag: 'Garden Bath' },
+        space04: { title: 'Private Sunlit Verandah & Lounge', img: pool[7], imgIndex: 7, tag: 'Verandah' }
+      },
+      {
+        id: 'executive',
+        name: '03 · ' + LEGACY_ROOM_TIER_CONFIG.executive.name,
+        description: LEGACY_ROOM_TIER_CONFIG.executive.specs,
+        spaces: [
+          { title: LEGACY_ROOM_TIER_CONFIG.executive.name, caption: LEGACY_ROOM_TIER_CONFIG.executive.specs, img: pool[8] },
+          { title: 'Compact En-Suite', caption: 'Rain shower with forest view', img: pool[9] },
+          { title: 'Executive Terrace', caption: 'Private balcony with valley views', img: pool[10] },
+          { title: 'Work Alcove', caption: 'Ultra-fast FTTP connectivity', img: pool[11] }
+        ],
+        space01: { title: 'The Executive Studio Sanctuary', desc: 'Minimalist private single room with dedicated ergonomic work enclave, rain shower pod, and courtyard terrace.', img: pool[8], imgIndex: 8, tag: 'Executive Single', unitType: 'Single Room' },
+        space02: { title: 'Dedicated Ergonomic Work Enclave', img: pool[9], imgIndex: 9, tag: 'Work Enclave' },
+        space03: { title: 'Minimalist Walk-In Rain Shower Pod', img: pool[10], imgIndex: 10, tag: 'Rain Shower' },
+        space04: { title: 'Courtyard Zen Garden Reading Nook', img: pool[11], imgIndex: 11, tag: 'Zen Garden' }
+      }
+    ];
+  }, [listing.photos, uniqueMediaPool, availableRoomTiers, getRoomConfig, listing.title, listing.video_url]);
 
     const mobileGalleryRef = useRef<HTMLDivElement>(null);
   const [mobileSpaceIndex, setMobileSpaceIndex] = useState(0);
@@ -565,6 +492,29 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
     ];
   }, [listing.curated_guidelines]);
 
+  const [showAllAmenities, setShowAllAmenities] = useState(false);
+
+  const amenityIcon = (amenity: string): string => {
+    const a = amenity.toLowerCase();
+    if (a.includes('wifi') || a.includes('internet')) return '📶';
+    if (a.includes('pool')) return '🏊';
+    if (a.includes('gym') || a.includes('fitness')) return '🏋️';
+    if (a.includes('spa') || a.includes('wellness')) return '💆';
+    if (a.includes('parking')) return '🚗';
+    if (a.includes('kitchen')) return '🍳';
+    if (a.includes('air') || a.includes('ac')) return '❄️';
+    if (a.includes('tv') || a.includes('television')) return '📺';
+    if (a.includes('breakfast')) return '☕';
+    if (a.includes('laundry') || a.includes('washing')) return '🧿';
+    if (a.includes('garden') || a.includes('outdoor')) return '🌿';
+    if (a.includes('bar') || a.includes('minibar')) return '🍸';
+    if (a.includes('restaurant') || a.includes('dining')) return '🍽️';
+    if (a.includes('pet') || a.includes('dog')) return '🐕';
+    if (a.includes('beach')) return '🏖️';
+    if (a.includes('view') || a.includes('mountain')) return '⛰️';
+    return '✨';
+  };
+
   // Accordion state
   const [openAccordion, setOpenAccordion] = useState<{ about: boolean; guidelines: boolean; safety: boolean; services: boolean }>({
     about: true,
@@ -589,7 +539,14 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
 
   // Selected Room Tier: Defaults to 'deluxe' (Psychological Revenue Anchor)
-  const [selectedRoomTier, setSelectedRoomTier] = useState<'suites' | 'deluxe' | 'executive'>('deluxe');
+  // If listing has rooms, default to first room's type key; else 'suites'
+  const [selectedRoomTier, setSelectedRoomTier] = useState<string>(() => {
+    if (listing.rooms && listing.rooms.length > 0) {
+      const firstRoom = (listing.rooms as any[])[0];
+      return firstRoom.type || firstRoom.id || 'suites';
+    }
+    return 'suites';
+  });
 
   // Booking Form State
   const [checkIn, setCheckIn] = useState<string>(() => {
@@ -611,16 +568,23 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   const guests = adultsCount + childrenCount;
 
   // Double-Entry Ledger Calculation per Selected Room Tier
-  const activeTierObj = ROOM_TIER_CONFIG[selectedRoomTier];
+  const activeTierObj = getRoomConfig(selectedRoomTier);
+// ADR-003: Price authority is listing.rooms[].price, not hardcoded multipliers
   const activeNightlyRate = useMemo(() => {
-    if (listing.currency === 'USD') return activeTierObj.priceUsd;
+    if (liveRoomConfigs && liveRoomConfigs[selectedRoomTier]) {
+      return liveRoomConfigs[selectedRoomTier].price;
+    }
+    // Legacy fallback
+    const legacyConfig = LEGACY_ROOM_TIER_CONFIG[selectedRoomTier];
+    if (!legacyConfig) return listing.price || 0;
+    if (listing.currency === 'USD') return legacyConfig.priceUsd;
     if (listing.price && listing.price > 1000) {
       if (selectedRoomTier === 'suites') return Math.round(listing.price * 1.35);
       if (selectedRoomTier === 'executive') return Math.round(listing.price * 0.65);
       return listing.price;
     }
-    return activeTierObj.price;
-  }, [listing.currency, listing.price, selectedRoomTier, activeTierObj]);
+    return legacyConfig.price;
+  }, [selectedRoomTier, liveRoomConfigs, listing.price, listing.currency]);
 
   const nights = useMemo(() => {
     const start = new Date(checkIn).getTime();
@@ -634,11 +598,11 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   const taxAmount = Math.round((baseRentTotal + enchoFee) * 0.18); // 18% Statutory GST
   const grandTotal = baseRentTotal + enchoFee + taxAmount;
 
-  const handleReserve = (overrideTier?: 'suites' | 'deluxe' | 'executive') => {
+  const handleReserve = (overrideTier?: string) => {
     uiAudio.playSuccess();
     const tierKey = overrideTier || selectedRoomTier;
-    const tierMeta = ROOM_TIER_CONFIG[tierKey];
-    const nightly = listing.currency === 'USD' ? tierMeta.priceUsd : (listing.price && listing.price > 1000 ? (tierKey === 'suites' ? Math.round(listing.price * 1.35) : tierKey === 'executive' ? Math.round(listing.price * 0.65) : listing.price) : tierMeta.price);
+    const tierMeta = getRoomConfig(tierKey);
+    const nightly = listing.currency === 'USD' ? ((tierMeta as any).priceUsd || tierMeta.price) : activeNightlyRate;
     const rent = nightly * nights;
     const fee = Math.round(rent * 0.15);
     const tax = Math.round((rent + fee) * 0.18);
@@ -954,6 +918,30 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   </div>
                 </section>
 
+                {/* M7: Amenities section — reads from listing.amenities[] */}
+                {listing.amenities && listing.amenities.length > 0 && (
+                  <section className="py-10 border-t border-zinc-100 dark:border-neutral-800/60">
+                    <h2 className="text-2xl font-bold text-zinc-900 dark:text-white mb-2">What this place offers</h2>
+                    <p className="text-sm text-zinc-500 mb-6">{listing.amenities.length} amenities included</p>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {(showAllAmenities ? listing.amenities : listing.amenities.slice(0, 6)).map((amenity: string, i: number) => (
+                        <div key={i} className="flex items-center gap-3 p-3.5 rounded-2xl bg-zinc-50 dark:bg-neutral-900/70 border border-zinc-100 dark:border-neutral-800">
+                          <span className="text-xl flex-shrink-0">{amenityIcon(amenity)}</span>
+                          <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300 leading-tight">{amenity}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {listing.amenities.length > 6 && (
+                      <button
+                        onClick={() => setShowAllAmenities(prev => !prev)}
+                        className="mt-5 px-6 py-2.5 border border-zinc-300 dark:border-neutral-700 rounded-full text-sm font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-neutral-800 transition-all cursor-pointer"
+                      >
+                        {showAllAmenities ? 'Show less' : `Show all ${listing.amenities.length} amenities →`}
+                      </button>
+                    )}
+                  </section>
+                )}
+
                 {/* EDITORIAL SANCTUARY DOSSIER ACCORDION */}
                 <section className="border-t border-zinc-200/80 pt-6 space-y-2">
                   {/* Accordion Item 1: About The Sanctuary */}
@@ -1155,7 +1143,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         </div>
                         <span className="bg-amber-50 text-amber-800 border border-amber-200/80 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full flex items-center gap-1">
                           <span>{activeTierObj.icon}</span>
-                          <span>{activeTierObj.shortName}</span>
+                          <span>{(activeTierObj as any).shortName}</span>
                         </span>
                     </div>
 
@@ -1170,10 +1158,10 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         </span>
                       </div>
                       <div className="grid grid-cols-3 gap-1.5 p-1 bg-zinc-100/80 rounded-2xl border border-zinc-200/60">
-                        {(['suites', 'deluxe', 'executive'] as const).map(tierKey => {
-                          const t = ROOM_TIER_CONFIG[tierKey];
+                        {availableRoomTiers.map(tierKey => {
+                          const t = getRoomConfig(tierKey);
                           const isSelected = selectedRoomTier === tierKey;
-                          const tRate = listing.currency === 'USD' ? t.priceUsd : (listing.price && listing.price > 1000 ? (tierKey === 'suites' ? Math.round(listing.price * 1.35) : tierKey === 'executive' ? Math.round(listing.price * 0.65) : listing.price) : t.price);
+                          const tRate = listing.currency === 'USD' ? ((t as any).priceUsd || t.price) : t.price;
                           return (
                             <button
                               key={tierKey}
@@ -1190,7 +1178,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                               }`}
                             >
                               <span className="text-xs">{t.icon}</span>
-                              <span className="text-[11px] font-bold tracking-tight mt-0.5">{t.shortName}</span>
+                              <span className="text-[11px] font-bold tracking-tight mt-0.5">{(t as any).shortName || t.name.substring(0, 10)}</span>
                               <span className="text-[9px] font-mono text-zinc-400">
                                 {listing.currency === 'USD' ? `$${tRate}` : `₹${Math.round(tRate / 1000)}k`}
                               </span>
@@ -1361,7 +1349,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     {/* Visual Split-Cost Calculator (Strict Ledger) */}
                     <div className="space-y-3 text-sm text-zinc-600 font-medium">
                         <div className="flex justify-between">
-                            <span>{activeTierObj.shortName} ({listing.currency === 'USD' ? '$' : '₹'}{activeNightlyRate.toLocaleString()} × {nights} nts)</span>
+                            <span>{(activeTierObj as any).shortName || activeTierObj.name} ({listing.currency === 'USD' ? '$' : '₹'}{activeNightlyRate.toLocaleString()} × {nights} nts)</span>
                             <span className="tabular-nums font-semibold text-zinc-900">{listing.currency === 'USD' ? '$' : '₹'}{baseRentTotal.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between">
@@ -1661,7 +1649,9 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   <div
                     onClick={() => {
                       uiAudio.playClick();
-                      setLightboxIndex(slideCollections[activeSlide].space01.imgIndex);
+                      setGalleryInitialIndex(0);
+                      setGalleryInitialCategory(slideCollections[activeSlide].id as GalleryCategoryKey);
+                      setIsGalleryOpen(true);
                     }}
                     className="col-span-5 group relative min-h-[380px] lg:min-h-full rounded-3xl overflow-hidden bg-zinc-100 border border-zinc-200/60 shadow-xs hover:shadow-2xl transition-all duration-500 cursor-pointer flex flex-col justify-end"
                   >
@@ -1870,13 +1860,16 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
               </span>
             </div>
 
+            {curatedNeighborhoodPOIs.length === 0 ? (
+                <p className="text-sm text-zinc-500 italic">This host has not added nearby points of interest yet.</p>
+            ) : (
             <div className="relative w-full h-[380px] sm:h-[420px] md:h-[460px] bg-zinc-100 rounded-3xl overflow-hidden border border-zinc-200 shadow-inner group">
               {/* Locked "Dormant to Life" Chromatic Shift Layer with Dynamic Camera Zoom */}
               <div 
                 className="absolute inset-0 opacity-50 bg-[url('https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=1600&q=80')] bg-cover bg-center grayscale group-hover:grayscale-0 transition-all duration-1000 ease-out" 
                 style={{
                   transform: activeTouristPlace ? 'scale(1.35)' : 'scale(1.0)',
-                  transformOrigin: activeTouristPlace ? `${activeTouristPlace.pinLeft} ${activeTouristPlace.pinTop}` : 'center center'
+                  transformOrigin: activeTouristPlace ? `${(activeTouristPlace as any).pinLeft} ${(activeTouristPlace as any).pinTop}` : 'center center'
                 }}
               />
               <div className="absolute inset-0 bg-gradient-to-t from-white/95 via-white/30 to-transparent pointer-events-none" />
@@ -1954,7 +1947,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         <p className="text-[10px] font-semibold text-zinc-500 truncate">{activeTouristPlace.localScript}</p>
                         <div className="flex items-center gap-1.5 text-xs font-extrabold text-zinc-900">
                           <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                          <span>{activeTouristPlace.rating}</span>
+                          <span>{(activeTouristPlace as any).rating}</span>
                           <span className="text-[10px] text-zinc-400 font-normal">({(activeTouristPlace.reviewCount ?? 100).toLocaleString()})</span>
                         </div>
                         <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-md border ${
@@ -1975,7 +1968,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
                     {/* Minimal Direct Navigation Button */}
                     <a
-                      href={activeTouristPlace.googleMapsUrl}
+                      href={(activeTouristPlace as any).googleMapsUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className={`w-full text-white text-xs font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all hover:shadow-md cursor-pointer ${
@@ -2000,7 +1993,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   return (
                     <div
                       key={poi.id}
-                      style={{ position: 'absolute', top: poi.pinTop, left: poi.pinLeft }}
+                      style={{ position: 'absolute', top: (poi as any).pinTop, left: (poi as any).pinLeft }}
                       className={`z-30 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center group/pin transition-all duration-500 ${
                         activeTouristPlace && !isActive ? 'opacity-60 scale-95' : 'opacity-100'
                       }`}
@@ -2041,7 +2034,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         </div>
 
                         <a
-                          href={poi.googleMapsUrl}
+                          href={(poi as any).googleMapsUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={(e) => e.stopPropagation()}
@@ -2062,7 +2055,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 return (
                   <div
                     key={poi.id}
-                    style={{ position: 'absolute', top: poi.pinTop, left: poi.pinLeft }}
+                    style={{ position: 'absolute', top: (poi as any).pinTop, left: (poi as any).pinLeft }}
                     className={`z-20 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center group/pin transition-all duration-500 ${
                       activeTouristPlace && !isActive ? 'opacity-40 scale-90' : 'opacity-100'
                     }`}
@@ -2095,7 +2088,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     }`}>
                       <span>{poi.name} · {poi.distance}</span>
                       <a
-                        href={poi.googleMapsUrl}
+                        href={(poi as any).googleMapsUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
@@ -2152,7 +2145,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                               </span>
                               <span className="text-[10px] font-bold text-amber-600 flex items-center gap-0.5">
                                 <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
-                                <span>{poi.rating}</span>
+                                <span>{(poi as any).rating}</span>
                               </span>
                             </div>
 
@@ -2191,7 +2184,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                           </div>
                           <div className="flex items-center gap-0.5 text-[10px] font-bold text-amber-600 bg-amber-50 px-1 py-0.2 rounded">
                             <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
-                            <span>{poi.rating}</span>
+                            <span>{(poi as any).rating}</span>
                           </div>
                         </div>
                         <h4 className={`text-xs font-bold truncate font-display transition-colors ${
@@ -2211,6 +2204,8 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 </div>
               </div>
             </div>
+
+            )}
           </section>
 
           {/* 3. VERIFIED GUEST REVIEWS */}
@@ -2358,7 +2353,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         <span className="text-[10px] font-bold text-zinc-400 uppercase font-mono">/ nt</span>
                     </div>
                     <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 mt-0.5 truncate max-w-[140px]">
-                        {ROOM_TIER_CONFIG[selectedRoomTier].icon} {ROOM_TIER_CONFIG[selectedRoomTier].name}
+                        {getRoomConfig(selectedRoomTier).icon} {getRoomConfig(selectedRoomTier).name}
                     </span>
                 </div>
                 <button 

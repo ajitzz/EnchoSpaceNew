@@ -48,7 +48,7 @@ describe('Sanctuary Spatial Gallery Architecture & Taxonomy Tests', () => {
       {
         id: 'p1',
         url: 'https://images.unsplash.com/photo-1',
-        category: 'pool',
+        tier: 'common', category: 'pool',
         title: 'Sunset Mineral Infinity Pool',
         description: 'Heated cliffside infinity pool with mountain panorama.',
         specs: '60ft · Heated · Teak Decking'
@@ -56,7 +56,7 @@ describe('Sanctuary Spatial Gallery Architecture & Taxonomy Tests', () => {
       {
         id: 'p2',
         url: 'https://images.unsplash.com/photo-2',
-        category: 'living_room',
+        tier: 'suites', category: 'living_room',
         title: 'Travertine Atrium Salon',
         description: 'Double-height sunken fireside salon.',
         specs: '1,400 sqft · Sunken Pit'

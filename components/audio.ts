@@ -18,6 +18,12 @@ class UIAudio {
 
   private playTone(freq: number, type: OscillatorType, duration: number, vol: number = 0.1) {
     if (!this.enabled) return;
+    
+    // Suppress AudioContext warning if user hasn't interacted yet
+    if (typeof navigator !== 'undefined' && 'userActivation' in navigator) {
+       if (!(navigator as any).userActivation.hasBeenActive) return;
+    }
+    
     this.init();
     if (!this.ctx) return;
 

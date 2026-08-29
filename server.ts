@@ -723,10 +723,11 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'", "*"],
       connectSrc: ["'self'", "https:", "http:", "wss:", "ws:"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://js.stripe.com", "https://maps.googleapis.com", "https://*.googleapis.com", "https://accounts.google.com"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      scriptSrc: ["\'self\'", "\'unsafe-inline\'", "\'unsafe-eval\'", "blob:", "https://js.stripe.com", "https://maps.googleapis.com", "https://*.googleapis.com", "https://accounts.google.com", "https://va.vercel-scripts.com", "https://unpkg.com", "https://*.vercel.live"],
+      workerSrc: ["'self'", "blob:"],
+      styleSrc: ["\'self\'", "\'unsafe-inline\'", "https://fonts.googleapis.com", "https://unpkg.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
-      imgSrc: ["'self'", "data:", "https:", "http:"],
+      imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
       frameSrc: ["'self'", "https:", "http:", "https://js.stripe.com", "https://hooks.stripe.com"],
       frameAncestors: ["*"] // Allow iframe embedding in AI Studio preview
     }
@@ -1228,6 +1229,44 @@ const ensureListingsTable = async () => {
       rooms JSONB DEFAULT '[]'::jsonb,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS room_types (
+      id SERIAL PRIMARY KEY,
+      listing_id INT REFERENCES listings(id) ON DELETE CASCADE,
+      name VARCHAR(255) NOT NULL,
+      base_price DECIMAL NOT NULL,
+      currency VARCHAR(10) DEFAULT 'INR',
+      max_occupancy INT DEFAULT 2,
+      inventory_count INT DEFAULT 1,
+      features JSONB DEFAULT '[]'::jsonb,
+      amenities JSONB DEFAULT '[]'::jsonb,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS media_assets (
+      id SERIAL PRIMARY KEY,
+      entity_type VARCHAR(50) NOT NULL,
+      entity_id INT NOT NULL,
+      url TEXT NOT NULL,
+      category VARCHAR(50) NOT NULL,
+      title VARCHAR(255),
+      description TEXT,
+      specs VARCHAR(255),
+      lighting_time VARCHAR(255),
+      is_hero BOOLEAN DEFAULT false,
+      order_index INT DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS listings_drafts (
+      id SERIAL PRIMARY KEY,
+      host_id INT REFERENCES users(id),
+      published_listing_id INT REFERENCES listings(id) ON DELETE SET NULL,
+      status VARCHAR(50) DEFAULT 'DRAFT',
+      draft_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   await pool.query(`
@@ -1572,6 +1611,9 @@ const ensureListingsTable = async () => {
     ['seo_description', 'TEXT'],
     ['seo_keywords', 'TEXT'],
     ['seo_image_url', 'TEXT'],
+    ['amenity_clusters', 'JSONB'],
+    ['child_safety_specs', 'JSONB'],
+    ['nearby', 'JSONB'],
     ['state', "VARCHAR(100) DEFAULT ''"],
     ['country', "VARCHAR(100) DEFAULT ''"]
   ];
@@ -1773,6 +1815,13 @@ const ensureListingsTable = async () => {
   `);
 
   // Migration for CRM Lead Intent Scorer & Audience Detection & Campaign/Host Linkage
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS host_outreach_leads (
+      id SERIAL PRIMARY KEY,
+      property_name VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
   await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS campaign_id INT;`);
   await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS host_id INT;`);
   await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS guest_name VARCHAR(255);`);
@@ -1837,26 +1886,12 @@ const ensureListingsTable = async () => {
     ALTER TABLE async_webhook_queue ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMP;
     ALTER TABLE async_webhook_queue ADD COLUMN IF NOT EXISTS attempt_count INT DEFAULT 0;
     ALTER TABLE async_webhook_queue ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
-    ALTER TABLE webhook_dlq ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMP;
-    ALTER TABLE host_social_posts ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMP;
-    ALTER TABLE host_social_posts ADD COLUMN IF NOT EXISTS publish_attempt_count INT DEFAULT 0;
-    ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS dco_last_evaluated_at TIMESTAMP;
   `);
-  // Add database indexes for high-throughput campaign lookup queries
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_host_id ON host_marketing_campaigns(host_id);`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_listing_id ON host_marketing_campaigns(listing_id);`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_status ON host_marketing_campaigns(status);`);
   // M2: Webhook query optimization
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_inbound_webhooks_pending ON inbound_webhooks(status, next_retry_at) WHERE status IN ('pending', 'processing');`);
 
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_async_webhook_status ON async_webhook_queue(status);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_async_webhook_queue_pending ON async_webhook_queue(status, available_at, created_at) WHERE status IN ('pending', 'processing');`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_webhook_dlq_retry ON webhook_dlq(retry_count, next_retry_at);`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_webhook_dlq_active ON webhook_dlq(next_retry_at, retry_count) WHERE status = 'pending';`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_social_posts_due ON host_social_posts(status, scheduled_at) WHERE status IN ('approved', 'publishing');`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_dco_eval ON host_marketing_campaigns(status, meta_dispatched_at, dco_last_evaluated_at) WHERE status = 'active';`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_meta_tx_recovery ON meta_publishing_transactions(publish_status, updated_at, reconciliation_lease_expires_at);`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_entity ON admin_audit_logs(entity_type, entity_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_bookings_user_id ON bookings(user_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_bookings_listing_id ON bookings(listing_id);`);
 
@@ -1886,6 +1921,19 @@ const ensureListingsTable = async () => {
     );
   `);
 
+  // Ensure new columns exist in case the table was created previously without them
+  await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS property_name VARCHAR(255);`);
+  await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS instagram_username VARCHAR(100);`);
+  await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS facebook_url VARCHAR(255);`);
+  await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS owner_name VARCHAR(100);`);
+  await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS location VARCHAR(255);`);
+  await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS estimated_nightly_rate INT;`);
+  await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'discovered';`);
+  await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS notes TEXT;`);
+  await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS email VARCHAR(255);`);
+  await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS phone VARCHAR(50);`);
+  await pool.query(`ALTER TABLE host_outreach_leads ADD COLUMN IF NOT EXISTS last_contacted_at TIMESTAMP;`);
+  
   // Seed default high-value outreach targets if table is completely empty
   const countRes = await pool.query('SELECT COUNT(*) FROM host_outreach_leads');
   if (parseInt(countRes.rows[0].count) === 0) {
@@ -1899,6 +1947,21 @@ const ensureListingsTable = async () => {
       ('Amalfi Cliffside Estate', 'amalficliffside', 'https://facebook.com/amalficliffside', 'Gianluca Rossi', 'Amalfi, Italy', 1250, 'discovered', 'Ultra-luxury estate. Currently spending €5k/month on OTA commissions. Direct booking engine would save them thousands.', 'gianluca@amalficliffside.it')
     `);
   }
+
+  // ADR-006: AI gatekeeper score storage
+  await pool.query(`ALTER TABLE listings_drafts ADD COLUMN IF NOT EXISTS ai_score DECIMAL`);
+  await pool.query(`ALTER TABLE listings_drafts ADD COLUMN IF NOT EXISTS ai_evaluation JSONB`);
+  // ADR-001: room_types extra columns for free-form room model
+  await pool.query(`ALTER TABLE room_types ADD COLUMN IF NOT EXISTS type VARCHAR(100)`);
+  await pool.query(`ALTER TABLE room_types ADD COLUMN IF NOT EXISTS description TEXT`);
+  await pool.query(`ALTER TABLE room_types ADD COLUMN IF NOT EXISTS specs VARCHAR(500)`);
+  await pool.query(`ALTER TABLE room_types ADD COLUMN IF NOT EXISTS icon VARCHAR(20) DEFAULT '\ud83d\udecf\ufe0f'`);
+  await pool.query(`ALTER TABLE room_types ADD COLUMN IF NOT EXISTS tag VARCHAR(100)`);
+  await pool.query(`ALTER TABLE room_types ADD COLUMN IF NOT EXISTS min_stay_nights INT DEFAULT 1`);
+  // MIG-002: media_assets tier and room linkage
+  await pool.query(`ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS tier VARCHAR(100) DEFAULT 'common'`);
+  await pool.query(`ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS room_type_id INT REFERENCES room_types(id) ON DELETE SET NULL`);
+  await pool.query(`ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS moderation_status VARCHAR(50) DEFAULT 'approved'`);
 
   listingsTableInitialized = true;
 };
@@ -2052,12 +2115,19 @@ export const ensureMarketingSchema = async () => {
       failure_stage VARCHAR(100),
       rollback_status VARCHAR(50),
       error_details JSONB,
+      reconciliation_lease_expires_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     );
 
+    ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS reconciliation_lease_expires_at TIMESTAMP;
+    ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS reconciliation_attempt_count INT DEFAULT 0;
     ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS failure_code VARCHAR(100);
     ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS correlation_id VARCHAR(255);
+    ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS failure_category VARCHAR(100);
+    ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS failure_stage VARCHAR(100);
+    ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS rollback_status VARCHAR(50);
+    ALTER TABLE meta_publishing_transactions ADD COLUMN IF NOT EXISTS error_details JSONB;
 
     CREATE TABLE IF NOT EXISTS meta_publishing_events (
       id SERIAL PRIMARY KEY,
@@ -2624,6 +2694,23 @@ export const ensureMarketingSchema = async () => {
   } catch (providerSchemaErr) {
     console.error('[PROVIDER SCHEMA ERROR]', providerSchemaErr);
   }
+
+    await pool.query(`
+      ALTER TABLE webhook_dlq ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMP;
+      ALTER TABLE host_social_posts ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMP;
+      ALTER TABLE host_social_posts ADD COLUMN IF NOT EXISTS publish_attempt_count INT DEFAULT 0;
+      ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS dco_last_evaluated_at TIMESTAMP;
+    `).catch(() => true);
+
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_host_id ON host_marketing_campaigns(host_id);`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_listing_id ON host_marketing_campaigns(listing_id);`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_status ON host_marketing_campaigns(status);`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_webhook_dlq_retry ON webhook_dlq(retry_count, next_retry_at);`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_webhook_dlq_active ON webhook_dlq(next_retry_at, retry_count) WHERE status = 'pending';`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_social_posts_due ON host_social_posts(status, scheduled_at) WHERE status IN ('approved', 'publishing');`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_campaigns_dco_eval ON host_marketing_campaigns(status, meta_dispatched_at, dco_last_evaluated_at) WHERE status = 'active';`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_meta_tx_recovery ON meta_publishing_transactions(publish_status, updated_at, reconciliation_lease_expires_at);`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_entity ON admin_audit_logs(entity_type, entity_id);`);
 
   marketingSchemaInitialized = true;
 };
@@ -12458,6 +12545,132 @@ app.delete('/api/admin/outreach-leads/:id', authenticateToken, async (req: AuthR
   }
 });
 
+
+// --- CMS PHASE B: DRAFT & PUBLISH ROUTES ---
+
+app.get('/api/listings/draft/:id', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const result = await pool.query('SELECT * FROM listings_drafts WHERE id = $1 AND host_id = $2', [req.params.id, req.user?.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Draft not found' });
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch draft' });
+  }
+});
+
+app.post('/api/listings/draft', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { draftId, ...draftData } = req.body;
+    if (draftId) {
+      const result = await pool.query(`
+        UPDATE listings_drafts 
+        SET draft_data = $1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2 AND host_id = $3
+        RETURNING *
+      `, [JSON.stringify(draftData), draftId, req.user?.id]);
+      return res.json(result.rows[0]);
+    } else {
+      const result = await pool.query(`
+        INSERT INTO listings_drafts (host_id, draft_data)
+        VALUES ($1, $2)
+        RETURNING *
+      `, [req.user?.id, JSON.stringify(draftData)]);
+      return res.json(result.rows[0]);
+    }
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to save draft' });
+  }
+});
+
+app.post('/api/admin/listings/draft/:id/approve', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const draftRes = await client.query('SELECT * FROM listings_drafts WHERE id = $1', [req.params.id]);
+    if (draftRes.rows.length === 0) throw new Error('Draft not found');
+    
+    const draft = draftRes.rows[0];
+    const data = draft.draft_data;
+    
+    let listingId = draft.published_listing_id;
+    if (listingId) {
+       await client.query(`
+         UPDATE listings SET 
+           title = $1, description = $2, price = $3, city = $4, type = $5,
+           rental_mode = $6, max_guests = $7, bedrooms = $8, beds = $9, bathrooms = $10,
+           hero_video_url = $11, dominant_color_hex = $12, experience_tags = $13,
+           rooms = $14, photos = $15
+         WHERE id = $16
+       `, [
+         data.title, data.description, data.price || 0, data.city || 'Berlin', data.type,
+         data.rentalMode || 'entire_place', data.maxGuests || 2, data.bedrooms || 1, data.beds || 1, data.bathrooms || 1,
+         data.hero_video_url || '', data.dominant_color_hex || '#0284C7', JSON.stringify(data.experience_tags || []),
+         JSON.stringify(data.rooms || []), JSON.stringify(data.photos || []),
+         listingId
+       ]);
+    } else {
+       const newListing = await client.query(`
+         INSERT INTO listings (
+           user_id, title, description, price, city, type, address,
+           rental_mode, max_guests, bedrooms, beds, bathrooms,
+           hero_video_url, dominant_color_hex, experience_tags,
+           rooms, photos
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+         RETURNING id
+       `, [
+         draft.host_id, data.title, data.description, data.price || 0, data.city || 'Berlin', data.type, data.address || '',
+         data.rentalMode || 'entire_place', data.maxGuests || 2, data.bedrooms || 1, data.beds || 1, data.bathrooms || 1,
+         data.hero_video_url || '', data.dominant_color_hex || '#0284C7', JSON.stringify(data.experience_tags || []),
+         JSON.stringify(data.rooms || []), JSON.stringify(data.photos || [])
+       ]);
+       listingId = newListing.rows[0].id;
+    }
+
+    await client.query('DELETE FROM room_types WHERE listing_id = $1', [listingId]);
+    if (data.rooms && Array.isArray(data.rooms)) {
+      for (const room of data.rooms) {
+         await client.query(`
+            INSERT INTO room_types (listing_id, name, base_price, currency, max_occupancy, inventory_count, features, amenities)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         `, [
+            listingId, room.name, room.price, data.currency || 'INR', room.capacity || 2, room.inventory_count || 1,
+            JSON.stringify(room.features || []), JSON.stringify(room.amenities || [])
+         ]);
+      }
+    }
+
+    await client.query('DELETE FROM media_assets WHERE entity_id = $1 AND entity_type = $2', [listingId, 'listing']);
+    if (data.photos && Array.isArray(data.photos)) {
+      let orderIndex = 0;
+      for (const photo of data.photos) {
+         await client.query(`
+            INSERT INTO media_assets (entity_type, entity_id, url, category, title, description, specs, lighting_time, is_hero, order_index)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         `, [
+            'listing', listingId, photo.url || photo.previewUrl, photo.category || 'other', photo.title || '', photo.description || '',
+            photo.specs || '', photo.lightingTime || '', photo.isHero || false, orderIndex++
+         ]);
+      }
+    }
+
+    await client.query(`UPDATE listings_drafts SET status = 'PUBLISHED', published_listing_id = $1 WHERE id = $2`, [listingId, draft.id]);
+
+    await client.query('COMMIT');
+    res.json({ success: true, listingId });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error('Draft Publish Error:', e);
+    res.status(500).json({ error: 'Failed to publish draft' });
+  } finally {
+    client.release();
+  }
+});
+
+// --- END CMS PHASE B ---
+
 // Create listing
 app.post('/api/listings', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) {
@@ -12476,7 +12689,8 @@ app.post('/api/listings', authenticateToken, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Title, price, type, and city are required' });
     }
 
-    const { amenity_clusters, child_safety_specs, nearby } = req.body;
+    const { amenity_clusters, child_safety_specs, nearby, photos } = req.body;
+    const safePhotos = Array.isArray(photos) ? JSON.stringify(photos) : JSON.stringify([]);
 
     const safeAmenities = Array.isArray(amenities) ? JSON.stringify(amenities) : JSON.stringify([]);
     const safeImageUrls = Array.isArray(imageUrls) ? JSON.stringify(imageUrls) : JSON.stringify([]);
@@ -12487,9 +12701,9 @@ app.post('/api/listings', authenticateToken, async (req: AuthRequest, res) => {
     const safeNearby = Array.isArray(nearby) ? JSON.stringify(nearby) : null;
 
     const result = await pool.query(
-      `INSERT INTO listings (user_id, title, description, price, type, address, city, image_url, image_urls, video_url, rental_mode, rooms, max_guests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamic_pricing, seo_title, seo_description, seo_keywords, seo_image_url, amenity_clusters, child_safety_specs, nearby, hero_video_url, hero_fallback_url, dominant_color_hex, raw_rules, curated_guidelines, experience_tags)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33) RETURNING *`,
-      [userId || null, title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode || 'entire_place', safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby, hero_video_url || null, hero_fallback_url || null, dominant_color_hex || null, raw_rules || null, curated_guidelines || null, Array.isArray(experience_tags) ? JSON.stringify(experience_tags) : JSON.stringify([])]
+      `INSERT INTO listings (user_id, title, description, price, type, address, city, image_url, image_urls, video_url, rental_mode, rooms, max_guests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamic_pricing, seo_title, seo_description, seo_keywords, seo_image_url, amenity_clusters, child_safety_specs, nearby, hero_video_url, hero_fallback_url, dominant_color_hex, raw_rules, curated_guidelines, experience_tags, photos)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34) RETURNING *`,
+      [userId || null, title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode || 'entire_place', safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby, hero_video_url || null, hero_fallback_url || null, dominant_color_hex || null, raw_rules || null, curated_guidelines || null, Array.isArray(experience_tags) ? JSON.stringify(experience_tags) : JSON.stringify([]), safePhotos]
     );
 
     const newListing = result.rows[0];
@@ -12735,6 +12949,49 @@ app.post('/api/listings/:id/reviews', authenticateToken, async (req: AuthRequest
     res.json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: 'Failed to add review' });
+  }
+});
+
+app.get('/api/listings/:id', async (req, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  if (isNaN(Number(req.params.id))) return res.status(400).json({ error: 'Invalid ID' });
+  try {
+    const result = await pool.query('SELECT * FROM listings WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Listing not found' });
+    const listing = result.rows[0];
+
+    // MIG-001: Hydrate rooms from room_types table if listing.rooms is empty
+    if (listing && (!listing.rooms || (Array.isArray(listing.rooms) && listing.rooms.length === 0))) {
+      try {
+        const rtResult = await pool.query(
+          'SELECT * FROM room_types WHERE listing_id = $1 ORDER BY id ASC',
+          [listing.id]
+        );
+        if (rtResult.rows.length > 0) {
+          listing.rooms = rtResult.rows.map((rt: any) => ({
+            id: String(rt.id),
+            name: rt.name,
+            type: rt.type || rt.name.toLowerCase().replace(/\s+/g, '_'),
+            icon: rt.icon || '\ud83d\udecf\ufe0f',
+            tag: rt.tag || '',
+            price: parseFloat(rt.base_price),
+            capacity: rt.max_occupancy,
+            inventory_count: rt.inventory_count,
+            description: rt.description || '',
+            specs: rt.specs || '',
+            features: typeof rt.features === 'string' ? JSON.parse(rt.features || '[]') : (rt.features || []),
+            amenities: typeof rt.amenities === 'string' ? JSON.parse(rt.amenities || '[]') : (rt.amenities || []),
+            min_stay_nights: rt.min_stay_nights || 1
+          }));
+        }
+      } catch (rtErr) {
+        console.warn('[MIG-001] Failed to hydrate rooms from room_types table:', rtErr);
+      }
+    }
+
+    res.json(listing);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch listing' });
   }
 });
 
@@ -13932,6 +14189,46 @@ app.post('/api/bookings', authenticateToken, bookingLimiter, async (req: AuthReq
 
     if (!listingId || !moveInDate || !name || !phone) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // ADR-003: Server-authoritative price validation
+    const { roomTier, nightlyRate, nights } = req.body;
+    if (listingId && roomTier && nightlyRate !== undefined && nights !== undefined) {
+      try {
+        const listingResult = await pool.query(
+          'SELECT rooms, price, currency FROM listings WHERE id = $1',
+          [listingId]
+        );
+        if (listingResult.rows.length > 0) {
+          const dbListing = listingResult.rows[0];
+          const dbRooms = typeof dbListing.rooms === 'string'
+            ? JSON.parse(dbListing.rooms || '[]')
+            : (Array.isArray(dbListing.rooms) ? dbListing.rooms : []);
+          
+          if (dbRooms.length > 0) {
+            const dbRoom = dbRooms.find((r: any) => 
+              r.type === roomTier || r.id === roomTier
+            );
+            if (dbRoom && dbRoom.price && Number(dbRoom.price) > 0) {
+              const serverPrice = Number(dbRoom.price);
+              const clientPrice = Number(nightlyRate);
+              const tolerance = serverPrice * 0.02; // 2% tolerance for currency rounding
+              if (Math.abs(clientPrice - serverPrice) > tolerance) {
+                console.warn(`[ADR-003 PRICE MISMATCH] listing=${listingId} tier=${roomTier} client=${clientPrice} server=${serverPrice}`);
+                return res.status(400).json({
+                  error: 'Price mismatch detected. Please refresh the page and try again.',
+                  code: 'PRICE_MISMATCH',
+                  serverPrice,
+                  clientPrice
+                });
+              }
+            }
+          }
+        }
+      } catch (priceValidationErr) {
+        console.warn('[ADR-003] Price validation query failed (non-blocking):', priceValidationErr);
+        // Non-blocking — continue booking if DB query fails
+      }
     }
 
     // Ensure Check Out Date column exists for the new Double Entry Ledger
@@ -15596,11 +15893,21 @@ app.post('/api/checkout/razorpay/order', optionalAuthenticateToken, async (req: 
 
       const commissionFee = (baseRent * commissionRate) / 100;
       const taxFee = (baseRent * taxRate) / 100;
-      if (req.body.amount && Number(req.body.amount) > 0) {
-        finalAmount = Math.round(Number(req.body.amount));
-      } else {
-        finalAmount = Math.round(baseRent + commissionFee + taxFee + systemFee);
+      // CMS Phase F: Authoritative Backend Pricing - Never trust frontend amount!
+      // Number of nights for stay
+      const start = new Date(moveInDate || Date.now()).getTime();
+      const checkOutStr = req.body.checkOutDate || req.body.configuration?.checkOutDate;
+      let nights = 1;
+      if (checkOutStr) {
+         const end = new Date(checkOutStr).getTime();
+         const diff = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+         if (diff > 0) nights = diff;
       }
+      
+      const baseRentTotal = baseRent * nights;
+      const calcCommissionFee = (baseRentTotal * commissionRate) / 100;
+      const calcTaxFee = (baseRentTotal * taxRate) / 100;
+      finalAmount = Math.round(baseRentTotal + calcCommissionFee + calcTaxFee + systemFee);
       title = `Stay at ${listing.title}`;
 
       // Table structure ensured at boot time for ultra-fast query execution
@@ -17943,6 +18250,149 @@ app.post('/api/ai/curate-rules', async (req, res) => {
     console.error('Curate rules error:', err);
     res.status(500).json({ error: 'Failed to curate rules' });
   }
+});
+
+// ADR-006: Real Gemini AI Gatekeeper for listing quality scoring
+app.post('/api/ai/evaluate-listing', authenticateToken, async (req: AuthRequest, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  const { title, description, photos, rooms, amenities, price, city } = req.body;
+
+  // Rate limit: 5 evaluations per host per hour (per AGENTS.md directive)
+  if (!(global as any).__aiEvalRL) (global as any).__aiEvalRL = {};
+  const rl = (global as any).__aiEvalRL;
+  const key = `rl_${userId}`;
+  const now = Date.now();
+  const prevCalls: number[] = (rl[key] || []).filter((t: number) => now - t < 3600000);
+  if (prevCalls.length >= 5) {
+    const retryMins = Math.ceil((prevCalls[0] + 3600000 - now) / 60000);
+    return res.status(429).json({
+      error: `Rate limit: max 5 AI evaluations per hour. Retry in ${retryMins} minute(s).`,
+      retryAfterMinutes: retryMins
+    });
+  }
+  rl[key] = [...prevCalls, now];
+
+  // Heuristic scorer (used as fallback if Gemini unavailable)
+  const heuristicScore = () => {
+    const photoArr = Array.isArray(photos) ? photos : [];
+    const roomArr = Array.isArray(rooms) ? rooms : [];
+    const amenityArr = Array.isArray(amenities) ? amenities : [];
+    const checks = [
+      { name: 'Title quality', pass: title && title.length >= 20, weight: 1.5, feedback: 'Title must be at least 20 characters' },
+      { name: 'Description depth', pass: description && description.length >= 150, weight: 2, feedback: 'Description must be at least 150 characters' },
+      { name: 'Photo count', pass: photoArr.length >= 5, weight: 2, feedback: 'Upload at least 5 photos' },
+      { name: 'Photos categorized', pass: photoArr.filter((p: any) => p.category && p.category !== 'other').length >= 3, weight: 1, feedback: 'Tag at least 3 photos with spatial categories' },
+      { name: 'Room types defined', pass: roomArr.length >= 1, weight: 1.5, feedback: 'Define at least 1 room type' },
+      { name: 'Room pricing set', pass: roomArr.length > 0 && roomArr.every((r: any) => Number(r.price) > 0), weight: 2, feedback: 'Set nightly price for every room type' },
+      { name: 'Room names set', pass: roomArr.length > 0 && roomArr.every((r: any) => r.name && r.name.length > 0), weight: 1, feedback: 'Give each room type a name' },
+      { name: 'Amenities listed', pass: amenityArr.length >= 3, weight: 1, feedback: 'List at least 3 amenities' },
+      { name: 'City set', pass: city && city.length > 0, weight: 1, feedback: 'Set the property city' }
+    ];
+    const totalWeight = checks.reduce((s, c) => s + c.weight, 0);
+    const earned = checks.reduce((s, c) => s + (c.pass ? c.weight : 0), 0);
+    const score = Math.round((earned / totalWeight) * 10 * 10) / 10;
+    const issues = checks.filter(c => !c.pass).map(c => c.feedback);
+    const strengths = checks.filter(c => c.pass).map(c => c.name);
+    return { score, cleared: score >= 8, headline: score >= 8 ? 'Listing meets quality standards for advertising.' : 'Listing needs improvement before advertising.', issues, strengths, method: 'heuristic' };
+  };
+
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (geminiKey) {
+    try {
+      const photoArr = Array.isArray(photos) ? photos : [];
+      const roomArr = Array.isArray(rooms) ? rooms : [];
+      const amenityArr = Array.isArray(amenities) ? amenities : [];
+
+      const prompt = `You are a luxury property listing quality inspector for Encho, a premium property hosting platform.
+Evaluate this listing for advertising readiness. Score from 0.0 to 10.0 (one decimal).
+8.0+ = Cleared for paid advertising.
+
+Listing:
+- Title: "${(title || '').substring(0, 100)}"
+- Description: "${(description || '').substring(0, 400)}" (${(description || '').length} chars)
+- Photos: ${photoArr.length} uploaded, ${photoArr.filter((p: any) => p.category && p.category !== 'other').length} categorized
+- Room types: ${roomArr.length} (${roomArr.map((r: any) => `${r.name}: \u20b9${r.price}`).join(', ')})
+- Amenities: ${amenityArr.slice(0, 8).join(', ')} (${amenityArr.length} total)
+- City: ${city || 'not set'}
+
+Return JSON only:
+{"score":number,"cleared":boolean,"headline":string,"issues":string[],"strengths":string[]}`;
+
+      const gRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: 800 }
+          })
+        }
+      );
+      if (gRes.ok) {
+        const gData = await gRes.json();
+        const raw = gData.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+        const parsed = JSON.parse(raw);
+        if (typeof parsed.score === 'number') {
+          return res.json({ ...parsed, method: 'gemini' });
+        }
+      }
+    } catch (gErr) {
+      console.warn('[ADR-006] Gemini evaluation failed, using heuristic fallback:', gErr);
+      // Per AGENTS.md: never blank-approve if AI fails — heuristic fallback is always stricter
+    }
+  }
+
+  res.json(heuristicScore());
+});
+
+// ADR-004: AI-powered nearby POI generation from coordinates
+app.post('/api/ai/nearby-pois', authenticateToken, async (req: AuthRequest, res) => {
+  const { lat, lng, city, propertyType } = req.body;
+  if (!lat || !lng) return res.status(400).json({ error: 'lat and lng are required' });
+
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!geminiKey) {
+    return res.json({ pois: [], source: 'none', message: 'AI suggestions unavailable. Add POIs manually.' });
+  }
+
+  try {
+    const prompt = `Generate 5 realistic nearby points of interest for a ${propertyType || 'luxury property'} located at coordinates (${lat}, ${lng}) in ${city || 'the area'}.
+Focus on what guests would actually want to visit: nature, dining, beaches, cultural attractions, wellness, transport hubs.
+Return JSON only:
+{"pois":[{"name":string,"distance":string,"type":"nature"|"dining"|"attraction"|"wellness"|"transport"|"beach"|"shopping","description":string}]}`;
+
+    const gRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: 'application/json', temperature: 0.7, maxOutputTokens: 800 }
+        })
+      }
+    );
+    if (gRes.ok) {
+      const gData = await gRes.json();
+      const raw = gData.candidates?.[0]?.content?.parts?.[0]?.text || '{"pois":[]}';
+      const parsed = JSON.parse(raw);
+      const pois = (parsed.pois || []).map((poi: any, i: number) => ({
+        id: `ai-poi-${Date.now()}-${i}`,
+        name: poi.name || '',
+        distance: poi.distance || '',
+        type: poi.type || 'attraction',
+        description: poi.description || ''
+      }));
+      return res.json({ pois, source: 'gemini' });
+    }
+  } catch (err) {
+    console.warn('[ADR-004] POI generation error:', err);
+  }
+
+  res.json({ pois: [], source: 'error', message: 'AI POI generation failed. Add POIs manually.' });
 });
 
 // Soft-Exit Lead Capture (Walled Garden CRM & Meta CAPI Retargeting Sync)

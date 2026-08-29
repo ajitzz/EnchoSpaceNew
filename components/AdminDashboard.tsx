@@ -3,7 +3,7 @@ import { SEO } from './SEO';
 import { AdminSEOTab } from './AdminSEOTab';
 import { Listing } from '../types';
 import { HomeIcon, ListIcon,  TrashIcon, EditIcon, CheckCircle2Icon, UserIcon, XIcon } from './Icons';
-import { Map, Compass, MoreHorizontal, Edit3, Megaphone, Link, CreditCard, TrendingUp, Send, RefreshCw, Plus, Phone, Mail, Users, Globe, Building, Check, Search, Sparkles, Loader2, Upload, Zap, Shield, ShieldCheck, FileText, ChevronRight, AlertTriangle, Eye, CheckCircle, XCircle, Crown, Film, Palette, Tag, Play, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { Map, Compass, MoreHorizontal, Edit3, Megaphone, Link, CreditCard, TrendingUp, Send, RefreshCw, Plus, Phone, Mail, Users, Globe, Building, Check, Search, Sparkles, Loader2, Upload, Zap, Shield, ShieldCheck, FileText, ChevronRight, ChevronDown as ChevronDownIcon, AlertTriangle, Eye, CheckCircle, XCircle, Crown, Film, Palette, Tag, Play, CheckCircle2, ShieldAlert, Bed } from 'lucide-react';
 import { useAuth, User } from './AuthContext';
 import AdminInbox from './AdminInbox';
 import { useCurrency } from './CurrencyContext';
@@ -24,30 +24,34 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   const [adminMode, setAdminMode] = useState<'stays' | 'experiences'>('stays');
   const [activeTab, setActiveTab] = useState<'analytics' | 'listings' | 'users' | 'settings' | 'offers' | 'reviews' | 'messages' | 'seo' | 'marketing'>('analytics');
   const [editingRoomsListing, setEditingRoomsListing] = useState<Listing | null>(null);
+  // ADR-001: Rooms now have free-form name + tier key + icon + tag + description + specs
   const [editingRoomsData, setEditingRoomsData] = useState<any[]>([]);
+  const [editingRoomExpandedIdx, setEditingRoomExpandedIdx] = useState<number | null>(0);
 
   const openRoomsEditor = (listing: Listing, e: React.MouseEvent) => {
-      e.stopPropagation();
-      setEditingRoomsListing(listing);
-      setEditingRoomsData(listing.rooms ? JSON.parse(JSON.stringify(listing.rooms)) : []);
+    e.stopPropagation();
+    setEditingRoomsListing(listing);
+    setEditingRoomsData(listing.rooms ? JSON.parse(JSON.stringify(listing.rooms)) : []);
+    setEditingRoomExpandedIdx(0);
   };
 
   const saveRoomsData = async () => {
-      if (!editingRoomsListing) return;
-      try {
-          const res = await fetch(`/api/listings/${editingRoomsListing.id}/rooms`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-              body: JSON.stringify({ rooms: editingRoomsData })
-          });
-          if (res.ok) {
-              setListings(prev => prev.map(l => l.id === editingRoomsListing.id ? { ...l, rooms: editingRoomsData } : l));
-              setEditingRoomsListing(null);
-          } else {
-              alert("Failed to update inventory rooms.");
-          }
-      } catch (err) {
-          console.error(err);
+    if (!editingRoomsListing) return;
+    try {
+      const res = await fetch(`/api/listings/${editingRoomsListing.id}/rooms`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ rooms: editingRoomsData })
+      });
+      if (res.ok) {
+        setListings(prev => prev.map(l => l.id === editingRoomsListing.id ? { ...l, rooms: editingRoomsData } : l));
+        setEditingRoomsListing(null);
+      } else {
+        alert('Failed to update room types.');
+      }
+    } catch (err) {
+      console.error(err);
+
           alert("Error saving rooms.");
       }
   };
@@ -1632,6 +1636,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                           </button>
                                           <button onClick={(e) => handleEditVideoUrl(listing, e)} title="Edit Video URL" className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors">
                                              <EditIcon className="w-4 h-4" />
+                                          </button>
+                                          <button onClick={(e) => openRoomsEditor(listing, e)} title="Manage Room Types" className="p-2 text-gray-400 hover:text-[#0284C7] hover:bg-[#0284C7]/10 rounded-md transition-colors">
+                                             <Bed className="w-4 h-4" />
                                           </button>
                                           <button onClick={(e) => handleDeleteListing(listing.id, e)} title="Delete" className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors">
                                               <TrashIcon className="w-4 h-4" />
@@ -5003,6 +5010,212 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                   </div>
                </div>
             </div>
+        )}
+
+        {/* ADR-001: Admin Room Type Manager Modal — supports free-form room names + tier keys */}
+        {editingRoomsListing && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[999] flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-white dark:bg-neutral-900 rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+              {/* Header */}
+              <div className="p-6 border-b border-zinc-100 dark:border-neutral-800 flex items-center justify-between flex-shrink-0">
+                <div>
+                  <h2 className="text-xl font-extrabold text-zinc-900 dark:text-white">Room Type Manager</h2>
+                  <p className="text-xs text-zinc-500 mt-0.5 font-medium">{editingRoomsListing.title} · {editingRoomsData.length} room type(s)</p>
+                </div>
+                <button onClick={() => setEditingRoomsListing(null)} className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-neutral-800 transition-colors">
+                  <XIcon className="w-5 h-5 text-zinc-500" />
+                </button>
+              </div>
+
+              {/* Room List */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-3">
+                {editingRoomsData.length === 0 && (
+                  <div className="text-center py-12 text-zinc-400">
+                    <p className="font-semibold">No room types defined.</p>
+                    <p className="text-sm mt-1">Click &quot;Add Room Type&quot; to begin.</p>
+                  </div>
+                )}
+                {editingRoomsData.map((room: any, idx: number) => (
+                  <div key={room.id || idx} className="rounded-2xl border border-zinc-200 dark:border-neutral-800 overflow-hidden">
+                    {/* Room Card Header */}
+                    <div
+                      className="flex items-center gap-3 p-4 cursor-pointer hover:bg-zinc-50 dark:hover:bg-neutral-800/50 transition-colors select-none"
+                      onClick={() => setEditingRoomExpandedIdx(editingRoomExpandedIdx === idx ? null : idx)}
+                    >
+                      <span className="text-2xl w-8 text-center">{room.icon || '🛏️'}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-zinc-900 dark:text-white truncate">{room.name || 'Unnamed Room'}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {room.type && <span className="text-[10px] font-bold uppercase tracking-widest text-[#0284C7] bg-[#0284C7]/10 px-2 py-0.5 rounded-full">{room.type}</span>}
+                          {room.tag && <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">{room.tag}</span>}
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="font-extrabold text-zinc-900 dark:text-white">₹{(room.price || 0).toLocaleString()}</p>
+                        <p className="text-[11px] text-zinc-500">{room.capacity || 2} guests · {room.inventory_count || 1} unit(s)</p>
+                      </div>
+                      <ChevronDownIcon className={`w-4 h-4 text-zinc-400 transition-transform flex-shrink-0 ${editingRoomExpandedIdx === idx ? 'rotate-180' : ''}`} />
+                    </div>
+
+                    {/* Expanded Editor */}
+                    {editingRoomExpandedIdx === idx && (
+                      <div className="border-t border-zinc-100 dark:border-neutral-800 p-4 space-y-4 bg-zinc-50/50 dark:bg-neutral-900/50">
+                        {/* Row 1: Icon + Name + Tier key */}
+                        <div className="grid grid-cols-[48px_1fr_1fr] gap-3">
+                          <div>
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 block mb-1.5">Icon</label>
+                            <input
+                              type="text"
+                              maxLength={4}
+                              value={room.icon || '🛏️'}
+                              onChange={e => setEditingRoomsData(prev => prev.map((r: any, i: number) => i === idx ? { ...r, icon: e.target.value } : r))}
+                              className="w-full text-center text-xl p-2 rounded-xl border border-zinc-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 outline-none focus:ring-2 focus:ring-[#0284C7]"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 block mb-1.5">Room Name</label>
+                            <input
+                              type="text"
+                              value={room.name || ''}
+                              onChange={e => setEditingRoomsData(prev => prev.map((r: any, i: number) => i === idx ? { ...r, name: e.target.value } : r))}
+                              placeholder="e.g. Ocean Bungalow Suite"
+                              className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm font-medium outline-none focus:ring-2 focus:ring-[#0284C7]"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 block mb-1.5">Tier/Gallery Key</label>
+                            <input
+                              type="text"
+                              value={room.type || ''}
+                              onChange={e => setEditingRoomsData(prev => prev.map((r: any, i: number) => i === idx ? { ...r, type: e.target.value.toLowerCase().replace(/\s+/g, '-') } : r))}
+                              placeholder="e.g. suites, triplux, honeymoon"
+                              className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm font-medium outline-none focus:ring-2 focus:ring-[#0284C7] lowercase"
+                            />
+                          </div>
+                        </div>
+                        {/* Row 2: Tag + Price + Capacity + Inventory */}
+                        <div className="grid grid-cols-4 gap-3">
+                          <div>
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 block mb-1.5">Marketing Tag</label>
+                            <input
+                              type="text"
+                              value={room.tag || ''}
+                              onChange={e => setEditingRoomsData(prev => prev.map((r: any, i: number) => i === idx ? { ...r, tag: e.target.value } : r))}
+                              placeholder="e.g. Most Popular"
+                              className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm outline-none focus:ring-2 focus:ring-[#0284C7]"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 block mb-1.5">Nightly Price (₹)</label>
+                            <input
+                              type="number"
+                              value={room.price || 0}
+                              onChange={e => setEditingRoomsData(prev => prev.map((r: any, i: number) => i === idx ? { ...r, price: Number(e.target.value) } : r))}
+                              className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm font-bold outline-none focus:ring-2 focus:ring-[#0284C7]"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 block mb-1.5">Max Guests</label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={room.capacity || 2}
+                              onChange={e => setEditingRoomsData(prev => prev.map((r: any, i: number) => i === idx ? { ...r, capacity: Number(e.target.value) } : r))}
+                              className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm outline-none focus:ring-2 focus:ring-[#0284C7]"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 block mb-1.5">Units Available</label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={room.inventory_count || 1}
+                              onChange={e => setEditingRoomsData(prev => prev.map((r: any, i: number) => i === idx ? { ...r, inventory_count: Number(e.target.value) } : r))}
+                              className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm outline-none focus:ring-2 focus:ring-[#0284C7]"
+                            />
+                          </div>
+                        </div>
+                        {/* Row 3: Specs */}
+                        <div>
+                          <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 block mb-1.5">Specs Line</label>
+                          <input
+                            type="text"
+                            value={room.specs || ''}
+                            onChange={e => setEditingRoomsData(prev => prev.map((r: any, i: number) => i === idx ? { ...r, specs: e.target.value } : r))}
+                            placeholder="e.g. 1200 sq.ft · Valley View · Heated Jacuzzi"
+                            className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm outline-none focus:ring-2 focus:ring-[#0284C7]"
+                          />
+                        </div>
+                        {/* Row 4: Description */}
+                        <div>
+                          <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 block mb-1.5">Guest-Facing Description</label>
+                          <textarea
+                            value={room.description || ''}
+                            onChange={e => setEditingRoomsData(prev => prev.map((r: any, i: number) => i === idx ? { ...r, description: e.target.value } : r))}
+                            rows={3}
+                            placeholder="Describe this room type to guests..."
+                            className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm outline-none focus:ring-2 focus:ring-[#0284C7] resize-none"
+                          />
+                        </div>
+                        {/* Delete button */}
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingRoomsData(prev => prev.filter((_: any, i: number) => i !== idx));
+                              setEditingRoomExpandedIdx(null);
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors"
+                          >
+                            <TrashIcon className="w-3.5 h-3.5" /> Delete Room Type
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {/* Add Room Type Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newRoom = {
+                      id: `admin-room-${Date.now()}`,
+                      name: '',
+                      type: `room-${editingRoomsData.length + 1}`,
+                      icon: '🛏️',
+                      tag: '',
+                      price: 0,
+                      capacity: 2,
+                      inventory_count: 1,
+                      description: '',
+                      specs: '',
+                      features: [],
+                      amenities: []
+                    };
+                    setEditingRoomsData(prev => [...prev, newRoom]);
+                    setEditingRoomExpandedIdx(editingRoomsData.length);
+                  }}
+                  className="w-full py-3 border-2 border-dashed border-zinc-200 dark:border-neutral-700 rounded-2xl text-sm font-bold text-zinc-500 hover:border-[#0284C7] hover:text-[#0284C7] transition-all"
+                >
+                  + Add Room Type
+                </button>
+              </div>
+
+              {/* Footer */}
+              <div className="p-6 border-t border-zinc-100 dark:border-neutral-800 flex justify-between items-center flex-shrink-0">
+                <p className="text-xs text-zinc-400">Changes will update the guest booking page and gallery immediately.</p>
+                <div className="flex gap-3">
+                  <button onClick={() => setEditingRoomsListing(null)} className="px-5 py-2.5 rounded-xl border border-zinc-200 dark:border-neutral-700 text-sm font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-neutral-800 transition-colors">
+                    Cancel
+                  </button>
+                  <button onClick={saveRoomsData} className="px-6 py-2.5 bg-[#0284C7] hover:bg-[#0274B7] text-white font-bold text-sm rounded-xl transition-colors shadow-sm">
+                    Save Room Types
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </main>
     </div>

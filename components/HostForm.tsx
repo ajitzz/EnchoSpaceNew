@@ -1,26 +1,37 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Listing, Room } from '../types';
 import { ChevronLeft, ChevronRight, ShieldCheck } from './Icons';
 import { LocationPicker } from './LocationPicker';
 import { PhotoUpload, PhotoData } from './PhotoUpload';
 import { AmenitiesPicker } from './AmenitiesPicker';
 import { useAuth } from './AuthContext';
-import { 
-  Building2, Home, Trees, Tractor, Coffee, Ship, Tent, Caravan, Castle, Mountain, Box, Circle, Leaf, 
-  X, Eye, Maximize2, Sparkles, Check, CheckCircle2, Bed, Users, Trash2, Globe, Settings, MapPin, 
-  Smartphone, Laptop, ExternalLink, Video, Compass, AlertCircle, Info, DollarSign, Loader2
-} from 'lucide-react';
 import { useToast } from './ToastContext';
 import { useCurrency } from './CurrencyContext';
-import ListingDetails from './ListingDetails';
 import { motion, AnimatePresence } from 'framer-motion';
 import { queueCustomMutation } from '../lib/syncService';
+import { 
+  Building2, Home, Trees, Tractor, Coffee, Ship, Tent, Caravan, Castle, Mountain, Box, Circle, Leaf,
+  X, Sparkles, Check, CheckCircle2, Bed, Users, Trash2, Crown, Star, DoorOpen, Bath, 
+  ChevronDown, ChevronUp, Globe, MapPin, Video, AlertCircle, Info, Loader2, Plus, Minus, Tag,
+  Eye, Compass, DollarSign, Layers, Shield, ArrowRight, Wand2, CheckCircle
+} from 'lucide-react';
 
 interface HostFormProps {
   onBack: () => void;
   onSuccess: () => void;
   existingListing?: Listing;
 }
+
+const STEPS = [
+  { id: 1, name: 'Identity',   label: 'Property Identity',       desc: 'Title, type & description', icon: Home },
+  { id: 2, name: 'Location',   label: 'Location & Map',           desc: 'Address, map & nearby places', icon: MapPin },
+  { id: 3, name: 'Rooms',      label: 'Room Types Builder',       desc: 'Accommodations & pricing', icon: Bed },
+  { id: 4, name: 'Media',      label: 'Property Media',           desc: 'Photos, video & visual identity', icon: Layers },
+  { id: 5, name: 'Amenities',  label: 'Amenities & Safety',       desc: 'Features & guest safety', icon: Shield },
+  { id: 6, name: 'Policies',   label: 'Policies & Pricing',       desc: 'Rules, pricing & stays', icon: DollarSign },
+  { id: 7, name: 'SEO',        label: 'SEO & Discovery',          desc: 'Search engine optimization', icon: Globe },
+  { id: 8, name: 'Launch',     label: 'AI Pre-Flight & Launch',   desc: 'AI quality check & publish', icon: Sparkles },
+];
 
 const PROPERTY_TYPES = [
   { id: 'Resort', label: 'Resort', icon: Trees },
@@ -36,292 +47,79 @@ const PROPERTY_TYPES = [
   { id: 'Container', label: 'Container', icon: Box },
   { id: 'Dome', label: 'Dome', icon: Circle },
   { id: 'Earth home', label: 'Earth home', icon: Leaf },
+  { id: 'Hotel', label: 'Hotel', icon: Building2 },
+  { id: 'Boutique', label: 'Boutique', icon: Star },
+  { id: 'Villa', label: 'Villa', icon: Home }
 ];
 
-const STEPS = [
-  { id: 1, name: 'Basics', label: 'Basics & Category', desc: 'Title, category, description' },
-  { id: 2, name: 'Location', label: 'Location & Map', desc: 'Address & spatial location' },
-  { id: 3, name: 'Spaces', label: 'Spaces & Layout', desc: 'Rental mode & subunit builder' },
-  { id: 4, name: 'Amenities', label: 'Amenities', desc: 'Features, photos, assets' },
-  { id: 5, name: 'Pricing', label: 'Pricing & Rules', desc: 'Base prices & peak multipliers' },
-  { id: 6, name: 'SEO', label: 'SEO Settings', desc: 'Google Search preview card' },
-];
+const ROOM_ICONS = ['🛏️', '👑', '💻', '🌴', '🏡', '🌺', '🎋', '⭐', '🏖️', '🌿', '🎯', '🌊', '✨', '🏰'];
 
-const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing }) => {
+export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing }) => {
   const { user } = useAuth();
   const { addToast } = useToast();
   const { formatPrice } = useCurrency();
   const [loading, setLoading] = useState(false);
-  const [isCompressing, setIsCompressing] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
-  const [previewFidelity, setPreviewFidelity] = useState<'desktop' | 'mobile'>('desktop');
-  
-  // Collapse state for each added subunit room
-  const [expandedRoomIndices, setExpandedRoomIndices] = useState<Record<number, boolean>>({ 0: true });
+  const [draftId, setDraftId] = useState<number | null>(null);
 
   const [formData, setFormData] = useState({
     title: existingListing?.title || '',
     description: existingListing?.description || '',
-    videoUrl: existingListing?.video_url || '',
-    price: existingListing?.price?.toString() || '',
-    type: existingListing?.type || 'Apartment',
+    type: existingListing?.type || 'Resort',
+    tagline: '',
     rentalMode: existingListing?.rental_mode || 'entire_place',
-    rooms: existingListing?.rooms?.map((room: any) => ({
-      ...room,
-      photos: room.imageUrls ? room.imageUrls.map((url: string) => ({
-        id: Math.random().toString(36).substring(2, 9),
-        previewUrl: url
-      })) : []
-    })) || ([] as any[]),
     address: existingListing?.address || '',
-    city: existingListing?.city || 'Berlin',
+    city: existingListing?.city || '',
+    lat: existingListing?.lat || 11.6854,
+    lng: existingListing?.lng || 76.1320,
+    nearby: existingListing?.nearby || [] as any[],
+    rooms: (existingListing?.rooms && existingListing.rooms.length > 0)
+      ? existingListing.rooms.map((r: any) => ({ 
+          ...r, 
+          icon: r.icon || '🛏️',
+          tag: r.tag || '',
+          specs: r.specs || '',
+          description: r.description || '',
+          photos: r.photos || [] 
+        }))
+      : [{ id: `room-${Date.now()}`, name: '', type: 'room-1', icon: '🛏️', tag: '', price: 0, capacity: 2, inventory_count: 1, description: '', specs: '', features: [], amenities: [], photos: [] }],
     maxGuests: existingListing?.maxGuests || 2,
     bedrooms: existingListing?.bedrooms || 1,
     beds: existingListing?.beds || 1,
     bathrooms: existingListing?.bathrooms || 1,
-    amenities: existingListing?.amenities || ([] as string[]),
-    lat: existingListing?.lat || 52.5200,
-    lng: existingListing?.lng || 13.4050,
+    amenities: existingListing?.amenities || [] as string[],
+    amenity_clusters: existingListing?.amenity_clusters || { vibe: [], comfort: [], work: [], culinary: [] },
+    child_safety_specs: existingListing?.child_safety_specs || [] as string[],
+    videoUrl: existingListing?.video_url || '',
+    hero_video_url: existingListing?.hero_video_url || '',
+    hero_fallback_url: existingListing?.hero_fallback_url || '',
+    dominant_color_hex: existingListing?.dominant_color_hex || '#0284C7',
+    experience_tags: existingListing?.experience_tags || [] as string[],
+    price: existingListing?.price?.toString() || '0',
+    dynamicPricing: existingListing?.dynamicPricing || { weekendMultiplier: 1.0, seasonalMultiplier: 1.0 },
+    raw_rules: existingListing?.raw_rules || '',
+    curated_guidelines: existingListing?.curated_guidelines || '',
     seo_title: existingListing?.seo_title || '',
     seo_description: existingListing?.seo_description || '',
     seo_keywords: existingListing?.seo_keywords || '',
     seo_image_url: existingListing?.seo_image_url || '',
-    dynamicPricing: existingListing?.dynamicPricing || { weekendMultiplier: 1.0, seasonalMultiplier: 1.0 },
-    amenity_clusters: existingListing?.amenity_clusters || { vibe: [], comfort: [], work: [], culinary: [] },
-    child_safety_specs: existingListing?.child_safety_specs || [],
-    nearby: existingListing?.nearby || [],
-    hero_video_url: existingListing?.hero_video_url || '',
-    hero_fallback_url: existingListing?.hero_fallback_url || '',
-    dominant_color_hex: existingListing?.dominant_color_hex || '#0284C7',
-    raw_rules: existingListing?.raw_rules || '',
-    curated_guidelines: existingListing?.curated_guidelines || '',
-    experience_tags: existingListing?.experience_tags || ([] as string[])
   });
-  const [isCuratingRules, setIsCuratingRules] = useState(false);
-  
+
   const [photos, setPhotos] = useState<PhotoData[]>(() => {
-    const urls = (existingListing?.imageUrls && existingListing.imageUrls.length > 0) 
-        ? existingListing.imageUrls 
-        : (existingListing?.imageUrl ? [existingListing.imageUrl] : []);
-    return urls.map((url: string) => ({
-      id: Math.random().toString(36).substring(2, 9),
-      previewUrl: url
-    }));
+    const urls = existingListing?.imageUrls?.length > 0 
+      ? existingListing.imageUrls 
+      : (existingListing?.imageUrl ? [existingListing.imageUrl] : []);
+    return urls.map((url: string) => ({ id: Math.random().toString(36).substr(2,7), previewUrl: url, tier: 'common', category: 'exterior' as any }));
   });
 
-  const [showMobilePreview, setShowMobilePreview] = useState(false);
-
-  // Parse video URL to check if it is YouTube or Vimeo
-  const getYoutubeOrVimeoDetails = (url: string) => {
-    if (!url) return null;
-    const ytReg = /(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/||user\/[^/]+\/)|youtu\.be\/)([^"&?/ ]{11})/;
-    const ytMatch = url.match(ytReg);
-    if (ytMatch) return { type: 'YouTube', id: ytMatch[1] };
-
-    const vimeoReg = /vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/([^/]*)\/videos\/|album\/(\d+)\/video\/|video\/|)(\d+)(?:$|\/|\?)/;
-    const vimeoMatch = url.match(vimeoReg);
-    if (vimeoMatch) return { type: 'Vimeo', id: vimeoMatch[3] };
-
-    if (url.toLowerCase().endsWith('.mp4') || url.toLowerCase().endsWith('.webm')) {
-      return { type: 'Direct MP4/WebM File', id: 'direct' };
-    }
-
-    return null;
-  };
-
-  const videoDetails = getYoutubeOrVimeoDetails(formData.videoUrl);
-
-  const mockListing: Listing = {
-    id: existingListing?.id || 'preview-id',
-    host_id: user?.id || 'host-id',
-    title: formData.title || 'Your property title',
-    description: formData.description || 'Description will appear here...',
-    price: parseFloat(formData.price) || 0,
-    currency: 'INR',
-    
-    address: formData.address || 'Address',
-    lat: formData.lat || 52.52,
-    lng: formData.lng || 13.40,
-    imageUrls: photos.map(p => p.previewUrl),
-    imageUrl: photos.length > 0 ? photos[0].previewUrl : '',
-    imageCount: photos.length,
-    type: formData.type || 'Apartment',
-    maxGuests: formData.maxGuests,
-    bedrooms: formData.bedrooms,
-    beds: formData.beds,
-    bathrooms: formData.bathrooms,
-    amenities: formData.amenities,
-    rating: existingListing?.rating || 0,
-    reviewCount: existingListing?.reviewCount || 0,
-    isVerified: existingListing?.isVerified || false,
-    rental_mode: formData.rentalMode as any,
-    rooms: formData.rooms as any,
-    video_url: formData.videoUrl,
-    created_at: existingListing?.created_at || new Date().toISOString(),
-    updated_at: existingListing?.updated_at || new Date().toISOString(),
-    seo_title: formData.seo_title,
-    seo_description: formData.seo_description,
-    seo_keywords: formData.seo_keywords,
-    seo_image_url: formData.seo_image_url,
-    dynamicPricing: formData.dynamicPricing,
-    hero_video_url: formData.hero_video_url,
-    hero_fallback_url: formData.hero_fallback_url,
-    dominant_color_hex: formData.dominant_color_hex,
-    raw_rules: formData.raw_rules,
-    curated_guidelines: formData.curated_guidelines,
-    experience_tags: formData.experience_tags,
-  };
-
-  // Perform active preview scrolling when focused or when step changes
-  const handleFocus = (sectionName: string) => {
-      const previewContainer = document.getElementById('preview-container-content');
-      if (!previewContainer) return;
-
-      if (sectionName === 'Photos' || sectionName === 'Basics' || sectionName === 'Step1') {
-          previewContainer.scrollTo({ top: 0, behavior: 'smooth' });
-          return;
-      }
-
-      let searchStr = sectionName.toLowerCase();
-      if (sectionName === 'Amenities' || sectionName === 'Step4') searchStr = 'what this place offers';
-      if (sectionName === 'Location' || sectionName === 'Step2') searchStr = 'where you';
-      if (sectionName === 'Configuration' || sectionName === 'Step3') searchStr = 'spatial configuration';
-      if (sectionName === 'Pricing' || sectionName === 'Step5') {
-          const bookingCard = previewContainer.querySelector('#booking-card');
-          if (bookingCard) {
-              bookingCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              return;
-          }
-          searchStr = 'price';
-      }
-
-      const headings = Array.from(previewContainer.querySelectorAll('h1, h2, h3, h4'));
-      const target = headings.find(el => el.textContent?.toLowerCase().includes(searchStr));
-
-      if (target) {
-          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-  };
-
-  // Handle focusing live preview automatically on step transitions
-  useEffect(() => {
-    if (currentStep === 1) handleFocus('Step1');
-    if (currentStep === 2) handleFocus('Step2');
-    if (currentStep === 3) handleFocus('Step3');
-    if (currentStep === 4) handleFocus('Step4');
-    if (currentStep === 5) handleFocus('Step5');
-  }, [currentStep]);
-
-  const handleLocationChange = (updates: { address: string; city: string; lat?: number; lng?: number }) => {
-    setFormData(prev => ({
-      ...prev,
-      ...updates
-    }));
-  };
-
-  const handleAmenitiesChange = (amenities: string[]) => {
-    setFormData(prev => ({ ...prev, amenities }));
-  };
-
-  const handleAddRoom = () => {
-    const newIndex = formData.rooms.length;
-    setFormData(prev => ({
-      ...prev,
-      rooms: [...prev.rooms, { 
-        id: Math.random().toString(36).substring(2, 9), 
-        name: `Luxury Suite ${prev.rooms.length + 1}`, 
-        type: prev.rooms.length === 0 ? 'master' : 'guest',
-        sqft: 450,
-        price_modifier: 1.0,
-        price: parseFloat(formData.price) ? Math.round(parseFloat(formData.price) / 2) : 5000, 
-        capacity: 2, 
-        bedrooms: 1,
-        beds: 1,
-        inventory_count: 1,
-        hasAttachedBathroom: true, 
-        hasAc: true, 
-        amenities: ['King Bed', 'En-suite Bathroom', 'Ocean View'], 
-        features: ['Panoramic View', 'Smart Lighting', 'Voice Controlled Setup'],
-        photos: [] 
-      }]
-    }));
-    // Expand the newly added room and collapse others
-    setExpandedRoomIndices({ [newIndex]: true });
-  };
-
-  const handleRemoveRoom = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      rooms: prev.rooms.filter((_, i) => i !== index)
-    }));
-  };
-
-  const handleUpdateRoom = (index: number, field: string, value: any) => {
-    setFormData(prev => {
-      const newRooms = [...prev.rooms];
-      newRooms[index] = { ...newRooms[index], [field]: value };
-      return { ...prev, rooms: newRooms };
-    });
-  };
-
-  const toggleExpandRoom = (index: number) => {
-    setExpandedRoomIndices(prev => ({
-      ...prev,
-      [index]: !prev[index]
-    }));
-  };
-
-  const validateStep = (stepNum: number) => {
-    if (stepNum === 1) {
-      if (!formData.title || formData.title.trim().length < 5) {
-        addToast("Validation Error", "Please provide an expressive title (at least 5 characters).", "warning");
-        return false;
-      }
-      if (!formData.description || formData.description.trim().length < 10) {
-        addToast("Validation Error", "Please write a comprehensive description (at least 10 characters).", "warning");
-        return false;
-      }
-    }
-    if (stepNum === 2) {
-      if (!formData.address || !formData.city) {
-        addToast("Validation Error", "Please select a verified location address.", "warning");
-        return false;
-      }
-    }
-    if (stepNum === 3) {
-      if ((formData.rentalMode === 'private_rooms' || formData.rentalMode === 'hybrid') && formData.rooms.length === 0) {
-        addToast("Validation Error", "Please configure at least one individual bookable room unit for room rental mode.", "warning");
-        return false;
-      }
-    }
-    if (stepNum === 4) {
-      if (photos.length === 0 && !existingListing?.imageUrl) {
-        addToast("Validation Error", "Please upload at least one main listing photo.", "warning");
-        return false;
-      }
-    }
-    if (stepNum === 5) {
-      if (formData.rentalMode !== 'private_rooms') {
-        const parsedPrice = parseFloat(formData.price);
-        if (isNaN(parsedPrice) || parsedPrice <= 0) {
-          addToast("Validation Error", "Please specify a valid base price.", "warning");
-          return false;
-        }
-      }
-    }
-    return true;
-  };
-
-  const handleNextStep = () => {
-    if (validateStep(currentStep)) {
-      setCurrentStep(prev => Math.min(6, prev + 1));
-    }
-  };
-
-  const handlePrevStep = () => {
-    setCurrentStep(prev => Math.max(1, prev - 1));
-  };
+  const [isCuratingRules, setIsCuratingRules] = useState(false);
+  const [aiScore, setAiScore] = useState<number | null>(null);
+  const [aiResult, setAiResult] = useState<any>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [isSuggestingPOIs, setIsSuggestingPOIs] = useState(false);
+  const [expandedRoomId, setExpandedRoomId] = useState<string | null>(formData.rooms[0]?.id || null);
+  const [newFeatureText, setNewFeatureText] = useState<{ [roomId: string]: string }>({});
 
   const uploadPhotoFile = async (file: File): Promise<string> => {
     const token = localStorage.getItem('token');
@@ -336,11 +134,15 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
       });
       if (presignRes.ok) {
         const { uploadUrl, fileUrl } = presignRes.headers.get('content-type')?.includes('json') ? await presignRes.json() : { error: 'Server returned non-JSON response: ' + (await presignRes.text()).slice(0, 150) } as any;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
         const uploadRes = await fetch(uploadUrl, {
           method: 'PUT',
           headers: { 'Content-Type': file.type || 'image/webp' },
           body: file,
+          signal: controller.signal
         });
+        clearTimeout(timeoutId);
         if (uploadRes.ok) {
           return fileUrl;
         }
@@ -411,6 +213,177 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
     return typeof preview === 'string' ? preview : '';
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const uploadedImageUrls: string[] = [];
+      const spatialPhotos: any[] = [];
+
+      for (const photo of photos) {
+        const url = await resolveAndUploadPhoto(photo);
+        if (url && !url.startsWith('blob:')) {
+          uploadedImageUrls.push(url);
+          spatialPhotos.push({
+            id: photo.id || `sp-${Date.now()}`,
+            url,
+            category: photo.category || 'exterior',
+            tier: photo.tier || 'common',
+            title: photo.title || '',
+            description: photo.description || '',
+            specs: photo.specs || '',
+            isHero: uploadedImageUrls.length === 1
+          });
+        }
+      }
+
+      const processedRooms: any[] = [];
+      for (const room of formData.rooms) {
+        const roomPhotoUrls: string[] = [];
+        const roomSpatialPhotos: any[] = [];
+        for (const rp of (room.photos || [])) {
+          const url = await resolveAndUploadPhoto(rp);
+          if (url && !url.startsWith('blob:')) {
+            roomPhotoUrls.push(url);
+            uploadedImageUrls.push(url);
+            const sp = {
+              id: rp.id || `rp-${Date.now()}`,
+              url,
+              category: rp.category || 'bedroom',
+              tier: room.type || 'common',
+              title: rp.title || room.name || '',
+              description: rp.description || '',
+              specs: rp.specs || '',
+              isHero: false
+            };
+            spatialPhotos.push(sp);
+            roomSpatialPhotos.push(sp);
+          }
+        }
+        processedRooms.push({
+          ...room,
+          imageUrls: roomPhotoUrls,
+          imageUrl: roomPhotoUrls[0] || '',
+          photos: roomSpatialPhotos
+        });
+      }
+
+      const payload: any = {
+        title: formData.title,
+        description: formData.description,
+        price: parseFloat(formData.price) || (processedRooms[0]?.price || 0),
+        type: formData.type,
+        address: formData.address,
+        city: formData.city,
+        imageUrl: uploadedImageUrls[0] || '',
+        imageUrls: uploadedImageUrls,
+        photos: spatialPhotos,
+        videoUrl: formData.videoUrl || '',
+        rentalMode: formData.rentalMode,
+        rooms: processedRooms,
+        maxGuests: formData.maxGuests,
+        bedrooms: formData.bedrooms,
+        beds: formData.beds,
+        bathrooms: formData.bathrooms,
+        amenities: formData.amenities,
+        lat: formData.lat,
+        lng: formData.lng,
+        dynamicPricing: formData.dynamicPricing,
+        amenity_clusters: formData.amenity_clusters,
+        child_safety_specs: formData.child_safety_specs,
+        nearby: formData.nearby,
+        hero_video_url: formData.hero_video_url,
+        hero_fallback_url: formData.hero_fallback_url,
+        dominant_color_hex: formData.dominant_color_hex,
+        raw_rules: formData.raw_rules,
+        curated_guidelines: formData.curated_guidelines,
+        experience_tags: formData.experience_tags,
+        seo_title: formData.seo_title,
+        seo_description: formData.seo_description,
+        seo_keywords: formData.seo_keywords,
+        seo_image_url: formData.seo_image_url,
+      };
+      const endpoint = existingListing?.id ? `/api/listings/${existingListing.id}` : '/api/listings';
+      const method = existingListing?.id ? 'PUT' : 'POST';
+
+      const res = await fetch(endpoint, {
+        method,
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(err.error || 'Publish failed');
+      }
+      addToast('Success', existingListing ? 'Property updated successfully!' : 'Property published successfully!', 'success');
+      setSubmitted(true);
+      setTimeout(() => { onSuccess(); }, 1500);
+    } catch (err: any) {
+      addToast('Error', err.message || 'Failed to publish.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const runAiGatekeeper = async () => {
+    setIsScanning(true);
+    setAiScore(null);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/ai/evaluate-listing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({
+          title: formData.title,
+          description: formData.description,
+          photos: photos.map(p => ({ category: p.category, tier: p.tier })),
+          rooms: formData.rooms.map((r: any) => ({ name: r.name, price: r.price, description: r.description })),
+          amenities: formData.amenities,
+          price: parseFloat(formData.price) || (formData.rooms[0]?.price || 0),
+          city: formData.city
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAiScore(data.score);
+        setAiResult(data);
+      } else {
+        addToast('Notice', 'AI evaluation unavailable. Proceeding with heuristic check.', 'info');
+      }
+    } catch (err) {
+      addToast('Notice', 'AI evaluation failed. Please try again.', 'error');
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const suggestNearbyPOIs = async () => {
+    if (!formData.lat || !formData.lng) {
+      addToast('Notice', 'Please set your property location on the map first.', 'info');
+      return;
+    }
+    setIsSuggestingPOIs(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/ai/nearby-pois', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ lat: formData.lat, lng: formData.lng, city: formData.city, propertyType: formData.type })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.pois && data.pois.length > 0) {
+          setFormData(prev => ({ ...prev, nearby: [...prev.nearby, ...data.pois] }));
+          addToast('AI Success', `${data.pois.length} nearby points of interest added!`, 'success');
+        }
+      }
+    } catch (err) {
+      addToast('Error', 'Could not fetch AI POI suggestions.', 'error');
+    } finally {
+      setIsSuggestingPOIs(false);
+    }
+  };
   
   const handleCurateRules = async () => {
     if (!formData.raw_rules?.trim()) {
@@ -439,1407 +412,1056 @@ const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing 
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    for (let i = 1; i <= 5; i++) {
-      if (!validateStep(i)) {
-        setCurrentStep(i);
-        return;
-      }
-    }
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('token');
-      const uploadedImageUrls: string[] = [];
-      const spatialPhotos: any[] = [];
-      for (const photo of photos) {
-        const url = await resolveAndUploadPhoto(photo);
-        if (url && !url.startsWith('blob:')) {
-          uploadedImageUrls.push(url);
-          spatialPhotos.push({
-            id: photo.id || `${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-            url,
-            category: photo.category || 'living_room',
-            title: photo.title || '',
-            description: photo.description || '',
-            specs: photo.specs || ''
-          });
-        }
-      }
-
-      const processedRooms = await Promise.all(
-        formData.rooms.map(async (room: any) => {
-          const roomPhotoUrls: string[] = [];
-          if (room.photos && Array.isArray(room.photos)) {
-            for (const rp of room.photos) {
-              const url = await resolveAndUploadPhoto(rp);
-              if (url && !url.startsWith('blob:')) {
-                roomPhotoUrls.push(url);
-              }
-            }
-          } else if (room.imageUrls && Array.isArray(room.imageUrls)) {
-            roomPhotoUrls.push(...room.imageUrls);
-          }
-          return {
-            ...room,
-            imageUrls: roomPhotoUrls,
-            imageUrl: roomPhotoUrls[0] || ''
-          };
-        })
-      );
-
-      const payload = {
-        title: formData.title,
-        description: formData.description,
-        price: parseFloat(formData.price) || 0,
-        type: formData.type,
-        address: formData.address,
-        city: formData.city,
-        imageUrl: uploadedImageUrls[0] || '',
-        imageUrls: uploadedImageUrls,
-        photos: spatialPhotos,
-        videoUrl: formData.videoUrl || '',
-        rentalMode: formData.rentalMode,
-        rooms: processedRooms,
-        maxGuests: formData.maxGuests,
-        bedrooms: formData.bedrooms,
-        beds: formData.beds,
-        bathrooms: formData.bathrooms,
-        amenities: formData.amenities,
-        lat: formData.lat,
-        lng: formData.lng,
-        dynamicPricing: formData.dynamicPricing,
-        amenity_clusters: formData.amenity_clusters,
-        child_safety_specs: formData.child_safety_specs,
-        nearby: formData.nearby,
-        hero_video_url: formData.hero_video_url,
-        hero_fallback_url: formData.hero_fallback_url,
-        dominant_color_hex: formData.dominant_color_hex,
-        raw_rules: formData.raw_rules,
-        curated_guidelines: formData.curated_guidelines,
-        experience_tags: formData.experience_tags
-      };
-
-      const endpoint = existingListing?.id ? `/api/listings/${existingListing.id}` : '/api/listings';
-      const method = existingListing?.id ? 'PUT' : 'POST';
-
-      const res = await fetch(endpoint, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!res.ok) {
-        const errData = (res.headers.get('content-type')?.includes('json') ? await res.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await res.text().catch(() => '')).slice(0, 150) } as any);
-        throw new Error(errData.error || 'Failed to save listing');
-      }
-
-      addToast("Success", existingListing ? "Property successfully updated!" : "Property successfully published!", "success");
-      setSubmitted(true);
-      setTimeout(() => {
-        onSuccess();
-        onBack();
-      }, 2000);
-    } catch (error: any) {
-      console.error('Failed to list space:', error);
-      addToast("Upload Failed", error.message || 'Failed to publish property listing.', "error");
-    } finally {
-      setLoading(false);
+  const validateStep = (step: number): boolean => {
+    switch (step) {
+      case 1: return formData.title.trim().length >= 10 && formData.type.length > 0;
+      case 2: return formData.city.trim().length > 0;
+      case 3: return formData.rooms.some((r: any) => r.name.trim().length > 0 && r.price > 0);
+      default: return true;
     }
   };
 
-    if (submitted) {
-      return (
-          <div className="min-h-screen bg-neutral-900 flex flex-col items-center justify-center p-6 text-center text-zinc-100">
-              <motion.div 
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="w-20 h-20 bg-[#0284C7]/20 border border-[#0284C7] rounded-full flex items-center justify-center mb-6"
-              >
-                  <ShieldCheck className="w-10 h-10 text-[#0284C7]" />
-              </motion.div>
-              <h1 className="text-3xl font-extrabold text-white mb-2 tracking-tight">
-                {existingListing ? 'Property Updated!' : 'Property Published Successfully!'}
-              </h1>
-              <p className="text-zinc-400 max-w-md mx-auto text-sm leading-relaxed">
-                {existingListing 
-                  ? "Your luxury real estate alterations have been registered and successfully written to the distributed ledger." 
-                  : "Your architectural masterpiece is now published. Guests will be redirected to the exploration dashboard shortly."}
-              </p>
+  const handleNextStep = () => {
+    if (validateStep(currentStep)) {
+      setCurrentStep(prev => Math.min(8, prev + 1));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      if (currentStep === 1) addToast('Validation', 'Please provide a descriptive title (at least 10 chars).', 'warning');
+      else if (currentStep === 2) addToast('Validation', 'Please enter at least a City for your property location.', 'warning');
+      else if (currentStep === 3) addToast('Validation', 'Please configure at least one room with a name and price.', 'warning');
+      else addToast('Validation', 'Please fill required fields before proceeding.', 'warning');
+    }
+  };
+
+  const handlePrevStep = () => {
+    setCurrentStep(prev => Math.max(1, prev - 1));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  
+  const updateRoom = (id: string, field: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      rooms: prev.rooms.map((r: any) => r.id === id ? { ...r, [field]: value } : r)
+    }));
+  };
+  
+  const addRoom = () => {
+    const newId = `room-${Date.now()}`;
+    setFormData(prev => ({
+      ...prev,
+      rooms: [...prev.rooms, { 
+        id: newId, 
+        name: '', 
+        type: `room-${prev.rooms.length+1}`, 
+        icon: '🛏️', 
+        tag: '', 
+        price: 0, 
+        capacity: 2, 
+        inventory_count: 1, 
+        description: '', 
+        specs: '', 
+        features: [], 
+        amenities: [], 
+        photos: [] 
+      }]
+    }));
+    setExpandedRoomId(newId);
+  };
+
+  const removeRoom = (id: string) => {
+    if (formData.rooms.length <= 1) {
+      addToast('Notice', 'At least one room type is required.', 'info');
+      return;
+    }
+    setFormData(prev => ({
+      ...prev,
+      rooms: prev.rooms.filter((r: any) => r.id !== id)
+    }));
+  };
+
+  const addRoomFeature = (roomId: string) => {
+    const text = (newFeatureText[roomId] || '').trim();
+    if (!text) return;
+    setFormData(prev => ({
+      ...prev,
+      rooms: prev.rooms.map((r: any) => r.id === roomId ? {
+        ...r,
+        features: [...(r.features || []), text]
+      } : r)
+    }));
+    setNewFeatureText(prev => ({ ...prev, [roomId]: '' }));
+  };
+
+  const removeRoomFeature = (roomId: string, featIdx: number) => {
+    setFormData(prev => ({
+      ...prev,
+      rooms: prev.rooms.map((r: any) => r.id === roomId ? {
+        ...r,
+        features: (r.features || []).filter((_: any, i: number) => i !== featIdx)
+      } : r)
+    }));
+  };
+
+  const renderStep = () => {
+    switch (currentStep) {
+      case 1:
+        return (
+          <div className="space-y-8 animate-in fade-in duration-300">
+            <div>
+              <h2 className="text-2xl font-black text-white tracking-tight">Property Identity</h2>
+              <p className="text-sm text-slate-400 mt-1">Define the core signature, architectural category, and luxury narrative of your estate.</p>
+            </div>
+
+            {/* Title */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Listing Headline & Title *</label>
+                <span className={`text-xs font-mono font-bold ${formData.title.length < 10 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                  {formData.title.length}/100 chars
+                </span>
+              </div>
+              <input 
+                type="text" 
+                maxLength={100}
+                className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl px-4 py-3.5 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0284C7] focus:border-[#0284C7] transition-all text-base font-semibold shadow-inner"
+                value={formData.title} 
+                onChange={e => setFormData({...formData, title: e.target.value})} 
+                placeholder="e.g. Cloud Valley Sovereign Estate & Spa Sanctuary" 
+              />
+              <p className="text-xs text-slate-500">Catchy, evocative title describing location and unique aesthetic.</p>
+            </div>
+
+            {/* Property Type Grid */}
+            <div className="space-y-3">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Architectural Category *</label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {PROPERTY_TYPES.map(pt => {
+                  const isSelected = formData.type === pt.id;
+                  const IconComponent = pt.icon;
+                  return (
+                    <button
+                      key={pt.id}
+                      type="button"
+                      onClick={() => setFormData({...formData, type: pt.id})}
+                      className={`p-4 rounded-2xl border text-left flex flex-col items-center justify-center gap-2.5 transition-all cursor-pointer ${
+                        isSelected 
+                          ? 'border-[#0284C7] bg-[#0284C7]/20 text-white ring-2 ring-[#0284C7] shadow-lg shadow-[#0284C7]/20 scale-[1.02]' 
+                          : 'border-slate-800 bg-[#151D2C]/70 hover:bg-[#1C2638] hover:border-slate-600 text-slate-300 hover:text-white'
+                      }`}
+                    >
+                      <IconComponent className={`w-6 h-6 ${isSelected ? 'text-[#0284C7]' : 'text-slate-400'}`} />
+                      <span className="text-xs font-bold tracking-tight text-center">{pt.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Rental Mode */}
+            <div className="space-y-3">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Rental Structure Mode</label>
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { id: 'entire_place', label: 'Entire Place', desc: 'Guests book the whole property' },
+                  { id: 'private_rooms', label: 'Private Rooms', desc: 'Guests book individual room subunits' },
+                  { id: 'hybrid', label: 'Hybrid Estate', desc: 'Rent as whole or by room types' }
+                ].map(mode => (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    onClick={() => setFormData({...formData, rentalMode: mode.id as any})}
+                    className={`p-4 rounded-xl border text-left transition-all ${
+                      formData.rentalMode === mode.id
+                        ? 'border-[#0284C7] bg-[#0284C7]/15 text-white ring-1 ring-[#0284C7]'
+                        : 'border-slate-800 bg-[#151D2C]/60 hover:bg-[#151D2C] text-slate-300'
+                    }`}
+                  >
+                    <div className="font-bold text-sm text-white">{mode.label}</div>
+                    <div className="text-xs text-slate-400 mt-1">{mode.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Description */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Sanctuary Narrative Description</label>
+                <span className="text-xs text-slate-400 font-mono">{formData.description.length} chars</span>
+              </div>
+              <textarea 
+                className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl p-4 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0284C7] focus:border-[#0284C7] transition-all text-sm leading-relaxed h-36 font-medium resize-none shadow-inner"
+                value={formData.description} 
+                onChange={e => setFormData({...formData, description: e.target.value})} 
+                placeholder="Paint a vivid sensory description of this estate: the architectural atmosphere, scenic vistas, private culinary spaces, and bespoke guest experiences..."
+              />
+            </div>
           </div>
-      );
+        );
+
+      case 2:
+        return (
+          <div className="space-y-8 animate-in fade-in duration-300">
+            <div>
+              <h2 className="text-2xl font-black text-white tracking-tight">Location & Surroundings</h2>
+              <p className="text-sm text-slate-400 mt-1">Pinpoint the exact spatial coordinates and curate high-intent neighborhood attractions.</p>
+            </div>
+
+            {/* Address & City */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Street / Estate Address</label>
+                <input 
+                  type="text" 
+                  className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0284C7] text-sm font-medium"
+                  value={formData.address} 
+                  onChange={e => setFormData({...formData, address: e.target.value})} 
+                  placeholder="e.g. Ridge Road, Valley Sanctuary Estate"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-300">City / Destination *</label>
+                <input 
+                  type="text" 
+                  className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0284C7] text-sm font-medium"
+                  value={formData.city} 
+                  onChange={e => setFormData({...formData, city: e.target.value})} 
+                  placeholder="e.g. Wayanad, Kerala"
+                />
+              </div>
+            </div>
+
+            {/* Interactive Location Picker Map */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Interactive Map Pin Location</label>
+              <div className="rounded-2xl overflow-hidden border border-slate-700/80 bg-[#151D2C] p-2">
+                <LocationPicker 
+                  address={formData.address}
+                  city={formData.city}
+                  onChange={(updates) => setFormData(prev => ({ 
+                    ...prev, 
+                    address: updates.address || prev.address,
+                    city: updates.city || prev.city,
+                    lat: updates.lat !== undefined ? updates.lat : prev.lat,
+                    lng: updates.lng !== undefined ? updates.lng : prev.lng
+                  }))} 
+                />
+              </div>
+              <div className="flex gap-4 text-xs font-mono text-slate-400">
+                <span>LAT: <strong className="text-white">{formData.lat.toFixed(4)}</strong></span>
+                <span>LNG: <strong className="text-white">{formData.lng.toFixed(4)}</strong></span>
+              </div>
+            </div>
+
+            {/* Nearby POIs */}
+            <div className="space-y-4 pt-4 border-t border-slate-800">
+              <div className="flex justify-between items-center">
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Curated Neighborhood Highlights</label>
+                  <p className="text-xs text-slate-500">Points of interest shown to prospective guests.</p>
+                </div>
+                <button 
+                  type="button" 
+                  disabled={isSuggestingPOIs}
+                  onClick={suggestNearbyPOIs} 
+                  className="px-4 py-2 bg-purple-600/20 border border-purple-500/40 hover:bg-purple-600/30 text-purple-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isSuggestingPOIs ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-purple-400" />}
+                  <span>{isSuggestingPOIs ? 'Generating...' : 'AI Suggest POIs'}</span>
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {formData.nearby.map((poi: any, i: number) => (
+                  <div key={i} className="flex gap-3 items-center bg-[#151D2C] p-3 rounded-xl border border-slate-700/80">
+                    <span className="text-lg">📍</span>
+                    <input 
+                      type="text" 
+                      className="bg-[#0B0F19] border border-slate-700/60 rounded-lg px-3 py-2 text-white text-xs font-semibold flex-1 focus:outline-none focus:ring-1 focus:ring-[#0284C7]" 
+                      value={poi.name || ''} 
+                      placeholder="Attraction Name (e.g. Chembra Peak)"
+                      onChange={e => {
+                        const newNearby = [...formData.nearby];
+                        newNearby[i] = { ...poi, name: e.target.value };
+                        setFormData({...formData, nearby: newNearby});
+                      }} 
+                    />
+                    <input 
+                      type="text" 
+                      className="bg-[#0B0F19] border border-slate-700/60 rounded-lg px-3 py-2 text-white text-xs font-medium w-28 focus:outline-none focus:ring-1 focus:ring-[#0284C7]" 
+                      value={poi.distance || ''} 
+                      placeholder="Distance (e.g. 3.2 km)"
+                      onChange={e => {
+                        const newNearby = [...formData.nearby];
+                        newNearby[i] = { ...poi, distance: e.target.value };
+                        setFormData({...formData, nearby: newNearby});
+                      }} 
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => setFormData({...formData, nearby: formData.nearby.filter((_, idx) => idx !== i)})}
+                      className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4"/>
+                    </button>
+                  </div>
+                ))}
+
+                <button 
+                  type="button" 
+                  onClick={() => setFormData({...formData, nearby: [...formData.nearby, { name: '', distance: '', type: 'attraction' }]})}
+                  className="w-full py-3 border-2 border-dashed border-slate-700 hover:border-[#0284C7] rounded-xl text-slate-400 hover:text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                  <Plus className="w-4 h-4"/> Add Neighborhood Point of Interest
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 3:
+        return (
+          <div className="space-y-8 animate-in fade-in duration-300">
+            <div>
+              <h2 className="text-2xl font-black text-white tracking-tight">Room Types Builder</h2>
+              <p className="text-sm text-slate-400 mt-1">Configure free-form accommodations, individual rates, subunit inventories, and per-room media galleries.</p>
+            </div>
+
+            <div className="space-y-4">
+              {formData.rooms.map((room: any, rIdx: number) => {
+                const isExpanded = expandedRoomId === room.id;
+                return (
+                  <div key={room.id} className="border border-slate-700/80 rounded-2xl bg-[#151D2C] overflow-hidden shadow-md">
+                    {/* Header */}
+                    <div 
+                      className="p-5 flex items-center justify-between cursor-pointer hover:bg-[#1C2638] transition-colors select-none"
+                      onClick={() => setExpandedRoomId(isExpanded ? null : room.id)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">{room.icon || '🛏️'}</span>
+                        <div>
+                          <h3 className="font-bold text-base text-white">{room.name || `Room Type #${rIdx + 1}`}</h3>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {room.type && (
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-[#0284C7] bg-[#0284C7]/15 px-2 py-0.5 rounded-full border border-[#0284C7]/30">
+                                {room.type}
+                              </span>
+                            )}
+                            <span className="text-xs text-slate-400 font-mono font-semibold">
+                              {formatPrice(room.price || 0, 'INR')}/night · {room.capacity || 2} guests · {room.inventory_count || 1} units
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        {formData.rooms.length > 1 && (
+                          <button 
+                            type="button" 
+                            onClick={(e) => { e.stopPropagation(); removeRoom(room.id); }} 
+                            className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4"/>
+                          </button>
+                        )}
+                        <div className={`w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-300 transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
+                          <ChevronDown className="w-4 h-4" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Expanded Body */}
+                    {isExpanded && (
+                      <div className="p-6 pt-2 border-t border-slate-800 space-y-6 bg-[#0E1522]">
+                        {/* Icon Picker */}
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Room Icon Badge</label>
+                          <div className="flex flex-wrap gap-2">
+                            {ROOM_ICONS.map(emoji => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                onClick={() => updateRoom(room.id, 'icon', emoji)}
+                                className={`w-10 h-10 rounded-xl text-lg flex items-center justify-center transition-all cursor-pointer ${
+                                  room.icon === emoji 
+                                    ? 'bg-[#0284C7] text-white ring-2 ring-[#0284C7]/50 scale-110 shadow-md' 
+                                    : 'bg-[#151D2C] hover:bg-slate-700 text-slate-300'
+                                }`}
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Row: Name & Tier Key */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Room Name (Guest-Facing) *</label>
+                            <input 
+                              type="text" 
+                              className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
+                              value={room.name} 
+                              onChange={e => updateRoom(room.id, 'name', e.target.value)} 
+                              placeholder="e.g. Presidential Panorama Suite"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Gallery Tier Key (Routing) *</label>
+                            <input 
+                              type="text" 
+                              className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 text-sm font-mono lowercase focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
+                              value={room.type} 
+                              onChange={e => updateRoom(room.id, 'type', e.target.value.toLowerCase().replace(/\s+/g, '-'))} 
+                              placeholder="e.g. suites, triplux, honeymoon"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Row: Price, Capacity, Inventory, Tag */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Nightly Rate (₹) *</label>
+                            <input 
+                              type="number" 
+                              className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl px-3 py-3 text-white font-bold text-sm focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
+                              value={room.price || ''} 
+                              onChange={e => updateRoom(room.id, 'price', parseFloat(e.target.value) || 0)} 
+                              placeholder="18500"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Max Capacity</label>
+                            <input 
+                              type="number" 
+                              min={1}
+                              className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl px-3 py-3 text-white font-bold text-sm focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
+                              value={room.capacity || 2} 
+                              onChange={e => updateRoom(room.id, 'capacity', parseInt(e.target.value) || 1)} 
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Units Available</label>
+                            <input 
+                              type="number" 
+                              min={1}
+                              className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl px-3 py-3 text-white font-bold text-sm focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
+                              value={room.inventory_count || 1} 
+                              onChange={e => updateRoom(room.id, 'inventory_count', parseInt(e.target.value) || 1)} 
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Marketing Tag</label>
+                            <input 
+                              type="text" 
+                              className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl px-3 py-3 text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
+                              value={room.tag || ''} 
+                              onChange={e => updateRoom(room.id, 'tag', e.target.value)} 
+                              placeholder="e.g. Most Popular"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Specs */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Key Specs Line</label>
+                          <input 
+                            type="text" 
+                            className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
+                            value={room.specs || ''} 
+                            onChange={e => updateRoom(room.id, 'specs', e.target.value)} 
+                            placeholder="e.g. 1,200 sq.ft · 270° Valley View · Heated Jacuzzi"
+                          />
+                        </div>
+
+                        {/* Description */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Subunit Description</label>
+                          <textarea 
+                            className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl p-3.5 text-white placeholder:text-slate-500 text-sm h-24 focus:outline-none focus:ring-2 focus:ring-[#0284C7] resize-none" 
+                            value={room.description || ''} 
+                            onChange={e => updateRoom(room.id, 'description', e.target.value)} 
+                            placeholder="Describe the architectural nuances and amenities of this specific room..."
+                          />
+                        </div>
+
+                        {/* Features Chips */}
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Features & Amenities Highlights</label>
+                          <div className="flex flex-wrap gap-2">
+                            {(room.features || []).map((feat: string, fIdx: number) => (
+                              <span key={fIdx} className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#151D2C] border border-slate-700 rounded-full text-xs text-white font-medium">
+                                <span>{feat}</span>
+                                <button type="button" onClick={() => removeRoomFeature(room.id, fIdx)} className="text-slate-400 hover:text-red-400">
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <input 
+                              type="text" 
+                              value={newFeatureText[room.id] || ''} 
+                              onChange={e => setNewFeatureText(prev => ({ ...prev, [room.id]: e.target.value }))}
+                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addRoomFeature(room.id); } }}
+                              placeholder="Type a feature and press Add (e.g. Rain Shower)"
+                              className="bg-[#151D2C] border border-slate-700 rounded-xl px-3 py-2 text-white text-xs flex-1 focus:outline-none focus:ring-1 focus:ring-[#0284C7]"
+                            />
+                            <button 
+                              type="button" 
+                              onClick={() => addRoomFeature(room.id)}
+                              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                            >
+                              Add
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Room Photos */}
+                        <div className="space-y-2 pt-2 border-t border-slate-800">
+                          <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Room-Specific Media</label>
+                          <p className="text-xs text-slate-500">Photos uploaded here are locked to this room type in the guest gallery.</p>
+                          <PhotoUpload 
+                            photos={room.photos || []} 
+                            setPhotos={(newPhotos) => updateRoom(room.id, 'photos', typeof newPhotos === 'function' ? newPhotos(room.photos || []) : newPhotos)} 
+                            lockedTier={room.type} 
+                            lockedTierLabel={room.name || 'Room'}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              <button 
+                type="button" 
+                onClick={addRoom} 
+                className="w-full py-4 border-2 border-dashed border-slate-700 hover:border-[#0284C7] bg-[#151D2C]/40 hover:bg-[#151D2C] rounded-2xl text-slate-300 hover:text-white font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
+              >
+                <Plus className="w-5 h-5"/> Add Another Room Type
+              </button>
+            </div>
+          </div>
+        );
+
+      case 4:
+        return (
+          <div className="space-y-8 animate-in fade-in duration-300">
+            <div>
+              <h2 className="text-2xl font-black text-white tracking-tight">Property-Wide Media</h2>
+              <p className="text-sm text-slate-400 mt-1">Upload shared grounds, facade, pool, wellness, and restaurant photography for the main gallery.</p>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Property Grounds & Common Photography</label>
+              <PhotoUpload 
+                photos={photos} 
+                setPhotos={setPhotos} 
+                lockedTier="common" 
+                lockedTierLabel="Property & Amenities"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-800">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Hero Cinematic Video (YouTube / Vimeo / MP4)</label>
+                <input 
+                  type="text" 
+                  className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
+                  value={formData.hero_video_url} 
+                  onChange={e => setFormData({...formData, hero_video_url: e.target.value})} 
+                  placeholder="https://youtube.com/watch?v=..."
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Brand Color Accent</label>
+                <div className="flex gap-3 items-center">
+                  <input 
+                    type="color" 
+                    className="border border-slate-700 rounded-xl h-11 w-16 bg-[#151D2C] cursor-pointer" 
+                    value={formData.dominant_color_hex} 
+                    onChange={e => setFormData({...formData, dominant_color_hex: e.target.value})} 
+                  />
+                  <span className="font-mono text-sm font-bold text-slate-300">{formData.dominant_color_hex}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 5:
+        return (
+          <div className="space-y-8 animate-in fade-in duration-300">
+            <div>
+              <h2 className="text-2xl font-black text-white tracking-tight">Amenities & Guest Capacity</h2>
+              <p className="text-sm text-slate-400 mt-1">Select all features, luxury services, and structural guest safety guarantees.</p>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Curated Amenities Checklist</label>
+              <div className="bg-[#151D2C] p-4 rounded-2xl border border-slate-700/80">
+                <AmenitiesPicker selected={formData.amenities} onChange={(amens) => setFormData({...formData, amenities: amens})} />
+              </div>
+            </div>
+
+            {/* Guest capacity counters */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-slate-800">
+              {[
+                { key: 'maxGuests', label: 'Max Guests' },
+                { key: 'bedrooms', label: 'Bedrooms' },
+                { key: 'beds', label: 'Total Beds' },
+                { key: 'bathrooms', label: 'Bathrooms' },
+              ].map(item => (
+                <div key={item.key} className="bg-[#151D2C] p-4 rounded-2xl border border-slate-700/80 text-center space-y-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">{item.label}</span>
+                  <div className="flex items-center justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, [item.key]: Math.max(1, ((prev as any)[item.key] || 1) - 1) }))}
+                      className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="font-mono text-xl font-extrabold text-white w-8">
+                      {(formData as any)[item.key]}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, [item.key]: ((prev as any)[item.key] || 1) + 1 }))}
+                      className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+
+      case 6:
+        return (
+          <div className="space-y-8 animate-in fade-in duration-300">
+            <div>
+              <h2 className="text-2xl font-black text-white tracking-tight">Policies & Dynamic Multipliers</h2>
+              <p className="text-sm text-slate-400 mt-1">Set authoritative base rates, weekend surges, and AI-curated house guidelines.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Base Nightly Price (₹)</label>
+                <input 
+                  type="number" 
+                  className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl px-4 py-3 text-white font-bold text-sm focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
+                  value={formData.price} 
+                  onChange={e => setFormData({...formData, price: e.target.value})} 
+                  placeholder="12000"
+                />
+                <p className="text-xs text-slate-500">Fallback rate when entire property is booked.</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                  Weekend Surge Multiplier ({formData.dynamicPricing.weekendMultiplier}x)
+                </label>
+                <input 
+                  type="range" 
+                  min="1.0" 
+                  max="2.0" 
+                  step="0.05" 
+                  className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[#0284C7]" 
+                  value={formData.dynamicPricing.weekendMultiplier} 
+                  onChange={e => setFormData({...formData, dynamicPricing: {...formData.dynamicPricing, weekendMultiplier: parseFloat(e.target.value)}})} 
+                />
+                <div className="flex justify-between text-[11px] font-mono text-slate-500">
+                  <span>1.0x (Standard)</span>
+                  <span>1.5x</span>
+                  <span>2.0x (Double)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* House Rules */}
+            <div className="space-y-3 pt-4 border-t border-slate-800">
+              <div className="flex justify-between items-center">
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-300">House Rules & Guidelines</label>
+                  <p className="text-xs text-slate-500">Enter raw rules or let AI refine them into luxury etiquette.</p>
+                </div>
+                <button 
+                  type="button" 
+                  disabled={isCuratingRules}
+                  onClick={handleCurateRules} 
+                  className="px-4 py-2 bg-purple-600/20 border border-purple-500/40 hover:bg-purple-600/30 text-purple-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isCuratingRules ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5 text-purple-400" />}
+                  <span>{isCuratingRules ? 'Curating...' : 'Refine with AI'}</span>
+                </button>
+              </div>
+              <textarea 
+                className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl p-4 text-white placeholder:text-slate-500 text-sm h-32 focus:outline-none focus:ring-2 focus:ring-[#0284C7] resize-none" 
+                value={formData.raw_rules} 
+                onChange={e => setFormData({...formData, raw_rules: e.target.value})} 
+                placeholder="e.g. Quiet hours after 10 PM. No glass around the heated pool. Pets welcomed upon prior notification..."
+              />
+              {formData.curated_guidelines && (
+                <div className="p-4 bg-emerald-950/30 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 leading-relaxed">
+                  <div className="font-bold flex items-center gap-1 mb-1">
+                    <CheckCircle className="w-3.5 h-3.5" /> AI-Curated Luxury Etiquette:
+                  </div>
+                  {formData.curated_guidelines}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+
+      case 7:
+        return (
+          <div className="space-y-8 animate-in fade-in duration-300">
+            <div>
+              <h2 className="text-2xl font-black text-white tracking-tight">SEO & Search Card Preview</h2>
+              <p className="text-sm text-slate-400 mt-1">Optimize metadata so prospective high-net-worth guests discover your listing on Google Search.</p>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-300">SEO Page Title Tag</label>
+                <input 
+                  type="text" 
+                  className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
+                  value={formData.seo_title} 
+                  onChange={e => setFormData({...formData, seo_title: e.target.value})} 
+                  placeholder={formData.title || "Luxury Stay & Resort"}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Meta Meta Description</label>
+                <textarea 
+                  className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl p-3.5 text-white placeholder:text-slate-500 text-sm h-24 focus:outline-none focus:ring-2 focus:ring-[#0284C7] resize-none" 
+                  value={formData.seo_description} 
+                  onChange={e => setFormData({...formData, seo_description: e.target.value})} 
+                  placeholder="Experience unrivaled serenity, private chef dining, and panoramic vistas at..."
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Target SEO Keywords</label>
+                <input 
+                  type="text" 
+                  className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
+                  value={formData.seo_keywords} 
+                  onChange={e => setFormData({...formData, seo_keywords: e.target.value})} 
+                  placeholder="luxury villa, private pool resort, wayanad retreat"
+                />
+              </div>
+            </div>
+
+            {/* Google Search Card Preview */}
+            <div className="space-y-2 pt-4 border-t border-slate-800">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Live Google SERP Card Simulation</label>
+              <div className="p-5 bg-[#151D2C] rounded-2xl border border-slate-700/80 shadow-md">
+                <div className="text-xs text-emerald-400 font-mono">https://encho.space/stay/{formData.city.toLowerCase().replace(/\s+/g, '-') || 'wayanad'}</div>
+                <div className="text-lg font-semibold text-[#60A5FA] hover:underline cursor-pointer mt-0.5">
+                  {formData.seo_title || formData.title || "Luxury Architectural Sanctuary | Encho"}
+                </div>
+                <div className="text-xs text-slate-300 mt-1 leading-relaxed line-clamp-2">
+                  {formData.seo_description || formData.description || "Discover verified architectural stays and boutique sanctuaries on Encho."}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 8:
+        return (
+          <div className="space-y-8 animate-in fade-in duration-300">
+            <div>
+              <h2 className="text-2xl font-black text-white tracking-tight">AI Quality Pre-Flight Scan</h2>
+              <p className="text-sm text-slate-400 mt-1">Our FAANG-grade AI Gatekeeper audits listing completeness, high-res photography, and pricing taxonomy.</p>
+            </div>
+
+            <div className="p-8 bg-gradient-to-br from-[#151D2C] to-[#0E1522] rounded-3xl border border-slate-700/80 text-center space-y-6 shadow-xl">
+              <div className="max-w-md mx-auto space-y-4">
+                <div className="w-20 h-20 mx-auto rounded-3xl bg-[#0284C7]/20 border border-[#0284C7]/40 flex items-center justify-center text-[#0284C7] shadow-lg shadow-[#0284C7]/20">
+                  <Sparkles className="w-10 h-10" />
+                </div>
+                <h3 className="text-xl font-black text-white">Automated AI Quality Gatekeeper</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Pre-flight scans verify image aspect ratios, copy quality, subunit completeness, and ad network compliance before live distribution.
+                </p>
+                <button 
+                  type="button" 
+                  disabled={isScanning}
+                  onClick={runAiGatekeeper} 
+                  className="w-full py-4 bg-gradient-to-r from-[#0284C7] to-indigo-600 hover:from-[#0274B7] hover:to-indigo-500 text-white font-extrabold text-sm rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-[#0284C7]/25 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isScanning ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+                  <span>{isScanning ? 'Auditing Listing with Gemini AI...' : 'Run Pre-Flight AI Scan'}</span>
+                </button>
+              </div>
+
+              {/* Score Display */}
+              {aiScore !== null && (
+                <div className="p-6 bg-[#0B0F19] rounded-2xl border border-slate-800 text-center space-y-4 animate-in zoom-in-95 duration-300">
+                  <div className="inline-flex flex-col items-center">
+                    <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-[#0284C7] font-mono">
+                      {aiScore}
+                    </span>
+                    <span className="text-xs font-bold uppercase tracking-widest text-slate-400 mt-1">Quality Index Score / 10</span>
+                  </div>
+
+                  {aiResult && (
+                    <div className="text-left space-y-3 max-w-lg mx-auto pt-4 border-t border-slate-800">
+                      <div className="text-sm font-bold text-white flex items-center gap-2">
+                        {aiScore >= 8 ? <CheckCircle2 className="w-5 h-5 text-emerald-400" /> : <AlertCircle className="w-5 h-5 text-amber-400" />}
+                        <span>{aiResult.headline || (aiScore >= 8 ? 'Cleared for Ad Engine & Live Directory' : 'Recommended Improvements Needed')}</span>
+                      </div>
+                      {aiResult.issues && aiResult.issues.length > 0 && (
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">Optimization Feedback:</span>
+                          <ul className="text-xs text-slate-400 list-disc list-inside space-y-1">
+                            {aiResult.issues.map((iss: string, i: number) => <li key={i}>{iss}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  if (submitted) {
+    return (
+      <div className="min-h-screen bg-[#0B0F19] flex flex-col items-center justify-center p-6 text-center text-slate-100">
+        <motion.div 
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="w-20 h-20 bg-[#0284C7]/20 border border-[#0284C7] rounded-full flex items-center justify-center mb-6 shadow-xl shadow-[#0284C7]/20"
+        >
+          <ShieldCheck className="w-10 h-10 text-[#0284C7]" />
+        </motion.div>
+        <h1 className="text-3xl font-extrabold text-white mb-2 tracking-tight">
+          {existingListing ? 'Property Successfully Updated!' : 'Property Published Successfully!'}
+        </h1>
+        <p className="text-slate-400 max-w-md mx-auto text-sm leading-relaxed">
+          {existingListing 
+            ? "Your property alterations and room type rates have been written to the distributed ledger." 
+            : "Your architectural sanctuary is now live on the platform directory and ready for marketing distribution."}
+        </p>
+      </div>
+    );
   }
 
-  // Calculate percentage of progress for the beautiful top progress indicator
   const progressPercent = Math.round((currentStep / STEPS.length) * 100);
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-neutral-950 flex flex-col font-sans">
-      
-      {/* Premium Sleek Control Bar */}
-      <header className="sticky top-0 z-50 bg-white dark:bg-neutral-900 border-b border-zinc-200 dark:border-neutral-800 px-4 md:px-8 py-3.5 flex items-center justify-between">
+    <div className="min-h-screen bg-[#0B0F19] text-white font-sans flex flex-col selection:bg-[#0284C7] selection:text-white">
+      {/* Top Header */}
+      <header className="sticky top-0 z-50 bg-[#0B0F19]/90 backdrop-blur-xl border-b border-slate-800/80 px-4 md:px-8 py-3.5 flex items-center justify-between shadow-lg">
         <div className="flex items-center gap-3">
-            <button onClick={onBack} className="p-2 hover:bg-zinc-100 dark:hover:bg-neutral-800 rounded-full transition-colors cursor-pointer text-zinc-900 dark:text-zinc-100">
-                <ChevronLeft className="w-6 h-6" />
-            </button>
-            <div>
-              <h1 className="text-base font-bold text-zinc-900 dark:text-white tracking-tight leading-none">
-                {existingListing ? 'Revise Luxury Listing' : 'Setup Masterful Listing'}
-              </h1>
-              <p className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7] mt-1">Host Portal Engine</p>
-            </div>
-        </div>
-        
-        {/* Step Indicator Badges (Large Screens) */}
-        <div className="hidden lg:flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-          <span>Step {currentStep} of {STEPS.length}</span>
-          <span className="text-zinc-300 dark:text-neutral-700">|</span>
-          <span className="text-zinc-900 dark:text-white font-extrabold">{STEPS[currentStep - 1].name}</span>
+          <button 
+            type="button"
+            onClick={onBack} 
+            className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white transition-colors cursor-pointer border border-slate-700/60"
+            title="Go Back"
+          >
+            <ChevronLeft className="w-5 h-5"/>
+          </button>
+          <div>
+            <h1 className="font-extrabold text-base text-white tracking-tight leading-tight">
+              {existingListing ? 'Revise Luxury Listing' : 'Setup Masterful Listing'}
+            </h1>
+            <p className="text-[10px] uppercase font-extrabold tracking-widest text-[#0284C7]">Encho Host Engine</p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-4">
-            <button onClick={onBack} type="button" className="px-5 py-2 font-bold text-xs uppercase tracking-widest text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer">
-              Abort
-            </button>
-            <button 
-              form="host-form" 
-              type="submit" 
-              disabled={loading || isCompressing} 
-              className="px-6 py-2.5 bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 font-bold text-xs uppercase tracking-widest rounded-xl transition-all shadow-md disabled:opacity-50 cursor-pointer"
-            >
-                {isCompressing ? 'Compressing...' : loading ? 'Saving...' : existingListing ? 'Save Master' : 'Publish Master'}
-            </button>
+        <div className="flex items-center gap-3">
+          <div className="hidden sm:flex items-center gap-2 text-xs font-mono font-bold text-slate-400">
+            <span>Step {currentStep} of {STEPS.length}</span>
+            <span className="text-slate-600">·</span>
+            <span className="text-white font-bold">{STEPS[currentStep - 1].name}</span>
+          </div>
+
+          <button 
+            type="button" 
+            onClick={onBack} 
+            className="px-4 py-2 text-xs font-bold text-slate-400 hover:text-white uppercase tracking-wider transition-colors cursor-pointer"
+          >
+            Cancel
+          </button>
+
+          <button 
+            form="host-form" 
+            type="submit" 
+            disabled={loading} 
+            className="px-6 py-2.5 bg-[#0284C7] hover:bg-[#0274B7] disabled:opacity-50 text-white font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-[#0284C7]/20 flex items-center gap-1.5 cursor-pointer"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            <span>{loading ? 'Saving...' : existingListing ? 'Save Master' : 'Publish Listing'}</span>
+          </button>
         </div>
       </header>
 
-      {/* Elegant Multi-Step Stepper & Progress Ribbon */}
-      <div className="w-full bg-white dark:bg-neutral-900 border-b border-zinc-100 dark:border-neutral-800/50 py-3 px-4 md:px-8">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
-          
-          {/* Progress bar info */}
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full border border-zinc-200 dark:border-neutral-700 flex items-center justify-center font-mono font-extrabold text-sm text-zinc-800 dark:text-zinc-200">
-              {progressPercent}%
-            </div>
-            <div>
-              <div className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Setup Progress</div>
-              <div className="text-sm font-extrabold text-zinc-900 dark:text-white mt-0.5">{STEPS[currentStep - 1].label}</div>
-            </div>
-          </div>
+      {/* Step Pills Navigation Ribbon */}
+      <div className="bg-[#0E1522] border-b border-slate-800/80 overflow-x-auto py-2.5 px-4 md:px-8">
+        <div className="max-w-7xl mx-auto flex items-center gap-2">
+          {STEPS.map(s => {
+            const isActive = currentStep === s.id;
+            const isCompleted = currentStep > s.id;
+            const StepIcon = s.icon;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => {
+                  let canJump = true;
+                  for (let i = 1; i < s.id; i++) {
+                    if (!validateStep(i)) {
+                      canJump = false;
+                      setCurrentStep(i);
+                      break;
+                    }
+                  }
+                  if (canJump) setCurrentStep(s.id);
+                }}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer border ${
+                  isActive 
+                    ? 'bg-[#0284C7] border-[#0284C7] text-white shadow-md shadow-[#0284C7]/25 scale-105' 
+                    : isCompleted 
+                      ? 'bg-emerald-950/50 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60' 
+                      : 'bg-[#151D2C] border-slate-700/60 text-slate-400 hover:text-slate-200 hover:border-slate-600'
+                }`}
+              >
+                <span className={`w-4 h-4 rounded-full text-[10px] font-mono flex items-center justify-center ${
+                  isActive ? 'bg-white text-[#0284C7] font-black' : isCompleted ? 'bg-emerald-400 text-emerald-950 font-black' : 'bg-slate-700 text-slate-300'
+                }`}>
+                  {isCompleted ? '✓' : s.id}
+                </span>
+                <span>{s.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-          {/* Stepper Dots/Cards */}
-          <div className="flex items-center flex-1 justify-end max-w-4xl gap-2 md:gap-4 overflow-x-auto no-scrollbar py-1">
-            {STEPS.map(st => {
-              const isActive = st.id === currentStep;
-              const isCompleted = st.id < currentStep;
+      {/* Main Form Body */}
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-8 flex-1 w-full">
+        {/* Left Sidebar Steps */}
+        <aside className="hidden lg:block">
+          <div className="space-y-2 sticky top-28 bg-[#151D2C]/60 p-3 rounded-2xl border border-slate-800/80">
+            <div className="px-3 py-2 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+              Navigation Steps ({progressPercent}%)
+            </div>
+            {STEPS.map(s => {
+              const isActive = currentStep === s.id;
+              const isCompleted = currentStep > s.id;
+              const StepIcon = s.icon;
               return (
-                <button
-                  key={st.id}
-                  type="button"
+                <div 
+                  key={s.id} 
                   onClick={() => {
-                    // Jump to step if previous is validated
-                    let valid = true;
-                    for (let i = 1; i < st.id; i++) {
+                    let canJump = true;
+                    for (let i = 1; i < s.id; i++) {
                       if (!validateStep(i)) {
-                        valid = false;
+                        canJump = false;
                         setCurrentStep(i);
                         break;
                       }
                     }
-                    if (valid) setCurrentStep(st.id);
+                    if (canJump) setCurrentStep(s.id);
                   }}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-left transition-all shrink-0 cursor-pointer ${
+                  className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
                     isActive 
-                      ? 'border-zinc-900 dark:border-white bg-zinc-50 dark:bg-neutral-800 text-zinc-900 dark:text-white font-extrabold shadow-sm' 
+                      ? 'border-[#0284C7] bg-[#0284C7]/15 text-white shadow-md' 
                       : isCompleted 
-                        ? 'border-emerald-200 dark:border-emerald-950/40 bg-emerald-50/50 dark:bg-emerald-950/10 text-emerald-700 dark:text-emerald-400' 
-                        : 'border-zinc-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-zinc-400 dark:text-zinc-500'
+                        ? 'border-transparent text-emerald-300 hover:bg-white/5' 
+                        : 'border-transparent text-slate-400 hover:bg-white/5 hover:text-slate-200'
                   }`}
                 >
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-mono font-extrabold ${
-                    isActive 
-                      ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900' 
-                      : isCompleted 
-                        ? 'bg-emerald-500 text-white' 
-                        : 'bg-zinc-100 dark:bg-neutral-800 text-zinc-400 dark:text-zinc-500'
+                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-mono font-bold mt-0.5 ${
+                    isActive ? 'bg-[#0284C7] text-white' : isCompleted ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-slate-800 text-slate-400'
                   }`}>
-                    {isCompleted ? <Check className="w-3 h-3" /> : st.id}
+                    {isCompleted ? '✓' : s.id}
                   </div>
-                  <div className="hidden sm:block text-[11px] uppercase tracking-wider font-bold">
-                    {st.name}
+                  <div className="flex-1 min-w-0">
+                    <div className={`font-bold text-xs tracking-tight ${isActive ? 'text-white' : isCompleted ? 'text-emerald-300' : 'text-slate-300'}`}>
+                      {s.label}
+                    </div>
+                    <div className="text-[11px] text-slate-400 truncate mt-0.5">
+                      {s.desc}
+                    </div>
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
+        </aside>
 
-        </div>
-      </div>
-
-      {/* Main Dual-Column Workspace Layout */}
-      <main className="flex-1 max-w-[1700px] w-full mx-auto px-4 md:px-6 py-6 md:py-8 lg:grid lg:grid-cols-12 lg:gap-8 xl:gap-10 overflow-hidden">
-        
-        {/* Left Side: Wizard Forms */}
-        <div className="lg:col-span-6 xl:col-span-6 flex flex-col overflow-y-auto pr-0 lg:pr-2 xl:pr-4">
-          
-          <form id="host-form" onSubmit={handleSubmit} className="space-y-6 pb-24">
-            
+        {/* Right Form Main Canvas */}
+        <main className="bg-[#111827]/70 border border-slate-800/80 rounded-3xl p-6 md:p-8 shadow-2xl backdrop-blur-sm">
+          <form id="host-form" onSubmit={handleSubmit}>
             <AnimatePresence mode="wait">
-              <motion.div
-                key={currentStep}
-                initial={{ opacity: 0, x: 15 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -15 }}
-                transition={{ duration: 0.25, ease: "easeOut" }}
-                className="space-y-6"
+              <motion.div 
+                key={currentStep} 
+                initial={{ opacity: 0, y: 8 }} 
+                animate={{ opacity: 1, y: 0 }} 
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
               >
-                
-                {/* STEP 1: BASICS & CATEGORY SELECTION */}
-                {currentStep === 1 && (
-                  <div className="space-y-6">
-                    
-                    {/* Visual Category Grid */}
-                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm">
-                      <div className="mb-4">
-                        <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 1.1</span>
-                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Which of these best describes your architectural canvas?</h2>
-                        <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Specify the property format category to align query routing engines.</p>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        {PROPERTY_TYPES.map(pt => {
-                          const isSelected = formData.type === pt.id;
-                          const Icon = pt.icon;
-                          return (
-                            <div 
-                              key={pt.id}
-                              onClick={() => setFormData({...formData, type: pt.id})}
-                              className={`
-                                cursor-pointer border-2 rounded-xl p-4 flex flex-col items-start gap-4 transition-all hover:bg-zinc-50 dark:hover:bg-neutral-800/40 
-                                ${isSelected 
-                                  ? 'border-zinc-900 dark:border-white bg-zinc-50 dark:bg-neutral-800/30 ring-1 ring-zinc-900 dark:ring-white scale-[1.02]' 
-                                  : 'border-zinc-200/70 dark:border-neutral-800'
-                                }
-                              `}
-                            >
-                              <div className={`p-2 rounded-lg ${isSelected ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-950' : 'bg-zinc-100 text-zinc-500 dark:bg-neutral-800/50 dark:text-zinc-400'}`}>
-                                <Icon className="w-5 h-5" strokeWidth={1.5} />
-                              </div>
-                              <span className="font-extrabold text-xs text-zinc-800 dark:text-zinc-200 leading-tight tracking-wider uppercase">{pt.label}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Basic Meta Inputs */}
-                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-6">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 1.2</span>
-                          <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5 font-sans">Core Details</h2>
-                        </div>
-                        <button 
-                            type="button" 
-                            className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 dark:bg-neutral-800 hover:bg-zinc-200 text-zinc-800 dark:text-zinc-200 rounded-lg transition-colors cursor-pointer"
-                            onClick={async () => {
-                                try {
-                                    const token = localStorage.getItem('token');
-                                    const res = await fetch('/api/ai/suggest-listing', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                        body: JSON.stringify({
-                                            type: formData.type,
-                                            city: formData.city,
-                                            amenities: formData.amenities,
-                                            rooms: formData.rooms,
-                                            rentalMode: formData.rentalMode
-                                        })
-                                    });
-                                    if (res.ok) {
-                                        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
-                                        if (data.title) setFormData(prev => ({...prev, title: data.title}));
-                                        if (data.description) setFormData(prev => ({...prev, description: data.description}));
-                                        addToast("AI Complete", "Autogenerated premium copy generated.", "success");
-                                    }
-                                } catch(e) {
-                                    console.error('AI Suggestion failed', e);
-                                }
-                            }}
-                        >
-                            <Sparkles className="w-3.5 h-3.5 text-indigo-500 animate-pulse" />
-                            <span>Suggest with AI</span>
-                        </button>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Expressive Title</label>
-                        <input 
-                          required 
-                          value={formData.title} 
-                          onChange={e => setFormData({...formData, title: e.target.value})} 
-                          className="w-full p-4 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 focus:ring-2 focus:ring-[#0284C7] focus:border-transparent outline-none text-sm font-semibold transition-all dark:text-white" 
-                          placeholder="e.g. Grand Chalet with Panoramic Valley View" 
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Compelling Description</label>
-                        <textarea 
-                          required 
-                          rows={6}
-                          value={formData.description} 
-                          onChange={e => setFormData({...formData, description: e.target.value})} 
-                          className="w-full p-4 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 focus:ring-2 focus:ring-[#0284C7] outline-none text-sm transition-all dark:text-white resize-none" 
-                          placeholder="Compose a description highlighting the materials, layout, unique location context, and experience offerings..." 
-                        />
-                      </div>
-                    </div>
-
-                    {/* Property Video Tour */}
-                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 1.3</span>
-                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">High-Fidelity Video Tour (Optional)</h2>
-                        <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Provide a link to a video tour (YouTube, Vimeo, or a raw .mp4 asset URL).</p>
-                      </div>
-
-                      <div className="relative">
-                        <input 
-                          type="url"
-                          value={formData.videoUrl} 
-                          onChange={e => setFormData({...formData, videoUrl: e.target.value})} 
-                          className="w-full p-4 pl-12 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 focus:ring-2 focus:ring-[#0284C7] focus:border-transparent outline-none text-sm font-semibold transition-all dark:text-white" 
-                          placeholder="https://youtube.com/watch?v=..." 
-                        />
-                        <Video className="w-5 h-5 text-zinc-400 absolute left-4 top-4" />
-                      </div>
-
-                      {videoDetails && (
-                        <div className="flex items-center gap-2 p-3 bg-[#0284C7]/5 dark:bg-[#0284C7]/10 border border-[#0284C7]/20 rounded-xl text-xs text-[#0284C7]">
-                          <CheckCircle2 className="w-4 h-4 text-[#0284C7]" />
-                          <span className="font-bold">Source Verified:</span>
-                          <span>Detected {videoDetails.type} stream (ID: {videoDetails.id})</span>
-                        </div>
-                      )}
-                    </div>
-
-                  </div>
-                )}
-
-                {/* STEP 2: LOCATION & MAP SPATIAL */}
-                {currentStep === 2 && (
-                  <div className="space-y-6">
-                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-6">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 2.1</span>
-                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Geospatial Information</h2>
-                        <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Set physical coordinate geometry and textual address details.</p>
-                      </div>
-
-                      <LocationPicker 
-                        address={formData.address} 
-                        city={formData.city} 
-                        onChange={handleLocationChange} 
-                      />
-
-                      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-100 dark:border-neutral-800">
-                        <div>
-                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Latitude</label>
-                          <input 
-                            type="number"
-                            step="any"
-                            value={formData.lat}
-                            onChange={e => setFormData(p => ({ ...p, lat: parseFloat(e.target.value) || 0 }))}
-                            className="w-full p-3 rounded-lg border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs dark:text-white font-mono"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Longitude</label>
-                          <input 
-                            type="number"
-                            step="any"
-                            value={formData.lng}
-                            onChange={e => setFormData(p => ({ ...p, lng: parseFloat(e.target.value) || 0 }))}
-                            className="w-full p-3 rounded-lg border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs dark:text-white font-mono"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* STEP 3: CONFIGURATION & CAPACITY */}
-                {currentStep === 3 && (
-                  <div className="space-y-6">
-                    
-                    {/* Booking Mode Options */}
-                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 3.1</span>
-                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5 font-sans">Rental Operations Model</h2>
-                        <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Select whether guests rent the entirety of your estate, private individual suites, or both models.</p>
-                      </div>
-
-                      <div className="flex flex-col gap-3">
-                        <label className={`cursor-pointer border-2 rounded-xl p-4 flex items-center gap-4 transition-all hover:bg-zinc-50 dark:hover:bg-neutral-800/20 ${formData.rentalMode === 'entire_place' ? 'border-zinc-900 dark:border-white bg-zinc-50 dark:bg-neutral-800/30' : 'border-zinc-200 dark:border-neutral-800'}`}>
-                          <input type="radio" name="rentalMode" value="entire_place" checked={formData.rentalMode === 'entire_place'} onChange={() => setFormData({...formData, rentalMode: 'entire_place'})} className="sr-only" />
-                          <div className="flex-1">
-                            <span className="font-extrabold text-zinc-900 dark:text-white text-sm block">Entire Place Buyout</span>
-                            <span className="text-zinc-400 dark:text-zinc-500 text-xs mt-0.5 block">Guests secure exclusive occupancy of the absolute entirety of your estate.</span>
-                          </div>
-                        </label>
-                        <label className={`cursor-pointer border-2 rounded-xl p-4 flex items-center gap-4 transition-all hover:bg-zinc-50 dark:hover:bg-neutral-800/20 ${formData.rentalMode === 'private_rooms' ? 'border-zinc-900 dark:border-white bg-zinc-50 dark:bg-neutral-800/30' : 'border-zinc-200 dark:border-neutral-800'}`}>
-                          <input type="radio" name="rentalMode" value="private_rooms" checked={formData.rentalMode === 'private_rooms'} onChange={() => setFormData({...formData, rentalMode: 'private_rooms'})} className="sr-only" />
-                          <div className="flex-1">
-                            <span className="font-extrabold text-zinc-900 dark:text-white text-sm block">Boutique Room Inventory</span>
-                            <span className="text-zinc-400 dark:text-zinc-500 text-xs mt-0.5 block">Guests purchase specific rooms, cabins, or wings, sharing common core facilities.</span>
-                          </div>
-                        </label>
-                        <label className={`cursor-pointer border-2 rounded-xl p-4 flex items-center gap-4 transition-all hover:bg-zinc-50 dark:hover:bg-neutral-800/20 ${formData.rentalMode === 'hybrid' ? 'border-zinc-900 dark:border-white bg-zinc-50 dark:bg-neutral-800/30' : 'border-zinc-200 dark:border-neutral-800'}`}>
-                          <input type="radio" name="rentalMode" value="hybrid" checked={formData.rentalMode === 'hybrid'} onChange={() => setFormData({...formData, rentalMode: 'hybrid'})} className="sr-only" />
-                          <div className="flex-1">
-                            <span className="font-extrabold text-zinc-900 dark:text-white text-sm block">Hybrid (Entire Place & Individual Rooms)</span>
-                            <span className="text-zinc-400 dark:text-zinc-500 text-xs mt-0.5 block">Supports full buyout booking or multi-subunit breakdown reservation dynamically.</span>
-                          </div>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Capacity layout for buyout entire place */}
-                    {formData.rentalMode !== 'private_rooms' && (
-                      <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
-                        <div>
-                          <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 3.2</span>
-                          <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Buyout Spatial Capacity</h2>
-                          <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Specify maximum capacity limits and details for entire place buyout.</p>
-                        </div>
-
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                          {[
-                            { label: 'Guests', key: 'maxGuests' as const },
-                            { label: 'Bedrooms', key: 'bedrooms' as const },
-                            { label: 'Beds', key: 'beds' as const },
-                            { label: 'Bathrooms', key: 'bathrooms' as const },
-                          ].map((item) => (
-                            <div key={item.key} className="space-y-1.5 p-3 rounded-xl border border-zinc-100 dark:border-neutral-800 bg-zinc-50/40 dark:bg-neutral-900">
-                              <label className="text-[9px] font-extrabold text-zinc-400 uppercase tracking-widest block text-center">{item.label}</label>
-                              <div className="flex items-center justify-between gap-1 mt-2">
-                                <button 
-                                  type="button"
-                                  onClick={() => setFormData(prev => ({ ...prev, [item.key]: Math.max(1, prev[item.key] - 1) }))}
-                                  className="w-7 h-7 flex items-center justify-center rounded-full border border-zinc-200 dark:border-neutral-700 hover:border-zinc-950 dark:hover:border-white transition-colors cursor-pointer bg-white dark:bg-neutral-800 font-extrabold text-xs dark:text-white"
-                                >
-                                  -
-                                </button>
-                                <span className="font-extrabold text-sm text-zinc-900 dark:text-white">{formData[item.key]}</span>
-                                <button 
-                                  type="button"
-                                  onClick={() => setFormData(prev => ({ ...prev, [item.key]: prev[item.key] + 1 }))}
-                                  className="w-7 h-7 flex items-center justify-center rounded-full border border-zinc-200 dark:border-neutral-700 hover:border-zinc-950 dark:hover:border-white transition-colors cursor-pointer bg-white dark:bg-neutral-800 font-extrabold text-xs dark:text-white"
-                                >
-                                  +
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Subunit Rooms Interactive Builder */}
-                    {(formData.rentalMode === 'private_rooms' || formData.rentalMode === 'hybrid') && (
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between bg-white dark:bg-neutral-900 p-4 rounded-xl border border-zinc-200/60 dark:border-neutral-800">
-                          <div>
-                            <h3 className="font-extrabold text-sm text-zinc-900 dark:text-white">Spatial Inventory Units</h3>
-                            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">Manage suites, cottages, or individual private spaces.</p>
-                          </div>
-                          <button 
-                            type="button" 
-                            onClick={handleAddRoom} 
-                            className="px-3.5 py-1.5 bg-[#0284C7] hover:bg-[#0369A1] text-white rounded-lg font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer"
-                          >
-                            + Add Unit
-                          </button>
-                        </div>
-
-                        {formData.rooms.length === 0 && (
-                          <div className="p-8 text-center border-2 border-dashed border-zinc-200 dark:border-neutral-800 rounded-2xl text-zinc-400 text-xs italic">
-                            No subunits configured. Please add at least one luxury room or private cottage.
-                          </div>
-                        )}
-
-                        <div className="space-y-3">
-                          {formData.rooms.map((room, index) => {
-                            const isExpanded = expandedRoomIndices[index];
-                            return (
-                              <div 
-                                key={room.id} 
-                                className={`border rounded-2xl transition-all shadow-sm ${
-                                  isExpanded 
-                                    ? 'border-zinc-900 dark:border-white bg-white dark:bg-neutral-900 p-6' 
-                                    : 'border-zinc-200/70 dark:border-neutral-800 bg-white dark:bg-neutral-900/50 p-4'
-                                }`}
-                              >
-                                {/* Collapsed Header Summary */}
-                                <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleExpandRoom(index)}>
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-lg bg-[#0284C7]/10 flex items-center justify-center font-bold text-[#0284C7] text-xs">
-                                      {index + 1}
-                                    </div>
-                                    <div>
-                                      <h4 className="font-extrabold text-sm text-zinc-900 dark:text-white leading-snug">{room.name || `Unit ${index + 1}`}</h4>
-                                      <p className="text-[10px] text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mt-0.5">
-                                        {formatPrice(room.price || 0, 'INR')} / Month • {room.capacity || 1} Max Guests {room.bedrooms ? `• ${room.bedrooms} BHK` : ''}
-                                      </p>
-                                    </div>
-                                  </div>
-                                  
-                                  <div className="flex items-center gap-3">
-                                    <button 
-                                      type="button" 
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleRemoveRoom(index);
-                                      }} 
-                                      className="text-zinc-400 hover:text-red-500 transition-colors p-1"
-                                      title="Delete suite"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#0284C7] bg-[#0284C7]/5 px-2.5 py-1 rounded-md">
-                                      {isExpanded ? 'Collapse' : 'Expand'}
-                                    </span>
-                                  </div>
-                                </div>
-
-                                {/* Expanded Inputs */}
-                                <AnimatePresence initial={false}>
-                                  {isExpanded && (
-                                    <motion.div 
-                                      initial={{ height: 0, opacity: 0 }}
-                                      animate={{ height: 'auto', opacity: 1 }}
-                                      exit={{ height: 0, opacity: 0 }}
-                                      transition={{ duration: 0.2 }}
-                                      className="mt-6 pt-6 border-t border-zinc-100 dark:border-neutral-800 space-y-6 overflow-hidden"
-                                    >
-                                      
-                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        <div className="space-y-1.5 col-span-3">
-                                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Suite / Unit Name</label>
-                                          <input 
-                                            value={room.name} 
-                                            required 
-                                            onChange={e => handleUpdateRoom(index, 'name', e.target.value)} 
-                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm font-semibold dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7]" 
-                                            placeholder="e.g. Master Penthouse Suite" 
-                                          />
-                                        </div>
-
-                                        <div className="space-y-1.5 col-span-3">
-                                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Room Description</label>
-                                          <textarea 
-                                            value={room.description || ''} 
-                                            onChange={e => handleUpdateRoom(index, 'description', e.target.value)} 
-                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7] resize-none" 
-                                            rows={2}
-                                            placeholder="Introduce details of the space, bathroom access, custom views, private entrance details..." 
-                                          />
-                                        </div>
-
-                                        <div className="space-y-1.5">
-                                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Base Rent (₹)</label>
-                                          <input 
-                                            value={room.price} 
-                                            required 
-                                            type="number" 
-                                            min="0" 
-                                            onChange={e => handleUpdateRoom(index, 'price', parseFloat(e.target.value) || 0)} 
-                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm font-semibold dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7]" 
-                                            placeholder="e.g. 5000" 
-                                          />
-                                        </div>
-
-                                        <div className="space-y-1.5">
-                                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Max Capacity</label>
-                                          <input 
-                                            value={room.capacity || ''} 
-                                            type="number" 
-                                            min="1" 
-                                            onChange={e => handleUpdateRoom(index, 'capacity', parseInt(e.target.value) || 1)} 
-                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm font-semibold dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7]" 
-                                            placeholder="Guests" 
-                                          />
-                                        </div>
-
-                                        <div className="space-y-1.5">
-                                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Bedrooms (BHK)</label>
-                                          <input 
-                                            value={room.bedrooms ?? ''} 
-                                            type="number" 
-                                            min="0" 
-                                            onChange={e => handleUpdateRoom(index, 'bedrooms', parseInt(e.target.value) || 0)} 
-                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm font-semibold dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7]" 
-                                            placeholder="e.g. 1" 
-                                          />
-                                        </div>
-
-                                        <div className="space-y-1.5">
-                                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Available Units count</label>
-                                          <input 
-                                            value={room.inventory_count ?? 1} 
-                                            type="number" 
-                                            min="1" 
-                                            onChange={e => handleUpdateRoom(index, 'inventory_count', parseInt(e.target.value) || 1)} 
-                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm font-semibold dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7]" 
-                                            placeholder="e.g. 1" 
-                                          />
-                                        </div>
-
-                                        <div className="space-y-1.5">
-                                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Beds</label>
-                                          <input 
-                                            value={room.beds ?? ''} 
-                                            type="number" 
-                                            min="1" 
-                                            onChange={e => handleUpdateRoom(index, 'beds', parseInt(e.target.value) || 1)} 
-                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm font-semibold dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7]" 
-                                            placeholder="Beds Count" 
-                                          />
-                                        </div>
-
-                                        <div className="space-y-1.5">
-                                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Unit Video Tour (Optional)</label>
-                                          <input 
-                                            type="url"
-                                            value={room.video_url || ''} 
-                                            onChange={e => handleUpdateRoom(index, 'video_url', e.target.value)} 
-                                            className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm font-semibold dark:text-white outline-none focus:ring-1 focus:ring-[#0284C7]" 
-                                            placeholder="Video link" 
-                                          />
-                                        </div>
-                                      </div>
-
-                                      {/* Subunit Checkbox features */}
-                                      <div className="grid grid-cols-2 gap-3">
-                                        <div className="flex items-center justify-between p-3 border border-zinc-200 dark:border-neutral-800 rounded-xl bg-zinc-50/50 dark:bg-neutral-900/30">
-                                          <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Attached Bathroom</label>
-                                          <input 
-                                            type="checkbox" 
-                                            checked={room.hasAttachedBathroom || false} 
-                                            onChange={e => handleUpdateRoom(index, 'hasAttachedBathroom', e.target.checked)} 
-                                            className="w-4 h-4 rounded text-[#0284C7] focus:ring-0 cursor-pointer"
-                                          />
-                                        </div>
-                                        <div className="flex items-center justify-between p-3 border border-zinc-200 dark:border-neutral-800 rounded-xl bg-zinc-50/50 dark:bg-neutral-900/30">
-                                          <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300">Air Conditioning (AC)</label>
-                                          <input 
-                                            type="checkbox" 
-                                            checked={room.hasAc || false} 
-                                            onChange={e => handleUpdateRoom(index, 'hasAc', e.target.checked)} 
-                                            className="w-4 h-4 rounded text-[#0284C7] focus:ring-0 cursor-pointer"
-                                          />
-                                        </div>
-                                      </div>
-
-                                      {/* Specific Unit Photos upload */}
-                                      <div className="space-y-2 pt-2">
-                                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Unit Photos</label>
-                                        <PhotoUpload 
-                                          photos={room.photos || []} 
-                                          setPhotos={p => handleUpdateRoom(index, 'photos', p)} 
-                                          isCompressing={isCompressing} 
-                                          setIsCompressing={setIsCompressing} 
-                                        />
-                                      </div>
-
-                                      {/* Packages/Tiers Pricing Builder */}
-                                      <div className="space-y-3 pt-4 border-t border-zinc-100 dark:border-neutral-800">
-                                        <div className="flex items-center justify-between">
-                                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Unit Pricing Tiers & Packages</label>
-                                          <button 
-                                            type="button" 
-                                            onClick={() => {
-                                              const tiers = room.tiers || [];
-                                              handleUpdateRoom(index, 'tiers', [...tiers, { id: Math.random().toString(36).substring(2, 9), name: 'Premium Package', price: Math.round(room.price * 1.2), amenities: ['Breakfast', 'Free Wifi'] }]);
-                                            }} 
-                                            className="text-xs font-bold text-[#0284C7] hover:underline cursor-pointer"
-                                          >
-                                            + Add Package Tier
-                                          </button>
-                                        </div>
-
-                                        {(!room.tiers || room.tiers.length === 0) && (
-                                          <p className="text-[10px] text-zinc-400 dark:text-zinc-500 italic">No pricing tiers added. Defaults to standard base price only.</p>
-                                        )}
-
-                                        <div className="space-y-2">
-                                          {room.tiers && room.tiers.map((tier: any, tIndex: number) => (
-                                            <div key={tier.id} className="p-3 bg-zinc-50/50 dark:bg-neutral-800/25 border border-zinc-200 dark:border-neutral-800 rounded-xl relative space-y-3">
-                                              <button 
-                                                type="button" 
-                                                onClick={() => {
-                                                  handleUpdateRoom(index, 'tiers', room.tiers.filter((_: any, i: number) => i !== tIndex));
-                                                }} 
-                                                className="absolute top-2.5 right-2.5 text-zinc-400 hover:text-red-500"
-                                              >
-                                                <X className="w-3.5 h-3.5" />
-                                              </button>
-
-                                              <div className="grid grid-cols-2 gap-3">
-                                                <div>
-                                                  <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Tier Name</label>
-                                                  <input 
-                                                    value={tier.name} 
-                                                    onChange={e => {
-                                                      const newTiers = [...room.tiers];
-                                                      newTiers[tIndex].name = e.target.value;
-                                                      handleUpdateRoom(index, 'tiers', newTiers);
-                                                    }} 
-                                                    className="w-full p-2 mt-1 border border-zinc-200 dark:border-neutral-800 rounded-lg text-xs dark:text-white bg-white dark:bg-neutral-900 focus:ring-1 outline-none font-semibold" 
-                                                    placeholder="e.g. Breakfast + Airport Shuttle" 
-                                                  />
-                                                </div>
-                                                <div>
-                                                  <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Tier Price (₹)</label>
-                                                  <input 
-                                                    value={tier.price} 
-                                                    type="number"
-                                                    onChange={e => {
-                                                      const newTiers = [...room.tiers];
-                                                      newTiers[tIndex].price = parseFloat(e.target.value) || 0;
-                                                      handleUpdateRoom(index, 'tiers', newTiers);
-                                                    }} 
-                                                    className="w-full p-2 mt-1 border border-zinc-200 dark:border-neutral-800 rounded-lg text-xs dark:text-white bg-white dark:bg-neutral-900 focus:ring-1 outline-none font-semibold" 
-                                                    placeholder="e.g. 6000" 
-                                                  />
-                                                </div>
-                                                <div className="col-span-2">
-                                                  <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Included Tier Perks (comma separated)</label>
-                                                  <input 
-                                                    value={tier.amenities.join(', ')} 
-                                                    onChange={e => {
-                                                      const newTiers = [...room.tiers];
-                                                      newTiers[tIndex].amenities = e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean);
-                                                      handleUpdateRoom(index, 'tiers', newTiers);
-                                                    }} 
-                                                    className="w-full p-2 mt-1 border border-zinc-200 dark:border-neutral-800 rounded-lg text-xs dark:text-white bg-white dark:bg-neutral-900 focus:ring-1 outline-none" 
-                                                    placeholder="e.g. Full Hot Buffet Breakfast, Airport Pickup, Free Cancellation" 
-                                                  />
-                                                </div>
-                                              </div>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-
-                                      {/* Subunit specific Amenities */}
-                                      <div className="space-y-2 pt-4 border-t border-zinc-100 dark:border-neutral-800">
-                                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Suite Amenities</label>
-                                        <AmenitiesPicker 
-                                          selected={room.amenities || []} 
-                                          onChange={sel => handleUpdateRoom(index, 'amenities', sel)} 
-                                        />
-                                      </div>
-
-                                    </motion.div>
-                                  )}
-                                </AnimatePresence>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                  </div>
-                )}
-
-                {/* STEP 4: GLOBAL AMENITIES & PHOTOS */}
-                {currentStep === 4 && (
-                  <div className="space-y-6">
-                    {/* Cinematic Asset Studio (God-Level Immersion) */}
-                    <div className="bg-gradient-to-br from-neutral-900 to-zinc-950 text-white rounded-2xl p-6 border border-zinc-700/60 shadow-xl space-y-5">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7] bg-[#0284C7]/10 px-2 py-0.5 rounded-full border border-[#0284C7]/30">God-Level Asset Studio</span>
-                          <h2 className="text-lg font-extrabold text-white tracking-tight mt-1 flex items-center gap-2">
-                            <Video className="w-5 h-5 text-[#0284C7]" /> Cinematic Hero Video & Chameleon Aura
-                          </h2>
-                          <p className="text-xs text-zinc-400 mt-1">Upload or link a 5-second ultra-HD ambient loop (.webm / .mp4 / YouTube) to captivate high-dopamine travelers.</p>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest block mb-1.5">Cinematic Hero Loop Video URL</label>
-                          <input 
-                            type="text"
-                            placeholder="https://.../ambient_hero.mp4 or YouTube / Vimeo link"
-                            value={formData.hero_video_url || formData.videoUrl}
-                            onChange={e => setFormData(prev => ({ ...prev, hero_video_url: e.target.value, videoUrl: e.target.value }))}
-                            className="w-full p-3.5 rounded-xl border border-zinc-700 bg-neutral-900/80 text-white text-xs placeholder-zinc-500 focus:border-[#0284C7] outline-none"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest block mb-1.5">High-Res Fallback Image URL</label>
-                          <input 
-                            type="text"
-                            placeholder="https://.../high_res_cover.webp (used for low-power mode)"
-                            value={formData.hero_fallback_url}
-                            onChange={e => setFormData(prev => ({ ...prev, hero_fallback_url: e.target.value }))}
-                            className="w-full p-3.5 rounded-xl border border-zinc-700 bg-neutral-900/80 text-white text-xs placeholder-zinc-500 focus:border-[#0284C7] outline-none"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Chameleon Aura Palette */}
-                      <div className="pt-2 border-t border-zinc-800">
-                        <label className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest block mb-2">Chameleon UI Aura Tint</label>
-                        <div className="flex flex-wrap gap-2 items-center">
-                          {[
-                            { name: 'Aegean Cyan', hex: '#0284C7' },
-                            { name: 'Aman Terracotta', hex: '#C86446' },
-                            { name: 'Emerald Rainforest', hex: '#0F5132' },
-                            { name: 'Midnight Obsidian', hex: '#1E1E24' },
-                            { name: 'Champagne Gold', hex: '#D4AF37' },
-                            { name: 'Alpine Quartz', hex: '#4A5568' }
-                          ].map(pal => (
-                            <button
-                              key={pal.hex}
-                              type="button"
-                              onClick={() => setFormData(prev => ({ ...prev, dominant_color_hex: pal.hex }))}
-                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${formData.dominant_color_hex === pal.hex ? 'border-white bg-white/20 text-white shadow-lg' : 'border-zinc-700 bg-neutral-800/50 text-zinc-400 hover:text-white'}`}
-                            >
-                              <span className="w-3 h-3 rounded-full border border-white/20" style={{ backgroundColor: pal.hex }} />
-                              {pal.name}
-                            </button>
-                          ))}
-                          <div className="flex items-center gap-1.5 ml-2">
-                            <span className="text-[11px] text-zinc-400">Custom:</span>
-                            <input 
-                              type="color" 
-                              value={formData.dominant_color_hex || '#0284C7'}
-                              onChange={e => setFormData(prev => ({ ...prev, dominant_color_hex: e.target.value }))}
-                              className="w-7 h-7 rounded-lg border-0 bg-transparent cursor-pointer"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Sensory Atmosphere Experience Deck */}
-                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 4.0</span>
-                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5 flex items-center gap-2">
-                          <Sparkles className="w-5 h-5 text-amber-500" /> Sensory Atmosphere & Experience Tags
-                        </h2>
-                        <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Select signature sensory dimensions that elevate your estate above standard hospitality listings.</p>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        {[
-                          'Ocean Waves Acoustics', 'Forest Serenity', 'Panoramic Mountain Vista', 'Acoustic Soundproofing',
-                          'Stone Hearth Fireplace', 'Private Chef On-Demand', 'Heated Infinity Pool', 'High-Altitude Stargazing',
-                          'In-Villa Hydrotherapy / Spa', '1 Gbps Ultra-Fiber Workspace', 'Bespoke Espresso Atelier',
-                          'Sommelier Curated Wine Cellar', 'Private Helipad Access'
-                        ].map(tag => {
-                          const isSelected = (formData.experience_tags || []).includes(tag);
-                          return (
-                            <button
-                              key={tag}
-                              type="button"
-                              onClick={() => {
-                                setFormData(prev => {
-                                  const current = prev.experience_tags || [];
-                                  return {
-                                    ...prev,
-                                    experience_tags: isSelected ? current.filter(t => t !== tag) : [...current, tag]
-                                  };
-                                });
-                              }}
-                              className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all border flex items-center gap-1.5 ${isSelected ? 'bg-black dark:bg-white text-white dark:text-black border-black dark:border-white shadow-sm' : 'bg-zinc-50 dark:bg-neutral-800/60 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-neutral-700 hover:border-zinc-400'}`}
-                            >
-                              {isSelected ? <Check className="w-3.5 h-3.5" /> : <Sparkles className="w-3.5 h-3.5 text-zinc-400" />}
-                              {tag}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    {/* Photos upload */}
-                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 4.1</span>
-                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Asset Gallery Upload</h2>
-                        <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Upload at least one primary cover image. Drag to reorder. The first photo will act as cover.</p>
-                      </div>
-
-                      <PhotoUpload 
-                        photos={photos} 
-                        setPhotos={setPhotos} 
-                        isCompressing={isCompressing} 
-                        setIsCompressing={setIsCompressing} 
-                      />
-                      {photos.length === 0 && <p className="text-red-500 text-xs font-bold mt-2 flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" /> At least one listing cover photo is required.</p>}
-                    </div>
-
-                    {/* General Amenities Selection */}
-                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 4.2</span>
-                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">What amenities does your estate offer globally?</h2>
-                        <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Select all features available on site to populate filtering query pipelines.</p>
-                      </div>
-
-                      <AmenitiesPicker selected={formData.amenities} onChange={handleAmenitiesChange} />
-                    </div>
-
-                    {/* FAANG Experience Matrix & Safety (amenity_clusters & child_safety_specs) */}
-                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 4.3</span>
-                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Experience & Atmosphere Matrix</h2>
-                        <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Configure your FAANG-grade Experience Bento Grid (Vibe, Comfort, Work, Culinary).</p>
-                      </div>
-
-                      <div className="space-y-4">
-                        {(['vibe', 'comfort', 'work', 'culinary'] as const).map(category => (
-                          <div key={category}>
-                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{category} Architecture</label>
-                            <input 
-                              type="text" 
-                              className="w-full p-4 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm transition-all outline-none" 
-                              placeholder="Comma separated items (e.g. Ambient acoustics, Architectural lighting)"
-                              value={(formData.amenity_clusters[category] || []).join(', ')}
-                              onChange={e => {
-                                const arr = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
-                                setFormData(prev => ({
-                                  ...prev,
-                                  amenity_clusters: { ...prev.amenity_clusters, [category]: arr }
-                                }));
-                              }}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Child Safety & Nearby */}
-                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 4.4</span>
-                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Safety & Geolocation Context</h2>
-                      </div>
-                      
-                      <div>
-                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Child Safety Profile</label>
-                        <textarea 
-                          rows={2}
-                          className="w-full p-4 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm transition-all outline-none" 
-                          placeholder="Comma separated items (e.g. Pool safety fence available, Tamper-proof smart outlets)"
-                          value={(formData.child_safety_specs || []).join(', ')}
-                          onChange={e => {
-                            const arr = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
-                            setFormData(prev => ({ ...prev, child_safety_specs: arr }));
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* STEP 5: DYNAMIC PRICING & BUSINESS RULES */}
-                {currentStep === 5 && (
-                  <div className="space-y-6">
-                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-6">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 5.1</span>
-                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5">Base & Calendar Overrides</h2>
-                        <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Determine global pricing settings and currency metrics.</p>
-                      </div>
-
-                      {formData.rentalMode !== 'private_rooms' ? (
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Base Monthly Rent (₹)</label>
-                          <div className="relative">
-                            <input 
-                              required 
-                              type="number" 
-                              min="0" 
-                              value={formData.price} 
-                              onChange={e => setFormData({...formData, price: e.target.value})} 
-                              className="w-full p-4 pl-10 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm font-semibold transition-all dark:text-white focus:ring-1 focus:ring-black focus:border-transparent outline-none" 
-                              placeholder="e.g. 15000" 
-                            />
-                            <div className="absolute left-4 top-4 font-extrabold text-zinc-400 text-sm">₹</div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="p-4 bg-zinc-50/50 dark:bg-neutral-800/20 border border-zinc-200 dark:border-neutral-800 rounded-xl">
-                          <p className="text-xs text-zinc-500 font-bold flex items-center gap-1.5 leading-relaxed">
-                            <Info className="w-4 h-4 text-[#0284C7] shrink-0" />
-                            Rent is configured on individual Room subunits in Step 3. No global buyout base pricing is required.
-                          </p>
-                        </div>
-                      )}
-
-                      <div className="space-y-4 pt-4 border-t border-zinc-100 dark:border-neutral-800">
-                        <div>
-                          <h4 className="font-extrabold text-xs text-zinc-900 dark:text-white uppercase tracking-widest">Multipliers Rules</h4>
-                          <p className="text-[10px] text-zinc-400 mt-1">Automate pricing adjustments for specific seasonal schedules.</p>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                           <div className="space-y-1.5 p-3.5 border border-zinc-100 dark:border-neutral-800 bg-zinc-50/20 rounded-xl">
-                             <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest block">Weekend Multiplier</label>
-                             <input 
-                               type="number" 
-                               step="0.01"
-                               min="0.5"
-                               max="5.0"
-                               value={formData.dynamicPricing.weekendMultiplier}
-                               onChange={e => setFormData(p => ({ ...p, dynamicPricing: { ...p.dynamicPricing, weekendMultiplier: parseFloat(e.target.value) || 1.0 }}))}
-                               className="w-full p-2.5 mt-1 rounded-lg border border-zinc-200 dark:border-neutral-800 text-sm font-bold bg-white dark:bg-neutral-900 text-zinc-900 dark:text-white focus:ring-1 outline-none"
-                             />
-                             <span className="text-[9px] text-zinc-400 mt-1 block">Multiplies rate for Fri/Sat nights.</span>
-                           </div>
-                           <div className="space-y-1.5 p-3.5 border border-zinc-100 dark:border-neutral-800 bg-zinc-50/20 rounded-xl">
-                             <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest block">Peak Season Multiplier</label>
-                             <input 
-                               type="number" 
-                               step="0.01"
-                               min="0.5"
-                               max="5.0"
-                               value={formData.dynamicPricing.seasonalMultiplier}
-                               onChange={e => setFormData(p => ({ ...p, dynamicPricing: { ...p.dynamicPricing, seasonalMultiplier: parseFloat(e.target.value) || 1.0 }}))}
-                               className="w-full p-2.5 mt-1 rounded-lg border border-zinc-200 dark:border-neutral-800 text-sm font-bold bg-white dark:bg-neutral-900 text-zinc-900 dark:text-white focus:ring-1 outline-none"
-                             />
-                             <span className="text-[9px] text-zinc-400 mt-1 block">Multiplies rate during peak periods.</span>
-                           </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                
-                      {/* AI Rule Abstraction Studio (5-Star Guidelines) */}
-                      <div className="p-5 border border-zinc-200 dark:border-neutral-800 bg-zinc-50/50 dark:bg-neutral-900/60 rounded-2xl space-y-4">
-                        <div className="flex items-center justify-between flex-wrap gap-2">
-                          <div>
-                            <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7] bg-[#0284C7]/10 px-2 py-0.5 rounded-full border border-[#0284C7]/30">AI Rule Abstraction</span>
-                            <h3 className="text-sm font-extrabold text-zinc-900 dark:text-white mt-1">Aristocratic House Guidelines</h3>
-                            <p className="text-xs text-zinc-400">Convert harsh host restrictions into welcoming, 5-star estate guidelines to eliminate booking friction.</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={handleCurateRules}
-                            disabled={isCuratingRules}
-                            className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl text-xs font-bold shadow-md hover:opacity-95 transition-all flex items-center gap-1.5 disabled:opacity-50"
-                          >
-                            {isCuratingRules ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-amber-300" />}
-                            {isCuratingRules ? 'Polishing with AI...' : '✨ Polish into Luxury Guidelines'}
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block mb-1">Your Raw Rules</label>
-                            <textarea
-                              rows={4}
-                              placeholder="e.g. No smoking inside, quiet hours after 10 PM, strictly no unapproved parties, checkout 11 AM sharp..."
-                              value={formData.raw_rules}
-                              onChange={e => setFormData(prev => ({ ...prev, raw_rules: e.target.value }))}
-                              className="w-full p-3 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white outline-none"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest block mb-1">AI-Curated House Guidelines (Aman Standard)</label>
-                            <textarea
-                              rows={4}
-                              placeholder="AI refined guidelines will appear here..."
-                              value={formData.curated_guidelines}
-                              onChange={e => setFormData(prev => ({ ...prev, curated_guidelines: e.target.value }))}
-                              className="w-full p-3 rounded-xl border border-emerald-300 dark:border-emerald-800/80 bg-emerald-50/20 dark:bg-emerald-950/20 text-xs text-zinc-900 dark:text-white outline-none"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                {/* STEP 6: SEARCH ENGINE OPTIMIZATION */}
-                {currentStep === 6 && (
-                  <div className="space-y-6 animate-fade-in">
-                    
-                    {/* Beautiful Google Search Preview Snippet Card */}
-                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 6.1</span>
-                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5 font-sans">Google Search Preview</h2>
-                        <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Live simulation of your indexing metadata in search results.</p>
-                      </div>
-
-                      {/* Snippet representation */}
-                      <div className="p-5 border border-zinc-100 dark:border-neutral-800/80 bg-zinc-50/50 dark:bg-neutral-950/20 rounded-2xl font-sans max-w-xl shadow-inner">
-                        <div className="flex items-center gap-2 mb-1.5">
-                          {photos.length > 0 && (
-                            <img src={photos[0].previewUrl} className="w-5 h-5 rounded-md object-cover border" alt="" />
-                          )}
-                          <div className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate font-mono">
-                            https://nestpick.space/stays/{existingListing?.id || 'new-stay-id'}
-                          </div>
-                        </div>
-                        <h3 className="text-indigo-600 dark:text-blue-400 text-lg font-semibold leading-snug hover:underline cursor-pointer">
-                          {formData.seo_title || formData.title || 'Masterful Cozy Luxury Nest | Nestpick Stay'}
-                        </h3>
-                        <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed mt-1 line-clamp-2">
-                          {formData.seo_description || formData.description || 'Secure ultimate co-living luxury stays or complete property buyouts. Nestled in prime scenic neighborhoods...'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* SEO Metadata Form */}
-                    <div className="bg-white dark:bg-neutral-900 rounded-2xl p-6 border border-zinc-200/60 dark:border-neutral-800 shadow-sm space-y-4">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold tracking-widest text-[#0284C7]">Segment 6.2</span>
-                        <h2 className="text-lg font-extrabold text-zinc-900 dark:text-white tracking-tight mt-0.5 font-sans">SEO Meta Parameters</h2>
-                        <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Populate parameters to achieve high positioning in algorithmic indexing cycles.</p>
-                      </div>
-
-                      <div className="space-y-4">
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Custom SEO Title</label>
-                          <input 
-                            type="text" 
-                            value={formData.seo_title} 
-                            onChange={e => setFormData({...formData, seo_title: e.target.value})} 
-                            className="w-full p-3.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm font-semibold text-zinc-900 dark:text-white focus:ring-1 focus:ring-[#0284C7] outline-none" 
-                            placeholder="Defaults to Property Title" 
-                          />
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Custom SEO Description</label>
-                          <textarea 
-                            rows={3} 
-                            value={formData.seo_description} 
-                            onChange={e => setFormData({...formData, seo_description: e.target.value})} 
-                            className="w-full p-3.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white focus:ring-1 focus:ring-[#0284C7] outline-none resize-none" 
-                            placeholder="Summarize property features and local area attraction specifics under 160 characters..." 
-                          />
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Index Keywords (comma-separated)</label>
-                          <input 
-                            type="text" 
-                            value={formData.seo_keywords} 
-                            onChange={e => setFormData({...formData, seo_keywords: e.target.value})} 
-                            className="w-full p-3.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-sm text-zinc-900 dark:text-white focus:ring-1 focus:ring-[#0284C7] outline-none" 
-                            placeholder="e.g. boutique stay, exclusive pool, mountain view, cozy room" 
-                          />
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Social Graph Cover Image URL</label>
-                          <input 
-                            type="text" 
-                            value={formData.seo_image_url} 
-                            onChange={e => setFormData({...formData, seo_image_url: e.target.value})} 
-                            className="w-full p-3.5 rounded-xl border border-zinc-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 text-xs text-zinc-900 dark:text-white focus:ring-1 focus:ring-[#0284C7] outline-none" 
-                            placeholder="https://example.com/sharing-card.jpg" 
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
+                {renderStep()}
               </motion.div>
             </AnimatePresence>
-
-            {/* Stepper Navigation Buttons */}
-            <div className="flex items-center justify-between pt-6 border-t border-zinc-200 dark:border-neutral-800/80">
-              <button
-                type="button"
-                onClick={handlePrevStep}
-                disabled={currentStep === 1}
-                className={`flex items-center gap-2 px-5 py-3 rounded-xl border font-bold text-xs uppercase tracking-wider transition-all cursor-pointer ${
-                  currentStep === 1 
-                    ? 'border-zinc-200 text-zinc-300 cursor-not-allowed dark:border-neutral-800 dark:text-neutral-700' 
-                    : 'border-zinc-300 dark:border-neutral-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-neutral-800'
-                }`}
-              >
-                <ChevronLeft className="w-4 h-4" />
-                Previous Step
-              </button>
-
-              {currentStep < 6 ? (
-                <button
-                  type="button"
-                  onClick={handleNextStep}
-                  className="flex items-center gap-2 px-6 py-3 bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-950 rounded-xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-sm"
-                >
-                  Next Step
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={loading || isCompressing}
-                  className="flex items-center gap-2 px-8 py-3 bg-[#0284C7] hover:bg-[#0369A1] text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-all cursor-pointer shadow-md"
-                >
-                  {loading ? 'Publishing...' : 'Publish Listing'}
-                </button>
-              )}
-            </div>
-
           </form>
-        </div>
-
-        {/* Right Side: Desktop Dual-Mode Live Preview Simulator */}
-        <div className="hidden lg:flex lg:col-span-6 xl:col-span-6 flex-col h-[calc(100vh-170px)] sticky top-[140px] overflow-hidden">
-          
-          {/* Preview Navigation & Fidelity controls */}
-          <div className="bg-white dark:bg-neutral-900 rounded-t-2xl p-4 border-t border-x border-zinc-200/80 dark:border-neutral-800 flex items-center justify-between shadow-sm z-20 shrink-0">
-             <div className="flex items-center gap-2.5">
-                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-xs font-bold uppercase tracking-widest text-zinc-900 dark:text-white">Active Customer Preview</span>
-             </div>
-
-             <div className="flex items-center gap-1.5 p-1 bg-zinc-100 dark:bg-neutral-800 rounded-xl">
-               <button
-                 type="button"
-                 onClick={() => setPreviewFidelity('desktop')}
-                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                   previewFidelity === 'desktop' 
-                     ? 'bg-white dark:bg-neutral-900 text-zinc-900 dark:text-white shadow-sm' 
-                     : 'text-zinc-400 hover:text-zinc-600'
-                 }`}
-               >
-                 <Laptop className="w-3.5 h-3.5" />
-                 Desktop View
-               </button>
-               <button
-                 type="button"
-                 onClick={() => setPreviewFidelity('mobile')}
-                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                   previewFidelity === 'mobile' 
-                     ? 'bg-white dark:bg-neutral-900 text-zinc-900 dark:text-white shadow-sm' 
-                     : 'text-zinc-400 hover:text-zinc-600'
-                 }`}
-               >
-                 <Smartphone className="w-3.5 h-3.5" />
-                 Mobile View
-               </button>
-             </div>
-          </div>
-
-          {/* Simulated Screen Container */}
-          <div className="flex-1 bg-zinc-100 dark:bg-neutral-950 p-4 md:p-6 border-b border-x border-zinc-200/80 dark:border-neutral-800 rounded-b-2xl flex items-center justify-center overflow-hidden relative">
-            
-            {previewFidelity === 'desktop' ? (
-              <div 
-                id="preview-container-content"
-                className="w-full h-full bg-white dark:bg-neutral-900 rounded-2xl overflow-y-auto border border-zinc-200/60 dark:border-neutral-800 shadow-md no-scrollbar relative pointer-events-none"
-              >
-                <div className="p-1 scale-[0.95] origin-top">
-                  <ListingDetails 
-                    listing={mockListing} 
-                    onBack={() => {}} 
-                    similarListings={[]} 
-                    onListingClick={() => {}} 
-                    isFavorite={false} 
-                    onToggleFavorite={() => {}} 
-                  />
-                </div>
-              </div>
-            ) : (
-              // Ultimate iPhone mockup container
-              <div className="relative w-[340px] h-[98%] max-h-[640px] bg-neutral-950 rounded-[48px] p-3 border-[10px] border-neutral-900 shadow-2xl overflow-hidden ring-4 ring-neutral-800/40 flex flex-col shrink-0">
-                
-                {/* Dynamic Camera Notch Island */}
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 w-28 h-5 bg-black rounded-full z-50 flex items-center justify-between px-3">
-                  <div className="w-2.5 h-2.5 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center">
-                    <div className="w-1 h-1 rounded-full bg-blue-900/40" />
-                  </div>
-                  <div className="w-1.5 h-1.5 rounded-full bg-[#0284C7]/20 animate-pulse" />
-                </div>
-
-                {/* Simulated Screen Body */}
-                <div 
-                  id="preview-container-content"
-                  className="flex-1 bg-white dark:bg-neutral-900 rounded-[38px] overflow-y-auto no-scrollbar pointer-events-none relative"
-                >
-                  <div className="scale-[0.8] origin-top-left w-[125%] h-auto pb-10">
-                    <ListingDetails 
-                      listing={mockListing} 
-                      onBack={() => {}} 
-                      similarListings={[]} 
-                      onListingClick={() => {}} 
-                      isFavorite={false} 
-                      onToggleFavorite={() => {}} 
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-        </div>
-
-      </main>
-
-      {/* Floating Eye button for mobile devices */}
-      <div className="lg:hidden fixed bottom-6 right-6 z-[60]">
-        <button 
-          type="button" 
-          onClick={() => setShowMobilePreview(true)}
-          className="bg-zinc-950 hover:bg-neutral-800 text-white p-4 rounded-full shadow-2xl border border-white/10 active:scale-95 transition-transform flex items-center justify-center"
-        >
-          <Eye className="w-6 h-6" />
-        </button>
+        </main>
       </div>
 
-      {/* Mobile Swipe Up Fullscreen Preview */}
-      <AnimatePresence>
-        {showMobilePreview && (
-          <motion.div 
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
-            className="fixed inset-0 z-[100] bg-white dark:bg-neutral-900 overflow-y-auto"
-          >
-             <div className="sticky top-0 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md z-10 border-b border-zinc-100 dark:border-neutral-800 px-4 py-4 flex items-center justify-between shadow-sm">
-               <div className="flex items-center gap-2">
-                  <Eye className="w-5 h-5 text-[#0284C7]" />
-                  <h3 className="font-extrabold text-sm text-zinc-900 dark:text-white uppercase tracking-wider">Live mobile Preview</h3>
-               </div>
-               <button onClick={() => setShowMobilePreview(false)} className="p-2 bg-zinc-100 dark:bg-neutral-800 rounded-full cursor-pointer">
-                  <X className="w-5 h-5 text-zinc-800 dark:text-zinc-100" />
-               </button>
-             </div>
-             <div className="pb-24 pointer-events-none">
-                <ListingDetails 
-                  listing={mockListing} 
-                  onBack={() => {}} 
-                  similarListings={[]} 
-                  onListingClick={() => {}} 
-                  isFavorite={false} 
-                  onToggleFavorite={() => {}} 
-                />
-             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Sticky Bottom Control Bar */}
+      <footer className="sticky bottom-0 z-40 bg-[#0B0F19]/95 backdrop-blur-xl border-t border-slate-800/80 px-4 md:px-8 py-4 flex items-center justify-between shadow-2xl">
+        <button 
+          type="button" 
+          onClick={handlePrevStep} 
+          disabled={currentStep === 1} 
+          className="px-6 py-2.5 rounded-xl bg-[#151D2C] hover:bg-slate-700 disabled:opacity-30 border border-slate-700/80 text-white font-bold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5"
+        >
+          <ChevronLeft className="w-4 h-4" />
+          <span>Back</span>
+        </button>
+
+        <div className="flex items-center gap-3">
+          {currentStep < 8 ? (
+            <button 
+              type="button"
+              onClick={handleNextStep} 
+              className="px-8 py-2.5 bg-[#0284C7] hover:bg-[#0274B7] text-white font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-[#0284C7]/25 flex items-center gap-2 cursor-pointer"
+            >
+              <span>Continue</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          ) : (
+            <button 
+              form="host-form" 
+              type="submit" 
+              disabled={loading}
+              className="px-8 py-2.5 bg-gradient-to-r from-[#0284C7] to-emerald-500 hover:from-[#0274B7] hover:to-emerald-600 disabled:opacity-50 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-xl shadow-emerald-500/20 flex items-center gap-2 cursor-pointer"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+              <span>{loading ? 'Publishing...' : 'Publish Listing'}</span>
+            </button>
+          )}
+        </div>
+      </footer>
     </div>
   );
 };
 
 export default HostForm;
+

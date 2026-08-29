@@ -1,32 +1,45 @@
 
 export interface RoomTier {
   id: string;
-  name: string; // e.g., "Standard", "Premium", "Room Only", "Breakfast + Cancel"
-  price: number; // Tier price
-  amenities: string[]; // Explicit amenities for this tier
+  name: string;
+  price: number;
+  amenities: string[];
 }
 
+/**
+ * ADR-001 APPROVED: Hosts define free-form room names with a tier classification key.
+ * e.g. name="Ocean Bungalow Suite" type="suites" or name="Triplux" type="triplux"
+ */
 export interface Room {
   features?: string[];
   isAvailable?: boolean;
   sqft?: number;
   id: string;
-  name: string;
-  price: number;
+  name: string;             // Host-defined free-form name shown to guests
+  type?: string;            // Tier/classification key for gallery routing (free-form)
+  icon?: string;            // Emoji icon e.g. "👑"
+  tag?: string;             // Marketing tag e.g. "Most Popular"
+  price: number;            // Authoritative nightly price (ADR-003)
   capacity?: number;
-  bedrooms?: number; // Added for deep search
-  beds?: number; // Added for deep search
+  bedrooms?: number;
+  beds?: number;
+  bathrooms?: number;
   hasAttachedBathroom?: boolean;
   hasAc?: boolean;
   amenities?: string[];
-  imageUrls?: string[];
+  imageUrls?: string[];     // Legacy — maintained for backward compat
   video_url?: string;
   floor_plan_url?: string;
   amenity_clusters?: Record<string, string[]>;
   child_safety_specs?: string[];
-  description?: string;
-  inventory_count?: number; // Number of available units for this specific room type
-  tiers?: RoomTier[]; // Pricing tiers
+  description?: string;     // Host-authored description shown on guest detail page
+  specs?: string;           // Short specs e.g. "1200 sq.ft · Valley View · Jacuzzi"
+  inventory_count?: number;
+  tiers?: RoomTier[];
+  photos?: SpatialPhoto[];  // Room-specific photos tagged to this room type
+  min_stay_nights?: number;
+  check_in_time?: string;
+  check_out_time?: string;
 }
 
 export interface Offer {
@@ -45,10 +58,15 @@ export interface CalendarDay {
   offer?: Offer;
 }
 
+/**
+ * MIG-002 APPROVED: tier is widened to string to support ADR-001 custom tier keys.
+ * Backward-compatible: 'common'|'suites'|'deluxe'|'executive' still valid.
+ */
 export interface SpatialPhoto {
   id: string;
   url: string;
-  category: 'living_room' | 'dining' | 'bedroom' | 'bathroom' | 'garden' | 'exterior' | 'pool' | 'details' | 'other';
+  tier: string;             // Free-form: 'common','suites','deluxe','executive','triplux','honeymoon',etc.
+  category: 'living_room' | 'dining' | 'bedroom' | 'bathroom' | 'garden' | 'exterior' | 'pool' | 'details' | 'balcony' | 'parking' | 'restaurant' | 'lobby' | 'spa' | 'gym' | 'activity_area' | 'view' | 'other';
   categoryLabel?: string;
   title: string;
   description: string;
