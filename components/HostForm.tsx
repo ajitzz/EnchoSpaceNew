@@ -107,9 +107,12 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
   });
 
   const [photos, setPhotos] = useState<PhotoData[]>(() => {
-    const urls = existingListing?.imageUrls?.length > 0 
-      ? existingListing.imageUrls 
-      : (existingListing?.imageUrl ? [existingListing.imageUrl] : []);
+    let urls: string[] = [];
+    if (existingListing?.imageUrls && existingListing.imageUrls.length > 0) {
+      urls = existingListing.imageUrls;
+    } else if (existingListing?.imageUrl) {
+      urls = [existingListing.imageUrl];
+    }
     return urls.map((url: string) => ({ id: Math.random().toString(36).substr(2,7), previewUrl: url, tier: 'common', category: 'exterior' as any }));
   });
 

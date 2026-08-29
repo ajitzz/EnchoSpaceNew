@@ -104,15 +104,15 @@ export function OptimizedImage({
 
   const isUnsplash = cleanSrc.includes('images.unsplash.com');
 
-  const optimizedSrc = getOptimizedUrl(cleanSrc, undefined, props.aspectRatio);
+  const optimizedSrc = getOptimizedUrl(cleanSrc, undefined, aspectRatio);
   
   // Unsplash LQIP
-  const unsplashLqip = isUnsplash ? getOptimizedUrl(cleanSrc, 20, props.aspectRatio) + '&blur=50' : undefined;
+  const unsplashLqip = isUnsplash ? getOptimizedUrl(cleanSrc, 20, aspectRatio) + '&blur=50' : undefined;
   const placeholderSrc = lqipDataUri || unsplashLqip;
   
   // Generate responsive srcSet for all optimized images
   const srcSet = [320, 640, 768, 1024, 1536, 2048].map(w => 
-      `${getOptimizedUrl(cleanSrc, w, props.aspectRatio)} ${w}w`
+      `${getOptimizedUrl(cleanSrc, w, aspectRatio)} ${w}w`
   ).join(', ');
 
   // Fallback image in case of failure
