@@ -3552,7 +3552,8 @@ app.put('/api/upload-local', express.raw({ type: '*/*', limit: '50mb' }), (req, 
 
 app.post('/api/upload-base64', authenticateToken, express.json({ limit: '50mb' }), (req: AuthRequest, res) => {
   try {
-    const { filename, base64Data, contentType } = req.body;
+    const { filename, contentType } = req.body;
+    const base64Data = req.body.base64Data || req.body.base64;
     if (!base64Data) {
       return res.status(400).json({ error: 'base64Data required' });
     }
@@ -3567,10 +3568,10 @@ app.post('/api/upload-base64', authenticateToken, express.json({ limit: '50mb' }
       const buffer = Buffer.from(base64Data.replace(/^data:.*;base64,/, ''), 'base64');
       fs.writeFileSync(filePath, buffer);
       const fileUrl = `/uploads/${uniqueName}`;
-      return res.json({ url: fileUrl });
+      return res.json({ url: fileUrl, publicUrl: fileUrl });
     } catch (diskErr) {
       console.warn('[BASE64 UPLOAD WARNING - read-only FS, returning base64 data uri]:', diskErr);
-      return res.json({ url: base64Data });
+      return res.json({ url: base64Data, publicUrl: base64Data });
     }
   } catch (err) {
     console.error('[BASE64 UPLOAD ERROR]', err);
@@ -3595,7 +3596,7 @@ app.post('/api/upload-url', authenticateToken, async (req, res) => {
       const uniqueName = Date.now() + '-' + (filename ? filename.replace(/[^a-zA-Z0-9.-]/g, '_') : 'file.bin');
       const uploadUrl = `/api/upload-local?filename=${encodeURIComponent(uniqueName)}`;
       const fileUrl = `/uploads/${uniqueName}`;
-      return res.json({ uploadUrl, fileUrl });
+      return res.json({ uploadUrl, fileUrl, publicUrl: fileUrl });
     }
 
     const key = `listings/${Date.now()}-${filename.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
@@ -3609,7 +3610,7 @@ app.post('/api/upload-url', authenticateToken, async (req, res) => {
 
     // Make sure we form the correct virtual-hosted style URL for S3
     const fileUrl = `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
-    res.json({ uploadUrl, fileUrl });
+    res.json({ uploadUrl, fileUrl, publicUrl: fileUrl });
   } catch (error) {
     console.error('Presigned URL Error:', error);
     res.status(500).json({ error: 'Failed to generate upload URL' });
