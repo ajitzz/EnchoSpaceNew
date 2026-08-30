@@ -281,7 +281,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
       });
       const commonPhotos = byTier['common'] || [];
       
-      return availableRoomTiers.map((tierKey, index) => {
+      const collections = availableRoomTiers.map((tierKey, index) => {
         const roomCfg = getRoomConfig(tierKey);
         const tierPhotos = [
           ...(byTier[tierKey] || []),
@@ -322,6 +322,8 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
           space04: spaces[3]
         };
       }).filter(col => col.spaces.length > 0);
+      
+      if (collections.length > 0) return collections;
     }
     
     // Legacy positional fallback
@@ -396,45 +398,43 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   };
 
   // Pure 12-Space Continuous Media Stream (Zero Fake Text Cards)
-  const mobileContinuousSpaces = useMemo(() => [
-    { space: slideCollections[0].space01, collectionIdx: 0, globalIdx: 1, subIdx: 1, chapterName: '01 · Presidential Suites', isChapterStart: true },
-    { space: slideCollections[0].space02, collectionIdx: 0, globalIdx: 2, subIdx: 2, chapterName: '01 · Presidential Suites', isChapterStart: false },
-    { space: slideCollections[0].space03, collectionIdx: 0, globalIdx: 3, subIdx: 3, chapterName: '01 · Presidential Suites', isChapterStart: false },
-    { space: slideCollections[0].space04, collectionIdx: 0, globalIdx: 4, subIdx: 4, chapterName: '01 · Presidential Suites', isChapterStart: false },
-    { space: slideCollections[1].space01, collectionIdx: 1, globalIdx: 5, subIdx: 1, chapterName: '02 · Deluxe Double Rooms', isChapterStart: true },
-    { space: slideCollections[1].space02, collectionIdx: 1, globalIdx: 6, subIdx: 2, chapterName: '02 · Deluxe Double Rooms', isChapterStart: false },
-    { space: slideCollections[1].space03, collectionIdx: 1, globalIdx: 7, subIdx: 3, chapterName: '02 · Deluxe Double Rooms', isChapterStart: false },
-    { space: slideCollections[1].space04, collectionIdx: 1, globalIdx: 8, subIdx: 4, chapterName: '02 · Deluxe Double Rooms', isChapterStart: false },
-    { space: slideCollections[2].space01, collectionIdx: 2, globalIdx: 9, subIdx: 1, chapterName: '03 · Executive Single Rooms', isChapterStart: true },
-    { space: slideCollections[2].space02, collectionIdx: 2, globalIdx: 10, subIdx: 2, chapterName: '03 · Executive Single Rooms', isChapterStart: false },
-    { space: slideCollections[2].space03, collectionIdx: 2, globalIdx: 11, subIdx: 3, chapterName: '03 · Executive Single Rooms', isChapterStart: false },
-    { space: slideCollections[2].space04, collectionIdx: 2, globalIdx: 12, subIdx: 4, chapterName: '03 · Executive Single Rooms', isChapterStart: false }
-  ], [slideCollections]);
+  const mobileContinuousSpaces = useMemo(() => {
+    let globalIdxCounter = 1;
+    return slideCollections.flatMap((collection, cIdx) => {
+      const spaces = [collection.space01, collection.space02, collection.space03, collection.space04].filter(Boolean);
+      return spaces.map((space, sIdx) => ({
+        space,
+        collectionIdx: cIdx,
+        globalIdx: globalIdxCounter++,
+        subIdx: sIdx + 1,
+        chapterName: collection.name,
+        isChapterStart: sIdx === 0
+      }));
+    });
+  }, [slideCollections]);
 
   const handleMobileScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.target as HTMLDivElement;
     const scrollLeft = target.scrollLeft;
     const cardWidth = target.clientWidth * 0.85;
-    const currentIdx = Math.min(Math.max(Math.round(scrollLeft / cardWidth), 0), 11);
+    const maxIdx = mobileContinuousSpaces.length - 1;
+    const currentIdx = Math.min(Math.max(Math.round(scrollLeft / cardWidth), 0), maxIdx);
 
     setMobileSpaceIndex(currentIdx);
 
-    if (currentIdx >= 8) {
-      if (activeSlide !== 2) setActiveSlide(2);
-    } else if (currentIdx >= 4) {
-      if (activeSlide !== 1) setActiveSlide(1);
-    } else {
-      if (activeSlide !== 0) setActiveSlide(0);
+    const collectionIdx = Math.floor(currentIdx / 4);
+    if (activeSlide !== collectionIdx && collectionIdx < slideCollections.length) {
+      setActiveSlide(collectionIdx);
     }
   };
 
   const handleCategoryPillClick = (idx: number) => {
     uiAudio.playClick();
     setActiveSlide(idx);
-    setSelectedRoomTier(idx === 0 ? 'suites' : idx === 1 ? 'deluxe' : 'executive');
+    const tier = slideCollections[idx]?.id || availableRoomTiers[idx] || 'suites';
+    setSelectedRoomTier(tier);
     if (mobileGalleryRef.current) {
-      const targetIndices = [0, 4, 8];
-      const targetCard = mobileGalleryRef.current.children[targetIndices[idx]] as HTMLElement;
+      const targetCard = mobileGalleryRef.current.children[idx * 4] as HTMLElement;
       if (targetCard) {
         targetCard.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
       }
@@ -1157,8 +1157,8 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                           {activeTierObj.tag}
                         </span>
                       </div>
-                      <div className="grid grid-cols-3 gap-1.5 p-1 bg-zinc-100/80 rounded-2xl border border-zinc-200/60">
-                        {availableRoomTiers.map(tierKey => {
+                      <div className={`grid gap-1.5 p-1 bg-zinc-100/80 rounded-2xl border border-zinc-200/60 ${availableRoomTiers.length === 1 ? 'grid-cols-1' : availableRoomTiers.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                        {availableRoomTiers.map((tierKey, idx) => {
                           const t = getRoomConfig(tierKey);
                           const isSelected = selectedRoomTier === tierKey;
                           const tRate = listing.currency === 'USD' ? ((t as any).priceUsd || t.price) : t.price;
@@ -1169,7 +1169,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                               onClick={() => {
                                 uiAudio.playClick();
                                 setSelectedRoomTier(tierKey);
-                                setActiveSlide(tierKey === 'suites' ? 0 : tierKey === 'deluxe' ? 1 : 2);
+                                setActiveSlide(idx);
                               }}
                               className={`py-2 px-1.5 rounded-xl text-center transition-all cursor-pointer flex flex-col items-center justify-center ${
                                 isSelected
@@ -1468,7 +1468,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   type="button"
                   onClick={() => {
                     uiAudio.playClick();
-                    setActiveSlide((activeSlide - 1 + 3) % 3);
+                    setActiveSlide((activeSlide - 1 + slideCollections.length) % slideCollections.length);
                   }}
                   className="w-10 h-10 rounded-full bg-white hover:bg-zinc-100 border border-zinc-200 text-zinc-900 flex items-center justify-center shadow-xs active:scale-95 transition-all cursor-pointer"
                   title="Previous Collection"
@@ -1479,7 +1479,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   type="button"
                   onClick={() => {
                     uiAudio.playClick();
-                    setActiveSlide((activeSlide + 1) % 3);
+                    setActiveSlide((activeSlide + 1) % slideCollections.length);
                   }}
                   className="w-10 h-10 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white flex items-center justify-center shadow-md active:scale-95 transition-all cursor-pointer"
                   title="Next Collection"
@@ -1518,7 +1518,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 type="button"
                 onClick={() => {
                   uiAudio.playClick();
-                  setActiveSlide((activeSlide - 1 + 3) % 3);
+                  setActiveSlide((activeSlide - 1 + slideCollections.length) % slideCollections.length);
                 }}
                 className="absolute left-4 top-1/2 -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-black/40 hover:bg-black/70 text-white backdrop-blur-xl border border-white/20 flex items-center justify-center opacity-0 group-hover/gallery:opacity-100 transition-all duration-300 shadow-xl active:scale-90 cursor-pointer"
                 title="Previous Collection"
@@ -1529,7 +1529,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 type="button"
                 onClick={() => {
                   uiAudio.playClick();
-                  setActiveSlide((activeSlide + 1) % 3);
+                  setActiveSlide((activeSlide + 1) % slideCollections.length);
                 }}
                 className="absolute right-4 top-1/2 -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-black/40 hover:bg-black/70 text-white backdrop-blur-xl border border-white/20 flex items-center justify-center opacity-0 group-hover/gallery:opacity-100 transition-all duration-300 shadow-xl active:scale-90 cursor-pointer"
                 title="Next Collection"
