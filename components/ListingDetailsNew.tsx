@@ -468,8 +468,11 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
     if (Array.isArray(listing.experience_tags) && listing.experience_tags.length > 0) {
       return listing.experience_tags;
     }
+    if (Array.isArray(listing.amenities) && listing.amenities.length > 0) {
+      return listing.amenities.slice(0, 5);
+    }
     return ['Ocean Waves', 'Heated Infinity Pool', 'Private Chef Available', '1 Gbps Fiber WiFi', 'Panoramic Mountain View'];
-  }, [listing.experience_tags]);
+  }, [listing.experience_tags, listing.amenities]);
 
   // Parse Curated Guidelines
   const parsedGuidelines: string[] = useMemo(() => {
@@ -516,14 +519,15 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   };
 
   // Accordion state
-  const [openAccordion, setOpenAccordion] = useState<{ about: boolean; guidelines: boolean; safety: boolean; services: boolean }>({
+  const [openAccordion, setOpenAccordion] = useState<{ about: boolean; guidelines: boolean; safety: boolean; services: boolean; philosophy: boolean }>({
     about: true,
     guidelines: false,
     safety: false,
-    services: false
+    services: false,
+    philosophy: false
   });
 
-  const toggleAccordion = (key: 'about' | 'guidelines' | 'safety' | 'services') => {
+  const toggleAccordion = (key: 'about' | 'guidelines' | 'safety' | 'services' | 'philosophy') => {
     uiAudio.playClick();
     setOpenAccordion(prev => ({ ...prev, [key]: !prev[key] }));
   };
@@ -918,31 +922,6 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   </div>
                 </section>
 
-                {/* M7: Amenities section — reads from listing.amenities[] */}
-                {listing.amenities && listing.amenities.length > 0 && (
-                  <section className="py-10 border-t border-zinc-100 dark:border-neutral-800/60">
-                    <h2 className="text-2xl font-bold text-zinc-900 dark:text-white mb-2">What this place offers</h2>
-                    <p className="text-sm text-zinc-500 mb-6">{listing.amenities.length} amenities included</p>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      {(showAllAmenities ? listing.amenities : listing.amenities.slice(0, 6)).map((amenity: string, i: number) => (
-                        <div key={i} className="flex items-center gap-3 p-3.5 rounded-2xl bg-zinc-50 dark:bg-neutral-900/70 border border-zinc-100 dark:border-neutral-800">
-                          <span className="text-xl flex-shrink-0">{amenityIcon(amenity)}</span>
-                          <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300 leading-tight">{amenity}</span>
-                        </div>
-                      ))}
-                    </div>
-                    {listing.amenities.length > 6 && (
-                      <button
-                        onClick={() => setShowAllAmenities(prev => !prev)}
-                        className="mt-5 px-6 py-2.5 border border-zinc-300 dark:border-neutral-700 rounded-full text-sm font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-neutral-800 transition-all cursor-pointer"
-                      >
-                        {showAllAmenities ? 'Show less' : `Show all ${listing.amenities.length} amenities →`}
-                      </button>
-                    )}
-                  </section>
-                )}
-
-                {/* EDITORIAL SANCTUARY DOSSIER ACCORDION */}
                 <section className="border-t border-zinc-200/80 pt-6 space-y-2">
                   {/* Accordion Item 1: About The Sanctuary */}
                   <div className="border-b border-zinc-200/80 transition-colors">
@@ -1064,7 +1043,33 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     {openAccordion.services && (
                       <div className="pb-6 pt-1 text-zinc-600 text-sm md:text-base leading-relaxed space-y-3 font-normal animate-fade-in pl-8 pr-2">
                         <p className="text-xs md:text-sm text-zinc-600 leading-relaxed">
-                          All guests at this Encho Sanctuary receive direct access to our Walled Garden Host Concierge. Private dining experiences, sommelier cellar curation, private driver transfers, and customized wellness sessions can be coordinated seamlessly inside your Encho guest inbox.
+                          {listing.concierge_privileges || "All guests at this Encho Sanctuary receive direct access to our Walled Garden Host Concierge. Private dining experiences, sommelier cellar curation, private driver transfers, and customized wellness sessions can be coordinated seamlessly inside your Encho guest inbox."}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Accordion Item 5: Host Philosophy */}
+                  <div className="border-b border-zinc-200/80 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => toggleAccordion('philosophy')}
+                      className="w-full py-5 flex items-center justify-between text-left group transition-all cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3.5">
+                        <span className="text-zinc-400 font-bold text-xs tracking-wider font-mono">05</span>
+                        <h3 className="text-lg md:text-xl font-bold text-zinc-900 tracking-tight group-hover:text-zinc-700 font-display">
+                          Host Philosophy
+                        </h3>
+                      </div>
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-500 group-hover:bg-zinc-100 transition-all text-xl font-light">
+                        {openAccordion.philosophy ? <Minus className="w-4 h-4 text-zinc-700" /> : <Plus className="w-4 h-4 text-zinc-700" />}
+                      </div>
+                    </button>
+                    {openAccordion.philosophy && (
+                      <div className="pb-6 pt-1 text-zinc-600 text-sm md:text-base leading-relaxed space-y-3 font-normal animate-fade-in pl-8 pr-2">
+                        <p className="text-xs md:text-sm text-zinc-600 leading-relaxed italic">
+                          "{listing.host_philosophy || "Hosting is an art form of anticipation. Our mission is to curate an environment where the architecture fades into the background, and the sensory experience takes precedence, allowing guests to achieve absolute cognitive reset."}"
                         </p>
                       </div>
                     )}

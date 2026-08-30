@@ -96,6 +96,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
     hero_fallback_url: existingListing?.hero_fallback_url || '',
     dominant_color_hex: existingListing?.dominant_color_hex || '#0284C7',
     experience_tags: existingListing?.experience_tags || [] as string[],
+    concierge_privileges: existingListing?.concierge_privileges || '',
+    host_philosophy: existingListing?.host_philosophy || '',
     price: existingListing?.price?.toString() || '0',
     dynamicPricing: existingListing?.dynamicPricing || { weekendMultiplier: 1.0, seasonalMultiplier: 1.0 },
     raw_rules: existingListing?.raw_rules || '',
@@ -302,6 +304,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         raw_rules: formData.raw_rules,
         curated_guidelines: formData.curated_guidelines,
         experience_tags: formData.experience_tags,
+        concierge_privileges: formData.concierge_privileges,
+        host_philosophy: formData.host_philosophy,
         seo_title: formData.seo_title,
         seo_description: formData.seo_description,
         seo_keywords: formData.seo_keywords,
@@ -586,18 +590,45 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               </div>
             </div>
 
-            {/* Description */}
+            {/* About The Sanctuary (Description) */}
             <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Sanctuary Narrative Description</label>
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-300">About The Sanctuary</label>
                 <span className="text-xs text-slate-400 font-mono">{formData.description.length} chars</span>
               </div>
               <textarea 
-                className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl p-4 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0284C7] focus:border-[#0284C7] transition-all text-sm leading-relaxed h-36 font-medium resize-none shadow-inner"
+                className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl p-4 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0284C7] focus:border-[#0284C7] transition-all text-sm leading-relaxed h-32 font-medium resize-none shadow-inner"
                 value={formData.description} 
                 onChange={e => setFormData({...formData, description: e.target.value})} 
-                placeholder="Paint a vivid sensory description of this estate: the architectural atmosphere, scenic vistas, private culinary spaces, and bespoke guest experiences..."
+                placeholder="Paint a vivid sensory description of this estate..."
               />
+            </div>
+
+            {/* Host Philosophy */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Host Philosophy</label>
+                <span className="text-xs text-slate-400 font-mono">{formData.host_philosophy.length} chars</span>
+              </div>
+              <textarea 
+                className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl p-4 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0284C7] transition-all text-sm leading-relaxed h-24 font-medium resize-none shadow-inner"
+                value={formData.host_philosophy} 
+                onChange={e => setFormData({...formData, host_philosophy: e.target.value})} 
+                placeholder="Describe your personal hosting philosophy, cultural approach, and what makes your hospitality unique..."
+              />
+            </div>
+
+            {/* Sensory Atmosphere Deck (Tags) */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Sensory Atmosphere Deck (Tags)</label>
+              <input 
+                type="text" 
+                className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0284C7] text-sm font-medium"
+                value={formData.experience_tags.join(', ')} 
+                onChange={e => setFormData({...formData, experience_tags: e.target.value.split(',').map(s => s.trim()).filter(Boolean)})} 
+                placeholder="e.g. Ocean Waves, Heated Infinity Pool, Private Chef Available" 
+              />
+              <p className="text-[10px] text-slate-500">Comma separated tags to populate the Aman-Standard Sensory Deck.</p>
             </div>
           </div>
         );
@@ -1047,8 +1078,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         return (
           <div className="space-y-8 animate-in fade-in duration-300">
             <div>
-              <h2 className="text-2xl font-black text-white tracking-tight">Policies & Dynamic Multipliers</h2>
-              <p className="text-sm text-slate-400 mt-1">Set authoritative base rates, weekend surges, and AI-curated house guidelines.</p>
+              <h2 className="text-2xl font-black text-white tracking-tight">Policies, Guidelines & Concierge</h2>
+              <p className="text-sm text-slate-400 mt-1">Set authoritative base rates, aristocratic hospitality guidelines, and bespoke concierge services.</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1084,11 +1115,11 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               </div>
             </div>
 
-            {/* House Rules */}
+            {/* Aristocratic Hospitality Guidelines */}
             <div className="space-y-3 pt-4 border-t border-slate-800">
               <div className="flex justify-between items-center">
                 <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-300">House Rules & Guidelines</label>
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Aristocratic Hospitality Guidelines</label>
                   <p className="text-xs text-slate-500">Enter raw rules or let AI refine them into luxury etiquette.</p>
                 </div>
                 <button 
@@ -1115,6 +1146,17 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                   {formData.curated_guidelines}
                 </div>
               )}
+            </div>
+
+            {/* Concierge Privileges & Bespoke Services */}
+            <div className="space-y-2 pt-4 border-t border-slate-800">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Concierge Privileges & Bespoke Services</label>
+              <textarea 
+                className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl p-4 text-white placeholder:text-slate-500 text-sm h-28 focus:outline-none focus:ring-2 focus:ring-[#0284C7] resize-none" 
+                value={formData.concierge_privileges} 
+                onChange={e => setFormData({...formData, concierge_privileges: e.target.value})} 
+                placeholder="Describe exclusive services offered... e.g. Dedicated 24/7 butler, private sommelier, helipad access, in-villa spa treatments."
+              />
             </div>
           </div>
         );

@@ -1303,7 +1303,12 @@ const ensureListingsTable = async () => {
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='experience_tags') THEN
         ALTER TABLE listings ADD COLUMN experience_tags JSONB DEFAULT '[]'::jsonb;
       END IF;
-
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='concierge_privileges') THEN
+        ALTER TABLE listings ADD COLUMN concierge_privileges TEXT;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='host_philosophy') THEN
+        ALTER TABLE listings ADD COLUMN host_philosophy TEXT;
+      END IF;
     END $$;
   `);
 
@@ -2724,7 +2729,7 @@ const ensureDbInitialized = async () => {
       try {
         // FAANG Fast-Path: Bypass massive DDL locks in Vercel Serverless if schema is up-to-date
         try {
-          const fastCheck = await pool.query(`SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='amenity_clusters' LIMIT 1`);
+          const fastCheck = await pool.query(`SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='host_philosophy' LIMIT 1`);
           if (fastCheck.rowCount && fastCheck.rowCount > 0) {
              marketingSchemaInitialized = true;
              usersTableInitialized = true;

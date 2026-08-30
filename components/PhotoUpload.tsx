@@ -234,10 +234,10 @@ export const PhotoUpload: React.FC<PhotoUploadProps> = ({ photos, setPhotos, isC
         <AnimatePresence>
           {activePhoto && (
             <motion.div 
-              initial={{ width: 0, opacity: 0, x: 20 }} animate={{ width: 360, opacity: 1, x: 0 }} exit={{ width: 0, opacity: 0, x: 20 }}
-              className="hidden xl:flex flex-col bg-white dark:bg-neutral-900 rounded-3xl border border-zinc-200/60 dark:border-neutral-800 shadow-xl overflow-hidden flex-shrink-0"
+              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+              className="flex flex-col bg-white dark:bg-neutral-900 rounded-3xl border border-zinc-200/60 dark:border-neutral-800 shadow-xl overflow-hidden flex-shrink-0 w-full xl:w-[360px] xl:h-full mt-6 xl:mt-0"
             >
-              <div className="w-[360px] flex flex-col h-full">
+              <div className="w-full flex flex-col h-full">
                 <div className="p-6 border-b border-zinc-100 dark:border-neutral-800 flex items-center justify-between bg-zinc-50/50 dark:bg-neutral-900/50">
                   <div className="flex flex-col">
                     <h4 className="font-bold text-zinc-900 dark:text-white">Photo Inspector</h4>

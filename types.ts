@@ -139,6 +139,8 @@ export interface Listing {
   raw_rules?: string;
   curated_guidelines?: string | string[];
   experience_tags?: string[];
+  concierge_privileges?: string;
+  host_philosophy?: string;
   editorial_quote?: string;
   
   // Detailed fields
