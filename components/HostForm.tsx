@@ -1717,7 +1717,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
   const progressPercent = Math.round((currentStep / STEPS.length) * 100);
 
   return (
-    <div className="min-h-screen bg-[#090D16] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900/60 via-[#090D16] to-[#04060B] text-white font-sans flex flex-col selection:bg-[#0284C7] selection:text-white">
+    <div className="min-h-screen bg-[#090D16] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900/60 via-[#090D16] to-[#04060B] text-white font-sans flex flex-col selection:bg-[#0284C7] selection:text-white w-full max-w-full overflow-x-hidden">
       {/* ── 10/10 LUXURY STUDIO TOP HEADER ── */}
       <header className="sticky top-0 z-50 bg-[#090D16]/90 backdrop-blur-2xl border-b border-slate-800/80 px-4 sm:px-8 py-3.5 flex items-center justify-between shadow-2xl">
         {/* Left: Brand / Title */}
@@ -1825,8 +1825,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
       </div>
 
       {/* ── MAIN WORKSPACE CANVAS ── */}
-      <main className="max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-10 flex-1">
-        <div className="bg-[#0F1626]/85 border border-slate-800/80 rounded-3xl sm:rounded-[32px] p-6 sm:p-10 shadow-[0_20px_60px_rgba(0,0,0,0.6)] backdrop-blur-xl">
+      <main className="max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-10 flex-1 min-w-0">
+        <div className="bg-[#0F1626]/85 border border-slate-800/80 rounded-3xl sm:rounded-[32px] p-4 sm:p-8 lg:p-10 shadow-[0_20px_60px_rgba(0,0,0,0.6)] backdrop-blur-xl w-full max-w-full overflow-hidden min-w-0">
           <form id="host-form" onSubmit={handleSubmit}>
             <AnimatePresence mode="wait">
               <motion.div 

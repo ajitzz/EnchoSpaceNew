@@ -977,7 +977,7 @@ function App() {
     if (appMode === 'host') {
         if (currentView === 'HOSTING') {
             return (
-              <motion.div key="hosting" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition} className="min-h-screen bg-white">
+              <motion.div key="hosting" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition} className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#090D16]">
                 <HostForm 
                   existingListing={editingListing}
                   onBack={() => {

@@ -288,7 +288,7 @@ export const SensoryTagPicker: React.FC<SensoryTagPickerProps> = ({
   const activeCategoryData = SENSORY_CATEGORIES.find(c => c.id === activeCategory);
 
   return (
-    <div className="space-y-6 rounded-3xl bg-[#0C1322] border border-slate-700/70 p-5 sm:p-7 shadow-2xl">
+    <div className="space-y-6 rounded-3xl bg-[#0C1322] border border-slate-700/70 p-4 sm:p-7 shadow-2xl w-full max-w-full overflow-hidden min-w-0">
 
       {/* ── 1. HEADER WITH AMAN BADGE & AI TRIGGER ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-800/80">
@@ -406,9 +406,9 @@ export const SensoryTagPicker: React.FC<SensoryTagPickerProps> = ({
       </div>
 
       {/* ── 3. SEARCH & CUSTOM INPUT BAR ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full min-w-0">
         {/* Search */}
-        <div className="md:col-span-2 relative">
+        <div className="sm:col-span-2 relative min-w-0">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
           <input
             ref={searchRef}
@@ -416,7 +416,7 @@ export const SensoryTagPicker: React.FC<SensoryTagPickerProps> = ({
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search 80+ Aman standard tags (e.g. 'infinity pool', 'chef', 'mountain', 'wifi')…"
-            className="w-full bg-[#141E30] border border-slate-700/80 hover:border-slate-600 focus:border-[#0284C7] rounded-2xl pl-11 pr-10 py-3 text-white text-xs font-semibold placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0284C7]/30 transition-all"
+            className="w-full min-w-0 bg-[#141E30] border border-slate-700/80 hover:border-slate-600 focus:border-[#0284C7] rounded-2xl pl-11 pr-10 py-3 text-white text-xs font-semibold placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0284C7]/30 transition-all"
           />
           {search && (
             <button
@@ -430,14 +430,14 @@ export const SensoryTagPicker: React.FC<SensoryTagPickerProps> = ({
         </div>
 
         {/* Custom Tag Input */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 min-w-0">
           <input
             type="text"
             value={customTagInput}
             onChange={e => setCustomTagInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddCustomTag(); } }}
             placeholder="Add custom tag…"
-            className="flex-1 bg-[#141E30] border border-slate-700/80 hover:border-slate-600 focus:border-[#0284C7] rounded-2xl px-4 py-3 text-white text-xs font-semibold placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0284C7]/30 transition-all"
+            className="flex-1 min-w-0 bg-[#141E30] border border-slate-700/80 hover:border-slate-600 focus:border-[#0284C7] rounded-2xl px-4 py-3 text-white text-xs font-semibold placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0284C7]/30 transition-all"
           />
           <button
             type="button"
@@ -451,7 +451,7 @@ export const SensoryTagPicker: React.FC<SensoryTagPickerProps> = ({
       </div>
 
       {/* ── 4. CATEGORY PILLS WITH VECTOR ICONS ── */}
-      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none" style={{ scrollbarWidth: 'none' }}>
+      <div className="flex gap-2 overflow-x-auto pb-1.5 scrollbar-none w-full max-w-full min-w-0" style={{ scrollbarWidth: 'none' }}>
         {SENSORY_CATEGORIES.map(cat => {
           const isActive = activeCategory === cat.id;
           const CatIcon = cat.icon;
@@ -483,7 +483,7 @@ export const SensoryTagPicker: React.FC<SensoryTagPickerProps> = ({
       </div>
 
       {/* ── 5. SELECTION GRID WITH SIGNATURE CYAN SQUIRCLE BADGES ── */}
-      <div className="space-y-3">
+      <div className="space-y-3 w-full min-w-0">
         <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-400">
           <span>{search ? `Results for "${search}" (${filteredTags.length})` : `${activeCategoryData?.label} (${filteredTags.length})`}</span>
           <span className="text-[10px] text-slate-500">Tap to toggle</span>
@@ -497,7 +497,7 @@ export const SensoryTagPicker: React.FC<SensoryTagPickerProps> = ({
           </div>
         ) : (
           <div 
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[440px] overflow-y-auto pr-1.5"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[440px] overflow-y-auto pr-1.5 w-full min-w-0"
             style={{ scrollbarWidth: 'thin', scrollbarColor: '#1e293b transparent' }}
           >
             {filteredTags.map(tag => {
