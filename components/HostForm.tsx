@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Listing, Room } from '../types';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Listing, Room, SpatialPhoto } from '../types';
 import { ChevronLeft, ChevronRight, ShieldCheck } from './Icons';
 import { LocationPicker } from './LocationPicker';
 import { PhotoUpload, PhotoData } from './PhotoUpload';
 import { AmenitiesPicker } from './AmenitiesPicker';
 import { SensoryTagPicker } from './SensoryTagPicker';
+import { ListingDetailsNew } from './ListingDetailsNew';
 import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
 import { useCurrency } from './CurrencyContext';
@@ -14,7 +15,8 @@ import {
   Building2, Home, Trees, Tractor, Coffee, Ship, Tent, Caravan, Castle, Mountain, Box, Circle, Leaf,
   X, Sparkles, Check, CheckCircle2, Bed, Users, Trash2, Crown, Star, DoorOpen, Bath, 
   ChevronDown, ChevronUp, Globe, MapPin, Video, AlertCircle, Info, Loader2, Plus, Minus, Tag,
-  Eye, Compass, DollarSign, Layers, Shield, ArrowRight, Wand2, CheckCircle
+  Eye, Compass, DollarSign, Layers, Shield, ArrowRight, Wand2, CheckCircle,
+  Monitor, Tablet, Smartphone, Maximize2, ExternalLink
 } from 'lucide-react';
 
 interface HostFormProps {
@@ -142,6 +144,168 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
   const [isSuggestingPOIs, setIsSuggestingPOIs] = useState(false);
   const [expandedRoomId, setExpandedRoomId] = useState<string | null>(formData.rooms[0]?.id || null);
   const [newFeatureText, setNewFeatureText] = useState<{ [roomId: string]: string }>({});
+  
+  // 10/10 Live Guest Preview Simulator State
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewDevice, setPreviewDevice] = useState<'desktop' | 'laptop' | 'tablet' | 'mobile'>('desktop');
+
+  // Real-time Guest View Data Compiler
+  const previewListing: Listing = useMemo(() => {
+    // 1. Gather all spatial photos from main upload and per-room uploads
+    const spatialPhotos: SpatialPhoto[] = [
+      ...photos.map(p => ({
+        id: p.id,
+        url: p.previewUrl,
+        tier: p.tier || 'common',
+        category: (p.category as any) || 'exterior',
+        categoryLabel: (p as any).categoryLabel || '',
+        title: p.title || '',
+        description: p.description || '',
+        specs: p.specs || '',
+        isHero: (p as any).isHero || false,
+      })),
+      ...formData.rooms.flatMap((r: any) =>
+        (r.photos || []).map((rp: any) => ({
+          id: rp.id,
+          url: rp.previewUrl || rp.url,
+          tier: r.type || 'suites',
+          category: (rp.category as any) || 'bedroom',
+          categoryLabel: (rp as any).categoryLabel || '',
+          title: rp.title || r.name || '',
+          description: rp.description || '',
+          specs: rp.specs || '',
+          isHero: (rp as any).isHero || false,
+        }))
+      ),
+    ];
+
+    // High-resolution Aman Standard fallback imagery if host hasn't uploaded photos yet
+    const fallbackPhotos: SpatialPhoto[] = spatialPhotos.length > 0 ? spatialPhotos : [
+      {
+        id: 'fallback-1',
+        url: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1600&q=80',
+        tier: 'suites',
+        category: 'exterior',
+        title: 'Main Sanctuary Vista',
+        description: 'Architectural facade overlooking private infinity terraces.',
+        isHero: true
+      },
+      {
+        id: 'fallback-2',
+        url: 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=1200&q=80',
+        tier: 'suites',
+        category: 'pool',
+        title: 'Heated Infinity Horizon',
+        description: 'Temperature-controlled lap pool with panoramic mountain views.'
+      },
+      {
+        id: 'fallback-3',
+        url: 'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1200&q=80',
+        tier: 'deluxe',
+        category: 'living_room',
+        title: 'Minimalist Pavilions',
+        description: 'Sunken living spaces finished with teakwood and brushed stone.'
+      },
+      {
+        id: 'fallback-4',
+        url: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=1200&q=80',
+        tier: 'deluxe',
+        category: 'bedroom',
+        title: 'Presidential Master Suite',
+        description: 'Custom king platform bed with floor-to-ceiling panoramic glass.'
+      },
+      {
+        id: 'fallback-5',
+        url: 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=1200&q=80',
+        tier: 'executive',
+        category: 'dining',
+        title: 'Sommelier Wine Lounge',
+        description: 'Private culinary enclave for bespoke in-villa dining.'
+      }
+    ];
+
+    const allImageUrls = fallbackPhotos.map(p => p.url);
+
+    // Formulate rooms with fallback pricing and metadata
+    const processedRooms: Room[] = (formData.rooms && formData.rooms.length > 0)
+      ? formData.rooms.map((r: any, idx: number) => ({
+          id: r.id || `room-${idx + 1}`,
+          name: r.name || (ROOM_CLASSIFICATIONS[idx % ROOM_CLASSIFICATIONS.length]?.name || `Sanctuary Suite ${idx + 1}`),
+          type: r.type || (ROOM_CLASSIFICATIONS[idx % ROOM_CLASSIFICATIONS.length]?.tier || 'suites'),
+          icon: r.icon || '👑',
+          tag: r.tag || 'Most Exclusive',
+          price: parseFloat(r.price) || (parseFloat(formData.price) || 18500),
+          capacity: r.capacity || 2,
+          inventory_count: r.inventory_count || 1,
+          description: r.description || formData.description || 'Bespoke architectural suite with private panoramic views.',
+          specs: r.specs || '1,200 sq.ft · Panoramic Views · Private Balcony',
+          features: (r.features && r.features.length > 0) ? r.features : ['Private Terrace', 'Spa Bathroom', 'Fiber WiFi'],
+          amenities: r.amenities || formData.amenities || [],
+          photos: (r.photos && r.photos.length > 0) ? r.photos : fallbackPhotos.slice(idx * 2, (idx * 2) + 2)
+        }))
+      : [
+          {
+            id: 'room-default-1',
+            name: 'Presidential Panorama Suite',
+            type: 'suites',
+            icon: '👑',
+            tag: 'Most Exclusive',
+            price: parseFloat(formData.price) || 18500,
+            capacity: 2,
+            inventory_count: 1,
+            specs: '1,200 sq.ft · 270° Valley View · Heated Jacuzzi',
+            description: 'Ultra-exclusive master pavilion with panoramic views.',
+            features: ['Private Heated Jacuzzi', 'Dedicated Butler Call', 'Panoramic Mountain View'],
+            photos: fallbackPhotos
+          }
+        ];
+
+    return {
+      id: existingListing?.id || 'preview-sanctuary-draft',
+      user_id: user?.id || 1,
+      host_id: user?.id || 1,
+      title: formData.title.trim() || 'Untitled Luxury Architectural Sanctuary',
+      description: formData.description.trim() || 'Experience elevated serenity and world-class architectural design surrounded by pristine natural vistas.',
+      type: formData.type || 'Resort',
+      rental_mode: formData.rentalMode as any,
+      price: parseFloat(formData.price) || 18500,
+      currency: 'INR',
+      address: formData.address || 'Signature Wayanad Highlands',
+      city: formData.city || 'Wayanad, Kerala',
+      lat: formData.lat || 11.6854,
+      lng: formData.lng || 76.1320,
+      imageUrl: allImageUrls[0],
+      imageUrls: allImageUrls,
+      photos: fallbackPhotos,
+      imageCount: fallbackPhotos.length,
+      isVerified: true,
+      rating: 4.98,
+      reviewCount: 42,
+      maxGuests: formData.maxGuests || 4,
+      bedrooms: formData.bedrooms || 2,
+      beds: formData.beds || 3,
+      bathrooms: formData.bathrooms || 2,
+      amenities: formData.amenities.length > 0 ? formData.amenities : ['Heated Pool', 'Private Chef', '1 Gbps WiFi', 'Air Conditioning', 'Free Parking', 'Spa'],
+      experience_tags: formData.experience_tags.length > 0 ? formData.experience_tags : ['Ocean Waves', 'Heated Infinity Pool', 'Private Chef Available', '1 Gbps Fiber WiFi', 'Panoramic Mountain View'],
+      concierge_privileges: formData.concierge_privileges || 'All guests receive dedicated access to our 24/7 Host Concierge for private cellar tastings, driver transfers, and in-villa wellness treatments.',
+      host_philosophy: formData.host_philosophy || 'Hosting is an art form of anticipation. Our mission is to curate an environment where architecture and nature merge seamlessly.',
+      raw_rules: formData.raw_rules || 'Quiet hours after twilight. No smoking indoors.',
+      curated_guidelines: formData.curated_guidelines || 'We invite guests to embrace the tranquil atmosphere of the estate, observing quiet serenity after twilight.',
+      child_safety_specs: formData.child_safety_specs || [],
+      dominant_color_hex: formData.dominant_color_hex || '#0284C7',
+      hero_video_url: formData.hero_video_url || formData.videoUrl || '',
+      hero_fallback_url: formData.hero_fallback_url || allImageUrls[0],
+      video_url: formData.videoUrl || '',
+      nearby: formData.nearby && formData.nearby.length > 0 ? formData.nearby : [
+        { name: 'Chembra Peak Vista', distance: '3.2 km', minutes: 8, type: 'PARK' as any },
+        { name: 'Banasura Sagar Lake', distance: '8.5 km', minutes: 18, type: 'PARK' as any },
+        { name: 'Artisan Plantation Cafe', distance: '1.2 km', minutes: 3, type: 'CAFE' as any }
+      ],
+      dynamicPricing: formData.dynamicPricing,
+      seo_title: formData.seo_title || formData.title,
+      seo_description: formData.seo_description || formData.description
+    };
+  }, [formData, photos, user, existingListing]);
 
   const uploadPhotoFile = async (file: File): Promise<string> => {
     const token = localStorage.getItem('token');
@@ -1321,6 +1485,34 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                 </div>
               )}
             </div>
+
+            {/* Live Interactive Guest View & Spatial Gallery Launcher */}
+            <div className="p-6 bg-gradient-to-br from-[#101A2D] to-[#0A101C] rounded-3xl border border-sky-500/30 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
+              <div className="flex items-center gap-4 text-left">
+                <div className="w-14 h-14 rounded-2xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0 shadow-lg shadow-sky-500/10">
+                  <Eye className="w-7 h-7" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-base font-black text-white">Full Guest Page & Spatial Gallery Simulation</h4>
+                    <span className="text-[10px] font-bold text-sky-400 bg-sky-950/80 border border-sky-500/40 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                      Live Preview
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                    Test your live sanctuary page, rooms breakdown, sensory atmosphere deck, and 360 spatial galleries across desktop, tablet, and mobile simulator frames.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPreviewOpen(true)}
+                className="px-6 py-3.5 bg-gradient-to-r from-[#0284C7] to-indigo-600 hover:from-[#0274B7] hover:to-indigo-500 text-white font-extrabold text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-sky-500/25 shrink-0 cursor-pointer flex items-center gap-2"
+              >
+                <Eye className="w-4 h-4" />
+                <span>Launch Live Preview</span>
+              </button>
+            </div>
           </div>
         );
 
@@ -1328,6 +1520,16 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         return null;
     }
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isPreviewOpen) {
+        setIsPreviewOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isPreviewOpen]);
 
   if (submitted) {
     return (
@@ -1380,6 +1582,18 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
             <span className="text-slate-600">·</span>
             <span className="text-white font-bold">{STEPS[currentStep - 1].name}</span>
           </div>
+
+          {/* 10/10 Live Guest Preview Trigger */}
+          <button 
+            type="button" 
+            onClick={() => setIsPreviewOpen(true)}
+            className="px-3.5 py-2 bg-gradient-to-r from-sky-500/15 via-indigo-500/15 to-purple-500/15 border border-sky-500/35 hover:border-sky-400 hover:bg-sky-500/25 text-sky-200 hover:text-white font-bold text-xs rounded-xl flex items-center gap-2 transition-all shadow-md shadow-sky-950/50 cursor-pointer group"
+            title="Open Live Guest Experience Preview & Spatial Gallery"
+          >
+            <Eye className="w-4 h-4 text-sky-400 group-hover:scale-110 transition-transform" />
+            <span className="hidden sm:inline">Live Guest View</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          </button>
 
           <button 
             type="button" 
@@ -1549,6 +1763,132 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
           )}
         </div>
       </footer>
+
+      {/* ── FLOATING QUICK-ACTION PREVIEW PILL (ALWAYS ACCESSIBLE) ── */}
+      <div className="fixed bottom-20 right-6 z-40">
+        <motion.button
+          type="button"
+          onClick={() => setIsPreviewOpen(true)}
+          whileHover={{ scale: 1.05, y: -2 }}
+          whileTap={{ scale: 0.95 }}
+          className="px-5 py-3 bg-gradient-to-r from-[#0284C7] via-indigo-600 to-sky-600 hover:from-[#0274B7] hover:to-indigo-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-full flex items-center gap-2.5 shadow-2xl shadow-sky-500/40 border border-sky-400/40 cursor-pointer backdrop-blur-md transition-all group"
+        >
+          <Eye className="w-4 h-4 text-sky-200 group-hover:scale-110 transition-transform" />
+          <span className="font-bold">Live Guest View</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+        </motion.button>
+      </div>
+
+      {/* ── 10/10 FULL-SCREEN LIVE GUEST SIMULATOR MODAL (WITH SPATIAL GALLERY) ── */}
+      <AnimatePresence>
+        {isPreviewOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[99999] bg-[#070A12] flex flex-col overflow-hidden"
+          >
+            {/* Top Control Bar HUD */}
+            <div className="h-16 shrink-0 bg-[#0C1322] border-b border-slate-800 px-4 md:px-8 flex items-center justify-between z-30 shadow-xl">
+              {/* Left Branding */}
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-[#0284C7] font-black text-xs shadow-xs">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div className="hidden sm:block">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black uppercase tracking-wider text-white">Live Guest Experience Simulator</span>
+                    <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      LIVE SYNC ACTIVE
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 truncate max-w-sm">
+                    {previewListing.title}
+                  </p>
+                </div>
+              </div>
+
+              {/* Center Device Switcher */}
+              <div className="flex items-center bg-[#141E30] border border-slate-700/80 p-1 rounded-2xl gap-1 shadow-inner">
+                {[
+                  { id: 'desktop', label: 'Desktop', icon: Monitor, sub: 'Fluid' },
+                  { id: 'laptop',  label: 'Laptop',  icon: Maximize2, sub: '1280px' },
+                  { id: 'tablet',  label: 'Tablet',  icon: Tablet,  sub: '768px' },
+                  { id: 'mobile',  label: 'Mobile',  icon: Smartphone, sub: '390px' }
+                ].map(dev => {
+                  const Icon = dev.icon;
+                  const isActive = previewDevice === dev.id;
+                  return (
+                    <button
+                      key={dev.id}
+                      type="button"
+                      onClick={() => setPreviewDevice(dev.id as any)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-[#0284C7] text-white shadow-md shadow-sky-900/40'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                      }`}
+                      title={`${dev.label} View (${dev.sub})`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      <span className="hidden md:inline">{dev.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Right Exit Button */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPreviewOpen(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+                >
+                  <X className="w-4 h-4 text-slate-400" />
+                  <span>Exit Preview</span>
+                  <kbd className="hidden sm:inline ml-1 px-1.5 py-0.5 text-[9px] font-mono bg-slate-900 text-slate-400 rounded border border-slate-800">ESC</kbd>
+                </button>
+              </div>
+            </div>
+
+            {/* Viewport Studio Workspace */}
+            <div className="flex-1 bg-[#070A11] bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px] overflow-hidden flex items-center justify-center p-0 sm:p-4 md:p-6">
+              <motion.div
+                layout
+                transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+                className={`transition-all duration-300 ${
+                  previewDevice === 'desktop'
+                    ? 'w-full h-full bg-white shadow-2xl overflow-y-auto'
+                    : previewDevice === 'laptop'
+                      ? 'w-full max-w-[1280px] h-[90vh] bg-white rounded-2xl shadow-[0_25px_70px_rgba(0,0,0,0.85)] border border-slate-700 overflow-y-auto'
+                      : previewDevice === 'tablet'
+                        ? 'w-[768px] h-[90vh] bg-white rounded-3xl shadow-[0_25px_70px_rgba(0,0,0,0.9)] border-4 border-slate-800 ring-1 ring-slate-700 overflow-y-auto'
+                        : 'w-[390px] h-[844px] max-h-[90vh] bg-white rounded-[44px] shadow-[0_25px_80px_rgba(0,0,0,0.95)] border-8 border-slate-800 ring-2 ring-slate-700 relative overflow-y-auto'
+                }`}
+                style={{ scrollbarWidth: 'thin' }}
+              >
+                {/* Mobile Dynamic Island / Bezel Simulator */}
+                {previewDevice === 'mobile' && (
+                  <div className="sticky top-0 z-50 w-full h-7 bg-white flex items-center justify-center border-b border-zinc-100">
+                    <div className="w-24 h-4 bg-black rounded-full shadow-inner" />
+                  </div>
+                )}
+
+                {/* Render Full Live Guest Page & Encho Spatial Gallery Modal */}
+                <ListingDetailsNew
+                  listing={previewListing}
+                  onBack={() => setIsPreviewOpen(false)}
+                  isFavorite={false}
+                  onToggleFavorite={() => addToast('Wishlist', 'Saved to wishlist (Live Simulation Mode)', 'success')}
+                  onBook={() => addToast('Reservation Simulator', 'Guest reservation checkout flow verified!', 'success')}
+                  onContactHost={() => addToast('Host Concierge', 'Walled garden concierge chat opened (Live Simulation Mode)', 'info')}
+                />
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
