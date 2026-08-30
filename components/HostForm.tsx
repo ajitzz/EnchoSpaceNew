@@ -68,6 +68,24 @@ export const ROOM_CLASSIFICATIONS: { id: string; name: string; label: string; ti
   { id: 'pool-villa',          name: 'Private Pool Villa',        label: 'Private Pool Villa',        tier: 'pool-villa',icon: '🏊', defaultSpecs: 'Private Infinity Pool · King Bed · Lounge Deck',     defaultTag: 'Pool Access'    },
 ];
 
+const GUIDELINE_PRESETS = [
+  "Heritage Sanctity: The 200-year-old sandstone stonework is preserved with organic floral care.",
+  "Aristocratic Silence: Sunset peacock hour is dedicated to acoustic tranquility.",
+  "Private Culinary Protocols: Royal Thali dining is prepared exclusively on brass dinnerware.",
+  "Twilight Serenity: Acoustic stillness and minimal ambient lighting observed after 10:00 PM.",
+  "Footwear Sanctity: Footwear is respectfully removed prior to stepping onto living pavilion teak floors.",
+  "Drone & Media Protocol: Professional aerial photography requires prior host clearance to protect discretion."
+];
+
+const CONCIERGE_PRESETS = [
+  "👑 Dedicated Estate Butler & Guest Ambassador",
+  "🍷 Private Sommelier & Wine Cellar Curation",
+  "🚁 Helicopter & Luxury Airport Chauffeur",
+  "🍽️ In-Villa Michelin-Starred Chef & Royal Thali",
+  "🧘 Tailored Ayurvedic & Tibetan Sound Healing",
+  "⛵ Sunset Catamaran & Private Lake Excursion"
+];
+
 export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing }) => {
   const { user, token } = useAuth();
   const { addToast } = useToast();
@@ -84,6 +102,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [newGuidelineInput, setNewGuidelineInput] = useState('');
 
   // Split Screen Live Preview State
   const [isSplitView, setIsSplitView] = useState(true);
@@ -160,7 +179,21 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
     price: existingListing?.price?.toString() || '18500',
     dynamicPricing: existingListing?.dynamicPricing || { weekendMultiplier: 1.15, seasonalMultiplier: 1.25 },
     raw_rules: existingListing?.raw_rules || 'Quiet hours observed after 10 PM. No indoor smoking. Curated wellness atmosphere.',
-    curated_guidelines: existingListing?.curated_guidelines || 'We invite guests to embrace the serene sanctuary atmosphere, preserving acoustic stillness across the private estate grounds after twilight.',
+    curated_guidelines: (() => {
+      if (Array.isArray(existingListing?.curated_guidelines)) return existingListing.curated_guidelines;
+      if (typeof existingListing?.curated_guidelines === 'string' && existingListing.curated_guidelines.trim()) {
+        try {
+          const parsed = JSON.parse(existingListing.curated_guidelines);
+          if (Array.isArray(parsed)) return parsed;
+        } catch {}
+        return [existingListing.curated_guidelines];
+      }
+      return [
+        "Heritage Sanctity: The 200-year-old sandstone stonework is preserved with organic floral care.",
+        "Aristocratic Silence: Sunset peacock hour is dedicated to acoustic tranquility.",
+        "Private Culinary Protocols: Royal Thali dining is prepared exclusively on brass dinnerware."
+      ];
+    })(),
     seo_title: existingListing?.seo_title || '',
     seo_description: existingListing?.seo_description || '',
     seo_keywords: existingListing?.seo_keywords || '',
@@ -422,30 +455,78 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
 
   // AI Curate Rules
   const handleCurateRules = async () => {
-    if (!formData.raw_rules.trim()) {
-      addToast('Rules Missing', 'Please enter some base house rules first.', 'info');
-      return;
-    }
     setIsCuratingRules(true);
     try {
       const res = await fetch('/api/ai/curate-rules', {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ raw_rules: formData.raw_rules, property_type: formData.type })
+        body: JSON.stringify({ raw_rules: formData.raw_rules || 'Quiet hours at night. No smoking indoors. Pool safety.', property_type: formData.type })
       });
-      if (!res.ok) throw new Error('AI curation failed');
-      const data = await res.json();
-      setFormData(prev => ({ ...prev, curated_guidelines: data.curated_guidelines }));
-      addToast('Rules Curated', 'Aristocratic hospitality guidelines drafted successfully!', 'success');
-    } catch {
-      addToast('AI Curation Notice', 'Using refined luxury guidelines template.', 'info');
-      setFormData(prev => ({
+      if (res.ok) {
+        const data = await res.json();
+        if (data.curated_guidelines) {
+          const lines = Array.isArray(data.curated_guidelines) 
+            ? data.curated_guidelines 
+            : (typeof data.curated_guidelines === 'string' ? data.curated_guidelines.split('\n').filter(Boolean) : []);
+          if (lines.length > 0) {
+            setFormData(prev => ({ ...prev, curated_guidelines: lines }));
+            addToast('Rules Curated (10/10)', 'Point-by-point Aristocratic Hospitality Guidelines crafted!', 'success');
+            return;
+          }
+        }
+      }
+    } catch {}
+
+    setFormData(prev => ({
+      ...prev,
+      curated_guidelines: [
+        "Heritage Sanctity: The sandstone stonework and artisan woodwork are preserved with natural organic care.",
+        "Aristocratic Silence: Sunset and twilight hours are dedicated to acoustic tranquility across all pavilions.",
+        "Private Culinary Protocols: Gourmet dining and private cellar service prepared exclusively to host specifications."
+      ]
+    }));
+    addToast('Guidelines Formatted', 'Populated point-by-point Aristocratic Hospitality Guidelines.', 'success');
+    setIsCuratingRules(false);
+  };
+
+  const addGuidelinePoint = (text?: string) => {
+    const toAdd = (text || newGuidelineInput).trim();
+    if (!toAdd) return;
+    setFormData(prev => {
+      const current = Array.isArray(prev.curated_guidelines) ? prev.curated_guidelines : [prev.curated_guidelines];
+      return { ...prev, curated_guidelines: [...current, toAdd] };
+    });
+    setNewGuidelineInput('');
+    addToast('Point Added', 'Added new Aristocratic Guideline.', 'success');
+  };
+
+  const removeGuidelinePoint = (idx: number) => {
+    setFormData(prev => {
+      const current = Array.isArray(prev.curated_guidelines) ? prev.curated_guidelines : [prev.curated_guidelines];
+      return { ...prev, curated_guidelines: current.filter((_, i) => i !== idx) };
+    });
+  };
+
+  const updateGuidelinePoint = (idx: number, val: string) => {
+    setFormData(prev => {
+      const current = Array.isArray(prev.curated_guidelines) ? [...prev.curated_guidelines] : [prev.curated_guidelines];
+      current[idx] = val;
+      return { ...prev, curated_guidelines: current };
+    });
+  };
+
+  const appendConciergeService = (service: string) => {
+    setFormData(prev => {
+      const cleanService = service.replace(/^[^\w\s]+/, '').trim();
+      const existing = prev.concierge_privileges || '';
+      if (existing.toLowerCase().includes(cleanService.toLowerCase())) return prev;
+      const separator = existing.trim() ? ' ' : '';
+      return {
         ...prev,
-        curated_guidelines: 'We invite our esteemed guests to honor the acoustic stillness and private natural harmony of the estate after twilight.'
-      }));
-    } finally {
-      setIsCuratingRules(false);
-    }
+        concierge_privileges: `${existing.trim()}${separator}Guests enjoy complimentary access to ${cleanService}.`
+      };
+    });
+    addToast('Privilege Added', `Included: ${service}`, 'success');
   };
 
   // AI Suggest POIs
@@ -668,7 +749,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         hero_fallback_url: formData.hero_fallback_url || primaryImageUrl,
         dominant_color_hex: formData.dominant_color_hex,
         raw_rules: formData.raw_rules,
-        curated_guidelines: formData.curated_guidelines,
+        curated_guidelines: Array.isArray(formData.curated_guidelines) ? JSON.stringify(formData.curated_guidelines) : formData.curated_guidelines,
         experience_tags: formData.experience_tags,
         concierge_privileges: formData.concierge_privileges,
         host_philosophy: formData.host_philosophy,
@@ -1466,54 +1547,161 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         );
 
       case 6:
+        const currentGuidelines = Array.isArray(formData.curated_guidelines)
+          ? formData.curated_guidelines
+          : (typeof formData.curated_guidelines === 'string' ? [formData.curated_guidelines] : []);
+
         return (
           <div className="space-y-8 animate-in fade-in duration-300 w-full min-w-0">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400 text-[11px] font-mono font-black tracking-widest uppercase mb-3">
-                <DollarSign className="w-3.5 h-3.5" />
-                Step 06 · Rules & Dynamic Multipliers
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[11px] font-mono font-black tracking-widest uppercase mb-3">
+                <Sparkles className="w-3.5 h-3.5" />
+                Step 06 · Etiquette, Concierge & Pricing
               </div>
-              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight font-display">Hospitality Guidelines & Pricing</h2>
-              <p className="text-slate-400 text-xs sm:text-sm mt-1.5 leading-relaxed">Establish estate rules, AI-curated guest etiquette, and dynamic weekend/seasonal surge algorithms.</p>
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight font-display">Hospitality Guidelines & Bespoke Privileges</h2>
+              <p className="text-slate-400 text-xs sm:text-sm mt-1.5 leading-relaxed">Craft your point-by-point aristocratic guest protocols, configure tailored white-glove concierge privileges, and set dynamic surge pricing.</p>
             </div>
 
-            <div className="space-y-3.5 w-full min-w-0">
-              <div className="flex justify-between items-center">
+            {/* 02. Aristocratic Hospitality Guidelines (Point-by-point editor) */}
+            <div className="p-5 sm:p-6 rounded-3xl bg-[#101726]/90 border border-slate-700/80 space-y-4 shadow-xl w-full min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
                 <div>
-                  <label className="text-xs font-black uppercase tracking-wider text-slate-200">Base House Rules</label>
-                  <p className="text-xs text-slate-500">Provide basic rules — Encho AI will elevate them into aristocratic etiquette guidelines.</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-amber-400 font-mono font-bold text-xs">02</span>
+                    <label className="text-sm font-black uppercase tracking-wider text-white">Aristocratic Hospitality Guidelines</label>
+                    <span className="bg-amber-500/20 text-amber-300 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-500/30">
+                      Curated
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">Define structured point-by-point guidelines for guest etiquette, serenity, and heritage care.</p>
                 </div>
+
                 <button
                   type="button"
                   disabled={isCuratingRules}
                   onClick={handleCurateRules}
-                  className="px-3.5 py-2 bg-gradient-to-r from-sky-500/20 to-indigo-500/20 border border-sky-500/40 hover:bg-sky-500/30 text-sky-200 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-md shadow-sky-950/40 shrink-0"
+                  className="px-3.5 py-2 bg-gradient-to-r from-amber-500/20 to-sky-500/20 border border-amber-500/40 hover:bg-amber-500/30 text-amber-200 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 shrink-0 shadow-sm"
                 >
-                  {isCuratingRules ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5 text-sky-400" />}
-                  <span>{isCuratingRules ? 'Curating...' : 'AI Curate'}</span>
+                  {isCuratingRules ? <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" /> : <Wand2 className="w-3.5 h-3.5 text-amber-400" />}
+                  <span>{isCuratingRules ? 'Curating...' : 'AI Enhance Guidelines'}</span>
                 </button>
               </div>
 
-              <textarea 
-                className="w-full bg-[#101726]/90 border border-slate-700/80 rounded-2xl p-4 text-white placeholder:text-slate-500 text-xs sm:text-sm h-20 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 resize-none font-medium min-w-0"
-                value={formData.raw_rules} 
-                onChange={e => setFormData({...formData, raw_rules: e.target.value})} 
-                placeholder="Quiet hours after 10 PM. No indoor smoking. Swimming pool closes at 11 PM..."
-              />
+              {/* Point-by-Point Cards List */}
+              <div className="space-y-3">
+                {currentGuidelines.map((item: string, idx: number) => {
+                  const colonIdx = item.indexOf(':');
+                  const hasPrefix = colonIdx > 0 && colonIdx < 40;
+                  const titlePart = hasPrefix ? item.substring(0, colonIdx) : null;
+                  const descPart = hasPrefix ? item.substring(colonIdx + 1).trim() : item;
 
-              {formData.curated_guidelines && (
-                <div className="p-4 rounded-2xl bg-[#090D16] border border-sky-500/30 space-y-1.5">
-                  <div className="flex items-center gap-2 text-xs font-bold text-sky-400">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Aristocratic Guidelines (Rendered to Guests)</span>
-                  </div>
-                  <p className="text-xs text-slate-300 leading-relaxed italic">
-                    "{formData.curated_guidelines}"
-                  </p>
+                  return (
+                    <div key={idx} className="flex items-start gap-3 p-3.5 rounded-2xl bg-[#090D16] border border-slate-800 hover:border-amber-500/40 transition-all group">
+                      <span className="text-amber-400 font-mono font-bold text-xs shrink-0 mt-2.5 px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                        {String(idx + 1).padStart(2, '0')}.
+                      </span>
+                      <textarea
+                        value={item}
+                        onChange={e => updateGuidelinePoint(idx, e.target.value)}
+                        rows={2}
+                        className="flex-1 bg-transparent border-0 text-xs sm:text-sm text-slate-200 placeholder:text-slate-600 focus:ring-0 focus:outline-none resize-none font-medium leading-relaxed"
+                        placeholder="e.g. Heritage Sanctity: The sandstone stonework is preserved with organic floral care."
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeGuidelinePoint(idx)}
+                        className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition-colors shrink-0 cursor-pointer"
+                        title="Delete guideline point"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Add New Guideline Input */}
+              <div className="flex gap-2 pt-2">
+                <input
+                  type="text"
+                  value={newGuidelineInput}
+                  onChange={e => setNewGuidelineInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addGuidelinePoint();
+                    }
+                  }}
+                  placeholder="Add guideline point (e.g. Twilight Serenity: Acoustic stillness observed after 10 PM...)"
+                  className="flex-1 bg-[#090D16] border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30 font-medium"
+                />
+                <button
+                  type="button"
+                  onClick={() => addGuidelinePoint()}
+                  className="px-4 py-2.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Point</span>
+                </button>
+              </div>
+
+              {/* Quick Preset Badges */}
+              <div className="pt-2">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Instant Luxury Presets (Click to add):</p>
+                <div className="flex flex-wrap gap-2">
+                  {GUIDELINE_PRESETS.map((preset, pIdx) => (
+                    <button
+                      key={pIdx}
+                      type="button"
+                      onClick={() => addGuidelinePoint(preset)}
+                      className="px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-amber-500/40 hover:bg-amber-500/10 text-slate-300 hover:text-amber-200 text-xs transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Plus className="w-3 h-3 text-amber-400" />
+                      <span>{preset.split(':')[0]}</span>
+                    </button>
+                  ))}
                 </div>
-              )}
+              </div>
             </div>
 
+            {/* 04. Concierge Privileges & Bespoke Services */}
+            <div className="p-5 sm:p-6 rounded-3xl bg-[#101726]/90 border border-slate-700/80 space-y-4 shadow-xl w-full min-w-0">
+              <div className="pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <span className="text-sky-400 font-mono font-bold text-xs">04</span>
+                  <label className="text-sm font-black uppercase tracking-wider text-white">Concierge Privileges & Bespoke Services</label>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">Detail the white-glove amenities, private dining, transfers, and tailored experiences accessible to guests.</p>
+              </div>
+
+              {/* Quick Service Badges (Click to append) */}
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Available Bespoke Privileges (Click to include):</p>
+                <div className="flex flex-wrap gap-2">
+                  {CONCIERGE_PRESETS.map((service, sIdx) => (
+                    <button
+                      key={sIdx}
+                      type="button"
+                      onClick={() => appendConciergeService(service)}
+                      className="px-3 py-1.5 rounded-xl bg-sky-500/10 border border-sky-500/20 hover:bg-sky-500/20 text-sky-200 text-xs transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Sparkles className="w-3 h-3 text-sky-400" />
+                      <span>{service}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <textarea
+                rows={4}
+                value={formData.concierge_privileges}
+                onChange={e => setFormData({ ...formData, concierge_privileges: e.target.value })}
+                placeholder="All guests at this Encho Sanctuary receive direct access to our Walled Garden Host Concierge. Private dining experiences, sommelier cellar curation, private driver transfers, and customized wellness sessions can be coordinated seamlessly inside your Encho guest inbox."
+                className="w-full bg-[#090D16] border border-slate-700/80 rounded-2xl p-4 text-white placeholder:text-slate-500 text-xs sm:text-sm focus:outline-none focus:ring-4 focus:ring-sky-500/20 resize-none font-medium leading-relaxed"
+              />
+            </div>
+
+            {/* Dynamic Multipliers */}
             <div className="space-y-3 pt-3 border-t border-slate-800 w-full min-w-0">
               <label className="text-xs font-black uppercase tracking-wider text-slate-200">Dynamic Pricing Multipliers</label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

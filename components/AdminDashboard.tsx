@@ -4936,6 +4936,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                               </button>
                            </div>
                         </div>
+
+                        {/* Concierge Privileges & Bespoke Services in Admin */}
+                        <div className="space-y-2 pt-3 border-t border-slate-700/60">
+                           <label className="block text-xs font-bold text-sky-300 flex items-center justify-between">
+                              <span>Concierge Privileges & Bespoke Services (Section 04)</span>
+                              <span className="text-[10px] text-slate-400">Rendered in Guest UI</span>
+                           </label>
+                           <textarea
+                              rows={3}
+                              value={(luxuryFormData as any).concierge_privileges || ''}
+                              onChange={e => setLuxuryFormData(prev => ({ ...prev, concierge_privileges: e.target.value } as any))}
+                              placeholder="All guests at this Encho Sanctuary receive direct access to our Walled Garden Host Concierge..."
+                              className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500 resize-none font-medium"
+                           />
+                        </div>
                      </div>
 
                      {/* Section 4: Soft Exit Leads & Inbound Analytics */}

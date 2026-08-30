@@ -963,14 +963,32 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     </button>
                     {openAccordion.guidelines && (
                       <div className="pb-6 pt-1 text-zinc-600 text-sm md:text-base leading-relaxed space-y-4 font-normal animate-fade-in pl-8 pr-2">
-                        <ul className="space-y-3">
-                          {parsedGuidelines.map((g, idx) => (
-                            <li key={idx} className="flex items-start gap-3 p-3 rounded-2xl bg-zinc-50 border border-zinc-200/60">
-                              <span className="text-amber-800 font-bold text-xs shrink-0 mt-0.5 font-mono">0{idx + 1}.</span>
-                              <span className="text-xs md:text-sm text-zinc-700 font-medium leading-relaxed">{g}</span>
-                            </li>
-                          ))}
-                        </ul>
+                        <div className="space-y-3">
+                          {parsedGuidelines.map((g, idx) => {
+                            const colonIdx = g.indexOf(':');
+                            const hasPrefix = colonIdx > 0 && colonIdx < 40;
+                            const titlePart = hasPrefix ? g.substring(0, colonIdx) : null;
+                            const descPart = hasPrefix ? g.substring(colonIdx + 1).trim() : g;
+
+                            return (
+                              <div key={idx} className="flex items-start gap-3.5 p-4 rounded-2xl bg-zinc-50/80 border border-zinc-200/80 transition-all hover:bg-zinc-50 hover:border-zinc-300">
+                                <span className="text-amber-800 font-bold text-xs shrink-0 mt-0.5 font-mono tracking-wider">
+                                  {String(idx + 1).padStart(2, '0')}.
+                                </span>
+                                <p className="text-xs md:text-sm text-zinc-800 leading-relaxed font-normal">
+                                  {titlePart ? (
+                                    <>
+                                      <strong className="font-bold text-zinc-900">{titlePart}: </strong>
+                                      <span>{descPart}</span>
+                                    </>
+                                  ) : (
+                                    <span>{g}</span>
+                                  )}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
                   </div>
