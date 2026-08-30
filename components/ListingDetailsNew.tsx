@@ -68,6 +68,7 @@ import {
 import { uiAudio } from './audio';
 import { useToast } from './ToastContext';
 import { SanctuaryGalleryModal, GalleryCategoryKey } from './SanctuaryGalleryModal';
+import { getSensoryTagIcon } from './SensoryTagPicker';
 
 // LEGACY fallback — used only when listing.rooms[] is empty (MIG-001)
 export const LEGACY_ROOM_TIER_CONFIG: Record<string, {
@@ -92,31 +93,7 @@ interface ListingDetailsNewProps {
   onRequestAuth?: () => void;
 }
 
-const getTagIcon = (tag: string) => {
-  const lower = tag.toLowerCase();
-  if (lower.includes('ocean') || lower.includes('sea') || lower.includes('water') || lower.includes('beach') || lower.includes('reef') || lower.includes('river') || lower.includes('backwater')) return Waves;
-  if (lower.includes('chef') || lower.includes('kitchen') || lower.includes('dining') || lower.includes('culinary') || lower.includes('tasting') || lower.includes('breakfast') || lower.includes('bbq')) return Utensils;
-  if (lower.includes('pool') || lower.includes('infinity') || lower.includes('jacuzzi') || lower.includes('plunge') || lower.includes('hydrotherapy')) return Waves;
-  if (lower.includes('wifi') || lower.includes('speed') || lower.includes('internet') || lower.includes('fiber') || lower.includes('starlink') || lower.includes('isp')) return Wifi;
-  if (lower.includes('mountain') || lower.includes('himalayan') || lower.includes('peak') || lower.includes('cliff') || lower.includes('valley') || lower.includes('lodge')) return Mountain;
-  if (lower.includes('wine') || lower.includes('bar') || lower.includes('cellar') || lower.includes('mixology') || lower.includes('minibar')) return Wine;
-  if (lower.includes('coffee') || lower.includes('tea')) return Coffee;
-  if (lower.includes('forest') || lower.includes('tree') || lower.includes('jungle') || lower.includes('canopy') || lower.includes('botanical') || lower.includes('garden') || lower.includes('paddy')) return Trees;
-  if (lower.includes('fire') || lower.includes('bonfire') || lower.includes('sauna') || lower.includes('steam')) return Flame;
-  if (lower.includes('sun') || lower.includes('sunrise') || lower.includes('sunset') || lower.includes('circadian')) return Sun;
-  if (lower.includes('star') || lower.includes('night') || lower.includes('moon') || lower.includes('stargazing')) return Moon;
-  if (lower.includes('yoga') || lower.includes('spa') || lower.includes('meditation') || lower.includes('ayurvedic') || lower.includes('wellness') || lower.includes('trainer') || lower.includes('fitness')) return Dumbbell;
-  if (lower.includes('butler') || lower.includes('concierge') || lower.includes('celebrity') || lower.includes('privacy') || lower.includes('vip') || lower.includes('presidential')) return Crown;
-  if (lower.includes('security') || lower.includes('safe') || lower.includes('shield')) return Shield;
-  if (lower.includes('photo') || lower.includes('camera')) return Camera;
-  if (lower.includes('cinema') || lower.includes('theater') || lower.includes('film')) return Film;
-  if (lower.includes('library') || lower.includes('reading') || lower.includes('book')) return BookOpen;
-  if (lower.includes('air') || lower.includes('wind') || lower.includes('breeze') || lower.includes('pavilion') || lower.includes('silence') || lower.includes('acoustic')) return Wind;
-  if (lower.includes('boat') || lower.includes('sailing') || lower.includes('yacht') || lower.includes('kayak')) return Anchor;
-  if (lower.includes('trek') || lower.includes('trail') || lower.includes('walk') || lower.includes('tour') || lower.includes('explore')) return Compass;
-  if (lower.includes('bed') || lower.includes('suite') || lower.includes('room')) return Bed;
-  return Sparkles;
-};
+// Legacy getTagIcon removed in favor of shared getSensoryTagIcon
 
 const LUXURY_BACKUP_POOL = [
   "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1200&q=80",
@@ -904,30 +881,24 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 <section className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-zinc-900 font-display flex items-center gap-2.5">
-                      <Sparkles className="w-5 h-5" style={{ color: dominantColor }} />
+                      <Sparkles className="w-5 h-5 text-[#0284C7]" />
                       <span>Sensory Atmosphere Deck</span>
                     </h2>
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider font-display">Aman Standard</span>
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest font-display">Aman Standard</span>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
                     {sensoryTags.map((tag, idx) => {
-                      const IconComponent = getTagIcon(tag);
+                      const IconComponent = getSensoryTagIcon(tag);
                       return (
                         <div
                           key={idx}
-                          className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:shadow-md transition-all flex items-center gap-3 group"
+                          className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-100/90 shadow-[0_4px_25px_rgba(0,0,0,0.03)] hover:shadow-md transition-all flex items-center gap-4 group"
                         >
-                          <div
-                            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 shadow-xs"
-                            style={{
-                              backgroundColor: `${dominantColor}15`,
-                              color: dominantColor
-                            }}
-                          >
-                            <IconComponent className="w-5 h-5" />
+                          <div className="w-12 h-12 rounded-2xl bg-[#F0F9FF] border border-[#E0F2FE] flex items-center justify-center shrink-0 text-[#0284C7] group-hover:scale-105 transition-transform shadow-xs">
+                            <IconComponent className="w-6 h-6 stroke-[1.8]" />
                           </div>
-                          <span className="text-xs font-bold text-slate-800 tracking-tight leading-snug">{tag}</span>
+                          <span className="text-sm sm:text-base font-bold text-zinc-900 tracking-tight leading-snug">{tag}</span>
                         </div>
                       );
                     })}
