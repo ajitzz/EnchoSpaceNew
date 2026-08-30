@@ -12,10 +12,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { queueCustomMutation } from '../lib/syncService';
 import { 
   Building2, Home, Trees, Tractor, Coffee, Ship, Tent, Caravan, Castle, Mountain, Box, Circle, Leaf,
-  X, Sparkles, Check, CheckCircle2, Bed, Users, Trash2, Crown, Star, DoorOpen, Bath, 
-  ChevronDown, ChevronUp, ChevronLeft, Globe, MapPin, Video, AlertCircle, Info, Loader2, Plus, Minus, Tag,
-  Eye, Compass, DollarSign, Layers, Shield, ArrowRight, Wand2, CheckCircle, ShieldCheck,
-  Monitor, Tablet, Smartphone, Maximize2, ExternalLink, Images, RefreshCw, Key
+  X, Sparkles, Check, Bed, Users, Trash2, Crown, Star, DoorOpen, Bath, 
+  ChevronDown, ChevronUp, ChevronLeft, Globe, MapPin, Loader2, Plus, Minus,
+  Eye, DollarSign, Layers, Shield, ArrowRight, Wand2, ShieldCheck,
+  Monitor, Tablet, Smartphone, Maximize2, Images, Columns, LayoutDashboard
 } from 'lucide-react';
 
 interface HostFormProps {
@@ -54,10 +54,6 @@ const PROPERTY_TYPES = [
   { id: 'Hotel', label: 'Grand Hotel', desc: 'Full-service luxury hospitality institution', icon: Building2, tag: 'Grand' }
 ];
 
-const ROOM_ICONS = ['🛏️', '👑', '💻', '🌴', '🏡', '🌺', '🎋', '⭐', '🏖️', '🌿', '🎯', '🌊', '✨', '🏰'];
-
-// ADR-001 REVISED: Room classifications are FIXED. Hosts SELECT, not free-type.
-// Gallery routing keys are derived automatically from name.
 export const ROOM_CLASSIFICATIONS: { id: string; name: string; label: string; tier: string; icon: string; defaultSpecs: string; defaultTag: string }[] = [
   { id: 'presidential-suite',  name: 'Presidential Suite',        label: 'Presidential Suite',        tier: 'suites',    icon: '👑', defaultSpecs: 'Panoramic views · King Platform Bed · Private Jacuzzi', defaultTag: 'Most Exclusive' },
   { id: 'deluxe-double',       name: 'Deluxe Double Room',        label: 'Deluxe Double Room',        tier: 'deluxe',    icon: '🛏️', defaultSpecs: 'Garden View · Queen Bed · Spa Bath',                  defaultTag: 'Best Value'     },
@@ -80,6 +76,11 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+
+  // Split Screen Live Preview State
+  const [isSplitView, setIsSplitView] = useState(true);
+  const [splitDevice, setSplitDevice] = useState<'mobile' | 'laptop' | 'desktop'>('laptop');
+  const [splitGalleryOpen, setSplitGalleryOpen] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -158,7 +159,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
     seo_image_url: existingListing?.seo_image_url || '',
   });
 
-  // Photos State (Property-wide common grounds)
+  // Photos State
   const [photos, setPhotos] = useState<PhotoData[]>(() => {
     const urls = existingListing?.imageUrls?.length 
       ? existingListing.imageUrls 
@@ -185,7 +186,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
   const [expandedRoomId, setExpandedRoomId] = useState<string | null>(formData.rooms[0]?.id || null);
   const [newFeatureText, setNewFeatureText] = useState<{ [roomId: string]: string }>({});
   
-  // 10/10 Live Guest Preview Simulator State
+  // Full-screen Modal Simulator State
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewInitialGallery, setPreviewInitialGallery] = useState(false);
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'laptop' | 'tablet' | 'mobile'>('desktop');
@@ -197,7 +198,6 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
 
   // Real-time Guest View Data Compiler
   const previewListing: Listing = useMemo(() => {
-    // 1. Gather all spatial photos from main upload and per-room uploads
     const spatialPhotos: SpatialPhoto[] = [
       ...photos.map(p => ({
         id: p.id,
@@ -225,7 +225,6 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
       ),
     ];
 
-    // High-resolution Aman Standard fallback imagery if host hasn't uploaded photos yet
     const fallbackPhotos: SpatialPhoto[] = spatialPhotos.length > 0 ? spatialPhotos : [
       {
         id: 'fallback-1',
@@ -272,7 +271,6 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
 
     const allImageUrls = fallbackPhotos.map(p => p.url);
 
-    // 2. Prepare structured Room items
     const compiledRooms: Room[] = formData.rooms.map((r: any, idx: number) => {
       const roomTier = r.type || (idx === 0 ? 'suites' : idx === 1 ? 'deluxe' : 'executive');
       const roomPhotos = (r.photos && r.photos.length > 0)
@@ -418,7 +416,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
       const data = await res.json();
       setFormData(prev => ({ ...prev, curated_guidelines: data.curated_guidelines }));
       addToast('Rules Curated', 'Aristocratic hospitality guidelines drafted successfully!', 'success');
-    } catch (err: any) {
+    } catch {
       addToast('AI Curation Notice', 'Using refined luxury guidelines template.', 'info');
       setFormData(prev => ({
         ...prev,
@@ -464,7 +462,6 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
       setIsSuggestingPOIs(false);
     }
 
-    // High standard fallback POIs
     setFormData(prev => ({
       ...prev,
       nearby: [
@@ -505,12 +502,11 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         return;
       }
     } catch {
-      // Heuristic fallback
+      // Fallback
     } finally {
       setIsScanning(false);
     }
 
-    // Deterministic fallback score
     const hasPhotos = (photos.length + formData.rooms.reduce((acc, r) => acc + (r.photos?.length || 0), 0)) >= 3;
     const hasRooms = formData.rooms.length > 0 && formData.rooms.every((r: any) => r.name && r.price > 0);
     const hasTitle = formData.title.length >= 15;
@@ -561,7 +557,6 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
     setLoading(true);
 
     try {
-      // 1. Upload common property photos
       const uploadedPhotos: SpatialPhoto[] = [];
       const uploadedImageUrls: string[] = [];
 
@@ -580,7 +575,6 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         uploadedImageUrls.push(url);
       }
 
-      // 2. Upload per-room photos
       const processedRooms: any[] = [];
       for (const room of formData.rooms) {
         const roomUploadedPhotos: SpatialPhoto[] = [];
@@ -684,7 +678,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
     }
   };
 
-  // Room Management Helpers
+  // Room Helpers
   const addRoom = () => {
     const defaultClassification = ROOM_CLASSIFICATIONS[formData.rooms.length % ROOM_CLASSIFICATIONS.length];
     const newRoom = {
@@ -749,19 +743,18 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
     switch (currentStep) {
       case 1:
         return (
-          <div className="space-y-10 animate-in fade-in duration-300">
-            {/* Step Header */}
+          <div className="space-y-8 animate-in fade-in duration-300 w-full min-w-0">
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400 text-[11px] font-mono font-black tracking-widest uppercase mb-3">
                 <Sparkles className="w-3.5 h-3.5" />
                 Step 01 · Foundational Identity
               </div>
-              <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight font-display">Define Your Architectural Sanctuary</h2>
-              <p className="text-slate-400 text-sm sm:text-base mt-2 leading-relaxed">Establish the luxury narrative, architectural classification, and hospitality signature of your estate.</p>
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight font-display">Define Your Architectural Sanctuary</h2>
+              <p className="text-slate-400 text-xs sm:text-sm mt-1.5 leading-relaxed">Establish the luxury narrative, architectural classification, and hospitality signature of your estate.</p>
             </div>
 
             {/* Listing Headline & Title */}
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               <div className="flex justify-between items-center">
                 <label className="text-xs font-black uppercase tracking-wider text-slate-200">Listing Headline & Title *</label>
                 <span className={`text-xs font-mono font-bold px-2.5 py-1 rounded-lg border ${
@@ -775,27 +768,27 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               <input 
                 type="text" 
                 maxLength={100}
-                className="w-full bg-[#101726]/90 border border-slate-700/80 hover:border-slate-500 rounded-2xl px-5 py-4 text-white placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 focus:border-[#0284C7] transition-all text-base sm:text-lg font-semibold shadow-inner"
+                className="w-full bg-[#101726]/90 border border-slate-700/80 hover:border-slate-500 rounded-2xl px-4 sm:px-5 py-3.5 sm:py-4 text-white placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 focus:border-[#0284C7] transition-all text-sm sm:text-base font-semibold shadow-inner min-w-0"
                 value={formData.title} 
                 onChange={e => setFormData({...formData, title: e.target.value})} 
                 placeholder="e.g. Cloud Valley Sovereign Estate & Spa Sanctuary" 
               />
-              <p className="text-xs text-slate-500">Evocative luxury title reflecting the location, landscape, and spatial aesthetic.</p>
+              <p className="text-xs text-slate-500">Live preview updates instantaneously as you type.</p>
             </div>
 
-            {/* Architectural Category Grid (10/10 Aman Luxury Redesign) */}
-            <div className="space-y-4">
+            {/* Architectural Category Grid */}
+            <div className="space-y-3.5">
               <div className="flex items-center justify-between">
                 <div>
                   <label className="text-xs font-black uppercase tracking-wider text-slate-200">Architectural Category *</label>
-                  <p className="text-xs text-slate-500 mt-0.5">Select the primary structural and spatial typology of the property.</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Select the primary structural and spatial typology.</p>
                 </div>
                 <span className="text-[11px] font-mono font-bold text-sky-400 bg-sky-950/60 border border-sky-500/30 px-2.5 py-1 rounded-full">
                   Selected: {formData.type}
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-3 w-full min-w-0">
                 {PROPERTY_TYPES.map(pt => {
                   const isSelected = formData.type === pt.id;
                   const IconComponent = pt.icon;
@@ -804,30 +797,30 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                       key={pt.id}
                       type="button"
                       onClick={() => setFormData({...formData, type: pt.id})}
-                      className={`relative p-4 sm:p-5 rounded-2xl border text-left flex flex-col justify-between gap-3 transition-all cursor-pointer group ${
+                      className={`relative p-3.5 sm:p-4 rounded-2xl border text-left flex flex-col justify-between gap-2.5 transition-all cursor-pointer group min-w-0 ${
                         isSelected 
-                          ? 'border-[#0284C7] bg-gradient-to-b from-[#0284C7]/25 via-[#0F172A] to-[#0A0F1D] text-white ring-2 ring-[#0284C7]/50 shadow-[0_0_25px_rgba(2,132,199,0.3)] scale-[1.02]' 
+                          ? 'border-[#0284C7] bg-gradient-to-b from-[#0284C7]/25 via-[#0F172A] to-[#0A0F1D] text-white ring-2 ring-[#0284C7]/50 shadow-[0_0_20px_rgba(2,132,199,0.3)] scale-[1.01]' 
                           : 'border-slate-800/80 bg-[#121927]/80 hover:bg-[#182235] hover:border-slate-600 text-slate-300 hover:text-white shadow-sm'
                       }`}
                     >
                       <div className="flex items-center justify-between w-full">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
                           isSelected 
                             ? 'bg-[#0284C7] text-white shadow-md shadow-sky-900/60' 
                             : 'bg-slate-800/70 border border-slate-700/60 text-slate-400 group-hover:text-sky-400 group-hover:border-sky-500/40 group-hover:bg-sky-500/10'
                         }`}>
-                          <IconComponent className="w-5 h-5" />
+                          <IconComponent className="w-4 h-4" />
                         </div>
                         {isSelected ? (
-                          <span className="w-5 h-5 rounded-full bg-[#0284C7] text-white flex items-center justify-center text-[10px] font-black shadow-xs">✓</span>
+                          <span className="w-4 h-4 rounded-full bg-[#0284C7] text-white flex items-center justify-center text-[9px] font-black">✓</span>
                         ) : (
-                          <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest">{pt.tag}</span>
+                          <span className="text-[9px] font-mono font-bold text-slate-500 uppercase tracking-widest">{pt.tag}</span>
                         )}
                       </div>
 
-                      <div>
-                        <span className="text-sm font-bold tracking-tight block text-white">{pt.label}</span>
-                        <p className="text-[11px] text-slate-400 leading-tight mt-1 line-clamp-2">{pt.desc}</p>
+                      <div className="min-w-0">
+                        <span className="text-xs sm:text-sm font-bold tracking-tight block text-white truncate">{pt.label}</span>
+                        <p className="text-[10px] text-slate-400 leading-tight mt-0.5 line-clamp-1">{pt.desc}</p>
                       </div>
                     </button>
                   );
@@ -836,13 +829,13 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
             </div>
 
             {/* Rental Structure Mode */}
-            <div className="space-y-4 pt-2">
+            <div className="space-y-3 pt-1">
               <div>
                 <label className="text-xs font-black uppercase tracking-wider text-slate-200">Rental Structure Mode</label>
                 <p className="text-xs text-slate-500 mt-0.5">Determine how guests book accommodations across your estate.</p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full min-w-0">
                 {[
                   { 
                     id: 'entire_place', 
@@ -873,23 +866,23 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                       key={mode.id}
                       type="button"
                       onClick={() => setFormData({...formData, rentalMode: mode.id as any})}
-                      className={`p-5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-3 ${
+                      className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2.5 min-w-0 ${
                         isSelected
                           ? 'border-[#0284C7] bg-[#0284C7]/15 text-white ring-2 ring-[#0284C7]/40 shadow-lg shadow-[#0284C7]/20'
                           : 'border-slate-800/80 bg-[#121927]/80 hover:bg-[#182235] hover:border-slate-700 text-slate-300'
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${isSelected ? 'bg-[#0284C7] text-white' : 'bg-slate-800 text-slate-400'}`}>
-                          <Icon className="w-4 h-4" />
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${isSelected ? 'bg-[#0284C7] text-white' : 'bg-slate-800 text-slate-400'}`}>
+                          <Icon className="w-3.5 h-3.5" />
                         </div>
-                        <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${isSelected ? 'bg-sky-500/30 text-sky-200 border border-sky-400/40' : 'bg-slate-800 text-slate-400'}`}>
+                        <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full ${isSelected ? 'bg-sky-500/30 text-sky-200 border border-sky-400/40' : 'bg-slate-800 text-slate-400'}`}>
                           {mode.tag}
                         </span>
                       </div>
-                      <div>
-                        <div className="font-bold text-sm text-white">{mode.label}</div>
-                        <div className="text-xs text-slate-400 mt-1 leading-relaxed">{mode.desc}</div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-xs sm:text-sm text-white truncate">{mode.label}</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5 line-clamp-2 leading-relaxed">{mode.desc}</div>
                       </div>
                     </button>
                   );
@@ -898,7 +891,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
             </div>
 
             {/* About The Sanctuary (Primary Narrative) */}
-            <div className="space-y-3 pt-2">
+            <div className="space-y-2.5 pt-1">
               <div className="flex justify-between items-center">
                 <div>
                   <label className="text-xs font-black uppercase tracking-wider text-slate-200">About The Sanctuary (Narrative) *</label>
@@ -907,7 +900,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                 <span className="text-xs text-slate-400 font-mono font-bold">{formData.description.length} chars</span>
               </div>
               <textarea 
-                className="w-full bg-[#101726]/90 border border-slate-700/80 hover:border-slate-500 rounded-2xl p-5 text-white placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 focus:border-[#0284C7] transition-all text-sm sm:text-base leading-relaxed h-36 font-normal resize-none shadow-inner"
+                className="w-full bg-[#101726]/90 border border-slate-700/80 hover:border-slate-500 rounded-2xl p-4 sm:p-5 text-white placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 focus:border-[#0284C7] transition-all text-xs sm:text-sm leading-relaxed h-32 font-normal resize-none shadow-inner min-w-0"
                 value={formData.description} 
                 onChange={e => setFormData({...formData, description: e.target.value})} 
                 placeholder="Perched on a dramatic ridgeline overlooking misty tea valleys, this architectural sanctuary merges minimalist stone pavilions with lush indigenous flora..."
@@ -915,7 +908,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
             </div>
 
             {/* Host Philosophy & Signature Message */}
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               <div className="flex justify-between items-center">
                 <div>
                   <label className="text-xs font-black uppercase tracking-wider text-slate-200">Host Philosophy & Signature Message</label>
@@ -924,14 +917,14 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                 <span className="text-xs text-slate-400 font-mono font-bold">{formData.host_philosophy.length} chars</span>
               </div>
               <textarea 
-                className="w-full bg-[#101726]/90 border border-slate-700/80 hover:border-slate-500 rounded-2xl p-5 text-white placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 focus:border-[#0284C7] transition-all text-sm leading-relaxed h-28 font-medium italic resize-none shadow-inner"
+                className="w-full bg-[#101726]/90 border border-slate-700/80 hover:border-slate-500 rounded-2xl p-4 sm:p-5 text-white placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 focus:border-[#0284C7] transition-all text-xs sm:text-sm leading-relaxed h-24 font-medium italic resize-none shadow-inner min-w-0"
                 value={formData.host_philosophy} 
                 onChange={e => setFormData({...formData, host_philosophy: e.target.value})} 
                 placeholder="e.g. Our design philosophy is to allow natural sunlight and acoustic stillness to heal the modern soul. Every detail here is intentional."
               />
             </div>
 
-            {/* Sensory Atmosphere Deck (Tags) - 10/10 Aman Standard AI Tag Picker */}
+            {/* Sensory Atmosphere Deck (Tags) */}
             <SensoryTagPicker
               selectedTags={formData.experience_tags}
               onChange={(tags) => setFormData({ ...formData, experience_tags: tags })}
@@ -945,33 +938,32 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
 
       case 2:
         return (
-          <div className="space-y-10 animate-in fade-in duration-300">
+          <div className="space-y-8 animate-in fade-in duration-300 w-full min-w-0">
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400 text-[11px] font-mono font-black tracking-widest uppercase mb-3">
                 <MapPin className="w-3.5 h-3.5" />
                 Step 02 · Spatial Coordinates & Radar
               </div>
-              <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight font-display">Location & Surroundings</h2>
-              <p className="text-slate-400 text-sm sm:text-base mt-2 leading-relaxed">Pinpoint the exact spatial coordinates and curate high-intent neighborhood attractions.</p>
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight font-display">Location & Surroundings</h2>
+              <p className="text-slate-400 text-xs sm:text-sm mt-1.5 leading-relaxed">Pinpoint the exact spatial coordinates and curate high-intent neighborhood attractions.</p>
             </div>
 
-            {/* Address & City */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 w-full min-w-0">
+              <div className="space-y-2 min-w-0">
                 <label className="text-xs font-black uppercase tracking-wider text-slate-200">Street / Estate Address</label>
                 <input 
                   type="text" 
-                  className="w-full bg-[#101726]/90 border border-slate-700/80 hover:border-slate-500 rounded-2xl px-5 py-4 text-white placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 focus:border-[#0284C7] text-sm font-medium"
+                  className="w-full bg-[#101726]/90 border border-slate-700/80 hover:border-slate-500 rounded-2xl px-4 py-3.5 text-white placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 focus:border-[#0284C7] text-xs sm:text-sm font-medium min-w-0"
                   value={formData.address} 
                   onChange={e => setFormData({...formData, address: e.target.value})} 
                   placeholder="e.g. Ridge Road, Valley Sanctuary Estate"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 min-w-0">
                 <label className="text-xs font-black uppercase tracking-wider text-slate-200">City / Destination *</label>
                 <input 
                   type="text" 
-                  className="w-full bg-[#101726]/90 border border-slate-700/80 hover:border-slate-500 rounded-2xl px-5 py-4 text-white placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 focus:border-[#0284C7] text-sm font-medium"
+                  className="w-full bg-[#101726]/90 border border-slate-700/80 hover:border-slate-500 rounded-2xl px-4 py-3.5 text-white placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 focus:border-[#0284C7] text-xs sm:text-sm font-medium min-w-0"
                   value={formData.city} 
                   onChange={e => setFormData({...formData, city: e.target.value})} 
                   placeholder="e.g. Wayanad, Kerala"
@@ -979,10 +971,9 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               </div>
             </div>
 
-            {/* Interactive Location Picker Map */}
-            <div className="space-y-3">
+            <div className="space-y-3 w-full min-w-0">
               <label className="text-xs font-black uppercase tracking-wider text-slate-200">Interactive Map Pin Location</label>
-              <div className="rounded-3xl overflow-hidden border border-slate-800/80 bg-[#101726] p-2.5 shadow-2xl">
+              <div className="rounded-3xl overflow-hidden border border-slate-800/80 bg-[#101726] p-2 shadow-2xl w-full">
                 <LocationPicker 
                   address={formData.address}
                   city={formData.city}
@@ -1001,8 +992,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               </div>
             </div>
 
-            {/* Nearby POIs */}
-            <div className="space-y-5 pt-4 border-t border-slate-800">
+            <div className="space-y-4 pt-3 border-t border-slate-800 w-full min-w-0">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <label className="text-xs font-black uppercase tracking-wider text-slate-200">Curated Neighborhood Highlights</label>
@@ -1012,20 +1002,20 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                   type="button" 
                   disabled={isSuggestingPOIs}
                   onClick={suggestNearbyPOIs} 
-                  className="px-4 py-2.5 bg-gradient-to-r from-purple-500/20 to-indigo-500/20 border border-purple-500/40 hover:bg-purple-600/30 text-purple-200 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-md shadow-purple-950/40 shrink-0"
+                  className="px-4 py-2 bg-gradient-to-r from-purple-500/20 to-indigo-500/20 border border-purple-500/40 hover:bg-purple-600/30 text-purple-200 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-md shadow-purple-950/40 shrink-0"
                 >
                   {isSuggestingPOIs ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-purple-400" />}
                   <span>{isSuggestingPOIs ? 'Generating Radar...' : 'AI Suggest POIs'}</span>
                 </button>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2.5">
                 {formData.nearby.map((poi: any, i: number) => (
-                  <div key={i} className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center bg-[#101726]/90 p-3.5 rounded-2xl border border-slate-800/80 shadow-sm">
+                  <div key={i} className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center bg-[#101726]/90 p-3 rounded-2xl border border-slate-800/80 shadow-sm min-w-0">
                     <span className="text-xl shrink-0 self-center">📍</span>
                     <input 
                       type="text" 
-                      className="bg-[#090D16] border border-slate-700/80 rounded-xl px-4 py-2.5 text-white text-xs font-semibold flex-1 focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
+                      className="bg-[#090D16] border border-slate-700/80 rounded-xl px-3.5 py-2 text-white text-xs font-semibold flex-1 min-w-0 focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
                       value={poi.name || ''} 
                       placeholder="Attraction Name (e.g. Chembra Peak)"
                       onChange={e => {
@@ -1036,7 +1026,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                     />
                     <input 
                       type="text" 
-                      className="bg-[#090D16] border border-slate-700/80 rounded-xl px-4 py-2.5 text-white text-xs font-medium w-full sm:w-36 focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
+                      className="bg-[#090D16] border border-slate-700/80 rounded-xl px-3.5 py-2 text-white text-xs font-medium w-full sm:w-32 min-w-0 focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
                       value={poi.distance || ''} 
                       placeholder="Distance (e.g. 3.2 km)"
                       onChange={e => {
@@ -1048,7 +1038,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                     <button 
                       type="button" 
                       onClick={() => setFormData({...formData, nearby: formData.nearby.filter((_, idx) => idx !== i)})}
-                      className="p-2.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors self-center cursor-pointer"
+                      className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors self-center cursor-pointer shrink-0"
                     >
                       <Trash2 className="w-4 h-4"/>
                     </button>
@@ -1058,7 +1048,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                 <button 
                   type="button" 
                   onClick={() => setFormData({...formData, nearby: [...formData.nearby, { name: '', distance: '', type: 'attraction' }]})}
-                  className="w-full py-4 border-2 border-dashed border-slate-800 hover:border-[#0284C7] bg-[#101726]/40 hover:bg-[#101726] rounded-2xl text-slate-400 hover:text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  className="w-full py-3.5 border-2 border-dashed border-slate-800 hover:border-[#0284C7] bg-[#101726]/40 hover:bg-[#101726] rounded-2xl text-slate-400 hover:text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
                   <Plus className="w-4 h-4"/> Add Neighborhood Point of Interest
                 </button>
@@ -1069,56 +1059,55 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
 
       case 3:
         return (
-          <div className="space-y-10 animate-in fade-in duration-300">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-8 animate-in fade-in duration-300 w-full min-w-0">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400 text-[11px] font-mono font-black tracking-widest uppercase mb-3">
                   <Bed className="w-3.5 h-3.5" />
                   Step 03 · Accommodations & Subunits
                 </div>
-                <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight font-display">Room Classification Builder</h2>
-                <p className="text-slate-400 text-sm sm:text-base mt-2 leading-relaxed">Select from Encho's curated room classifications, set individual rates, and upload per-room spatial media.</p>
+                <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight font-display">Room Classification Builder</h2>
+                <p className="text-slate-400 text-xs sm:text-sm mt-1.5 leading-relaxed">Select from Encho's curated room classifications, set individual rates, and upload per-room spatial media.</p>
               </div>
               <button
                 type="button"
                 onClick={() => openGuestPreview(true)}
-                className="shrink-0 px-4 py-2.5 bg-gradient-to-r from-sky-500/20 to-indigo-500/20 hover:from-sky-500/30 hover:to-indigo-500/30 border border-sky-500/40 text-sky-200 hover:text-white rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shadow-md shadow-sky-950/40"
+                className="shrink-0 px-3.5 py-2 bg-gradient-to-r from-sky-500/20 to-indigo-500/20 hover:from-sky-500/30 hover:to-indigo-500/30 border border-sky-500/40 text-sky-200 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shadow-md shadow-sky-950/40"
               >
-                <Images className="w-4 h-4 text-sky-400" />
-                <span>Preview in Spatial Gallery</span>
+                <Images className="w-3.5 h-3.5 text-sky-400" />
+                <span>Spatial Gallery</span>
               </button>
             </div>
 
-            <div className="space-y-5">
+            <div className="space-y-4">
               {formData.rooms.map((room: any, rIdx: number) => {
                 const isExpanded = expandedRoomId === room.id;
                 return (
-                  <div key={room.id} className="border border-slate-800/90 rounded-3xl bg-[#101726]/90 overflow-hidden shadow-xl">
-                    {/* Header */}
+                  <div key={room.id} className="border border-slate-800/90 rounded-3xl bg-[#101726]/90 overflow-hidden shadow-xl w-full min-w-0">
                     <div 
-                      className="p-5 sm:p-6 flex items-center justify-between cursor-pointer hover:bg-[#182235] transition-colors select-none"
+                      className="p-4 sm:p-5 flex items-center justify-between cursor-pointer hover:bg-[#182235] transition-colors select-none min-w-0"
                       onClick={() => setExpandedRoomId(isExpanded ? null : room.id)}
                     >
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-2xl shrink-0 shadow-inner">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-xl shrink-0">
                           {room.icon || '🛏️'}
                         </div>
-                        <div>
-                          <h3 className="font-extrabold text-base sm:text-lg text-white font-display">{room.name || `Room Type #${rIdx + 1}`}</h3>
-                          <div className="flex flex-wrap items-center gap-2 mt-1">
+                        <div className="min-w-0">
+                          <h3 className="font-extrabold text-sm sm:text-base text-white font-display truncate">{room.name || `Room Type #${rIdx + 1}`}</h3>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
                             {room.type && (
-                              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#0284C7] bg-[#0284C7]/15 px-2.5 py-0.5 rounded-full border border-[#0284C7]/30">
+                              <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-[#0284C7] bg-[#0284C7]/15 px-2 py-0.5 rounded-full border border-[#0284C7]/30">
                                 {room.type}
                               </span>
                             )}
-                            <span className="text-xs text-slate-400 font-mono font-semibold">
-                              {formatPrice(room.price || 0, 'INR')}/night · {room.capacity || 2} guests · {room.inventory_count || 1} units
+                            <span className="text-xs text-slate-400 font-mono font-semibold truncate">
+                              {formatPrice(room.price || 0, 'INR')}/night · {room.capacity || 2} guests
                             </span>
                           </div>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2.5 shrink-0">
                         {formData.rooms.length > 1 && (
                           <button
                             type="button"
@@ -1129,24 +1118,22 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                             <Trash2 className="w-4 h-4" />
                           </button>
                         )}
-                        <div className="w-8 h-8 rounded-full bg-slate-800/80 flex items-center justify-center text-slate-400">
-                          {isExpanded ? <ChevronUp className="w-4 h-4 text-white"/> : <ChevronDown className="w-4 h-4"/>}
+                        <div className="w-7 h-7 rounded-full bg-slate-800/80 flex items-center justify-center text-slate-400">
+                          {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-white"/> : <ChevronDown className="w-3.5 h-3.5"/>}
                         </div>
                       </div>
                     </div>
 
-                    {/* Expanded Edit Form */}
                     {isExpanded && (
-                      <div className="p-5 sm:p-7 border-t border-slate-800 bg-[#090D16]/90 space-y-6 animate-in fade-in duration-200">
-                        {/* Preset Classification Selector */}
-                        <div className="space-y-3">
+                      <div className="p-4 sm:p-6 border-t border-slate-800 bg-[#090D16]/90 space-y-5 animate-in fade-in duration-200 w-full min-w-0">
+                        <div className="space-y-2.5">
                           <div className="flex items-center justify-between">
                             <label className="text-xs font-black uppercase tracking-wider text-slate-200">Select Fixed Room Classification *</label>
                             <span className="text-[10px] text-sky-400 font-mono font-bold bg-sky-950/60 border border-sky-500/30 px-2 py-0.5 rounded-full">
                               🔒 Aman Standard
                             </span>
                           </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 w-full min-w-0">
                             {ROOM_CLASSIFICATIONS.map(cls => {
                               const isSelected = room.name === cls.name;
                               return (
@@ -1160,61 +1147,60 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                                     if (!room.tag) updateRoom(room.id, 'tag', cls.defaultTag);
                                     if (!room.specs) updateRoom(room.id, 'specs', cls.defaultSpecs);
                                   }}
-                                  className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer ${
+                                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer min-w-0 ${
                                     isSelected
                                       ? 'border-[#0284C7] bg-[#0284C7]/15 ring-2 ring-[#0284C7]/40 shadow-sm'
                                       : 'border-slate-800 bg-[#101726] hover:border-slate-600 hover:bg-[#182235]'
                                   }`}
                                 >
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <span className="text-base">{cls.icon}</span>
-                                    <span className={`text-xs font-bold leading-tight ${isSelected ? 'text-white' : 'text-slate-300'}`}>{cls.label}</span>
+                                  <div className="flex items-center gap-2 mb-0.5">
+                                    <span className="text-sm">{cls.icon}</span>
+                                    <span className={`text-xs font-bold truncate ${isSelected ? 'text-white' : 'text-slate-300'}`}>{cls.label}</span>
                                     {isSelected && <span className="ml-auto text-[#0284C7] text-xs font-black">✓</span>}
                                   </div>
-                                  <p className="text-[11px] text-slate-500 leading-tight">{cls.defaultSpecs}</p>
+                                  <p className="text-[10px] text-slate-500 leading-tight line-clamp-1">{cls.defaultSpecs}</p>
                                 </button>
                               );
                             })}
                           </div>
                         </div>
 
-                        {/* Row: Price, Capacity, Inventory, Tag */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-                          <div className="space-y-2">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full min-w-0">
+                          <div className="space-y-1.5 min-w-0">
                             <label className="text-xs font-black uppercase tracking-wider text-slate-200">Nightly Rate (₹) *</label>
                             <input 
                               type="number" 
-                              className="w-full bg-[#101726] border border-slate-700/80 rounded-2xl px-4 py-3 text-white font-bold text-sm focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
+                              className="w-full bg-[#101726] border border-slate-700/80 rounded-xl px-3 py-2.5 text-white font-bold text-xs sm:text-sm min-w-0 focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
                               value={room.price || ''} 
                               onChange={e => updateRoom(room.id, 'price', parseFloat(e.target.value) || 0)} 
                               placeholder="18500"
                             />
                           </div>
-                          <div className="space-y-2">
+                          <div className="space-y-1.5 min-w-0">
                             <label className="text-xs font-black uppercase tracking-wider text-slate-200">Max Capacity</label>
                             <input 
                               type="number" 
                               min={1}
-                              className="w-full bg-[#101726] border border-slate-700/80 rounded-2xl px-4 py-3 text-white font-bold text-sm focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
+                              className="w-full bg-[#101726] border border-slate-700/80 rounded-xl px-3 py-2.5 text-white font-bold text-xs sm:text-sm min-w-0 focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
                               value={room.capacity || 2} 
                               onChange={e => updateRoom(room.id, 'capacity', parseInt(e.target.value) || 2)} 
                             />
                           </div>
-                          <div className="space-y-2">
+                          <div className="space-y-1.5 min-w-0">
                             <label className="text-xs font-black uppercase tracking-wider text-slate-200">Units Available</label>
                             <input 
                               type="number" 
                               min={1}
-                              className="w-full bg-[#101726] border border-slate-700/80 rounded-2xl px-4 py-3 text-white font-bold text-sm focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
+                              className="w-full bg-[#101726] border border-slate-700/80 rounded-xl px-3 py-2.5 text-white font-bold text-xs sm:text-sm min-w-0 focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
                               value={room.inventory_count || 1} 
                               onChange={e => updateRoom(room.id, 'inventory_count', parseInt(e.target.value) || 1)} 
                             />
                           </div>
-                          <div className="space-y-2">
+                          <div className="space-y-1.5 min-w-0">
                             <label className="text-xs font-black uppercase tracking-wider text-slate-200">Marketing Tag</label>
                             <input 
                               type="text" 
-                              className="w-full bg-[#101726] border border-slate-700/80 rounded-2xl px-4 py-3 text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
+                              className="w-full bg-[#101726] border border-slate-700/80 rounded-xl px-3 py-2.5 text-white text-xs font-semibold min-w-0 focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
                               value={room.tag || ''} 
                               onChange={e => updateRoom(room.id, 'tag', e.target.value)} 
                               placeholder="e.g. Most Popular"
@@ -1222,35 +1208,32 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                           </div>
                         </div>
 
-                        {/* Specs */}
-                        <div className="space-y-2">
+                        <div className="space-y-1.5 min-w-0">
                           <label className="text-xs font-black uppercase tracking-wider text-slate-200">Key Specs Line</label>
                           <input 
                             type="text" 
-                            className="w-full bg-[#101726] border border-slate-700/80 rounded-2xl px-4 py-3 text-white placeholder:text-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
+                            className="w-full bg-[#101726] border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-white placeholder:text-slate-500 text-xs sm:text-sm min-w-0 focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
                             value={room.specs || ''} 
                             onChange={e => updateRoom(room.id, 'specs', e.target.value)} 
                             placeholder="e.g. 1,200 sq.ft · 270° Valley View · Heated Jacuzzi"
                           />
                         </div>
 
-                        {/* Description */}
-                        <div className="space-y-2">
+                        <div className="space-y-1.5 min-w-0">
                           <label className="text-xs font-black uppercase tracking-wider text-slate-200">Subunit Description</label>
                           <textarea 
-                            className="w-full bg-[#101726] border border-slate-700/80 rounded-2xl p-4 text-white placeholder:text-slate-500 text-sm h-24 focus:outline-none focus:ring-2 focus:ring-[#0284C7] resize-none" 
+                            className="w-full bg-[#101726] border border-slate-700/80 rounded-xl p-3 text-white placeholder:text-slate-500 text-xs sm:text-sm h-20 min-w-0 focus:outline-none focus:ring-2 focus:ring-[#0284C7] resize-none" 
                             value={room.description || ''} 
                             onChange={e => updateRoom(room.id, 'description', e.target.value)} 
                             placeholder="Describe the architectural nuances and amenities of this specific room..."
                           />
                         </div>
 
-                        {/* Features Chips */}
-                        <div className="space-y-3">
+                        <div className="space-y-2.5 min-w-0">
                           <label className="text-xs font-black uppercase tracking-wider text-slate-200">Features & Highlights</label>
-                          <div className="flex flex-wrap gap-2">
+                          <div className="flex flex-wrap gap-1.5">
                             {(room.features || []).map((feat: string, fIdx: number) => (
-                              <span key={fIdx} className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#101726] border border-slate-700 rounded-full text-xs text-white font-medium">
+                              <span key={fIdx} className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#101726] border border-slate-700 rounded-full text-xs text-white font-medium">
                                 <span>{feat}</span>
                                 <button type="button" onClick={() => removeRoomFeature(room.id, fIdx)} className="text-slate-400 hover:text-red-400">
                                   <X className="w-3 h-3" />
@@ -1264,28 +1247,27 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                               value={newFeatureText[room.id] || ''} 
                               onChange={e => setNewFeatureText(prev => ({ ...prev, [room.id]: e.target.value }))} 
                               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addRoomFeature(room.id); }}}
-                              className="bg-[#101726] border border-slate-700/80 rounded-2xl px-4 py-2.5 text-white text-xs flex-1 focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
+                              className="bg-[#101726] border border-slate-700/80 rounded-xl px-3.5 py-2 text-white text-xs flex-1 min-w-0 focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
                               placeholder="Type a feature and press Enter (e.g. Rainforest Shower)"
                             />
                             <button 
                               type="button" 
                               onClick={() => addRoomFeature(room.id)} 
-                              className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-2xl text-xs font-bold text-white transition-colors cursor-pointer"
+                              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-bold text-white transition-colors cursor-pointer"
                             >
                               Add
                             </button>
                           </div>
                         </div>
 
-                        {/* Room Photos & Sub-Classification */}
-                        <div className="space-y-4 pt-4 border-t border-slate-800">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="space-y-3 pt-3 border-t border-slate-800 w-full min-w-0">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                             <div>
                               <label className="text-xs font-black uppercase tracking-wider text-slate-200">Room Photos & Spatial Sub-Classification</label>
-                              <p className="text-xs text-slate-500 mt-0.5">Upload photos for <strong className="text-slate-300">{room.name || 'this room'}</strong> — click any photo to tag with spatial categories.</p>
+                              <p className="text-xs text-slate-500 mt-0.5">Upload photos for <strong className="text-slate-300">{room.name || 'this room'}</strong>.</p>
                             </div>
-                            <span className="shrink-0 text-[10px] font-bold text-amber-300 bg-amber-950/40 border border-amber-500/30 px-2.5 py-1 rounded-full whitespace-nowrap">
-                              🔒 Scoped to: {room.name || 'Room'}
+                            <span className="shrink-0 text-[10px] font-bold text-amber-300 bg-amber-950/40 border border-amber-500/30 px-2 py-0.5 rounded-full whitespace-nowrap">
+                              🔒 Scoped: {room.name || 'Room'}
                             </span>
                           </div>
                           <PhotoUpload 
@@ -1304,9 +1286,9 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               <button 
                 type="button" 
                 onClick={addRoom} 
-                className="w-full py-4 border-2 border-dashed border-slate-800 hover:border-[#0284C7] bg-[#101726]/40 hover:bg-[#101726] rounded-3xl text-slate-300 hover:text-white font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
+                className="w-full py-3.5 border-2 border-dashed border-slate-800 hover:border-[#0284C7] bg-[#101726]/40 hover:bg-[#101726] rounded-2xl text-slate-300 hover:text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
               >
-                <Plus className="w-5 h-5"/> Add Another Room Type
+                <Plus className="w-4 h-4"/> Add Another Room Type
               </button>
             </div>
           </div>
@@ -1314,27 +1296,27 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
 
       case 4:
         return (
-          <div className="space-y-10 animate-in fade-in duration-300">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-8 animate-in fade-in duration-300 w-full min-w-0">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400 text-[11px] font-mono font-black tracking-widest uppercase mb-3">
                   <Layers className="w-3.5 h-3.5" />
                   Step 04 · Media & Visual Identity
                 </div>
-                <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight font-display">Property-Wide Media</h2>
-                <p className="text-slate-400 text-sm sm:text-base mt-2 leading-relaxed">Upload shared grounds, facade, pool, wellness, and restaurant photography for the main gallery.</p>
+                <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight font-display">Property-Wide Media</h2>
+                <p className="text-slate-400 text-xs sm:text-sm mt-1.5 leading-relaxed">Upload shared grounds, facade, pool, wellness, and restaurant photography for the main gallery.</p>
               </div>
               <button
                 type="button"
                 onClick={() => openGuestPreview(true)}
-                className="shrink-0 px-4 py-2.5 bg-gradient-to-r from-sky-500/20 to-indigo-500/20 hover:from-sky-500/30 hover:to-indigo-500/30 border border-sky-500/40 text-sky-200 hover:text-white rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shadow-md shadow-sky-950/40"
+                className="shrink-0 px-3.5 py-2 bg-gradient-to-r from-sky-500/20 to-indigo-500/20 hover:from-sky-500/30 hover:to-indigo-500/30 border border-sky-500/40 text-sky-200 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shadow-md shadow-sky-950/40"
               >
-                <Images className="w-4 h-4 text-sky-400" />
-                <span>Preview in Spatial Gallery</span>
+                <Images className="w-3.5 h-3.5 text-sky-400" />
+                <span>Spatial Gallery</span>
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3 w-full min-w-0">
               <label className="text-xs font-black uppercase tracking-wider text-slate-200">Property Grounds & Common Photography</label>
               <PhotoUpload 
                 photos={photos} 
@@ -1344,28 +1326,28 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-800">
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase tracking-wider text-slate-200">Hero Cinematic Video (YouTube / Vimeo / MP4)</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-3 border-t border-slate-800 w-full min-w-0">
+              <div className="space-y-1.5 min-w-0">
+                <label className="text-xs font-black uppercase tracking-wider text-slate-200">Hero Video (YouTube / MP4)</label>
                 <input 
                   type="text" 
-                  className="w-full bg-[#101726]/90 border border-slate-700/80 hover:border-slate-500 rounded-2xl px-4 py-3.5 text-white placeholder:text-slate-500 text-sm font-medium focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 focus:border-[#0284C7]" 
+                  className="w-full bg-[#101726]/90 border border-slate-700/80 hover:border-slate-500 rounded-xl px-3.5 py-2.5 text-white placeholder:text-slate-500 text-xs sm:text-sm font-medium focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 focus:border-[#0284C7] min-w-0" 
                   value={formData.hero_video_url} 
                   onChange={e => setFormData({...formData, hero_video_url: e.target.value})} 
                   placeholder="https://youtube.com/watch?v=..."
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5 min-w-0">
                 <label className="text-xs font-black uppercase tracking-wider text-slate-200">Brand Color Accent</label>
-                <div className="flex gap-3 items-center bg-[#101726]/90 border border-slate-700/80 p-2.5 rounded-2xl">
+                <div className="flex gap-3 items-center bg-[#101726]/90 border border-slate-700/80 p-2 rounded-xl">
                   <input 
                     type="color" 
-                    className="border-0 rounded-xl h-10 w-14 bg-transparent cursor-pointer" 
+                    className="border-0 rounded-lg h-8 w-12 bg-transparent cursor-pointer" 
                     value={formData.dominant_color_hex} 
                     onChange={e => setFormData({...formData, dominant_color_hex: e.target.value})} 
                   />
-                  <span className="font-mono text-sm font-bold text-slate-200">{formData.dominant_color_hex}</span>
-                  <div className="ml-auto w-6 h-6 rounded-full border border-white/20" style={{ backgroundColor: formData.dominant_color_hex }} />
+                  <span className="font-mono text-xs font-bold text-slate-200">{formData.dominant_color_hex}</span>
+                  <div className="ml-auto w-5 h-5 rounded-full border border-white/20" style={{ backgroundColor: formData.dominant_color_hex }} />
                 </div>
               </div>
             </div>
@@ -1374,17 +1356,17 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
 
       case 5:
         return (
-          <div className="space-y-10 animate-in fade-in duration-300">
+          <div className="space-y-8 animate-in fade-in duration-300 w-full min-w-0">
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400 text-[11px] font-mono font-black tracking-widest uppercase mb-3">
                 <Shield className="w-3.5 h-3.5" />
                 Step 05 · Amenities & Structural Safety
               </div>
-              <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight font-display">Amenities & Guest Capacity</h2>
-              <p className="text-slate-400 text-sm sm:text-base mt-2 leading-relaxed">Select all features, luxury services, and structural guest safety guarantees.</p>
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight font-display">Amenities & Guest Capacity</h2>
+              <p className="text-slate-400 text-xs sm:text-sm mt-1.5 leading-relaxed">Select all features, luxury services, and structural guest safety guarantees.</p>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3 w-full min-w-0">
               <label className="text-xs font-black uppercase tracking-wider text-slate-200">Full Amenities & Privileges Deck</label>
               <AmenitiesPicker
                 selected={formData.amenities}
@@ -1392,8 +1374,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               />
             </div>
 
-            {/* Steppers: maxGuests, bedrooms, beds, bathrooms */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-slate-800">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-slate-800 w-full min-w-0">
               {[
                 { label: 'Max Guests', key: 'maxGuests', icon: Users, val: formData.maxGuests, min: 1 },
                 { label: 'Bedrooms', key: 'bedrooms', icon: Bed, val: formData.bedrooms, min: 1 },
@@ -1402,26 +1383,26 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               ].map(st => {
                 const Icon = st.icon;
                 return (
-                  <div key={st.key} className="bg-[#101726]/90 border border-slate-800/80 p-4 rounded-2xl flex flex-col items-center justify-between gap-3 shadow-sm">
-                    <div className="flex items-center gap-2 text-slate-300 text-xs font-bold">
-                      <Icon className="w-4 h-4 text-sky-400" />
-                      <span>{st.label}</span>
+                  <div key={st.key} className="bg-[#101726]/90 border border-slate-800/80 p-3.5 rounded-2xl flex flex-col items-center justify-between gap-2 shadow-sm min-w-0">
+                    <div className="flex items-center gap-1.5 text-slate-300 text-xs font-bold truncate">
+                      <Icon className="w-3.5 h-3.5 text-sky-400" />
+                      <span className="truncate">{st.label}</span>
                     </div>
-                    <div className="text-2xl font-black text-white font-mono">{st.val}</div>
-                    <div className="flex items-center gap-2">
+                    <div className="text-xl font-black text-white font-mono">{st.val}</div>
+                    <div className="flex items-center gap-1.5">
                       <button
                         type="button"
                         onClick={() => setFormData(prev => ({ ...prev, [st.key]: Math.max(st.min, (prev as any)[st.key] - 1) }))}
-                        className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center transition-colors cursor-pointer"
+                        className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center transition-colors cursor-pointer"
                       >
-                        <Minus className="w-3.5 h-3.5" />
+                        <Minus className="w-3 h-3" />
                       </button>
                       <button
                         type="button"
                         onClick={() => setFormData(prev => ({ ...prev, [st.key]: (prev as any)[st.key] + 1 }))}
-                        className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center transition-colors cursor-pointer"
+                        className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold flex items-center justify-center transition-colors cursor-pointer"
                       >
-                        <Plus className="w-3.5 h-3.5" />
+                        <Plus className="w-3 h-3" />
                       </button>
                     </div>
                   </div>
@@ -1433,18 +1414,17 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
 
       case 6:
         return (
-          <div className="space-y-10 animate-in fade-in duration-300">
+          <div className="space-y-8 animate-in fade-in duration-300 w-full min-w-0">
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400 text-[11px] font-mono font-black tracking-widest uppercase mb-3">
                 <DollarSign className="w-3.5 h-3.5" />
                 Step 06 · Rules & Dynamic Multipliers
               </div>
-              <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight font-display">Hospitality Guidelines & Pricing</h2>
-              <p className="text-slate-400 text-sm sm:text-base mt-2 leading-relaxed">Establish estate rules, AI-curated guest etiquette, and dynamic weekend/seasonal surge algorithms.</p>
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight font-display">Hospitality Guidelines & Pricing</h2>
+              <p className="text-slate-400 text-xs sm:text-sm mt-1.5 leading-relaxed">Establish estate rules, AI-curated guest etiquette, and dynamic weekend/seasonal surge algorithms.</p>
             </div>
 
-            {/* House Rules & AI Curation */}
-            <div className="space-y-4">
+            <div className="space-y-3.5 w-full min-w-0">
               <div className="flex justify-between items-center">
                 <div>
                   <label className="text-xs font-black uppercase tracking-wider text-slate-200">Base House Rules</label>
@@ -1454,41 +1434,40 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                   type="button"
                   disabled={isCuratingRules}
                   onClick={handleCurateRules}
-                  className="px-4 py-2.5 bg-gradient-to-r from-sky-500/20 to-indigo-500/20 border border-sky-500/40 hover:bg-sky-500/30 text-sky-200 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-md shadow-sky-950/40"
+                  className="px-3.5 py-2 bg-gradient-to-r from-sky-500/20 to-indigo-500/20 border border-sky-500/40 hover:bg-sky-500/30 text-sky-200 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-md shadow-sky-950/40 shrink-0"
                 >
                   {isCuratingRules ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5 text-sky-400" />}
-                  <span>{isCuratingRules ? 'Curating...' : 'AI Curate Guidelines'}</span>
+                  <span>{isCuratingRules ? 'Curating...' : 'AI Curate'}</span>
                 </button>
               </div>
 
               <textarea 
-                className="w-full bg-[#101726]/90 border border-slate-700/80 rounded-2xl p-4 text-white placeholder:text-slate-500 text-sm h-24 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 resize-none font-medium"
+                className="w-full bg-[#101726]/90 border border-slate-700/80 rounded-2xl p-4 text-white placeholder:text-slate-500 text-xs sm:text-sm h-20 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 resize-none font-medium min-w-0"
                 value={formData.raw_rules} 
                 onChange={e => setFormData({...formData, raw_rules: e.target.value})} 
                 placeholder="Quiet hours after 10 PM. No indoor smoking. Swimming pool closes at 11 PM..."
               />
 
               {formData.curated_guidelines && (
-                <div className="p-5 rounded-2xl bg-[#090D16] border border-sky-500/30 space-y-2">
+                <div className="p-4 rounded-2xl bg-[#090D16] border border-sky-500/30 space-y-1.5">
                   <div className="flex items-center gap-2 text-xs font-bold text-sky-400">
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>Aristocratic Hospitality Guidelines (Rendered to Guests)</span>
+                    <span>Aristocratic Guidelines (Rendered to Guests)</span>
                   </div>
-                  <p className="text-xs sm:text-sm text-slate-300 leading-relaxed italic">
+                  <p className="text-xs text-slate-300 leading-relaxed italic">
                     "{formData.curated_guidelines}"
                   </p>
                 </div>
               )}
             </div>
 
-            {/* Dynamic Multipliers */}
-            <div className="space-y-4 pt-4 border-t border-slate-800">
-              <label className="text-xs font-black uppercase tracking-wider text-slate-200">Dynamic Pricing Yield Multipliers</label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="bg-[#101726]/90 border border-slate-800/80 p-5 rounded-2xl space-y-3">
+            <div className="space-y-3 pt-3 border-t border-slate-800 w-full min-w-0">
+              <label className="text-xs font-black uppercase tracking-wider text-slate-200">Dynamic Pricing Multipliers</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="bg-[#101726]/90 border border-slate-800/80 p-4 rounded-2xl space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-white">Weekend Surge Rate</span>
-                    <span className="text-sm font-mono font-bold text-sky-400">{formData.dynamicPricing.weekendMultiplier}x</span>
+                    <span className="text-xs font-bold text-white">Weekend Surge</span>
+                    <span className="text-xs font-mono font-bold text-sky-400">{formData.dynamicPricing.weekendMultiplier}x</span>
                   </div>
                   <input 
                     type="range" 
@@ -1502,13 +1481,12 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                     })}
                     className="w-full accent-[#0284C7] cursor-pointer"
                   />
-                  <p className="text-[11px] text-slate-500">Automatically scales nightly rates for Friday & Saturday check-ins.</p>
                 </div>
 
-                <div className="bg-[#101726]/90 border border-slate-800/80 p-5 rounded-2xl space-y-3">
+                <div className="bg-[#101726]/90 border border-slate-800/80 p-4 rounded-2xl space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-white">Peak Season Multiplier</span>
-                    <span className="text-sm font-mono font-bold text-sky-400">{formData.dynamicPricing.seasonalMultiplier}x</span>
+                    <span className="text-xs font-bold text-white">Peak Season Surge</span>
+                    <span className="text-xs font-mono font-bold text-sky-400">{formData.dynamicPricing.seasonalMultiplier}x</span>
                   </div>
                   <input 
                     type="range" 
@@ -1522,7 +1500,6 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                     })}
                     className="w-full accent-[#0284C7] cursor-pointer"
                   />
-                  <p className="text-[11px] text-slate-500">Surges during high-occupancy festive & holiday windows.</p>
                 </div>
               </div>
             </div>
@@ -1531,32 +1508,32 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
 
       case 7:
         return (
-          <div className="space-y-10 animate-in fade-in duration-300">
+          <div className="space-y-8 animate-in fade-in duration-300 w-full min-w-0">
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400 text-[11px] font-mono font-black tracking-widest uppercase mb-3">
                 <Globe className="w-3.5 h-3.5" />
                 Step 07 · Search Discovery & SERP
               </div>
-              <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight font-display">SEO & Search Optimization</h2>
-              <p className="text-slate-400 text-sm sm:text-base mt-2 leading-relaxed">Customize how your sanctuary appears on Google, Meta social sharing cards, and luxury travel engines.</p>
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight font-display">SEO & Search Optimization</h2>
+              <p className="text-slate-400 text-xs sm:text-sm mt-1.5 leading-relaxed">Customize how your sanctuary appears on Google, Meta social sharing cards, and luxury travel engines.</p>
             </div>
 
-            <div className="space-y-4">
-              <div className="space-y-2">
+            <div className="space-y-3.5 w-full min-w-0">
+              <div className="space-y-1.5 min-w-0">
                 <label className="text-xs font-black uppercase tracking-wider text-slate-200">SEO Meta Title</label>
                 <input 
                   type="text" 
-                  className="w-full bg-[#101726]/90 border border-slate-700/80 rounded-2xl px-4 py-3.5 text-white placeholder:text-slate-500 text-sm font-medium focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20" 
+                  className="w-full bg-[#101726]/90 border border-slate-700/80 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 text-xs sm:text-sm font-medium focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 min-w-0" 
                   value={formData.seo_title} 
                   onChange={e => setFormData({...formData, seo_title: e.target.value})} 
                   placeholder={formData.title || 'Luxury Sanctuary Villa'} 
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1.5 min-w-0">
                 <label className="text-xs font-black uppercase tracking-wider text-slate-200">SEO Meta Description</label>
                 <textarea 
-                  className="w-full bg-[#101726]/90 border border-slate-700/80 rounded-2xl p-4 text-white placeholder:text-slate-500 text-sm h-24 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 resize-none font-medium" 
+                  className="w-full bg-[#101726]/90 border border-slate-700/80 rounded-xl p-3.5 text-white placeholder:text-slate-500 text-xs sm:text-sm h-20 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 resize-none font-medium min-w-0" 
                   value={formData.seo_description} 
                   onChange={e => setFormData({...formData, seo_description: e.target.value})} 
                   placeholder={formData.description.substring(0, 160) || 'Experience the highest standard of luxury hospitality...'} 
@@ -1564,13 +1541,13 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               </div>
 
               {/* Google SERP Preview */}
-              <div className="p-5 rounded-3xl bg-white text-slate-900 shadow-xl space-y-1.5 border border-slate-200">
-                <span className="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-widest">Google Search Engine Card Preview</span>
+              <div className="p-4 rounded-2xl bg-white text-slate-900 shadow-xl space-y-1 border border-slate-200 w-full min-w-0">
+                <span className="text-[9px] font-mono font-bold text-slate-500 uppercase tracking-widest">Google Search Preview</span>
                 <div className="text-xs text-emerald-800 truncate font-mono">https://encho.space/sanctuaries/{formData.city?.toLowerCase().replace(/\s+/g, '-') || 'wayanad'}</div>
-                <h4 className="text-base font-bold text-[#1a0dab] hover:underline cursor-pointer leading-tight">
+                <h4 className="text-sm font-bold text-[#1a0dab] hover:underline cursor-pointer leading-tight truncate">
                   {formData.seo_title || formData.title || 'Luxury Highland Sanctuary & Spa'}
                 </h4>
-                <p className="text-xs text-slate-600 leading-relaxed">
+                <p className="text-xs text-slate-600 leading-relaxed line-clamp-2">
                   {formData.seo_description || formData.description.substring(0, 150) || 'Discover exclusive architectural pavilions with private heated pool, sommelier cellar, and concierge service.'}
                 </p>
               </div>
@@ -1580,25 +1557,24 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
 
       case 8:
         return (
-          <div className="space-y-10 animate-in fade-in duration-300">
+          <div className="space-y-8 animate-in fade-in duration-300 w-full min-w-0">
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400 text-[11px] font-mono font-black tracking-widest uppercase mb-3">
                 <Sparkles className="w-3.5 h-3.5" />
                 Step 08 · AI Quality Pre-Flight & Launch
               </div>
-              <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight font-display">AI Quality Pre-Flight & Launch</h2>
-              <p className="text-slate-400 text-sm sm:text-base mt-2 leading-relaxed">Run the Gemini AI Pre-Flight Gatekeeper scan to audit your copy, photography, room configurations, and pricing readiness.</p>
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight font-display">AI Quality Pre-Flight & Launch</h2>
+              <p className="text-slate-400 text-xs sm:text-sm mt-1.5 leading-relaxed">Run the Gemini AI Pre-Flight Gatekeeper scan to audit your copy, photography, room configurations, and pricing readiness.</p>
             </div>
 
-            {/* AI Gatekeeper Card */}
-            <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-b from-[#101726] to-[#090D16] border border-slate-800 shadow-2xl space-y-6">
+            <div className="p-5 sm:p-7 rounded-3xl bg-gradient-to-b from-[#101726] to-[#090D16] border border-slate-800 shadow-2xl space-y-5 w-full min-w-0">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-2xl bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400 text-2xl shrink-0 shadow-inner">
-                    <Sparkles className="w-7 h-7" />
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400 text-xl shrink-0">
+                    <Sparkles className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="text-lg sm:text-xl font-black text-white font-display">Encho AI Quality Gatekeeper</h3>
+                    <h3 className="text-base sm:text-lg font-black text-white font-display">Encho AI Quality Gatekeeper</h3>
                     <p className="text-xs text-slate-400 mt-0.5">FAANG 10/10 Luxury Ad-Ready Verification Scanner</p>
                   </div>
                 </div>
@@ -1607,27 +1583,26 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                   type="button"
                   disabled={isScanning}
                   onClick={runAiPreFlightCheck}
-                  className="px-6 py-3.5 bg-gradient-to-r from-[#0284C7] to-indigo-600 hover:from-[#0274B7] hover:to-indigo-500 disabled:opacity-50 text-white font-extrabold text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-sky-500/25 shrink-0 cursor-pointer flex items-center gap-2"
+                  className="px-5 py-3 bg-gradient-to-r from-[#0284C7] to-indigo-600 hover:from-[#0274B7] hover:to-indigo-500 disabled:opacity-50 text-white font-extrabold text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-sky-500/25 shrink-0 cursor-pointer flex items-center gap-2"
                 >
                   {isScanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-                  <span>{isScanning ? 'Scanning Sanctuary...' : 'Run Pre-Flight AI Scan'}</span>
+                  <span>{isScanning ? 'Scanning...' : 'Run Pre-Flight Scan'}</span>
                 </button>
               </div>
 
-              {/* Score Display */}
               {aiScore !== null && (
-                <div className="p-6 rounded-2xl bg-[#070A11] border border-slate-800 space-y-4">
+                <div className="p-5 rounded-2xl bg-[#070A11] border border-slate-800 space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">Overall Quality Score</span>
-                      <div className="text-3xl sm:text-4xl font-black text-white font-mono mt-0.5">{aiScore} <span className="text-base text-slate-500">/ 10.0</span></div>
+                      <span className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">Overall Score</span>
+                      <div className="text-2xl sm:text-3xl font-black text-white font-mono mt-0.5">{aiScore} <span className="text-sm text-slate-500">/ 10.0</span></div>
                     </div>
-                    <span className={`px-3.5 py-1.5 rounded-full text-xs font-black uppercase tracking-wider border ${
+                    <span className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border ${
                       aiScore >= 8.0 
-                        ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 shadow-md shadow-emerald-950/50' 
+                        ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300' 
                         : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
                     }`}>
-                      {aiScore >= 8.0 ? '✓ CLEARED FOR PAID AD ENGINES' : 'REQUIRES POLISH'}
+                      {aiScore >= 8.0 ? '✓ CLEARED' : 'NEEDS POLISH'}
                     </span>
                   </div>
 
@@ -1636,43 +1611,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                       {aiResult.headline}
                     </p>
                   )}
-
-                  {aiResult?.issues && aiResult.issues.length > 0 && (
-                    <div className="space-y-1.5 pt-2 border-t border-slate-800">
-                      <span className="text-[11px] font-mono font-bold text-amber-400 uppercase tracking-widest">Recommended Actions:</span>
-                      {aiResult.issues.map((iss: string, idx: number) => (
-                        <div key={idx} className="flex items-center gap-2 text-xs text-slate-400">
-                          <span className="text-amber-400">•</span>
-                          <span>{iss}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
-            </div>
-
-            {/* Launch Live Guest Experience Simulator Card */}
-            <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-sky-950/40 via-indigo-950/30 to-purple-950/30 border border-sky-500/30 shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-sky-500/20 border border-sky-400/40 flex items-center justify-center text-sky-300 shrink-0 shadow-lg">
-                  <Monitor className="w-7 h-7" />
-                </div>
-                <div>
-                  <h3 className="text-lg sm:text-xl font-black text-white font-display">Interactive Guest Page & Spatial Gallery Simulation</h3>
-                  <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-xl leading-relaxed">
-                    Test your live sanctuary page, rooms breakdown, sensory atmosphere deck, and 360 spatial galleries across desktop, tablet, and mobile simulator frames.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => openGuestPreview(false)}
-                className="px-6 py-3.5 bg-gradient-to-r from-[#0284C7] to-indigo-600 hover:from-[#0274B7] hover:to-indigo-500 text-white font-extrabold text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-sky-500/25 shrink-0 cursor-pointer flex items-center gap-2"
-              >
-                <Eye className="w-4 h-4" />
-                <span>Launch Live Preview</span>
-              </button>
             </div>
           </div>
         );
@@ -1719,7 +1659,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
   return (
     <div className="min-h-screen bg-[#090D16] bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900/60 via-[#090D16] to-[#04060B] text-white font-sans flex flex-col selection:bg-[#0284C7] selection:text-white w-full max-w-full overflow-x-hidden">
       {/* ── 10/10 LUXURY STUDIO TOP HEADER ── */}
-      <header className="sticky top-0 z-50 bg-[#090D16]/90 backdrop-blur-2xl border-b border-slate-800/80 px-4 sm:px-8 py-3.5 flex items-center justify-between shadow-2xl">
+      <header className="sticky top-0 z-50 bg-[#090D16]/90 backdrop-blur-2xl border-b border-slate-800/80 px-4 sm:px-8 py-3.5 flex items-center justify-between shadow-2xl w-full max-w-full">
         {/* Left: Brand / Title */}
         <div className="flex items-center gap-3.5">
           <button 
@@ -1739,7 +1679,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         </div>
 
         {/* Center Minimal Progress Indicator */}
-        <div className="hidden lg:flex items-center gap-2 bg-slate-900/70 border border-slate-800/80 px-4 py-1.5 rounded-full shadow-inner">
+        <div className="hidden xl:flex items-center gap-2 bg-slate-900/70 border border-slate-800/80 px-4 py-1.5 rounded-full shadow-inner">
           <span className="text-xs font-mono font-bold text-slate-400">Step {currentStep} of {STEPS.length}</span>
           <span className="text-slate-600">·</span>
           <span className="text-xs font-bold text-white font-display">{STEPS[currentStep - 1].label}</span>
@@ -1748,24 +1688,39 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
           </div>
         </div>
 
-        {/* Right Actions */}
-        <div className="flex items-center gap-3">
-          {/* Live Guest Preview Trigger */}
+        {/* Right Actions: Split View Toggle & Live Preview */}
+        <div className="flex items-center gap-2.5">
+          {/* Side-by-Side Split View Toggle */}
+          <button
+            type="button"
+            onClick={() => setIsSplitView(prev => !prev)}
+            className={`hidden lg:flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-bold border transition-all cursor-pointer shadow-md ${
+              isSplitView
+                ? 'bg-sky-500/20 border-sky-400 text-sky-200 shadow-sky-950/60'
+                : 'bg-slate-900/80 border-slate-700/80 text-slate-400 hover:text-white hover:border-slate-500'
+            }`}
+            title="Toggle Live Side-by-Side Preview (Desktop/Laptop/Mobile)"
+          >
+            <Columns className="w-4 h-4 text-sky-400" />
+            <span>{isSplitView ? 'Split View Active' : 'Side Preview'}</span>
+            <span className={`w-2 h-2 rounded-full ${isSplitView ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+          </button>
+
+          {/* Full-Screen Live Guest Preview Trigger */}
           <button 
             type="button" 
             onClick={() => openGuestPreview(false)}
-            className="px-4 py-2 bg-gradient-to-r from-sky-500/15 via-indigo-500/15 to-purple-500/15 border border-sky-500/40 hover:border-sky-400 hover:bg-sky-500/25 text-sky-200 hover:text-white font-bold text-xs rounded-2xl flex items-center gap-2 transition-all shadow-md shadow-sky-950/50 cursor-pointer group"
-            title="Open Live Guest Experience Preview & Spatial Gallery"
+            className="px-3.5 sm:px-4 py-2 bg-gradient-to-r from-sky-500/15 via-indigo-500/15 to-purple-500/15 border border-sky-500/40 hover:border-sky-400 hover:bg-sky-500/25 text-sky-200 hover:text-white font-bold text-xs rounded-2xl flex items-center gap-2 transition-all shadow-md shadow-sky-950/50 cursor-pointer group"
+            title="Open Fullscreen Guest Simulator & Spatial Gallery"
           >
             <Eye className="w-4 h-4 text-sky-400 group-hover:scale-110 transition-transform" />
-            <span className="hidden sm:inline">Live Guest View</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="hidden sm:inline">Fullscreen View</span>
           </button>
 
           <button 
             type="button" 
             onClick={onBack} 
-            className="hidden sm:inline-block px-3.5 py-2 text-xs font-bold text-slate-400 hover:text-white uppercase tracking-wider transition-colors cursor-pointer"
+            className="hidden sm:inline-block px-3 py-2 text-xs font-bold text-slate-400 hover:text-white uppercase tracking-wider transition-colors cursor-pointer"
           >
             Cancel
           </button>
@@ -1774,7 +1729,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
             form="host-form" 
             type="submit" 
             disabled={loading} 
-            className="px-6 py-2.5 bg-[#0284C7] hover:bg-[#0274B7] disabled:opacity-50 text-white font-extrabold text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-[#0284C7]/20 flex items-center gap-1.5 cursor-pointer"
+            className="px-5 sm:px-6 py-2.5 bg-[#0284C7] hover:bg-[#0274B7] disabled:opacity-50 text-white font-extrabold text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-[#0284C7]/20 flex items-center gap-1.5 cursor-pointer"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
             <span>{loading ? 'Saving...' : existingListing ? 'Save Master' : 'Publish Listing'}</span>
@@ -1783,12 +1738,11 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
       </header>
 
       {/* ── STREAMLINED HORIZONTAL STEP NAVIGATOR ── */}
-      <div className="sticky top-[69px] z-40 bg-[#090D16]/95 backdrop-blur-xl border-b border-slate-800/80 overflow-x-auto py-3 px-4 sm:px-8">
-        <div className="max-w-5xl mx-auto flex items-center gap-2.5 justify-start sm:justify-center">
+      <div className="sticky top-[69px] z-40 bg-[#090D16]/95 backdrop-blur-xl border-b border-slate-800/80 overflow-x-auto py-2.5 px-4 sm:px-8 w-full max-w-full">
+        <div className="max-w-7xl mx-auto flex items-center gap-2 justify-start sm:justify-center">
           {STEPS.map(s => {
             const isActive = currentStep === s.id;
             const isCompleted = currentStep > s.id;
-            const StepIcon = s.icon;
             return (
               <button
                 key={s.id}
@@ -1804,7 +1758,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                   }
                   if (canJump) setCurrentStep(s.id);
                 }}
-                className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer border ${
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer border ${
                   isActive 
                     ? 'bg-[#0284C7] border-[#0284C7] text-white shadow-lg shadow-[#0284C7]/30 scale-105 ring-2 ring-sky-400/40' 
                     : isCompleted 
@@ -1812,7 +1766,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                       : 'bg-[#101726]/80 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
                 }`}
               >
-                <span className={`w-4 h-4 rounded-full text-[10px] font-mono flex items-center justify-center ${
+                <span className={`w-3.5 h-3.5 rounded-full text-[9px] font-mono flex items-center justify-center ${
                   isActive ? 'bg-white text-[#0284C7] font-black' : isCompleted ? 'bg-emerald-400 text-emerald-950 font-black' : 'bg-slate-800 text-slate-400'
                 }`}>
                   {isCompleted ? '✓' : s.id}
@@ -1824,32 +1778,147 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         </div>
       </div>
 
-      {/* ── MAIN WORKSPACE CANVAS ── */}
-      <main className="max-w-4xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-10 flex-1 min-w-0">
-        <div className="bg-[#0F1626]/85 border border-slate-800/80 rounded-3xl sm:rounded-[32px] p-4 sm:p-8 lg:p-10 shadow-[0_20px_60px_rgba(0,0,0,0.6)] backdrop-blur-xl w-full max-w-full overflow-hidden min-w-0">
-          <form id="host-form" onSubmit={handleSubmit}>
-            <AnimatePresence mode="wait">
-              <motion.div 
-                key={currentStep} 
-                initial={{ opacity: 0, y: 12 }} 
-                animate={{ opacity: 1, y: 0 }} 
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.22 }}
-              >
-                {renderStep()}
-              </motion.div>
-            </AnimatePresence>
-          </form>
+      {/* ── WORKSPACE CANVAS (SPLIT OR CENTERED) ── */}
+      <div className={`w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8 flex-1 min-w-0 ${
+        isSplitView ? 'max-w-[1720px] mx-auto' : 'max-w-4xl mx-auto'
+      }`}>
+        <div className={`w-full min-w-0 ${
+          isSplitView ? 'flex flex-col lg:flex-row items-start gap-6 lg:gap-8' : ''
+        }`}>
+          {/* LEFT: Main Form Editor Card */}
+          <main className={`w-full min-w-0 ${
+            isSplitView ? 'lg:w-[48%] xl:w-[45%]' : 'w-full'
+          }`}>
+            <div className="bg-[#0F1626]/85 border border-slate-800/80 rounded-3xl sm:rounded-[32px] p-4 sm:p-7 lg:p-8 shadow-[0_20px_60px_rgba(0,0,0,0.6)] backdrop-blur-xl w-full max-w-full overflow-hidden min-w-0">
+              <form id="host-form" onSubmit={handleSubmit}>
+                <AnimatePresence mode="wait">
+                  <motion.div 
+                    key={currentStep} 
+                    initial={{ opacity: 0, y: 10 }} 
+                    animate={{ opacity: 1, y: 0 }} 
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                    className="w-full min-w-0"
+                  >
+                    {renderStep()}
+                  </motion.div>
+                </AnimatePresence>
+              </form>
+            </div>
+          </main>
+
+          {/* RIGHT: Live Side-by-Side Preview Studio Dock */}
+          {isSplitView && (
+            <aside className="hidden lg:flex flex-col w-full lg:w-[52%] xl:w-[55%] sticky top-[125px] h-[calc(100vh-155px)] bg-[#0C1322] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl min-w-0 z-20">
+              {/* Top Studio HUD */}
+              <div className="h-14 shrink-0 bg-[#0F1829] border-b border-slate-800 px-4 flex items-center justify-between z-30">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-xs font-black uppercase tracking-wider text-white">Live Guest View</span>
+                  <span className="text-[10px] font-mono text-sky-400 bg-sky-950/70 border border-sky-500/30 px-2 py-0.5 rounded-full font-bold">
+                    LIVE SYNC
+                  </span>
+                </div>
+
+                {/* Device Switcher */}
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center bg-[#152033] border border-slate-700/80 p-1 rounded-xl gap-1">
+                    {[
+                      { id: 'mobile',  label: 'Mobile',  icon: Smartphone, width: '390px' },
+                      { id: 'laptop',  label: 'Laptop',  icon: Maximize2,  width: 'Fluid' },
+                      { id: 'desktop', label: 'Desktop', icon: Monitor,    width: '100%' }
+                    ].map(dev => {
+                      const Icon = dev.icon;
+                      const isActive = splitDevice === dev.id;
+                      return (
+                        <button
+                          key={dev.id}
+                          type="button"
+                          onClick={() => setSplitDevice(dev.id as any)}
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            isActive
+                              ? 'bg-[#0284C7] text-white shadow-xs'
+                              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                          }`}
+                          title={`${dev.label} view (${dev.width})`}
+                        >
+                          <Icon className="w-3.5 h-3.5" />
+                          <span className="hidden xl:inline">{dev.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Spatial Gallery Quick Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => setSplitGalleryOpen(prev => !prev)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                      splitGalleryOpen
+                        ? 'bg-sky-500/20 border-sky-400 text-sky-200'
+                        : 'bg-[#152033] border-slate-700 text-slate-300 hover:text-white'
+                    }`}
+                    title="Open Spatial Gallery Overlay in Preview"
+                  >
+                    <Images className="w-3.5 h-3.5 text-sky-400" />
+                    <span className="hidden xl:inline">Gallery</span>
+                    <span className="text-[10px] font-mono font-bold bg-sky-950 border border-sky-500/40 text-sky-300 px-1 rounded-full">
+                      {previewListing.photos?.length || 0}
+                    </span>
+                  </button>
+
+                  {/* Fullscreen Popout */}
+                  <button
+                    type="button"
+                    onClick={() => openGuestPreview(false)}
+                    className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                    title="Open in Fullscreen Modal"
+                  >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Viewport Frame */}
+              <div className="flex-1 bg-[#070A11] bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:20px_20px] overflow-hidden flex items-center justify-center p-3 sm:p-4">
+                <div className={`transition-all duration-300 ${
+                  splitDevice === 'mobile'
+                    ? 'w-[375px] h-full max-h-[812px] bg-white rounded-[38px] shadow-[0_20px_60px_rgba(0,0,0,0.85)] border-4 border-slate-800 ring-2 ring-slate-700 relative overflow-y-auto'
+                    : splitDevice === 'laptop'
+                      ? 'w-full h-full bg-white rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.7)] border border-slate-700 overflow-y-auto'
+                      : 'w-full h-full bg-white rounded-xl shadow-2xl overflow-y-auto'
+                }`}
+                style={{ scrollbarWidth: 'thin' }}
+                >
+                  {splitDevice === 'mobile' && (
+                    <div className="sticky top-0 z-50 w-full h-6 bg-white flex items-center justify-center border-b border-zinc-100">
+                      <div className="w-20 h-3.5 bg-black rounded-full shadow-inner" />
+                    </div>
+                  )}
+
+                  <ListingDetailsNew
+                    listing={previewListing}
+                    onBack={() => {}}
+                    isFavorite={false}
+                    initialGalleryOpen={splitGalleryOpen}
+                    onToggleFavorite={() => addToast('Wishlist', 'Saved to wishlist (Live Simulation)', 'success')}
+                    onBook={() => addToast('Reservation Simulator', 'Guest reservation checkout flow verified!', 'success')}
+                    onContactHost={() => addToast('Host Concierge', 'Walled garden concierge chat opened (Live Simulation)', 'info')}
+                  />
+                </div>
+              </div>
+            </aside>
+          )}
         </div>
-      </main>
+      </div>
 
       {/* ── STICKY BOTTOM CONTROL FOOTER ── */}
-      <footer className="sticky bottom-0 z-40 bg-[#090D16]/95 backdrop-blur-2xl border-t border-slate-800/80 px-4 sm:px-8 py-4 flex items-center justify-between shadow-2xl">
+      <footer className="sticky bottom-0 z-40 bg-[#090D16]/95 backdrop-blur-2xl border-t border-slate-800/80 px-4 sm:px-8 py-3.5 flex items-center justify-between shadow-2xl w-full max-w-full">
         <button 
           type="button" 
           onClick={handlePrevStep} 
           disabled={currentStep === 1} 
-          className="px-6 py-3 rounded-2xl bg-[#101726] hover:bg-slate-800 disabled:opacity-30 border border-slate-700/80 text-white font-bold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2"
+          className="px-5 py-2.5 rounded-2xl bg-[#101726] hover:bg-slate-800 disabled:opacity-30 border border-slate-700/80 text-white font-bold text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2"
         >
           <ChevronLeft className="w-4 h-4" />
           <span>Back</span>
@@ -1860,7 +1929,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
             <button 
               type="button"
               onClick={handleNextStep} 
-              className="px-8 py-3 bg-[#0284C7] hover:bg-[#0274B7] text-white font-extrabold text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-[#0284C7]/25 flex items-center gap-2 cursor-pointer"
+              className="px-7 py-2.5 bg-[#0284C7] hover:bg-[#0274B7] text-white font-extrabold text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-[#0284C7]/25 flex items-center gap-2 cursor-pointer"
             >
               <span>Continue to {STEPS[currentStep].name}</span>
               <ArrowRight className="w-4 h-4" />
@@ -1870,7 +1939,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               form="host-form" 
               type="submit" 
               disabled={loading}
-              className="px-8 py-3 bg-gradient-to-r from-[#0284C7] to-emerald-500 hover:from-[#0274B7] hover:to-emerald-600 disabled:opacity-50 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-xl shadow-emerald-500/20 flex items-center gap-2 cursor-pointer"
+              className="px-7 py-2.5 bg-gradient-to-r from-[#0284C7] to-emerald-500 hover:from-[#0274B7] hover:to-emerald-600 disabled:opacity-50 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-xl shadow-emerald-500/20 flex items-center gap-2 cursor-pointer"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
               <span>{loading ? 'Publishing...' : 'Publish Listing'}</span>
@@ -1879,22 +1948,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         </div>
       </footer>
 
-      {/* ── FLOATING QUICK-ACTION PREVIEW PILL ── */}
-      <div className="fixed bottom-20 right-6 z-40">
-        <motion.button
-          type="button"
-          onClick={() => openGuestPreview(false)}
-          whileHover={{ scale: 1.05, y: -2 }}
-          whileTap={{ scale: 0.95 }}
-          className="px-5 py-3 bg-gradient-to-r from-[#0284C7] via-indigo-600 to-sky-600 hover:from-[#0274B7] hover:to-indigo-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-full flex items-center gap-2.5 shadow-2xl shadow-sky-500/40 border border-sky-400/40 cursor-pointer backdrop-blur-md transition-all group"
-        >
-          <Eye className="w-4 h-4 text-sky-200 group-hover:scale-110 transition-transform" />
-          <span className="font-bold">Live Guest View</span>
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-        </motion.button>
-      </div>
-
-      {/* ── 10/10 FULL-SCREEN LIVE GUEST SIMULATOR MODAL (WITH SPATIAL GALLERY) ── */}
+      {/* ── FULLSCREEN LIVE GUEST SIMULATOR MODAL ── */}
       <AnimatePresence>
         {isPreviewOpen && (
           <motion.div
@@ -1903,11 +1957,9 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[99999] bg-[#070A12] flex flex-col overflow-hidden"
           >
-            {/* Top Control Bar HUD */}
             <div className="h-16 shrink-0 bg-[#0C1322] border-b border-slate-800 px-4 md:px-8 flex items-center justify-between z-30 shadow-xl">
-              {/* Left Branding */}
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-[#0284C7] font-black text-xs shadow-xs">
+                <div className="w-8 h-8 rounded-xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-[#0284C7] font-black text-xs">
                   <Sparkles className="w-4 h-4" />
                 </div>
                 <div className="hidden sm:block">
@@ -1924,7 +1976,6 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                 </div>
               </div>
 
-              {/* Center Device Switcher & Spatial Gallery Quick Trigger */}
               <div className="flex items-center gap-2">
                 <div className="flex items-center bg-[#141E30] border border-slate-700/80 p-1 rounded-2xl gap-1 shadow-inner">
                   {[
@@ -1972,12 +2023,11 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                 </button>
               </div>
 
-              {/* Right Exit Button */}
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setIsPreviewOpen(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   <X className="w-4 h-4 text-slate-400" />
                   <span>Exit Preview</span>
@@ -1986,7 +2036,6 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               </div>
             </div>
 
-            {/* Viewport Studio Workspace */}
             <div className="flex-1 bg-[#070A11] bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px] overflow-hidden flex items-center justify-center p-0 sm:p-4 md:p-6">
               <motion.div
                 layout
@@ -2002,14 +2051,12 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                 }`}
                 style={{ scrollbarWidth: 'thin' }}
               >
-                {/* Mobile Dynamic Island / Bezel Simulator */}
                 {previewDevice === 'mobile' && (
                   <div className="sticky top-0 z-50 w-full h-7 bg-white flex items-center justify-center border-b border-zinc-100">
                     <div className="w-24 h-4 bg-black rounded-full shadow-inner" />
                   </div>
                 )}
 
-                {/* Render Full Live Guest Page & Encho Spatial Gallery Modal */}
                 <ListingDetailsNew
                   listing={previewListing}
                   onBack={() => setIsPreviewOpen(false)}
