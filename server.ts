@@ -1309,6 +1309,30 @@ const ensureListingsTable = async () => {
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='host_philosophy') THEN
         ALTER TABLE listings ADD COLUMN host_philosophy TEXT;
       END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='photos') THEN
+        ALTER TABLE listings ADD COLUMN photos JSONB DEFAULT '[]'::jsonb;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='amenity_clusters') THEN
+        ALTER TABLE listings ADD COLUMN amenity_clusters JSONB DEFAULT '{}'::jsonb;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='child_safety_specs') THEN
+        ALTER TABLE listings ADD COLUMN child_safety_specs JSONB DEFAULT '[]'::jsonb;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='nearby') THEN
+        ALTER TABLE listings ADD COLUMN nearby JSONB DEFAULT '[]'::jsonb;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='seo_title') THEN
+        ALTER TABLE listings ADD COLUMN seo_title TEXT;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='seo_description') THEN
+        ALTER TABLE listings ADD COLUMN seo_description TEXT;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='seo_keywords') THEN
+        ALTER TABLE listings ADD COLUMN seo_keywords TEXT;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='seo_image_url') THEN
+        ALTER TABLE listings ADD COLUMN seo_image_url TEXT;
+      END IF;
     END $$;
   `);
 
@@ -2729,6 +2753,35 @@ const ensureDbInitialized = async () => {
       try {
         // FAANG Fast-Path: Bypass massive DDL locks in Vercel Serverless if schema is up-to-date
         try {
+          // Auto-promote any unpromoted drafts from listings_drafts into listings catalogue
+          try {
+            const drafts = await pool.query(`SELECT * FROM listings_drafts WHERE published_listing_id IS NULL OR status = 'PUBLISHED'`);
+            for (const draft of drafts.rows) {
+              const data = draft.draft_data;
+              if (data && data.title && (Number(data.price) > 0 || (Array.isArray(data.rooms) && data.rooms.length > 0))) {
+                const ex = await pool.query('SELECT id FROM listings WHERE title = $1', [data.title]);
+                if (ex.rows.length === 0) {
+                  const safePhotos = Array.isArray(data.photos) ? JSON.stringify(data.photos) : JSON.stringify([]);
+                  const safeRooms = Array.isArray(data.rooms) ? JSON.stringify(data.rooms) : null;
+                  const safeAmenities = Array.isArray(data.amenities) ? JSON.stringify(data.amenities) : JSON.stringify([]);
+                  const safeImageUrls = Array.isArray(data.imageUrls) ? JSON.stringify(data.imageUrls) : JSON.stringify([]);
+                  const basePrice = Number(data.price) || (Array.isArray(data.rooms) && data.rooms[0]?.price) || 10000;
+                  const ins = await pool.query(`
+                    INSERT INTO listings (user_id, title, description, price, type, address, city, image_url, image_urls, video_url, rental_mode, rooms, max_guests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamic_pricing, seo_title, seo_description, seo_keywords, seo_image_url, amenity_clusters, child_safety_specs, nearby, hero_video_url, hero_fallback_url, dominant_color_hex, raw_rules, curated_guidelines, experience_tags, photos, concierge_privileges, host_philosophy)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36) RETURNING id
+                  `, [
+                    draft.host_id || 1, data.title, data.description || '', basePrice, data.type || 'Resort', data.address || '', data.city || 'Wayanad', data.imageUrl || data.imageUrls?.[0] || 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1600&q=80', safeImageUrls, data.videoUrl || '', data.rentalMode || 'entire_place', safeRooms, data.maxGuests || 2, data.bedrooms || 1, data.beds || 1, data.bathrooms || 1, safeAmenities, data.lat || 11.6854, data.lng || 76.1320, JSON.stringify(data.dynamicPricing || {}), data.seo_title || null, data.seo_description || null, data.seo_keywords || null, data.seo_image_url || null, JSON.stringify(data.amenity_clusters || {}), JSON.stringify(data.child_safety_specs || []), JSON.stringify(data.nearby || []), data.hero_video_url || null, data.hero_fallback_url || null, data.dominant_color_hex || null, data.raw_rules || null, data.curated_guidelines || null, Array.isArray(data.experience_tags) ? JSON.stringify(data.experience_tags) : JSON.stringify([]), safePhotos, data.concierge_privileges || null, data.host_philosophy || null
+                  ]);
+                  const newListingId = ins.rows[0].id;
+                  await pool.query('UPDATE listings_drafts SET published_listing_id = $1, status = \'PUBLISHED\' WHERE id = $2', [newListingId, draft.id]);
+                  console.log(`[DRAFT RECOVERY] Auto-promoted draft #${draft.id} ("${data.title}") to live listing #${newListingId}!`);
+                }
+              }
+            }
+          } catch (recErr) {
+            console.warn('[DRAFT RECOVERY] Warning:', recErr);
+          }
+
           const fastCheck = await pool.query(`SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='host_philosophy' LIMIT 1`);
           if (fastCheck.rowCount && fastCheck.rowCount > 0) {
              marketingSchemaInitialized = true;
@@ -3682,13 +3735,49 @@ app.put('/api/listings/:id', authenticateToken, async (req: AuthRequest, res) =>
     const safeNearby = Array.isArray(nearby) ? JSON.stringify(nearby) : null;
 
     if (title) {
+      const safePhotos = Array.isArray(req.body.photos) ? JSON.stringify(req.body.photos) : (typeof req.body.photos === 'string' ? req.body.photos : JSON.stringify([]));
       await pool.query(`
         UPDATE listings
-        SET title=$1, description=$2, price=$3, type=$4, address=$5, city=$6, image_url=$7, image_urls=$8, video_url=$9, rental_mode=$10, rooms=$11, max_guests=$12, bedrooms=$13, beds=$14, bathrooms=$15, amenities=$16, lat=$18, lng=$19, dynamic_pricing=$20, seo_title=$21, seo_description=$22, seo_keywords=$23, seo_image_url=$24, amenity_clusters=$25, child_safety_specs=$26, nearby=$27, hero_video_url=$28, hero_fallback_url=$29, dominant_color_hex=$30, raw_rules=$31, curated_guidelines=$32, experience_tags=$33
+        SET title=$1, description=$2, price=$3, type=$4, address=$5, city=$6, image_url=$7, image_urls=$8, video_url=$9, rental_mode=$10, rooms=$11, max_guests=$12, bedrooms=$13, beds=$14, bathrooms=$15, amenities=$16, lat=$18, lng=$19, dynamic_pricing=$20, seo_title=$21, seo_description=$22, seo_keywords=$23, seo_image_url=$24, amenity_clusters=$25, child_safety_specs=$26, nearby=$27, hero_video_url=$28, hero_fallback_url=$29, dominant_color_hex=$30, raw_rules=$31, curated_guidelines=$32, experience_tags=$33, photos=$34, concierge_privileges=$35, host_philosophy=$36
         WHERE id=$17
       `, [
-        title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode, safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, req.params.id as string, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby, hero_video_url || null, hero_fallback_url || null, dominant_color_hex || null, raw_rules || null, curated_guidelines || null, Array.isArray(experience_tags) ? JSON.stringify(experience_tags) : JSON.stringify([])
+        title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode, safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, req.params.id as string, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby, hero_video_url || null, hero_fallback_url || null, dominant_color_hex || null, raw_rules || null, curated_guidelines || null, Array.isArray(experience_tags) ? JSON.stringify(experience_tags) : JSON.stringify([]), safePhotos, req.body.concierge_privileges || null, req.body.host_philosophy || null
       ]);
+
+      // Sync room_types table
+      if (Array.isArray(rooms) && rooms.length > 0) {
+        try {
+          await pool.query('DELETE FROM room_types WHERE listing_id = $1', [req.params.id]);
+          for (const room of rooms) {
+            await pool.query(`
+              INSERT INTO room_types (listing_id, name, type, icon, tag, base_price, currency, max_occupancy, inventory_count, description, specs, features, amenities)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            `, [
+              req.params.id, room.name || 'Sanctuary Room', room.type || 'suites', room.icon || '🛏️', room.tag || '', Number(room.price) || Number(price) || 0, req.body.currency || 'INR', Number(room.capacity) || 2, Number(room.inventory_count) || 1, room.description || '', room.specs || '', JSON.stringify(room.features || []), JSON.stringify(room.amenities || [])
+            ]);
+          }
+        } catch (rtSyncErr) {
+          console.warn('[PUT LISTING] Room types sync warning:', rtSyncErr);
+        }
+      }
+
+      // Sync media_assets table
+      if (Array.isArray(req.body.photos) && req.body.photos.length > 0) {
+        try {
+          await pool.query('DELETE FROM media_assets WHERE entity_id = $1 AND entity_type = $2', [req.params.id, 'listing']);
+          let orderIdx = 0;
+          for (const photo of req.body.photos) {
+            await pool.query(`
+              INSERT INTO media_assets (entity_type, entity_id, url, tier, category, title, description, specs, is_hero, order_index)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            `, [
+              'listing', req.params.id, photo.url || photo.previewUrl, photo.tier || 'common', photo.category || 'other', photo.title || '', photo.description || '', photo.specs || '', photo.isHero || false, orderIdx++
+            ]);
+          }
+        } catch (mediaSyncErr) {
+          console.warn('[PUT LISTING] Media assets sync warning:', mediaSyncErr);
+        }
+      }
       if (price) await syncDynamicPricingToMeta(req.params.id, oldPrice, price);
     } else if (videoUrl !== undefined) {
       await pool.query('UPDATE listings SET video_url = $1 WHERE id = $2', [videoUrl, req.params.id]);
@@ -12718,13 +12807,47 @@ app.post('/api/listings', authenticateToken, async (req: AuthRequest, res) => {
     const safeChildSafety = Array.isArray(child_safety_specs) ? JSON.stringify(child_safety_specs) : null;
     const safeNearby = Array.isArray(nearby) ? JSON.stringify(nearby) : null;
 
+    const { concierge_privileges, host_philosophy } = req.body;
     const result = await pool.query(
-      `INSERT INTO listings (user_id, title, description, price, type, address, city, image_url, image_urls, video_url, rental_mode, rooms, max_guests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamic_pricing, seo_title, seo_description, seo_keywords, seo_image_url, amenity_clusters, child_safety_specs, nearby, hero_video_url, hero_fallback_url, dominant_color_hex, raw_rules, curated_guidelines, experience_tags, photos)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34) RETURNING *`,
-      [userId || null, title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode || 'entire_place', safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby, hero_video_url || null, hero_fallback_url || null, dominant_color_hex || null, raw_rules || null, curated_guidelines || null, Array.isArray(experience_tags) ? JSON.stringify(experience_tags) : JSON.stringify([]), safePhotos]
+      `INSERT INTO listings (user_id, title, description, price, type, address, city, image_url, image_urls, video_url, rental_mode, rooms, max_guests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamic_pricing, seo_title, seo_description, seo_keywords, seo_image_url, amenity_clusters, child_safety_specs, nearby, hero_video_url, hero_fallback_url, dominant_color_hex, raw_rules, curated_guidelines, experience_tags, photos, concierge_privileges, host_philosophy)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36) RETURNING *`,
+      [userId || null, title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode || 'entire_place', safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby, hero_video_url || null, hero_fallback_url || null, dominant_color_hex || null, raw_rules || null, curated_guidelines || null, Array.isArray(experience_tags) ? JSON.stringify(experience_tags) : JSON.stringify([]), safePhotos, concierge_privileges || null, host_philosophy || null]
     );
 
     const newListing = result.rows[0];
+
+    // Sync room_types table
+    if (Array.isArray(rooms) && rooms.length > 0) {
+      try {
+        for (const room of rooms) {
+          await pool.query(`
+            INSERT INTO room_types (listing_id, name, type, icon, tag, base_price, currency, max_occupancy, inventory_count, description, specs, features, amenities)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          `, [
+            newListing.id, room.name || 'Sanctuary Room', room.type || 'suites', room.icon || '🛏️', room.tag || '', Number(room.price) || Number(price) || 0, req.body.currency || 'INR', Number(room.capacity) || 2, Number(room.inventory_count) || 1, room.description || '', room.specs || '', JSON.stringify(room.features || []), JSON.stringify(room.amenities || [])
+          ]);
+        }
+      } catch (rtErr) {
+        console.warn('[POST LISTING] Room types sync warning:', rtErr);
+      }
+    }
+
+    // Sync media_assets table
+    if (Array.isArray(photos) && photos.length > 0) {
+      try {
+        let orderIdx = 0;
+        for (const photo of photos) {
+          await pool.query(`
+            INSERT INTO media_assets (entity_type, entity_id, url, tier, category, title, description, specs, is_hero, order_index)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          `, [
+            'listing', newListing.id, photo.url || photo.previewUrl, photo.tier || 'common', photo.category || 'other', photo.title || '', photo.description || '', photo.specs || '', photo.isHero || false, orderIdx++
+          ]);
+        }
+      } catch (mediaErr) {
+        console.warn('[POST LISTING] Media assets sync warning:', mediaErr);
+      }
+    }
 
     // Invalidate cache
     if (redis) {
@@ -13007,6 +13130,30 @@ app.get('/api/listings/:id', async (req, res) => {
       }
     }
 
+    // MIG-002: Hydrate photos from media_assets table if listing.photos is empty
+    if (listing && (!listing.photos || (Array.isArray(listing.photos) && listing.photos.length === 0))) {
+      try {
+        const mediaResult = await pool.query(
+          'SELECT * FROM media_assets WHERE entity_id = $1 AND entity_type = $2 ORDER BY order_index ASC',
+          [listing.id, 'listing']
+        );
+        if (mediaResult.rows.length > 0) {
+          listing.photos = mediaResult.rows.map((m: any) => ({
+            id: String(m.id),
+            url: m.url,
+            tier: m.tier || 'common',
+            category: m.category || 'other',
+            title: m.title || '',
+            description: m.description || '',
+            specs: m.specs || '',
+            isHero: m.is_hero || false
+          }));
+        }
+      } catch (mediaErr) {
+        console.warn('[MIG-002] Failed to hydrate photos from media_assets table:', mediaErr);
+      }
+    }
+
     res.json(listing);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch listing' });
@@ -13170,7 +13317,16 @@ app.get('/api/listings', async (req, res) => {
         dominant_color_hex: row.dominant_color_hex || null,
         raw_rules: row.raw_rules || null,
         curated_guidelines: row.curated_guidelines || null,
-        experience_tags: Array.isArray(row.experience_tags) ? row.experience_tags : (typeof row.experience_tags === 'string' ? JSON.parse(row.experience_tags || '[]') : [])
+        experience_tags: Array.isArray(row.experience_tags) ? row.experience_tags : (typeof row.experience_tags === 'string' ? JSON.parse(row.experience_tags || '[]') : []),
+        concierge_privileges: row.concierge_privileges || null,
+        host_philosophy: row.host_philosophy || null,
+        nearby: typeof row.nearby === 'string' ? JSON.parse(row.nearby || '[]') : (row.nearby || []),
+        amenity_clusters: typeof row.amenity_clusters === 'string' ? JSON.parse(row.amenity_clusters || '{}') : (row.amenity_clusters || {}),
+        child_safety_specs: typeof row.child_safety_specs === 'string' ? JSON.parse(row.child_safety_specs || '[]') : (row.child_safety_specs || []),
+        seo_title: row.seo_title || null,
+        seo_description: row.seo_description || null,
+        seo_keywords: row.seo_keywords || null,
+        seo_image_url: row.seo_image_url || null
       });
     }
 

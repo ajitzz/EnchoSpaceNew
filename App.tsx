@@ -986,7 +986,8 @@ function App() {
                     setHostView('listings');
                   }}
                   onSuccess={() => {
-                      handleSearch(city);
+                      setEditingListing(null);
+                      handleSearch('all');
                       setHostDashboardRefresh(prev => prev + 1);
                       setHostView('listings');
                       setCurrentView('SEARCH');
