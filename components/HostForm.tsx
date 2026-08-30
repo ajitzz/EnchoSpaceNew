@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, ShieldCheck } from './Icons';
 import { LocationPicker } from './LocationPicker';
 import { PhotoUpload, PhotoData } from './PhotoUpload';
 import { AmenitiesPicker } from './AmenitiesPicker';
+import { SensoryTagPicker } from './SensoryTagPicker';
 import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
 import { useCurrency } from './CurrencyContext';
@@ -635,18 +636,15 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               />
             </div>
 
-            {/* Sensory Atmosphere Deck (Tags) */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Sensory Atmosphere Deck (Tags)</label>
-              <input 
-                type="text" 
-                className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0284C7] text-sm font-medium"
-                value={formData.experience_tags.join(', ')} 
-                onChange={e => setFormData({...formData, experience_tags: e.target.value.split(',').map(s => s.trim()).filter(Boolean)})} 
-                placeholder="e.g. Ocean Waves, Heated Infinity Pool, Private Chef Available" 
-              />
-              <p className="text-[10px] text-slate-500">Comma separated tags to populate the Aman-Standard Sensory Deck.</p>
-            </div>
+            {/* Sensory Atmosphere Deck (Tags) - 10/10 Aman Standard AI Tag Picker */}
+            <SensoryTagPicker
+              selectedTags={formData.experience_tags}
+              onChange={(tags) => setFormData({ ...formData, experience_tags: tags })}
+              listingTitle={formData.title}
+              listingDescription={formData.description}
+              listingType={formData.type}
+              listingLocation={formData.city}
+            />
           </div>
         );
 

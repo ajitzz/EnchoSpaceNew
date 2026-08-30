@@ -43,8 +43,28 @@ import {
   Tag,
   Crown,
   Plus,
-  Minus
-, Search, Bookmark, Share2, Compass , ArrowUpRight } from 'lucide-react';
+  Minus,
+  Search,
+  Bookmark,
+  Share2,
+  Compass,
+  ArrowUpRight,
+  Coffee,
+  Sun,
+  Moon,
+  Dumbbell,
+  Shield,
+  Trees,
+  Heart,
+  Radio,
+  Camera,
+  Film,
+  BookOpen,
+  Wind,
+  Anchor,
+  Tent,
+  Bed
+} from 'lucide-react';
 import { uiAudio } from './audio';
 import { useToast } from './ToastContext';
 import { SanctuaryGalleryModal, GalleryCategoryKey } from './SanctuaryGalleryModal';
@@ -74,12 +94,27 @@ interface ListingDetailsNewProps {
 
 const getTagIcon = (tag: string) => {
   const lower = tag.toLowerCase();
-  if (lower.includes('ocean') || lower.includes('sea') || lower.includes('water') || lower.includes('beach')) return Waves;
-  if (lower.includes('chef') || lower.includes('kitchen') || lower.includes('dining') || lower.includes('culinary')) return Utensils;
-  if (lower.includes('pool') || lower.includes('infinity') || lower.includes('jacuzzi') || lower.includes('spa')) return Waves;
-  if (lower.includes('wifi') || lower.includes('speed') || lower.includes('internet') || lower.includes('fiber')) return Wifi;
-  if (lower.includes('mountain') || lower.includes('view') || lower.includes('vistas') || lower.includes('panoramic')) return Mountain;
-  if (lower.includes('wine') || lower.includes('bar') || lower.includes('cellar')) return Wine;
+  if (lower.includes('ocean') || lower.includes('sea') || lower.includes('water') || lower.includes('beach') || lower.includes('reef') || lower.includes('river') || lower.includes('backwater')) return Waves;
+  if (lower.includes('chef') || lower.includes('kitchen') || lower.includes('dining') || lower.includes('culinary') || lower.includes('tasting') || lower.includes('breakfast') || lower.includes('bbq')) return Utensils;
+  if (lower.includes('pool') || lower.includes('infinity') || lower.includes('jacuzzi') || lower.includes('plunge') || lower.includes('hydrotherapy')) return Waves;
+  if (lower.includes('wifi') || lower.includes('speed') || lower.includes('internet') || lower.includes('fiber') || lower.includes('starlink') || lower.includes('isp')) return Wifi;
+  if (lower.includes('mountain') || lower.includes('himalayan') || lower.includes('peak') || lower.includes('cliff') || lower.includes('valley') || lower.includes('lodge')) return Mountain;
+  if (lower.includes('wine') || lower.includes('bar') || lower.includes('cellar') || lower.includes('mixology') || lower.includes('minibar')) return Wine;
+  if (lower.includes('coffee') || lower.includes('tea')) return Coffee;
+  if (lower.includes('forest') || lower.includes('tree') || lower.includes('jungle') || lower.includes('canopy') || lower.includes('botanical') || lower.includes('garden') || lower.includes('paddy')) return Trees;
+  if (lower.includes('fire') || lower.includes('bonfire') || lower.includes('sauna') || lower.includes('steam')) return Flame;
+  if (lower.includes('sun') || lower.includes('sunrise') || lower.includes('sunset') || lower.includes('circadian')) return Sun;
+  if (lower.includes('star') || lower.includes('night') || lower.includes('moon') || lower.includes('stargazing')) return Moon;
+  if (lower.includes('yoga') || lower.includes('spa') || lower.includes('meditation') || lower.includes('ayurvedic') || lower.includes('wellness') || lower.includes('trainer') || lower.includes('fitness')) return Dumbbell;
+  if (lower.includes('butler') || lower.includes('concierge') || lower.includes('celebrity') || lower.includes('privacy') || lower.includes('vip') || lower.includes('presidential')) return Crown;
+  if (lower.includes('security') || lower.includes('safe') || lower.includes('shield')) return Shield;
+  if (lower.includes('photo') || lower.includes('camera')) return Camera;
+  if (lower.includes('cinema') || lower.includes('theater') || lower.includes('film')) return Film;
+  if (lower.includes('library') || lower.includes('reading') || lower.includes('book')) return BookOpen;
+  if (lower.includes('air') || lower.includes('wind') || lower.includes('breeze') || lower.includes('pavilion') || lower.includes('silence') || lower.includes('acoustic')) return Wind;
+  if (lower.includes('boat') || lower.includes('sailing') || lower.includes('yacht') || lower.includes('kayak')) return Anchor;
+  if (lower.includes('trek') || lower.includes('trail') || lower.includes('walk') || lower.includes('tour') || lower.includes('explore')) return Compass;
+  if (lower.includes('bed') || lower.includes('suite') || lower.includes('room')) return Bed;
   return Sparkles;
 };
 

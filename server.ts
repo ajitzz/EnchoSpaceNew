@@ -18242,7 +18242,7 @@ app.post('/api/ai/curate-rules', async (req, res) => {
         if (response && response.text) {
           return res.json({ curatedGuidelines: response.text.trim() });
         }
-      } catch (geminiErr) {
+      } catch (geminiErr: any) {
         console.warn('Gemini rule curation fallback invoked:', geminiErr?.message);
       }
     }
@@ -18266,6 +18266,90 @@ app.post('/api/ai/curate-rules', async (req, res) => {
   } catch (err) {
     console.error('Curate rules error:', err);
     res.status(500).json({ error: 'Failed to curate rules' });
+  }
+});
+
+// ADR-SENSORY-001: AI Sensory Atmosphere Tag Suggester
+app.post('/api/ai/suggest-sensory-tags', async (req, res) => {
+  try {
+    const { title, description, propertyType, location } = req.body;
+    if (!title && !description) {
+      return res.status(400).json({ error: 'title or description required' });
+    }
+
+    const ALL_AVAILABLE_TAGS = [
+      'Ocean Waves','Panoramic Mountain View','Valley Sunrise','Forest Canopy','Desert Dunes Vista',
+      'Backwater Views','Waterfall Proximity','Tea Estate Vista','Stargazing Sky','Himalayan Peaks',
+      'River Frontage','Cliff-Top Perch','Paddy Field Views','Coral Reef Access','Jungle Sounds',
+      'Heated Infinity Pool','Private Jacuzzi','In-Villa Spa Treatments','Yoga Deck','Meditation Garden',
+      'Ayurvedic Therapies','Cold Plunge Pool','Steam & Sauna','Hydrotherapy Circuit',
+      'Forest Bathing Trail','Sunrise Yoga Sessions','Wellness Consultation',
+      'Private Chef Available','Wine Cellar Access','Farm-to-Table Dining','Organic Tea Garden',
+      'In-Villa Breakfast','Poolside Dining','Bonfire BBQ Setup','Artisan Coffee Bar',
+      'Tasting Menu Experience','Mixology Bar',
+      '1 Gbps Fiber WiFi','Starlink Satellite WiFi','Dedicated Work Studio','Smart Home Controls',
+      'Video Conferencing Setup','Dual ISP Backup Internet',
+      'Artisan Fireplace','Himalayan Silence','Rainforest Soundscape','Candlelit Courtyards',
+      'Acoustic Architecture','Circadian Lighting System','Aromatherapy Diffusion',
+      'Heritage Architecture','Minimalist Zen Design','Open-Air Pavilions',
+      'Private Tennis Court','Nature Trekking Routes','Kayaking & Canoeing','Horse Riding Trails',
+      'Archery Range','Mountain Cycling Paths','Bird Watching Post','Sunset Sailing',
+      'Golf Proximity','Rock Climbing Wall',
+      '24/7 Butler Service','Private Airport Transfer','Helipad Access','Celebrity-Grade Privacy',
+      'Curated Minibar','Personal Trainer','Childcare Available','Dedicated Concierge',
+      'Cultural Immersion Walks','Local Artisan Workshops','Sunset Photography Tours',
+      'Guided Stargazing','Private Boat Tours','Private Cinema Room','Library & Reading Nook',
+      'Bonfire Storytelling Nights'
+    ];
+
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const prompt = `You are a luxury hospitality AI. Based on the property details below, select the most relevant Sensory Atmosphere Tags from the provided list. Return ONLY a JSON array of tag labels (max 8 tags) that genuinely match the property.
+
+Property Title: ${title || 'Luxury Estate'}
+Description: ${description || ''}
+Property Type: ${propertyType || 'Resort'}
+Location: ${location || ''}
+
+Available tags (select max 8 from this EXACT list only):
+${ALL_AVAILABLE_TAGS.join(', ')}
+
+Return ONLY a raw JSON array like: ["Tag 1", "Tag 2", "Tag 3"]`;
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+        });
+        if (response && response.text) {
+          const text = response.text.trim().replace(/```json\n?|\n?```/g, '');
+          const match = text.match(/\[[\s\S]*\]/);
+          if (match) {
+            const parsed = JSON.parse(match[0]);
+            const validated = parsed.filter((t: string) => ALL_AVAILABLE_TAGS.includes(t)).slice(0, 8);
+            return res.json({ tags: validated });
+          }
+        }
+      } catch (geminiErr: any) {
+        console.warn('Gemini tag suggestion fallback:', geminiErr?.message);
+      }
+    }
+
+    // Heuristic fallback
+    const desc = `${title} ${description} ${location}`.toLowerCase();
+    const fallback: string[] = [];
+    if (desc.includes('mountain') || desc.includes('hill') || desc.includes('peak')) fallback.push('Panoramic Mountain View');
+    if (desc.includes('ocean') || desc.includes('sea') || desc.includes('beach')) fallback.push('Ocean Waves');
+    if (desc.includes('pool') || desc.includes('infinity')) fallback.push('Heated Infinity Pool');
+    if (desc.includes('forest') || desc.includes('jungle') || desc.includes('wildlife')) fallback.push('Forest Canopy');
+    if (desc.includes('chef') || desc.includes('culinary') || desc.includes('dining')) fallback.push('Private Chef Available');
+    if (desc.includes('spa') || desc.includes('wellness') || desc.includes('yoga')) fallback.push('In-Villa Spa Treatments');
+    if (desc.includes('wifi') || desc.includes('work') || desc.includes('remote')) fallback.push('1 Gbps Fiber WiFi');
+    if (desc.includes('butler') || desc.includes('luxury') || desc.includes('concierge')) fallback.push('24/7 Butler Service');
+    res.json({ tags: fallback.slice(0, 6) });
+  } catch (err) {
+    console.error('Suggest sensory tags error:', err);
+    res.status(500).json({ error: 'Failed to suggest tags' });
   }
 });
 
