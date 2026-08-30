@@ -495,29 +495,6 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
     ];
   }, [listing.curated_guidelines]);
 
-  const [showAllAmenities, setShowAllAmenities] = useState(false);
-
-  const amenityIcon = (amenity: string): string => {
-    const a = amenity.toLowerCase();
-    if (a.includes('wifi') || a.includes('internet')) return '📶';
-    if (a.includes('pool')) return '🏊';
-    if (a.includes('gym') || a.includes('fitness')) return '🏋️';
-    if (a.includes('spa') || a.includes('wellness')) return '💆';
-    if (a.includes('parking')) return '🚗';
-    if (a.includes('kitchen')) return '🍳';
-    if (a.includes('air') || a.includes('ac')) return '❄️';
-    if (a.includes('tv') || a.includes('television')) return '📺';
-    if (a.includes('breakfast')) return '☕';
-    if (a.includes('laundry') || a.includes('washing')) return '🧿';
-    if (a.includes('garden') || a.includes('outdoor')) return '🌿';
-    if (a.includes('bar') || a.includes('minibar')) return '🍸';
-    if (a.includes('restaurant') || a.includes('dining')) return '🍽️';
-    if (a.includes('pet') || a.includes('dog')) return '🐕';
-    if (a.includes('beach')) return '🏖️';
-    if (a.includes('view') || a.includes('mountain')) return '⛰️';
-    return '✨';
-  };
-
   // Accordion state
   const [openAccordion, setOpenAccordion] = useState<{ about: boolean; guidelines: boolean; safety: boolean; services: boolean; philosophy: boolean }>({
     about: true,

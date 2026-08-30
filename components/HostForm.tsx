@@ -54,6 +54,22 @@ const PROPERTY_TYPES = [
 
 const ROOM_ICONS = ['🛏️', '👑', '💻', '🌴', '🏡', '🌺', '🎋', '⭐', '🏖️', '🌿', '🎯', '🌊', '✨', '🏰'];
 
+// ADR-001 REVISED: Room classifications are FIXED. Hosts SELECT, not free-type.
+// Gallery routing keys are derived automatically from name.
+export const ROOM_CLASSIFICATIONS: { id: string; name: string; label: string; tier: string; icon: string; defaultSpecs: string; defaultTag: string }[] = [
+  { id: 'presidential-suite',  name: 'Presidential Suite',        label: 'Presidential Suite',        tier: 'suites',    icon: '👑', defaultSpecs: 'Panoramic views · King Platform Bed · Private Jacuzzi', defaultTag: 'Most Exclusive' },
+  { id: 'deluxe-double',       name: 'Deluxe Double Room',        label: 'Deluxe Double Room',        tier: 'deluxe',    icon: '🛏️', defaultSpecs: 'Garden View · Queen Bed · Spa Bath',                  defaultTag: 'Best Value'     },
+  { id: 'executive-single',    name: 'Executive Single Room',     label: 'Executive Single Room',     tier: 'executive', icon: '💼', defaultSpecs: 'Valley View · Single Bed · Work Station',             defaultTag: 'Work-Friendly'  },
+  { id: 'penthouse-suite',     name: 'Penthouse Suite',           label: 'Penthouse Suite',           tier: 'penthouse', icon: '🌆', defaultSpecs: 'City View · Super King Bed · Private Terrace',        defaultTag: 'Ultra-Luxury'   },
+  { id: 'honeymoon-suite',     name: 'Honeymoon Suite',           label: 'Honeymoon Suite',           tier: 'honeymoon', icon: '🌺', defaultSpecs: 'Romantic Decor · King Bed · Rose Petal Setup',        defaultTag: 'Most Romantic'  },
+  { id: 'family-villa',        name: 'Family Villa',              label: 'Family Villa',              tier: 'villa',     icon: '🏡', defaultSpecs: '3 Bedrooms · Private Pool · Play Area',               defaultTag: 'Family Choice'  },
+  { id: 'garden-cottage',      name: 'Garden Cottage',            label: 'Garden Cottage',            tier: 'cottage',   icon: '🌿', defaultSpecs: 'Garden Access · King Bed · Open Shower',             defaultTag: 'Nature Immersed'},
+  { id: 'beachfront-cabana',   name: 'Beachfront Cabana',         label: 'Beachfront Cabana',         tier: 'cabana',    icon: '🏖️', defaultSpecs: 'Direct Beach Access · King Bed · Ocean View',        defaultTag: 'Sea-front'      },
+  { id: 'mountain-lodge',      name: 'Mountain Lodge',            label: 'Mountain Lodge',            tier: 'lodge',     icon: '🏔️', defaultSpecs: 'Mountain Views · Fireplace · Wooden Deck',           defaultTag: 'Highland Escape' },
+  { id: 'wellness-retreat',    name: 'Wellness Retreat Room',     label: 'Wellness Retreat Room',     tier: 'wellness',  icon: '🧘', defaultSpecs: 'In-Room Yoga Space · Rain Shower · Meditation Kit',  defaultTag: 'Wellness Focus' },
+  { id: 'pool-villa',          name: 'Private Pool Villa',        label: 'Private Pool Villa',        tier: 'pool-villa',icon: '🏊', defaultSpecs: 'Private Infinity Pool · King Bed · Lounge Deck',     defaultTag: 'Pool Access'    },
+];
+
 export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingListing }) => {
   const { user } = useAuth();
   const { addToast } = useToast();
@@ -454,19 +470,20 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
   
   const addRoom = () => {
     const newId = `room-${Date.now()}`;
+    const defaultClass = ROOM_CLASSIFICATIONS[0];
     setFormData(prev => ({
       ...prev,
       rooms: [...prev.rooms, { 
         id: newId, 
-        name: '', 
-        type: `room-${prev.rooms.length+1}`, 
-        icon: '🛏️', 
-        tag: '', 
+        name: defaultClass.name, 
+        type: defaultClass.tier, 
+        icon: defaultClass.icon, 
+        tag: defaultClass.defaultTag, 
         price: 0, 
         capacity: 2, 
         inventory_count: 1, 
         description: '', 
-        specs: '', 
+        specs: defaultClass.defaultSpecs, 
         features: [], 
         amenities: [], 
         photos: [] 
@@ -757,8 +774,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         return (
           <div className="space-y-8 animate-in fade-in duration-300">
             <div>
-              <h2 className="text-2xl font-black text-white tracking-tight">Room Types Builder</h2>
-              <p className="text-sm text-slate-400 mt-1">Configure free-form accommodations, individual rates, subunit inventories, and per-room media galleries.</p>
+              <h2 className="text-2xl font-black text-white tracking-tight">Room Classification Builder</h2>
+              <p className="text-sm text-slate-400 mt-1">Select from Encho's curated room classifications, set individual rates, configure subunit inventories, and upload per-room spatial media galleries.</p>
             </div>
 
             <div className="space-y-4">
@@ -828,31 +845,54 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                           </div>
                         </div>
 
-                        {/* Row: Name & Tier Key */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-1.5">
-                            <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Room Name (Guest-Facing) *</label>
-                            <input 
-                              type="text" 
-                              className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
-                              value={room.name} 
-                              onChange={e => updateRoom(room.id, 'name', e.target.value)} 
-                              placeholder="e.g. Presidential Panorama Suite"
-                            />
+                        {/* Classification Selector — Controlled, no free-form naming */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Room Classification *</label>
+                            <span className="text-[10px] text-slate-500 bg-slate-800 px-2 py-1 rounded-full border border-slate-700">
+                              🔒 Standard classifications only
+                            </span>
                           </div>
-                          <div className="space-y-1.5">
-                            <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Gallery Tier Key (Routing) *</label>
-                            <input 
-                              type="text" 
-                              className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 text-sm font-mono lowercase focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
-                              value={room.type} 
-                              onChange={e => updateRoom(room.id, 'type', e.target.value.toLowerCase().replace(/\s+/g, '-'))} 
-                              placeholder="e.g. suites, triplux, honeymoon"
-                            />
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {ROOM_CLASSIFICATIONS.map(cls => {
+                              const isSelected = room.name === cls.name;
+                              return (
+                                <button
+                                  key={cls.id}
+                                  type="button"
+                                  onClick={() => {
+                                    updateRoom(room.id, 'name', cls.name);
+                                    updateRoom(room.id, 'type', cls.tier);
+                                    updateRoom(room.id, 'icon', cls.icon);
+                                    if (!room.tag) updateRoom(room.id, 'tag', cls.defaultTag);
+                                    if (!room.specs) updateRoom(room.id, 'specs', cls.defaultSpecs);
+                                  }}
+                                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                                    isSelected
+                                      ? 'border-[#0284C7] bg-[#0284C7]/15 ring-1 ring-[#0284C7]'
+                                      : 'border-slate-700 bg-[#151D2C] hover:border-slate-500 hover:bg-[#1C2638]'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-base">{cls.icon}</span>
+                                    <span className={`text-xs font-bold leading-tight ${isSelected ? 'text-white' : 'text-slate-200'}`}>{cls.label}</span>
+                                    {isSelected && <span className="ml-auto text-[#0284C7] text-xs font-black">✓</span>}
+                                  </div>
+                                  <p className="text-[10px] text-slate-500 leading-tight">{cls.defaultSpecs}</p>
+                                </button>
+                              );
+                            })}
                           </div>
+                          {room.name && (
+                            <div className="flex items-center gap-2 p-3 bg-[#0284C7]/10 border border-[#0284C7]/30 rounded-xl">
+                              <span className="text-[#0284C7] text-xs font-bold">Selected:</span>
+                              <span className="text-white text-xs font-bold">{room.name}</span>
+                              <span className="text-slate-400 text-[10px] font-mono ml-auto">tier: {room.type}</span>
+                            </div>
+                          )}
                         </div>
 
-                        {/* Row: Price, Capacity, Inventory, Tag */}
+                        {/* Row: Price, Capacity, Inventory */}
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                           <div className="space-y-1.5">
                             <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Nightly Rate (₹) *</label>
@@ -951,10 +991,17 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                           </div>
                         </div>
 
-                        {/* Room Photos */}
+                        {/* Room Photos with Spatial Sub-Classification */}
                         <div className="space-y-2 pt-2 border-t border-slate-800">
-                          <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Room-Specific Media</label>
-                          <p className="text-xs text-slate-500">Photos uploaded here are locked to this room type in the guest gallery.</p>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Room Photos & Spatial Sub-Classification</label>
+                              <p className="text-xs text-slate-500 mt-0.5">Upload photos for <strong className="text-slate-300">{room.name || 'this room'}</strong> — then click any photo to tag it with its sub-category: <span className="text-[#0284C7]">Bedroom · Bathroom · Balcony · Pool & Wellness · Living Room · Views</span></p>
+                            </div>
+                            <span className="shrink-0 text-[10px] font-bold text-amber-400 bg-amber-900/30 border border-amber-800/50 px-2 py-1 rounded-full whitespace-nowrap">
+                              🔒 Locked to: {room.name || 'Room'}
+                            </span>
+                          </div>
                           <PhotoUpload 
                             photos={room.photos || []} 
                             setPhotos={(newPhotos) => updateRoom(room.id, 'photos', typeof newPhotos === 'function' ? newPhotos(room.photos || []) : newPhotos)} 
