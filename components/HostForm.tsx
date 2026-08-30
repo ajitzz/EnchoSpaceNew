@@ -16,7 +16,7 @@ import {
   X, Sparkles, Check, CheckCircle2, Bed, Users, Trash2, Crown, Star, DoorOpen, Bath, 
   ChevronDown, ChevronUp, Globe, MapPin, Video, AlertCircle, Info, Loader2, Plus, Minus, Tag,
   Eye, Compass, DollarSign, Layers, Shield, ArrowRight, Wand2, CheckCircle,
-  Monitor, Tablet, Smartphone, Maximize2, ExternalLink
+  Monitor, Tablet, Smartphone, Maximize2, ExternalLink, Images
 } from 'lucide-react';
 
 interface HostFormProps {
@@ -147,7 +147,13 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
   
   // 10/10 Live Guest Preview Simulator State
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewInitialGallery, setPreviewInitialGallery] = useState(false);
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'laptop' | 'tablet' | 'mobile'>('desktop');
+
+  const openGuestPreview = useCallback((openGallery = false) => {
+    setPreviewInitialGallery(openGallery);
+    setIsPreviewOpen(true);
+  }, []);
 
   // Real-time Guest View Data Compiler
   const previewListing: Listing = useMemo(() => {
@@ -935,9 +941,19 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
       case 3:
         return (
           <div className="space-y-8 animate-in fade-in duration-300">
-            <div>
-              <h2 className="text-2xl font-black text-white tracking-tight">Room Classification Builder</h2>
-              <p className="text-sm text-slate-400 mt-1">Select from Encho's curated room classifications, set individual rates, configure subunit inventories, and upload per-room spatial media galleries.</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-black text-white tracking-tight">Room Classification Builder</h2>
+                <p className="text-sm text-slate-400 mt-1">Select from Encho's curated room classifications, set individual rates, configure subunit inventories, and upload per-room spatial media galleries.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => openGuestPreview(true)}
+                className="shrink-0 px-4 py-2.5 bg-gradient-to-r from-sky-500/20 to-indigo-500/20 hover:from-sky-500/30 hover:to-indigo-500/30 border border-sky-500/40 text-sky-200 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shadow-md shadow-sky-950/40"
+              >
+                <Images className="w-4 h-4 text-sky-400" />
+                <span>Preview in Spatial Gallery</span>
+              </button>
             </div>
 
             <div className="space-y-4">
@@ -1191,9 +1207,19 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
       case 4:
         return (
           <div className="space-y-8 animate-in fade-in duration-300">
-            <div>
-              <h2 className="text-2xl font-black text-white tracking-tight">Property-Wide Media</h2>
-              <p className="text-sm text-slate-400 mt-1">Upload shared grounds, facade, pool, wellness, and restaurant photography for the main gallery.</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-black text-white tracking-tight">Property-Wide Media</h2>
+                <p className="text-sm text-slate-400 mt-1">Upload shared grounds, facade, pool, wellness, and restaurant photography for the main gallery.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => openGuestPreview(true)}
+                className="shrink-0 px-4 py-2.5 bg-gradient-to-r from-sky-500/20 to-indigo-500/20 hover:from-sky-500/30 hover:to-indigo-500/30 border border-sky-500/40 text-sky-200 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shadow-md shadow-sky-950/40"
+              >
+                <Images className="w-4 h-4 text-sky-400" />
+                <span>Preview in Spatial Gallery</span>
+              </button>
             </div>
 
             <div className="space-y-3">
@@ -1809,33 +1835,52 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                 </div>
               </div>
 
-              {/* Center Device Switcher */}
-              <div className="flex items-center bg-[#141E30] border border-slate-700/80 p-1 rounded-2xl gap-1 shadow-inner">
-                {[
-                  { id: 'desktop', label: 'Desktop', icon: Monitor, sub: 'Fluid' },
-                  { id: 'laptop',  label: 'Laptop',  icon: Maximize2, sub: '1280px' },
-                  { id: 'tablet',  label: 'Tablet',  icon: Tablet,  sub: '768px' },
-                  { id: 'mobile',  label: 'Mobile',  icon: Smartphone, sub: '390px' }
-                ].map(dev => {
-                  const Icon = dev.icon;
-                  const isActive = previewDevice === dev.id;
-                  return (
-                    <button
-                      key={dev.id}
-                      type="button"
-                      onClick={() => setPreviewDevice(dev.id as any)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        isActive
-                          ? 'bg-[#0284C7] text-white shadow-md shadow-sky-900/40'
-                          : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                      }`}
-                      title={`${dev.label} View (${dev.sub})`}
-                    >
-                      <Icon className="w-3.5 h-3.5" />
-                      <span className="hidden md:inline">{dev.label}</span>
-                    </button>
-                  );
-                })}
+              {/* Center Device Switcher & Spatial Gallery Quick Trigger */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center bg-[#141E30] border border-slate-700/80 p-1 rounded-2xl gap-1 shadow-inner">
+                  {[
+                    { id: 'desktop', label: 'Desktop', icon: Monitor, sub: 'Fluid' },
+                    { id: 'laptop',  label: 'Laptop',  icon: Maximize2, sub: '1280px' },
+                    { id: 'tablet',  label: 'Tablet',  icon: Tablet,  sub: '768px' },
+                    { id: 'mobile',  label: 'Mobile',  icon: Smartphone, sub: '390px' }
+                  ].map(dev => {
+                    const Icon = dev.icon;
+                    const isActive = previewDevice === dev.id;
+                    return (
+                      <button
+                        key={dev.id}
+                        type="button"
+                        onClick={() => setPreviewDevice(dev.id as any)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          isActive
+                            ? 'bg-[#0284C7] text-white shadow-md shadow-sky-900/40'
+                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                        }`}
+                        title={`${dev.label} View (${dev.sub})`}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                        <span className="hidden md:inline">{dev.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setPreviewInitialGallery(prev => !prev)}
+                  className={`hidden sm:flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer shadow-md ${
+                    previewInitialGallery
+                      ? 'bg-sky-500/20 border-sky-400 text-sky-200 shadow-sky-950/60'
+                      : 'bg-[#141E30] border-slate-700 text-slate-300 hover:border-slate-500 hover:text-white'
+                  }`}
+                  title="Open Encho Spatial Gallery Overlay"
+                >
+                  <Images className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Spatial Gallery</span>
+                  <span className="text-[10px] font-mono font-bold bg-sky-950/80 border border-sky-500/40 text-sky-300 px-1.5 py-0.2 rounded-full">
+                    {previewListing.photos?.length || 0}
+                  </span>
+                </button>
               </div>
 
               {/* Right Exit Button */}
@@ -1880,6 +1925,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                   listing={previewListing}
                   onBack={() => setIsPreviewOpen(false)}
                   isFavorite={false}
+                  initialGalleryOpen={previewInitialGallery}
                   onToggleFavorite={() => addToast('Wishlist', 'Saved to wishlist (Live Simulation Mode)', 'success')}
                   onBook={() => addToast('Reservation Simulator', 'Guest reservation checkout flow verified!', 'success')}
                   onContactHost={() => addToast('Host Concierge', 'Walled garden concierge chat opened (Live Simulation Mode)', 'info')}

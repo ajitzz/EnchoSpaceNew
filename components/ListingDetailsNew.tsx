@@ -91,6 +91,7 @@ interface ListingDetailsNewProps {
   onBook?: (data: any) => void;
   onContactHost?: () => void;
   onRequestAuth?: () => void;
+  initialGalleryOpen?: boolean;
 }
 
 // Legacy getTagIcon removed in favor of shared getSensoryTagIcon
@@ -132,7 +133,8 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   onToggleFavorite, 
   onBook, 
   onContactHost, 
-  onRequestAuth 
+  onRequestAuth,
+  initialGalleryOpen = false
 }) => {
   const { user } = useAuth();
   const { addToast } = useToast();
@@ -454,11 +456,17 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   };
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  const [isGalleryOpen, setIsGalleryOpen] = useState(initialGalleryOpen || false);
   const [galleryInitialCategory, setGalleryInitialCategory] = useState<GalleryCategoryKey>('all');
   const [galleryInitialIndex, setGalleryInitialIndex] = useState(0);
   const [showFloatingCapsule, setShowFloatingCapsule] = useState(false);
   const zone1Ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (initialGalleryOpen !== undefined) {
+      setIsGalleryOpen(initialGalleryOpen);
+    }
+  }, [initialGalleryOpen]);
 
   // Scroll listener for smooth bi-directional morphing of Booking Dock
   useEffect(() => {
