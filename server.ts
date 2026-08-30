@@ -2722,6 +2722,18 @@ const ensureDbInitialized = async () => {
   if (!initPromise) {
     initPromise = (async () => {
       try {
+        // FAANG Fast-Path: Bypass massive DDL locks in Vercel Serverless if schema is up-to-date
+        try {
+          const fastCheck = await pool.query(`SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='amenity_clusters' LIMIT 1`);
+          if (fastCheck.rowCount && fastCheck.rowCount > 0) {
+             marketingSchemaInitialized = true;
+             usersTableInitialized = true;
+             listingsTableInitialized = true;
+             return;
+          }
+        } catch (e) {
+          // ignore check failure, proceed to full init
+        }
         await ensureUsersTable();
         await ensureListingsTable();
 
