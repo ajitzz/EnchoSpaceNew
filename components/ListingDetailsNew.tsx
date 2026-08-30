@@ -515,16 +515,15 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
     ];
   }, [listing.curated_guidelines]);
 
-  // Accordion state
-  const [openAccordion, setOpenAccordion] = useState<{ about: boolean; guidelines: boolean; safety: boolean; services: boolean; philosophy: boolean }>({
+  // Accordion state (01 About, 02 Hospitality Guidelines, 03 Family Safety, 04 Concierge Privileges)
+  const [openAccordion, setOpenAccordion] = useState<{ about: boolean; guidelines: boolean; safety: boolean; services: boolean }>({
     about: true,
     guidelines: false,
     safety: false,
-    services: false,
-    philosophy: false
+    services: false
   });
 
-  const toggleAccordion = (key: 'about' | 'guidelines' | 'safety' | 'services' | 'philosophy') => {
+  const toggleAccordion = (key: 'about' | 'guidelines' | 'safety' | 'services') => {
     uiAudio.playClick();
     setOpenAccordion(prev => ({ ...prev, [key]: !prev[key] }));
   };
@@ -1039,32 +1038,6 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                       </div>
                     )}
                   </div>
-
-                  {/* Accordion Item 5: Host Philosophy */}
-                  <div className="border-b border-zinc-200/80 transition-colors">
-                    <button
-                      type="button"
-                      onClick={() => toggleAccordion('philosophy')}
-                      className="w-full py-5 flex items-center justify-between text-left group transition-all cursor-pointer"
-                    >
-                      <div className="flex items-center gap-3.5">
-                        <span className="text-zinc-400 font-bold text-xs tracking-wider font-mono">05</span>
-                        <h3 className="text-lg md:text-xl font-bold text-zinc-900 tracking-tight group-hover:text-zinc-700 font-display">
-                          Host Philosophy
-                        </h3>
-                      </div>
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-500 group-hover:bg-zinc-100 transition-all text-xl font-light">
-                        {openAccordion.philosophy ? <Minus className="w-4 h-4 text-zinc-700" /> : <Plus className="w-4 h-4 text-zinc-700" />}
-                      </div>
-                    </button>
-                    {openAccordion.philosophy && (
-                      <div className="pb-6 pt-1 text-zinc-600 text-sm md:text-base leading-relaxed space-y-3 font-normal animate-fade-in pl-8 pr-2">
-                        <p className="text-xs md:text-sm text-zinc-600 leading-relaxed italic">
-                          "{listing.host_philosophy || "Hosting is an art form of anticipation. Our mission is to curate an environment where the architecture fades into the background, and the sensory experience takes precedence, allowing guests to achieve absolute cognitive reset."}"
-                        </p>
-                      </div>
-                    )}
-                  </div>
                 </section>
 
                 {/* ANALYTICAL TRUST ANCHOR */}
@@ -1122,9 +1095,9 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     </button>
                   </div>
 
-                  {/* Host Editorial Quote */}
+                  {/* Host Philosophy / Editorial Message */}
                   <div className="p-4 rounded-2xl bg-zinc-50 border-l-2 border-zinc-900 text-sm md:text-base text-zinc-700 font-medium italic leading-relaxed">
-                    "{listing.editorial_quote || "Our design philosophy is to allow natural sunlight and acoustic stillness to heal the modern soul. Every detail here is intentional."}"
+                    "{listing.host_philosophy || listing.editorial_quote || "Our design philosophy is to allow natural sunlight and acoustic stillness to heal the modern soul. Every detail here is intentional."}"
                   </div>
                 </section>
             </div>

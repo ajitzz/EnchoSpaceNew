@@ -294,7 +294,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
       amenities: formData.amenities.length > 0 ? formData.amenities : ['Heated Pool', 'Private Chef', '1 Gbps WiFi', 'Air Conditioning', 'Free Parking', 'Spa'],
       experience_tags: formData.experience_tags.length > 0 ? formData.experience_tags : ['Ocean Waves', 'Heated Infinity Pool', 'Private Chef Available', '1 Gbps Fiber WiFi', 'Panoramic Mountain View'],
       concierge_privileges: formData.concierge_privileges || 'All guests receive dedicated access to our 24/7 Host Concierge for private cellar tastings, driver transfers, and in-villa wellness treatments.',
-      host_philosophy: formData.host_philosophy || 'Hosting is an art form of anticipation. Our mission is to curate an environment where architecture and nature merge seamlessly.',
+      host_philosophy: formData.host_philosophy || 'Our design philosophy is to allow natural sunlight and acoustic stillness to heal the modern soul. Every detail here is intentional.',
       raw_rules: formData.raw_rules || 'Quiet hours after twilight. No smoking indoors.',
       curated_guidelines: formData.curated_guidelines || 'We invite guests to embrace the tranquil atmosphere of the estate, observing quiet serenity after twilight.',
       child_safety_specs: formData.child_safety_specs || [],
@@ -792,18 +792,19 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               />
             </div>
 
-            {/* Host Philosophy */}
+            {/* Host Philosophy & Signature Quote */}
             <div className="space-y-2">
               <div className="flex justify-between items-center">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Host Philosophy</label>
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Host Philosophy & Signature Message</label>
                 <span className="text-xs text-slate-400 font-mono">{formData.host_philosophy.length} chars</span>
               </div>
               <textarea 
                 className="w-full bg-[#151D2C] border border-slate-700/80 rounded-xl p-4 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0284C7] transition-all text-sm leading-relaxed h-24 font-medium resize-none shadow-inner"
                 value={formData.host_philosophy} 
                 onChange={e => setFormData({...formData, host_philosophy: e.target.value})} 
-                placeholder="Describe your personal hosting philosophy, cultural approach, and what makes your hospitality unique..."
+                placeholder="e.g. Our design philosophy is to allow natural sunlight and acoustic stillness to heal the modern soul. Every detail here is intentional."
               />
+              <p className="text-[10px] text-slate-500">This quote appears in the verified Host section on your listing.</p>
             </div>
 
             {/* Sensory Atmosphere Deck (Tags) - 10/10 Aman Standard AI Tag Picker */}
