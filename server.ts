@@ -19225,7 +19225,7 @@ export const recoverOrphanedMetaTransactions = async (overridePool?: any) => {
   );
 };
 
-import { googleOfflineConversions } from './src/lib/providers/google/GoogleOfflineConversions';
+import { googleOfflineConversions } from './src/lib/providers/google/GoogleOfflineConversions.js';
 
 async function processGoogleOfflineConversions() {
   try {
@@ -19239,7 +19239,7 @@ async function processGoogleOfflineConversions() {
   }
 }
 
-import { TokenHealthMonitor } from './src/lib/observability/tokenHealthMonitor';
+import { TokenHealthMonitor } from './src/lib/observability/tokenHealthMonitor.js';
 
 // Run every 2 minutes — orphans are only eligible after 5 min (RECOVERY_LEASE_STALE_THRESHOLD_SECONDS)
 if (shouldRunBackgroundWorkers) {

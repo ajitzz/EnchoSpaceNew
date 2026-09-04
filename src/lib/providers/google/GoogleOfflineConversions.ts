@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { googleAdsClient } from './GoogleAdsClient';
+import { googleAdsClient } from './GoogleAdsClient.js';
 
 export interface OfflineConversion {
   bookingId: string;

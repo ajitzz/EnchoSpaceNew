@@ -1,4 +1,4 @@
-import { AlertService } from './alertService';
+import { AlertService } from './alertService.js';
 import pg from 'pg';
 
 export class TokenHealthMonitor {
