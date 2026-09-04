@@ -1,11 +1,34 @@
 import { useAuth } from './AuthContext';
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useScroll, useTransform, useMotionTemplate, useMotionValueEvent } from 'framer-motion';
 import { SEO } from './SEO';
 import { Listing } from '../types';
 import { ListingErrorBoundary } from './ListingErrorBoundary';
+
+export const getBrandTypography = (fontId?: string) => {
+    switch (fontId) {
+        case 'font-playfair': return { fontFamily: '"Playfair Display", serif', className: 'tracking-wider font-semibold' };
+        case 'font-cormorant': return { fontFamily: '"Cormorant", serif', className: 'tracking-[0.15em] uppercase font-semibold' };
+        case 'font-montserrat': return { fontFamily: '"Montserrat", sans-serif', className: 'tracking-[0.25em] uppercase font-medium' };
+        default: return { fontFamily: 'var(--font-display)', className: 'tracking-[0.22em] uppercase font-medium' };
+    }
+};
+
+export const getBrandColorStyle = (colorId?: string) => {
+    switch (colorId) {
+        case 'text-amber-800': return '#92400E';
+        case 'text-teal-900': return '#134E4A';
+        case 'text-rose-900': return '#881337';
+        case 'text-blue-950': return '#172554';
+        case 'text-zinc-900':
+        default:
+            return '#18181B';
+    }
+};
+
 import { useListingTelemetry } from '../hooks/useListingTelemetry';
 import { OptimizedImage } from './OptimizedImage';
+import { CinematicVideoPlayer } from './CinematicVideoPlayer';
 import { ChevronLeft, HeartIcon, ShieldCheck } from './Icons';
 import {
   Share,
@@ -20,6 +43,7 @@ import {
   Calendar,
   CreditCard,
   Clock,
+  ShieldAlert,
   CheckCircle2,
   Volume2,
   VolumeX,
@@ -63,12 +87,14 @@ import {
   Wind,
   Anchor,
   Tent,
-  Bed
+  Bed, Menu
 } from 'lucide-react';
 import { uiAudio } from './audio';
 import { useToast } from './ToastContext';
 import { SanctuaryGalleryModal, GalleryCategoryKey } from './SanctuaryGalleryModal';
+import { EnchoWordmark } from './EnchoWordmark';
 import { getSensoryTagIcon } from './SensoryTagPicker';
+import MuxPlayer from '@mux/mux-player-react';
 
 // LEGACY fallback — used only when listing.rooms[] is empty (MIG-001)
 export const LEGACY_ROOM_TIER_CONFIG: Record<string, {
@@ -92,6 +118,7 @@ interface ListingDetailsNewProps {
   onContactHost?: () => void;
   onRequestAuth?: () => void;
   initialGalleryOpen?: boolean;
+  isPreview?: boolean;
 }
 
 // Legacy getTagIcon removed in favor of shared getSensoryTagIcon
@@ -125,7 +152,7 @@ const LUXURY_BACKUP_POOL = [
 const DEFAULT_IMAGES = LUXURY_BACKUP_POOL.slice(0, 5);
 
 const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({ 
-  listing, 
+  listing: initialListing, 
   onBack, 
   onListingClick,
   similarListings, 
@@ -134,8 +161,25 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   onBook, 
   onContactHost, 
   onRequestAuth,
-  initialGalleryOpen = false
+  initialGalleryOpen = false,
+  isPreview = false
 }) => {
+  const [listing, setListing] = useState<Listing>(initialListing);
+
+  useEffect(() => {
+    setListing(initialListing);
+    if (!isPreview && initialListing.id && initialListing.id !== 'live-preview-sanctuary' && !String(initialListing.id).startsWith('demo-')) {
+      fetch(`/api/listings/${initialListing.id}`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data && data.id) {
+             setListing(prev => ({ ...prev, ...data }));
+          }
+        })
+        .catch(console.error);
+    }
+  }, [initialListing, isPreview]);
+
   const { user } = useAuth();
   const { addToast } = useToast();
   const { trackPhotoView, trackDateSelection } = useListingTelemetry(listing.id);
@@ -148,10 +192,51 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   const [isVideoMuted, setIsVideoMuted] = useState(true);
   const [activeGalleryTab, setActiveGalleryTab] = useState('all');
   const [activeSlide, setActiveSlide] = useState(0);
+  const [isVideoReady, setIsVideoReady] = useState(false);
   const [radarCategory, setRadarCategory] = useState<string>("DESTINATION");
   const [activeTouristPlace, setActiveTouristPlace] = useState<any | null>(null);
   const [activeCollageCenterIndex, setActiveCollageCenterIndex] = useState<number | null>(null);
   const collageTrackRef = useRef<HTMLDivElement>(null);
+
+
+  // 10/10 Award-Winning Header Scroll Mechanics
+  const { scrollY } = useScroll();
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
+  const lastScrollY = useRef(0);
+
+  useMotionValueEvent(scrollY, "change", (latest) => {
+    const direction = latest - lastScrollY.current;
+    if (latest < 100) {
+      setIsHeaderVisible(true);
+    } else {
+      if (direction > 10 && isHeaderVisible) { // scrolling down
+        setIsHeaderVisible(false);
+      } else if (direction < -10 && !isHeaderVisible) { // scrolling up
+        setIsHeaderVisible(true);
+      }
+    }
+    lastScrollY.current = latest;
+  });
+
+  const headerBgColor = useTransform(scrollY, [0, 100, 400], ["rgba(255, 255, 255, 0)", "rgba(255, 255, 255, 0.4)", "rgba(255, 255, 255, 0.75)"]);
+  const headerBgColorDark = useTransform(scrollY, [0, 100, 400], ["rgba(24, 24, 27, 0)", "rgba(24, 24, 27, 0.4)", "rgba(24, 24, 27, 0.75)"]);
+  const headerBlur = useTransform(scrollY, [0, 100, 400], ["blur(0px)", "blur(12px)", "blur(24px)"]);
+  const headerBorder = useTransform(scrollY, [0, 400], ["rgba(255, 255, 255, 0)", "rgba(255, 255, 255, 0.2)"]);
+  
+  const titleOpacity = useTransform(scrollY, [150, 300], [0, 1]);
+  const titleY = useTransform(scrollY, [150, 300], [10, 0]);
+  
+  // Transition text color from white (over video) to zinc (over light bg) on mobile
+  const textColorMobile = useTransform(scrollY, [0, 300], ["#ffffff", "#18181b"]);
+
+  const [isDesktop, setIsDesktop] = useState(true);
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 768px)');
+    setIsDesktop(media.matches);
+    const listener = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    media.addEventListener('change', listener);
+    return () => media.removeEventListener('change', listener);
+  }, []);
 
 
   // 10/10 Adaptive Media Allocator: Guarantees zero duplicate images across all collections
@@ -247,33 +332,61 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
   const curatedNeighborhoodPOIs = useMemo(() => {
     if (listing.nearby && Array.isArray(listing.nearby) && (listing.nearby as any[]).length > 0) {
-      return (listing.nearby as any[]).map((poi: any) => ({
-        id: Math.random().toString(),
-        isHome: false,
-        name: poi.name || '',
-        distance: poi.distance || '',
-        type: poi.type || 'attraction',
-        description: poi.description || '',
-        summary: poi.description || '',
-        photo: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80',
-        category: 'DESTINATION',
-        pinTop: '50%',
-        pinLeft: '50%',
-        googleMapsUrl: '#',
-        rating: 4.5
-      }));
+      return (listing.nearby as any[]).map((poi: any, index: number) => {
+        const angle = (index * (360 / (listing.nearby as any[]).length)) * (Math.PI / 180);
+        const radius = 25;
+        
+        let pinTop = `${50 + (Math.sin(angle) * radius)}%`;
+        let pinLeft = `${50 + (Math.cos(angle) * radius)}%`;
+        
+        if (poi.lat && poi.lng && listing.lat && listing.lng) {
+           const latDiff = (listing.lat - poi.lat) * 2000;
+           const lngDiff = (poi.lng - listing.lng) * 2000; 
+           pinTop = `${Math.max(10, Math.min(90, 50 + latDiff))}%`;
+           pinLeft = `${Math.max(10, Math.min(90, 50 + lngDiff))}%`;
+        }
+
+        const isRestaurant = poi.categoryGroup === 'restaurant' || ['fine_dining', 'cafe', 'farm_to_table', 'restaurant', 'dining', 'local_authentic', 'scenic_bar'].includes(poi.type);
+
+        const fallbackImages: Record<string, string> = {
+          'nature': 'https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=1200&q=80',
+          'culture': 'https://images.unsplash.com/photo-1552566626-52f8b828add9?auto=format&fit=crop&w=1200&q=80',
+          'landmark': 'https://images.unsplash.com/photo-1548625361-ec8587114b7e?auto=format&fit=crop&w=1200&q=80',
+          'viewpoint': 'https://images.unsplash.com/photo-1534008897995-27a23e859048?auto=format&fit=crop&w=1200&q=80',
+          'experience': 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80',
+          'fine_dining': 'https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?auto=format&fit=crop&w=1200&q=80',
+          'cafe': 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=1200&q=80',
+          'farm_to_table': 'https://images.unsplash.com/photo-1543339308-43e59d6b73a6?auto=format&fit=crop&w=1200&q=80',
+          'local_authentic': 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=80',
+          'scenic_bar': 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80'
+        };
+
+        return {
+          id: poi.id || Math.random().toString(),
+          isHome: false,
+          name: poi.name || '',
+          distance: poi.distance || '',
+          type: poi.type || (isRestaurant ? 'fine_dining' : 'attraction'),
+          cuisine: poi.cuisine || '',
+          description: poi.description || (isRestaurant ? (poi.cuisine || 'Curated culinary destination.') : 'A highly recommended destination.'),
+          summary: poi.description || (isRestaurant ? (poi.cuisine || 'Curated culinary destination.') : 'A highly recommended destination.'),
+          photo: poi.photoUrl || fallbackImages[poi.type] || (isRestaurant ? fallbackImages['fine_dining'] : fallbackImages['experience']),
+          category: isRestaurant ? 'RESTAURANT' : 'DESTINATION',
+          pinTop,
+          pinLeft,
+          googleMapsUrl: poi.googleMapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((poi.name || '') + ' ' + (listing.city || ''))}`,
+          rating: poi.rating || (isRestaurant ? 4.8 : 4.5)
+        };
+      });
     }
-    return []; // ADR-004: Return empty — no hardcoded location-specific POIs
-  }, [listing.nearby]);
+    return [];
+  }, [listing.nearby, listing.lat, listing.lng, listing.city]);
 
   // AI Dynamic Category Pruning: Only show categories that have high-quality items
   const availableRadarCategories = useMemo(() => {
-    const categories: { id: string; label: string }[] = [{ id: 'DESTINATION', label: 'Destinations' }];
+    const categories: { id: string; label: string }[] = [{ id: 'DESTINATION', label: 'Top Destinations' }];
     const hasRestaurants = curatedNeighborhoodPOIs.some(p => p.category === 'RESTAURANT');
-    const hasShopping = curatedNeighborhoodPOIs.some(p => p.category === 'SHOPPING');
-    
-    if (hasRestaurants) categories.push({ id: 'RESTAURANT', label: 'Restaurants' });
-    if (hasShopping) categories.push({ id: 'SHOPPING', label: 'Shopping' });
+    if (hasRestaurants) categories.push({ id: 'RESTAURANT', label: 'Restaurants & Dining' });
     return categories;
   }, [curatedNeighborhoodPOIs]);
 
@@ -285,6 +398,40 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
   // Curated Room Inventory Collections (Suites, Double Rooms, Single Rooms)
   const slideCollections = useMemo(() => {
+    const inferUnitType = (name: string): string => {
+      const n = (name || '').toLowerCase();
+      if (n.includes('suite')) return 'Suite';
+      if (n.includes('villa')) return 'Villa';
+      if (n.includes('studio')) return 'Studio';
+      if (n.includes('duplex')) return 'Duplex';
+      if (n.includes('bungalow')) return 'Bungalow';
+      if (n.includes('penthouse')) return 'Penthouse';
+      if (n.includes('cottage')) return 'Cottage';
+      if (n.includes('room')) return 'Room';
+      return 'Accommodation';
+    };
+
+    const categoryTagMap: Record<string, string> = {
+      'bedroom': 'Bedrooms & Sleeping Quarters',
+      'bathroom': 'Bathrooms & Spa',
+      'balcony': 'Balconies & Terraces',
+      'living_room': 'Living Room & Atrium',
+      'living': 'Living Room & Lounge',
+      'dining': 'Dining & Kitchen',
+      'pool': 'Pool & Wellness',
+      'garden': 'Gardens & Courtyards',
+      'exterior': 'Exterior Architecture',
+      'restaurant': 'Restaurant & Dining',
+      'lobby': 'Lobby & Reception',
+      'spa': 'Spa & Wellness',
+      'gym': 'Gym & Fitness',
+      'activity_area': 'Activity & Recreation',
+      'view': 'Panoramic Views',
+      'parking': 'Arrival & Parking',
+      'details': 'Curated Details',
+      'other': 'Sanctuary Space'
+    };
+
     // MIG-002: Use structured photos if available
     if (listing.photos && (listing.photos as any[]).length > 0) {
       const byTier: Record<string, any[]> = {};
@@ -297,40 +444,88 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
       
       const collections = availableRoomTiers.map((tierKey, index) => {
         const roomCfg = getRoomConfig(tierKey);
-        const tierPhotos = [
-          ...(byTier[tierKey] || []),
-          ...commonPhotos.slice(0, 2)
-        ].filter(p => p.url);
+        const unitType = inferUnitType(roomCfg.name);
+        // STRICT SPATIAL SEPARATION: Use 100% room photos. Never prepend common grounds photos!
+        const roomPhotosOnly = (byTier[tierKey] || []).filter(p => p.url);
+        const tierPhotos = roomPhotosOnly.length > 0 ? roomPhotosOnly : commonPhotos.filter(p => p.url);
         
-        const spaces = tierPhotos.slice(0, 6).map((photo: any) => ({
-          title: photo.title || roomCfg.name,
-          caption: photo.description || roomCfg.specs || '',
-          img: photo.url,
-          imgIndex: 0,
-          desc: photo.description || roomCfg.specs || '',
-          tag: photo.tag || '',
-          hasVideo: false
-        }));
+        let defaultSpaceTags = ['HERO FEATURE ANCHOR', 'HORIZON BALCONY', 'SPA ENSUITE', 'MASTER SALON'];
+        let defaultSpaceTitles = [
+          roomCfg.name,
+          'Private Glass Balcony & Horizon Deck',
+          'Ensuite Italian Marble Spa Bath',
+          'Acoustic Hearth & Evening Reading Salon'
+        ];
+
+        if (tierKey === 'deluxe') {
+          defaultSpaceTags = ['HERO FEATURE ANCHOR', 'TWIN SUITE', 'GARDEN BATH', 'VERANDAH'];
+          defaultSpaceTitles = [
+            roomCfg.name,
+            'Twin Plush Organic Cotton Bedding',
+            'Rainforest View Ensuite Bath',
+            'Private Sunlit Verandah & Lounge'
+          ];
+        } else if (tierKey === 'executive') {
+          defaultSpaceTags = ['HERO FEATURE ANCHOR', 'Work & Living Area', 'Architectural Details', 'Private Terrace'];
+          defaultSpaceTitles = [
+            roomCfg.name,
+            'Dedicated Ergonomic Work Enclave',
+            'Bespoke Studio Architectural Details',
+            'Courtyard Reading Nook'
+          ];
+        }
+
+        const spaces = tierPhotos.slice(0, 6).map((photo: any, pIdx: number) => {
+          const categoryKey = (photo.category || '').toLowerCase();
+          const subCategoryLabel = categoryTagMap[categoryKey]
+            || (photo.categoryLabel || photo.tag || defaultSpaceTags[pIdx % defaultSpaceTags.length]);
+
+          const spaceTag = pIdx === 0 
+            ? 'HERO FEATURE ANCHOR' 
+            : subCategoryLabel;
+
+          const spaceTitle = pIdx === 0 
+            ? (roomCfg.name || 'Presidential Panorama Suite')
+            : (photo.description && photo.description.trim() 
+                ? photo.description.trim() 
+                : (photo.title && photo.title !== roomCfg.name ? photo.title : defaultSpaceTitles[pIdx % defaultSpaceTitles.length]));
+
+          return {
+            title: spaceTitle,
+            caption: photo.description || roomCfg.specs || '',
+            img: photo.url,
+            imgIndex: 0,
+            desc: photo.description || roomCfg.specs || '',
+            tag: spaceTag,
+            hasVideo: pIdx === 0 && !!((listing as any).hero_video_url || listing.video_url),
+            unitType
+          };
+        });
         
-        // Pad to ensure space01 - space04 exist
+        // Pad to ensure space01 - space04 exist only if room has < 4 photos
+        let padIdx = 0;
         while (spaces.length < 4) {
+          const fallbackImg = commonPhotos[padIdx]?.url || uniqueMediaPool[padIdx % uniqueMediaPool.length];
           spaces.push({
-            title: roomCfg.name,
+            title: `${roomCfg.name} · Space 0${spaces.length + 1}`,
             caption: '',
-            img: uniqueMediaPool[0],
+            img: fallbackImg,
             imgIndex: 0,
             desc: '',
-            tag: '',
-            hasVideo: false
+            tag: 'Sanctuary Architecture',
+            hasVideo: false,
+            unitType
           });
+          padIdx++;
         }
 
         return {
           id: tierKey,
           name: `${String(index + 1).padStart(2, '0')} · ${roomCfg.name}`,
           description: (roomCfg as any).description || roomCfg.specs,
+          unitType,
           spaces: spaces,
-          space01: spaces[0],
+          space01: { ...spaces[0], unitType },
           space02: spaces[1],
           space03: spaces[2],
           space04: spaces[3]
@@ -347,55 +542,58 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
         id: 'suites',
         name: '01 · ' + LEGACY_ROOM_TIER_CONFIG.suites.name,
         description: LEGACY_ROOM_TIER_CONFIG.suites.specs,
+        unitType: 'Suite',
         spaces: [
           { title: LEGACY_ROOM_TIER_CONFIG.suites.name, caption: LEGACY_ROOM_TIER_CONFIG.suites.specs, img: pool[0] },
-          { title: 'Master En-Suite', caption: 'Volcanic stone soaking tub', img: pool[1] },
-          { title: 'Panorama Terrace', caption: 'Private wraparound verandah', img: pool[2] },
-          { title: 'Valley Study', caption: 'Integrated architectural workspace', img: pool[3] }
+          { title: 'Panorama Terrace', caption: 'Private wraparound verandah', img: pool[1] },
+          { title: 'Architectural Detail', caption: 'Custom crafted finishes and stone textures', img: pool[2] },
+          { title: 'Valley Living Salon', caption: 'Integrated architectural living space', img: pool[3] }
         ],
         space01: {
           title: `${listing.title ? listing.title.split('•')[0].trim() : 'Sanctuary'} Presidential Panorama Suite`,
           desc: 'Panoramic master glass suite with custom king platform bed, private jacuzzi lounge, and valley vistas.',
-          img: pool[0], imgIndex: 0, tag: 'Presidential Suite', unitType: 'Suite', hasVideo: !!listing.video_url
+          img: pool[0], imgIndex: 0, tag: 'Presidential Suite', unitType: 'Suite', hasVideo: !!((listing as any).hero_video_url || listing.video_url)
         },
-        space02: { title: 'Private Glass Balcony & Horizon Deck', img: pool[1], imgIndex: 1, tag: 'Horizon Balcony' },
-        space03: { title: 'Ensuite Italian Marble Spa Bath', img: pool[2], imgIndex: 2, tag: 'Spa Ensuite' },
-        space04: { title: 'Acoustic Hearth & Evening Reading Salon', img: pool[3], imgIndex: 3, tag: 'Master Salon' }
+        space02: { title: 'Private Glass Balcony & Horizon Deck', img: pool[1], imgIndex: 1, tag: 'HORIZON BALCONY' },
+        space03: { title: 'Ensuite Italian Marble Spa Bath', img: pool[2], imgIndex: 2, tag: 'SPA ENSUITE' },
+        space04: { title: 'Acoustic Hearth & Evening Reading Salon', img: pool[3], imgIndex: 3, tag: 'MASTER SALON' }
       },
       {
         id: 'deluxe',
         name: '02 · ' + LEGACY_ROOM_TIER_CONFIG.deluxe.name,
         description: LEGACY_ROOM_TIER_CONFIG.deluxe.specs,
+        unitType: 'Room',
         spaces: [
           { title: LEGACY_ROOM_TIER_CONFIG.deluxe.name, caption: LEGACY_ROOM_TIER_CONFIG.deluxe.specs, img: pool[4] },
-          { title: 'Garden Bath', caption: 'Private bamboo-screen terrace shower', img: pool[5] },
-          { title: 'Bamboo Garden', caption: 'Private courtyard access', img: pool[6] },
-          { title: 'Deluxe Studio', caption: 'Integrated workspace', img: pool[7] }
+          { title: 'Plush Bedding Area', caption: 'Plush organic cotton twin setup', img: pool[5] },
+          { title: 'Architectural Detail', caption: 'Refined garden interior textures', img: pool[6] },
+          { title: 'Private Verandah', caption: 'Integrated garden access', img: pool[7] }
         ],
-        space01: { title: 'The Deluxe Garden Double Room', desc: 'Spacious double room featuring twin plush organic cotton beds, garden terrace, and en-suite marble bath.', img: pool[4], imgIndex: 4, tag: 'Deluxe Double', unitType: 'Double Room' },
-        space02: { title: 'Twin Plush Organic Cotton Bedding', img: pool[5], imgIndex: 5, tag: 'Twin Suite' },
-        space03: { title: 'Rainforest View Ensuite Bath', img: pool[6], imgIndex: 6, tag: 'Garden Bath' },
-        space04: { title: 'Private Sunlit Verandah & Lounge', img: pool[7], imgIndex: 7, tag: 'Verandah' }
+        space01: { title: 'The Deluxe Garden Double Room', desc: 'Spacious double room featuring twin plush organic cotton beds, garden terrace, and en-suite marble bath.', img: pool[4], imgIndex: 4, tag: 'Deluxe Double Room', unitType: 'Room' },
+        space02: { title: 'Twin Plush Organic Cotton Bedding', img: pool[5], imgIndex: 5, tag: 'TWIN SUITE' },
+        space03: { title: 'Rainforest View Ensuite Bath', img: pool[6], imgIndex: 6, tag: 'GARDEN BATH' },
+        space04: { title: 'Private Sunlit Verandah & Lounge', img: pool[7], imgIndex: 7, tag: 'VERANDAH' }
       },
       {
         id: 'executive',
         name: '03 · ' + LEGACY_ROOM_TIER_CONFIG.executive.name,
         description: LEGACY_ROOM_TIER_CONFIG.executive.specs,
+        unitType: 'Studio',
         spaces: [
           { title: LEGACY_ROOM_TIER_CONFIG.executive.name, caption: LEGACY_ROOM_TIER_CONFIG.executive.specs, img: pool[8] },
-          { title: 'Compact En-Suite', caption: 'Rain shower with forest view', img: pool[9] },
-          { title: 'Executive Terrace', caption: 'Private balcony with valley views', img: pool[10] },
-          { title: 'Work Alcove', caption: 'Ultra-fast FTTP connectivity', img: pool[11] }
+          { title: 'Work & Living Enclave', caption: 'Ergonomic dedicated productivity space', img: pool[9] },
+          { title: 'Architectural Detail', caption: 'Minimalist studio design elements', img: pool[10] },
+          { title: 'Courtyard Terrace', caption: 'Private balcony with serene natural light', img: pool[11] }
         ],
-        space01: { title: 'The Executive Studio Sanctuary', desc: 'Minimalist private single room with dedicated ergonomic work enclave, rain shower pod, and courtyard terrace.', img: pool[8], imgIndex: 8, tag: 'Executive Single', unitType: 'Single Room' },
-        space02: { title: 'Dedicated Ergonomic Work Enclave', img: pool[9], imgIndex: 9, tag: 'Work Enclave' },
-        space03: { title: 'Minimalist Walk-In Rain Shower Pod', img: pool[10], imgIndex: 10, tag: 'Rain Shower' },
-        space04: { title: 'Courtyard Zen Garden Reading Nook', img: pool[11], imgIndex: 11, tag: 'Zen Garden' }
+        space01: { title: 'The Executive Studio Sanctuary', desc: 'Minimalist private single room with dedicated ergonomic work enclave, rain shower pod, and courtyard terrace.', img: pool[8], imgIndex: 8, tag: 'Executive Studio', unitType: 'Studio' },
+        space02: { title: 'Dedicated Ergonomic Work Enclave', img: pool[9], imgIndex: 9, tag: 'Work & Living Area' },
+        space03: { title: 'Bespoke Studio Architectural Details', img: pool[10], imgIndex: 10, tag: 'Architectural Details' },
+        space04: { title: 'Courtyard Reading Nook', img: pool[11], imgIndex: 11, tag: 'Private Terrace' }
       }
     ];
   }, [listing.photos, uniqueMediaPool, availableRoomTiers, getRoomConfig, listing.title, listing.video_url]);
 
-    const mobileGalleryRef = useRef<HTMLDivElement>(null);
+  const mobileGalleryRef = useRef<HTMLDivElement>(null);
   const [mobileSpaceIndex, setMobileSpaceIndex] = useState(0);
   const [isMorphingReservation, setIsMorphingReservation] = useState(false);
 
@@ -460,6 +658,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   const [galleryInitialCategory, setGalleryInitialCategory] = useState<GalleryCategoryKey>('all');
   const [galleryInitialIndex, setGalleryInitialIndex] = useState(0);
   const [showFloatingCapsule, setShowFloatingCapsule] = useState(false);
+  const [showMobileStickyBar, setShowMobileStickyBar] = useState(false);
   const zone1Ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -471,6 +670,9 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   // Scroll listener for smooth bi-directional morphing of Booking Dock
   useEffect(() => {
     const handleScroll = () => {
+      // Show mobile sticky bar only after scrolling past the video hero
+      setShowMobileStickyBar(window.scrollY > window.innerHeight * 0.7);
+
       if (zone1Ref.current) {
         const rect = zone1Ref.current.getBoundingClientRect();
         // Morph into capsule when bottom of Zone 1 scrolls past the upper viewport
@@ -567,6 +769,72 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   const [showOccupancyPicker, setShowOccupancyPicker] = useState<boolean>(false);
   const guests = adultsCount + childrenCount;
 
+  // Real-Time Room Availability & Date Lockout Engine
+  const [roomCalendarData, setRoomCalendarData] = useState<any>(null);
+
+  useEffect(() => {
+    if (listing.id && listing.id !== 'live-preview-sanctuary' && !String(listing.id).startsWith('demo-')) {
+      fetch(`/api/listings/${listing.id}/room-calendar?_t=${Date.now()}`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data) setRoomCalendarData(data);
+        })
+        .catch(console.error);
+    }
+  }, [listing.id]);
+
+  // Multi-Unit Capacity & Real-Time Availability Calculator
+  const roomInventoryStats = useMemo(() => {
+    const defaultStats = { totalUnits: 1, occupiedUnits: 0, remainingUnits: 1, isSoldOut: false };
+    if (!roomCalendarData) return defaultStats;
+    const sDate = checkIn;
+    const eDate = checkOut;
+    if (!sDate || !eDate) return defaultStats;
+
+    // 1. Find Room Configuration
+    const targetRoom = (roomCalendarData.rooms || []).find((r: any) => r.tierKey === selectedRoomTier);
+    const totalUnits = targetRoom ? (targetRoom.inventoryCount || 1) : 1;
+
+    // 2. Count Occupied Physical Units for this date range
+    const occupiedSet = new Set<number>();
+    let isAllHeld = false;
+
+    // Check Blocks
+    (roomCalendarData.blocks || []).forEach((blk: any) => {
+      const isMatchTier = blk.roomTierKey === selectedRoomTier || blk.roomTierKey === 'all';
+      if (isMatchTier && blk.startDate <= eDate && blk.endDate >= sDate) {
+        const uNum = Number(blk.roomUnitNumber);
+        if (uNum === 0 || blk.roomTierKey === 'all') {
+          isAllHeld = true;
+        } else {
+          occupiedSet.add(uNum);
+        }
+      }
+    });
+
+    // Check Active Bookings
+    (roomCalendarData.bookings || []).forEach((b: any) => {
+      const isMatchTier = b.roomTier === selectedRoomTier || !b.roomTier;
+      if (isMatchTier && b.startDate < eDate && b.endDate > sDate) {
+        const bUnit = Number(b.roomUnitNumber) || 1;
+        occupiedSet.add(bUnit);
+      }
+    });
+
+    const occupiedCount = isAllHeld ? totalUnits : occupiedSet.size;
+    const remainingUnits = Math.max(0, totalUnits - occupiedCount);
+    const isSoldOut = isAllHeld || remainingUnits <= 0;
+
+    return {
+      totalUnits,
+      occupiedUnits: occupiedCount,
+      remainingUnits,
+      isSoldOut
+    };
+  }, [roomCalendarData, checkIn, checkOut, selectedRoomTier]);
+
+  const isDateRangeBlocked = roomInventoryStats.isSoldOut;
+
   // Double-Entry Ledger Calculation per Selected Room Tier
   const activeTierObj = getRoomConfig(selectedRoomTier);
 // ADR-003: Price authority is listing.rooms[].price, not hardcoded multipliers
@@ -599,6 +867,11 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   const grandTotal = baseRentTotal + enchoFee + taxAmount;
 
   const handleReserve = (overrideTier?: string) => {
+    if (isDateRangeBlocked) {
+      uiAudio.playPop();
+      addToast('Suite Unavailable', 'The selected dates are currently held or reserved. Please choose different dates or select another suite.', 'error');
+      return;
+    }
     uiAudio.playSuccess();
     const tierKey = overrideTier || selectedRoomTier;
     const tierMeta = getRoomConfig(tierKey);
@@ -650,189 +923,196 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
         image={images[0]}
       />
 
-      <div className="min-h-screen bg-[#fafafa] font-sans antialiased text-zinc-900 pb-28 md:pb-36 selection:bg-amber-500/20">
+      <div className="min-h-screen bg-[#F9F8F6] dark:bg-[#F9F8F6] font-sans antialiased text-zinc-900 pb-28 md:pb-36 selection:bg-amber-500/20">
 
-        {/* Ambient Gradient Glow from Dominant Color */}
-        <div 
-          className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-[450px] opacity-15 blur-[120px] pointer-events-none -z-10 transition-colors duration-1000"
-          style={{ background: `radial-gradient(circle, ${dominantColor} 0%, rgba(255,255,255,0) 70%)` }}
-        />
+        
 
-        {/* MILESTONE 1: Top Navigation Bar */}
-        <div className="absolute top-0 inset-x-0 z-[50] flex items-center justify-between p-4 mt-2 md:mt-6 pointer-events-none md:max-w-7xl md:mx-auto">
-            <button 
-                onClick={(e) => { e.stopPropagation(); uiAudio.playClick(); onBack(); }}
-                className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-white/70 backdrop-blur-xl flex items-center justify-center shadow-[0_4px_24px_rgba(0,0,0,0.06)] pointer-events-auto active:scale-95 transition-all hover:bg-white hover:scale-105 border border-white/40 text-zinc-900 cursor-pointer"
-                title="Back to search"
-            >
-                <ChevronLeft className="w-5 h-5 md:w-6 md:h-6 pr-0.5" />
-            </button>
-            <div className="flex gap-2.5 md:gap-3 pointer-events-auto">
+        {/* 10/10 AMAN-GRADE LUXURY EDITORIAL MASTER HEADER */}
+        <header className={"sticky top-0 z-[60] w-full bg-[#F9F8F6]/90 backdrop-blur-md border-b border-[#E8E4DC] transition-all duration-300 ease-in-out " + (isHeaderVisible ? "translate-y-0" : "-translate-y-full")}>
+          <div className="max-w-[1400px] mx-auto flex items-center justify-between h-16 md:h-20 px-4 sm:px-8 md:px-12">
+            
+            {/* LEFT: [< (Back) ENCHO (logo official <EnchoWordmark />)] */}
+            <div className="flex items-center gap-4 shrink-0">
                 <button 
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        uiAudio.playClick();
-                        if (navigator.share) {
-                            navigator.share({ title: listing.title, url: window.location.href }).catch(err => console.log(err));
-                        } else {
-                            navigator.clipboard.writeText(window.location.href);
-                            addToast("Link Copied", "Listing link copied to clipboard!", "success");
-                        }
-                    }}
-                    className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-white/70 backdrop-blur-xl flex items-center justify-center shadow-[0_4px_24px_rgba(0,0,0,0.06)] active:scale-95 transition-all hover:bg-white hover:scale-105 border border-white/40 text-zinc-900 cursor-pointer"
-                    title="Share sanctuary"
+                    onClick={(e) => { e.stopPropagation(); uiAudio.playClick(); onBack(); }}
+                    className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-black/5 active:scale-95 transition-all text-zinc-900 cursor-pointer group/back"
+                    aria-label="Go back"
+                    title="Go back"
                 >
-                    <Share className="w-4 h-4 md:w-4.5 md:h-4.5" strokeWidth={2.5} />
+                    <ChevronLeft strokeWidth={1.5} className="w-6 h-6 group-hover/back:-translate-x-1 transition-transform" />
                 </button>
+
+                {/* Official ENCHO Wordmark */}
+                <div 
+                    onClick={(e) => { e.stopPropagation(); uiAudio.playClick(); onBack(); }}
+                    className="flex items-center cursor-pointer group shrink-0 select-none"
+                    title="Encho Space"
+                >
+                    <div className="flex items-center">
+                        <EnchoWordmark className="h-4 sm:h-[18px] w-auto" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#0284C7] ml-[2px] transition-transform duration-300 group-hover:scale-125 shrink-0" />
+                    </div>
+                    <span className="ml-3 text-[9px] font-medium tracking-[0.3em] text-zinc-400 uppercase group-hover:text-zinc-600 transition-colors hidden sm:inline-block">
+                        STAYS
+                    </span>
+                </div>
+            </div>
+
+            {/* CENTER: THUSHARA (Brand Identity) */}
+            <div className="flex items-center justify-center px-4 min-w-0 flex-1">
+                {((listing as any).brand && (listing as any).brand.trim().length > 0) && (
+                    <div className="flex items-center gap-2 px-2 sm:px-4 py-1.5 min-w-0">
+                        <span 
+                            style={{ 
+                              fontFamily: getBrandTypography((listing as any).brand_font).fontFamily,
+                              color: getBrandColorStyle((listing as any).brand_color)
+                            }} 
+                            className={`${getBrandTypography((listing as any).brand_font).className} text-[13px] md:text-[15px] truncate font-semibold uppercase`}
+                        >
+                            {(listing as any).brand.trim()}
+                        </span>
+                    </div>
+                )}
+            </div>
+
+            {/* RIGHT: [♥ Wishlist]  [☰Menu ] */}
+            <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+                {/* Wishlist Button */}
                 <button 
                     onClick={(e) => { e.stopPropagation(); uiAudio.playPop(); if(onToggleFavorite) onToggleFavorite(listing); }}
-                    className="w-10 h-10 md:w-11 md:h-11 rounded-full bg-white/70 backdrop-blur-xl flex items-center justify-center shadow-[0_4px_24px_rgba(0,0,0,0.06)] active:scale-95 transition-all hover:bg-white hover:scale-105 border border-white/40 cursor-pointer"
-                    title={isFavorite ? "Remove from wishlist" : "Add to wishlist"}
+                    className={`hidden sm:flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full transition-all cursor-pointer group/fav active:scale-95 ${
+                        isFavorite 
+                            ? 'text-[#e51d53]' 
+                            : 'hover:bg-black/5 text-zinc-900'
+                    }`}
+                    aria-label={isFavorite ? "Remove from wishlist" : "Add to wishlist"}
                 >
-                    <HeartIcon className={`w-5 h-5 md:w-5.5 md:h-5.5 ${isFavorite ? 'fill-[#e51d53] text-[#e51d53]' : 'text-zinc-900'}`} filled={isFavorite} />
+                    <HeartIcon 
+                        className={`w-5 h-5 transition-transform group-hover/fav:scale-110 ${
+                            isFavorite ? 'fill-[#e51d53] text-[#e51d53]' : 'text-zinc-900'
+                        }`} 
+                        filled={isFavorite} 
+                    />
+                    <span className="hidden md:inline text-[11px] font-medium font-sans uppercase tracking-[0.1em]">
+                        {isFavorite ? 'Saved' : 'Wishlist'}
+                    </span>
+                </button>
+
+                {/* Menu Button */}
+                <button 
+                    onClick={(e) => { e.stopPropagation(); uiAudio.playClick(); /* Future Menu Drawer */ }}
+                    className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full hover:bg-black/5 transition-all text-zinc-900 cursor-pointer active:scale-95"
+                    aria-label="Menu"
+                >
+                    <Menu strokeWidth={1.5} className="w-5 h-5" />
+                    <span className="hidden md:inline text-[11px] font-medium font-sans uppercase tracking-[0.1em]">
+                        Menu
+                    </span>
                 </button>
             </div>
+
+          </div>
+        </header>
+
+        
+        <div className="w-full md:max-w-[1400px] mx-auto px-3 sm:px-6 md:px-8 pt-3 sm:pt-4 pb-6">
+            {((listing as any).hero_video_url || listing.video_url) ? (
+                <div className="w-full h-[75vh] md:h-[75vh] lg:h-[85vh] rounded-2xl md:rounded-3xl overflow-hidden bg-black shadow-xl relative group/video border border-zinc-200/40 /40">
+                    <CinematicVideoPlayer
+                        videoUrl={(listing as any).hero_video_url || listing.video_url}
+                        posterUrl={images[0]}
+                        title={listing.title}
+                        price={activeNightlyRate}
+                        currency={listing.currency}
+                        onReserveClick={handleReserve}
+                    />
+                    
+                    {liveViewers > 1 && (
+                        <div className="absolute top-6 right-6 bg-black/30 backdrop-blur-md px-4 py-2 rounded flex items-center gap-2 border border-white/10 pointer-events-none z-20">
+                            <div className="relative flex h-2.5 w-2.5">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+                            </div>
+                            <span className="text-[10px] font-light tracking-[0.2em] text-white uppercase font-display">{liveViewers} Viewing</span>
+                        </div>
+                    )}
+                </div>
+            ) : (
+                <>
+                    <div className="hidden md:grid grid-cols-4 grid-rows-2 gap-2.5 h-[65vh] lg:h-[75vh] rounded-3xl overflow-hidden bg-zinc-200 shadow-sm relative">
+                        <div className="col-span-2 row-span-2 relative h-full overflow-hidden">
+                            <OptimizedImage src={images[0]} aspectRatio="4:3" priority={true} className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" alt={`${listing.title} Main View`} onClick={() => { uiAudio.playClick(); trackPhotoView(0); setGalleryInitialIndex(0); setGalleryInitialCategory('all'); setIsGalleryOpen(true); }} />
+                            {listing.isVerified && (
+                                <div className="absolute bottom-6 left-6 bg-white/90 backdrop-blur-xl px-4 py-2 rounded-xl shadow-lg border border-white/40 flex items-center gap-2 pointer-events-none">
+                                    <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                                    <span className="text-[10px] font-bold font-display tracking-widest text-zinc-900 uppercase">Verified Sanctuary</span>
+                                </div>
+                            )}
+                        </div>
+                        <div className="relative overflow-hidden h-full">
+                            <OptimizedImage src={images[1]} aspectRatio="16:9" className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" alt="View 2" onClick={() => { uiAudio.playClick(); trackPhotoView(1); setGalleryInitialIndex(1); setGalleryInitialCategory('all'); setIsGalleryOpen(true); }} />
+                        </div>
+                        <div className="relative overflow-hidden h-full">
+                            <OptimizedImage src={images[2]} aspectRatio="16:9" className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" alt="View 3" onClick={() => { uiAudio.playClick(); trackPhotoView(2); setGalleryInitialIndex(2); setGalleryInitialCategory('all'); setIsGalleryOpen(true); }} />
+                        </div>
+                        <div className="relative overflow-hidden h-full">
+                            <OptimizedImage src={images[3]} aspectRatio="16:9" className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" alt="View 4" onClick={() => { uiAudio.playClick(); trackPhotoView(3); setGalleryInitialIndex(3); setGalleryInitialCategory('all'); setIsGalleryOpen(true); }} />
+                        </div>
+                        <div className="relative overflow-hidden h-full group/gallery cursor-pointer" onClick={() => { uiAudio.playClick(); trackPhotoView(4); setGalleryInitialIndex(0); setGalleryInitialCategory('all'); setIsGalleryOpen(true); }}>
+                            <OptimizedImage src={images[4]} aspectRatio="16:9" className="w-full h-full object-cover transition-transform duration-700 group-hover/gallery:scale-[1.03] group-hover/gallery:blur-sm" alt="View 5" />
+                            <div className="absolute inset-0 bg-black/10 group-hover/gallery:bg-black/20 transition-colors duration-500" />
+                            <div className="absolute bottom-4 right-4 bg-white/95 backdrop-blur-xl border border-white/50 text-zinc-900 px-5 py-3 rounded-xl flex items-center gap-2 shadow-lg hover:scale-[1.02] active:scale-95 transition-transform">
+                                <ImageIcon className="w-4 h-4" />
+                                <span className="text-[11px] font-extrabold uppercase tracking-widest font-display">Show All Media</span>
+                            </div>
+                        </div>
+                        {liveViewers > 1 && (
+                            <div className="absolute top-6 right-6 bg-zinc-900/80 backdrop-blur-xl px-4 py-2 rounded-full flex items-center gap-2 border border-white/10 shadow-2xl animate-fade-in pointer-events-none">
+                                <div className="relative flex h-2.5 w-2.5">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                                </div>
+                                <span className="text-[10px] font-extrabold tracking-widest text-white uppercase font-display">{liveViewers} Viewing</span>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="md:hidden relative w-full aspect-[4/5] sm:aspect-square bg-zinc-200 overflow-hidden">
+                        <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide w-full h-full" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }} onScroll={(e) => {
+                            const scrollLeft = (e.target as HTMLDivElement).scrollLeft;
+                            const width = (e.target as HTMLDivElement).clientWidth;
+                            const idx = Math.round(scrollLeft / width);
+                            if (idx !== activeMobileImage) {
+                                setActiveMobileImage(idx);
+                                trackPhotoView(idx);
+                            }
+                        }}>
+                            {images.map((img, idx) => (
+                                <div key={idx} className="w-full h-full snap-center shrink-0 relative" onClick={() => setLightboxIndex(idx)}>
+                                    <OptimizedImage src={img} aspectRatio="1:1" priority={idx === 0} className="w-full h-full object-cover" alt={`${listing.title} View ${idx + 1}`} />
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="absolute bottom-8 left-0 right-0 flex justify-center pointer-events-none">
+                            <div className="flex gap-1.5 bg-black/30 backdrop-blur-xl px-3 py-1.5 rounded-full">
+                                {images.map((_, i) => (
+                                    <div key={i} className={`h-1 rounded-full transition-all duration-300 ${activeMobileImage === i ? 'w-4 bg-white' : 'w-1 bg-white/40'}`} />
+                                ))}
+                            </div>
+                        </div>
+                        {listing.isVerified && (
+                            <div className="absolute bottom-6 left-4 bg-white/80 backdrop-blur-xl px-3.5 py-1.5 rounded-xl shadow-sm border border-white/40 flex items-center gap-1.5 pointer-events-none">
+                                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                                <span className="text-[10px] font-bold tracking-widest text-zinc-900 uppercase font-display">Verified</span>
+                            </div>
+                        )}
+                    </div>
+                </>
+            )}
         </div>
 
-        {/* HERO SECTION: Bento Grid / Video Loop */}
-        <div className="w-full md:max-w-7xl mx-auto md:px-6 lg:px-8 md:pt-6">
-            
-            {/* Desktop Bento Grid */}
-            <div className="hidden md:grid grid-cols-4 grid-rows-2 gap-2.5 h-[65vh] lg:h-[75vh] rounded-3xl overflow-hidden bg-zinc-200 shadow-sm relative group">
-                {/* Main Hero Card 1 (Ambient Video Loop or High-Res Photo) */}
-                <div className="col-span-2 row-span-2 relative h-full overflow-hidden group/video">
-                    {listing.video_url ? (
-                      <video
-                        src={listing.video_url}
-                        poster={images[0]}
-                        autoPlay
-                        loop
-                        muted={isVideoMuted}
-                        playsInline
-                        className="w-full h-full object-cover cursor-pointer"
-                        onClick={() => {
-                          uiAudio.playClick();
-                          setLightboxIndex(0);
-                        }}
-                      />
-                    ) : (
-                      <div className="relative w-full h-full">
-                        <OptimizedImage 
-                            src={images[0]} 
-                            aspectRatio="4:3"
-                            priority={true}
-                            className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" 
-                            alt={`${listing.title} Main View`}
-                            onClick={() => { uiAudio.playClick(); trackPhotoView(0); setGalleryInitialIndex(0); setGalleryInitialCategory('all'); setIsGalleryOpen(true); }}
-                        />
-                      </div>
-                    )}
-
-                    {/* Ambient Video Micro-HUD Controls */}
-                    {listing.video_url && (
-                      <div className="absolute top-4 left-4 z-20 flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            uiAudio.playClick();
-                            setIsVideoMuted(!isVideoMuted);
-                          }}
-                          className="p-2 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-md transition-all shadow-md active:scale-95 cursor-pointer"
-                          title={isVideoMuted ? "Unmute Ambient Sound" : "Mute Sound"}
-                        >
-                          {isVideoMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
-                        </button>
-                        <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-black/40 text-white/90 backdrop-blur-md border border-white/10 flex items-center gap-1.5 font-display">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                          Live Ambient Reel
-                        </span>
-                      </div>
-                    )}
-
-                    {listing.isVerified && (
-                        <div className="absolute bottom-6 left-6 bg-white/90 backdrop-blur-xl px-4 py-2 rounded-xl shadow-lg border border-white/40 flex items-center gap-2 pointer-events-none">
-                            <ShieldCheck className="w-5 h-5 text-emerald-600" />
-                            <span className="text-xs font-bold font-display tracking-widest text-zinc-900 uppercase">Verified Sanctuary</span>
-                        </div>
-                    )}
-                </div>
-                
-                {/* Bento Grid Sub-Images */}
-                <div className="relative overflow-hidden h-full">
-                    <OptimizedImage src={images[1]} aspectRatio="16:9" className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" alt="View 2" onClick={() => { uiAudio.playClick(); trackPhotoView(1); setGalleryInitialIndex(1); setGalleryInitialCategory('all'); setIsGalleryOpen(true); }} />
-                </div>
-                <div className="relative overflow-hidden h-full">
-                    <OptimizedImage src={images[2]} aspectRatio="16:9" className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" alt="View 3" onClick={() => { uiAudio.playClick(); trackPhotoView(2); setGalleryInitialIndex(2); setGalleryInitialCategory('all'); setIsGalleryOpen(true); }} />
-                </div>
-                <div className="relative overflow-hidden h-full">
-                    <OptimizedImage src={images[3]} aspectRatio="16:9" className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform cursor-pointer" alt="View 4" onClick={() => { uiAudio.playClick(); trackPhotoView(3); setGalleryInitialIndex(3); setGalleryInitialCategory('all'); setIsGalleryOpen(true); }} />
-                </div>
-                
-                {/* View Gallery Overlay */}
-                <div className="relative overflow-hidden h-full group/gallery cursor-pointer" onClick={() => { uiAudio.playClick(); trackPhotoView(4); setGalleryInitialIndex(0); setGalleryInitialCategory('all'); setIsGalleryOpen(true); }}>
-                    <OptimizedImage src={images[4]} aspectRatio="16:9" className="w-full h-full object-cover transition-transform duration-700 group-hover/gallery:scale-[1.03] group-hover/gallery:blur-sm" alt="View 5" />
-                    <div className="absolute inset-0 bg-black/10 group-hover/gallery:bg-black/20 transition-colors duration-500" />
-                    <div className="absolute bottom-4 right-4 bg-white/95 backdrop-blur-xl border border-white/50 text-zinc-900 px-5 py-3 rounded-xl flex items-center gap-2 shadow-lg hover:scale-[1.02] active:scale-95 transition-transform">
-                        <ImageIcon className="w-4 h-4" />
-                        <span className="text-[11px] font-extrabold uppercase tracking-widest font-display">Show All Media</span>
-                    </div>
-                </div>
-
-                {/* Live Viewers Floating Badge */}
-                {liveViewers > 1 && (
-                    <div className="absolute top-6 right-6 bg-zinc-900/80 backdrop-blur-xl px-4 py-2 rounded-full flex items-center gap-2 border border-white/10 shadow-2xl animate-fade-in pointer-events-none">
-                        <div className="relative flex h-2.5 w-2.5">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                        </div>
-                        <span className="text-[10px] font-extrabold tracking-widest text-white uppercase font-display">{liveViewers} Viewing</span>
-                    </div>
-                )}
-            </div>
-
-            {/* Mobile 16:9 Swipe Canvas */}
-            <div className="md:hidden relative w-full aspect-[4/5] sm:aspect-square bg-zinc-200 overflow-hidden">
-                <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide w-full h-full" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }} onScroll={(e) => {
-                    const scrollLeft = (e.target as HTMLDivElement).scrollLeft;
-                    const width = (e.target as HTMLDivElement).clientWidth;
-                    const idx = Math.round(scrollLeft / width);
-                    if (idx !== activeMobileImage) {
-                        setActiveMobileImage(idx);
-                        trackPhotoView(idx);
-                    }
-                }}>
-                    {images.map((img, idx) => (
-                        <div key={idx} className="w-full h-full snap-center shrink-0 relative" onClick={() => setLightboxIndex(idx)}>
-                            <OptimizedImage 
-                                src={img} 
-                                aspectRatio="1:1"
-                                priority={idx === 0}
-                                className="w-full h-full object-cover" 
-                                alt={`${listing.title} View ${idx + 1}`} 
-                            />
-                        </div>
-                    ))}
-                </div>
-
-                {/* Mobile Micro-HUD Overlays */}
-                <div className="absolute bottom-8 left-0 right-0 flex justify-center pointer-events-none">
-                    <div className="flex gap-1.5 bg-black/30 backdrop-blur-xl px-3 py-1.5 rounded-full">
-                        {images.map((_, i) => (
-                            <div key={i} className={`h-1 rounded-full transition-all duration-300 ${activeMobileImage === i ? 'w-4 bg-white' : 'w-1 bg-white/40'}`} />
-                        ))}
-                    </div>
-                </div>
-
-                {listing.isVerified && (
-                    <div className="absolute bottom-6 left-4 bg-white/80 backdrop-blur-xl px-3.5 py-1.5 rounded-xl shadow-sm border border-white/40 flex items-center gap-1.5 pointer-events-none">
-                        <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                        <span className="text-[10px] font-bold tracking-widest text-zinc-900 uppercase font-display">Verified</span>
-                    </div>
-                )}
-            </div>
-        </div>
-
+        
         {/* ========================================================================= */}
         {/* ZONE 1: HIGH-CONVERSION SPLIT GRID (Top -> End of Host Section)           */}
         {/* ========================================================================= */}
@@ -1323,15 +1603,43 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         </div>
                     </div>
 
+                    {/* Dynamic Multi-Unit Availability & Date Block Status Banner */}
+                    {isDateRangeBlocked ? (
+                      <div className="mb-4 p-3.5 rounded-2xl bg-rose-50 border border-rose-200/90 text-rose-800 text-xs flex items-start gap-2.5 font-medium animate-fadeIn shadow-sm">
+                        <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-bold block text-rose-900 font-display">All Units Reserved for Dates</span>
+                          <span className="text-[11px] text-rose-700 leading-relaxed block mt-0.5">
+                            All {roomInventoryStats.totalUnits} {activeTierObj.name} suites are booked or held for {checkIn} → {checkOut}. Please choose alternative dates or toggle another suite above.
+                          </span>
+                        </div>
+                      </div>
+                    ) : roomInventoryStats.occupiedUnits > 0 ? (
+                      <div className="mb-4 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between font-semibold animate-fadeIn">
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                          High Demand · {roomInventoryStats.occupiedUnits} of {roomInventoryStats.totalUnits} units booked
+                        </span>
+                        <span className="text-amber-800 font-mono font-bold">Only {roomInventoryStats.remainingUnits} left!</span>
+                      </div>
+                    ) : null}
+
                     <button 
+                        disabled={isDateRangeBlocked}
                         onClick={() => handleReserve()}
-                        className="w-full bg-gradient-to-r from-zinc-900 to-zinc-800 text-white font-bold font-display py-4 rounded-2xl shadow-[0_4px_14px_rgba(0,0,0,0.15)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.2)] active:scale-[0.98] transition-all flex items-center justify-center gap-2 mb-4 cursor-pointer"
+                        className={`w-full font-bold font-display py-4 rounded-2xl transition-all flex items-center justify-center gap-2 mb-4 ${
+                          isDateRangeBlocked
+                            ? 'bg-zinc-200 text-zinc-400 cursor-not-allowed border border-zinc-300/60 shadow-none'
+                            : 'bg-gradient-to-r from-zinc-900 to-zinc-800 text-white shadow-[0_4px_14px_rgba(0,0,0,0.15)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.2)] active:scale-[0.98] cursor-pointer'
+                        }`}
                     >
                         <CreditCard className="w-4 h-4" />
-                        <span>Reserve Sanctuary</span>
+                        <span>{isDateRangeBlocked ? 'Dates Unavailable for this Suite' : 'Reserve Sanctuary'}</span>
                     </button>
                     
-                    <p className="text-[11px] text-zinc-400 text-center mb-6 font-medium">You won't be charged yet</p>
+                    <p className="text-[11px] text-zinc-400 text-center mb-6 font-medium">
+                      {isDateRangeBlocked ? 'Choose alternate dates to unlock reservation' : "You won't be charged yet"}
+                    </p>
 
                     {/* Visual Split-Cost Calculator (Strict Ledger) */}
                     <div className="space-y-3 text-sm text-zinc-600 font-medium">
@@ -1434,14 +1742,14 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 <div className="flex items-center gap-2 mb-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                   <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 font-display">
-                    Curated Architectural Portfolio
+                    THE ROOM COLLECTIONS
                   </span>
                 </div>
                 <h2 className="text-2xl md:text-4xl font-extrabold tracking-tight text-zinc-900 font-display">
-                  Cinematic Sanctuary Gallery
+                  Our Sanctuary Chambers
                 </h2>
                 <p className="text-sm md:text-base text-zinc-500 font-medium mt-1">
-                  Explore every curated pavilion, open-air reflection pool, and artisanal suite detail.
+                  Explore our curated selection of spaces.
                 </p>
               </div>
 
@@ -1449,7 +1757,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
               <div className="flex items-center gap-3 self-start md:self-end">
                 <div className="bg-zinc-100 px-4 py-2 rounded-full text-xs font-bold text-zinc-700 font-display flex items-center gap-2 border border-zinc-200/60 shadow-2xs">
                   <span className="w-1.5 h-1.5 rounded-full bg-zinc-900" />
-                  <span>COLLECTION 0{activeSlide + 1} / 03</span>
+                  <span>COLLECTION 0{activeSlide + 1} / 0{slideCollections.length}</span>
                 </div>
                 <button
                   type="button"
@@ -1460,7 +1768,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   className="w-10 h-10 rounded-full bg-white hover:bg-zinc-100 border border-zinc-200 text-zinc-900 flex items-center justify-center shadow-xs active:scale-95 transition-all cursor-pointer"
                   title="Previous Collection"
                 >
-                  <ChevronLeft className="w-5 h-5" />
+                  <ChevronLeft strokeWidth={1.5} className="w-5 h-5" />
                 </button>
                 <button
                   type="button"
@@ -1476,24 +1784,20 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
               </div>
             </div>
 
-            {/* Collection Category Pills (Room Inventory Taxonomy) */}
+            {/* Collection Category Pills (Dynamic Room Inventory Taxonomy) */}
             <div className="flex flex-wrap gap-2">
-              {[
-                { id: 0, label: '01 · Presidential Suites' },
-                { id: 1, label: '02 · Deluxe Double Rooms' },
-                { id: 2, label: '03 · Executive Single Rooms' }
-              ].map(cat => (
+              {slideCollections.map((col, idx) => (
                 <button
-                  key={cat.id}
+                  key={col.id || idx}
                   type="button"
-                  onClick={() => handleCategoryPillClick(cat.id)}
+                  onClick={() => handleCategoryPillClick(idx)}
                   className={`px-4 py-2 rounded-full text-xs font-bold font-display transition-all cursor-pointer flex items-center gap-2 ${
-                    activeSlide === cat.id
-                      ? 'bg-zinc-900 text-white shadow-sm'
+                    activeSlide === idx
+                      ? 'bg-zinc-900 text-white shadow-sm ring-1 ring-zinc-900'
                       : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200/60'
                   }`}
                 >
-                  <span>{cat.label}</span>
+                  <span>{col.name}</span>
                 </button>
               ))}
             </div>
@@ -1510,7 +1814,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 className="absolute left-4 top-1/2 -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-black/40 hover:bg-black/70 text-white backdrop-blur-xl border border-white/20 flex items-center justify-center opacity-0 group-hover/gallery:opacity-100 transition-all duration-300 shadow-xl active:scale-90 cursor-pointer"
                 title="Previous Collection"
               >
-                <ChevronLeft className="w-6 h-6" />
+                <ChevronLeft strokeWidth={1.5} className="w-6 h-6" />
               </button>
               <button
                 type="button"
@@ -1533,7 +1837,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
                   className="grid grid-cols-12 gap-4 h-full"
                 >
-                  {/* LEFT SIDE (7 Cols): TRIO OF DETAIL SPACES */}
+                  {/* LEFT SIDE (7 Cols): TRIO OF DETAIL SPACES (Sub-Classification Labels ONLY) */}
                   <div className="col-span-7 flex flex-col gap-4">
                     {/* Top Row: Spaces 02 & 03 (4:3) */}
                     <div className="grid grid-cols-2 gap-4">
@@ -1549,21 +1853,17 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                           src={slideCollections[activeSlide].space02.img}
                           aspectRatio="4:3"
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                          alt={slideCollections[activeSlide].space02.title}
+                          alt={slideCollections[activeSlide].space02.tag || 'Space'}
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent opacity-80 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-5">
-                          <div className="flex items-center justify-between w-full text-white">
-                            <div>
-                              <span className="text-[10px] font-black uppercase tracking-widest text-amber-300 font-mono">
-                                Space 02 · {slideCollections[activeSlide].space02.tag}
-                              </span>
-                              <h4 className="text-sm md:text-base font-bold font-display mt-0.5">
-                                {slideCollections[activeSlide].space02.title}
-                              </h4>
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/15 to-transparent opacity-85 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4 sm:p-5">
+                          <div className="flex flex-col w-full text-white">
+                            <div className="flex items-center justify-between w-full">
+                              <span className="uppercase text-[10px] md:text-xs text-amber-400 font-mono font-bold tracking-wider">{slideCollections[activeSlide]?.space02?.tag || 'Sanctuary Space'}</span>
+                              <div className="p-2 rounded-full bg-white/20 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                <Eye className="w-4 h-4 text-white" />
+                              </div>
                             </div>
-                            <div className="p-2 rounded-full bg-white/20 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                              <Eye className="w-4 h-4 text-white" />
-                            </div>
+                            <h4 className="mt-3 text-lg font-bold font-display leading-tight shadow-sm drop-shadow-md">{slideCollections[activeSlide].space02.title}</h4>
                           </div>
                         </div>
                       </div>
@@ -1580,21 +1880,17 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                           src={slideCollections[activeSlide].space03.img}
                           aspectRatio="4:3"
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                          alt={slideCollections[activeSlide].space03.title}
+                          alt={slideCollections[activeSlide].space03.tag || 'Space'}
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent opacity-80 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-5">
-                          <div className="flex items-center justify-between w-full text-white">
-                            <div>
-                              <span className="text-[10px] font-black uppercase tracking-widest text-amber-300 font-mono">
-                                Space 03 · {slideCollections[activeSlide].space03.tag}
-                              </span>
-                              <h4 className="text-sm md:text-base font-bold font-display mt-0.5">
-                                {slideCollections[activeSlide].space03.title}
-                              </h4>
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/15 to-transparent opacity-85 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4 sm:p-5">
+                          <div className="flex flex-col w-full text-white">
+                            <div className="flex items-center justify-between w-full">
+                              <span className="uppercase text-[10px] md:text-xs text-amber-400 font-mono font-bold tracking-wider">{slideCollections[activeSlide]?.space03?.tag || 'Sanctuary Space'}</span>
+                              <div className="p-2 rounded-full bg-white/20 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                <Eye className="w-4 h-4 text-white" />
+                              </div>
                             </div>
-                            <div className="p-2 rounded-full bg-white/20 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                              <Eye className="w-4 h-4 text-white" />
-                            </div>
+                            <h4 className="mt-3 text-lg font-bold font-display leading-tight shadow-sm drop-shadow-md">{slideCollections[activeSlide].space03.title}</h4>
                           </div>
                         </div>
                       </div>
@@ -1612,21 +1908,17 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         src={slideCollections[activeSlide].space04.img}
                         aspectRatio="16:9"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                        alt={slideCollections[activeSlide].space04.title}
+                        alt={slideCollections[activeSlide].space04.tag || 'Space'}
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent opacity-80 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-6">
-                        <div className="flex items-center justify-between w-full text-white">
-                          <div>
-                            <span className="text-[10px] font-black uppercase tracking-widest text-amber-300 font-mono">
-                              Space 04 · {slideCollections[activeSlide].space04.tag}
-                            </span>
-                            <h4 className="text-base md:text-lg font-bold font-display mt-0.5">
-                              {slideCollections[activeSlide].space04.title}
-                            </h4>
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/15 to-transparent opacity-85 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-5 sm:p-6">
+                        <div className="flex flex-col w-full text-white">
+                          <div className="flex items-center justify-between w-full">
+                            <span className="uppercase text-[10px] md:text-xs text-amber-400 font-mono font-bold tracking-wider">{slideCollections[activeSlide]?.space04?.tag || 'Sanctuary Space'}</span>
+                            <div className="p-2.5 rounded-full bg-white/20 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                              <Eye className="w-4 h-4 text-white" />
+                            </div>
                           </div>
-                          <div className="p-2.5 rounded-full bg-white/20 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                            <Eye className="w-4 h-4 text-white" />
-                          </div>
+                          <h4 className="mt-3 text-xl font-bold font-display leading-tight shadow-sm drop-shadow-md">{slideCollections[activeSlide].space04.title}</h4>
                         </div>
                       </div>
                     </div>
@@ -1642,16 +1934,37 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     }}
                     className="col-span-5 group relative min-h-[380px] lg:min-h-full rounded-3xl overflow-hidden bg-zinc-100 border border-zinc-200/60 shadow-xs hover:shadow-2xl transition-all duration-500 cursor-pointer flex flex-col justify-end"
                   >
-                    {slideCollections[activeSlide].space01.hasVideo && listing.video_url ? (
-                      <video
-                        src={listing.video_url}
-                        poster={slideCollections[activeSlide].space01.img}
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                        className="absolute inset-0 w-full h-full object-cover"
-                      />
+                    {slideCollections[activeSlide].space01.hasVideo && ((listing as any).hero_video_url || listing.video_url) ? (
+                      <div className="absolute inset-0 w-full h-full">
+                        <OptimizedImage
+                          src={slideCollections[activeSlide].space01.img}
+                          aspectRatio="16:9"
+                          priority={true}
+                          className="absolute inset-0 w-full h-full object-cover"
+                          alt={slideCollections[activeSlide].space01.title}
+                        />
+                        {((listing as any).hero_video_url || listing.video_url).startsWith('mux://') ? (
+                          <MuxPlayer
+                            playbackId={((listing as any).hero_video_url || listing.video_url).replace('mux://', '')}
+                            autoPlay="muted"
+                            loop
+                            muted
+                            onCanPlay={() => setIsVideoReady(true)}
+                            className={`absolute inset-0 w-full h-full transition-opacity duration-1000 ${isVideoReady ? 'opacity-100' : 'opacity-0'}`}
+                            style={{ '--media-object-fit': 'cover' } as any}
+                          />
+                        ) : (
+                          <video
+                            src={(listing as any).hero_video_url || listing.video_url}
+                            autoPlay
+                            loop
+                            muted
+                            playsInline
+                            onCanPlayThrough={() => setIsVideoReady(true)}
+                            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ${isVideoReady ? 'opacity-100' : 'opacity-0'}`}
+                          />
+                        )}
+                      </div>
                     ) : (
                       <OptimizedImage
                         src={slideCollections[activeSlide].space01.img}
@@ -1665,9 +1978,9 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     
                     {/* Hero Badge & Metadata */}
                     <div className="relative z-10 p-6 md:p-8 text-white space-y-2">
-                      <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full border border-white/30 text-[10px] font-black uppercase tracking-widest font-mono">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                        <span>Space 01 · Hero Feature Anchor</span>
+                      <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/30 text-[10px] font-black uppercase tracking-widest font-mono">
+                        <Crown className="w-3.5 h-3.5 text-amber-300" />
+                        <span>{slideCollections[activeSlide]?.space01?.tag || 'Flagship Living Quarters'}</span>
                       </div>
                       <h3 className="text-xl md:text-2xl font-extrabold font-display leading-tight">
                         {slideCollections[activeSlide].space01.title}
@@ -1687,18 +2000,18 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                           {isMorphingReservation ? (
                             <>
                               <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-900" />
-                              <span>Booking...</span>
+                              <span>Selecting...</span>
                             </>
                           ) : (
                             <>
-                              <CreditCard className="w-3.5 h-3.5 text-zinc-900" />
-                              <span>Book This Space</span>
+                              <Bed className="w-3.5 h-3.5 text-zinc-900" />
+                              <span>Select This {slideCollections[activeSlide]?.space01?.unitType || 'Accommodation'}</span>
                             </>
                           )}
                         </button>
 
                         <div className="flex items-center gap-1.5 text-xs font-bold font-display text-amber-300 group-hover:translate-x-1 transition-transform">
-                          <span>Inspect in 4K</span>
+                          <span>Explore All Photos</span>
                           <ArrowRight className="w-4 h-4" />
                         </div>
                       </div>
@@ -1829,8 +2142,8 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
               </div>
 
               <div className="flex items-center justify-between px-3 text-[11px] font-medium text-zinc-400 pt-0.5">
-                <span>Swipe 12 curated spaces</span>
-                <span>Tap for 4K inspection</span>
+                <span>Swipe across room configurations</span>
+                <span>Tap photo to expand full view</span>
               </div>
             </div>
           </section>
@@ -1847,9 +2160,6 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
               </span>
             </div>
 
-            {curatedNeighborhoodPOIs.length === 0 ? (
-                <p className="text-sm text-zinc-500 italic">This host has not added nearby points of interest yet.</p>
-            ) : (
             <div className="relative w-full h-[380px] sm:h-[420px] md:h-[460px] bg-zinc-100 rounded-3xl overflow-hidden border border-zinc-200 shadow-inner group">
               {/* Locked "Dormant to Life" Chromatic Shift Layer with Dynamic Camera Zoom */}
               <div 
@@ -2192,7 +2502,6 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
               </div>
             </div>
 
-            )}
           </section>
 
           {/* 3. VERIFIED GUEST REVIEWS */}
@@ -2320,37 +2629,91 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
                 <button
                   type="button"
+                  disabled={isDateRangeBlocked}
                   onClick={() => handleReserve()}
-                  className="bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-zinc-950 text-xs md:text-sm font-extrabold font-display uppercase tracking-wider px-7 py-3 rounded-full shadow-lg shadow-amber-500/20 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
+                  className={`text-xs md:text-sm font-extrabold font-display uppercase tracking-wider px-7 py-3 rounded-full shadow-lg active:scale-95 transition-all flex items-center gap-2 ${
+                    isDateRangeBlocked
+                      ? 'bg-zinc-700 text-zinc-400 cursor-not-allowed shadow-none'
+                      : 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-zinc-950 shadow-amber-500/20 cursor-pointer'
+                  }`}
                 >
-                  <span>RESERVE</span>
-                  <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+                  <span>{isDateRangeBlocked ? 'UNAVAILABLE' : 'RESERVE'}</span>
+                  {!isDateRangeBlocked && <ArrowRight className="w-4 h-4 stroke-[2.5]" />}
                 </button>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Mobile Sticky Booking Bar (M5) */}
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t border-zinc-200/80 shadow-[0_-8px_30px_rgb(0,0,0,0.08)] z-50 px-4 py-3 pb-safe safe-area-bottom">
-            <div className="flex items-center justify-between gap-4 max-w-md mx-auto">
-                <div className="flex flex-col">
-                    <div className="flex items-baseline gap-1">
-                        <span className="text-lg font-black text-zinc-900 font-display tabular-nums">{listing.currency === 'USD' ? '$' : '₹'}{activeNightlyRate.toLocaleString()}</span>
-                        <span className="text-[10px] font-bold text-zinc-400 uppercase font-mono">/ nt</span>
-                    </div>
-                    <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 mt-0.5 truncate max-w-[140px]">
-                        {getRoomConfig(selectedRoomTier).icon} {getRoomConfig(selectedRoomTier).name}
-                    </span>
+        {/* ========================================================================= */}
+        {/* UNIFIED LIQUID MORPHING MOBILE BOOKING CAPSULE (10/10 AWARD WINNER)        */}
+        {/* ========================================================================= */}
+        <div className="lg:hidden">
+          <motion.div
+            layout
+            transition={{ type: "spring", stiffness: 380, damping: 28 }}
+            className={`fixed z-50 pointer-events-auto transition-colors duration-300 ${
+              showMobileStickyBar
+                ? "bottom-0 inset-x-0 bg-white/95 backdrop-blur-2xl border-t border-zinc-200/80 shadow-[0_-8px_32px_rgba(0,0,0,0.09)] px-4 py-3 pb-safe safe-area-bottom"
+                : "bottom-5 inset-x-4 max-w-md mx-auto bg-zinc-900/90 text-white backdrop-blur-2xl border border-white/15 shadow-[0_16px_48px_rgba(0,0,0,0.4)] rounded-full px-5 py-2.5"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-3 max-w-md mx-auto">
+              <div className="flex flex-col">
+                <div className="flex items-baseline gap-1">
+                  <span className={`text-lg sm:text-xl font-black font-display tabular-nums ${showMobileStickyBar ? "text-zinc-900" : "text-white"}`}>
+                    {listing.currency === 'USD' ? '$' : '₹'}{activeNightlyRate.toLocaleString()}
+                  </span>
+                  <span className={`text-[10px] font-bold uppercase font-mono ${showMobileStickyBar ? "text-zinc-400" : "text-zinc-300"}`}>
+                    / nt
+                  </span>
                 </div>
-                <button 
-                    onClick={() => handleReserve()}
-                    className="bg-zinc-950 hover:bg-zinc-900 text-white font-bold font-display uppercase tracking-wider text-xs py-3.5 px-6 rounded-full active:scale-95 transition-all shadow-md flex-1 max-w-[160px] cursor-pointer flex items-center justify-center gap-1.5"
-                >
+                {isDateRangeBlocked ? (
+                  <span className="text-[9px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 mt-0.5 truncate max-w-[150px]">
+                    ⛔ Held / Booked
+                  </span>
+                ) : showMobileStickyBar ? (
+                  <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 mt-0.5 truncate max-w-[150px]">
+                    {getRoomConfig(selectedRoomTier).icon} {getRoomConfig(selectedRoomTier).name}
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-medium text-emerald-400 tracking-wider uppercase flex items-center gap-1 mt-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Instant Confirmation
+                  </span>
+                )}
+              </div>
+
+              <button 
+                disabled={isDateRangeBlocked}
+                onClick={() => {
+                  uiAudio.playPop();
+                  handleReserve();
+                }}
+                className={`font-bold font-display uppercase tracking-wider text-xs py-3 px-6 rounded-full active:scale-95 transition-all shadow-md flex items-center justify-center gap-1.5 ${
+                  isDateRangeBlocked
+                    ? "bg-zinc-300 text-zinc-500 cursor-not-allowed shadow-none"
+                    : showMobileStickyBar
+                      ? "bg-zinc-950 hover:bg-zinc-900 text-white cursor-pointer"
+                      : "bg-white text-zinc-950 hover:bg-zinc-100 shadow-white/20 cursor-pointer"
+                }`}
+              >
+                {isDateRangeBlocked ? (
+                  <span>UNAVAILABLE</span>
+                ) : showMobileStickyBar ? (
+                  <>
                     <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                     <span>RESERVE ↗</span>
-                </button>
+                  </>
+                ) : (
+                  <>
+                    <span>Reserve</span>
+                    <ArrowRight className="w-3.5 h-3.5 stroke-[3]" />
+                  </>
+                )}
+              </button>
             </div>
+          </motion.div>
         </div>
 
         {/* ========================================================================= */}

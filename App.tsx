@@ -375,13 +375,12 @@ function App() {
         }
 
         setListings(apiListings);
-        fetchGlobalExperiences();
     } catch (e) {
         console.error("Failed to load listings", e);
     } finally {
         setLoading(false);
     }
-  }, [filters, fetchGlobalExperiences]);
+  }, [filters]);
   
   const { setBadge, clearBadge } = useAppBadge();
 
@@ -676,11 +675,11 @@ function App() {
             { id: 'r2', name: 'Standard Room', price: Math.floor(sourceListing.price * 0.4), sqft: 14, isAvailable: false, features: ['Double Bed', 'Desk'] }
         ],
         nearby: sourceListing.nearby || [
-            { name: 'Central Station', type: 'TRANSPORT', distance: '5 min walk', minutes: 5 },
-            { name: 'Organic Market', type: 'GROCERY', distance: '2 min walk', minutes: 2 },
-            { name: 'City Park', type: 'PARK', distance: '10 min walk', minutes: 10 },
-            { name: 'Coffee Lab', type: 'CAFE', distance: '1 min walk', minutes: 1 },
-            { name: 'FitFirst Gym', type: 'GYM', distance: '3 min walk', minutes: 3 },
+            { name: 'Central Station', type: 'TRANSPORT', distance: '5 min walk' },
+            { name: 'Organic Market', type: 'GROCERY', distance: '2 min walk' },
+            { name: 'City Park', type: 'PARK', distance: '10 min walk' },
+            { name: 'Coffee Lab', type: 'CAFE', distance: '1 min walk' },
+            { name: 'FitFirst Gym', type: 'GYM', distance: '3 min walk' },
         ]
     };
     setSelectedListing(detailedListing);

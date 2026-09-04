@@ -45,6 +45,9 @@ export interface Room {
 export interface Offer {
   id: number;
   title: string;
+  brand?: string;
+  brand_font?: string;
+  brand_color?: string;
   discountPercentage: number;
 }
 
@@ -69,6 +72,9 @@ export interface SpatialPhoto {
   category: 'living_room' | 'dining' | 'bedroom' | 'bathroom' | 'garden' | 'exterior' | 'pool' | 'details' | 'balcony' | 'parking' | 'restaurant' | 'lobby' | 'spa' | 'gym' | 'activity_area' | 'view' | 'other';
   categoryLabel?: string;
   title: string;
+  brand?: string;
+  brand_font?: string;
+  brand_color?: string;
   description: string;
   specs?: string;
   lightingTime?: string;
@@ -76,10 +82,18 @@ export interface SpatialPhoto {
 }
 
 export interface NearbyPoint {
+  id?: string;
   name: string;
-  type: 'TRANSPORT' | 'GROCERY' | 'PARK' | 'CAFE' | 'GYM';
+  categoryGroup?: 'destination' | 'restaurant';
+  type: string; // e.g. 'nature' | 'culture' | 'landmark' | 'viewpoint' | 'experience' | 'fine_dining' | 'cafe' | 'farm_to_table' | 'local_authentic' | 'scenic_bar'
   distance: string; // e.g., "5 min walk"
-  minutes: number;
+  cuisine?: string;
+  rating?: number;
+  lat?: number;
+  lng?: number;
+  photoUrl?: string;
+  googleMapsUrl?: string;
+  isManual?: boolean;
 }
 
 export interface Listing {
@@ -89,6 +103,9 @@ export interface Listing {
   user_id?: number | string;
   host_id?: number | string;
   title: string;
+  brand?: string;
+  brand_font?: string;
+  brand_color?: string;
   price: number;
   currency: string;
   period?: string;
@@ -194,6 +211,9 @@ export interface IncludedStay {
 export interface Experience {
   id: number;
   title: string;
+  brand?: string;
+  brand_font?: string;
+  brand_color?: string;
   description: string;
   destination: string;
   departure_location: string;
@@ -253,6 +273,9 @@ export interface MarketingCampaign {
   host_id: number;
   listing_id: number;
   title: string;
+  brand?: string;
+  brand_font?: string;
+  brand_color?: string;
   description: string;
   video_url?: string;
   media_urls: string[];

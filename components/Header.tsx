@@ -214,25 +214,27 @@ const Header: React.FC<HeaderProps> = ({
   }, []);
 
   useEffect(() => {
-     if (user) {
+     const token = localStorage.getItem('token');
+     if (user && token) {
          fetch('/api/unread-counts', {
-             headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+             headers: { 'Authorization': `Bearer ${token}` }
          })
-         .then(res => res.json())
-         .then(data => setUnreadCount(data.unread || 0))
-         .catch(console.error);
+         .then(res => res.ok ? res.json() : null)
+         .then(data => data && setUnreadCount(data.unread || 0))
+         .catch(() => {});
          
          const interval = setInterval(() => {
+             const currentToken = localStorage.getItem('token');
+             if (!currentToken) return;
              fetch('/api/unread-counts', {
-                 headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                 headers: { 'Authorization': `Bearer ${currentToken}` }
              })
-             .then(res => res.json())
-             .then(data => setUnreadCount(data.unread || 0))
-             .catch(err => console.debug('Unread counts fetch error:', err));
+             .then(res => res.ok ? res.json() : null)
+             .then(data => data && setUnreadCount(data.unread || 0))
+             .catch(() => {});
          }, 30000);
          return () => clearInterval(interval);
      } else {
-         
          setUnreadCount(0);
      }
   }, [user]);

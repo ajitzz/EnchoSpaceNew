@@ -160,12 +160,20 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
   // Classify and curate photos
   const allPhotos = useMemo(() => classifyListingPhotos(listing), [listing]);
 
-  // Filtered photos for active tab (2D Matrix Injection)
+  // Filtered photos for active tab: Room photos strictly at the top!
   const filteredPhotos = useMemo(() => {
-    if (selectedCategory === 'all') return allPhotos;
-    if (selectedCategory === 'common') return allPhotos.filter(p => p.tier === 'common');
-    // For a specific room tier: show that tier's photos + common photos
-    return allPhotos.filter(p => p.tier === selectedCategory || p.tier === 'common');
+    if (selectedCategory === 'all') {
+      const roomPhotos = allPhotos.filter(p => p.tier !== 'common');
+      const commonPhotos = allPhotos.filter(p => p.tier === 'common');
+      return [...roomPhotos, ...commonPhotos];
+    }
+    if (selectedCategory === 'common') {
+      return allPhotos.filter(p => p.tier === 'common');
+    }
+    // For a specific room tier: 100% room photos first, common grounds photos only appended at the bottom
+    const roomPhotos = allPhotos.filter(p => p.tier === selectedCategory);
+    const commonPhotos = allPhotos.filter(p => p.tier === 'common');
+    return roomPhotos.length > 0 ? [...roomPhotos, ...commonPhotos] : commonPhotos;
   }, [allPhotos, selectedCategory]);
 
   // Group filtered photos by their Spatial Category for Bento Rendering

@@ -47,7 +47,8 @@ export const SPATIAL_CATEGORIES: { key: SpatialCategory; label: string; icon: st
 export interface PhotoData {
   id: string;
   file?: File;
-  previewUrl: string;
+  previewUrl?: string;
+  url?: string;
   blurhash?: string;
   category?: SpatialCategory;
   tier?: string;              // ADR-001: free-form tier key
@@ -80,7 +81,7 @@ interface SortablePhotoItemProps {
 const SortablePhotoItem = ({ photo, index, onRemove, isActive, onSelect, tierLabel }: SortablePhotoItemProps) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: photo.id });
   const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 50 : isActive ? 40 : 1 };
-  const url = photo.previewUrl || '';
+  const url = photo.previewUrl || photo.url || (photo as any).imageUrl || '';
   const isMain = index === 0;
   
   const activeCategory = SPATIAL_CATEGORIES.find(c => c.key === photo.category) || SPATIAL_CATEGORIES[0];
@@ -98,7 +99,21 @@ const SortablePhotoItem = ({ photo, index, onRemove, isActive, onSelect, tierLab
       ${isActive && !isDragging ? 'ring-4 ring-[#0284C7] scale-[1.02]' : ''}`}
     >
       <div className="relative h-full w-full bg-zinc-100 dark:bg-neutral-900 overflow-hidden min-h-[160px]">
-        <img src={url} alt="Space" className={`w-full h-full object-cover transition-transform duration-700 ${isActive ? 'scale-110' : 'group-hover:scale-105'}`} />
+        {url ? (
+          <img 
+            src={url} 
+            alt={photo.title || "Space Photo"} 
+            className={`w-full h-full object-cover transition-transform duration-700 ${isActive ? 'scale-110' : 'group-hover:scale-105'}`} 
+            onError={(e) => {
+              // Graceful fallback for broken image links
+              (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80';
+            }}
+          />
+        ) : (
+          <div className="w-full h-full min-h-[160px] flex items-center justify-center bg-slate-800/80 text-slate-500">
+            <ImagePlus className="w-8 h-8 opacity-40" />
+          </div>
+        )}
         
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         {isActive && <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" />}
@@ -278,10 +293,21 @@ export const PhotoUpload: React.FC<PhotoUploadProps> = ({ photos, setPhotos, isC
                   </div>
 
                   <div className="pt-4 border-t border-zinc-100 dark:border-neutral-800">
-                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5"><Filter className="w-3 h-3"/>Caption</label>
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5"><Filter className="w-3 h-3"/>Space Name (Title)</label>
+                    <input 
+                      type="text"
+                      className="w-full mt-3 p-3 rounded-xl bg-zinc-50 dark:bg-neutral-800 border border-zinc-200 dark:border-neutral-700 text-sm focus:ring-2 focus:ring-[#0284C7] outline-none transition-all font-bold"
+                      placeholder="e.g. Master Salon"
+                      value={activePhoto.title || ''}
+                      onChange={e => setPhotos(prev => prev.map(p => p.id === activePhoto.id ? { ...p, title: e.target.value } : p))}
+                    />
+                  </div>
+
+                  <div className="pt-4 border-t border-zinc-100 dark:border-neutral-800">
+                    <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5"><Filter className="w-3 h-3"/>Caption (Description)</label>
                     <textarea 
                       className="w-full mt-3 p-3 rounded-xl bg-zinc-50 dark:bg-neutral-800 border border-zinc-200 dark:border-neutral-700 text-sm focus:ring-2 focus:ring-[#0284C7] outline-none transition-all resize-none h-20 font-medium"
-                      placeholder="Describe this space for guests..."
+                      placeholder="e.g. Acoustic Hearth & Evening Reading Salon"
                       value={activePhoto.description || ''}
                       onChange={e => setPhotos(prev => prev.map(p => p.id === activePhoto.id ? { ...p, description: e.target.value } : p))}
                     />

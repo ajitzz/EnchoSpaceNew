@@ -1,385 +1,908 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Listing, Offer } from '../types';
-import { ChevronRight, ChevronLeft, ChevronDown, Check } from 'lucide-react';
+import { Listing } from '../types';
+import { 
+  ChevronRight, 
+  ChevronLeft, 
+  Plus, 
+  Calendar as CalendarIcon, 
+  ShieldAlert, 
+  Lock, 
+  Unlock, 
+  Sparkles, 
+  Check, 
+  X, 
+  User, 
+  DollarSign, 
+  Clock, 
+  Layers, 
+  Hotel, 
+  Home, 
+  Plane, 
+  Wrench,
+  Info,
+  ChevronDown,
+  Building2
+} from 'lucide-react';
 import { useAuth } from './AuthContext';
 import { useCurrency } from './CurrencyContext';
 
 interface HostCalendarProps {
   listings: Listing[];
-  reservations: any[]; 
+  reservations?: any[];
 }
 
-const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+interface PhysicalUnit {
+  unitNumber: number;
+  unitName: string;
+  tierKey: string;
+}
 
-export default function HostCalendar({ listings, reservations }: HostCalendarProps) {
-  const { formatPrice, currency } = useCurrency();
-  const [selectedListingId, setSelectedListingId] = useState<string | null>(listings.length > 0 ? listings[0].id : null);
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDates, setSelectedDates] = useState<number[]>([]);
-  const [offers, setOffers] = useState<Offer[]>([]);
-  const [calendarPrices, setCalendarPrices] = useState<any[]>([]);
-  const [customPrice, setCustomPrice] = useState<string>('');
-  const [selectedOfferId, setSelectedOfferId] = useState<number | null>(null);
-  const [status, setStatus] = useState<'available' | 'blocked'>('available');
-  
+interface RoomMatrixItem {
+  tierKey: string;
+  name: string;
+  icon: string;
+  price: number;
+  capacity: number;
+  inventoryCount: number;
+  tag?: string;
+  units: PhysicalUnit[];
+}
+
+interface RoomBooking {
+  id: string | number;
+  roomTier: string;
+  roomUnitNumber: number;
+  guestName: string;
+  guestEmail: string;
+  guestAvatar?: string;
+  startDate: string;
+  endDate: string;
+  totalPrice: number;
+  guestsCount: number;
+  status: string;
+  source: string;
+}
+
+interface RoomBlock {
+  id: number;
+  roomTierKey: string;
+  roomName: string;
+  roomUnitNumber: number; // 0 = all units
+  startDate: string;
+  endDate: string;
+  blockSource: 'airbnb' | 'booking_com' | 'direct' | 'maintenance' | 'manual';
+  guestName?: string;
+  note?: string;
+  createdAt?: string;
+}
+
+const BLOCK_SOURCES = [
+  { id: 'airbnb', label: 'Airbnb', icon: '✈️', color: 'bg-rose-500/10 text-rose-400 border-rose-500/30' },
+  { id: 'booking_com', label: 'Booking.com', icon: '🏨', color: 'bg-blue-500/10 text-blue-400 border-blue-500/30' },
+  { id: 'direct', label: 'Direct / Offline VIP', icon: '💎', color: 'bg-amber-500/10 text-amber-400 border-amber-500/30' },
+  { id: 'maintenance', label: 'Maintenance', icon: '🛠️', color: 'bg-purple-500/10 text-purple-400 border-purple-500/30' },
+  { id: 'manual', label: 'Host Personal Hold', icon: '🧘', color: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/30' },
+];
+
+export default function HostCalendar({ listings, reservations = [] }: HostCalendarProps) {
+  const { formatPrice } = useCurrency();
   const { token } = useAuth();
-  
+
+  const [selectedListingId, setSelectedListingId] = useState<string | number | null>(
+    listings.length > 0 ? listings[0].id : null
+  );
+
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [rooms, setRooms] = useState<RoomMatrixItem[]>([]);
+  const [bookings, setBookings] = useState<RoomBooking[]>([]);
+  const [blocks, setBlocks] = useState<RoomBlock[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [collapsedTiers, setCollapsedTiers] = useState<{ [tierKey: string]: boolean }>({});
+
+  // Block Modal State
+  const [isBlockModalOpen, setIsBlockModalOpen] = useState(false);
+  const [selectedBlockToInspect, setSelectedBlockToInspect] = useState<RoomBlock | null>(null);
+  const [selectedBookingToInspect, setSelectedBookingToInspect] = useState<RoomBooking | null>(null);
+
+  // New Block Form State
+  const [blockForm, setBlockForm] = useState({
+    roomTierKey: 'all',
+    roomUnitNumber: 0, // 0 = all units
+    roomName: 'All Sanctuary Rooms',
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
+    blockSource: 'airbnb' as 'airbnb' | 'booking_com' | 'direct' | 'maintenance' | 'manual',
+    guestName: '',
+    note: ''
+  });
+
+  const selectedListing = useMemo(
+    () => listings.find(l => String(l.id) === String(selectedListingId)) || listings[0],
+    [listings, selectedListingId]
+  );
+
+  // Fetch Room Calendar Matrix Data
+  const fetchCalendarMatrix = async () => {
+    if (!selectedListingId) return;
+    setIsLoading(true);
+    try {
+      const res = await fetch(`/api/listings/${selectedListingId}/room-calendar`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRooms(data.rooms || []);
+        setBookings(data.bookings || []);
+        setBlocks(data.blocks || []);
+      }
+    } catch (err) {
+      console.error('[HOST CALENDAR FETCH ERROR]', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-     // Fetch offers
-     fetch('/api/admin/offers', { headers: { 'Authorization': `Bearer ${token}` } })
-       .then(res => res.json())
-       .then(data => {
-          if (Array.isArray(data)) setOffers(data);
-       })
-       .catch(err => console.error(err));
-  }, [token]);
-  
-  useEffect(() => {
-     if (!selectedListingId) return;
-     fetch(`/api/listings/${selectedListingId}/calendar`, { headers: { 'Authorization': `Bearer ${token}` }})
-       .then(res => res.json())
-       .then(data => {
-          if (Array.isArray(data)) setCalendarPrices(data);
-       })
-       .catch(err => console.error(err));
+    fetchCalendarMatrix();
   }, [selectedListingId, token]);
-  
-  const selectedListing = useMemo(() => listings.find(l => l.id === selectedListingId) || listings[0], [listings, selectedListingId]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
-
-  useEffect(() => {
-      if (selectedDates.length > 0 && selectedListing) {
-          // pre-fill with first selected date's info or default
-          const firstDate = selectedDates[0];
-          const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(firstDate).padStart(2,'0')}`;
-          const currentDayInfo = calendarPrices.find(cp => cp.date_string === dateStr);
-          
-          if (currentDayInfo) {
-              setCustomPrice(currentDayInfo.price);
-              setSelectedOfferId(currentDayInfo.offer_id);
-              setStatus(currentDayInfo.status || 'available');
-          } else {
-              setCustomPrice(selectedListing.price.toString());
-              setSelectedOfferId(null);
-              setStatus('available');
-          }
-      }
-  }, [selectedDates, selectedListing, calendarPrices, year, month]);
-
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDayOfMonth = new Date(year, month, 1).getDay();
+  const monthName = currentDate.toLocaleString('default', { month: 'long' });
 
   const handlePrevMonth = () => {
     setCurrentDate(new Date(year, month - 1, 1));
-    setSelectedDates([]);
   };
 
   const handleNextMonth = () => {
     setCurrentDate(new Date(year, month + 1, 1));
-    setSelectedDates([]);
   };
-  
-  const toggleDateSelection = (day: number) => {
-      // Very simple multi-select for visual demo
-      setSelectedDates(prev => {
-          if (prev.includes(day)) return prev.filter(d => d !== day);
-          return [...prev, day];
+
+  const toggleTierCollapse = (tierKey: string) => {
+    setCollapsedTiers(prev => ({ ...prev, [tierKey]: !prev[tierKey] }));
+  };
+
+  // Quick Open Block Modal with Pre-filled Unit & Dates
+  const openBlockModal = (tierKey = 'all', unitNumber = 0, dayNum?: number) => {
+    const selectedRoom = rooms.find(r => r.tierKey === tierKey);
+    const startStr = dayNum 
+      ? `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`
+      : new Date().toISOString().split('T')[0];
+    
+    const endStr = dayNum
+      ? `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum + 1 > daysInMonth ? daysInMonth : dayNum + 1).padStart(2, '0')}`
+      : new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0];
+
+    let roomDisplayName = 'All Sanctuary Rooms';
+    if (selectedRoom) {
+      roomDisplayName = unitNumber > 0 
+        ? `${selectedRoom.name} #${String(unitNumber).padStart(2, '0')}` 
+        : `${selectedRoom.name} (All ${selectedRoom.inventoryCount} Units)`;
+    }
+
+    setBlockForm({
+      roomTierKey: tierKey,
+      roomUnitNumber: unitNumber,
+      roomName: roomDisplayName,
+      startDate: startStr,
+      endDate: endStr,
+      blockSource: 'booking_com',
+      guestName: '',
+      note: ''
+    });
+    setIsBlockModalOpen(true);
+  };
+
+  // Submit Block
+  const handleSaveBlock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedListingId) return;
+
+    try {
+      const res = await fetch(`/api/listings/${selectedListingId}/room-calendar/block`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(blockForm)
       });
-  }
 
-  const monthName = currentDate.toLocaleString('default', { month: 'long' });
-
-  // Generate cells
-  const cells = [];
-  for (let i = 0; i < firstDayOfMonth; i++) {
-    cells.push(<div key={`empty-prev-${i}`} className="h-32 border border-transparent bg-white"></div>);
-  }
-
-  const handleSave = async () => {
-      if (!selectedListingId || selectedDates.length === 0) return;
-      
-      const dates = selectedDates.map(day => `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`);
-      
-      try {
-          const res = await fetch(`/api/listings/${selectedListingId}/calendar`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-              body: JSON.stringify({
-                  dates,
-                  price: Number(customPrice),
-                  offer_id: selectedOfferId,
-                  status
-              })
-          });
-          
-          if (res.ok) {
-              // Update local state instantly for UI
-              const updatedCalendarPrices = [...calendarPrices];
-              const appliedOffer = offers.find(o => o.id === selectedOfferId);
-              
-              dates.forEach(dateStr => {
-                  const existingIdx = updatedCalendarPrices.findIndex(cp => cp.date_string === dateStr);
-                  const newEntry = {
-                      listing_id: selectedListingId,
-                      date_string: dateStr,
-                      price: Number(customPrice),
-                      offer_id: selectedOfferId,
-                      status,
-                      offer: appliedOffer
-                  };
-                  if (existingIdx >= 0) {
-                      updatedCalendarPrices[existingIdx] = newEntry;
-                  } else {
-                      updatedCalendarPrices.push(newEntry);
-                  }
-              });
-              
-              setCalendarPrices(updatedCalendarPrices);
-              setSelectedDates([]);
-              alert('Prices and offers updated successfully.');
-          }
-      } catch (err) {
-          console.error(err);
-          alert('Failed to update calendar');
+      if (res.ok) {
+        setIsBlockModalOpen(false);
+        fetchCalendarMatrix();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to block dates');
       }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to save room block');
+    }
   };
 
-  for (let day = 1; day <= daysInMonth; day++) {
-    const basePrice = selectedListing ? selectedListing.price : 2500;
-    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-    const dayInfo = calendarPrices.find(cp => cp.date_string === dateStr);
-    
-    // priority: custom calendar price > default price calculation
-    let displayPrice = basePrice;
-    if (dayInfo && dayInfo.price) {
-        displayPrice = Number(dayInfo.price);
-    } else {
-        const currentDayOfWeek = new Date(year, month, day).getDay();
-        const isWeekend = currentDayOfWeek === 5 || currentDayOfWeek === 6; 
-        if (isWeekend) displayPrice = Math.round(basePrice * 1.1);
-    }
-    
-    // If offer is applied
-    if (dayInfo && dayInfo.offer) {
-        displayPrice = Math.round(displayPrice * (1 - dayInfo.offer.discountPercentage / 100));
-    }
-    
-    const formattedPrice = displayPrice >= 1000 
-        ? `${formatPrice(Number((displayPrice / 1000).toFixed(1)), currency)}K` 
-        : formatPrice(displayPrice, currency);
-        
-    const isSelected = selectedDates.includes(day);
-    const isBlocked = dayInfo && dayInfo.status === 'blocked';
+  // Delete Block (Unblock)
+  const handleDeleteBlock = async (blockId: number) => {
+    if (!selectedListingId) return;
+    if (!confirm('Are you sure you want to release these dates back to the public booking pool?')) return;
 
-    cells.push(
-      <div 
-        key={`day-${day}`} 
-        onClick={() => toggleDateSelection(day)}
-        className={`h-32 border ${isSelected ? 'border-gray-900 bg-gray-50 z-10 relative shadow-sm scale-[1.02]' : isBlocked ? 'border-gray-200 bg-gray-100 opacity-50' : 'border-gray-200 bg-white hover:bg-gray-50'} p-3 flex flex-col justify-between cursor-pointer transition-all rounded-2xl m-1 group`}
-      >
-        <div className={`font-semibold text-lg flex justify-between ${isSelected ? 'text-gray-900' : 'text-gray-700 group-hover:text-gray-900'}`}>
-            {day}
-            {dayInfo && dayInfo.offer && <span className="text-xs bg-[#0284C7] text-white px-1.5 rounded flex items-center font-bold">-{dayInfo.offer.discountPercentage}%</span>}
-        </div>
-        <div className={`text-sm font-medium ${isSelected ? 'text-gray-900' : isBlocked ? 'line-through text-gray-400' : 'text-gray-500'}`}>{formattedPrice}</div>
-      </div>
-    );
-  }
+    try {
+      const res = await fetch(`/api/listings/${selectedListingId}/room-calendar/block/${blockId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
 
-  const trailingEmptyCells = (7 - ((firstDayOfMonth + daysInMonth) % 7)) % 7;
-  for (let i = 0; i < trailingEmptyCells; i++) {
-    cells.push(<div key={`empty-next-${i}`} className="h-32 border border-transparent bg-white"></div>);
-  }
+      if (res.ok) {
+        setSelectedBlockToInspect(null);
+        fetchCalendarMatrix();
+      } else {
+        alert('Failed to delete date block');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Network error while deleting date block');
+    }
+  };
+
+  // Date array for horizontal matrix
+  const daysArray = useMemo(() => {
+    const arr = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateObj = new Date(year, month, d);
+      arr.push({
+        day: d,
+        dateStr: `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+        weekday: dateObj.toLocaleDateString('en-US', { weekday: 'narrow' }),
+        isWeekend: dateObj.getDay() === 0 || dateObj.getDay() === 6,
+        isToday: new Date().toDateString() === dateObj.toDateString()
+      });
+    }
+    return arr;
+  }, [year, month, daysInMonth]);
+
+  // Check unit cell occupation
+  const getUnitOccupation = (tierKey: string, unitNumber: number, dateStr: string) => {
+    // 1. Check Encho Bookings for this unit
+    const matchedBooking = bookings.find(b => {
+      const isTier = b.roomTier === tierKey || !b.roomTier;
+      const isUnit = Number(b.roomUnitNumber) === unitNumber || (!b.roomUnitNumber && unitNumber === 1);
+      return isTier && isUnit && b.startDate <= dateStr && b.endDate >= dateStr;
+    });
+    if (matchedBooking) {
+      return { type: 'booking', data: matchedBooking };
+    }
+
+    // 2. Check Blocks for this unit or all units
+    const matchedBlock = blocks.find(blk => {
+      const isTier = blk.roomTierKey === tierKey || blk.roomTierKey === 'all';
+      const isUnit = Number(blk.roomUnitNumber) === unitNumber || Number(blk.roomUnitNumber) === 0;
+      return isTier && isUnit && blk.startDate <= dateStr && blk.endDate >= dateStr;
+    });
+    if (matchedBlock) {
+      return { type: 'block', data: matchedBlock };
+    }
+
+    return null;
+  };
+
+  // Summary counts
+  const totalInventoryUnits = useMemo(() => {
+    return rooms.reduce((acc, r) => acc + (r.inventoryCount || 1), 0);
+  }, [rooms]);
 
   return (
-    <div className="max-w-[1600px] mx-auto px-4 py-8 flex gap-8 h-[calc(100vh-100px)]">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-8 md:py-12 pb-36 text-slate-100">
       
-      {/* Left Sidebar - Listings list */}
-      <div className="w-20 lg:w-64 flex flex-col gap-4 border-r border-gray-100 pr-4">
-        <h2 className="hidden lg:block text-sm font-bold text-gray-500 uppercase tracking-widest mb-4">Properties</h2>
-        {listings.map(listing => (
-          <div 
-            key={listing.id}
-            onClick={() => setSelectedListingId(listing.id)}
-            className={`flex items-center gap-3 p-2 rounded-2xl cursor-pointer transition-all ${selectedListingId === listing.id ? 'bg-gray-100 border-gray-200' : 'hover:bg-gray-50 border-transparent'} border`}
+      {/* HEADER CONTROLS */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 mb-8 pb-6 border-b border-slate-800">
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="px-2.5 py-0.5 rounded-full bg-[#0284C7]/10 border border-[#0284C7]/30 text-[#38BDF8] text-[10px] font-mono font-black uppercase tracking-widest">
+              Unit-Level Multi-Inventory Matrix (10/10 PMS)
+            </span>
+            {selectedListing?.brand && (
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-semibold uppercase tracking-widest">
+                {selectedListing.brand}
+              </span>
+            )}
+          </div>
+          <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight font-display flex items-center gap-3">
+            <span>Multi-Unit Calendar Matrix</span>
+            <span className="text-xs font-mono font-bold px-3 py-1 bg-slate-800 text-slate-300 rounded-xl border border-slate-700">
+              {totalInventoryUnits} Physical Units Live
+            </span>
+          </h1>
+          <p className="text-slate-400 text-xs sm:text-sm mt-1">
+            Manage individual room units independently. Block single units for Booking.com/Airbnb while keeping remaining units open for Encho guests.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Listing Selector Dropdown */}
+          {listings.length > 1 && (
+            <select
+              value={selectedListingId || ''}
+              onChange={(e) => setSelectedListingId(e.target.value)}
+              className="bg-[#101726] border border-slate-700 hover:border-slate-500 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#0284C7]"
+            >
+              {listings.map(l => (
+                <option key={l.id} value={l.id}>
+                  {l.title} ({l.city})
+                </option>
+              ))}
+            </select>
+          )}
+
+          {/* Block Unit Dates Button */}
+          <button
+            onClick={() => openBlockModal('all', 0)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#0284C7] hover:bg-[#0369A1] text-white rounded-xl text-xs sm:text-sm font-bold shadow-lg shadow-sky-950/40 transition-all cursor-pointer active:scale-95"
           >
-            <div className="w-12 h-12 rounded-xl overflow-hidden bg-gray-200 flex-shrink-0">
-               <img src={listing.imageUrl || 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=500'} alt={listing.title} className="w-full h-full object-cover" />
+            <Lock className="w-4 h-4" />
+            <span>Block Specific Unit / Dates</span>
+          </button>
+        </div>
+      </div>
+
+      {/* TIMELINE CONTROLS & LEGEND */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-[#101726]/80 border border-slate-800 p-4 rounded-2xl mb-6">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center bg-[#0A0F1C] border border-slate-700/60 rounded-xl p-1">
+            <button
+              onClick={handlePrevMonth}
+              className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
+              title="Previous Month"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="px-3 text-xs sm:text-sm font-bold text-white tracking-wide">
+              {monthName} {year}
+            </span>
+            <button
+              onClick={handleNextMonth}
+              className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
+              title="Next Month"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          <button
+            onClick={() => setCurrentDate(new Date())}
+            className="text-[11px] font-mono font-semibold px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+          >
+            Today
+          </button>
+        </div>
+
+        {/* Legend */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-[11px] font-medium text-slate-400">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Encho Guest
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-500" /> Booking.com
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500" /> Airbnb
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Direct VIP
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-purple-500" /> Maintenance
+          </span>
+        </div>
+      </div>
+
+      {/* MATRIX TIMELINE GRID */}
+      <div className="bg-[#0A0F1C] border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+        <div className="overflow-x-auto">
+          <div className="min-w-[1000px]">
+            
+            {/* Header Date Row */}
+            <div className="grid grid-cols-[260px_repeat(auto-fit,minmax(32px,1fr))] border-b border-slate-800 bg-[#101726]">
+              <div className="p-3.5 text-xs font-black uppercase tracking-wider text-slate-400 border-r border-slate-800 flex items-center justify-between">
+                <span>Suite & Physical Units</span>
+                <span className="text-[10px] text-slate-500 font-mono font-normal">Inventory</span>
+              </div>
+              <div className="grid grid-flow-col auto-cols-fr">
+                {daysArray.map(d => (
+                  <div 
+                    key={d.day} 
+                    className={`p-2 text-center border-r border-slate-800/60 last:border-r-0 ${
+                      d.isToday 
+                        ? 'bg-sky-500/20 text-sky-300 font-black' 
+                        : d.isWeekend 
+                          ? 'bg-[#151D2E]/60 text-slate-400' 
+                          : 'text-slate-500'
+                    }`}
+                  >
+                    <div className="text-[10px] font-mono leading-none">{d.weekday}</div>
+                    <div className="text-xs font-bold mt-1">{d.day}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="hidden lg:block overflow-hidden">
-                <div className="text-sm font-bold text-gray-900 truncate">{(listing as any).city}</div>
-                <div className="text-xs text-gray-500 truncate">{listing.title}</div>
+
+            {/* Room Tiers & Unit Sub-Rows */}
+            {rooms.length === 0 ? (
+              <div className="p-12 text-center text-slate-500 text-sm">
+                No room configurations found for this listing. Add room types in the Host Form to activate the full Room Matrix.
+              </div>
+            ) : (
+              rooms.map((room) => {
+                const isCollapsed = collapsedTiers[room.tierKey];
+                return (
+                  <div key={room.tierKey} className="border-b border-slate-800 last:border-b-0">
+                    
+                    {/* Tier Group Header Bar */}
+                    <div className="bg-[#131B2E] border-b border-slate-800/60 px-3.5 py-2.5 flex items-center justify-between">
+                      <div 
+                        onClick={() => toggleTierCollapse(room.tierKey)}
+                        className="flex items-center gap-2 cursor-pointer group"
+                      >
+                        <ChevronDown className={`w-4 h-4 text-slate-400 group-hover:text-white transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
+                        <span className="text-sm">{room.icon}</span>
+                        <h2 className="text-xs sm:text-sm font-bold text-white font-display uppercase tracking-wider group-hover:text-sky-300 transition-colors">
+                          {room.name}
+                        </h2>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/30 text-sky-300 font-bold ml-1">
+                          {room.inventoryCount} Unit{room.inventoryCount > 1 ? 's' : ''}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-mono text-slate-400">
+                          ₹{room.price.toLocaleString()} / nt
+                        </span>
+                        <button
+                          onClick={() => openBlockModal(room.tierKey, 0)}
+                          className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-[#0284C7] text-slate-300 hover:text-white transition-colors flex items-center gap-1 cursor-pointer"
+                          title={`Block all ${room.inventoryCount} units of ${room.name}`}
+                        >
+                          <Lock className="w-3 h-3" />
+                          <span>Block All {room.inventoryCount} Units</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Physical Units Rows */}
+                    {!isCollapsed && room.units.map((unit) => (
+                      <div 
+                        key={`${room.tierKey}-${unit.unitNumber}`}
+                        className="grid grid-cols-[260px_repeat(auto-fit,minmax(32px,1fr))] border-b border-slate-800/40 hover:bg-[#101726]/40 transition-colors group/unit last:border-b-0"
+                      >
+                        {/* Unit Name Label */}
+                        <div className="p-3 border-r border-slate-800 flex items-center justify-between gap-2 bg-[#0A0F1C]/90 pl-6">
+                          <div className="min-w-0 flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-[#0284C7]" />
+                            <span className="text-xs font-semibold text-slate-200 truncate font-mono">
+                              Unit #{String(unit.unitNumber).padStart(2, '0')}
+                            </span>
+                          </div>
+
+                          <button
+                            onClick={() => openBlockModal(room.tierKey, unit.unitNumber)}
+                            className="p-1 rounded-md bg-slate-800/60 hover:bg-[#0284C7] text-slate-400 hover:text-white transition-colors cursor-pointer shrink-0 opacity-40 group-hover/unit:opacity-100"
+                            title={`Block Unit #${unit.unitNumber}`}
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+
+                        {/* Days Cells */}
+                        <div className="grid grid-flow-col auto-cols-fr">
+                          {daysArray.map(d => {
+                            const occ = getUnitOccupation(room.tierKey, unit.unitNumber, d.dateStr);
+
+                            if (occ?.type === 'booking') {
+                              const b = occ.data as RoomBooking;
+                              const isStart = b.startDate === d.dateStr;
+                              return (
+                                <div
+                                  key={d.day}
+                                  onClick={() => setSelectedBookingToInspect(b)}
+                                  className="p-0.5 border-r border-slate-800/60 flex items-center justify-center cursor-pointer bg-emerald-950/40 hover:bg-emerald-900/60 transition-colors relative group/cell"
+                                  title={`Encho Booking: ${b.guestName} (${b.startDate} to ${b.endDate})`}
+                                >
+                                  <div className="w-full h-7 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold flex items-center justify-center px-1 truncate">
+                                    {isStart ? (
+                                      <span className="truncate flex items-center gap-1 font-sans">
+                                        <User className="w-2.5 h-2.5 shrink-0" />
+                                        {b.guestName.split(' ')[0]}
+                                      </span>
+                                    ) : (
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            if (occ?.type === 'block') {
+                              const blk = occ.data as RoomBlock;
+                              const isStart = blk.startDate === d.dateStr;
+                              const sourceMeta = BLOCK_SOURCES.find(s => s.id === blk.blockSource) || BLOCK_SOURCES[1];
+                              
+                              return (
+                                <div
+                                  key={d.day}
+                                  onClick={() => setSelectedBlockToInspect(blk)}
+                                  className="p-0.5 border-r border-slate-800/60 flex items-center justify-center cursor-pointer bg-slate-900/60 hover:bg-slate-800/80 transition-colors relative group/blk"
+                                  title={`${sourceMeta.label} Block: ${blk.guestName || blk.note || 'Reserved'}`}
+                                >
+                                  <div className={`w-full h-7 rounded border text-[10px] font-bold flex items-center justify-center px-1 truncate ${sourceMeta.color}`}>
+                                    {isStart ? (
+                                      <span className="truncate flex items-center gap-1 font-sans">
+                                        <span>{sourceMeta.icon}</span>
+                                        {blk.guestName ? blk.guestName.split(' ')[0] : sourceMeta.label}
+                                      </span>
+                                    ) : (
+                                      <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            // Empty Available Date Cell
+                            return (
+                              <div
+                                key={d.day}
+                                onClick={() => openBlockModal(room.tierKey, unit.unitNumber, d.day)}
+                                className={`border-r border-slate-800/40 hover:bg-sky-500/10 cursor-pointer transition-colors flex items-center justify-center group/cell ${
+                                  d.isWeekend ? 'bg-[#0E1524]/20' : ''
+                                }`}
+                                title={`Click to block ${room.name} Unit #${unit.unitNumber} on ${d.dateStr}`}
+                              >
+                                <span className="text-[9px] text-slate-600 opacity-0 group-hover/cell:opacity-100 font-mono">
+                                  +
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================== */}
+      {/* 2-CLICK DATE & UNIT BLOCK MODAL */}
+      {/* ========================================== */}
+      {isBlockModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-[#101726] border border-slate-700 w-full max-w-lg rounded-3xl p-6 sm:p-8 shadow-2xl relative">
+            <button
+              onClick={() => setIsBlockModalOpen(false)}
+              className="absolute top-5 right-5 p-2 text-slate-400 hover:text-white rounded-full bg-slate-800 hover:bg-slate-700 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-2xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white font-display">Block Specific Unit / Dates</h3>
+                <p className="text-xs text-slate-400 mt-0.5">Hold 1 unit for Booking.com/Airbnb or lock the entire estate.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveBlock} className="space-y-4">
+              
+              {/* Room Target & Unit Selector */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                    Suite Category
+                  </label>
+                  <select
+                    value={blockForm.roomTierKey}
+                    onChange={(e) => {
+                      const tier = e.target.value;
+                      const sel = rooms.find(r => r.tierKey === tier);
+                      setBlockForm({
+                        ...blockForm,
+                        roomTierKey: tier,
+                        roomUnitNumber: 0,
+                        roomName: sel ? sel.name : 'All Sanctuary Rooms'
+                      });
+                    }}
+                    className="w-full bg-[#0A0F1C] border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white font-semibold focus:outline-none focus:ring-2 focus:ring-[#0284C7]"
+                  >
+                    <option value="all">🌟 Entire Estate (All Rooms)</option>
+                    {rooms.map(r => (
+                      <option key={r.tierKey} value={r.tierKey}>
+                        {r.icon} {r.name} ({r.inventoryCount} Units)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                    Physical Unit
+                  </label>
+                  <select
+                    value={blockForm.roomUnitNumber}
+                    disabled={blockForm.roomTierKey === 'all'}
+                    onChange={(e) => {
+                      const uNum = Number(e.target.value);
+                      const sel = rooms.find(r => r.tierKey === blockForm.roomTierKey);
+                      setBlockForm({
+                        ...blockForm,
+                        roomUnitNumber: uNum,
+                        roomName: uNum > 0 && sel ? `${sel.name} #${String(uNum).padStart(2, '0')}` : (sel ? sel.name : 'All Rooms')
+                      });
+                    }}
+                    className="w-full bg-[#0A0F1C] border border-slate-700 disabled:opacity-40 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white font-semibold focus:outline-none focus:ring-2 focus:ring-[#0284C7]"
+                  >
+                    <option value={0}>⚡ All Units in this Suite</option>
+                    {(() => {
+                      const sel = rooms.find(r => r.tierKey === blockForm.roomTierKey);
+                      if (!sel) return null;
+                      return sel.units.map(u => (
+                        <option key={u.unitNumber} value={u.unitNumber}>
+                          🎯 Only Unit #{String(u.unitNumber).padStart(2, '0')}
+                        </option>
+                      ));
+                    })()}
+                  </select>
+                </div>
+              </div>
+
+              {/* Date Range Picker */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    value={blockForm.startDate}
+                    onChange={(e) => setBlockForm({ ...blockForm, startDate: e.target.value })}
+                    className="w-full bg-[#0A0F1C] border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#0284C7]"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                    End Date
+                  </label>
+                  <input
+                    type="date"
+                    min={blockForm.startDate}
+                    value={blockForm.endDate}
+                    onChange={(e) => setBlockForm({ ...blockForm, endDate: e.target.value })}
+                    className="w-full bg-[#0A0F1C] border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#0284C7]"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Block Source / Platform */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                  Platform / Provenance
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {BLOCK_SOURCES.map(src => (
+                    <button
+                      key={src.id}
+                      type="button"
+                      onClick={() => setBlockForm({ ...blockForm, blockSource: src.id as any })}
+                      className={`flex items-center gap-2 p-2.5 rounded-xl border text-xs font-bold transition-all text-left ${
+                        blockForm.blockSource === src.id
+                          ? 'bg-[#0284C7]/20 border-[#0284C7] text-sky-300 shadow-md'
+                          : 'bg-[#0A0F1C] border-slate-800 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      <span className="text-sm">{src.icon}</span>
+                      <span className="truncate">{src.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Guest Name & Notes */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                    Customer Name <span className="text-slate-500 lowercase">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Booking.com Guest: Rohit Sharma"
+                    value={blockForm.guestName}
+                    onChange={(e) => setBlockForm({ ...blockForm, guestName: e.target.value })}
+                    className="w-full bg-[#0A0F1C] border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#0284C7]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">
+                    Status / Booking Note <span className="text-slate-500 lowercase">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Paid online on Booking.com"
+                    value={blockForm.note}
+                    onChange={(e) => setBlockForm({ ...blockForm, note: e.target.value })}
+                    className="w-full bg-[#0A0F1C] border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-[#0284C7]"
+                  />
+                </div>
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsBlockModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-400 hover:text-white transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-[#0284C7] hover:bg-[#0369A1] text-white rounded-xl text-xs sm:text-sm font-bold shadow-lg shadow-sky-950/40 transition-all cursor-pointer"
+                >
+                  Confirm Unit Lock
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* INSPECT BLOCK MODAL (1-CLICK UNBLOCK) */}
+      {/* ========================================== */}
+      {selectedBlockToInspect && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-[#101726] border border-slate-700 w-full max-w-md rounded-3xl p-6 sm:p-8 shadow-2xl relative">
+            <button
+              onClick={() => setSelectedBlockToInspect(null)}
+              className="absolute top-5 right-5 p-2 text-slate-400 hover:text-white rounded-full bg-slate-800 hover:bg-slate-700 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white font-display">
+                  {selectedBlockToInspect.roomName}
+                  {selectedBlockToInspect.roomUnitNumber > 0 && (
+                    <span className="ml-2 text-xs font-mono px-2 py-0.5 rounded bg-sky-500/20 text-sky-300">
+                      Unit #{selectedBlockToInspect.roomUnitNumber}
+                    </span>
+                  )}
+                </h3>
+                <span className="text-xs font-mono text-slate-400">
+                  {selectedBlockToInspect.startDate} → {selectedBlockToInspect.endDate}
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-[#0A0F1C] border border-slate-800 rounded-2xl p-4 space-y-3 mb-6">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500 font-bold uppercase tracking-wider">Channel / Reason:</span>
+                <span className="font-bold text-white uppercase">{selectedBlockToInspect.blockSource}</span>
+              </div>
+              {selectedBlockToInspect.guestName && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500 font-bold uppercase tracking-wider">Customer:</span>
+                  <span className="font-semibold text-slate-200">{selectedBlockToInspect.guestName}</span>
+                </div>
+              )}
+              {selectedBlockToInspect.note && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500 font-bold uppercase tracking-wider">Status Note:</span>
+                  <span className="text-slate-300 italic">{selectedBlockToInspect.note}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setSelectedBlockToInspect(null)}
+                className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-400 hover:text-white transition-colors"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteBlock(selectedBlockToInspect.id)}
+                className="flex items-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs sm:text-sm font-bold shadow-lg shadow-rose-950/40 transition-all cursor-pointer"
+              >
+                <Unlock className="w-4 h-4" />
+                <span>Release Unit (Unblock)</span>
+              </button>
             </div>
           </div>
-        ))}
-        {listings.length === 0 && (
-            <div className="text-sm text-gray-500 hidden lg:block">No properties available.</div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Main Calendar Area */}
-      <div className="flex-1 flex flex-col overflow-y-auto pr-4">
-         <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-4">
-                <h1 className="text-4xl font-bold text-gray-900 flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded-xl transition-colors">
-                    {monthName} <ChevronDown className="w-6 h-6" />
-                </h1>
-            </div>
-            <div className="flex items-center gap-4">
-                <div className="flex bg-gray-100 p-1 rounded-full">
-                    <button className="bg-white text-gray-900 px-4 py-1.5 rounded-full font-bold text-sm shadow-sm flex items-center gap-2">
-                        Month <ChevronDown className="w-4 h-4" />
-                    </button>
-                </div>
-                <div className="flex items-center gap-2 border border-gray-200 rounded-full p-1 bg-white">
-                    <button onClick={handlePrevMonth} className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 text-gray-700">
-                        <ChevronLeft className="w-5 h-5" />
-                    </button>
-                    <button onClick={handleNextMonth} className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 text-gray-700">
-                        <ChevronRight className="w-5 h-5" />
-                    </button>
-                </div>
-            </div>
-         </div>
+      {/* ========================================== */}
+      {/* INSPECT ENCHO BOOKING MODAL */}
+      {/* ========================================== */}
+      {selectedBookingToInspect && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-[#101726] border border-slate-700 w-full max-w-md rounded-3xl p-6 sm:p-8 shadow-2xl relative">
+            <button
+              onClick={() => setSelectedBookingToInspect(null)}
+              className="absolute top-5 right-5 p-2 text-slate-400 hover:text-white rounded-full bg-slate-800 hover:bg-slate-700 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
 
-         {/* Calendar Grid */}
-         <div className="w-full rounded-3xl border border-gray-200 bg-white overflow-hidden shadow-sm">
-            <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
-                {DAYS_OF_WEEK.map(day => (
-                    <div key={day} className="py-4 text-center text-sm font-bold text-gray-500 uppercase tracking-wider">
-                        {day}
-                    </div>
-                ))}
-            </div>
-            <div className="grid grid-cols-7 p-2 gap-0">
-                {cells}
-            </div>
-         </div>
-      </div>
-
-      {/* Right Sidebar - Pricing & Availability settings */}
-      <div className="hidden xl:flex w-80 border-l border-gray-100 pl-8 flex-col overflow-y-auto">
-          {selectedListing ? (
-            <div className="space-y-8 pb-10">
-                {selectedDates.length > 0 && (
-                     <div className="bg-gray-50 border border-gray-200 rounded-2xl p-4 mb-4">
-                         <h3 className="font-bold text-gray-900 mb-1">{selectedDates.length} {selectedDates.length === 1 ? 'night' : 'nights'} selected</h3>
-                         <div className="text-sm text-gray-500">{monthName} {Math.min(...selectedDates)} - {Math.max(...selectedDates)}</div>
-                     </div>
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-lg">
+                {selectedBookingToInspect.guestAvatar ? (
+                  <img src={selectedBookingToInspect.guestAvatar} alt="" className="w-full h-full rounded-2xl object-cover" />
+                ) : (
+                  selectedBookingToInspect.guestName[0]
                 )}
-                
-                {selectedDates.length > 0 && (
-                <div>
-                     <h3 className="text-xl font-bold text-gray-900 mb-4">Status</h3>
-                     <div className="flex bg-gray-100 p-1 rounded-full w-full mb-6 relative">
-                         <button onClick={() => setStatus('available')} className={`flex-1 px-4 py-2 rounded-full font-bold text-sm shadow-sm transition-all z-10 text-center ${status === 'available' ? 'bg-white text-gray-900' : 'text-gray-500 hover:text-gray-900'}`}>Available</button>
-                         <button onClick={() => setStatus('blocked')} className={`flex-1 px-4 py-2 rounded-full font-bold text-sm shadow-sm transition-all z-10 text-center ${status === 'blocked' ? 'bg-white text-gray-900' : 'text-gray-500 hover:text-gray-900'}`}>Blocked</button>
-                     </div>
-                </div>
-                )}
-                
-                <div>
-                     <div className="flex items-center justify-between mb-4">
-                         <h3 className="text-xl font-bold text-gray-900">Pricing</h3>
-                         <button 
-                             onClick={async () => {
-                                 if (!selectedListingId || selectedDates.length === 0) return;
-                                 try {
-                                     const pToken = localStorage.getItem('token');
-                                     const res = await fetch('/api/ai/suggest-price', {
-                                         method: 'POST',
-                                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${pToken}` },
-                                         body: JSON.stringify({
-                                             listingId: selectedListingId,
-                                             dates: selectedDates.map(day => `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`)
-                                         })
-                                     });
-                                     if (res.ok) {
-                                         const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
-                                         if (data.price) setCustomPrice(data.price.toString());
-                                     }
-                                 } catch(e) {
-                                     console.error(e);
-                                 }
-                             }}
-                             disabled={selectedDates.length === 0}
-                             className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full hover:bg-indigo-100 transition-colors disabled:opacity-50"
-                         >
-                             ✨ Smart Pricing
-                         </button>
-                     </div>
-                     <div className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-2xl cursor-pointer transition-colors group mb-3 hover:border-gray-900">
-                         <div className="w-full">
-                            <label className="text-sm text-gray-500 block mb-1">Nightly price</label>
-                            <div className="flex items-center">
-                                <span className="font-bold text-gray-900 text-xl mr-1">{currency === 'USD' ? '$' : '₹'}</span>
-                                <input 
-                                    type="number" 
-                                    className="font-bold text-gray-900 text-xl focus:outline-none w-full bg-transparent"
-                                    value={customPrice}
-                                    onChange={e => setCustomPrice(e.target.value)}
-                                    disabled={selectedDates.length === 0}
-                                    placeholder={selectedListing.price.toString()}
-                                />
-                            </div>
-                         </div>
-                     </div>
-                </div>
-
-                <div className="h-px bg-gray-100 w-full" />
-
-                <div>
-                     <div className="flex items-center justify-between mb-4">
-                         <h3 className="text-xl font-bold text-gray-900">Platform Offers</h3>
-                     </div>
-                     {offers.length === 0 && (
-                         <div className="text-sm text-gray-500 mb-4">No platform offers available currently. Admin can create offers.</div>
-                     )}
-                     <div className="space-y-3">
-                         {offers.map(offer => (
-                             <div 
-                                key={offer.id}
-                                onClick={() => setSelectedDates.length > 0 && setSelectedOfferId(selectedOfferId === offer.id ? null : offer.id)}
-                                className={`flex items-center justify-between p-4 bg-white border ${selectedOfferId === offer.id ? 'border-[#0284C7] bg-[#0284C7]/5' : 'border-gray-200 hover:border-gray-900'} rounded-2xl cursor-pointer transition-colors group `}
-                             >
-                                 <div>
-                                    <div className={`font-bold ${selectedOfferId === offer.id ? 'text-[#0284C7]' : 'text-gray-900'}`}>{offer.title}</div>
-                                    <div className="text-sm text-gray-500 mt-1">{offer.discountPercentage}% discount on base price</div>
-                                 </div>
-                                 {selectedOfferId === offer.id && <Check className="w-5 h-5 text-[#0284C7]" />}
-                             </div>
-                         ))}
-                     </div>
-                </div>
-
-                <div className="h-px bg-gray-100 w-full" />
-
-                <div>
-                     <h3 className="text-xl font-bold text-gray-900 mb-4">Availability</h3>
-                     <div className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-2xl hover:border-gray-900 cursor-pointer transition-colors group">
-                         <div>
-                            <div className="font-bold text-gray-900">1–1 night stays</div>
-                            <div className="text-sm text-gray-500 mt-1">Same-day advance notice</div>
-                         </div>
-                         <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-gray-900 transition-colors" />
-                     </div>
-                </div>
-            </div>
-          ) : (
-            <div className="text-center text-gray-500 mt-20 font-medium">
-               Select a listing to view its settings
-            </div>
-          )}
-          
-          {selectedDates.length > 0 && selectedListing && (
-              <div className="mt-8 pt-4 border-t border-gray-100 flex items-center justify-between pb-8 sticky bottom-0 bg-white">
-                  <button onClick={() => setSelectedDates([])} className="text-gray-900 font-bold underline hover:text-gray-700">Cancel</button>
-                  <button onClick={handleSave} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-gray-800 transition-colors shadow-lg">Save Changes</button>
               </div>
-          )}
-      </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xl font-bold text-white font-display">
+                    {selectedBookingToInspect.guestName}
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold">
+                    ENCHO PAID
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">{selectedBookingToInspect.guestEmail}</p>
+              </div>
+            </div>
+
+            <div className="bg-[#0A0F1C] border border-slate-800 rounded-2xl p-4 space-y-3 mb-6">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500 font-bold uppercase tracking-wider">Suite & Unit:</span>
+                <span className="font-bold text-white uppercase">
+                  {selectedBookingToInspect.roomTier} · Unit #{selectedBookingToInspect.roomUnitNumber || 1}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500 font-bold uppercase tracking-wider">Stay Dates:</span>
+                <span className="font-semibold text-emerald-400 font-mono">
+                  {selectedBookingToInspect.startDate} → {selectedBookingToInspect.endDate}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500 font-bold uppercase tracking-wider">Guests:</span>
+                <span className="font-semibold text-slate-200">{selectedBookingToInspect.guestsCount} Guest(s)</span>
+              </div>
+              <div className="flex justify-between text-xs border-t border-slate-800 pt-2">
+                <span className="text-slate-500 font-bold uppercase tracking-wider">Gross Rent Paid:</span>
+                <span className="font-bold text-white font-mono">₹{selectedBookingToInspect.totalPrice.toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setSelectedBookingToInspect(null)}
+                className="px-5 py-2.5 bg-[#0284C7] hover:bg-[#0369A1] text-white rounded-xl text-xs sm:text-sm font-bold shadow-lg transition-all cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

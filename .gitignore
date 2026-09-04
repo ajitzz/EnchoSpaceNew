@@ -31,3 +31,8 @@ playwright-report
 test-results
 blob-report
 
+# Temporary scratch & patch scripts
+scratch/
+generate_*.sh
+patch_*.py
+patch_*.cjs

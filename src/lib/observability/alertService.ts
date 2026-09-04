@@ -20,7 +20,9 @@ export interface OperationalAlert {
     | 'WORKER_STARVATION' 
     | 'PAYMENT_RECONCILIATION_MISMATCH' 
     | 'AUTH_FAILURE_SPIKE'
-    | 'PROVIDER_SCHEMA_DRIFT';
+    | 'PROVIDER_SCHEMA_DRIFT'
+    | 'TOKEN_EXPIRED'
+    | 'TOKEN_EXPIRING_SOON';
   title: string;
   description: string;
   context: Record<string, any>;

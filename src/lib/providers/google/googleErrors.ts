@@ -22,6 +22,7 @@ export type GoogleErrorCode =
   | 'GOOGLE_UNKNOWN_OUTCOME'
   | 'GOOGLE_TELEMETRY_UNAVAILABLE'
   | 'FINANCIAL_BUDGET_EXCEEDS_AUTHORIZATION'
+  | 'GOOGLE_MUTATION_FAILED'
   | 'GOOGLE_INTERNAL_ERROR';
 
 export class GoogleAdsError extends Error {

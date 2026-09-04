@@ -248,6 +248,49 @@ export class GoogleAdsClient {
       });
     }
   }
+
+  public async uploadClickConversions(
+    customerId: string,
+    conversions: any[]
+  ): Promise<any> {
+    if (this.isSandboxMode) {
+      console.log(`[GoogleAdsClient] SANDBOX MODE: Mocking upload of ${conversions.length} conversions for customer ${customerId}`);
+      return {
+        results: conversions.map(c => ({
+          conversionAction: c.conversionAction,
+          conversionDateTime: c.conversionDateTime,
+        }))
+      };
+    }
+
+    const token = await this.getFreshAccessToken();
+    const url = `https://googleads.googleapis.com/v18/customers/${customerId}:uploadClickConversions`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'developer-token': this.credentials.developerToken,
+        'login-customer-id': this.credentials.mccCustomerId,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        conversions,
+        partialFailure: true
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new GoogleAdsError('GOOGLE_MUTATION_FAILED', `Failed to upload offline conversions: ${JSON.stringify(data)}`, {
+        statusCode: response.status,
+        errorClass: 'VALIDATION'
+      });
+    }
+
+    return data;
+  }
 }
 
 export const googleAdsClient = new GoogleAdsClient();

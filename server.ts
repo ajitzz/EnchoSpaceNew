@@ -155,6 +155,7 @@ import { Redis } from '@upstash/redis';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import dotenv from 'dotenv';
+import Mux from '@mux/mux-node';
 import cors from 'cors';
 import helmet from 'helmet';
 import hpp from 'hpp';
@@ -199,6 +200,11 @@ import {
 } from './src/lib/integrationInspector.js';
 
 dotenv.config();
+
+const mux = new Mux({
+  tokenId: process.env.MUX_TOKEN_ID,
+  tokenSecret: process.env.MUX_TOKEN_SECRET
+});
 
 // Ensure Meta Marketing & Graph API environment variable bridges
 if (!process.env.META_ACCESS_TOKEN && process.env.META_API_TOKEN) {
@@ -722,10 +728,11 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'", "*"],
-      connectSrc: ["'self'", "https:", "http:", "wss:", "ws:"],
-      scriptSrc: ["\'self\'", "\'unsafe-inline\'", "\'unsafe-eval\'", "blob:", "https://js.stripe.com", "https://maps.googleapis.com", "https://*.googleapis.com", "https://accounts.google.com", "https://va.vercel-scripts.com", "https://unpkg.com", "https://*.vercel.live"],
-      workerSrc: ["'self'", "blob:"],
-      styleSrc: ["\'self\'", "\'unsafe-inline\'", "https://fonts.googleapis.com", "https://unpkg.com"],
+      mediaSrc: ["'self'", "*", "blob:", "data:"],
+      connectSrc: ["'self'", "*", "https:", "http:", "wss:", "ws:", "blob:", "data:"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "blob:", "https://js.stripe.com", "https://maps.googleapis.com", "https://*.googleapis.com", "https://accounts.google.com", "https://va.vercel-scripts.com", "https://unpkg.com", "https://*.vercel.live", "https://www.gstatic.com", "https://*.gstatic.com"],
+      workerSrc: ["'self'", "blob:", "data:"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://unpkg.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
       imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
       frameSrc: ["'self'", "https:", "http:", "https://js.stripe.com", "https://hooks.stripe.com"],
@@ -863,7 +870,12 @@ const otpLimiter = rateLimit({
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300, // Limit each IP to 300 requests per windowMs
+  max: process.env.NODE_ENV === 'production' ? 5000 : 100000, // Enterprise SPA capacity (5000 req/15m)
+  skip: (req) => {
+    // Prevent dev lockouts, loopback HMR and Split View live preview spam
+    const ip = req.ip || req.socket.remoteAddress || '';
+    return ip === '127.0.0.1' || ip === '::1' || ip.includes('127.0.0.1') || process.env.NODE_ENV !== 'production';
+  },
   standardHeaders: true,
   legacyHeaders: false,
   validate: false,
@@ -1267,6 +1279,20 @@ const ensureListingsTable = async () => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS room_calendar_blocks (
+      id SERIAL PRIMARY KEY,
+      listing_id INT REFERENCES listings(id) ON DELETE CASCADE,
+      room_tier_key VARCHAR(100) NOT NULL,
+      room_name VARCHAR(255),
+      start_date DATE NOT NULL,
+      end_date DATE NOT NULL,
+      block_source VARCHAR(50) DEFAULT 'manual',
+      guest_name VARCHAR(255),
+      note TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   await pool.query(`
@@ -1332,6 +1358,15 @@ const ensureListingsTable = async () => {
       END IF;
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='seo_image_url') THEN
         ALTER TABLE listings ADD COLUMN seo_image_url TEXT;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='brand') THEN
+        ALTER TABLE listings ADD COLUMN brand VARCHAR(100);
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='brand_font') THEN
+        ALTER TABLE listings ADD COLUMN brand_font VARCHAR(100);
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='brand_color') THEN
+        ALTER TABLE listings ADD COLUMN brand_color VARCHAR(100);
       END IF;
     END $$;
   `);
@@ -3287,6 +3322,227 @@ app.post('/api/listings/:id/calendar', authenticateToken, async (req: AuthReques
   }
 });
 
+// ==========================================
+// ROOM-AWARE MULTI-CHANNEL CALENDAR MATRIX (UNIT-LEVEL PMS)
+// ==========================================
+
+// 1. Fetch complete room matrix (rooms with inventory units, confirmed Encho bookings, external blocks)
+app.get('/api/listings/:id/room-calendar', async (req, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  const listingId = req.params.id;
+  if (isNaN(Number(listingId))) return res.json({ listingId, rooms: [], bookings: [], blocks: [] });
+
+  try {
+    // 1. Fetch listing details to extract room types
+    const listingRes = await pool.query('SELECT id, title, rooms, user_id FROM listings WHERE id = $1', [listingId]);
+    if (listingRes.rows.length === 0) return res.status(404).json({ error: 'Listing not found' });
+    const listing = listingRes.rows[0];
+
+    // Normalize rooms
+    let rooms: any[] = [];
+    if (listing.rooms) {
+      rooms = typeof listing.rooms === 'string' ? JSON.parse(listing.rooms) : listing.rooms;
+    }
+    if (!Array.isArray(rooms) || rooms.length === 0) {
+      // Check room_types table
+      const rtRes = await pool.query('SELECT * FROM room_types WHERE listing_id = $1 ORDER BY id ASC', [listingId]);
+      if (rtRes.rows.length > 0) {
+        rooms = rtRes.rows.map((rt: any) => ({
+          id: String(rt.id),
+          name: rt.name,
+          type: rt.type || rt.name.toLowerCase().replace(/\s+/g, '_'),
+          icon: rt.icon || '🛏️',
+          tag: rt.tag || '',
+          price: parseFloat(rt.base_price),
+          capacity: rt.max_occupancy,
+          inventory_count: Number(rt.inventory_count) || 1,
+          specs: rt.specs || '',
+          description: rt.description || ''
+        }));
+      } else {
+        // Default sanctuary room fallback
+        rooms = [
+          { id: 'suites', name: 'Presidential Panorama Suite', type: 'suites', icon: '👑', price: 18500, capacity: 2, inventory_count: 3, tag: 'Master Luxury' },
+          { id: 'deluxe', name: 'Deluxe Garden Sanctuary', type: 'deluxe', icon: '🛏️', price: 11500, capacity: 2, inventory_count: 4, tag: 'Recommended' },
+          { id: 'executive', name: 'Executive Work Enclave', type: 'executive', icon: '💻', price: 7500, capacity: 1, inventory_count: 2, tag: 'Solo & Work' }
+        ];
+      }
+    }
+
+    // 2. Fetch all confirmed/active bookings for this listing
+    const bookingsRes = await pool.query(`
+      SELECT b.id, b.user_id, b.start_date, b.end_date, b.total_price, b.status, b.guests, b.room_tier, b.room_unit_number, b.created_at,
+             COALESCE(u.name, 'Encho Verified Guest') as guest_name,
+             COALESCE(u.email, '') as guest_email,
+             COALESCE(u.avatar, '') as guest_avatar
+      FROM bookings b
+      LEFT JOIN users u ON b.user_id = u.id
+      WHERE b.listing_id = $1 AND b.status != 'cancelled'
+      ORDER BY b.start_date ASC
+    `, [listingId]);
+
+    // 3. Fetch all date blocks for this listing
+    const blocksRes = await pool.query(`
+      SELECT id, listing_id, room_tier_key, room_name, room_unit_number, start_date, end_date, block_source, guest_name, note, created_at
+      FROM room_calendar_blocks
+      WHERE listing_id = $1
+      ORDER BY start_date ASC
+    `, [listingId]);
+
+    // Format rooms with individual physical unit breakdown
+    const formattedRooms = rooms.map(r => {
+      const invCount = Math.max(1, Number(r.inventory_count) || 1);
+      const tierKey = r.type || r.id || 'suites';
+      
+      const units = [];
+      for (let u = 1; u <= invCount; u++) {
+        units.push({
+          unitNumber: u,
+          unitName: `${r.name} #${String(u).padStart(2, '0')}`,
+          tierKey: tierKey
+        });
+      }
+
+      return {
+        tierKey: tierKey,
+        name: r.name || 'Sanctuary Suite',
+        icon: r.icon || '🛏️',
+        price: Number(r.price) || 0,
+        capacity: Number(r.capacity) || 2,
+        inventoryCount: invCount,
+        tag: r.tag || '',
+        units: units
+      };
+    });
+
+    res.json({
+      listingId: Number(listingId),
+      listingTitle: listing.title,
+      hostId: listing.user_id,
+      rooms: formattedRooms,
+      bookings: bookingsRes.rows.map(b => ({
+        id: b.id,
+        roomTier: b.room_tier || 'suites',
+        roomUnitNumber: Number(b.room_unit_number) || 1,
+        guestName: b.guest_name,
+        guestEmail: b.guest_email,
+        guestAvatar: b.guest_avatar,
+        startDate: b.start_date ? new Date(b.start_date).toISOString().split('T')[0] : '',
+        endDate: b.end_date ? new Date(b.end_date).toISOString().split('T')[0] : '',
+        totalPrice: Number(b.total_price) || 0,
+        guestsCount: Number(b.guests) || 1,
+        status: b.status || 'confirmed',
+        source: 'encho'
+      })),
+      blocks: blocksRes.rows.map(blk => ({
+        id: blk.id,
+        roomTierKey: blk.room_tier_key,
+        roomName: blk.room_name || 'All Rooms',
+        roomUnitNumber: blk.room_unit_number ? Number(blk.room_unit_number) : 0, // 0 = all units
+        startDate: blk.start_date ? new Date(blk.start_date).toISOString().split('T')[0] : '',
+        endDate: blk.end_date ? new Date(blk.end_date).toISOString().split('T')[0] : '',
+        blockSource: blk.block_source || 'manual',
+        guestName: blk.guest_name || '',
+        note: blk.note || '',
+        createdAt: blk.created_at
+      }))
+    });
+  } catch (err) {
+    console.error('[ROOM CALENDAR GET ERROR]', err);
+    res.status(500).json({ error: 'Failed to fetch room calendar' });
+  }
+});
+
+// 2. Create date block for a specific room unit or entire estate
+app.post('/api/listings/:id/room-calendar/block', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  const listingId = req.params.id;
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  try {
+    // IDOR Check
+    const authCheck = await pool.query('SELECT user_id FROM listings WHERE id = $1', [listingId]);
+    if (authCheck.rows.length === 0) return res.status(404).json({ error: 'Listing not found' });
+    if (authCheck.rows[0].user_id !== userId && req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: You do not own this listing' });
+    }
+
+    const { roomTierKey, roomName, roomUnitNumber, startDate, endDate, blockSource, guestName, note } = req.body;
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: 'startDate and endDate are required' });
+    }
+
+    const sDate = new Date(startDate);
+    const eDate = new Date(endDate);
+    if (isNaN(sDate.getTime()) || isNaN(eDate.getTime()) || sDate > eDate) {
+      return res.status(400).json({ error: 'Invalid date range: startDate must be before or equal to endDate' });
+    }
+
+    const result = await pool.query(`
+      INSERT INTO room_calendar_blocks (listing_id, room_tier_key, room_name, room_unit_number, start_date, end_date, block_source, guest_name, note)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *
+    `, [
+      listingId,
+      roomTierKey || 'all',
+      roomName || 'All Sanctuary Rooms',
+      roomUnitNumber !== undefined && roomUnitNumber !== null ? Number(roomUnitNumber) : 0,
+      startDate,
+      endDate,
+      blockSource || 'manual',
+      guestName || null,
+      note || null
+    ]);
+
+    // Circuit Breaker: If entire estate blocked or multiple rooms blocked, trigger marketing auto-pause check
+    triggerSmartAutoPause(listingId, `ROOM_BLOCK_${Date.now()}`).catch(err => {
+      console.warn('[CIRCUIT BREAKER] Auto-pause trigger notice:', err);
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Unit date block established successfully',
+      block: result.rows[0]
+    });
+  } catch (err) {
+    console.error('[ROOM CALENDAR BLOCK CREATE ERROR]', err);
+    res.status(500).json({ error: 'Failed to create room calendar block' });
+  }
+});
+
+// 3. Remove date block
+app.delete('/api/listings/:id/room-calendar/block/:blockId', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  const { id: listingId, blockId } = req.params;
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  try {
+    // IDOR Check
+    const authCheck = await pool.query('SELECT user_id FROM listings WHERE id = $1', [listingId]);
+    if (authCheck.rows.length === 0) return res.status(404).json({ error: 'Listing not found' });
+    if (authCheck.rows[0].user_id !== userId && req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: You do not own this listing' });
+    }
+
+    const delRes = await pool.query(`
+      DELETE FROM room_calendar_blocks
+      WHERE id = $1 AND listing_id = $2
+      RETURNING id
+    `, [blockId, listingId]);
+
+    if (delRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Date block not found' });
+    }
+
+    res.json({ success: true, message: 'Date block removed and dates restored to live pool' });
+  } catch (err) {
+    console.error('[ROOM CALENDAR BLOCK DELETE ERROR]', err);
+    res.status(500).json({ error: 'Failed to delete room calendar block' });
+  }
+});
+
 app.get('/api/admin/users', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
@@ -3632,6 +3888,39 @@ app.post('/api/upload-base64', authenticateToken, express.json({ limit: '50mb' }
   }
 });
 
+app.post('/api/upload-video-url', authenticateToken, async (req, res) => {
+  try {
+    const upload = await mux.video.uploads.create({
+      new_asset_settings: {
+        playback_policy: ['public'],
+        video_quality: 'basic',
+      },
+      cors_origin: '*',
+    });
+    res.json({ uploadUrl: upload.url, uploadId: upload.id });
+  } catch (error) {
+    console.error('[MUX UPLOAD URL ERROR]', error);
+    res.status(500).json({ error: 'Failed to create Mux direct upload URL' });
+  }
+});
+
+app.get('/api/mux/upload/:uploadId', authenticateToken, async (req, res) => {
+  try {
+    const upload = await mux.video.uploads.retrieve(req.params.uploadId);
+    if (upload.asset_id) {
+      const asset = await mux.video.assets.retrieve(upload.asset_id);
+      const playbackId = asset.playback_ids?.[0]?.id;
+      if (playbackId) {
+        return res.json({ status: asset.status, playbackId });
+      }
+    }
+    res.json({ status: upload.status || 'waiting' });
+  } catch (error) {
+    console.error('[MUX STATUS ERROR]', error);
+    res.status(500).json({ error: 'Failed to retrieve Mux status' });
+  }
+});
+
 app.post('/api/upload-url', authenticateToken, async (req, res) => {
   try {
     const { filename, contentType } = req.body;
@@ -3715,7 +4004,7 @@ app.put('/api/listings/:id', authenticateToken, async (req: AuthRequest, res) =>
        return res.status(403).json({ error: 'Forbidden: You do not have permission to modify this listing.' });
     }
 
-    const { title, description, price, type, address, city, imageUrl, imageUrls, videoUrl, rentalMode, rooms, maxGuests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamicPricing, seo_title, seo_description, seo_keywords, seo_image_url, amenity_clusters, child_safety_specs, nearby, hero_video_url, hero_fallback_url, dominant_color_hex, raw_rules, curated_guidelines, experience_tags } = req.body;
+    const { title, description, price, type, address, city, imageUrl, imageUrls, videoUrl, rentalMode, rooms, maxGuests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamicPricing, seo_title, seo_description, seo_keywords, seo_image_url, amenity_clusters, child_safety_specs, nearby, hero_video_url, hero_fallback_url, dominant_color_hex, raw_rules, curated_guidelines, experience_tags, brand, brand_font, brand_color } = req.body;
 
     // Gap 16 check old price
     let oldPrice = 0;
@@ -3738,10 +4027,10 @@ app.put('/api/listings/:id', authenticateToken, async (req: AuthRequest, res) =>
       const safePhotos = Array.isArray(req.body.photos) ? JSON.stringify(req.body.photos) : (typeof req.body.photos === 'string' ? req.body.photos : JSON.stringify([]));
       await pool.query(`
         UPDATE listings
-        SET title=$1, description=$2, price=$3, type=$4, address=$5, city=$6, image_url=$7, image_urls=$8, video_url=$9, rental_mode=$10, rooms=$11, max_guests=$12, bedrooms=$13, beds=$14, bathrooms=$15, amenities=$16, lat=$18, lng=$19, dynamic_pricing=$20, seo_title=$21, seo_description=$22, seo_keywords=$23, seo_image_url=$24, amenity_clusters=$25, child_safety_specs=$26, nearby=$27, hero_video_url=$28, hero_fallback_url=$29, dominant_color_hex=$30, raw_rules=$31, curated_guidelines=$32, experience_tags=$33, photos=$34, concierge_privileges=$35, host_philosophy=$36
+        SET title=$1, description=$2, price=$3, type=$4, address=$5, city=$6, image_url=$7, image_urls=$8, video_url=$9, rental_mode=$10, rooms=$11, max_guests=$12, bedrooms=$13, beds=$14, bathrooms=$15, amenities=$16, lat=$18, lng=$19, dynamic_pricing=$20, seo_title=$21, seo_description=$22, seo_keywords=$23, seo_image_url=$24, amenity_clusters=$25, child_safety_specs=$26, nearby=$27, hero_video_url=$28, hero_fallback_url=$29, dominant_color_hex=$30, raw_rules=$31, curated_guidelines=$32, experience_tags=$33, photos=$34, concierge_privileges=$35, host_philosophy=$36, brand=$37, brand_font=$38, brand_color=$39
         WHERE id=$17
       `, [
-        title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode, safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, req.params.id as string, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby, hero_video_url || null, hero_fallback_url || null, dominant_color_hex || null, raw_rules || null, curated_guidelines || null, Array.isArray(experience_tags) ? JSON.stringify(experience_tags) : JSON.stringify([]), safePhotos, req.body.concierge_privileges || null, req.body.host_philosophy || null
+        title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode, safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, req.params.id as string, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby, hero_video_url || null, hero_fallback_url || null, dominant_color_hex || null, raw_rules || null, curated_guidelines || null, Array.isArray(experience_tags) ? JSON.stringify(experience_tags) : JSON.stringify([]), safePhotos, req.body.concierge_privileges || null, req.body.host_philosophy || null, brand || null, brand_font || null, brand_color || null
       ]);
 
       // Sync room_types table
@@ -12785,7 +13074,7 @@ app.post('/api/listings', authenticateToken, async (req: AuthRequest, res) => {
   }
   try {
     await ensureListingsTable();
-    const { title, description, price, type, address, city, imageUrl, imageUrls, videoUrl, rentalMode, rooms, maxGuests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamicPricing, seo_title, seo_description, seo_keywords, seo_image_url, hero_video_url, hero_fallback_url, dominant_color_hex, raw_rules, curated_guidelines, experience_tags } = req.body;
+    const { title, description, price, type, address, city, imageUrl, imageUrls, videoUrl, rentalMode, rooms, maxGuests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamicPricing, seo_title, seo_description, seo_keywords, seo_image_url, hero_video_url, hero_fallback_url, dominant_color_hex, raw_rules, curated_guidelines, experience_tags, brand, brand_font, brand_color } = req.body;
 
     // Security: Use authenticated user ID, ignore body userId to prevent IDOR spoofing
     const userId = req.user?.id;
@@ -12809,9 +13098,9 @@ app.post('/api/listings', authenticateToken, async (req: AuthRequest, res) => {
 
     const { concierge_privileges, host_philosophy } = req.body;
     const result = await pool.query(
-      `INSERT INTO listings (user_id, title, description, price, type, address, city, image_url, image_urls, video_url, rental_mode, rooms, max_guests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamic_pricing, seo_title, seo_description, seo_keywords, seo_image_url, amenity_clusters, child_safety_specs, nearby, hero_video_url, hero_fallback_url, dominant_color_hex, raw_rules, curated_guidelines, experience_tags, photos, concierge_privileges, host_philosophy)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36) RETURNING *`,
-      [userId || null, title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode || 'entire_place', safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby, hero_video_url || null, hero_fallback_url || null, dominant_color_hex || null, raw_rules || null, curated_guidelines || null, Array.isArray(experience_tags) ? JSON.stringify(experience_tags) : JSON.stringify([]), safePhotos, concierge_privileges || null, host_philosophy || null]
+      `INSERT INTO listings (user_id, title, description, price, type, address, city, image_url, image_urls, video_url, rental_mode, rooms, max_guests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamic_pricing, seo_title, seo_description, seo_keywords, seo_image_url, amenity_clusters, child_safety_specs, nearby, hero_video_url, hero_fallback_url, dominant_color_hex, raw_rules, curated_guidelines, experience_tags, photos, concierge_privileges, host_philosophy, brand, brand_font, brand_color)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39) RETURNING *`,
+      [userId || null, title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode || 'entire_place', safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby, hero_video_url || null, hero_fallback_url || null, dominant_color_hex || null, raw_rules || null, curated_guidelines || null, Array.isArray(experience_tags) ? JSON.stringify(experience_tags) : JSON.stringify([]), safePhotos, concierge_privileges || null, host_philosophy || null, brand || null, brand_font || null, brand_color || null]
     );
 
     const newListing = result.rows[0];
@@ -13328,6 +13617,61 @@ app.get('/api/listings', async (req, res) => {
         seo_keywords: row.seo_keywords || null,
         seo_image_url: row.seo_image_url || null
       });
+    }
+
+
+    // MIG-001 & MIG-002: Hydrate rooms and photos for host dashboard (when userId is present)
+    if (userId && listings.length > 0) {
+      const listingIds = listings.map(l => l.id);
+      try {
+        const rtResult = await pool.query('SELECT * FROM room_types WHERE listing_id = ANY($1) ORDER BY id ASC', [listingIds]);
+        const roomsByListing: any = {};
+        rtResult.rows.forEach(rt => {
+          if (!roomsByListing[rt.listing_id]) roomsByListing[rt.listing_id] = [];
+          roomsByListing[rt.listing_id].push({
+            id: String(rt.id),
+            name: rt.name,
+            type: rt.type || rt.name.toLowerCase().replace(/\s+/g, '_'),
+            icon: rt.icon || '🛏️',
+            tag: rt.tag || '',
+            price: parseFloat(rt.base_price),
+            capacity: rt.max_occupancy,
+            inventory_count: rt.inventory_count,
+            description: rt.description || '',
+            specs: rt.specs || '',
+            features: typeof rt.features === 'string' ? JSON.parse(rt.features || '[]') : (rt.features || []),
+            amenities: typeof rt.amenities === 'string' ? JSON.parse(rt.amenities || '[]') : (rt.amenities || []),
+            min_stay_nights: rt.min_stay_nights || 1
+          });
+        });
+
+        const mediaResult = await pool.query("SELECT * FROM media_assets WHERE entity_type = 'listing' AND entity_id = ANY($1) ORDER BY order_index ASC", [listingIds]);
+        const photosByListing: any = {};
+        mediaResult.rows.forEach(m => {
+          if (!photosByListing[m.entity_id]) photosByListing[m.entity_id] = [];
+          photosByListing[m.entity_id].push({
+            id: String(m.id),
+            url: m.url,
+            tier: m.tier || 'common',
+            category: m.category || 'other',
+            title: m.title || '',
+            description: m.description || '',
+            specs: m.specs || '',
+            isHero: m.is_hero || false
+          });
+        });
+
+        listings.forEach(l => {
+          if (!l.rooms || l.rooms.length === 0) {
+            l.rooms = roomsByListing[l.id] || [];
+          }
+          if (!l.photos || l.photos.length === 0) {
+            l.photos = photosByListing[l.id] || [];
+          }
+        });
+      } catch (err) {
+        console.warn('Failed to hydrate rooms/photos in batch listings:', err);
+      }
     }
 
     if (minLat && maxLat && minLng && maxLng) {
@@ -14216,6 +14560,8 @@ Do NOT include any empty placeholders, brackets like [Insert City], or generic t
           }
         });
 
+
+
         const output = JSON.parse(response?.text || '{}');
         if (output.title) title = output.title;
         if (output.description) description = output.description;
@@ -14230,6 +14576,522 @@ Do NOT include any empty placeholders, brackets like [Insert City], or generic t
     res.status(500).json({ error: 'Failed to generate listing info' });
   }
 });
+
+// AI Rule Abstraction (God-Level Luxury Hospitality Rule Polishing)
+app.post('/api/ai/curate-rules', async (req, res) => {
+  try {
+    const { rawRules } = req.body;
+    if (!rawRules || typeof rawRules !== 'string' || !rawRules.trim()) {
+      return res.status(400).json({ error: 'rawRules text required' });
+    }
+
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const prompt = "You are an executive hospitality director at an ultra-luxury 5-star estate (like Aman or Casa Angelina). Transform the following raw house rules into polite, sophisticated, aristocratic 'House Guidelines'. Retain all core boundaries (e.g. smoking, noise, checkout, pets) while completely eliminating hostile or aggressive phrasing. Format as 3-5 concise, elegant bullet points:\n\n" + rawRules;
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+        });
+        if (response && response.text) {
+          return res.json({ curatedGuidelines: response.text.trim() });
+        }
+      } catch (geminiErr: any) {
+        console.warn('Gemini rule curation fallback invoked:', geminiErr?.message);
+      }
+    }
+
+    // Heuristic luxury polish fallback
+    const polished = rawRules
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => {
+        let text = line.replace(/^[\d\-\.\*\s]+/, '');
+        if (/no smoking/i.test(text)) return 'To preserve the pristine mountain and ocean air of the sanctuary, smoking is reserved exclusively for the outer perimeter.';
+        if (/no parties|no loud music/i.test(text)) return 'We invite guests to embrace the tranquil atmosphere of the estate, observing quiet serenity after twilight.';
+        if (/check-?out/i.test(text)) return 'Check-out is honored with leisurely grace by the appointed hour to allow our housekeeping artisans to prepare the suites.';
+        if (/no pets/i.test(text)) return 'To protect the heritage furnishings and allergy-sensitive atmosphere, animal companions are welcomed only by prior concierge approval.';
+        return 'We kindly request guests to treat the sanctuary and its bespoke architecture with gentle reverence: ' + text;
+      })
+      .join('\n');
+
+    res.json({ curatedGuidelines: polished });
+  } catch (err) {
+    console.error('Curate rules error:', err);
+    res.status(500).json({ error: 'Failed to curate rules' });
+  }
+});
+
+// ADR-SENSORY-001: AI Sensory Atmosphere Tag Suggester
+
+// ADR-NEIGHBORHOOD-001: Dual-Pillar AI Radar Scan (Destinations & Gastronomy)
+app.post('/api/ai/radar-scan', async (req, res) => {
+  try {
+    const { lat, lng, city, address } = req.body;
+    
+    const fallbackDestinations = [
+      {
+        id: crypto.randomUUID(),
+        categoryGroup: 'destination',
+        type: 'landmark',
+        name: 'The Heritage Palace & Grounds',
+        distance: '10 min drive',
+        rating: 4.8,
+        lat: lat ? lat + 0.01 : 11.69,
+        lng: lng ? lng + 0.01 : 76.14
+      },
+      {
+        id: crypto.randomUUID(),
+        categoryGroup: 'destination',
+        type: 'nature',
+        name: 'Emerald Valley Viewpoint & Trail',
+        distance: '15 min drive',
+        rating: 4.9,
+        lat: lat ? lat - 0.02 : 11.66,
+        lng: lng ? lng + 0.015 : 76.15
+      },
+      {
+        id: crypto.randomUUID(),
+        categoryGroup: 'destination',
+        type: 'culture',
+        name: 'Artisan Village & Living Museum',
+        distance: '5 min walk',
+        rating: 4.7,
+        lat: lat ? lat + 0.005 : 11.68,
+        lng: lng ? lng - 0.01 : 76.12
+      },
+      {
+        id: crypto.randomUUID(),
+        categoryGroup: 'destination',
+        type: 'experience',
+        name: 'Riverfront Mist Promenade',
+        distance: '20 min drive',
+        rating: 4.6,
+        lat: lat ? lat - 0.01 : 11.67,
+        lng: lng ? lng - 0.02 : 76.11
+      }
+    ];
+
+    const fallbackRestaurants = [
+      {
+        id: crypto.randomUUID(),
+        categoryGroup: 'restaurant',
+        type: 'farm_to_table',
+        name: 'The Plantation Cellar & Dining Pavilion',
+        cuisine: 'Organic Farm-to-Table',
+        distance: '8 min drive',
+        rating: 4.9,
+        lat: lat ? lat + 0.008 : 11.688,
+        lng: lng ? lng + 0.006 : 76.138
+      },
+      {
+        id: crypto.randomUUID(),
+        categoryGroup: 'restaurant',
+        type: 'fine_dining',
+        name: 'Mist Valley Artisanal Bistro',
+        cuisine: 'Contemporary Heritage Cuisine',
+        distance: '12 min drive',
+        rating: 4.8,
+        lat: lat ? lat - 0.012 : 11.673,
+        lng: lng ? lng - 0.008 : 76.124
+      },
+      {
+        id: crypto.randomUUID(),
+        categoryGroup: 'restaurant',
+        type: 'cafe',
+        name: 'The Canopy Roastery & Tea Salon',
+        cuisine: 'Single-Origin Estate Brews',
+        distance: '6 min drive',
+        rating: 4.8,
+        lat: lat ? lat + 0.003 : 11.683,
+        lng: lng ? lng - 0.005 : 76.127
+      },
+      {
+        id: crypto.randomUUID(),
+        categoryGroup: 'restaurant',
+        type: 'local_authentic',
+        name: 'Heritage Spice Hearth',
+        cuisine: 'Slow-Cooked Regional Claypot',
+        distance: '14 min drive',
+        rating: 4.7,
+        lat: lat ? lat - 0.018 : 11.667,
+        lng: lng ? lng + 0.012 : 76.144
+      }
+    ];
+
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const prompt = `You are a luxury travel and culinary concierge for an ultra-luxury property platform.
+We have a property at coordinates lat: ${lat}, lng: ${lng} in ${city || address || 'the local region'}.
+
+Please curate TWO distinct luxury lists:
+1. "destinations": 4 top-tier tourist attractions, nature spots, scenic viewpoints, or cultural landmarks (strict types: 'nature', 'culture', 'landmark', 'viewpoint', 'experience'). NO basic transit/groceries/gyms.
+2. "restaurants": 4 top-rated culinary dining spots, artisanal cafes, farm-to-table estates, or authentic local gourmet eateries (strict types: 'fine_dining', 'cafe', 'farm_to_table', 'local_authentic', 'scenic_bar'). Include an evocative 'cuisine' tag (e.g. 'Organic Farm-to-Table', 'Coastal Seafood & Wine', 'Artisan Coffee Roastery'). NO fast food chains.
+
+Return strictly a valid JSON object matching this exact structure:
+{
+  "destinations": [
+    {
+      "id": "string",
+      "categoryGroup": "destination",
+      "type": "nature"|"culture"|"landmark"|"viewpoint"|"experience",
+      "name": "string",
+      "distance": "string",
+      "rating": 4.8,
+      "lat": number,
+      "lng": number
+    }
+  ],
+  "restaurants": [
+    {
+      "id": "string",
+      "categoryGroup": "restaurant",
+      "type": "fine_dining"|"cafe"|"farm_to_table"|"local_authentic"|"scenic_bar",
+      "name": "string",
+      "cuisine": "string",
+      "distance": "string",
+      "rating": 4.9,
+      "lat": number,
+      "lng": number
+    }
+  ]
+}
+
+Respond ONLY with the raw JSON. No markdown codeblocks, no explanations.`;
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+        });
+
+        if (response && response.text) {
+          let text = response.text.trim();
+          if (text.startsWith('```json')) {
+            text = text.replace(/^```json/, '').replace(/```$/, '').trim();
+          } else if (text.startsWith('```')) {
+            text = text.replace(/^```/, '').replace(/```$/, '').trim();
+          }
+          const parsed = JSON.parse(text);
+          if (parsed && Array.isArray(parsed.destinations) && Array.isArray(parsed.restaurants)) {
+            return res.json({
+              destinations: parsed.destinations.map(d => ({ ...d, categoryGroup: 'destination' })),
+              restaurants: parsed.restaurants.map(r => ({ ...r, categoryGroup: 'restaurant' }))
+            });
+          }
+        }
+      } catch (geminiErr: any) {
+        console.warn('Gemini dual radar scan fallback invoked:', geminiErr?.message);
+      }
+    }
+
+    res.json({
+      destinations: fallbackDestinations,
+      restaurants: fallbackRestaurants
+    });
+  } catch (err) {
+    console.error('Radar scan error:', err);
+    res.status(500).json({ error: 'Failed to scan neighborhood' });
+  }
+});
+
+app.post('/api/ai/suggest-sensory-tags', async (req, res) => {
+  try {
+    const { title, description, propertyType, location } = req.body;
+    if (!title && !description) {
+      return res.status(400).json({ error: 'title or description required' });
+    }
+
+    const ALL_AVAILABLE_TAGS = [
+      'Ocean Waves','Panoramic Mountain View','Valley Sunrise','Forest Canopy','Desert Dunes Vista',
+      'Backwater Views','Waterfall Proximity','Tea Estate Vista','Stargazing Sky','Himalayan Peaks',
+      'River Frontage','Cliff-Top Perch','Paddy Field Views','Coral Reef Access','Jungle Sounds',
+      'Heated Infinity Pool','Private Jacuzzi','In-Villa Spa Treatments','Yoga Deck','Meditation Garden',
+      'Ayurvedic Therapies','Cold Plunge Pool','Steam & Sauna','Hydrotherapy Circuit',
+      'Forest Bathing Trail','Sunrise Yoga Sessions','Wellness Consultation',
+      'Private Chef Available','Wine Cellar Access','Farm-to-Table Dining','Organic Tea Garden',
+      'In-Villa Breakfast','Poolside Dining','Bonfire BBQ Setup','Artisan Coffee Bar',
+      'Tasting Menu Experience','Mixology Bar',
+      '1 Gbps Fiber WiFi','Starlink Satellite WiFi','Dedicated Work Studio','Smart Home Controls',
+      'Video Conferencing Setup','Dual ISP Backup Internet',
+      'Artisan Fireplace','Himalayan Silence','Rainforest Soundscape','Candlelit Courtyards',
+      'Acoustic Architecture','Circadian Lighting System','Aromatherapy Diffusion',
+      'Heritage Architecture','Minimalist Zen Design','Open-Air Pavilions',
+      'Private Tennis Court','Nature Trekking Routes','Kayaking & Canoeing','Horse Riding Trails',
+      'Archery Range','Mountain Cycling Paths','Bird Watching Post','Sunset Sailing',
+      'Golf Proximity','Rock Climbing Wall',
+      '24/7 Butler Service','Private Airport Transfer','Helipad Access','Celebrity-Grade Privacy',
+      'Curated Minibar','Personal Trainer','Childcare Available','Dedicated Concierge',
+      'Cultural Immersion Walks','Local Artisan Workshops','Sunset Photography Tours',
+      'Guided Stargazing','Private Boat Tours','Private Cinema Room','Library & Reading Nook',
+      'Bonfire Storytelling Nights'
+    ];
+
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const prompt = `You are a luxury hospitality AI. Based on the property details below, select the most relevant Sensory Atmosphere Tags from the provided list. Return ONLY a JSON array of tag labels (max 8 tags) that genuinely match the property.
+
+Property Title: ${title || 'Luxury Estate'}
+Description: ${description || ''}
+Property Type: ${propertyType || 'Resort'}
+Location: ${location || ''}
+
+Available tags (select max 8 from this EXACT list only):
+${ALL_AVAILABLE_TAGS.join(', ')}
+
+Return ONLY a raw JSON array like: ["Tag 1", "Tag 2", "Tag 3"]`;
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+        });
+        if (response && response.text) {
+          const text = response.text.trim().replace(/```json\n?|\n?```/g, '');
+          const match = text.match(/\[[\s\S]*\]/);
+          if (match) {
+            const parsed = JSON.parse(match[0]);
+            const validated = parsed.filter((t: string) => ALL_AVAILABLE_TAGS.includes(t)).slice(0, 8);
+            return res.json({ tags: validated });
+          }
+        }
+      } catch (geminiErr: any) {
+        console.warn('Gemini tag suggestion fallback:', geminiErr?.message);
+      }
+    }
+
+    // Heuristic fallback
+    const desc = `${title} ${description} ${location}`.toLowerCase();
+    const fallback: string[] = [];
+    if (desc.includes('mountain') || desc.includes('hill') || desc.includes('peak')) fallback.push('Panoramic Mountain View');
+    if (desc.includes('ocean') || desc.includes('sea') || desc.includes('beach')) fallback.push('Ocean Waves');
+    if (desc.includes('pool') || desc.includes('infinity')) fallback.push('Heated Infinity Pool');
+    if (desc.includes('forest') || desc.includes('jungle') || desc.includes('wildlife')) fallback.push('Forest Canopy');
+    if (desc.includes('chef') || desc.includes('culinary') || desc.includes('dining')) fallback.push('Private Chef Available');
+    if (desc.includes('spa') || desc.includes('wellness') || desc.includes('yoga')) fallback.push('In-Villa Spa Treatments');
+    if (desc.includes('wifi') || desc.includes('work') || desc.includes('remote')) fallback.push('1 Gbps Fiber WiFi');
+    if (desc.includes('butler') || desc.includes('luxury') || desc.includes('concierge')) fallback.push('24/7 Butler Service');
+    res.json({ tags: fallback.slice(0, 6) });
+  } catch (err) {
+    console.error('Suggest sensory tags error:', err);
+    res.status(500).json({ error: 'Failed to suggest tags' });
+  }
+});
+
+// ADR-006: Real Gemini AI Gatekeeper for listing quality scoring
+app.post('/api/ai/evaluate-listing', authenticateToken, async (req: AuthRequest, res) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  const { title, description, photos, rooms, amenities, price, city } = req.body;
+
+  // Rate limit: 5 evaluations per host per hour (per AGENTS.md directive)
+  if (!(global as any).__aiEvalRL) (global as any).__aiEvalRL = {};
+  const rl = (global as any).__aiEvalRL;
+  const key = `rl_${userId}`;
+  const now = Date.now();
+  const prevCalls: number[] = (rl[key] || []).filter((t: number) => now - t < 3600000);
+  if (prevCalls.length >= 5) {
+    const retryMins = Math.ceil((prevCalls[0] + 3600000 - now) / 60000);
+    return res.status(429).json({
+      error: `Rate limit: max 5 AI evaluations per hour. Retry in ${retryMins} minute(s).`,
+      retryAfterMinutes: retryMins
+    });
+  }
+  rl[key] = [...prevCalls, now];
+
+  // Heuristic scorer (used as fallback if Gemini unavailable)
+  const heuristicScore = () => {
+    const photoArr = Array.isArray(photos) ? photos : [];
+    const roomArr = Array.isArray(rooms) ? rooms : [];
+    const amenityArr = Array.isArray(amenities) ? amenities : [];
+    const checks = [
+      { name: 'Title quality', pass: title && title.length >= 20, weight: 1.5, feedback: 'Title must be at least 20 characters' },
+      { name: 'Description depth', pass: description && description.length >= 150, weight: 2, feedback: 'Description must be at least 150 characters' },
+      { name: 'Photo count', pass: photoArr.length >= 5, weight: 2, feedback: 'Upload at least 5 photos' },
+      { name: 'Photos categorized', pass: photoArr.filter((p: any) => p.category && p.category !== 'other').length >= 3, weight: 1, feedback: 'Tag at least 3 photos with spatial categories' },
+      { name: 'Room types defined', pass: roomArr.length >= 1, weight: 1.5, feedback: 'Define at least 1 room type' },
+      { name: 'Room pricing set', pass: roomArr.length > 0 && roomArr.every((r: any) => Number(r.price) > 0), weight: 2, feedback: 'Set nightly price for every room type' },
+      { name: 'Room names set', pass: roomArr.length > 0 && roomArr.every((r: any) => r.name && r.name.length > 0), weight: 1, feedback: 'Give each room type a name' },
+      { name: 'Amenities listed', pass: amenityArr.length >= 3, weight: 1, feedback: 'List at least 3 amenities' },
+      { name: 'City set', pass: city && city.length > 0, weight: 1, feedback: 'Set the property city' }
+    ];
+    const totalWeight = checks.reduce((s, c) => s + c.weight, 0);
+    const earned = checks.reduce((s, c) => s + (c.pass ? c.weight : 0), 0);
+    const score = Math.round((earned / totalWeight) * 10 * 10) / 10;
+    const issues = checks.filter(c => !c.pass).map(c => c.feedback);
+    const strengths = checks.filter(c => c.pass).map(c => c.name);
+    return { score, cleared: score >= 8, headline: score >= 8 ? 'Listing meets quality standards for advertising.' : 'Listing needs improvement before advertising.', issues, strengths, method: 'heuristic' };
+  };
+
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (geminiKey) {
+    try {
+      const photoArr = Array.isArray(photos) ? photos : [];
+      const roomArr = Array.isArray(rooms) ? rooms : [];
+      const amenityArr = Array.isArray(amenities) ? amenities : [];
+
+      const prompt = `You are a luxury property listing quality inspector for Encho, a premium property hosting platform.
+Evaluate this listing for advertising readiness. Score from 0.0 to 10.0 (one decimal).
+8.0+ = Cleared for paid advertising.
+
+Listing:
+- Title: "${(title || '').substring(0, 100)}"
+- Description: "${(description || '').substring(0, 400)}" (${(description || '').length} chars)
+- Photos: ${photoArr.length} uploaded, ${photoArr.filter((p: any) => p.category && p.category !== 'other').length} categorized
+- Room types: ${roomArr.length} (${roomArr.map((r: any) => `${r.name}: \u20b9${r.price}`).join(', ')})
+- Amenities: ${amenityArr.slice(0, 8).join(', ')} (${amenityArr.length} total)
+- City: ${city || 'not set'}
+
+Return JSON only:
+{"score":number,"cleared":boolean,"headline":string,"issues":string[],"strengths":string[]}`;
+
+      const gRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: 800 }
+          })
+        }
+      );
+      if (gRes.ok) {
+        const gData = await gRes.json();
+        const raw = gData.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+        const parsed = JSON.parse(raw);
+        if (typeof parsed.score === 'number') {
+          return res.json({ ...parsed, method: 'gemini' });
+        }
+      }
+    } catch (gErr) {
+      console.warn('[ADR-006] Gemini evaluation failed, using heuristic fallback:', gErr);
+      // Per AGENTS.md: never blank-approve if AI fails — heuristic fallback is always stricter
+    }
+  }
+
+  res.json(heuristicScore());
+});
+
+// ADR-004: AI-powered nearby POI generation from coordinates
+app.post('/api/ai/nearby-pois', authenticateToken, async (req: AuthRequest, res) => {
+  const { lat, lng, city, propertyType } = req.body;
+  if (!lat || !lng) return res.status(400).json({ error: 'lat and lng are required' });
+
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!geminiKey) {
+    return res.json({ pois: [], source: 'none', message: 'AI suggestions unavailable. Add POIs manually.' });
+  }
+
+  try {
+    const prompt = `Generate 5 realistic nearby points of interest for a ${propertyType || 'luxury property'} located at coordinates (${lat}, ${lng}) in ${city || 'the area'}.
+Focus on what guests would actually want to visit: nature, dining, beaches, cultural attractions, wellness, transport hubs.
+Return JSON only:
+{"pois":[{"name":string,"distance":string,"type":"nature"|"dining"|"attraction"|"wellness"|"transport"|"beach"|"shopping","description":string}]}`;
+
+    const gRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: 'application/json', temperature: 0.7, maxOutputTokens: 800 }
+        })
+      }
+    );
+    if (gRes.ok) {
+      const gData = await gRes.json();
+      const raw = gData.candidates?.[0]?.content?.parts?.[0]?.text || '{"pois":[]}';
+      const parsed = JSON.parse(raw);
+      const pois = (parsed.pois || []).map((poi: any, i: number) => ({
+        id: `ai-poi-${Date.now()}-${i}`,
+        name: poi.name || '',
+        distance: poi.distance || '',
+        type: poi.type || 'attraction',
+        description: poi.description || ''
+      }));
+      return res.json({ pois, source: 'gemini' });
+    }
+  } catch (err) {
+    console.warn('[ADR-004] POI generation error:', err);
+  }
+
+  res.json({ pois: [], source: 'error', message: 'AI POI generation failed. Add POIs manually.' });
+});
+
+// Soft-Exit Lead Capture (Walled Garden CRM & Meta CAPI Retargeting Sync)
+app.post('/api/leads/soft-exit', async (req, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const { listingId, email, source } = req.body;
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!email || typeof email !== 'string' || !emailRegex.test(email.trim())) {
+      return res.status(400).json({ error: 'Valid email address required' });
+    }
+    const cleanEmail = email.trim().toLowerCase();
+    const result = await pool.query(
+      'INSERT INTO soft_exit_leads (listing_id, email, status) VALUES ($1, $2, $3) RETURNING *',
+      [listingId ? parseInt(listingId) : null, cleanEmail, 'warm']
+    );
+
+    // Milestone 5: Sync to Meta CAPI & GDN Retargeting Audience
+    try {
+      await pool.query(`
+        INSERT INTO retargeting_pixel_events (listing_id, visitor_id, event_type, synced_to_meta_capi, synced_to_gdn)
+        VALUES ($1, $2, $3, true, true)
+      `, [listingId ? parseInt(listingId) : null, `lead_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`, 'Lead']);
+    } catch (pixelErr) {
+      console.warn('[CAPI_SYNC_NON_BLOCKING] Pixel sync warning:', pixelErr);
+    }
+
+    res.status(201).json({ success: true, lead: result.rows[0], capi_synced: true });
+  } catch (err) {
+    console.error('Soft exit lead error:', err);
+    res.status(500).json({ error: 'Failed to record lead' });
+  }
+});
+
+// Host Soft Leads Feed
+app.get('/api/host/soft-leads', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const hostId = req.user?.id;
+    const result = await pool.query(`
+      SELECT sl.*, l.title as listing_title, l.city as listing_city
+      FROM soft_exit_leads sl
+      LEFT JOIN listings l ON sl.listing_id = l.id
+      WHERE l.user_id = $1 OR $2 = 'admin'
+      ORDER BY sl.created_at DESC
+      LIMIT 100
+    `, [hostId, req.user?.role || 'user']);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get host soft leads error:', err);
+    res.status(500).json({ error: 'Failed to fetch soft leads' });
+  }
+});
+
+// User Profile Update (Avatar & Editorial Quote)
+app.put('/api/user/profile', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const userId = req.user?.id;
+    const { name, avatar, editorial_quote } = req.body;
+    const result = await pool.query(
+      'UPDATE users SET name = COALESCE($1, name), avatar = COALESCE($2, avatar), editorial_quote = COALESCE($3, editorial_quote) WHERE id = $4 RETURNING id, name, email, avatar, editorial_quote, role',
+      [name || null, avatar || null, editorial_quote || null, userId]
+    );
+    res.json({ success: true, user: result.rows[0] });
+  } catch (err) {
+    console.error('Update profile error:', err);
+    res.status(500).json({ error: 'Failed to update user profile' });
+  }
+});
+
+
 
 app.get('/api/user/bookings', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.json([]);
@@ -14352,7 +15214,7 @@ app.post('/api/bookings', authenticateToken, bookingLimiter, async (req: AuthReq
     return res.status(503).json({ error: 'DB not configured' });
   }
   try {
-    const { listingId, roomId, moveInDate, checkOutDate, configuration, name, phone, totalRent, userId } = req.body;
+    const { listingId, roomId, moveInDate, checkOutDate, configuration, name, phone, totalRent, userId, gclid, gbraid } = req.body;
 
     // Security check
     const authUserId = req.user?.id;
@@ -14405,13 +15267,125 @@ app.post('/api/bookings', authenticateToken, bookingLimiter, async (req: AuthReq
       }
     }
 
-    // Ensure Check Out Date column exists for the new Double Entry Ledger
-    await pool.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS check_out_date VARCHAR(50)');
+    // Room-Aware Multi-Inventory Availability & Double-Booking Guardrail
+    const targetTier = roomTier || roomId || 'suites';
+    const effectiveCheckIn = moveInDate;
+    const effectiveCheckOut = checkOutDate || moveInDate;
 
+    // 1. Ensure table schema columns exist
+    await pool.query(`
+      ALTER TABLE bookings ADD COLUMN IF NOT EXISTS check_out_date VARCHAR(50);
+      ALTER TABLE bookings ADD COLUMN IF NOT EXISTS room_tier VARCHAR(100);
+      ALTER TABLE bookings ADD COLUMN IF NOT EXISTS room_unit_number INT DEFAULT 1;
+      ALTER TABLE bookings ADD COLUMN IF NOT EXISTS start_date DATE;
+      ALTER TABLE bookings ADD COLUMN IF NOT EXISTS end_date DATE;
+      ALTER TABLE bookings ADD COLUMN IF NOT EXISTS guests INT DEFAULT 1;
+    `);
+
+    // 2. Fetch Total Inventory Capacity for this Room Tier
+    let totalInventoryCount = 1;
+    try {
+      const listingRes = await pool.query('SELECT rooms FROM listings WHERE id = $1', [listingId]);
+      if (listingRes.rows.length > 0) {
+        let roomsArr = listingRes.rows[0].rooms;
+        if (typeof roomsArr === 'string') roomsArr = JSON.parse(roomsArr || '[]');
+        if (Array.isArray(roomsArr) && roomsArr.length > 0) {
+          const matchRoom = roomsArr.find((r: any) => r.type === targetTier || r.id === targetTier);
+          if (matchRoom && matchRoom.inventory_count) {
+            totalInventoryCount = Math.max(1, Number(matchRoom.inventory_count));
+          }
+        }
+      }
+    } catch (invErr) {
+      console.warn('[INVENTORY CAP] Fallback inventory check:', invErr);
+    }
+
+    // 3. Query Occupied Units (Active Bookings + OTA / Host Blocks)
+    const occupiedUnits = new Set<number>();
+    let isEstateWideBlocked = false;
+
+    try {
+      // Check Blocks
+      const blockOverlap = await pool.query(`
+        SELECT id, room_tier_key, room_unit_number, block_source, guest_name
+        FROM room_calendar_blocks
+        WHERE listing_id = $1
+          AND (room_tier_key = $2 OR room_tier_key = 'all')
+          AND (start_date <= $4::date AND end_date >= $3::date)
+      `, [listingId, targetTier, effectiveCheckIn, effectiveCheckOut]);
+
+      for (const blk of blockOverlap.rows) {
+        const uNum = Number(blk.room_unit_number);
+        if (uNum === 0 || blk.room_tier_key === 'all') {
+          isEstateWideBlocked = true;
+          break;
+        } else {
+          occupiedUnits.add(uNum);
+        }
+      }
+
+      // Check Active Bookings
+      if (!isEstateWideBlocked) {
+        const bookingOverlap = await pool.query(`
+          SELECT id, room_tier, room_unit_number
+          FROM bookings
+          WHERE listing_id = $1
+            AND status != 'cancelled'
+            AND (room_tier = $2 OR room_tier IS NULL)
+            AND (
+              (COALESCE(start_date, move_in_date::date) < $4::date AND COALESCE(end_date, check_out_date::date) > $3::date)
+            )
+        `, [listingId, targetTier, effectiveCheckIn, effectiveCheckOut]);
+
+        for (const b of bookingOverlap.rows) {
+          const bUnit = Number(b.room_unit_number) || 1;
+          occupiedUnits.add(bUnit);
+        }
+      }
+
+      // 4. Threshold Enforcement
+      if (isEstateWideBlocked || occupiedUnits.size >= totalInventoryCount) {
+        console.warn(`[INVENTORY SOLD OUT] listing=${listingId} tier=${targetTier} occupied=${occupiedUnits.size}/${totalInventoryCount}`);
+        return res.status(409).json({
+          error: `All ${totalInventoryCount} unit(s) of this suite are fully booked or held for ${effectiveCheckIn} to ${effectiveCheckOut}. Please choose another suite tier or select alternate dates.`,
+          code: 'ROOM_TIER_SOLD_OUT',
+          totalInventory: totalInventoryCount,
+          occupiedCount: occupiedUnits.size
+        });
+      }
+    } catch (checkErr) {
+      console.warn('[AVAILABILITY CHECK] Capacity check warning:', checkErr);
+    }
+
+    // 5. Automatic Unit Assignment (First Free Physical Unit)
+    let assignedUnitNumber = 1;
+    for (let u = 1; u <= totalInventoryCount; u++) {
+      if (!occupiedUnits.has(u)) {
+        assignedUnitNumber = u;
+        break;
+      }
+    }
+
+    const { guestsCount } = req.body;
     const result = await pool.query(`
-      INSERT INTO bookings (user_id, listing_id, room_id, move_in_date, check_out_date, configuration, name, phone, total_rent)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *
-    `, [finalUserId, listingId, roomId || null, moveInDate, checkOutDate || null, configuration || '', name, phone, totalRent]);
+      INSERT INTO bookings (user_id, listing_id, room_id, room_tier, room_unit_number, start_date, end_date, move_in_date, check_out_date, configuration, name, phone, total_rent, guests, gclid, gbraid)
+      VALUES ($1, $2, $3, $4, $5, $6::date, $7::date, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *
+    `, [
+      finalUserId, 
+      listingId, 
+      roomId || null, 
+      targetTier, 
+      assignedUnitNumber,
+      effectiveCheckIn, 
+      effectiveCheckOut, 
+      moveInDate, 
+      checkOutDate || null, 
+      configuration || '', 
+      name, 
+      phone, 
+      totalRent, 
+      Number(guestsCount) || 1
+    ]);
 
     const newBooking = result.rows[0];
     newBooking.id = String(newBooking.id);
@@ -18251,9 +19225,27 @@ export const recoverOrphanedMetaTransactions = async (overridePool?: any) => {
   );
 };
 
+import { googleOfflineConversions } from './src/lib/providers/google/GoogleOfflineConversions';
+
+async function processGoogleOfflineConversions() {
+  try {
+    console.log('[Worker] Checking for pending Google Offline Conversions...');
+    // Replace with the actual MCC customer ID used by the platform
+    const GOOGLE_ADS_MCC_ID = process.env.GOOGLE_ADS_CLIENT_ID || '1234567890';
+    const GOOGLE_CONVERSION_ACTION = process.env.GOOGLE_CONVERSION_ACTION_ID || '12345';
+    await googleOfflineConversions.syncPendingConversions(GOOGLE_ADS_MCC_ID, GOOGLE_CONVERSION_ACTION);
+  } catch (error) {
+    console.error('[Worker] Error processing Google Offline Conversions:', error);
+  }
+}
+
+import { TokenHealthMonitor } from './src/lib/observability/tokenHealthMonitor';
+
 // Run every 2 minutes — orphans are only eligible after 5 min (RECOVERY_LEASE_STALE_THRESHOLD_SECONDS)
 if (shouldRunBackgroundWorkers) {
   setInterval(recoverOrphanedMetaTransactions, RECOVERY_POLL_INTERVAL_MS);
+  setInterval(processGoogleOfflineConversions, 15 * 60 * 1000); // 15 mins
+  setInterval(() => TokenHealthMonitor.checkTokenHealth(pool), 12 * 60 * 60 * 1000); // 12 hours
 }
 
 app.post('/api/marketing/track/view', async (req, res) => {
@@ -18380,344 +19372,3 @@ process.on('unhandledRejection', (reason) => {
 });
 
 
-// AI Rule Abstraction (God-Level Luxury Hospitality Rule Polishing)
-app.post('/api/ai/curate-rules', async (req, res) => {
-  try {
-    const { rawRules } = req.body;
-    if (!rawRules || typeof rawRules !== 'string' || !rawRules.trim()) {
-      return res.status(400).json({ error: 'rawRules text required' });
-    }
-
-    if (process.env.GEMINI_API_KEY) {
-      try {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        const prompt = "You are an executive hospitality director at an ultra-luxury 5-star estate (like Aman or Casa Angelina). Transform the following raw house rules into polite, sophisticated, aristocratic 'House Guidelines'. Retain all core boundaries (e.g. smoking, noise, checkout, pets) while completely eliminating hostile or aggressive phrasing. Format as 3-5 concise, elegant bullet points:\n\n" + rawRules;
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: prompt,
-        });
-        if (response && response.text) {
-          return res.json({ curatedGuidelines: response.text.trim() });
-        }
-      } catch (geminiErr: any) {
-        console.warn('Gemini rule curation fallback invoked:', geminiErr?.message);
-      }
-    }
-
-    // Heuristic luxury polish fallback
-    const polished = rawRules
-      .split('\n')
-      .map(line => line.trim())
-      .filter(Boolean)
-      .map(line => {
-        let text = line.replace(/^[\d\-\.\*\s]+/, '');
-        if (/no smoking/i.test(text)) return 'To preserve the pristine mountain and ocean air of the sanctuary, smoking is reserved exclusively for the outer perimeter.';
-        if (/no parties|no loud music/i.test(text)) return 'We invite guests to embrace the tranquil atmosphere of the estate, observing quiet serenity after twilight.';
-        if (/check-?out/i.test(text)) return 'Check-out is honored with leisurely grace by the appointed hour to allow our housekeeping artisans to prepare the suites.';
-        if (/no pets/i.test(text)) return 'To protect the heritage furnishings and allergy-sensitive atmosphere, animal companions are welcomed only by prior concierge approval.';
-        return 'We kindly request guests to treat the sanctuary and its bespoke architecture with gentle reverence: ' + text;
-      })
-      .join('\n');
-
-    res.json({ curatedGuidelines: polished });
-  } catch (err) {
-    console.error('Curate rules error:', err);
-    res.status(500).json({ error: 'Failed to curate rules' });
-  }
-});
-
-// ADR-SENSORY-001: AI Sensory Atmosphere Tag Suggester
-app.post('/api/ai/suggest-sensory-tags', async (req, res) => {
-  try {
-    const { title, description, propertyType, location } = req.body;
-    if (!title && !description) {
-      return res.status(400).json({ error: 'title or description required' });
-    }
-
-    const ALL_AVAILABLE_TAGS = [
-      'Ocean Waves','Panoramic Mountain View','Valley Sunrise','Forest Canopy','Desert Dunes Vista',
-      'Backwater Views','Waterfall Proximity','Tea Estate Vista','Stargazing Sky','Himalayan Peaks',
-      'River Frontage','Cliff-Top Perch','Paddy Field Views','Coral Reef Access','Jungle Sounds',
-      'Heated Infinity Pool','Private Jacuzzi','In-Villa Spa Treatments','Yoga Deck','Meditation Garden',
-      'Ayurvedic Therapies','Cold Plunge Pool','Steam & Sauna','Hydrotherapy Circuit',
-      'Forest Bathing Trail','Sunrise Yoga Sessions','Wellness Consultation',
-      'Private Chef Available','Wine Cellar Access','Farm-to-Table Dining','Organic Tea Garden',
-      'In-Villa Breakfast','Poolside Dining','Bonfire BBQ Setup','Artisan Coffee Bar',
-      'Tasting Menu Experience','Mixology Bar',
-      '1 Gbps Fiber WiFi','Starlink Satellite WiFi','Dedicated Work Studio','Smart Home Controls',
-      'Video Conferencing Setup','Dual ISP Backup Internet',
-      'Artisan Fireplace','Himalayan Silence','Rainforest Soundscape','Candlelit Courtyards',
-      'Acoustic Architecture','Circadian Lighting System','Aromatherapy Diffusion',
-      'Heritage Architecture','Minimalist Zen Design','Open-Air Pavilions',
-      'Private Tennis Court','Nature Trekking Routes','Kayaking & Canoeing','Horse Riding Trails',
-      'Archery Range','Mountain Cycling Paths','Bird Watching Post','Sunset Sailing',
-      'Golf Proximity','Rock Climbing Wall',
-      '24/7 Butler Service','Private Airport Transfer','Helipad Access','Celebrity-Grade Privacy',
-      'Curated Minibar','Personal Trainer','Childcare Available','Dedicated Concierge',
-      'Cultural Immersion Walks','Local Artisan Workshops','Sunset Photography Tours',
-      'Guided Stargazing','Private Boat Tours','Private Cinema Room','Library & Reading Nook',
-      'Bonfire Storytelling Nights'
-    ];
-
-    if (process.env.GEMINI_API_KEY) {
-      try {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        const prompt = `You are a luxury hospitality AI. Based on the property details below, select the most relevant Sensory Atmosphere Tags from the provided list. Return ONLY a JSON array of tag labels (max 8 tags) that genuinely match the property.
-
-Property Title: ${title || 'Luxury Estate'}
-Description: ${description || ''}
-Property Type: ${propertyType || 'Resort'}
-Location: ${location || ''}
-
-Available tags (select max 8 from this EXACT list only):
-${ALL_AVAILABLE_TAGS.join(', ')}
-
-Return ONLY a raw JSON array like: ["Tag 1", "Tag 2", "Tag 3"]`;
-
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: prompt,
-        });
-        if (response && response.text) {
-          const text = response.text.trim().replace(/```json\n?|\n?```/g, '');
-          const match = text.match(/\[[\s\S]*\]/);
-          if (match) {
-            const parsed = JSON.parse(match[0]);
-            const validated = parsed.filter((t: string) => ALL_AVAILABLE_TAGS.includes(t)).slice(0, 8);
-            return res.json({ tags: validated });
-          }
-        }
-      } catch (geminiErr: any) {
-        console.warn('Gemini tag suggestion fallback:', geminiErr?.message);
-      }
-    }
-
-    // Heuristic fallback
-    const desc = `${title} ${description} ${location}`.toLowerCase();
-    const fallback: string[] = [];
-    if (desc.includes('mountain') || desc.includes('hill') || desc.includes('peak')) fallback.push('Panoramic Mountain View');
-    if (desc.includes('ocean') || desc.includes('sea') || desc.includes('beach')) fallback.push('Ocean Waves');
-    if (desc.includes('pool') || desc.includes('infinity')) fallback.push('Heated Infinity Pool');
-    if (desc.includes('forest') || desc.includes('jungle') || desc.includes('wildlife')) fallback.push('Forest Canopy');
-    if (desc.includes('chef') || desc.includes('culinary') || desc.includes('dining')) fallback.push('Private Chef Available');
-    if (desc.includes('spa') || desc.includes('wellness') || desc.includes('yoga')) fallback.push('In-Villa Spa Treatments');
-    if (desc.includes('wifi') || desc.includes('work') || desc.includes('remote')) fallback.push('1 Gbps Fiber WiFi');
-    if (desc.includes('butler') || desc.includes('luxury') || desc.includes('concierge')) fallback.push('24/7 Butler Service');
-    res.json({ tags: fallback.slice(0, 6) });
-  } catch (err) {
-    console.error('Suggest sensory tags error:', err);
-    res.status(500).json({ error: 'Failed to suggest tags' });
-  }
-});
-
-// ADR-006: Real Gemini AI Gatekeeper for listing quality scoring
-app.post('/api/ai/evaluate-listing', authenticateToken, async (req: AuthRequest, res) => {
-  const userId = req.user?.id;
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-
-  const { title, description, photos, rooms, amenities, price, city } = req.body;
-
-  // Rate limit: 5 evaluations per host per hour (per AGENTS.md directive)
-  if (!(global as any).__aiEvalRL) (global as any).__aiEvalRL = {};
-  const rl = (global as any).__aiEvalRL;
-  const key = `rl_${userId}`;
-  const now = Date.now();
-  const prevCalls: number[] = (rl[key] || []).filter((t: number) => now - t < 3600000);
-  if (prevCalls.length >= 5) {
-    const retryMins = Math.ceil((prevCalls[0] + 3600000 - now) / 60000);
-    return res.status(429).json({
-      error: `Rate limit: max 5 AI evaluations per hour. Retry in ${retryMins} minute(s).`,
-      retryAfterMinutes: retryMins
-    });
-  }
-  rl[key] = [...prevCalls, now];
-
-  // Heuristic scorer (used as fallback if Gemini unavailable)
-  const heuristicScore = () => {
-    const photoArr = Array.isArray(photos) ? photos : [];
-    const roomArr = Array.isArray(rooms) ? rooms : [];
-    const amenityArr = Array.isArray(amenities) ? amenities : [];
-    const checks = [
-      { name: 'Title quality', pass: title && title.length >= 20, weight: 1.5, feedback: 'Title must be at least 20 characters' },
-      { name: 'Description depth', pass: description && description.length >= 150, weight: 2, feedback: 'Description must be at least 150 characters' },
-      { name: 'Photo count', pass: photoArr.length >= 5, weight: 2, feedback: 'Upload at least 5 photos' },
-      { name: 'Photos categorized', pass: photoArr.filter((p: any) => p.category && p.category !== 'other').length >= 3, weight: 1, feedback: 'Tag at least 3 photos with spatial categories' },
-      { name: 'Room types defined', pass: roomArr.length >= 1, weight: 1.5, feedback: 'Define at least 1 room type' },
-      { name: 'Room pricing set', pass: roomArr.length > 0 && roomArr.every((r: any) => Number(r.price) > 0), weight: 2, feedback: 'Set nightly price for every room type' },
-      { name: 'Room names set', pass: roomArr.length > 0 && roomArr.every((r: any) => r.name && r.name.length > 0), weight: 1, feedback: 'Give each room type a name' },
-      { name: 'Amenities listed', pass: amenityArr.length >= 3, weight: 1, feedback: 'List at least 3 amenities' },
-      { name: 'City set', pass: city && city.length > 0, weight: 1, feedback: 'Set the property city' }
-    ];
-    const totalWeight = checks.reduce((s, c) => s + c.weight, 0);
-    const earned = checks.reduce((s, c) => s + (c.pass ? c.weight : 0), 0);
-    const score = Math.round((earned / totalWeight) * 10 * 10) / 10;
-    const issues = checks.filter(c => !c.pass).map(c => c.feedback);
-    const strengths = checks.filter(c => c.pass).map(c => c.name);
-    return { score, cleared: score >= 8, headline: score >= 8 ? 'Listing meets quality standards for advertising.' : 'Listing needs improvement before advertising.', issues, strengths, method: 'heuristic' };
-  };
-
-  const geminiKey = process.env.GEMINI_API_KEY;
-  if (geminiKey) {
-    try {
-      const photoArr = Array.isArray(photos) ? photos : [];
-      const roomArr = Array.isArray(rooms) ? rooms : [];
-      const amenityArr = Array.isArray(amenities) ? amenities : [];
-
-      const prompt = `You are a luxury property listing quality inspector for Encho, a premium property hosting platform.
-Evaluate this listing for advertising readiness. Score from 0.0 to 10.0 (one decimal).
-8.0+ = Cleared for paid advertising.
-
-Listing:
-- Title: "${(title || '').substring(0, 100)}"
-- Description: "${(description || '').substring(0, 400)}" (${(description || '').length} chars)
-- Photos: ${photoArr.length} uploaded, ${photoArr.filter((p: any) => p.category && p.category !== 'other').length} categorized
-- Room types: ${roomArr.length} (${roomArr.map((r: any) => `${r.name}: \u20b9${r.price}`).join(', ')})
-- Amenities: ${amenityArr.slice(0, 8).join(', ')} (${amenityArr.length} total)
-- City: ${city || 'not set'}
-
-Return JSON only:
-{"score":number,"cleared":boolean,"headline":string,"issues":string[],"strengths":string[]}`;
-
-      const gRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: 'application/json', temperature: 0.2, maxOutputTokens: 800 }
-          })
-        }
-      );
-      if (gRes.ok) {
-        const gData = await gRes.json();
-        const raw = gData.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-        const parsed = JSON.parse(raw);
-        if (typeof parsed.score === 'number') {
-          return res.json({ ...parsed, method: 'gemini' });
-        }
-      }
-    } catch (gErr) {
-      console.warn('[ADR-006] Gemini evaluation failed, using heuristic fallback:', gErr);
-      // Per AGENTS.md: never blank-approve if AI fails — heuristic fallback is always stricter
-    }
-  }
-
-  res.json(heuristicScore());
-});
-
-// ADR-004: AI-powered nearby POI generation from coordinates
-app.post('/api/ai/nearby-pois', authenticateToken, async (req: AuthRequest, res) => {
-  const { lat, lng, city, propertyType } = req.body;
-  if (!lat || !lng) return res.status(400).json({ error: 'lat and lng are required' });
-
-  const geminiKey = process.env.GEMINI_API_KEY;
-  if (!geminiKey) {
-    return res.json({ pois: [], source: 'none', message: 'AI suggestions unavailable. Add POIs manually.' });
-  }
-
-  try {
-    const prompt = `Generate 5 realistic nearby points of interest for a ${propertyType || 'luxury property'} located at coordinates (${lat}, ${lng}) in ${city || 'the area'}.
-Focus on what guests would actually want to visit: nature, dining, beaches, cultural attractions, wellness, transport hubs.
-Return JSON only:
-{"pois":[{"name":string,"distance":string,"type":"nature"|"dining"|"attraction"|"wellness"|"transport"|"beach"|"shopping","description":string}]}`;
-
-    const gRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: 'application/json', temperature: 0.7, maxOutputTokens: 800 }
-        })
-      }
-    );
-    if (gRes.ok) {
-      const gData = await gRes.json();
-      const raw = gData.candidates?.[0]?.content?.parts?.[0]?.text || '{"pois":[]}';
-      const parsed = JSON.parse(raw);
-      const pois = (parsed.pois || []).map((poi: any, i: number) => ({
-        id: `ai-poi-${Date.now()}-${i}`,
-        name: poi.name || '',
-        distance: poi.distance || '',
-        type: poi.type || 'attraction',
-        description: poi.description || ''
-      }));
-      return res.json({ pois, source: 'gemini' });
-    }
-  } catch (err) {
-    console.warn('[ADR-004] POI generation error:', err);
-  }
-
-  res.json({ pois: [], source: 'error', message: 'AI POI generation failed. Add POIs manually.' });
-});
-
-// Soft-Exit Lead Capture (Walled Garden CRM & Meta CAPI Retargeting Sync)
-app.post('/api/leads/soft-exit', async (req, res) => {
-  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  try {
-    const { listingId, email, source } = req.body;
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-    if (!email || typeof email !== 'string' || !emailRegex.test(email.trim())) {
-      return res.status(400).json({ error: 'Valid email address required' });
-    }
-    const cleanEmail = email.trim().toLowerCase();
-    const result = await pool.query(
-      'INSERT INTO soft_exit_leads (listing_id, email, status) VALUES ($1, $2, $3) RETURNING *',
-      [listingId ? parseInt(listingId) : null, cleanEmail, 'warm']
-    );
-
-    // Milestone 5: Sync to Meta CAPI & GDN Retargeting Audience
-    try {
-      await pool.query(`
-        INSERT INTO retargeting_pixel_events (listing_id, visitor_id, event_type, synced_to_meta_capi, synced_to_gdn)
-        VALUES ($1, $2, $3, true, true)
-      `, [listingId ? parseInt(listingId) : null, `lead_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`, 'Lead']);
-    } catch (pixelErr) {
-      console.warn('[CAPI_SYNC_NON_BLOCKING] Pixel sync warning:', pixelErr);
-    }
-
-    res.status(201).json({ success: true, lead: result.rows[0], capi_synced: true });
-  } catch (err) {
-    console.error('Soft exit lead error:', err);
-    res.status(500).json({ error: 'Failed to record lead' });
-  }
-});
-
-// Host Soft Leads Feed
-app.get('/api/host/soft-leads', authenticateToken, async (req: AuthRequest, res) => {
-  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  try {
-    const hostId = req.user?.id;
-    const result = await pool.query(`
-      SELECT sl.*, l.title as listing_title, l.city as listing_city
-      FROM soft_exit_leads sl
-      LEFT JOIN listings l ON sl.listing_id = l.id
-      WHERE l.user_id = $1 OR $2 = 'admin'
-      ORDER BY sl.created_at DESC
-      LIMIT 100
-    `, [hostId, req.user?.role || 'user']);
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Get host soft leads error:', err);
-    res.status(500).json({ error: 'Failed to fetch soft leads' });
-  }
-});
-
-// User Profile Update (Avatar & Editorial Quote)
-app.put('/api/user/profile', authenticateToken, async (req: AuthRequest, res) => {
-  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  try {
-    const userId = req.user?.id;
-    const { name, avatar, editorial_quote } = req.body;
-    const result = await pool.query(
-      'UPDATE users SET name = COALESCE($1, name), avatar = COALESCE($2, avatar), editorial_quote = COALESCE($3, editorial_quote) WHERE id = $4 RETURNING id, name, email, avatar, editorial_quote, role',
-      [name || null, avatar || null, editorial_quote || null, userId]
-    );
-    res.json({ success: true, user: result.rows[0] });
-  } catch (err) {
-    console.error('Update profile error:', err);
-    res.status(500).json({ error: 'Failed to update user profile' });
-  }
-});
