@@ -659,33 +659,42 @@ function App() {
       }
   }, [user]);
 
-  const handleListingClick = React.useCallback((listing: Listing) => {
+  const handleListingClick = React.useCallback(async (listing: Listing) => {
     const sourceListing = listing.originalId ? listings.find(l => l.id === listing.originalId) || listing : listing;
+    const slug = getListingSlug(sourceListing);
 
-    const detailedListing: Listing = {
-        ...sourceListing,
-        selectedConfigId: listing.selectedConfigId,
-        description: sourceListing.description || `Welcome to this stunning ${sourceListing.type.toLowerCase()} in the heart of ${city}. This property offers a perfect blend of modern comfort and classic charm. High ceilings, large windows, and a spacious layout make this the ideal home for professionals or students.`,
-        size: sourceListing.size || Math.floor(Math.random() * 80) + 40,
-        floor: Math.floor(Math.random() * 5) + 1,
-        maxGuests: Math.floor(Math.random() * 3) + 1,
-        address: `${sourceListing.title}, ${city}`,
-        rooms: sourceListing.rooms || [
-            { id: 'r1', name: 'Master Bedroom', price: Math.floor(sourceListing.price * 0.6), sqft: 20, isAvailable: true, features: ['King Bed', 'En-suite', 'Balcony'] },
-            { id: 'r2', name: 'Standard Room', price: Math.floor(sourceListing.price * 0.4), sqft: 14, isAvailable: false, features: ['Double Bed', 'Desk'] }
-        ],
-        nearby: sourceListing.nearby || [
-            { name: 'Central Station', type: 'TRANSPORT', distance: '5 min walk' },
-            { name: 'Organic Market', type: 'GROCERY', distance: '2 min walk' },
-            { name: 'City Park', type: 'PARK', distance: '10 min walk' },
-            { name: 'Coffee Lab', type: 'CAFE', distance: '1 min walk' },
-            { name: 'FitFirst Gym', type: 'GYM', distance: '3 min walk' },
-        ]
-    };
-    setSelectedListing(detailedListing);
+    // If clicking a preview stay, use local preview state
+    if (sourceListing.id === 'preview-id' || sourceListing.id === 'preview') {
+      setSelectedListing(sourceListing);
+      setCurrentView('DETAILS');
+      window.scrollTo(0, 0);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const res = await fetch(`/api/v2/stays/${encodeURIComponent(slug)}`);
+      if (res.ok) {
+        const contentType = res.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const stayData = await res.json();
+          setSelectedListing(stayData);
+          setCurrentView('DETAILS');
+          window.scrollTo(0, 0);
+          return;
+        }
+      }
+    } catch (e) {
+      console.error('[CLICK-THROUGH STAY FETCH ERROR]', e);
+    } finally {
+      setLoading(false);
+    }
+
+    // Safe fallback from projection card if network fails
+    setSelectedListing(sourceListing);
     setCurrentView('DETAILS');
     window.scrollTo(0, 0);
-  }, [city, listings]);
+  }, [listings]);
 
   const handleBooking = React.useCallback(async (data: BookingData) => {
       if (!selectedListing) return;
@@ -808,6 +817,17 @@ function App() {
       }
   }, [flyAnimation]);
 
+  const getListingSlug = (listing: any): string => {
+    if (listing.slug) return listing.slug;
+    const cleanTitle = String(listing.title || '')
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/[\s_-]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    return `${cleanTitle || 'stay'}-${listing.id}`;
+  };
+
   // Handle browser history and back button via URL Hash & Path
   useEffect(() => {
     const handlePopState = async () => {
@@ -815,43 +835,60 @@ function App() {
       const hash = window.location.hash.replace('#', '').toUpperCase();
       const validViews = ['SEARCH', 'DETAILS', 'EXPERIENCE_DETAILS', 'BOOKING', 'CHECKOUT', 'WISHLIST', 'RESERVATIONS', 'MESSAGES', 'HOSTING', 'HOST_DASHBOARD', 'ADMIN', 'PREVIEW_HOST'];
       
-      if (path.startsWith('/listing/')) {
-        const id = path.split('/')[2];
-        if (!selectedListing || selectedListing.id !== id) {
+      if (path.startsWith('/stay/')) {
+        const propertySlug = path.split('/')[2];
+        if (propertySlug === 'preview' || propertySlug === 'preview-id') {
+          const previewStr = localStorage.getItem('hostPreviewListing');
+          if (previewStr) {
+            try {
+              const previewListing = JSON.parse(previewStr);
+              setSelectedListing(previewListing);
+              setCurrentView('DETAILS');
+            } catch(e) { console.error('Preview parse error:', e); setCurrentView('SEARCH'); }
+          } else {
+            setCurrentView('SEARCH');
+          }
+        } else if (!selectedListing || getListingSlug(selectedListing) !== propertySlug) {
           try {
-             setLoading(true);
-             const res = await fetch(`/api/listings`);
-             if (res.ok) {
-                const contentType = res.headers.get("content-type");
-                if (contentType && contentType.includes("application/json")) {
-                    try {
-                        const allListings = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
-                        let found = allListings.find((l: any) => String(l.id) === String(id));
-                        if (!found && id === 'preview-id') {
-                            const previewStr = localStorage.getItem('hostPreviewListing');
-                            if (previewStr) {
-                                try { found = JSON.parse(previewStr); } catch(e) { console.error('Preview parse error:', e); }
-                            }
-                        }
-                        if (found) {
-                           setSelectedListing(found);
-                           setCurrentView('DETAILS');
-                        } else {
-                           setCurrentView('SEARCH');
-                        }
-                    } catch (jsonErr) {
-                        console.error('Error parsing listings JSON:', jsonErr);
-                        setCurrentView('SEARCH');
-                    }
-                } else {
-                    console.warn('Expected JSON response for listings, but got:', contentType);
-                    setCurrentView('SEARCH');
-                }
-             }
-          } catch(e) { console.error(e); setCurrentView('SEARCH'); }
+            setLoading(true);
+            const res = await fetch(`/api/v2/stays/${encodeURIComponent(propertySlug)}`);
+            if (res.ok) {
+              const contentType = res.headers.get("content-type");
+              if (contentType && contentType.includes("application/json")) {
+                const stayData = await res.json();
+                setSelectedListing(stayData);
+                setCurrentView('DETAILS');
+              } else {
+                setCurrentView('SEARCH');
+              }
+            } else {
+              setCurrentView('SEARCH');
+            }
+          } catch (e) {
+            console.error('[STAY ROUTE ERROR]', e);
+            setCurrentView('SEARCH');
+          }
           setLoading(false);
         } else {
           setCurrentView('DETAILS');
+        }
+      } else if (path.startsWith('/listing/')) {
+        const id = path.split('/')[2];
+        if (id === 'preview-id') {
+          const previewStr = localStorage.getItem('hostPreviewListing');
+          if (previewStr) {
+            try {
+              const previewListing = JSON.parse(previewStr);
+              setSelectedListing(previewListing);
+              setCurrentView('DETAILS');
+            } catch(e) { console.error('Preview parse error:', e); setCurrentView('SEARCH'); }
+          } else {
+            setCurrentView('SEARCH');
+          }
+        } else {
+          // Client fallback: redirect browser to canonical stay route by calling server-side redirect
+          window.location.replace(`/listing/${id}`);
+          return;
         }
       } else if (path.startsWith('/experience/')) {
         const id = path.split('/')[2];
@@ -928,7 +965,12 @@ function App() {
     let targetHash = '';
     
     if (currentView === 'DETAILS' && selectedListing) {
-      newPath = `/listing/${selectedListing.id}`;
+      if (selectedListing.id === 'preview-id' || selectedListing.id === 'preview') {
+        newPath = '/stay/preview';
+      } else {
+        const slug = getListingSlug(selectedListing);
+        newPath = `/stay/${slug}`;
+      }
     } else if (currentView === 'EXPERIENCE_DETAILS' && selectedExperience) {
       newPath = `/experience/${selectedExperience.id}`;
     } else {

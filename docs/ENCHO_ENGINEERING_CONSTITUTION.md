@@ -18,8 +18,13 @@ To provide an ecosystem where high-quality property listings are matched with hi
 - Evolve AI capabilities for hyper-personalized dynamic creative optimization (DCO) and predictive pricing.
 
 ### Business Model
-- **SaaS/Commission Hybrid:** When a host funds an ad campaign (e.g., $100), Encho retains an "AI Optimization & Management Fee" (e.g., 15%), with the remainder directly funding the ad network.
-- **Walled Garden CRM:** Leads are captured directly into the ENCHO ecosystem, ensuring transactions and bookings occur on-platform, protecting the commission structure.
+- **Disclosed Marketplace Model:** The property host is the accommodation supplier. Encho operates as a disclosed marketplace and collection agent, generating invoices on the host's behalf.
+- **Guest Pricing:** Guests never pay Encho booking commissions or payment gateway surcharges. The price quoted is the price charged.
+- **Host Booking Commission:**
+  - **Flex Plan:** Default 15% booking commission (admin-configurable, snapshotted at booking confirmation) deducted from host payouts.
+  - **Growth Plan:** ₹4,999 + GST per property per rolling 30-day period. Bookings confirmed during active Growth retain 0% booking commission.
+- **Advertising Engine:** Optional marketing campaigns are billed separately as actual media spend plus a 15% AI optimization/management fee plus applicable statutory taxes.
+- **Walled Garden CRM:** Leads and inquiries remain on-platform to convert directly into verified reservations.
 
 ---
 
@@ -243,16 +248,29 @@ The Meta Publishing Engine is NOT complete until:
   - Phase 2.6 Milestone 1: Campaign Analytics Aggregation & Time-Series Rollup (`campaign_raw_event_logs`, `campaign_daily_rollups`, `runAnalyticsRollup` with UTC occurrence date extraction and composite `campaign_id + event_date` grouping, tenant-isolated analytics endpoints) — **Remediated & Certified Green**
   - Phase 2.7 Milestones 1-9: Unified Canonical Truth Projection Engine, Dual Projection (Host Transparency vs Admin Ops Command Center), Root-Cause Failure Intelligence, Drift Detection Worker, and Financial Authorization Boundary Enforcement (`campaign_financial_contracts` with DB check constraints, Scenarios A-O adversarial test matrix certified) — **Completed & Certified Green**
 
-**Phase 3: DCO & AI Expansion**
-- Objectives: Fully dynamic creative optimization, Lead Intent Scoring, and Walled Garden CRM Integration.
+**Phase 3: DCO & AI Expansion / Guest Booking V2 Architecture**
+- Objectives: Fully dynamic creative optimization, Lead Intent Scoring, Walled Garden CRM Integration, and Guest Booking V2 Architecture.
+- Active Track: Guest Booking Experience V2 (Scope: India domestic stays customer journey).
+  - Status: Milestone 1 — ACCEPTED: Architectural Baseline; Milestone 2 — ACCEPTED: Public Projection, Canonical Routing & Privacy Baseline; Milestone 3 — ACCEPTED: Canonical Relational Room & Media Authority; Milestone 4 — ACCEPTED: Inventory Days & Atomic Holds.
+  - Milestone 5: NOT STARTED — LEGALLY BLOCKED pending written Indian CA/tax-lawyer sign-off.
+  - Milestone 6A: AWAITING INDEPENDENT ACCEPTANCE — GUEST PRESENTATION TRUTH & LUXURY UX FOUNDATION.
+  - Milestone 6B: NOT STARTED — LEGALLY BLOCKED pending Milestone 5 and written Indian CA/tax-lawyer sign-off.
+  - Milestones 7–15: NOT STARTED.
+  - No claims of completion, certification, or production readiness permitted prior to formal independent acceptance.
 
 ---
 
 ## 17. Future Roadmap
 
-**Immediate:** Phase 2.6 Milestone 2 — Lead Intent Scoring & Walled Garden CRM Analytics.
-**Near Term:** Multi-channel alerting (SMS/Push) for new leads; Razorpay routing completion.
-**Long Term:** Google Display Network retargeting pipeline.
+### Active Track: Encho Stays — India Stays Customer Journey
+- **Current Status:** Milestone 6A — Guest Presentation Truth & Luxury UX Foundation (AWAITING INDEPENDENT ACCEPTANCE).
+- **Legally Blocked Milestones:** Milestone 5 (Immutable Quotes & Internal Settlement Snapshots) and Milestone 6B (Verified Quote and Booking Disclosure Layer) — NOT STARTED (LEGALLY BLOCKED pending written Indian CA/tax-lawyer sign-off).
+- **Subsequent Milestones:** Milestones 7–15 — NOT STARTED.
+
+### Historical / Marketing Engine Track (Superseded & Deferred)
+- *Legacy Phase 2.6 Milestone 2:* Lead Intent Scoring & Walled Garden CRM Analytics (deferred post-Stays launch).
+- *Legacy Near Term:* Multi-channel alerting (SMS/Push) for marketing leads; Razorpay campaign routing completion.
+- *Legacy Long Term:* Google Display Network retargeting pipeline.
 
 ---
 

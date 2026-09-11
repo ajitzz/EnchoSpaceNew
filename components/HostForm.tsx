@@ -145,7 +145,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               tier: r.type || p.tier || 'suites',
               category: p.category || (pIdx === 0 ? 'bedroom' : 'bathroom'),
               title: p.title || `${r.name || 'Room'} Space 0${pIdx + 1}`,
-              description: p.description || ''
+              description: p.description || '',
+              is_sleeping_area: Boolean(p.is_sleeping_area || p.category === 'bedroom')
             };
           }).filter(p => !!p.previewUrl);
 
@@ -419,7 +420,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
           title: rp.title || r.name,
           description: rp.description || '',
           specs: rp.specs || '',
-          isHero: (rp as any).isHero || false
+          isHero: (rp as any).isHero || false,
+          is_sleeping_area: Boolean((rp as any).is_sleeping_area)
         })),
         imageUrls: roomPhotos
       };
@@ -868,7 +870,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
             title: rp.title || room.name,
             description: rp.description || '',
             specs: rp.specs || '',
-            isHero: (rp as any).isHero || false
+            isHero: (rp as any).isHero || false,
+            is_sleeping_area: Boolean((rp as any).is_sleeping_area)
           };
           roomUploadedPhotos.push(spPhoto);
           uploadedPhotos.push(spPhoto);
@@ -1908,9 +1911,26 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                               <label className="text-xs font-black uppercase tracking-wider text-slate-200">Room Photos & Spatial Sub-Classification</label>
                               <p className="text-xs text-slate-500 mt-0.5">Upload photos for <strong className="text-slate-300">{room.name || 'this room'}</strong>.</p>
                             </div>
-                            <span className="shrink-0 text-[10px] font-bold text-amber-300 bg-amber-950/40 border border-amber-500/30 px-2 py-0.5 rounded-full whitespace-nowrap">
-                              🔒 Scoped: {room.name || 'Room'}
-                            </span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {/* Founder Gate PROPOSED-007 Compliance Indicator */}
+                              {(() => {
+                                const count = (room.photos || []).length;
+                                const hasSleeping = (room.photos || []).some((p: any) => p.is_sleeping_area || p.category === 'bedroom');
+                                const isSatisfied = count >= 3 && hasSleeping;
+                                return (
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                    isSatisfied
+                                      ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/30'
+                                      : 'bg-rose-950/40 text-rose-300 border-rose-500/30'
+                                  }`}>
+                                    {count}/3 photos {hasSleeping ? '· 🛏️ Sleeping' : '· ⚠️ Needs Sleeping Area'}
+                                  </span>
+                                );
+                              })()}
+                              <span className="shrink-0 text-[10px] font-bold text-amber-300 bg-amber-950/40 border border-amber-500/30 px-2 py-0.5 rounded-full whitespace-nowrap">
+                                🔒 Scoped: {room.name || 'Room'}
+                              </span>
+                            </div>
                           </div>
                           <PhotoUpload 
                             photos={room.photos || []} 

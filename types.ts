@@ -71,14 +71,17 @@ export interface SpatialPhoto {
   tier: string;             // Free-form: 'common','suites','deluxe','executive','triplux','honeymoon',etc.
   category: 'living_room' | 'dining' | 'bedroom' | 'bathroom' | 'garden' | 'exterior' | 'pool' | 'details' | 'balcony' | 'parking' | 'restaurant' | 'lobby' | 'spa' | 'gym' | 'activity_area' | 'view' | 'other';
   categoryLabel?: string;
-  title: string;
+  title?: string;
   brand?: string;
   brand_font?: string;
   brand_color?: string;
-  description: string;
+  description?: string;
   specs?: string;
   lightingTime?: string;
   isHero?: boolean;
+  room_type_id?: number | string | null;
+  moderation_status?: 'approved' | 'rejected' | 'pending';
+  is_sleeping_area?: boolean;
 }
 
 export interface NearbyPoint {
@@ -87,6 +90,7 @@ export interface NearbyPoint {
   categoryGroup?: 'destination' | 'restaurant';
   type: string; // e.g. 'nature' | 'culture' | 'landmark' | 'viewpoint' | 'experience' | 'fine_dining' | 'cafe' | 'farm_to_table' | 'local_authentic' | 'scenic_bar'
   distance: string; // e.g., "5 min walk"
+  description?: string;
   cuisine?: string;
   rating?: number;
   lat?: number;
@@ -100,6 +104,12 @@ export interface Listing {
   created_at?: string;
   updated_at?: string;
   id: string;
+  location?: {
+    city?: string;
+    locality?: string;
+    approximateLatitude?: number | null;
+    approximateLongitude?: number | null;
+  };
   user_id?: number | string;
   host_id?: number | string;
   title: string;
@@ -125,6 +135,7 @@ export interface Listing {
   imageCount: number;
   provider?: string;
   isVerified: boolean;
+  is_verified?: boolean;
   discount?: number; // percentage
   hasOffers?: boolean;
   isNew?: boolean;
@@ -141,6 +152,10 @@ export interface Listing {
   isChild?: boolean;
   rating?: number;
   reviewCount?: number;
+  reviews?: any[];
+  verification_method?: string;
+  verified_at?: string;
+  is_superhost?: boolean;
   amenities?: string[];
   
   seo_title?: string;
@@ -171,6 +186,7 @@ export interface Listing {
   bedrooms?: number;
   beds?: number;
   bathrooms?: number;
+  publication_status?: 'draft' | 'in_review' | 'published' | 'unlisted';
 }
 
 export interface SoftExitLead {

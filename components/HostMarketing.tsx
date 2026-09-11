@@ -180,7 +180,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   // Track layout & alignment options (Scenario 1 advanced design!)
   const [mediaAlignment, setMediaAlignment] = useState<'left' | 'center' | 'right'>('center');
   const [mediaAspect, setMediaAspect] = useState<'1:1' | '9:16' | '16:9'>('1:1');
-  const [previewPlatform, setPreviewPlatform] = useState<'instagram' | 'facebook' | 'google'>('instagram');
+  const [previewPlatform, setPreviewPlatform] = useState<'instagram' | 'facebook'>('instagram');
 
   const [copilotData, setCopilotData] = useState<any>(null);
   const [isCopilotLoading, setIsCopilotLoading] = useState(false);
@@ -5469,20 +5469,6 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                     >
                       Facebook
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPreviewPlatform('google');
-                        setActiveSlideIndex(0);
-                      }}
-                      className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition-all ${
-                        previewPlatform === 'google'
-                          ? 'bg-white text-gray-900 shadow-sm font-black'
-                          : 'text-gray-500 hover:text-gray-800'
-                      }`}
-                    >
-                      Google Ads
-                    </button>
                   </div>
                 </div>
 
@@ -5491,7 +5477,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                   <div className="flex items-center justify-between text-[10px] font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-xl">
                     <span className="flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                      <span>Meta & Google HEC Housing Compliant</span>
+                      <span>Meta HEC Housing Compliant</span>
                     </span>
                     <span className="bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded text-[9px] font-black uppercase">Verified</span>
                   </div>
@@ -6184,112 +6170,6 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                               </div>
                             );
                           }
-                        } else if (previewPlatform === 'google') {
-                          /* -----------------------------------------------
-                             GOOGLE ADS (SEARCH & DISPLAY NETWORK)
-                             ----------------------------------------------- */
-                          return (
-                            <div className="absolute inset-0 bg-zinc-100 flex flex-col justify-between pt-10 pb-6 text-gray-900 text-xs select-none overflow-y-auto">
-                              {/* Google Search/Display Top Header */}
-                              <div className="p-3 bg-white border-b border-zinc-200 flex items-center justify-between text-[11px]">
-                                <div className="flex items-center gap-1.5">
-                                  <div className="w-5 h-5 rounded-full bg-blue-600 text-white font-black text-[9px] flex items-center justify-center">
-                                    G
-                                  </div>
-                                  <span className="font-extrabold text-gray-900">Google Sponsored Network</span>
-                                </div>
-                                <span className="text-[9px] text-zinc-400 font-mono font-bold">Display 300x250</span>
-                              </div>
-
-                              {/* Responsive Google Display Banner Card */}
-                              <div className="p-3 space-y-3 flex-1 flex flex-col justify-center">
-                                <div className="bg-white rounded-2xl border border-zinc-200 p-3.5 shadow-xs space-y-2.5 text-left">
-                                  {/* Google Ad Header Badge */}
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-1 text-[9.5px]">
-                                      <span className="font-black text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded text-[8px] uppercase">Ad</span>
-                                      <span className="text-zinc-600 font-mono">nestpick.luxury</span>
-                                      <span className="text-zinc-300">↗</span>
-                                    </div>
-                                    <span className="text-[9px] text-zinc-400 hover:text-zinc-600 cursor-pointer">AdChoices ⓘ</span>
-                                  </div>
-
-                                  {/* Headline Title */}
-                                  <h4 className="font-black text-blue-700 text-[13px] hover:underline cursor-pointer leading-snug">
-                                    {formData.title || 'Certified Luxury Villas & Vacation Rentals'}
-                                  </h4>
-
-                                  {/* Description & Target Locations Tag */}
-                                  <p className="text-[10.5px] text-zinc-600 font-light leading-relaxed">
-                                    {formData.description || 'Verified private stays with private pools, butler concierge, and direct host pricing.'}
-                                  </p>
-
-                                  {formData.target_locations && (
-                                    <div className="text-[9px] text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-1 rounded-md font-medium flex items-center gap-1">
-                                      <span>📍 Target Markets:</span>
-                                      <span className="font-bold truncate">{formData.target_locations}</span>
-                                    </div>
-                                  )}
-
-                                  {/* Media Asset Preview Box */}
-                                  <div 
-                                    className="relative bg-zinc-950 rounded-xl overflow-hidden border border-zinc-200 flex items-center justify-center"
-                                    style={{
-                                      aspectRatio: mediaAspect === '16:9' ? '16/9' : mediaAspect === '9:16' ? '9/16' : '1/1',
-                                      maxHeight: '180px'
-                                    }}
-                                  >
-                                    <img 
-                                      src={activeImage} 
-                                      alt="Google Display Ad" 
-                                      referrerPolicy="no-referrer"
-                                      className={`w-full h-full object-cover ${
-                                        mediaAlignment === 'left' ? 'object-left' : mediaAlignment === 'right' ? 'object-right' : 'object-center'
-                                      }`}
-                                    />
-
-                                    {/* Format overlays / Carousel Navigation */}
-                                    {formData.ad_format === 'carousel' && (
-                                      <>
-                                        <button 
-                                          type="button" 
-                                          onClick={handlePrevSlide}
-                                          className="absolute left-1.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-black/60 text-white text-xs flex items-center justify-center hover:bg-black/80 z-30"
-                                        >
-                                          <ChevronLeft className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button 
-                                          type="button" 
-                                          onClick={handleNextSlide}
-                                          className="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-black/60 text-white text-xs flex items-center justify-center hover:bg-black/80 z-30"
-                                        >
-                                          <ChevronRight className="w-3.5 h-3.5" />
-                                        </button>
-                                      </>
-                                    )}
-
-                                    <span className="absolute bottom-1 right-1.5 bg-black/70 text-white text-[8px] font-mono px-1.5 py-0.5 rounded uppercase">
-                                      Google Display
-                                    </span>
-                                  </div>
-
-                                  {/* Dynamic Call-to-Action Action Button */}
-                                  <button
-                                    type="button"
-                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-2 px-3 rounded-xl text-xs uppercase tracking-wider transition-all shadow-xs flex items-center justify-center gap-1"
-                                  >
-                                    <span>{formData.cta_type || 'Book Now'}</span>
-                                    <span>➔</span>
-                                  </button>
-                                </div>
-                              </div>
-
-                              {/* Google Footer info */}
-                              <div className="p-2.5 bg-white border-t border-zinc-200 text-center text-[9px] text-zinc-400 font-mono">
-                                Google Ads Smart Campaign • Optimized by Encho AI
-                              </div>
-                            </div>
-                          );
                         }
                       })()}
 
@@ -8475,29 +8355,12 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                         checked={boostPlatforms.includes('meta')}
                         onChange={(e) => {
                           if (e.target.checked) {
-                            setBoostPlatforms([...boostPlatforms, 'meta']);
-                          } else {
-                            setBoostPlatforms(boostPlatforms.filter((p) => p !== 'meta'));
+                            setBoostPlatforms(['meta']);
                           }
                         }}
                         className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
                       />
                       <span>Meta Feed & Stories</span>
-                    </label>
-                    <label className="flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={boostPlatforms.includes('google')}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setBoostPlatforms([...boostPlatforms, 'google']);
-                          } else {
-                            setBoostPlatforms(boostPlatforms.filter((p) => p !== 'google'));
-                          }
-                        }}
-                        className="rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span>Google Display Network</span>
                     </label>
                   </div>
                 </div>

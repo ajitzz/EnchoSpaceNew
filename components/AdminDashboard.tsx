@@ -55,6 +55,34 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
           alert("Error saving rooms.");
       }
   };
+
+  const handleTogglePublicationStatus = async (listing: Listing, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const currentStatus = listing.publication_status || 'published';
+    const targetStatus = currentStatus === 'published' ? 'draft' : 'published';
+    try {
+      const res = await fetch(`/api/admin/listings/${listing.id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ publication_status: targetStatus })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const errorMsg = data.details ? data.details.join('\n') : (data.error || 'Failed to update publication status');
+        alert(`PROPOSED-007 Validation Block:\n${errorMsg}`);
+        addToast('Publication Blocked', errorMsg, 'error');
+        return;
+      }
+      setListings(prev => prev.map(l => l.id === listing.id ? { ...l, publication_status: targetStatus } : l));
+      addToast('Status Updated', `Listing marked as ${targetStatus}.`, 'success');
+    } catch (err: any) {
+      console.error('[STATUS TOGGLE ERR]', err);
+      alert('Error communicating with server.');
+    }
+  };
   const [listings, setListings] = useState<Listing[]>([]);
   const [experiences, setExperiences] = useState<any[]>([]);
   const [experienceBookings, setExperienceBookings] = useState<any[]>([]);
@@ -253,7 +281,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
       const headers = { 'Authorization': `Bearer ${token}` };
       
       const [listingsRes, metricsRes, usersRes, whatsappRes, callRes, demoRes, offersRes, reviewsRes, expRes, expBookingsRes, expHostsRes, ratesRes, campaignsRes, outreachRes] = await Promise.all([
-        fetch('/api/listings?city=all'),
+        fetch('/api/listings?city=all', { headers }),
         fetch(`/api/admin/metrics?type=${adminMode}`, { headers }),
         fetch(`/api/admin/users?type=${adminMode}`, { headers }),
         fetch('/api/settings/whatsapp'),
@@ -1604,10 +1632,35 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                   </td>
                                   <td className="px-6 py-4 font-medium text-gray-900">{formatPrice(listing.price, 'INR')}</td>
                                   <td className="px-6 py-4">
-                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700">
-                                         <CheckCircle2Icon className="w-3.5 h-3.5" /> Active
-                                      </span>
-                                  </td>
+                                       {(() => {
+                                         const pubStatus = listing.publication_status || 'published';
+                                         const isPub = pubStatus === 'published';
+                                         return (
+                                           <button
+                                             type="button"
+                                             onClick={(e) => handleTogglePublicationStatus(listing, e)}
+                                             title={isPub ? "Click to unpublish/set to draft" : "Click to publish (runs PROPOSED-007 check)"}
+                                             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                                               isPub
+                                                 ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                                                 : pubStatus === 'in_review'
+                                                 ? 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200'
+                                                 : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 border border-zinc-200'
+                                             }`}
+                                           >
+                                             {isPub ? (
+                                               <>
+                                                 <CheckCircle2Icon className="w-3.5 h-3.5" /> Published
+                                               </>
+                                             ) : (
+                                               <>
+                                                 <AlertTriangle className="w-3.5 h-3.5" /> {pubStatus === 'in_review' ? 'In Review' : 'Draft'}
+                                               </>
+                                             )}
+                                           </button>
+                                         );
+                                       })()}
+                                   </td>
                                   <td className="px-6 py-4 text-right">
                                       <div className="flex justify-end items-center gap-2">
                                           <button onClick={(e) => openLuxuryStudioModal(listing, e)} title="God-Level Luxury Studio & Assets Moderation" className="p-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-md transition-colors font-bold shadow-xs border border-amber-200">
@@ -5068,6 +5121,31 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                       <div className="text-right flex-shrink-0">
                         <p className="font-extrabold text-zinc-900 dark:text-white">₹{(room.price || 0).toLocaleString()}</p>
                         <p className="text-[11px] text-zinc-500">{room.capacity || 2} guests · {room.inventory_count || 1} unit(s)</p>
+                        {(() => {
+                          const roomPhotos = Array.isArray(room.photos) ? room.photos : [];
+                          const approvedRoomPhotos = roomPhotos.filter((p: any) => !p.moderation_status || p.moderation_status === 'approved');
+                          const totalApproved = approvedRoomPhotos.length;
+                          const sleepingCount = approvedRoomPhotos.filter((p: any) => p.is_sleeping_area).length;
+                          const isCompliant = totalApproved >= 3 && sleepingCount >= 1;
+                          return (
+                            <div className="flex items-center justify-end gap-1.5 mt-1">
+                              <span
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                  isCompliant
+                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400'
+                                    : 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400'
+                                }`}
+                                title={
+                                  isCompliant
+                                    ? 'PROPOSED-007 compliant: ≥3 approved photos with ≥1 sleeping area'
+                                    : `PROPOSED-007 check: ${totalApproved}/3 approved photos, ${sleepingCount}/1 sleeping area`
+                                }
+                              >
+                                📷 {totalApproved}/3 {sleepingCount >= 1 ? '🛏️' : '⚠️ No Bed'}
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </div>
                       <ChevronDownIcon className={`w-4 h-4 text-zinc-400 transition-transform flex-shrink-0 ${editingRoomExpandedIdx === idx ? 'rotate-180' : ''}`} />
                     </div>

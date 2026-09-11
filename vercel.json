@@ -24,7 +24,15 @@
   },
   "rewrites": [
     {
+      "source": "/stay/:slug",
+      "destination": "/api/seo?type=stay&slug=$slug"
+    },
+    {
       "source": "/listing/:id",
+      "destination": "/api/seo?type=listing&id=$id"
+    },
+    {
+      "source": "/listings/:id",
       "destination": "/api/seo?type=listing&id=$id"
     },
     {

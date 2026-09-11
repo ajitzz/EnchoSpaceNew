@@ -65,7 +65,9 @@ export const CinematicVideoPlayer: React.FC<CinematicVideoPlayerProps> = ({
       if (video.paused && !userExplicitlyPausedRef.current) {
         video.play().catch(() => {});
       }
-    } catch (_) {}
+    } catch (_) {
+      // Ignored: Audio play may be blocked by browser policy
+    }
   }, []);
 
   // Initialize HLS.js or Native Video Streaming

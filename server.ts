@@ -131,8 +131,9 @@ import fs from 'fs';
 import { AsyncLocalStorage } from 'async_hooks';
 import express, { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { Server as SocketIOServer } from 'socket.io'; // Import SocketIOServer
-import http from 'http'; // Import http
+import http from 'http';
+import { Server as SocketIOServer } from 'socket.io';
+import { toPublicStayProjection, toPublicListingCardProjection, generateListingSlug, escapeHtml, STAY_PUBLIC_SQL_COLUMNS, coarsenCoordinate } from './src/lib/stayProjection';
 
 export interface AuthRequest extends Request {
   user?: {
@@ -174,8 +175,16 @@ import { LeadAlertingCrmService } from './src/lib/leadAlertingCrmService.js';
 import { DynamicPricingSyncService } from './src/lib/dynamicPricingSyncService.js';
 import { RetargetingPixelService } from './src/lib/retargetingPixelService.js';
 import { DoubleEntryLedgerService } from './src/lib/doubleEntryLedgerService.js';
-import { WebhookWorkerService } from './src/lib/webhookWorkerService.js';
 import { DistributedLockService } from './src/lib/distributedLock.js';
+import {
+  acquireHold,
+  releaseHold,
+  sweepExpiredHolds,
+  getHoldTtlSeconds,
+  signGuestSession,
+  verifyGuestSession,
+  createHostCalendarBlock
+} from './src/services/inventoryHoldService.js';
 
 // import pinoHttp from 'pino-http'; // Removed as per JS version
 // import { logger } from './src/lib/logger/index.js'; // Removed as per JS version
@@ -243,6 +252,83 @@ export function logGeminiWarning(context: string, err: any) {
   } else {
     console.warn(`[GEMINI API NOTICE] ${context}: ${errMsg.substring(0, 150)}`);
   }
+}
+
+/**
+ * Phase 3 Milestone 3 / Founder Gate PROPOSED-007 Validator:
+ * A property cannot be published if any bookable room type has fewer than 3 approved,
+ * room-specific photos. At least 1 approved photo per room must be explicitly classified
+ * as showing the sleeping area (is_sleeping_area = true).
+ * Property-wide media (room_type_id IS NULL or tier = 'common') never counts toward a room's minimum.
+ */
+export async function validatePropertyPublication(
+  listingId: number | string,
+  clientOrPool: any
+): Promise<{ valid: boolean; errors: string[]; roomSummaries: any[] }> {
+  const numId = parseInt(String(listingId), 10);
+  if (isNaN(numId)) {
+    return { valid: false, errors: ['Invalid listing ID'], roomSummaries: [] };
+  }
+
+  // 1. Fetch relational room types for the listing
+  const roomsRes = await clientOrPool.query(
+    'SELECT id, name, type FROM room_types WHERE listing_id = $1 ORDER BY id ASC',
+    [numId]
+  );
+
+  if (roomsRes.rows.length === 0) {
+    return {
+      valid: false,
+      errors: ['Property must have at least one room type defined before publication.'],
+      roomSummaries: []
+    };
+  }
+
+  const errors: string[] = [];
+  const roomSummaries: any[] = [];
+
+  // 2. Validate each room type has >= 3 approved room-specific photos with >= 1 sleeping area photo
+  for (const rt of roomsRes.rows) {
+    const mediaRes = await clientOrPool.query(
+      `SELECT COUNT(*) as total_count,
+              COUNT(CASE WHEN is_sleeping_area = true THEN 1 END) as sleeping_count
+       FROM media_assets
+       WHERE entity_type = 'listing'
+         AND entity_id = $1
+         AND room_type_id = $2
+         AND moderation_status = 'approved'`,
+      [numId, rt.id]
+    );
+
+    const totalCount = parseInt(mediaRes.rows[0]?.total_count || '0', 10);
+    const sleepingCount = parseInt(mediaRes.rows[0]?.sleeping_count || '0', 10);
+
+    roomSummaries.push({
+      roomId: rt.id,
+      roomName: rt.name,
+      roomType: rt.type,
+      approvedPhotosCount: totalCount,
+      sleepingAreaPhotosCount: sleepingCount,
+      isCompliant: totalCount >= 3 && sleepingCount >= 1
+    });
+
+    if (totalCount < 3) {
+      errors.push(
+        `Room type "${rt.name || rt.type}" has only ${totalCount} approved photo(s). Minimum 3 approved room-specific photos are required for publication.`
+      );
+    }
+    if (sleepingCount < 1) {
+      errors.push(
+        `Room type "${rt.name || rt.type}" must have at least 1 approved photo showing the sleeping area.`
+      );
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    roomSummaries
+  };
 }
 
 let stripe: Stripe | null = null;
@@ -476,7 +562,7 @@ pool.query = async function (this: any, ...args: any[]) {
 
   // Only apply RLS configuration when there is an active, authenticated non-admin userId in the request store.
   // Otherwise, run direct queries immediately for optimal performance (e.g. unauthenticated or admin queries).
-  if (isDbConfigured && isRequest && userId && !bypassRls) {
+  if (process.env.NODE_ENV !== 'test' && isDbConfigured && isRequest && userId && !bypassRls) {
     return executeQueryWithRetry(async () => {
       let client: any = null;
       let hasError = false;
@@ -701,48 +787,154 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
   });
 };
 
-// Hardened CORS policy
-const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3000', 'https://localhost:3000'];
+// Hardened CORS policy: Exact production allowlist
+const canonicalProductionOrigins = [
+  'https://encho.space',
+  'https://www.encho.space'
+];
+
 app.use(cors({
   origin: function(origin, callback) {
-    // Allow Vercel deployments, Cloud Run (.run.app), AI Studio (.studio), localhost, or dynamically specified allowed origins
-    if (
-      !origin ||
-      allowedOrigins.indexOf(origin) !== -1 ||
-      process.env.NODE_ENV !== 'production' ||
-      origin.endsWith('.vercel.app') ||
-      origin.endsWith('.run.app') ||
-      origin.endsWith('.studio') ||
-      origin.includes('ai.studio')
-    ) {
-      callback(null, true);
-    } else {
-      callback(null, true);
+    // 1. Allow same-origin or non-browser server-to-server requests (no Origin header)
+    if (!origin) {
+      return callback(null, true);
     }
+
+    const isProd = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
+    const configuredAllowedOrigins = process.env.ALLOWED_ORIGINS
+      ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
+      : [];
+
+    const exactProductionAllowedOrigins = new Set([
+      ...canonicalProductionOrigins,
+      ...configuredAllowedOrigins
+    ]);
+
+    if (isProd && !process.env.ALLOWED_ORIGINS && !(global as any).__loggedMissingAllowedOrigins) {
+      (global as any).__loggedMissingAllowedOrigins = true;
+      console.error(
+        '[SECURITY CONFIGURATION ERROR] Missing ALLOWED_ORIGINS environment variable in production runtime. ' +
+        'CORS will strictly accept only canonical production origins: https://encho.space, https://www.encho.space. ' +
+        'To allow custom staging or preview domains, explicitly define ALLOWED_ORIGINS as a comma-separated list of exact origins.'
+      );
+    }
+
+    // 2. In non-production or test runtimes without production simulation, preserve local development compatibility
+    if (!isProd) {
+      if (
+        origin.startsWith('http://localhost:') ||
+        origin.startsWith('https://localhost:') ||
+        origin.startsWith('http://127.0.0.1:') ||
+        exactProductionAllowedOrigins.has(origin)
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    }
+
+    // 3. In production runtime: EXACT allowlist match only (fail closed, NO broad *.vercel.app)
+    if (exactProductionAllowedOrigins.has(origin)) {
+      return callback(null, true);
+    }
+
+    // Fail closed: reject any origin not in exact allowlist
+    return callback(new Error(`Blocked by CORS policy: Origin '${origin}' is not in production allowlist`), false);
   },
   credentials: true
 }));
 
-// Security Headers (Configured for iframe preview compatibility)
-app.use(helmet({
+// CORS Error Interceptor: Fail closed with HTTP 403
+app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+  if (err && typeof err.message === 'string' && err.message.startsWith('Blocked by CORS policy')) {
+    return res.status(403).json({ error: err.message });
+  }
+  next(err);
+});
+
+// Production Helmet: Unconditional clickjacking protection and minimal trusted CSP
+const productionHelmet = helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      mediaSrc: ["'self'", "https:", "blob:", "data:"],
+      connectSrc: [
+        "'self'",
+        "https://api.razorpay.com",
+        "https://api.stripe.com",
+        "https://maps.googleapis.com",
+        "https://*.googleapis.com",
+        "https://*.google.com",
+        "https://*.gstatic.com",
+        "https://va.vercel-scripts.com",
+        "https://*.vercel.live",
+        "https://*.neon.tech",
+        "https://generativelanguage.googleapis.com",
+        "wss:",
+        "ws:"
+      ],
+      scriptSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "'unsafe-eval'",
+        "blob:",
+        "https://checkout.razorpay.com",
+        "https://js.stripe.com",
+        "https://maps.googleapis.com",
+        "https://*.googleapis.com",
+        "https://accounts.google.com",
+        "https://va.vercel-scripts.com",
+        "https://unpkg.com",
+        "https://*.vercel.live",
+        "https://www.gstatic.com",
+        "https://*.gstatic.com"
+      ],
+      workerSrc: ["'self'", "blob:", "data:"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://unpkg.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+      imgSrc: ["'self'", "data:", "blob:", "https:"],
+      frameSrc: ["'self'", "https://api.razorpay.com", "https://checkout.razorpay.com", "https://js.stripe.com", "https://hooks.stripe.com"],
+      frameAncestors: ["'self'"]
+    }
+  },
+  frameguard: { action: 'sameorigin' as const },
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+});
+
+// Development Helmet: Permits iframe embedding in local AI Studio or dev previews
+const devHelmet = helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'", "*"],
       mediaSrc: ["'self'", "*", "blob:", "data:"],
       connectSrc: ["'self'", "*", "https:", "http:", "wss:", "ws:", "blob:", "data:"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "blob:", "https://js.stripe.com", "https://maps.googleapis.com", "https://*.googleapis.com", "https://accounts.google.com", "https://va.vercel-scripts.com", "https://unpkg.com", "https://*.vercel.live", "https://www.gstatic.com", "https://*.gstatic.com"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "blob:", "https://checkout.razorpay.com", "https://js.stripe.com", "https://maps.googleapis.com", "https://*.googleapis.com", "https://accounts.google.com", "https://va.vercel-scripts.com", "https://unpkg.com", "https://*.vercel.live", "https://www.gstatic.com", "https://*.gstatic.com"],
       workerSrc: ["'self'", "blob:", "data:"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://unpkg.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
       imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
       frameSrc: ["'self'", "https:", "http:", "https://js.stripe.com", "https://hooks.stripe.com"],
-      frameAncestors: ["*"] // Allow iframe embedding in AI Studio preview
+      frameAncestors: ["*"]
     }
   },
-  frameguard: false, // MANDATORY: Disable X-Frame-Options SAMEORIGIN header to allow iframe embedding
-  crossOriginEmbedderPolicy: false, // Needed false for external images usually
-  crossOriginResourcePolicy: { policy: "cross-origin" } // Allow loading cross-origin images
-}));
+  frameguard: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+});
+
+// Clickjacking & CSP Configuration: Unconditional in production
+// In production, frame-ancestors 'self' and SAMEORIGIN frameguard are UNCONDITIONAL.
+// ENABLE_PREVIEW_EMBED must NEVER relax security in production.
+app.use((req, res, next) => {
+  const isProd = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
+  if (isProd) {
+    return productionHelmet(req, res, next);
+  }
+  if (process.env.ENABLE_PREVIEW_EMBED === 'true') {
+    return devHelmet(req, res, next);
+  }
+  return productionHelmet(req, res, next);
+});
 
 // Process Liveness Probe — Instant 200 OK, Zero DB/Network/Worker Dependencies
 app.get('/api/health/live', (_req, res) => {
@@ -1215,6 +1407,10 @@ const ensureUsersTable = async () => {
 
 let listingsTableInitialized = false;
 const ensureListingsTable = async () => {
+  if (process.env.NODE_ENV === 'test') {
+    listingsTableInitialized = true;
+    return;
+  }
   if (!isDbConfigured) return;
   if (listingsTableInitialized) return;
 
@@ -1239,34 +1435,6 @@ const ensureListingsTable = async () => {
       video_url TEXT,
       rental_mode VARCHAR(50) DEFAULT 'entire_place',
       rooms JSONB DEFAULT '[]'::jsonb,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS room_types (
-      id SERIAL PRIMARY KEY,
-      listing_id INT REFERENCES listings(id) ON DELETE CASCADE,
-      name VARCHAR(255) NOT NULL,
-      base_price DECIMAL NOT NULL,
-      currency VARCHAR(10) DEFAULT 'INR',
-      max_occupancy INT DEFAULT 2,
-      inventory_count INT DEFAULT 1,
-      features JSONB DEFAULT '[]'::jsonb,
-      amenities JSONB DEFAULT '[]'::jsonb,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS media_assets (
-      id SERIAL PRIMARY KEY,
-      entity_type VARCHAR(50) NOT NULL,
-      entity_id INT NOT NULL,
-      url TEXT NOT NULL,
-      category VARCHAR(50) NOT NULL,
-      title VARCHAR(255),
-      description TEXT,
-      specs VARCHAR(255),
-      lighting_time VARCHAR(255),
-      is_hero BOOLEAN DEFAULT false,
-      order_index INT DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -1367,6 +1535,12 @@ const ensureListingsTable = async () => {
       END IF;
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='brand_color') THEN
         ALTER TABLE listings ADD COLUMN brand_color VARCHAR(100);
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='publication_status') THEN
+        ALTER TABLE listings ADD COLUMN publication_status VARCHAR(50) DEFAULT 'draft';
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='slug') THEN
+        ALTER TABLE listings ADD COLUMN slug VARCHAR(255) UNIQUE;
       END IF;
     END $$;
   `);
@@ -2015,17 +2189,7 @@ const ensureListingsTable = async () => {
   // ADR-006: AI gatekeeper score storage
   await pool.query(`ALTER TABLE listings_drafts ADD COLUMN IF NOT EXISTS ai_score DECIMAL`);
   await pool.query(`ALTER TABLE listings_drafts ADD COLUMN IF NOT EXISTS ai_evaluation JSONB`);
-  // ADR-001: room_types extra columns for free-form room model
-  await pool.query(`ALTER TABLE room_types ADD COLUMN IF NOT EXISTS type VARCHAR(100)`);
-  await pool.query(`ALTER TABLE room_types ADD COLUMN IF NOT EXISTS description TEXT`);
-  await pool.query(`ALTER TABLE room_types ADD COLUMN IF NOT EXISTS specs VARCHAR(500)`);
-  await pool.query(`ALTER TABLE room_types ADD COLUMN IF NOT EXISTS icon VARCHAR(20) DEFAULT '\ud83d\udecf\ufe0f'`);
-  await pool.query(`ALTER TABLE room_types ADD COLUMN IF NOT EXISTS tag VARCHAR(100)`);
-  await pool.query(`ALTER TABLE room_types ADD COLUMN IF NOT EXISTS min_stay_nights INT DEFAULT 1`);
-  // MIG-002: media_assets tier and room linkage
-  await pool.query(`ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS tier VARCHAR(100) DEFAULT 'common'`);
-  await pool.query(`ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS room_type_id INT REFERENCES room_types(id) ON DELETE SET NULL`);
-  await pool.query(`ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS moderation_status VARCHAR(50) DEFAULT 'approved'`);
+  // Note: room_types and media_assets schema managed exclusively via versioned migrations (003_canonical_room_and_media_authority.sql)
 
   listingsTableInitialized = true;
 };
@@ -2788,34 +2952,6 @@ const ensureDbInitialized = async () => {
       try {
         // FAANG Fast-Path: Bypass massive DDL locks in Vercel Serverless if schema is up-to-date
         try {
-          // Auto-promote any unpromoted drafts from listings_drafts into listings catalogue
-          try {
-            const drafts = await pool.query(`SELECT * FROM listings_drafts WHERE published_listing_id IS NULL OR status = 'PUBLISHED'`);
-            for (const draft of drafts.rows) {
-              const data = draft.draft_data;
-              if (data && data.title && (Number(data.price) > 0 || (Array.isArray(data.rooms) && data.rooms.length > 0))) {
-                const ex = await pool.query('SELECT id FROM listings WHERE title = $1', [data.title]);
-                if (ex.rows.length === 0) {
-                  const safePhotos = Array.isArray(data.photos) ? JSON.stringify(data.photos) : JSON.stringify([]);
-                  const safeRooms = Array.isArray(data.rooms) ? JSON.stringify(data.rooms) : null;
-                  const safeAmenities = Array.isArray(data.amenities) ? JSON.stringify(data.amenities) : JSON.stringify([]);
-                  const safeImageUrls = Array.isArray(data.imageUrls) ? JSON.stringify(data.imageUrls) : JSON.stringify([]);
-                  const basePrice = Number(data.price) || (Array.isArray(data.rooms) && data.rooms[0]?.price) || 10000;
-                  const ins = await pool.query(`
-                    INSERT INTO listings (user_id, title, description, price, type, address, city, image_url, image_urls, video_url, rental_mode, rooms, max_guests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamic_pricing, seo_title, seo_description, seo_keywords, seo_image_url, amenity_clusters, child_safety_specs, nearby, hero_video_url, hero_fallback_url, dominant_color_hex, raw_rules, curated_guidelines, experience_tags, photos, concierge_privileges, host_philosophy)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36) RETURNING id
-                  `, [
-                    draft.host_id || 1, data.title, data.description || '', basePrice, data.type || 'Resort', data.address || '', data.city || 'Wayanad', data.imageUrl || data.imageUrls?.[0] || 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1600&q=80', safeImageUrls, data.videoUrl || '', data.rentalMode || 'entire_place', safeRooms, data.maxGuests || 2, data.bedrooms || 1, data.beds || 1, data.bathrooms || 1, safeAmenities, data.lat || 11.6854, data.lng || 76.1320, JSON.stringify(data.dynamicPricing || {}), data.seo_title || null, data.seo_description || null, data.seo_keywords || null, data.seo_image_url || null, JSON.stringify(data.amenity_clusters || {}), JSON.stringify(data.child_safety_specs || []), JSON.stringify(data.nearby || []), data.hero_video_url || null, data.hero_fallback_url || null, data.dominant_color_hex || null, data.raw_rules || null, data.curated_guidelines || null, Array.isArray(data.experience_tags) ? JSON.stringify(data.experience_tags) : JSON.stringify([]), safePhotos, data.concierge_privileges || null, data.host_philosophy || null
-                  ]);
-                  const newListingId = ins.rows[0].id;
-                  await pool.query('UPDATE listings_drafts SET published_listing_id = $1, status = \'PUBLISHED\' WHERE id = $2', [newListingId, draft.id]);
-                  console.log(`[DRAFT RECOVERY] Auto-promoted draft #${draft.id} ("${data.title}") to live listing #${newListingId}!`);
-                }
-              }
-            }
-          } catch (recErr) {
-            console.warn('[DRAFT RECOVERY] Warning:', recErr);
-          }
 
           const fastCheck = await pool.query(`SELECT 1 FROM information_schema.columns WHERE table_name='listings' AND column_name='host_philosophy' LIMIT 1`);
           if (fastCheck.rowCount && fastCheck.rowCount > 0) {
@@ -3479,9 +3615,52 @@ app.post('/api/listings/:id/room-calendar/block', authenticateToken, async (req:
       return res.status(400).json({ error: 'Invalid date range: startDate must be before or equal to endDate' });
     }
 
+    let targetRoomTypeId = req.body.room_type_id || req.body.roomTypeId;
+    if (!targetRoomTypeId && roomTierKey && roomTierKey !== 'all') {
+      const matchRoom = await pool.query(
+        'SELECT id FROM room_types WHERE listing_id = $1 AND (type = $2 OR name = $3) LIMIT 1',
+        [listingId, roomTierKey, roomName || roomTierKey]
+      );
+      if (matchRoom.rows.length > 0) {
+        targetRoomTypeId = matchRoom.rows[0].id;
+      }
+    }
+
+    // If targetRoomTypeId is identified, use atomic transactional inventory authority
+    if (targetRoomTypeId) {
+      const blockResult = await createHostCalendarBlock(pool, {
+        listingId: Number(listingId),
+        roomTypeId: Number(targetRoomTypeId),
+        startDate,
+        endDate,
+        blockSource,
+        guestName,
+        note
+      });
+
+      if (!blockResult.success) {
+        return res.status(blockResult.statusCode).json({
+          error: blockResult.error,
+          code: blockResult.code,
+          details: blockResult.conflictDetails
+        });
+      }
+
+      triggerSmartAutoPause(listingId, `ROOM_BLOCK_${Date.now()}`).catch(err => {
+        console.warn('[CIRCUIT BREAKER] Auto-pause trigger notice:', err);
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: 'Unit date block established successfully',
+        block: blockResult.block
+      });
+    }
+
+    // Fallback: unmapped property-wide block ('all') marked as ambiguous
     const result = await pool.query(`
-      INSERT INTO room_calendar_blocks (listing_id, room_tier_key, room_name, room_unit_number, start_date, end_date, block_source, guest_name, note)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      INSERT INTO room_calendar_blocks (listing_id, room_tier_key, room_name, room_unit_number, start_date, end_date, block_source, guest_name, note, mapping_status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ambiguous')
       RETURNING *
     `, [
       listingId,
@@ -3495,7 +3674,6 @@ app.post('/api/listings/:id/room-calendar/block', authenticateToken, async (req:
       note || null
     ]);
 
-    // Circuit Breaker: If entire estate blocked or multiple rooms blocked, trigger marketing auto-pause check
     triggerSmartAutoPause(listingId, `ROOM_BLOCK_${Date.now()}`).catch(err => {
       console.warn('[CIRCUIT BREAKER] Auto-pause trigger notice:', err);
     });
@@ -3617,27 +3795,44 @@ function readIndexHtml(): string {
 
 // SEO routing fallback for Vercel direct reloads on listing and experience pages
 app.get('/api/seo', async (req, res) => {
-  const { type, id } = req.query;
+  const { type, id, slug } = req.query;
   let html = readIndexHtml();
 
   try {
     let injectedTags = '';
 
-    if (type === 'listing' && id) {
+    if (type === 'stay' && slug) {
       if (isDbConfigured) {
-        const result = await pool.query("SELECT * FROM listings WHERE id = $1", [id]);
-        if (result.rows.length > 0) {
+        let result;
+        try {
+          result = await pool.query(
+            "SELECT id, title, description, image_url, image_urls, slug FROM listings WHERE slug = $1 AND publication_status = 'published'",
+            [slug]
+          );
+        } catch (_e) {
+          result = { rows: [] };
+        }
+        if (result && result.rows.length > 0) {
           const listing = result.rows[0];
-          const title = `${listing.title} | EnchoSpace`;
-          const description = listing.description?.substring(0, 160) || `Stay at ${listing.title}`;
-          const image = listing.image_url || (listing.image_urls && listing.image_urls[0]) || '';
+          const rawTitle = `${listing.title || ''} | Encho Stays`;
+          const rawDescription = listing.description?.substring(0, 160) || `Stay at ${listing.title || ''}`;
+          const rawImage = listing.image_url || (listing.image_urls && listing.image_urls[0]) || '';
+          const canonicalSlug = listing.slug || generateListingSlug(listing.title, listing.id);
+          const canonicalUrl = `https://encho.space/stay/${encodeURIComponent(canonicalSlug)}`;
+
+          const title = escapeHtml(rawTitle);
+          const description = escapeHtml(rawDescription);
+          const image = escapeHtml(rawImage);
+          const safeCanonicalUrl = escapeHtml(canonicalUrl);
 
           injectedTags = `
             <title>${title}</title>
+            <link rel="canonical" href="${safeCanonicalUrl}" />
             <meta name="description" content="${description}" />
             <meta property="og:title" content="${title}" />
             <meta property="og:description" content="${description}" />
             <meta property="og:image" content="${image}" />
+            <meta property="og:url" content="${safeCanonicalUrl}" />
             <meta property="og:type" content="website" />
             <meta name="twitter:card" content="summary_large_image" />
             <meta name="twitter:title" content="${title}" />
@@ -3646,6 +3841,21 @@ app.get('/api/seo', async (req, res) => {
           `;
         }
       }
+    } else if (type === 'listing' && id) {
+      if (isDbConfigured && !isNaN(Number(id))) {
+        try {
+          const result = await pool.query(
+            "SELECT id, title, slug FROM listings WHERE id = $1 AND publication_status = 'published'",
+            [id]
+          );
+          if (result.rows.length > 0) {
+            const listing = result.rows[0];
+            const canonicalSlug = listing.slug || generateListingSlug(listing.title, listing.id);
+            return res.redirect(301, `/stay/${encodeURIComponent(canonicalSlug)}`);
+          }
+        } catch (_e) { /* continue to 404/render */ }
+      }
+      return res.status(404).send('Stay not found');
     } else if (type === 'experience' && id) {
       if (isDbConfigured) {
         const result = await pool.query("SELECT * FROM experiences WHERE id = $1", [id]);
@@ -4006,12 +4216,10 @@ app.put('/api/listings/:id', authenticateToken, async (req: AuthRequest, res) =>
 
     const { title, description, price, type, address, city, imageUrl, imageUrls, videoUrl, rentalMode, rooms, maxGuests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamicPricing, seo_title, seo_description, seo_keywords, seo_image_url, amenity_clusters, child_safety_specs, nearby, hero_video_url, hero_fallback_url, dominant_color_hex, raw_rules, curated_guidelines, experience_tags, brand, brand_font, brand_color } = req.body;
 
-    // Gap 16 check old price
-    let oldPrice = 0;
-    if (price) {
-      const oldCheck = await pool.query('SELECT price FROM listings WHERE id = $1', [req.params.id]);
-      if (oldCheck.rows.length > 0) oldPrice = oldCheck.rows[0].price;
-    }
+    // Fetch existing listing record for oldPrice and defaults
+    const currentListingRes = await pool.query('SELECT price, type, currency FROM listings WHERE id = $1', [req.params.id]);
+    const oldPrice = currentListingRes.rows.length > 0 ? currentListingRes.rows[0].price : 0;
+    const resolvedPrice = (price !== undefined && price !== null) ? price : oldPrice;
 
     const safeImageUrls = typeof imageUrls === 'string' ? imageUrls : JSON.stringify(imageUrls || []);
     const safeRooms = typeof rooms === 'string' ? rooms : JSON.stringify(rooms || []);
@@ -4024,48 +4232,185 @@ app.put('/api/listings/:id', authenticateToken, async (req: AuthRequest, res) =>
     const safeNearby = Array.isArray(nearby) ? JSON.stringify(nearby) : null;
 
     if (title) {
-      const safePhotos = Array.isArray(req.body.photos) ? JSON.stringify(req.body.photos) : (typeof req.body.photos === 'string' ? req.body.photos : JSON.stringify([]));
-      await pool.query(`
-        UPDATE listings
-        SET title=$1, description=$2, price=$3, type=$4, address=$5, city=$6, image_url=$7, image_urls=$8, video_url=$9, rental_mode=$10, rooms=$11, max_guests=$12, bedrooms=$13, beds=$14, bathrooms=$15, amenities=$16, lat=$18, lng=$19, dynamic_pricing=$20, seo_title=$21, seo_description=$22, seo_keywords=$23, seo_image_url=$24, amenity_clusters=$25, child_safety_specs=$26, nearby=$27, hero_video_url=$28, hero_fallback_url=$29, dominant_color_hex=$30, raw_rules=$31, curated_guidelines=$32, experience_tags=$33, photos=$34, concierge_privileges=$35, host_philosophy=$36, brand=$37, brand_font=$38, brand_color=$39
-        WHERE id=$17
-      `, [
-        title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode, safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, req.params.id as string, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby, hero_video_url || null, hero_fallback_url || null, dominant_color_hex || null, raw_rules || null, curated_guidelines || null, Array.isArray(experience_tags) ? JSON.stringify(experience_tags) : JSON.stringify([]), safePhotos, req.body.concierge_privileges || null, req.body.host_philosophy || null, brand || null, brand_font || null, brand_color || null
-      ]);
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
 
-      // Sync room_types table
-      if (Array.isArray(rooms) && rooms.length > 0) {
-        try {
-          await pool.query('DELETE FROM room_types WHERE listing_id = $1', [req.params.id]);
+        const safePhotos = Array.isArray(req.body.photos) ? JSON.stringify(req.body.photos) : (typeof req.body.photos === 'string' ? req.body.photos : JSON.stringify([]));
+        await client.query(`
+          UPDATE listings
+          SET title=$1, description=$2, price=$3, type=$4, address=$5, city=$6, image_url=$7, image_urls=$8, video_url=$9, rental_mode=$10, rooms=$11, max_guests=$12, bedrooms=$13, beds=$14, bathrooms=$15, amenities=$16, lat=$18, lng=$19, dynamic_pricing=$20, seo_title=$21, seo_description=$22, seo_keywords=$23, seo_image_url=$24, amenity_clusters=$25, child_safety_specs=$26, nearby=$27, hero_video_url=$28, hero_fallback_url=$29, dominant_color_hex=$30, raw_rules=$31, curated_guidelines=$32, experience_tags=$33, photos=$34, concierge_privileges=$35, host_philosophy=$36, brand=$37, brand_font=$38, brand_color=$39
+          WHERE id=$17
+        `, [
+          title, description, resolvedPrice, type || currentListingRes.rows[0]?.type || 'Sanctuary', address, city, imageUrl, safeImageUrls, videoUrl, rentalMode, safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, req.params.id as string, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby, hero_video_url || null, hero_fallback_url || null, dominant_color_hex || null, raw_rules || null, curated_guidelines || null, Array.isArray(experience_tags) ? JSON.stringify(experience_tags) : JSON.stringify([]), safePhotos, req.body.concierge_privileges || null, req.body.host_philosophy || null, brand || null, brand_font || null, brand_color || null
+        ]);
+
+        // M3: Non-Destructive room_types upsert preserving row IDs
+        const roomTypeMap = new Map<string, number>(); // Map room type/name -> room_types.id
+        if (Array.isArray(rooms) && rooms.length > 0) {
+          // Fetch existing rooms to preserve IDs
+          const existingRoomsRes = await client.query(
+            'SELECT id, name, type FROM room_types WHERE listing_id = $1',
+            [req.params.id]
+          );
+          const existingRooms = existingRoomsRes.rows;
+          const processedRoomIds = new Set<number>();
+
           for (const room of rooms) {
-            await pool.query(`
-              INSERT INTO room_types (listing_id, name, type, icon, tag, base_price, currency, max_occupancy, inventory_count, description, specs, features, amenities)
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-            `, [
-              req.params.id, room.name || 'Sanctuary Room', room.type || 'suites', room.icon || '🛏️', room.tag || '', Number(room.price) || Number(price) || 0, req.body.currency || 'INR', Number(room.capacity) || 2, Number(room.inventory_count) || 1, room.description || '', room.specs || '', JSON.stringify(room.features || []), JSON.stringify(room.amenities || [])
-            ]);
-          }
-        } catch (rtSyncErr) {
-          console.warn('[PUT LISTING] Room types sync warning:', rtSyncErr);
-        }
-      }
+            // Find existing row by matching ID, type, or name
+            const existing = existingRooms.find((er: any) =>
+              (room.id && !isNaN(Number(room.id)) && er.id === Number(room.id)) ||
+              (room.type && er.type === room.type) ||
+              (room.name && er.name === room.name)
+            );
 
-      // Sync media_assets table
-      if (Array.isArray(req.body.photos) && req.body.photos.length > 0) {
-        try {
-          await pool.query('DELETE FROM media_assets WHERE entity_id = $1 AND entity_type = $2', [req.params.id, 'listing']);
+            let savedRoomId: number;
+            if (existing) {
+              await client.query(`
+                UPDATE room_types
+                SET name=$1, type=$2, icon=$3, tag=$4, base_price=$5, currency=$6,
+                    max_occupancy=$7, inventory_count=$8, description=$9, specs=$10,
+                    features=$11, amenities=$12, min_stay_nights=$13
+                WHERE id=$14
+              `, [
+                room.name || existing.name || 'Sanctuary Room',
+                room.type || existing.type || 'suites',
+                room.icon || '🛏️',
+                room.tag || '',
+                Number(room.price) || Number(price) || 0,
+                req.body.currency || 'INR',
+                Number(room.capacity) || 2,
+                Number(room.inventory_count) || 1,
+                room.description || '',
+                room.specs || '',
+                JSON.stringify(room.features || []),
+                JSON.stringify(room.amenities || []),
+                Number(room.min_stay_nights) || 1,
+                existing.id
+              ]);
+              savedRoomId = existing.id;
+              processedRoomIds.add(existing.id);
+            } else {
+              const insertRes = await client.query(`
+                INSERT INTO room_types (listing_id, name, type, icon, tag, base_price, currency, max_occupancy, inventory_count, description, specs, features, amenities, min_stay_nights)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                RETURNING id
+              `, [
+                req.params.id,
+                room.name || 'Sanctuary Room',
+                room.type || 'suites',
+                room.icon || '🛏️',
+                room.tag || '',
+                Number(room.price) || Number(price) || 0,
+                req.body.currency || 'INR',
+                Number(room.capacity) || 2,
+                Number(room.inventory_count) || 1,
+                room.description || '',
+                room.specs || '',
+                JSON.stringify(room.features || []),
+                JSON.stringify(room.amenities || []),
+                Number(room.min_stay_nights) || 1
+              ]);
+              savedRoomId = insertRes.rows[0].id;
+              processedRoomIds.add(savedRoomId);
+            }
+
+            if (room.type) roomTypeMap.set(room.type, savedRoomId);
+            if (room.name) roomTypeMap.set(room.name, savedRoomId);
+            if (room.id) roomTypeMap.set(String(room.id), savedRoomId);
+          }
+        }
+
+        // M3: Non-Destructive media_assets upsert with room_type_id & is_sleeping_area
+        if (Array.isArray(req.body.photos) && req.body.photos.length > 0) {
+          const existingMediaRes = await client.query(
+            "SELECT id, url, tier, category, room_type_id, is_sleeping_area, moderation_status FROM media_assets WHERE entity_id = $1 AND entity_type = 'listing'",
+            [req.params.id]
+          );
+          const existingMedia = existingMediaRes.rows;
+
           let orderIdx = 0;
           for (const photo of req.body.photos) {
-            await pool.query(`
-              INSERT INTO media_assets (entity_type, entity_id, url, tier, category, title, description, specs, is_hero, order_index)
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            `, [
-              'listing', req.params.id, photo.url || photo.previewUrl, photo.tier || 'common', photo.category || 'other', photo.title || '', photo.description || '', photo.specs || '', photo.isHero || false, orderIdx++
-            ]);
+            const photoUrl = photo.url || photo.previewUrl;
+            if (!photoUrl) continue;
+
+            const existing = existingMedia.find((em: any) => em.url === photoUrl || (photo.id && !isNaN(Number(photo.id)) && em.id === Number(photo.id)));
+
+            // Resolve room_type_id from roomTypeMap
+            let linkedRoomTypeId: number | null = null;
+            if (photo.room_type_id && !isNaN(Number(photo.room_type_id))) {
+              linkedRoomTypeId = Number(photo.room_type_id);
+            } else if (photo.tier && photo.tier !== 'common' && roomTypeMap.has(photo.tier)) {
+              linkedRoomTypeId = roomTypeMap.get(photo.tier) || null;
+            }
+
+            // Strict sleeping area: require explicit is_sleeping_area = true (never infer from bedroom)
+            const isSleepingArea = Boolean(photo.is_sleeping_area || photo.isSleepingArea);
+
+            // True admin-only approval rule:
+            // Host submissions NEVER directly set approved.
+            // Preserve approved status ONLY if existing asset was approved and had no material changes.
+            let modStatus = 'pending_review';
+            if (existing && existing.moderation_status === 'approved') {
+              const unchanged = existing.url === photoUrl &&
+                                (existing.tier || 'common') === (photo.tier || 'common') &&
+                                (existing.category || 'other') === (photo.category || 'other') &&
+                                Boolean(existing.is_sleeping_area) === isSleepingArea &&
+                                ((existing.room_type_id === null && linkedRoomTypeId === null) ||
+                                 Number(existing.room_type_id) === Number(linkedRoomTypeId));
+              if (unchanged) {
+                modStatus = 'approved';
+              }
+            }
+
+            if (existing) {
+              await client.query(`
+                UPDATE media_assets
+                SET tier=$1, category=$2, title=$3, description=$4, specs=$5, is_hero=$6,
+                    order_index=$7, is_sleeping_area=$8, room_type_id=$9, moderation_status=$10
+                WHERE id=$11
+              `, [
+                photo.tier || 'common',
+                photo.category || 'other',
+                photo.title || '',
+                photo.description || '',
+                photo.specs || '',
+                photo.isHero || false,
+                orderIdx++,
+                isSleepingArea,
+                linkedRoomTypeId,
+                modStatus,
+                existing.id
+              ]);
+            } else {
+              await client.query(`
+                INSERT INTO media_assets (entity_type, entity_id, url, tier, category, title, description, specs, is_hero, order_index, is_sleeping_area, room_type_id, moderation_status)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+              `, [
+                'listing',
+                req.params.id,
+                photoUrl,
+                photo.tier || 'common',
+                photo.category || 'other',
+                photo.title || '',
+                photo.description || '',
+                photo.specs || '',
+                photo.isHero || false,
+                orderIdx++,
+                isSleepingArea,
+                linkedRoomTypeId,
+                modStatus
+              ]);
+            }
           }
-        } catch (mediaSyncErr) {
-          console.warn('[PUT LISTING] Media assets sync warning:', mediaSyncErr);
         }
+
+        await client.query('COMMIT');
+      } catch (putErr) {
+        await client.query('ROLLBACK');
+        throw putErr;
+      } finally {
+        client.release();
       }
       if (price) await syncDynamicPricingToMeta(req.params.id, oldPrice, price);
     } else if (videoUrl !== undefined) {
@@ -4109,6 +4454,22 @@ app.put('/api/listings/:id', authenticateToken, async (req: AuthRequest, res) =>
        }
     }
 
+    // Publication Status Update & PROPOSED-007 Validation Gate
+    if (req.body.publication_status !== undefined) {
+      const targetStatus = req.body.publication_status;
+      if (targetStatus === 'published') {
+        const validation = await validatePropertyPublication(req.params.id, pool);
+        if (!validation.valid) {
+          return res.status(422).json({
+            error: 'Cannot publish listing: Failed room and media authority requirements (PROPOSED-007).',
+            details: validation.errors,
+            roomSummaries: validation.roomSummaries
+          });
+        }
+      }
+      await pool.query('UPDATE listings SET publication_status = $1 WHERE id = $2', [targetStatus, req.params.id]);
+    }
+
     // Invalidate Cache
     if (redis && city) {
         try {
@@ -4117,10 +4478,431 @@ app.put('/api/listings/:id', authenticateToken, async (req: AuthRequest, res) =>
     }
 
     broadcastDbEvent(req, 'listing');
-    res.json({ message: 'Listing updated successfully' });
+    res.json({ success: true, message: 'Listing updated successfully' });
   } catch (error) {
     console.error('Update Listing Error:', error);
     res.status(500).json({ error: 'Failed to update listing' });
+  }
+});
+
+// M3: Admin & Host Publication Status Mutation Endpoint with PROPOSED-007 Gate
+app.patch('/api/admin/listings/:id/status', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    const listingId = req.params.id;
+    const { publication_status } = req.body;
+    if (!publication_status) {
+      return res.status(400).json({ error: 'publication_status is required' });
+    }
+
+    // IDOR Protection: Admin or listing owner only
+    const listingRes = await pool.query('SELECT user_id, title FROM listings WHERE id = $1', [listingId]);
+    if (listingRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Listing not found' });
+    }
+    const listing = listingRes.rows[0];
+    if (req.user?.role !== 'admin' && String(req.user?.id) !== String(listing.user_id)) {
+      return res.status(403).json({ error: 'Forbidden: Insufficient privileges' });
+    }
+
+    // PROPOSED-007 Gate: If transitioning to published, validate relational room and media rules
+    if (publication_status === 'published') {
+      const validation = await validatePropertyPublication(listingId, pool);
+      if (!validation.valid) {
+        return res.status(422).json({
+          error: 'Cannot publish listing: Failed room and media authority requirements (PROPOSED-007).',
+          details: validation.errors,
+          roomSummaries: validation.roomSummaries
+        });
+      }
+    }
+
+    await pool.query('UPDATE listings SET publication_status = $1 WHERE id = $2', [publication_status, listingId]);
+    broadcastDbEvent(req, 'listing');
+    return res.json({ success: true, listingId, publication_status });
+  } catch (err: any) {
+    console.error('[STATUS UPDATE ERROR]', err);
+    return res.status(500).json({ error: err?.message || 'Failed to update publication status' });
+  }
+});
+
+// M3: Admin / Host Dedicated Room Management Endpoint (PUT /api/listings/:id/rooms)
+app.put('/api/listings/:id/rooms', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  let client: any = null;
+  try {
+    const listingId = req.params.id;
+    const { rooms } = req.body;
+    if (!Array.isArray(rooms)) {
+      return res.status(400).json({ error: 'rooms must be an array' });
+    }
+
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    // IDOR Protection
+    const listingRes = await client.query('SELECT user_id FROM listings WHERE id = $1', [listingId]);
+    if (listingRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Listing not found' });
+    }
+    if (req.user?.role !== 'admin' && String(req.user?.id) !== String(listingRes.rows[0].user_id)) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    // Non-destructive upsert preserving row IDs (omitted rooms are preserved, never deleted)
+    const existingRoomsRes = await client.query('SELECT id, name, type FROM room_types WHERE listing_id = $1', [listingId]);
+    const existingRooms = existingRoomsRes.rows;
+
+    for (const room of rooms) {
+      const existing = existingRooms.find((er: any) =>
+        (room.id && !isNaN(Number(room.id)) && er.id === Number(room.id)) ||
+        (room.type && er.type === room.type) ||
+        (room.name && er.name === room.name)
+      );
+
+      if (existing) {
+        await client.query(`
+          UPDATE room_types
+          SET name=$1, type=$2, icon=$3, tag=$4, base_price=$5,
+              max_occupancy=$6, inventory_count=$7, description=$8, specs=$9,
+              features=$10, amenities=$11
+          WHERE id=$12
+        `, [
+          room.name || existing.name || 'Sanctuary Room',
+          room.type || existing.type || 'suites',
+          room.icon || '🛏️',
+          room.tag || '',
+          Number(room.price) || 0,
+          Number(room.capacity) || 2,
+          Number(room.inventory_count) || 1,
+          room.description || '',
+          room.specs || '',
+          JSON.stringify(room.features || []),
+          JSON.stringify(room.amenities || []),
+          existing.id
+        ]);
+      } else {
+        await client.query(`
+          INSERT INTO room_types (listing_id, name, type, icon, tag, base_price, currency, max_occupancy, inventory_count, description, specs, features, amenities)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        `, [
+          listingId,
+          room.name || 'Sanctuary Room',
+          room.type || 'suites',
+          room.icon || '🛏️',
+          room.tag || '',
+          Number(room.price) || 0,
+          'INR',
+          Number(room.capacity) || 2,
+          Number(room.inventory_count) || 1,
+          room.description || '',
+          room.specs || '',
+          JSON.stringify(room.features || []),
+          JSON.stringify(room.amenities || [])
+        ]);
+      }
+    }
+
+    // Update listings.rooms JSON for dual-write within the same transaction
+    await client.query('UPDATE listings SET rooms = $1 WHERE id = $2', [JSON.stringify(rooms), listingId]);
+
+    await client.query('COMMIT');
+
+    broadcastDbEvent(req, 'listing');
+    return res.json({ success: true, message: 'Room types saved successfully' });
+  } catch (err: any) {
+    if (client) {
+      await client.query('ROLLBACK').catch(() => {});
+    }
+    console.error('[ROOMS SAVE ERROR]', err);
+    return res.status(500).json({ error: err?.message || 'Failed to save room types' });
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+});
+
+// M3: Admin Media Asset Moderation Endpoint (PATCH /api/admin/media-assets/:id/moderation)
+app.patch('/api/admin/media-assets/:id/moderation', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin privileges required' });
+  }
+
+  const assetId = req.params.id;
+  const { moderation_status, is_sleeping_area, room_type_id } = req.body;
+
+  // Validate allowed moderation statuses
+  const ALLOWED_STATUSES = ['pending_review', 'approved', 'rejected'];
+  if (moderation_status !== undefined && !ALLOWED_STATUSES.includes(moderation_status)) {
+    return res.status(400).json({
+      error: `Invalid moderation_status: '${moderation_status}'. Allowed values are: ${ALLOWED_STATUSES.join(', ')}`
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. Lock media asset row with SELECT ... FOR UPDATE
+    const assetRes = await client.query(
+      'SELECT id, entity_type, entity_id, room_type_id, moderation_status FROM media_assets WHERE id = $1 FOR UPDATE',
+      [assetId]
+    );
+    if (assetRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Media asset not found' });
+    }
+    const asset = assetRes.rows[0];
+
+    // 2. If room_type_id is provided, lock room_types row with SELECT ... FOR UPDATE and validate same-property ownership
+    if (room_type_id !== undefined && room_type_id !== null) {
+      const roomRes = await client.query(
+        'SELECT id, listing_id FROM room_types WHERE id = $1 FOR UPDATE',
+        [Number(room_type_id)]
+      );
+      if (roomRes.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(422).json({ error: 'Referenced room type does not exist' });
+      }
+      if (asset.entity_type === 'listing' && Number(asset.entity_id) !== Number(roomRes.rows[0].listing_id)) {
+        await client.query('ROLLBACK');
+        return res.status(422).json({ error: 'Cross-property room assignment rejected: media asset and room type belong to different listings' });
+      }
+    }
+
+    // 3. Build updates dynamically inside the transaction
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    if (moderation_status !== undefined) {
+      values.push(moderation_status);
+      updates.push(`moderation_status = $${values.length}`);
+    }
+    if (is_sleeping_area !== undefined) {
+      values.push(Boolean(is_sleeping_area));
+      updates.push(`is_sleeping_area = $${values.length}`);
+    }
+    if (room_type_id !== undefined) {
+      values.push(room_type_id === null ? null : Number(room_type_id));
+      updates.push(`room_type_id = $${values.length}`);
+    }
+
+    if (updates.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    values.push(assetId);
+    await client.query(`UPDATE media_assets SET ${updates.join(', ')} WHERE id = $${values.length}`, values);
+
+    await client.query('COMMIT');
+    return res.json({ success: true, assetId });
+  } catch (err: any) {
+    await client.query('ROLLBACK').catch(() => {});
+    return res.status(500).json({ error: err?.message || 'Failed to update asset moderation' });
+  } finally {
+    client.release();
+  }
+});
+
+// M3: Idempotent Backfill Service Endpoint (POST /api/admin/backfill/room-media-authority)
+app.post('/api/admin/backfill/room-media-authority', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  try {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin privileges required' });
+    }
+
+    const client = await pool.connect();
+    let backfilledRooms = 0;
+    let backfilledMedia = 0;
+    let conflictsCount = 0;
+    const conflictIds: number[] = [];
+
+    try {
+      await client.query('BEGIN');
+
+      // Find all listings with JSON rooms or photos
+      const listingsRes = await client.query('SELECT id, rooms, photos, price FROM listings ORDER BY id ASC');
+
+      for (const listing of listingsRes.rows) {
+        const listingId = listing.id;
+
+        // 1. Backfill rooms
+        const rawRooms = typeof listing.rooms === 'string'
+          ? JSON.parse(listing.rooms || '[]')
+          : (Array.isArray(listing.rooms) ? listing.rooms : []);
+
+        const existingRoomsRes = await client.query('SELECT id, name, type FROM room_types WHERE listing_id = $1', [listingId]);
+        const existingRooms = existingRoomsRes.rows;
+        const roomTypeMap = new Map<string, number>();
+
+        existingRooms.forEach((er: any) => {
+          if (er.type) roomTypeMap.set(er.type, er.id);
+          if (er.name) roomTypeMap.set(er.name, er.id);
+        });
+
+        for (const r of rawRooms) {
+          const roomName = r.name || 'Sanctuary Room';
+          const roomType = r.type || 'suites';
+
+          // Validate room data integrity; if ambiguous or missing vital fields, record conflict for review
+          if (!r.name && !r.type) {
+            const existingConflict = await client.query(`
+              SELECT id FROM backfill_conflict_records
+              WHERE listing_id = $1 AND source_type = 'room' AND source_item_id = $2
+            `, [listingId, r.id ? String(r.id) : null]);
+            if (existingConflict.rows.length === 0) {
+              const confRes = await client.query(`
+                INSERT INTO backfill_conflict_records (listing_id, source_type, source_item_id, reason, diagnostic_metadata)
+                VALUES ($1, 'room', $2, 'Room record missing both name and type classification', $3)
+                RETURNING id
+              `, [listingId, r.id ? String(r.id) : null, JSON.stringify(r)]);
+              conflictIds.push(confRes.rows[0].id);
+              conflictsCount++;
+            }
+            continue;
+          }
+
+          if (!roomTypeMap.has(roomType) && !roomTypeMap.has(roomName)) {
+            const inserted = await client.query(`
+              INSERT INTO room_types (listing_id, name, type, icon, tag, base_price, currency, max_occupancy, inventory_count, description, specs, features, amenities)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+              RETURNING id
+            `, [
+              listingId,
+              roomName,
+              roomType,
+              r.icon || '🛏️',
+              r.tag || '',
+              Number(r.price) || Number(listing.price) || 0,
+              'INR',
+              Number(r.capacity) || 2,
+              Number(r.inventory_count) || 1,
+              r.description || '',
+              r.specs || '',
+              JSON.stringify(r.features || []),
+              JSON.stringify(r.amenities || [])
+            ]);
+            const newRtId = inserted.rows[0].id;
+            roomTypeMap.set(roomType, newRtId);
+            roomTypeMap.set(roomName, newRtId);
+            backfilledRooms++;
+          }
+        }
+
+        // 2. Backfill media
+        const rawPhotos = typeof listing.photos === 'string'
+          ? JSON.parse(listing.photos || '[]')
+          : (Array.isArray(listing.photos) ? listing.photos : []);
+
+        const existingMediaRes = await client.query(
+          "SELECT id, url FROM media_assets WHERE entity_id = $1 AND entity_type = 'listing'",
+          [listingId]
+        );
+        const existingUrls = new Set(existingMediaRes.rows.map((em: any) => em.url));
+
+        let orderIdx = 0;
+        for (const p of rawPhotos) {
+          const url = p.url || p.previewUrl;
+          const photoItemId = p.id ? String(p.id) : null;
+          if (!url) {
+            const existingConflict = await client.query(`
+              SELECT id FROM backfill_conflict_records
+              WHERE listing_id = $1 AND source_type = 'media' AND source_item_id = $2
+            `, [listingId, photoItemId]);
+            if (existingConflict.rows.length === 0) {
+              const confRes = await client.query(`
+                INSERT INTO backfill_conflict_records (listing_id, source_type, source_item_id, reason, diagnostic_metadata)
+                VALUES ($1, 'media', $2, 'Photo record has missing or empty URL', $3)
+                RETURNING id
+              `, [listingId, photoItemId, JSON.stringify(p)]);
+              conflictIds.push(confRes.rows[0].id);
+              conflictsCount++;
+            }
+            continue;
+          }
+
+          // Ambiguous tier mapping check:
+          // If media claims a non-common tier that cannot be matched unambiguously to exactly one room type,
+          // do NOT insert it as common/unassigned. Record it in backfill_conflict_records.
+          if (p.tier && p.tier !== 'common' && !roomTypeMap.has(p.tier)) {
+            const existingConflict = await client.query(`
+              SELECT id FROM backfill_conflict_records
+              WHERE listing_id = $1 AND source_type = 'media' AND source_item_id = $2
+            `, [listingId, photoItemId || url]);
+            if (existingConflict.rows.length === 0) {
+              const confRes = await client.query(`
+                INSERT INTO backfill_conflict_records (listing_id, source_type, source_item_id, reason, diagnostic_metadata)
+                VALUES ($1, 'media', $2, 'Ambiguous tier mapping: non-common tier cannot be matched to a known room type', $3)
+                RETURNING id
+              `, [listingId, photoItemId || url, JSON.stringify({ tier: p.tier, url })]);
+              conflictIds.push(confRes.rows[0].id);
+              conflictsCount++;
+            }
+            continue;
+          }
+
+          if (existingUrls.has(url)) continue;
+
+          let linkedRoomTypeId: number | null = null;
+          if (p.room_type_id && !isNaN(Number(p.room_type_id))) {
+            linkedRoomTypeId = Number(p.room_type_id);
+          } else if (p.tier && p.tier !== 'common' && roomTypeMap.has(p.tier)) {
+            linkedRoomTypeId = roomTypeMap.get(p.tier) || null;
+          }
+
+          // Strict sleeping area flag: require explicit is_sleeping_area = true (never infer from category === 'bedroom')
+          const isSleepingArea = Boolean(p.is_sleeping_area || p.isSleepingArea);
+          // Legacy backfilled media must unconditionally default to pending_review.
+          // Never inherit moderation_status from listings.photos JSON (including 'approved').
+          const modStatus = 'pending_review';
+
+          await client.query(`
+            INSERT INTO media_assets (entity_type, entity_id, url, tier, category, title, description, specs, is_hero, order_index, is_sleeping_area, room_type_id, moderation_status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          `, [
+            'listing',
+            listingId,
+            url,
+            p.tier || 'common',
+            p.category || 'other',
+            p.title || '',
+            p.description || '',
+            p.specs || '',
+            Boolean(p.isHero),
+            orderIdx++,
+            isSleepingArea,
+            linkedRoomTypeId,
+            modStatus
+          ]);
+          existingUrls.add(url);
+          backfilledMedia++;
+        }
+      }
+
+      await client.query('COMMIT');
+      return res.json({
+        success: true,
+        message: `Backfill completed successfully. Backfilled ${backfilledRooms} room types and ${backfilledMedia} media assets with ${conflictsCount} conflict(s).`,
+        backfilledRooms,
+        backfilledMedia,
+        conflictsCount,
+        conflictIds
+      });
+    } catch (e: any) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  } catch (err: any) {
+    console.error('[BACKFILL ERROR]', err);
+    return res.status(500).json({ error: err?.message || 'Backfill failed' });
   }
 });
 
@@ -7434,161 +8216,35 @@ app.post('/api/marketing/leads/:leadId/message', authenticateToken, async (req: 
 // Dispatch Meta Campaign simulating automated API building on Meta's servers
 
 
-// Phase 2: Dispatch Google Ads Campaign via Google Ads API (REST/gRPC Wrapper simulation)
-async function dispatchGoogleAdsCampaign(campaignId: number, req: any) {
-  try {
-    const campaignResult = await pool.query(`
-      SELECT c.*, l.title as listing_title, l.description as listing_desc, l.image_url as listing_image, l.city, l.amenities as listing_amenities, l.amenities as listing_amenities
-      FROM host_marketing_campaigns c
-      JOIN listings l ON c.listing_id = l.id
-      WHERE c.id = $1
-    `, [campaignId]);
-
-    if (campaignResult.rows.length === 0) {
-      console.warn(`[GOOGLE ADS API] Campaign ${campaignId} not found.`);
-      return false;
-    }
-
-    const campaign = campaignResult.rows[0];
-
-    // Check for Google Ads credentials
-    const devToken = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
-    const clientId = process.env.GOOGLE_ADS_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET;
-    const refreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN;
-    const customerId = process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID;
-
-    // Perform active inspection monitoring for Google Ads integration keys
-    checkIntegrationKeys(
-      'Google Ads API',
-      ['GOOGLE_ADS_DEVELOPER_TOKEN', 'GOOGLE_ADS_CLIENT_ID', 'GOOGLE_ADS_CLIENT_SECRET', 'GOOGLE_ADS_REFRESH_TOKEN'],
-      `Campaign #${campaign.id} Google Ads Sync Dispatch`
-    );
-
-    const hasRealGoogleCredentials = devToken && clientId && clientSecret && refreshToken && customerId && !devToken.includes('your_');
-
-    if (hasRealGoogleCredentials) {
-      console.log(`[GOOGLE ADS API] Full Search & Display Pipeline Initiated. Account: ${customerId}`);
-
-      try {
-        // Step 1: Exchange Refresh Token for Access Token (OAuth2)
-        const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            client_id: clientId,
-            client_secret: clientSecret,
-            refresh_token: refreshToken,
-            grant_type: 'refresh_token'
-          })
-        });
-        const tokenText = await tokenRes.text();
-        let tokenData: any = {};
-        try {
-          tokenData = JSON.parse(tokenText);
-        } catch (e) {
-          throw new Error(`OAuth token refresh returned non-JSON response (${tokenRes.status}): ${tokenText.substring(0, 150)}`);
-        }
-        if (!tokenRes.ok) throw new Error(`Failed to refresh token: ${tokenData.error || tokenText.substring(0, 150)}`);
-
-        const accessToken = tokenData.access_token;
-        console.log(`[GOOGLE ADS API] OAuth2 Access Token Acquired.`);
-
-        // Step 2: Create Campaign via Google Ads REST API
-        // For simplicity, we are structuring the REST call format.
-        const campaignUrl = `https://googleads.googleapis.com/v16/customers/${customerId}/campaigns:mutate`;
-
-        const gAdsPayload = {
-          operations: [
-            {
-              create: {
-                name: `Encho Space - ${campaign.title} (Camp #${campaign.id})`,
-                status: 'PAUSED', // Safe default
-                advertisingChannelType: 'PERFORMANCE_MAX',
-                campaignBudget: 'resourceNames/campaignBudgets/temporary',
-                targetRoas: { targetRoas: 2.5 }
-              }
-            }
-          ]
-        };
-
-        const campRes = await fetch(campaignUrl, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'developer-token': devToken,
-            'login-customer-id': customerId,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(gAdsPayload)
-        });
-
-        const campText = await campRes.text();
-        let campData: any = {};
-        try {
-          campData = JSON.parse(campText);
-        } catch (e) {
-          throw new Error(`Google Ads API returned non-JSON response (${campRes.status}): ${campText.substring(0, 150)}`);
-        }
-        if (!campRes.ok) throw new Error(`Campaign creation failed: ${campData.error?.message || JSON.stringify(campData)}`);
-
-        const googleCampaignId = campData.results[0].resourceName;
-        console.log(`[GOOGLE ADS API] Performance Max Campaign created: ${googleCampaignId}`);
-
-        // Update database with Google Ads ID
-        await pool.query(`
-          UPDATE host_marketing_campaigns
-          SET google_campaign_id = $1
-          WHERE id = $2
-        `, [googleCampaignId, campaignId]);
-
-        return true;
-
-      } catch (apiError: any) {
-        console.error(`[GOOGLE ADS API ERROR] Pipeline failed:`, apiError);
-        // We log the error but don't reject the whole campaign if Meta succeeded
-        return false;
-      }
-    } else {
-      console.log(`[GOOGLE ADS API] Missing credentials, using P-Max simulation...`);
-
-      const payload = {
-        campaignName: `Encho Space - ${campaign.title}`,
-        channel: "PERFORMANCE_MAX",
-        dailyBudgetMicro: Math.floor((Number(campaign.budget) / 30) * 1000000), // Micros
-        locationTargeting: campaign.city || "Global",
-        assetGroups: [
-          {
-            headlines: [`Book ${campaign.title}`, "Exclusive Retreat"],
-            descriptions: [campaign.description.substring(0, 90)],
-            images: [campaign.listing_image]
-          }
-        ]
-      };
-
-      console.log(`[GOOGLE ADS API] Simulating Performance Max dispatch:`, JSON.stringify(payload, null, 2));
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      const simulatedGoogleId = null;
-
-      console.log(`[GOOGLE ADS API] Success! Generated campaign ${simulatedGoogleId}`);
-
-      // We don't overwrite the main 'status' if it's already handled by Meta dispatch, but we update the google ID
-      await pool.query(`
-        ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS google_campaign_id VARCHAR(255);
-      `);
-
-      await pool.query(`
-        UPDATE host_marketing_campaigns
-        SET google_campaign_id = $1
-        WHERE id = $2
-      `, [simulatedGoogleId, campaignId]);
-
-      return true;
-    }
-  } catch (error) {
-    console.error(`[GOOGLE ADS API ERROR] Failed to dispatch campaign ${campaignId}:`, error);
-    return false;
-  }
+/**
+ * GOOGLE ADS UNCONDITIONAL CONTAINMENT GATE (Locked Architectural Decision #3)
+ *
+ * Google Ads dispatch is strictly disabled for the initial Encho launch.
+ * The deprecated v16 simulation / REST pipeline has been permanently decommissioned.
+ *
+ * REACTIVATION GATE REQUIREMENT:
+ * Re-enabling Google Ads requires:
+ * 1. Independent specification and acceptance of a future Google Ads v25+ Milestone.
+ * 2. Written architecture review establishing dedicated gRPC/REST SDK bindings,
+ *    multi-tenant customer authorization, OAuth offline token refresh rotation,
+ *    and double-entry budget reconciliation ledger.
+ * 3. Formal transition command approved in Phase 2 / Phase 3 governance.
+ *
+ * Under NO circumstances may environment variables (including ENABLE_GOOGLE_ADS_DISPATCH)
+ * bypass this containment gate or reactivate deprecated v16 code.
+ */
+export async function dispatchGoogleAdsCampaign(
+  campaignId: number,
+  _req?: any
+): Promise<{ dispatched: false; reason: string }> {
+  const reason = 'GOOGLE_ADS_CONTAINMENT_LOCKED: Google Ads dispatch is unconditionally disabled for initial launch under Decision #3. Requires future Google Ads v25 milestone.';
+  StructuredLogger.warn(`[GOOGLE ADS CONTAINMENT] Refusing dispatch for Campaign #${campaignId}: ${reason}`, {
+    campaignId,
+    containmentGate: 'DECISION_3_LOCKED',
+    targetMilestone: 'FUTURE_GOOGLE_ADS_V25',
+    attemptedFlag: process.env.ENABLE_GOOGLE_ADS_DISPATCH || 'unset'
+  });
+  return { dispatched: false, reason };
 }
 
 
@@ -7700,10 +8356,12 @@ export async function executeCampaignStateMachine(campaignId: number, triggerEve
                     metaSuccess = false;
                 }
 
-                try {
-                    await dispatchGoogleAdsCampaign(campaignId, req);
-                } catch (googleErr: any) {
-                    console.error(`[GOOGLE ADS DISPATCH ERROR] Campaign ${campaignId}:`, googleErr);
+                if (process.env.ENABLE_GOOGLE_ADS_DISPATCH === 'true') {
+                    try {
+                        await dispatchGoogleAdsCampaign(campaignId, req);
+                    } catch (googleErr: any) {
+                        console.error(`[GOOGLE ADS DISPATCH ERROR] Campaign ${campaignId}:`, googleErr);
+                    }
                 }
 
                 if (metaSuccess) {
@@ -13024,42 +13682,176 @@ app.post('/api/admin/listings/draft/:id/approve', authenticateToken, async (req:
        ]);
        listingId = newListing.rows[0].id;
     }
+    // Sync room_types table non-destructively
+    const roomTypeMap = new Map<string, number>();
+    if (data.rooms && Array.isArray(data.rooms) && data.rooms.length > 0) {
+      const existingRoomsRes = await client.query(
+        'SELECT id, name, type FROM room_types WHERE listing_id = $1',
+        [listingId]
+      );
+      const existingRooms = existingRoomsRes.rows;
 
-    await client.query('DELETE FROM room_types WHERE listing_id = $1', [listingId]);
-    if (data.rooms && Array.isArray(data.rooms)) {
       for (const room of data.rooms) {
-         await client.query(`
-            INSERT INTO room_types (listing_id, name, base_price, currency, max_occupancy, inventory_count, features, amenities)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         `, [
-            listingId, room.name, room.price, data.currency || 'INR', room.capacity || 2, room.inventory_count || 1,
-            JSON.stringify(room.features || []), JSON.stringify(room.amenities || [])
-         ]);
+        const existing = existingRooms.find((er: any) =>
+          (room.id && !isNaN(Number(room.id)) && er.id === Number(room.id)) ||
+          (room.type && er.type === room.type) ||
+          (room.name && er.name === room.name)
+        );
+
+        let savedRoomId: number;
+        if (existing) {
+          await client.query(`
+            UPDATE room_types
+            SET name=$1, type=$2, icon=$3, tag=$4, base_price=$5, currency=$6,
+                max_occupancy=$7, inventory_count=$8, description=$9, specs=$10,
+                features=$11, amenities=$12, min_stay_nights=$13
+            WHERE id=$14
+          `, [
+            room.name || existing.name || 'Sanctuary Room',
+            room.type || existing.type || 'suites',
+            room.icon || '🛏️',
+            room.tag || '',
+            Number(room.price) || Number(data.price) || 0,
+            data.currency || 'INR',
+            Number(room.capacity) || 2,
+            Number(room.inventory_count) || 1,
+            room.description || '',
+            room.specs || '',
+            JSON.stringify(room.features || []),
+            JSON.stringify(room.amenities || []),
+            Number(room.min_stay_nights) || 1,
+            existing.id
+          ]);
+          savedRoomId = existing.id;
+        } else {
+          const insertRes = await client.query(`
+            INSERT INTO room_types (listing_id, name, type, icon, tag, base_price, currency, max_occupancy, inventory_count, description, specs, features, amenities, min_stay_nights)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            RETURNING id
+          `, [
+            listingId,
+            room.name || 'Sanctuary Room',
+            room.type || 'suites',
+            room.icon || '🛏️',
+            room.tag || '',
+            Number(room.price) || Number(data.price) || 0,
+            data.currency || 'INR',
+            Number(room.capacity) || 2,
+            Number(room.inventory_count) || 1,
+            room.description || '',
+            room.specs || '',
+            JSON.stringify(room.features || []),
+            JSON.stringify(room.amenities || []),
+            Number(room.min_stay_nights) || 1
+          ]);
+          savedRoomId = insertRes.rows[0].id;
+        }
+        if (room.type) roomTypeMap.set(room.type, savedRoomId);
+        if (room.name) roomTypeMap.set(room.name, savedRoomId);
+        if (room.id) roomTypeMap.set(String(room.id), savedRoomId);
       }
     }
 
-    await client.query('DELETE FROM media_assets WHERE entity_id = $1 AND entity_type = $2', [listingId, 'listing']);
-    if (data.photos && Array.isArray(data.photos)) {
-      let orderIndex = 0;
+    // Sync media_assets table non-destructively
+    if (data.photos && Array.isArray(data.photos) && data.photos.length > 0) {
+      const existingMediaRes = await client.query(
+        "SELECT id, url, tier, category, room_type_id, is_sleeping_area, moderation_status FROM media_assets WHERE entity_id = $1 AND entity_type = 'listing'",
+        [listingId]
+      );
+      const existingMedia = existingMediaRes.rows;
+
+      let orderIdx = 0;
       for (const photo of data.photos) {
-         await client.query(`
-            INSERT INTO media_assets (entity_type, entity_id, url, category, title, description, specs, lighting_time, is_hero, order_index)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         `, [
-            'listing', listingId, photo.url || photo.previewUrl, photo.category || 'other', photo.title || '', photo.description || '',
-            photo.specs || '', photo.lightingTime || '', photo.isHero || false, orderIndex++
-         ]);
+        const photoUrl = photo.url || photo.previewUrl;
+        if (!photoUrl) continue;
+
+        const existing = existingMedia.find((em: any) => em.url === photoUrl || (photo.id && !isNaN(Number(photo.id)) && em.id === Number(photo.id)));
+
+        let linkedRoomTypeId: number | null = null;
+        if (photo.room_type_id && !isNaN(Number(photo.room_type_id))) {
+          linkedRoomTypeId = Number(photo.room_type_id);
+        } else if (photo.tier && photo.tier !== 'common' && roomTypeMap.has(photo.tier)) {
+          linkedRoomTypeId = roomTypeMap.get(photo.tier) || null;
+        }
+
+        const isSleepingArea = Boolean(photo.is_sleeping_area || photo.isSleepingArea);
+
+        // True admin-only approval rule:
+        // Draft publication payload cannot grant approval; preserve existing approved only if unchanged.
+        let modStatus = 'pending_review';
+        if (existing && existing.moderation_status === 'approved') {
+          const unchanged = existing.url === photoUrl &&
+                            (existing.tier || 'common') === (photo.tier || 'common') &&
+                            (existing.category || 'other') === (photo.category || 'other') &&
+                            Boolean(existing.is_sleeping_area) === isSleepingArea &&
+                            ((existing.room_type_id === null && linkedRoomTypeId === null) ||
+                             Number(existing.room_type_id) === Number(linkedRoomTypeId));
+          if (unchanged) {
+            modStatus = 'approved';
+          }
+        }
+
+        if (existing) {
+          await client.query(`
+            UPDATE media_assets
+            SET tier=$1, category=$2, title=$3, description=$4, specs=$5, is_hero=$6,
+                order_index=$7, is_sleeping_area=$8, room_type_id=$9, moderation_status=$10
+            WHERE id=$11
+          `, [
+            photo.tier || 'common',
+            photo.category || 'other',
+            photo.title || '',
+            photo.description || '',
+            photo.specs || '',
+            photo.isHero || false,
+            orderIdx++,
+            isSleepingArea,
+            linkedRoomTypeId,
+            modStatus,
+            existing.id
+          ]);
+        } else {
+          await client.query(`
+            INSERT INTO media_assets (entity_type, entity_id, url, tier, category, title, description, specs, is_hero, order_index, is_sleeping_area, room_type_id, moderation_status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          `, [
+            'listing',
+            listingId,
+            photoUrl,
+            photo.tier || 'common',
+            photo.category || 'other',
+            photo.title || '',
+            photo.description || '',
+            photo.specs || '',
+            photo.isHero || false,
+            orderIdx++,
+            isSleepingArea,
+            linkedRoomTypeId,
+            modStatus
+          ]);
+        }
       }
     }
+    // M3: Validate PROPOSED-007 publication rules before draft approval
+    const validation = await validatePropertyPublication(listingId, client);
+    if (!validation.valid) {
+      await client.query('ROLLBACK');
+      return res.status(422).json({
+        error: 'Cannot publish listing: Failed room and media authority requirements (PROPOSED-007).',
+        details: validation.errors,
+        roomSummaries: validation.roomSummaries
+      });
+    }
 
+    await client.query("UPDATE listings SET publication_status = 'published' WHERE id = $1", [listingId]);
     await client.query(`UPDATE listings_drafts SET status = 'PUBLISHED', published_listing_id = $1 WHERE id = $2`, [listingId, draft.id]);
 
     await client.query('COMMIT');
     res.json({ success: true, listingId });
-  } catch (e) {
+  } catch (e: any) {
     await client.query('ROLLBACK');
     console.error('Draft Publish Error:', e);
-    res.status(500).json({ error: 'Failed to publish draft' });
+    res.status(500).json({ error: e?.message || 'Failed to publish draft' });
   } finally {
     client.release();
   }
@@ -13074,7 +13866,7 @@ app.post('/api/listings', authenticateToken, async (req: AuthRequest, res) => {
   }
   try {
     await ensureListingsTable();
-    const { title, description, price, type, address, city, imageUrl, imageUrls, videoUrl, rentalMode, rooms, maxGuests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamicPricing, seo_title, seo_description, seo_keywords, seo_image_url, hero_video_url, hero_fallback_url, dominant_color_hex, raw_rules, curated_guidelines, experience_tags, brand, brand_font, brand_color } = req.body;
+    const { title, description, price, type, address, city, imageUrl, imageUrls, videoUrl, rentalMode, rooms, maxGuests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamicPricing, seo_title, seo_description, seo_keywords, seo_image_url, hero_video_url, hero_fallback_url, dominant_color_hex, raw_rules, curated_guidelines, experience_tags, brand, brand_font, brand_color, concierge_privileges, host_philosophy } = req.body;
 
     // Security: Use authenticated user ID, ignore body userId to prevent IDOR spoofing
     const userId = req.user?.id;
@@ -13096,60 +13888,127 @@ app.post('/api/listings', authenticateToken, async (req: AuthRequest, res) => {
     const safeChildSafety = Array.isArray(child_safety_specs) ? JSON.stringify(child_safety_specs) : null;
     const safeNearby = Array.isArray(nearby) ? JSON.stringify(nearby) : null;
 
-    const { concierge_privileges, host_philosophy } = req.body;
-    const result = await pool.query(
-      `INSERT INTO listings (user_id, title, description, price, type, address, city, image_url, image_urls, video_url, rental_mode, rooms, max_guests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamic_pricing, seo_title, seo_description, seo_keywords, seo_image_url, amenity_clusters, child_safety_specs, nearby, hero_video_url, hero_fallback_url, dominant_color_hex, raw_rules, curated_guidelines, experience_tags, photos, concierge_privileges, host_philosophy, brand, brand_font, brand_color)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39) RETURNING *`,
-      [userId || null, title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode || 'entire_place', safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby, hero_video_url || null, hero_fallback_url || null, dominant_color_hex || null, raw_rules || null, curated_guidelines || null, Array.isArray(experience_tags) ? JSON.stringify(experience_tags) : JSON.stringify([]), safePhotos, concierge_privileges || null, host_philosophy || null, brand || null, brand_font || null, brand_color || null]
-    );
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    const newListing = result.rows[0];
+      const result = await client.query(
+        `INSERT INTO listings (user_id, title, description, price, type, address, city, image_url, image_urls, video_url, rental_mode, rooms, max_guests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamic_pricing, seo_title, seo_description, seo_keywords, seo_image_url, amenity_clusters, child_safety_specs, nearby, hero_video_url, hero_fallback_url, dominant_color_hex, raw_rules, curated_guidelines, experience_tags, photos, concierge_privileges, host_philosophy, brand, brand_font, brand_color)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39) RETURNING *`,
+        [userId || null, title, description, price, type, address, city, imageUrl, safeImageUrls, videoUrl, rentalMode || 'entire_place', safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby, hero_video_url || null, hero_fallback_url || null, dominant_color_hex || null, raw_rules || null, curated_guidelines || null, Array.isArray(experience_tags) ? JSON.stringify(experience_tags) : JSON.stringify([]), safePhotos, concierge_privileges || null, host_philosophy || null, brand || null, brand_font || null, brand_color || null]
+      );
 
-    // Sync room_types table
-    if (Array.isArray(rooms) && rooms.length > 0) {
-      try {
+      const newListing = result.rows[0];
+
+      // Sync room_types table atomically
+      const roomTypeMap = new Map<string, number>();
+      if (Array.isArray(rooms) && rooms.length > 0) {
         for (const room of rooms) {
-          await pool.query(`
-            INSERT INTO room_types (listing_id, name, type, icon, tag, base_price, currency, max_occupancy, inventory_count, description, specs, features, amenities)
+          const rtRes = await client.query(`
+            INSERT INTO room_types (listing_id, name, type, icon, tag, base_price, currency, max_occupancy, inventory_count, description, specs, features, amenities, min_stay_nights)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            RETURNING id
+          `, [
+            newListing.id,
+            room.name || 'Sanctuary Room',
+            room.type || 'suites',
+            room.icon || '🛏️',
+            room.tag || '',
+            Number(room.price) || Number(price) || 0,
+            req.body.currency || 'INR',
+            Number(room.capacity) || 2,
+            Number(room.inventory_count) || 1,
+            room.description || '',
+            room.specs || '',
+            JSON.stringify(room.features || []),
+            JSON.stringify(room.amenities || []),
+            Number(room.min_stay_nights) || 1
+          ]);
+          const rtId = rtRes.rows[0].id;
+          if (room.type) roomTypeMap.set(room.type, rtId);
+          if (room.name) roomTypeMap.set(room.name, rtId);
+          if (room.id) roomTypeMap.set(String(room.id), rtId);
+        }
+      }
+
+      // Sync media_assets table from both listing-level photos and room-level photos
+      const allCandidatePhotos: any[] = [];
+      if (Array.isArray(photos)) {
+        allCandidatePhotos.push(...photos);
+      }
+      if (Array.isArray(rooms)) {
+        for (const room of rooms) {
+          if (Array.isArray(room.photos)) {
+            for (const rp of room.photos) {
+              allCandidatePhotos.push({
+                ...rp,
+                tier: rp.tier || room.type || 'common',
+                room_type_id: rp.room_type_id || roomTypeMap.get(room.type) || roomTypeMap.get(room.name) || roomTypeMap.get(String(room.id)) || null
+              });
+            }
+          }
+        }
+      }
+
+      if (allCandidatePhotos.length > 0) {
+        let orderIdx = 0;
+        for (const photo of allCandidatePhotos) {
+          const photoUrl = photo.url || photo.previewUrl;
+          if (!photoUrl) continue;
+
+          let linkedRoomTypeId: number | null = null;
+          if (photo.room_type_id && !isNaN(Number(photo.room_type_id))) {
+            linkedRoomTypeId = Number(photo.room_type_id);
+          } else if (photo.tier && photo.tier !== 'common' && roomTypeMap.has(photo.tier)) {
+            linkedRoomTypeId = roomTypeMap.get(photo.tier) || null;
+          }
+
+          // Strict sleeping area: require explicit is_sleeping_area = true (no bedroom inference)
+          const isSleepingArea = Boolean(photo.is_sleeping_area || photo.isSleepingArea);
+          // New media unconditionally defaults to pending_review. Host cannot set approved status.
+          const modStatus = 'pending_review';
+
+          await client.query(`
+            INSERT INTO media_assets (entity_type, entity_id, url, tier, category, title, description, specs, is_hero, order_index, is_sleeping_area, room_type_id, moderation_status)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
           `, [
-            newListing.id, room.name || 'Sanctuary Room', room.type || 'suites', room.icon || '🛏️', room.tag || '', Number(room.price) || Number(price) || 0, req.body.currency || 'INR', Number(room.capacity) || 2, Number(room.inventory_count) || 1, room.description || '', room.specs || '', JSON.stringify(room.features || []), JSON.stringify(room.amenities || [])
+            'listing',
+            newListing.id,
+            photoUrl,
+            photo.tier || 'common',
+            photo.category || 'other',
+            photo.title || '',
+            photo.description || '',
+            photo.specs || '',
+            photo.isHero || false,
+            orderIdx++,
+            isSleepingArea,
+            linkedRoomTypeId,
+            modStatus
           ]);
         }
-      } catch (rtErr) {
-        console.warn('[POST LISTING] Room types sync warning:', rtErr);
       }
-    }
 
-    // Sync media_assets table
-    if (Array.isArray(photos) && photos.length > 0) {
-      try {
-        let orderIdx = 0;
-        for (const photo of photos) {
-          await pool.query(`
-            INSERT INTO media_assets (entity_type, entity_id, url, tier, category, title, description, specs, is_hero, order_index)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-          `, [
-            'listing', newListing.id, photo.url || photo.previewUrl, photo.tier || 'common', photo.category || 'other', photo.title || '', photo.description || '', photo.specs || '', photo.isHero || false, orderIdx++
-          ]);
+      await client.query('COMMIT');
+
+      // Invalidate cache
+      if (redis) {
+        try {
+          await redis.del(`listings:${city.toLowerCase()}`);
+        } catch (e) {
+          console.warn('Redis cache invalidation failed', e);
         }
-      } catch (mediaErr) {
-        console.warn('[POST LISTING] Media assets sync warning:', mediaErr);
       }
+
+      broadcastDbEvent(req, 'listing');
+
+      res.status(201).json(newListing);
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
     }
-
-    // Invalidate cache
-    if (redis) {
-      try {
-        await redis.del(`listings:${city.toLowerCase()}`);
-      } catch (e) {
-        console.warn('Redis cache invalidation failed', e);
-      }
-    }
-
-    broadcastDbEvent(req, 'listing');
-
-    res.status(201).json(newListing);
   } catch (error) {
     console.error('Create Listing Error:', error);
     const errorMessage = error instanceof Error ? (error as Error).message : String(error);
@@ -13382,7 +14241,312 @@ app.post('/api/listings/:id/reviews', authenticateToken, async (req: AuthRequest
   }
 });
 
-app.get('/api/listings/:id', async (req, res) => {
+// Phase 3 Milestone 2: Public Stay Projection (Address Privacy Firewall)
+// GET /api/v2/stays/:propertySlug
+app.get('/api/v2/stays/:propertySlug', async (req, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  const { propertySlug } = req.params;
+  if (!propertySlug || typeof propertySlug !== 'string') {
+    return res.status(400).json({ error: 'Invalid property slug' });
+  }
+
+  try {
+    // Explicit SQL Column Allowlist: Prevents SELECT * from pulling private address, lat, lng, user_id, host contacts, access credentials
+    const allowlistedCols = STAY_PUBLIC_SQL_COLUMNS.join(', ');
+
+    let result;
+    try {
+      // Primary: Query by slug and enforce publication boundary (publication_status = 'published')
+      result = await pool.query(
+        `SELECT ${allowlistedCols} FROM listings WHERE slug = $1 AND publication_status = 'published'`,
+        [propertySlug]
+      );
+    } catch (_colErr) {
+      // Return null result if column or query fails — fail closed
+      result = { rows: [] };
+    }
+
+    if (!result || result.rows.length === 0) {
+      // If direct slug match wasn't found, attempt candidate ID match with expected slug verification
+      const parts = propertySlug.split('-');
+      const candidateId = parts[parts.length - 1];
+      if (candidateId && !isNaN(Number(candidateId))) {
+        try {
+          const fallbackResult = await pool.query(
+            `SELECT ${allowlistedCols} FROM listings WHERE id = $1 AND publication_status = 'published'`,
+            [candidateId]
+          );
+          if (fallbackResult.rows.length > 0) {
+            const row = fallbackResult.rows[0];
+            const expectedSlug = row.slug || generateListingSlug(row.title, row.id);
+            if (expectedSlug === propertySlug) {
+              result = fallbackResult;
+            }
+          }
+        } catch (_e) { /* non-blocking */ }
+      }
+    }
+
+    if (!result || result.rows.length === 0) {
+      return res.status(404).json({ error: 'Stay not found' });
+    }
+
+    const rawListing = result.rows[0];
+
+    // M3: Canonical Relational Authority
+    // Query relational room_types first. If relational rows exist, they unconditionally supersede legacy JSON.
+    // Fall back to legacy JSON only if 0 relational room rows exist.
+    try {
+      const rtResult = await pool.query(
+        'SELECT name, type, icon, tag, base_price, max_occupancy, features, amenities, description, specs FROM room_types WHERE listing_id = $1 ORDER BY id ASC',
+        [rawListing.id]
+      );
+      if (rtResult.rows.length > 0) {
+        rawListing.rooms = rtResult.rows.map((rt: any) => ({
+          name: rt.name,
+          type: rt.type || rt.name.toLowerCase().replace(/\s+/g, '_'),
+          icon: rt.icon || '🛏️',
+          tag: rt.tag || '',
+          price: parseFloat(rt.base_price),
+          capacity: rt.max_occupancy,
+          description: rt.description || '',
+          specs: rt.specs || '',
+          features: typeof rt.features === 'string' ? JSON.parse(rt.features || '[]') : (rt.features || []),
+          amenities: typeof rt.amenities === 'string' ? JSON.parse(rt.amenities || '[]') : (rt.amenities || [])
+        }));
+      }
+    } catch (_e) { /* non-blocking relational authority read */ }
+
+    // Query relational media_assets first. If relational rows exist, they unconditionally supersede legacy JSON.
+    // Only approved assets are returned (moderation_status = 'approved').
+    // Fall back to legacy JSON only if 0 relational media rows exist.
+    try {
+      const mediaResult = await pool.query(
+        `SELECT url, tier, category, title, description, is_hero, is_sleeping_area, moderation_status
+         FROM media_assets
+         WHERE entity_id = $1 AND entity_type = $2 AND moderation_status = 'approved'
+         ORDER BY order_index ASC`,
+        [rawListing.id, 'listing']
+      );
+      if (mediaResult.rows.length > 0) {
+        rawListing.photos = mediaResult.rows.map((m: any) => ({
+          url: m.url,
+          tier: m.tier || 'common',
+          category: m.category || 'other',
+          title: m.title || '',
+          description: m.description || '',
+          isHero: Boolean(m.is_hero),
+          is_sleeping_area: Boolean(m.is_sleeping_area),
+          moderation_status: m.moderation_status
+        }));
+      }
+    } catch (_e) { /* non-blocking relational authority read */ }
+
+    // Apply strict privacy transformation and nested safe mappers
+    const publicProjection = toPublicStayProjection(rawListing);
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=120');
+    return res.json(publicProjection);
+  } catch (error) {
+    console.error('[STAY PROJECTION ERROR]', error);
+    return res.status(500).json({ error: 'Failed to fetch stay projection' });
+  }
+});
+
+// Phase 3 Milestone 4: Inventory Days & Atomic Holds
+// Rate limiter: Max 30 hold creations per IP per 10 minutes to prevent denial-of-service
+const holdsRateLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many hold attempts. Please try again in a few minutes.' }
+});
+
+// Helper to parse cookies from Cookie header
+function parseCookies(req: Request): Record<string, string> {
+  const list: Record<string, string> = {};
+  const rc = req.headers.cookie;
+  if (!rc) return list;
+  rc.split(';').forEach((cookie: string) => {
+    const parts = cookie.split('=');
+    const name = parts.shift()?.trim();
+    if (name) {
+      list[name] = decodeURIComponent(parts.join('='));
+    }
+  });
+  return list;
+}
+
+// POST /api/v2/stays/holds
+app.post('/api/v2/stays/holds', holdsRateLimiter, async (req: Request, res: Response) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+
+  // 1. Resolve holder principal:
+  // - If user has valid Authorization Bearer token -> 'user:<id>'
+  // - Else anonymous guest -> require server-issued, signed HttpOnly cookie 'encho_guest_session'.
+  //   If absent or invalid, generate a new signed session UUID and set HttpOnly cookie.
+  let userId: number | null = null;
+  let holderPrincipal = '';
+  let guestSessionId: string | null = null;
+
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      if (decoded && decoded.id) {
+        userId = Number(decoded.id);
+        holderPrincipal = `user:${userId}`;
+      }
+    } catch (_err) { /* invalid token -> proceed to guest cookie */ }
+  }
+
+  if (!holderPrincipal) {
+    const cookies = parseCookies(req);
+    const existingSignedCookie = cookies['encho_guest_session'];
+    let verifiedSessionUuid = verifyGuestSession(existingSignedCookie);
+
+    if (!verifiedSessionUuid) {
+      verifiedSessionUuid = crypto.randomUUID();
+      const signedToken = signGuestSession(verifiedSessionUuid);
+      // Set secure, HttpOnly, SameSite cookie with Max-Age
+      const isProduction = process.env.NODE_ENV === 'production';
+      const cookieOptions = [
+        `encho_guest_session=${signedToken}`,
+        'Path=/',
+        'HttpOnly',
+        'SameSite=Lax',
+        'Max-Age=604800'
+      ];
+      if (isProduction) {
+        cookieOptions.push('Secure');
+      }
+      res.setHeader('Set-Cookie', cookieOptions.join('; '));
+    }
+
+    guestSessionId = verifiedSessionUuid;
+    holderPrincipal = `session:${verifiedSessionUuid}`;
+  }
+
+  const idempotencyKey = (req.headers['idempotency-key'] as string) || req.body.idempotency_key || req.body.idempotencyKey;
+
+  const result = await acquireHold(pool, {
+    roomTypeId: req.body.room_type_id || req.body.roomTypeId,
+    checkIn: req.body.check_in || req.body.checkIn,
+    checkOut: req.body.check_out || req.body.checkOut,
+    quantity: req.body.quantity,
+    idempotencyKey,
+    holderPrincipal,
+    userId,
+    guestSessionId
+  });
+
+  if (!result.success) {
+    return res.status(result.statusCode).json({
+      error: result.error,
+      code: result.code,
+      details: result.conflictDetails
+    });
+  }
+
+  return res.status(result.statusCode).json({
+    success: true,
+    hold: result.hold
+  });
+});
+
+// POST /api/v2/stays/holds/:id/release
+app.post('/api/v2/stays/holds/:id/release', async (req: Request, res: Response) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+
+  let userId: number | null = null;
+  let isServerAdmin = false;
+  let holderPrincipal = '';
+
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      if (decoded && decoded.id) {
+        userId = Number(decoded.id);
+        isServerAdmin = decoded.role === 'admin';
+        holderPrincipal = `user:${userId}`;
+      }
+    } catch (_err) { /* anonymous caller */ }
+  }
+
+  if (!holderPrincipal) {
+    const cookies = parseCookies(req);
+    const verifiedSessionUuid = verifyGuestSession(cookies['encho_guest_session']);
+    if (verifiedSessionUuid) {
+      holderPrincipal = `session:${verifiedSessionUuid}`;
+    } else {
+      holderPrincipal = 'anon:unauthenticated';
+    }
+  }
+
+  const body = req.body || {};
+  const result = await releaseHold(pool, {
+    holdId: req.params.id,
+    holderPrincipal,
+    isServerAdmin,
+    reason: body.reason || 'GUEST_EXPLICIT_RELEASE'
+  });
+
+  if (!result.success) {
+    return res.status(result.statusCode).json({
+      error: result.error,
+      code: result.code
+    });
+  }
+
+  return res.status(result.statusCode).json({
+    success: true,
+    releasedUnits: result.releasedUnits
+  });
+});
+
+// GET /api/v2/stays/holds/config - honest timer contract
+app.get('/api/v2/stays/holds/config', (_req: Request, res: Response) => {
+  return res.json({
+    holdTtlSeconds: getHoldTtlSeconds(),
+    maintenanceMode: process.env.MAINTENANCE_MODE_HOLDS === 'true'
+  });
+});
+
+// Phase 3 Milestone 2: Legacy ID Resolution & Permanent 301 Redirects
+// Handles legacy /listing/:id and /listings/:id HTTP routes
+app.get(['/listing/:id', '/listings/:id'], async (req, res) => {
+  const { id } = req.params;
+  if (!id || isNaN(Number(id))) {
+    return res.redirect(301, '/');
+  }
+
+  if (!isDbConfigured) {
+    return res.redirect(301, '/');
+  }
+
+  try {
+    const result = await pool.query(
+      "SELECT id, title, slug FROM listings WHERE id = $1 AND publication_status = 'published'",
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).send('Stay not found');
+    }
+
+    const listing = result.rows[0];
+    const canonicalSlug = listing.slug || generateListingSlug(listing.title, listing.id);
+    return res.redirect(301, `/stay/${encodeURIComponent(canonicalSlug)}`);
+  } catch (err) {
+    console.error('[LEGACY REDIRECT ERROR]', err);
+    return res.redirect(301, '/');
+  }
+});
+
+app.get('/api/listings/:id', async (req: Request, res: Response) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   if (isNaN(Number(req.params.id))) return res.status(400).json({ error: 'Invalid ID' });
   try {
@@ -13390,8 +14554,25 @@ app.get('/api/listings/:id', async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: 'Listing not found' });
     const listing = result.rows[0];
 
-    // MIG-001: Hydrate rooms from room_types table if listing.rooms is empty
-    if (listing && (!listing.rooms || (Array.isArray(listing.rooms) && listing.rooms.length === 0))) {
+    // Check optional authentication token to determine if requester is listing owner or admin
+    let isAuthorizedOwnerOrAdmin = false;
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (token) {
+      try {
+        const decoded: any = jwt.verify(token, JWT_SECRET);
+        if (decoded && (decoded.role === 'admin' || String(decoded.id) === String(listing.user_id))) {
+          isAuthorizedOwnerOrAdmin = true;
+        }
+      } catch (_jwtErr) {
+        // Invalid or expired token — proceed as anonymous/unauthorized
+      }
+    }
+
+    if (isAuthorizedOwnerOrAdmin) {
+      // Authorized Host/Admin: Provide full editable raw listing record
+      // M3: Canonical Relational Authority
+      // Relational room_types take precedence over legacy JSON
       try {
         const rtResult = await pool.query(
           'SELECT * FROM room_types WHERE listing_id = $1 ORDER BY id ASC',
@@ -13415,12 +14596,10 @@ app.get('/api/listings/:id', async (req, res) => {
           }));
         }
       } catch (rtErr) {
-        console.warn('[MIG-001] Failed to hydrate rooms from room_types table:', rtErr);
+        console.warn('[M3] Failed to query room_types table:', rtErr);
       }
-    }
 
-    // MIG-002: Hydrate photos from media_assets table if listing.photos is empty
-    if (listing && (!listing.photos || (Array.isArray(listing.photos) && listing.photos.length === 0))) {
+      // Relational media_assets take precedence over legacy JSON
       try {
         const mediaResult = await pool.query(
           'SELECT * FROM media_assets WHERE entity_id = $1 AND entity_type = $2 ORDER BY order_index ASC',
@@ -13435,22 +14614,35 @@ app.get('/api/listings/:id', async (req, res) => {
             title: m.title || '',
             description: m.description || '',
             specs: m.specs || '',
-            isHero: m.is_hero || false
+            isHero: m.is_hero || false,
+            is_sleeping_area: Boolean(m.is_sleeping_area),
+            moderation_status: m.moderation_status || 'approved',
+            room_type_id: m.room_type_id || null
           }));
         }
       } catch (mediaErr) {
-        console.warn('[MIG-002] Failed to hydrate photos from media_assets table:', mediaErr);
+        console.warn('[M3] Failed to query media_assets table:', mediaErr);
       }
+
+      return res.json(listing);
     }
 
-    res.json(listing);
+    // Anonymous or unauthorized requester:
+    // Enforce publication boundary — unpublished listings are NOT publicly visible
+    if (listing.publication_status !== 'published') {
+      return res.status(404).json({ error: 'Listing not found' });
+    }
+
+    // Return sanitized public stay projection — address, user_id, raw coords stripped
+    const safeProjection = toPublicStayProjection(listing);
+    return res.json(safeProjection);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch listing' });
   }
 });
 
 // Get listings (cache-first)
-app.get('/api/listings', async (req, res) => {
+app.get('/api/listings', async (req: Request, res: Response) => {
   res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=120');
   if (!isDbConfigured) {
     return res.status(503).json({ status: 'error', message: 'DB not configured' });
@@ -13469,14 +14661,41 @@ app.get('/api/listings', async (req, res) => {
     const minLng = req.query.minLng as string;
     const maxLng = req.query.maxLng as string;
 
-    // Redis Edge Caching
-    const cacheKey = `listings_v2:${userId || city || 'all'}:${req.originalUrl}`;
-    if (redis) {
+    // Optional authentication verification
+    let authenticatedUser: any = null;
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (token) {
+      try {
+        authenticatedUser = jwt.verify(token, JWT_SECRET);
+      } catch (_e) {
+        // Invalid or expired token
+      }
+    }
+
+    // If userId query param is provided, requester must be the owner or admin
+    if (userId) {
+      if (!authenticatedUser || (authenticatedUser.role !== 'admin' && String(authenticatedUser.id) !== String(userId))) {
+        return res.status(401).json({ error: 'Unauthorized to view listings for this user' });
+      }
+    }
+
+    const isAdminRequester = authenticatedUser && authenticatedUser.role === 'admin';
+
+    // Redis Edge Caching: Dedicated public catalogue safe-card cache namespace
+    const isPublicCatalogueFeed = !userId && !isAdminRequester;
+    const publicCityKey = (city && city !== 'all') ? city.toLowerCase() : 'all';
+    const cacheKey = isPublicCatalogueFeed
+      ? `listings_v3:public_cards:${publicCityKey}:${req.originalUrl}`
+      : null;
+
+    if (redis && cacheKey && isPublicCatalogueFeed) {
       try {
         const cached = await redis.get(cacheKey);
         if (cached) {
           // Serve from Redis Cache (Edge Cache)
-          return res.json(cached);
+          const parsed = typeof cached === 'string' ? JSON.parse(cached) : cached;
+          return res.json(parsed);
         }
       } catch (err) {
         console.warn('Redis Cache Error:', err);
@@ -13487,23 +14706,34 @@ app.get('/api/listings', async (req, res) => {
 
     try {
       if (userId) {
+        // Authenticated host fetching their own listings
         result = await pool.query(`
           SELECT l.*,
-                 EXISTS(SELECT 1 FROM calendar_prices cp WHERE cp.listing_id = l.id AND cp.offer_id IS NOT NULL) as has_offers
+                 COALESCE(cp.has_offers, false) as has_offers
           FROM listings l
+          LEFT JOIN (SELECT DISTINCT listing_id, true as has_offers FROM calendar_prices WHERE offer_id IS NOT NULL) cp ON cp.listing_id = l.id
           WHERE user_id = $1 ORDER BY created_at DESC LIMIT 200
         `, [userId]);
-      } else if (city === 'all') {
+      } else if (city === 'all' && isAdminRequester) {
+        // Authenticated admin fetching all listings (drafts, unlisted, published)
         result = await pool.query(`
           SELECT l.*,
-                 EXISTS(SELECT 1 FROM calendar_prices cp WHERE cp.listing_id = l.id AND cp.offer_id IS NOT NULL) as has_offers
+                 COALESCE(cp.has_offers, false) as has_offers
           FROM listings l
+          LEFT JOIN (SELECT DISTINCT listing_id, true as has_offers FROM calendar_prices WHERE offer_id IS NOT NULL) cp ON cp.listing_id = l.id
           ORDER BY created_at DESC LIMIT 200
         `);
       } else {
         city = (city && city !== 'all') ? city : '';
 
-        let queryStr = 'SELECT l.*, EXISTS(SELECT 1 FROM calendar_prices cp WHERE cp.listing_id = l.id AND cp.offer_id IS NOT NULL) as has_offers FROM listings l WHERE 1=1';
+        // Public explore query: strictly enforce publication_status = 'published'
+        let queryStr = `
+          SELECT l.*,
+                 COALESCE(cp.has_offers, false) as has_offers
+          FROM listings l
+          LEFT JOIN (SELECT DISTINCT listing_id, true as has_offers FROM calendar_prices WHERE offer_id IS NOT NULL) cp ON cp.listing_id = l.id
+          WHERE l.publication_status = 'published'
+        `;
         const queryParams: any[] = [];
 
         if (city) {
@@ -13569,62 +14799,70 @@ app.get('/api/listings', async (req, res) => {
     }
 
     let listings: any[] = [];
+    const isOwnerOrAdminFeed = Boolean(userId || isAdminRequester);
+
     for (const row of result.rows) {
-      listings.push({
-        id: String(row.id),
-        title: row.title,
-        description: row.description,
-        price: parseFloat(row.price),
-        currency: '₹',
-        type: row.type,
-        address: row.address,
-        city: row.city,
-        user_id: row.user_id,
-        imageUrl: row.image_url || '',
-        imageUrls: row.image_urls || [],
-        photos: row.photos || [],
-        video_url: row.video_url || null,
-        rental_mode: row.rental_mode || 'entire_place',
-        rooms: row.rooms || [],
-        imageCount: (row.image_urls && row.image_urls.length > 0) ? row.image_urls.length : 1,
-        provider: 'Host',
-        isVerified: true,
-        discount: 0,
-        rating: 5.0,
-        reviewCount: 0,
-        amenities: row.amenities || ['Wifi', 'Kitchen'],
-        maxGuests: row.max_guests,
-        bedrooms: row.bedrooms,
-        beds: row.beds,
-        bathrooms: row.bathrooms,
-        lat: row.lat ? parseFloat(row.lat) : null,
-        lng: row.lng ? parseFloat(row.lng) : null,
-        dynamicPricing: row.dynamic_pricing || { weekendMultiplier: 1.0, seasonalMultiplier: 1.0 },
-        hasOffers: row.has_offers || false,
-        hero_video_url: row.hero_video_url || null,
-        hero_fallback_url: row.hero_fallback_url || null,
-        dominant_color_hex: row.dominant_color_hex || null,
-        raw_rules: row.raw_rules || null,
-        curated_guidelines: row.curated_guidelines || null,
-        experience_tags: Array.isArray(row.experience_tags) ? row.experience_tags : (typeof row.experience_tags === 'string' ? JSON.parse(row.experience_tags || '[]') : []),
-        concierge_privileges: row.concierge_privileges || null,
-        host_philosophy: row.host_philosophy || null,
-        nearby: typeof row.nearby === 'string' ? JSON.parse(row.nearby || '[]') : (row.nearby || []),
-        amenity_clusters: typeof row.amenity_clusters === 'string' ? JSON.parse(row.amenity_clusters || '{}') : (row.amenity_clusters || {}),
-        child_safety_specs: typeof row.child_safety_specs === 'string' ? JSON.parse(row.child_safety_specs || '[]') : (row.child_safety_specs || []),
-        seo_title: row.seo_title || null,
-        seo_description: row.seo_description || null,
-        seo_keywords: row.seo_keywords || null,
-        seo_image_url: row.seo_image_url || null
-      });
+      if (isOwnerOrAdminFeed) {
+        // Authenticated owner or admin management read: preserve full administrative and relational fields
+        listings.push({
+          id: String(row.id),
+          title: row.title,
+          description: row.description,
+          price: parseFloat(row.price),
+          currency: '₹',
+          type: row.type,
+          address: row.address,
+          city: row.city,
+          user_id: row.user_id,
+          imageUrl: row.image_url || '',
+          imageUrls: row.image_urls || [],
+          photos: row.photos || [],
+          video_url: row.video_url || null,
+          rental_mode: row.rental_mode || 'entire_place',
+          rooms: row.rooms || [],
+          imageCount: (row.image_urls && row.image_urls.length > 0) ? row.image_urls.length : 1,
+          provider: 'Host',
+          isVerified: true,
+          discount: 0,
+          rating: 5.0,
+          reviewCount: 0,
+          amenities: row.amenities || ['Wifi', 'Kitchen'],
+          maxGuests: row.max_guests,
+          bedrooms: row.bedrooms,
+          beds: row.beds,
+          bathrooms: row.bathrooms,
+          lat: row.lat ? parseFloat(row.lat) : null,
+          lng: row.lng ? parseFloat(row.lng) : null,
+          dynamicPricing: row.dynamic_pricing || { weekendMultiplier: 1.0, seasonalMultiplier: 1.0 },
+          hasOffers: row.has_offers || false,
+          hero_video_url: row.hero_video_url || null,
+          hero_fallback_url: row.hero_fallback_url || null,
+          dominant_color_hex: row.dominant_color_hex || null,
+          raw_rules: row.raw_rules,
+          curated_guidelines: row.curated_guidelines || null,
+          experience_tags: Array.isArray(row.experience_tags) ? row.experience_tags : (typeof row.experience_tags === 'string' ? JSON.parse(row.experience_tags || '[]') : []),
+          concierge_privileges: row.concierge_privileges || null,
+          host_philosophy: row.host_philosophy || null,
+          nearby: typeof row.nearby === 'string' ? JSON.parse(row.nearby || '[]') : (row.nearby || []),
+          amenity_clusters: typeof row.amenity_clusters === 'string' ? JSON.parse(row.amenity_clusters || '{}') : (row.amenity_clusters || {}),
+          child_safety_specs: typeof row.child_safety_specs === 'string' ? JSON.parse(row.child_safety_specs || '[]') : (row.child_safety_specs || []),
+          seo_title: row.seo_title || null,
+          seo_description: row.seo_description || null,
+          seo_keywords: row.seo_keywords || null,
+          seo_image_url: row.seo_image_url || null
+        });
+      } else {
+        // Anonymous / public catalogue explore read: strictly project through toPublicListingCardProjection
+        listings.push(toPublicListingCardProjection(row));
+      }
     }
 
 
     // MIG-001 & MIG-002: Hydrate rooms and photos for host dashboard (when userId is present)
     if (userId && listings.length > 0) {
-      const listingIds = listings.map(l => l.id);
+      const listingIds = listings.map(l => parseInt(String(l.id), 10)).filter(n => !isNaN(n));
       try {
-        const rtResult = await pool.query('SELECT * FROM room_types WHERE listing_id = ANY($1) ORDER BY id ASC', [listingIds]);
+        const rtResult = await pool.query('SELECT * FROM room_types WHERE listing_id = ANY($1::int[]) ORDER BY id ASC', [listingIds]);
         const roomsByListing: any = {};
         rtResult.rows.forEach(rt => {
           if (!roomsByListing[rt.listing_id]) roomsByListing[rt.listing_id] = [];
@@ -13645,7 +14883,7 @@ app.get('/api/listings', async (req, res) => {
           });
         });
 
-        const mediaResult = await pool.query("SELECT * FROM media_assets WHERE entity_type = 'listing' AND entity_id = ANY($1) ORDER BY order_index ASC", [listingIds]);
+        const mediaResult = await pool.query("SELECT * FROM media_assets WHERE entity_type = 'listing' AND entity_id = ANY($1::int[]) ORDER BY order_index ASC", [listingIds]);
         const photosByListing: any = {};
         mediaResult.rows.forEach(m => {
           if (!photosByListing[m.entity_id]) photosByListing[m.entity_id] = [];
@@ -13662,11 +14900,11 @@ app.get('/api/listings', async (req, res) => {
         });
 
         listings.forEach(l => {
-          if (!l.rooms || l.rooms.length === 0) {
-            l.rooms = roomsByListing[l.id] || [];
+          if (roomsByListing[l.id] && roomsByListing[l.id].length > 0) {
+            l.rooms = roomsByListing[l.id];
           }
-          if (!l.photos || l.photos.length === 0) {
-            l.photos = photosByListing[l.id] || [];
+          if (photosByListing[l.id] && photosByListing[l.id].length > 0) {
+            l.photos = photosByListing[l.id];
           }
         });
       } catch (err) {
@@ -13692,7 +14930,7 @@ app.get('/api/listings', async (req, res) => {
         });
     }
 
-    if (redis) {
+    if (redis && cacheKey && isPublicCatalogueFeed) {
       try {
         await redis.set(cacheKey, JSON.stringify(listings), { ex: 3600 });
       } catch (e) {
@@ -14607,7 +15845,7 @@ app.post('/api/ai/curate-rules', async (req, res) => {
       .map(line => line.trim())
       .filter(Boolean)
       .map(line => {
-        let text = line.replace(/^[\d\-\.\*\s]+/, '');
+        const text = line.replace(/^[\d\-.* \t]+/, '');
         if (/no smoking/i.test(text)) return 'To preserve the pristine mountain and ocean air of the sanctuary, smoking is reserved exclusively for the outer perimeter.';
         if (/no parties|no loud music/i.test(text)) return 'We invite guests to embrace the tranquil atmosphere of the estate, observing quiet serenity after twilight.';
         if (/check-?out/i.test(text)) return 'Check-out is honored with leisurely grace by the appointed hour to allow our housekeeping artisans to prepare the suites.';
@@ -17002,6 +18240,15 @@ app.post('/api/checkout/razorpay/order', optionalAuthenticateToken, async (req: 
     const { listingId, experienceId, roomId, moveInDate, configuration, numTickets, name, phone } = req.body;
     const userId = req.user?.id;
 
+    // Production containment: online checkout for stays is legally blocked pending M5 quotes and tax sign-off
+    const isProductionRuntime = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
+    if (listingId && isProductionRuntime) {
+      return res.status(503).json({
+        error: 'Online stay reservations are temporarily unavailable while undergoing statutory compliance review. Direct reservations will open upon milestone clearance.',
+        code: 'STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE'
+      });
+    }
+
     const effectiveUserId = userId || 1;
 
     let finalAmount = 0;
@@ -17127,6 +18374,10 @@ app.post('/api/checkout/razorpay/order', optionalAuthenticateToken, async (req: 
         title
       });
     } else {
+      // In production runtimes without Razorpay credentials, fail closed
+      if (isProductionRuntime) {
+        return res.status(503).json({ error: 'Payment gateway unconfigured for production orders.' });
+      }
       const mockOrderId = `order_sim_${crypto.randomUUID()}`;
       return res.json({
         success: true,
@@ -17142,7 +18393,7 @@ app.post('/api/checkout/razorpay/order', optionalAuthenticateToken, async (req: 
     }
   } catch (error: any) {
     console.error('[RAZORPAY CHECKOUT ORDER ERROR]', error);
-    res.status(500).json({ error: error.message || 'Failed to create payment order' });
+    res.status(500).json({ error: error.message || 'Failed to create checkout order' });
   }
 });
 
@@ -17153,6 +18404,15 @@ app.post('/api/payments/razorpay/verify', async (req, res) => {
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return res.status(400).json({ error: 'Missing required Razorpay verification parameters' });
+    }
+
+    // Production containment: stay bookings cannot be verified via client RPC in production
+    const isProductionRuntime = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
+    if (booking_id && isProductionRuntime) {
+      return res.status(503).json({
+        error: 'Stay checkout verification is disabled in production pending Milestone 5, 8, and 9 implementation.',
+        code: 'STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE'
+      });
     }
 
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
@@ -17172,8 +18432,9 @@ app.post('/api/payments/razorpay/verify', async (req, res) => {
         isAuthentic = true;
       }
     } else {
-      // In sandbox/test mode when secret is not configured in env, strictly accept test signatures
-      if (String(razorpay_signature).startsWith('sim_sig_') || String(razorpay_signature).startsWith('rzp_sig_') || String(razorpay_signature).length >= 10) {
+      // In test-only execution environment, accept test signatures
+      const isTestRuntime = process.env.NODE_ENV === 'test' && process.env.VITEST === 'true';
+      if (isTestRuntime && (String(razorpay_signature).startsWith('sim_sig_') || String(razorpay_signature).startsWith('rzp_sig_'))) {
         isAuthentic = true;
       }
     }
@@ -17253,7 +18514,9 @@ app.post('/api/payments/razorpay/verify', async (req, res) => {
 
             if (campaign.admin_approved) {
               await dispatchMetaCampaign(campaign_id, req);
-              await dispatchGoogleAdsCampaign(campaign_id, req);
+              if (process.env.ENABLE_GOOGLE_ADS_DISPATCH === 'true') {
+                await dispatchGoogleAdsCampaign(campaign_id, req);
+              }
             }
           }
         }
@@ -17798,7 +19061,7 @@ app.post('/api/admin/payments/escrow/release', async (req: Request, res: Respons
             if (currentStatusCheck.rows[0]?.status !== 'failed_publish') {
                 await transitionCampaignState({ campaignId: campaign_id, to: 'failed_publish', reason: `Meta dispatch failed: ${dispatchError.message}`, actorType: 'system' });
             }
-        } else {
+        } else if (process.env.ENABLE_GOOGLE_ADS_DISPATCH === 'true') {
             await dispatchGoogleAdsCampaign(campaign_id, { protocol: 'https', get: () => 'localhost' });
         }
     } catch (err: any) {
@@ -17900,7 +19163,9 @@ export const processEscrowAutoRelease = async (overridePool?: any) => {
         // 4. Dispatch Async (outside the tight DB lock)
         if (shouldDispatch) {
            dispatchMetaCampaign(campaignId, { protocol: 'https', get: () => 'localhost' } as any).catch(e => console.error(e));
-           dispatchGoogleAdsCampaign(campaignId, { protocol: 'https', get: () => 'localhost' } as any).catch(e => console.error(e));
+           if (process.env.ENABLE_GOOGLE_ADS_DISPATCH === 'true') {
+             dispatchGoogleAdsCampaign(campaignId, { protocol: 'https', get: () => 'localhost' } as any).catch(e => console.error(e));
+           }
         }
       }
     }
@@ -18085,22 +19350,39 @@ async function startServer() {
     try {
         let injectedTags = '';
 
-        if (urlPath.startsWith('/listing/')) {
-            const id = urlPath.split('/')[2];
-            if (id && !isNaN(Number(id))) {
-                const result = await pool.query("SELECT * FROM listings WHERE id = $1", [id]);
-                if (result.rows.length > 0) {
+        if (urlPath.startsWith('/stay/')) {
+            const slug = urlPath.split('/')[2];
+            if (slug && isDbConfigured) {
+                let result;
+                try {
+                    result = await pool.query(
+                        "SELECT id, title, description, image_url, image_urls, slug FROM listings WHERE slug = $1 AND publication_status = 'published'",
+                        [slug]
+                    );
+                } catch (_e) {
+                    result = { rows: [] };
+                }
+                if (result && result.rows.length > 0) {
                     const listing = result.rows[0];
-                    const title = `${listing.title} | EnchoSpace`;
-                    const description = listing.description?.substring(0, 160) || `Stay at ${listing.title}`;
-                    const image = listing.image_url || (listing.image_urls && listing.image_urls[0]) || '';
+                    const rawTitle = `${listing.title || ''} | Encho Stays`;
+                    const rawDescription = listing.description?.substring(0, 160) || `Stay at ${listing.title || ''}`;
+                    const rawImage = listing.image_url || (listing.image_urls && listing.image_urls[0]) || '';
+                    const canonicalSlug = listing.slug || generateListingSlug(listing.title, listing.id);
+                    const canonicalUrl = `https://encho.space/stay/${encodeURIComponent(canonicalSlug)}`;
+
+                    const title = escapeHtml(rawTitle);
+                    const description = escapeHtml(rawDescription);
+                    const image = escapeHtml(rawImage);
+                    const safeCanonicalUrl = escapeHtml(canonicalUrl);
 
                     injectedTags = `
                         <title>${title}</title>
+                        <link rel="canonical" href="${safeCanonicalUrl}" />
                         <meta name="description" content="${description}" />
                         <meta property="og:title" content="${title}" />
                         <meta property="og:description" content="${description}" />
                         <meta property="og:image" content="${image}" />
+                        <meta property="og:url" content="${safeCanonicalUrl}" />
                         <meta property="og:type" content="website" />
                         <meta name="twitter:card" content="summary_large_image" />
                         <meta name="twitter:title" content="${title}" />
@@ -18109,6 +19391,22 @@ async function startServer() {
                     `;
                 }
             }
+        } else if (urlPath.startsWith('/listing/')) {
+            const id = urlPath.split('/')[2];
+            if (id && !isNaN(Number(id)) && isDbConfigured) {
+                try {
+                    const result = await pool.query(
+                        "SELECT id, title, slug FROM listings WHERE id = $1 AND publication_status = 'published'",
+                        [id]
+                    );
+                    if (result.rows.length > 0) {
+                        const listing = result.rows[0];
+                        const canonicalSlug = listing.slug || generateListingSlug(listing.title, listing.id);
+                        return res.redirect(301, `/stay/${encodeURIComponent(canonicalSlug)}`);
+                    }
+                } catch (_e) { /* continue */ }
+            }
+            return res.redirect(301, '/');
         } else if (urlPath.startsWith('/experience/')) {
             const id = urlPath.split('/')[2];
             if (id && !isNaN(Number(id))) {
@@ -19246,6 +20544,12 @@ if (shouldRunBackgroundWorkers) {
   setInterval(recoverOrphanedMetaTransactions, RECOVERY_POLL_INTERVAL_MS);
   setInterval(processGoogleOfflineConversions, 15 * 60 * 1000); // 15 mins
   setInterval(() => TokenHealthMonitor.checkTokenHealth(pool), 12 * 60 * 60 * 1000); // 12 hours
+  // Milestone 4: Hold reconciliation sweeper expiring stale checkout holds
+  setInterval(async () => {
+    try {
+      await sweepExpiredHolds(pool);
+    } catch (_sweeperErr) { /* non-blocking */ }
+  }, 60 * 1000); // 1 minute
 }
 
 app.post('/api/marketing/track/view', async (req, res) => {

@@ -55,6 +55,9 @@ export interface PhotoData {
   title?: string;
   description?: string;
   specs?: string;
+  room_type_id?: number | string | null;
+  moderation_status?: 'approved' | 'rejected' | 'pending';
+  is_sleeping_area?: boolean;
 }
 
 interface PhotoUploadProps {
@@ -139,6 +142,11 @@ const SortablePhotoItem = ({ photo, index, onRemove, isActive, onSelect, tierLab
             <div className="px-2 py-1 bg-black/60 backdrop-blur-md rounded-md text-[10px] font-bold text-white flex items-center gap-1 shadow-lg">
               <span>{activeCategory.icon}</span> <span>{activeCategory.label}</span>
             </div>
+            {photo.is_sleeping_area && (
+              <div className="px-2 py-1 bg-amber-500/90 backdrop-blur-md rounded-md text-[10px] font-black text-slate-950 flex items-center gap-1 shadow-lg">
+                <span>🛏️</span> <span>Sleeping Area</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -311,6 +319,25 @@ export const PhotoUpload: React.FC<PhotoUploadProps> = ({ photos, setPhotos, isC
                       value={activePhoto.description || ''}
                       onChange={e => setPhotos(prev => prev.map(p => p.id === activePhoto.id ? { ...p, description: e.target.value } : p))}
                     />
+                  </div>
+
+                  <div className="pt-4 border-t border-zinc-100 dark:border-neutral-800">
+                    <label className="flex items-center justify-between p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 cursor-pointer">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                          <span>🛏️</span> Sleeping Area Classification
+                        </span>
+                        <span className="text-[10px] text-amber-700 dark:text-amber-400 mt-0.5">
+                          Required for room approval (PROPOSED-007)
+                        </span>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(activePhoto.is_sleeping_area)}
+                        onChange={e => setPhotos(prev => prev.map(p => p.id === activePhoto.id ? { ...p, is_sleeping_area: e.target.checked } : p))}
+                        className="w-4 h-4 rounded border-amber-300 text-[#0284C7] focus:ring-[#0284C7]"
+                      />
+                    </label>
                   </div>
                 </div>
               </div>

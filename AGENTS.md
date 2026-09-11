@@ -1,7 +1,7 @@
 # Project Instructions
 
 ## Architecture & User Roles
-- The platform follows a unified account model similar to Airbnb or Booking.com. 
+- The platform follows a unified account model similar to Airbnb or Booking.com.
 - A single account can function as both a **Guest** (booking spaces) and a **Host** (listing spaces).
 - **Admin**: Admins have access to the Admin Dashboard where they can manage all properties, users, and bookings.
 
@@ -13,7 +13,7 @@ Whenever adding a new feature or field to a property (for example, adding a "vid
    3. **Admin Dashboard**: Update the admin panels to allow administrators to moderate, edit, or manage this specific feature on user listings.
 
 ## Database
-- Connects to Neon Postgres. Always ensure `DATABASE_URL` is parsed securely, ignoring dummy strings and stripping sslmode if reconnecting in script tests, but using the user-provided DB url securely in the `server.ts`. 
+- Connects to Neon Postgres. Always ensure `DATABASE_URL` is parsed securely, ignoring dummy strings and stripping sslmode if reconnecting in script tests, but using the user-provided DB url securely in the `server.ts`.
 - Ensure proper fallback logic is maintained.
 
 ## Empty/Placeholder Content
@@ -29,6 +29,7 @@ You operate strictly within a 4-Phase System. You will not move between phases w
 - **Phase 1 (The Boardroom)**: Strategy, debate, and business logic.
 - **Phase 2 (The Blueprint)**: Architecture, API mapping, and strict numbered milestone planning.
 - **Phase 3 (Execution)**: Coding exactly ONE milestone per response. You must output Current Completion Status: X% at the bottom.
+  - *Current Active Track:* Encho Stays — India Stays Customer Journey (M1: ACCEPTED — ARCHITECTURAL BASELINE; M2: ACCEPTED — PUBLIC PROJECTION, CANONICAL ROUTING & PRIVACY BASELINE; M3: ACCEPTED — CANONICAL RELATIONAL ROOM & MEDIA AUTHORITY; M4: ACCEPTED — INVENTORY DAYS & ATOMIC HOLDS; M5: NOT STARTED — LEGALLY BLOCKED pending written Indian CA/tax-lawyer sign-off; M6A: AWAITING INDEPENDENT ACCEPTANCE — GUEST PRESENTATION TRUTH & LUXURY UX FOUNDATION; M6B: NOT STARTED — LEGALLY BLOCKED pending M5 and written Indian CA/tax-lawyer sign-off; M7–M15: NOT STARTED).
 - **Phase 4 (Audit)**: Adversarial QA, security, OWASP review, and refactoring.
 
 ## Part 1: The Vision & Origin Story (The "Why")
@@ -41,7 +42,7 @@ You must understand these absolute business rules before writing a single line o
 
 1. **The Master Account Architecture (No Host OAuth)**: Hosts DO NOT connect their own Meta/Google accounts. We use a Master Encho Ad Account. Why? To prevent a single bad host from getting our API banned. We run the ads; they just fund them.
 2. **The AI Gatekeeper (Quality Control)**: Before an ad campaign even reaches a human Admin for approval, it must pass a strict AI Pre-Check. The AI grades the listing's copy, media, and targeting out of 10. If it scores below 8/10, the AI instantly rejects it and tells the host exactly what to fix. This protects our Master Ad Account from Meta policy violations.
-3. **The Optimization Fee (The Profit Margin)**: When a host pays $100 for ads, $85 goes to the ad network, and $15 is kept by Encho as an "AI Optimization & Management Fee." This is our SaaS revenue model.
+3. **The Advertising Engine Fee (The AdTech Margin)**: Advertising is strictly optional and separate from booking commission. When a host funds an ad campaign, the budget is billed as actual ad media spend plus a 15% AI optimization and management fee, plus applicable statutory taxes. This operates alongside our marketplace booking commission.
 4. **The Dopamine UI (The Host Dashboard)**: We don't show boring spreadsheets. We show a "Campaign Reactor Core" (a visual fuel gauge of their budget). We show real-time "Traffic & Click" dopamine hits (impressions, clicks, leads). When the fuel gauge turns orange (budget low), they feel the psychological urge to hit the "Refuel" button.
 5. **The "Rahul-Proof" Smart Targeting**: Hosts are bad at marketing. By default, our AI selects the optimal targeting locations (e.g., targeting Los Angeles tech workers for a Joshua Tree cabin, not local desert residents) and Meta interests. If the host overrides it with a bad location, the AI warns them that their campaign grade will drop.
 6. **The Walled Garden CRM**: Leads generated from the ads MUST drop directly into the Encho Host Inbox. No leaking leads to WhatsApp or phone calls. The host must convert the lead into a booking inside our platform, capturing the payment and our commission.

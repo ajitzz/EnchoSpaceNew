@@ -23,7 +23,8 @@ import {
   Copy,
   ChevronDown,
   ExternalLink,
-  Shield
+  Shield,
+  ShieldAlert
 } from 'lucide-react';
 import { Listing, Experience } from '../types';
 import { loadRazorpayScript, verifyRazorpayPayment } from '../lib/razorpay';
@@ -151,7 +152,65 @@ interface CheckoutPageProps {
   onCancel: () => void;
 }
 
-export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience, numTickets = 1, initialData, onSuccess, onCancel }) => {
+export const isProductionEnvironment = (): boolean => {
+  if (process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL)) {
+    return true;
+  }
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host && host !== 'localhost' && host !== '127.0.0.1' && !host.endsWith('.local') && !host.includes('test')) {
+      return true;
+    }
+  }
+  return false;
+};
+
+interface StayCheckoutComplianceGateProps {
+  listing?: Listing;
+  onCancel: () => void;
+}
+
+export const StayCheckoutComplianceGate: React.FC<StayCheckoutComplianceGateProps> = ({ listing, onCancel }) => {
+  return (
+    <div data-testid="stays-compliance-gate" className="min-h-screen bg-zinc-50 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white rounded-3xl p-8 border border-zinc-200 shadow-xl text-center space-y-6">
+        <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto text-amber-700">
+          <ShieldAlert className="w-8 h-8" />
+        </div>
+        <div className="space-y-2">
+          <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-200">
+            Statutory Compliance Gate
+          </span>
+          <h2 className="text-xl font-black text-zinc-900 font-display">
+            Online Stays Checkout Unavailable
+          </h2>
+          <p className="text-xs text-zinc-600 leading-relaxed">
+            Online stay reservations are temporarily unavailable while undergoing statutory compliance review. Direct reservations will open upon milestone clearance.
+          </p>
+        </div>
+        <div className="p-4 rounded-2xl bg-zinc-50 border border-zinc-100 text-left text-[11px] text-zinc-500 space-y-1">
+          <div className="flex justify-between">
+            <span className="font-semibold text-zinc-700">Property:</span>
+            <span className="font-medium text-zinc-900 truncate max-w-[180px]">{listing?.title || 'Sanctuary Stay'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-semibold text-zinc-700">Compliance Status:</span>
+            <span className="font-mono text-amber-700 font-bold">503 Service Unavailable</span>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="w-full py-3 bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs rounded-xl transition-all cursor-pointer"
+        >
+          ← Return to Property
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export const CheckoutPageImplementation: React.FC<CheckoutPageProps> = ({ listing, experience, numTickets = 1, initialData, onSuccess, onCancel }) => {
   const { formatPrice } = useCurrency();
   const { user } = useAuth();
   const isExperience = !!experience;
@@ -210,42 +269,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
   const [infantsCount, setInfantsCount] = useState<number>(initialData.infantsCount || 0);
   const [showOccupancyModal, setShowOccupancyModal] = useState<boolean>(false);
 
-  const [copiedVpa, setCopiedVpa] = useState<boolean>(false);
-
-  // Dynamic QR Expiry (5:00 minutes) & Retry State
-  const [qrSecondsLeft, setQrSecondsLeft] = useState(300);
-  const [qrNonce, setQrNonce] = useState(() => Date.now());
-  const [isRegeneratingQr, setIsRegeneratingQr] = useState(false);
-
-  // 10-Minute Escrow Lock Timer
-  const [escrowTimeLeft, setEscrowTimeLeft] = useState(599);
-  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-  const [processingStatusText, setProcessingStatusText] = useState('Securing Escrow Vault...');
+  const [isProcessingPayment, setIsProcessingPayment] = useState<boolean>(false);
+  const [processingStatusText, setProcessingStatusText] = useState<string>('');
 
   useEffect(() => {
     loadRazorpayScript().catch(() => {});
-    const timer = setInterval(() => {
-      setEscrowTimeLeft(prev => (prev > 0 ? prev - 1 : 0));
-      setQrSecondsLeft(prev => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(timer);
   }, []);
-
-  const handleRegenerateQr = () => {
-    uiAudio.playClick();
-    setIsRegeneratingQr(true);
-    setTimeout(() => {
-      setQrNonce(Date.now());
-      setQrSecondsLeft(300);
-      setIsRegeneratingQr(false);
-    }, 500);
-  };
-
-  const formatQrTime = (sec: number) => {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
-  };
 
   // Update info when user logs in or profile changes
   useEffect(() => {
@@ -255,12 +284,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
       if (!guestPhone && user.phone) setGuestPhone(user.phone.replace(/^\+\d+\s*/, ''));
     }
   }, [user]);
-
-  const formatEscrowTime = (sec: number) => {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
-  };
 
   // Dynamic Double-Entry Ledger Calculation
   const tierMeta = ROOM_TIER_META[activeRoomTier];
@@ -291,17 +314,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
     return tierMeta.price;
   }, [isExperience, experience, listing, activeRoomTier, tierMeta]);
 
+  // Client pricing calculations must NOT add 15% commission or hardcoded GST for stays
   const baseRentTotal = isExperience ? nightlyRate * numTickets : nightlyRate * nights;
-  const enchoOptimizationFee = Math.round(baseRentTotal * 0.15); // 15% Concierge & Escrow
-  const statutoryGst = Math.round((baseRentTotal + enchoOptimizationFee) * 0.18); // 18% Statutory GST
-  const grandTotal = baseRentTotal + enchoOptimizationFee + statutoryGst;
-
-  const handleCopyVpa = () => {
-    navigator.clipboard.writeText('encho.space@icici');
-    setCopiedVpa(true);
-    uiAudio.playClick();
-    setTimeout(() => setCopiedVpa(false), 2000);
-  };
+  const grandTotal = baseRentTotal;
 
   // 10/10 Razorpay Default Gateway Execution
   const handleExecutePayment = async () => {
@@ -396,34 +411,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
         const rzp = new (window as any).Razorpay(options);
         rzp.open();
       } else {
-        // Ultra-Fast Sandbox Execution (<100ms)
-        const mockPaymentId = `pay_rzp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-        const mockSignature = `rzp_sig_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-        
-        const verifyData = await verifyRazorpayPayment({
-          razorpay_order_id: orderData.order_id,
-          razorpay_payment_id: mockPaymentId,
-          razorpay_signature: mockSignature,
-          booking_id: orderData.bookingType === 'listing' ? orderData.bookingId : undefined,
-          experience_booking_id: orderData.bookingType === 'experience' ? orderData.bookingId : undefined
-        });
-
         setIsProcessingPayment(false);
-        if (verifyData.success) {
-          uiAudio.playSuccess();
-          onSuccess({
-            moveInDate,
-            configuration: isExperience ? `${numTickets} Tickets` : tierMeta.name,
-            name: effectiveName,
-            phone: effectivePhone,
-            totalRent: grandTotal,
-            roomIds: [],
-            bookingId: orderData.bookingId
-          } as any);
-        } else {
-          uiAudio.playError();
-          alert(`Payment Verification Error: ${verifyData.error}`);
-        }
+        throw new Error('Payment gateway SDK unavailable. Direct payment cannot be initialized.');
       }
     } catch (err: any) {
       uiAudio.playError();
@@ -461,12 +450,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
         </div>
       </header>
 
-      {/* Escrow Timer Pill Bar */}
+      {/* Compliance / Reservation Security Pill Bar */}
       <div className="bg-zinc-950 text-white py-2 px-4 text-center text-xs font-medium flex items-center justify-center gap-2">
-        <Clock className="w-3.5 h-3.5 text-amber-400" />
-        <span className="text-zinc-300">Sanctuary held in escrow for</span>
-        <span className="font-mono font-bold text-amber-300 bg-zinc-900 px-2 py-0.5 rounded text-[11px] border border-zinc-800">
-          {formatEscrowTime(escrowTimeLeft)}
+        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+        <span className="text-zinc-300">Encho Stays Secure Guest Reservation</span>
+        <span className="font-mono font-bold text-emerald-300 bg-zinc-900 px-2 py-0.5 rounded text-[11px] border border-zinc-800">
+          Encrypted
         </span>
       </div>
 
@@ -629,14 +618,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
                 <span>{tierMeta.name} ({formatPrice(nightlyRate, listing?.currency || 'INR')} × {nights} nts)</span>
                 <span className="font-mono font-bold text-zinc-900">{formatPrice(baseRentTotal, listing?.currency || 'INR')}</span>
               </div>
-              <div className="flex justify-between">
-                <span>Concierge & Escrow Protection (15%)</span>
-                <span className="font-mono font-bold text-zinc-900">{formatPrice(enchoOptimizationFee, listing?.currency || 'INR')}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Statutory GST (18%)</span>
-                <span className="font-mono font-bold text-zinc-900">{formatPrice(statutoryGst, listing?.currency || 'INR')}</span>
-              </div>
 
               <div className="pt-3 border-t border-zinc-100 flex justify-between items-baseline">
                 <span className="text-xs font-extrabold uppercase tracking-wider text-zinc-900 font-display">Total Amount</span>
@@ -792,123 +773,34 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
               </span>
             </div>
 
-            {/* Universal Dynamic UPI QR Code Box */}
+            {/* Payment Gateway Execution Notice & Official Gateway Trigger */}
             <div className="bg-zinc-50 rounded-3xl p-5 md:p-6 border border-zinc-200/90 flex flex-col items-center text-center space-y-4">
               
               <div className="space-y-1">
                 <span className="text-xs font-extrabold text-zinc-950 uppercase tracking-wider font-display block">
-                  Scan & Pay with Any UPI App
+                  Authoritative Payment Processing
                 </span>
                 <p className="text-[11px] text-zinc-500 font-medium max-w-sm">
-                  Point your camera or open Google Pay, PhonePe, Paytm, or BHIM to approve ₹{grandTotal.toLocaleString()}
+                  Official payment gateway channel for {tierMeta.name}. Reservations require genuine gateway capture evidence.
                 </p>
-              </div>
-
-              {/* Dynamic Live QR Canvas with Expiry & Retry System */}
-              <div className="relative w-52 h-52 bg-white rounded-2xl flex items-center justify-center border border-zinc-200/90 p-2.5 shadow-sm overflow-hidden">
-                {isRegeneratingQr ? (
-                  <div className="flex flex-col items-center justify-center gap-2 text-zinc-500">
-                    <RefreshCw className="w-6 h-6 animate-spin text-zinc-900" />
-                    <span className="text-[10px] font-bold font-mono">Generating New QR...</span>
-                  </div>
-                ) : qrSecondsLeft > 0 ? (
-                  <>
-                    <img 
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`upi://pay?pa=encho.space@icici&pn=ENCHO_SPACE&am=${grandTotal}&cu=INR&tn=${encodeURIComponent(tierMeta.name)}&tr=enc_${qrNonce}`)}`}
-                      alt="Universal UPI Payment QR Code"
-                      className="w-full h-full object-contain"
-                    />
-                    {/* Live Expiry Corner Badge */}
-                    <div className="absolute top-2 right-2 bg-zinc-950/80 backdrop-blur-md text-white text-[9px] font-mono font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-white/10">
-                      <Clock className="w-2.5 h-2.5 text-amber-400" />
-                      <span>{formatQrTime(qrSecondsLeft)}</span>
-                    </div>
-                  </>
-                ) : (
-                  /* Expired Overlay */
-                  <div className="absolute inset-0 bg-zinc-950/90 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center space-y-2.5 z-10 text-white">
-                    <Clock className="w-6 h-6 text-amber-400 animate-pulse" />
-                    <div>
-                      <span className="text-xs font-bold font-display block">QR Code Expired</span>
-                      <p className="text-[10px] text-zinc-300 mt-0.5">Session timed out for security</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleRegenerateQr}
-                      className="bg-white hover:bg-zinc-100 text-zinc-950 text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all shadow-md flex items-center gap-1.5 cursor-pointer active:scale-95"
-                    >
-                      <RefreshCw className="w-3 h-3 text-zinc-950" />
-                      <span>Retry & Refresh QR</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Sub-QR Actions Bar (Expiry Timer & Manual Retry Button) */}
-              <div className="flex items-center justify-between w-full max-w-xs text-[11px] px-1">
-                <span className="text-zinc-500 font-medium flex items-center gap-1">
-                  <span className={`w-1.5 h-1.5 rounded-full ${qrSecondsLeft > 60 ? 'bg-emerald-500 animate-pulse' : qrSecondsLeft > 0 ? 'bg-amber-500 animate-pulse' : 'bg-rose-500'}`} />
-                  <span>{qrSecondsLeft > 0 ? `Valid for ${formatQrTime(qrSecondsLeft)}` : 'Expired'}</span>
-                </span>
-                
-                <button
-                  type="button"
-                  onClick={handleRegenerateQr}
-                  disabled={isRegeneratingQr}
-                  className="text-zinc-700 hover:text-zinc-950 font-bold flex items-center gap-1 text-[11px] bg-white hover:bg-zinc-100 px-2 py-0.5 rounded-lg border border-zinc-200 shadow-2xs transition-colors cursor-pointer"
-                >
-                  <RefreshCw className={`w-3 h-3 text-zinc-600 ${isRegeneratingQr ? 'animate-spin' : ''}`} />
-                  <span>Retry QR</span>
-                </button>
               </div>
 
               {/* Official Brand Logo Trust Badges */}
               <div className="flex items-center justify-center gap-3 bg-white px-4 py-2 rounded-2xl border border-zinc-200/80 shadow-2xs">
                 <div className="flex items-center gap-1.5" title="Google Pay">
                   <GPayIcon className="w-4 h-4" />
-                  <span className="text-[10px] font-bold text-zinc-700 font-display">GPay</span>
+                  <span className="text-[10px] font-bold text-zinc-700 font-display">UPI / Cards</span>
                 </div>
                 <span className="text-zinc-300">·</span>
                 <div className="flex items-center gap-1.5" title="PhonePe">
                   <PhonePeIcon className="w-4 h-4" />
-                  <span className="text-[10px] font-bold text-zinc-700 font-display">PhonePe</span>
+                  <span className="text-[10px] font-bold text-zinc-700 font-display">Netbanking</span>
                 </div>
                 <span className="text-zinc-300">·</span>
                 <div className="flex items-center gap-1.5" title="Paytm">
                   <PaytmIcon className="w-5 h-3" />
-                  <span className="text-[10px] font-bold text-zinc-700 font-display">Paytm</span>
+                  <span className="text-[10px] font-bold text-zinc-700 font-display">Razorpay</span>
                 </div>
-                <span className="text-zinc-300">·</span>
-                <div className="flex items-center gap-1" title="BHIM / Any UPI">
-                  <UpiIcon className="w-4 h-3" />
-                  <span className="text-[10px] font-bold text-zinc-700 font-display">BHIM</span>
-                </div>
-              </div>
-
-              {/* Copyable UPI VPA Pill & Instant Confirm Action */}
-              <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-mono text-zinc-600 bg-white px-3 py-1.5 rounded-xl border border-zinc-200 shadow-2xs">
-                    encho.space@icici
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleCopyVpa}
-                    className="text-xs font-bold text-zinc-800 bg-white hover:bg-zinc-100 px-3 py-1.5 rounded-xl border border-zinc-200 transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
-                  >
-                    <Copy className="w-3 h-3 text-zinc-600" />
-                    <span>{copiedVpa ? 'Copied!' : 'Copy'}</span>
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => handleExecutePayment()}
-                  className="text-xs font-bold text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 px-3.5 py-1.5 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>I have completed UPI payment ↗</span>
-                </button>
               </div>
 
             </div>
@@ -987,6 +879,18 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ listing, experience,
 
     </div>
   );
+};
+
+export const CheckoutPage: React.FC<CheckoutPageProps> = (props) => {
+  const isExperience = !!props.experience;
+  const isStayCheckout = !isExperience && !!props.listing;
+  const isProd = isProductionEnvironment();
+
+  if (isStayCheckout && isProd) {
+    return <StayCheckoutComplianceGate listing={props.listing} onCancel={props.onCancel} />;
+  }
+
+  return <CheckoutPageImplementation {...props} />;
 };
 
 export default CheckoutPage;

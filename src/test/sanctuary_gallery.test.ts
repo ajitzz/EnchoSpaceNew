@@ -1,65 +1,90 @@
 import { describe, it, expect } from 'vitest';
-import { classifyListingPhotos, GALLERY_CATEGORIES } from '../../components/SanctuaryGalleryModal';
+import { classifyListingPhotos, buildGalleryCategories, GALLERY_CATEGORIES } from '../../components/SanctuaryGalleryModal';
 import { Listing, SpatialPhoto } from '../../types';
 
 describe('Sanctuary Spatial Gallery Architecture & Taxonomy Tests', () => {
-  it('should have all 8 award-winning architectural spatial categories plus all panorama', () => {
-    const requiredKeys = ['all', 'living_room', 'dining', 'bedroom', 'bathroom', 'garden', 'exterior', 'pool', 'details'];
-    const keys = GALLERY_CATEGORIES.map(c => c.key);
-    requiredKeys.forEach(k => {
-      expect(keys).toContain(k);
-    });
+  it('builds canonical default gallery categories with all and common spaces only', () => {
+    const defaultCategories = buildGalleryCategories({ rooms: [] } as any);
+    const keys = defaultCategories.map(c => c.key);
+    expect(keys).toEqual(['all', 'common']);
+    expect(keys).not.toContain('suites');
+    expect(keys).not.toContain('deluxe');
+    expect(keys).not.toContain('executive');
   });
 
-  it('should intelligently classify legacy listing with raw imageUrls into categorized spatial photos', () => {
+  it('dynamically builds categories derived strictly from host-defined listing.rooms', () => {
+    const listingWithRooms: Listing = {
+      id: 'stay-rooms-01',
+      title: 'Monsoon Villa',
+      price: 30000,
+      currency: 'INR',
+      type: 'Villa',
+      imageUrl: 'https://encho.test/cdn/hero.jpg',
+      imageCount: 1,
+      isVerified: false,
+      rooms: [
+        { id: 'r1', name: 'Forest Villa', type: 'forest_villa', price: 30000, capacity: 2, icon: '🌿' },
+        { id: 'r2', name: 'Cliff Cottage', type: 'cliff_cottage', price: 45000, capacity: 4, icon: '⛰️' }
+      ]
+    };
+
+    const categories = buildGalleryCategories(listingWithRooms);
+    const keys = categories.map(c => c.key);
+    expect(keys).toEqual(['all', 'common', 'forest_villa', 'cliff_cottage']);
+    expect(categories.find(c => c.key === 'forest_villa')?.label).toBe('Forest Villa');
+    expect(categories.find(c => c.key === 'cliff_cottage')?.label).toBe('Cliff Cottage');
+  });
+
+  it('truthfully classifies listing photos into spatial photos without fabricated titles or room tiers', () => {
     const mockListing: Listing = {
       id: 'test-123',
       title: 'The Amber Pavilion Luxury Estate',
       price: 25000,
       currency: 'INR',
       type: 'Villa',
-      imageUrl: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf',
+      imageUrl: 'https://encho.test/cdn/photo-1.jpg',
       imageUrls: [
-        'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf',
-        'https://images.unsplash.com/photo-1512917774080-9991f1c4c750',
-        'https://images.unsplash.com/photo-1613977257363-707ba9348227',
-        'https://images.unsplash.com/photo-1600585154340-be6161a56a0c'
+        'https://encho.test/cdn/photo-1.jpg',
+        'https://encho.test/cdn/photo-2.jpg'
       ],
-      imageCount: 4,
-      isVerified: true
+      imageCount: 2,
+      isVerified: false
     };
 
     const classified = classifyListingPhotos(mockListing);
-    expect(classified.length).toBe(4);
+    expect(classified.length).toBe(2);
     
-    // Check that items have titles, descriptions, and architectural categories
+    // Check that photos are classified with neutral property tier and no fabricated titles
     classified.forEach(photo => {
-      expect(photo.title).toBeTruthy();
-      expect(photo.description).toBeTruthy();
-      expect(photo.category).toBeTruthy();
-      expect(photo.specs).toBeDefined();
+      expect(photo.tier).toBe('common');
+      expect(photo.category).toBe('other');
+      expect(photo.title).toBeUndefined();
+      expect(photo.description).toBeUndefined();
     });
 
     expect(classified[0].isHero).toBe(true);
+    expect(classified[1].isHero).toBe(false);
   });
 
   it('should preserve explicit host-curated spatial photos if present on listing', () => {
     const customPhotos: SpatialPhoto[] = [
       {
         id: 'p1',
-        url: 'https://images.unsplash.com/photo-1',
-        tier: 'common', category: 'pool',
-        title: 'Sunset Mineral Infinity Pool',
-        description: 'Heated cliffside infinity pool with mountain panorama.',
-        specs: '60ft · Heated · Teak Decking'
+        url: 'https://encho.test/cdn/pool.jpg',
+        tier: 'common',
+        category: 'pool',
+        title: 'Infinity Pool',
+        description: 'Heated infinity pool.',
+        specs: '60ft'
       },
       {
         id: 'p2',
-        url: 'https://images.unsplash.com/photo-2',
-        tier: 'suites', category: 'living_room',
-        title: 'Travertine Atrium Salon',
-        description: 'Double-height sunken fireside salon.',
-        specs: '1,400 sqft · Sunken Pit'
+        url: 'https://encho.test/cdn/living.jpg',
+        tier: 'forest_villa',
+        category: 'living_room',
+        title: 'Travertine Salon',
+        description: 'Sunken fireside salon.',
+        specs: '1,400 sqft'
       }
     ];
 
@@ -69,15 +94,16 @@ describe('Sanctuary Spatial Gallery Architecture & Taxonomy Tests', () => {
       price: 35000,
       currency: 'INR',
       type: 'Villa',
-      imageUrl: 'https://images.unsplash.com/photo-1',
+      imageUrl: 'https://encho.test/cdn/pool.jpg',
       photos: customPhotos,
       imageCount: 2,
-      isVerified: true
+      isVerified: false
     };
 
     const classified = classifyListingPhotos(mockListing);
     expect(classified).toEqual(customPhotos);
     expect(classified[0].category).toBe('pool');
     expect(classified[1].category).toBe('living_room');
+    expect(classified[1].tier).toBe('forest_villa');
   });
 });
