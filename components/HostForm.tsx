@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Listing, Room, SpatialPhoto } from '../types';
 import { PhotoUpload, PhotoData } from './PhotoUpload';
 import { AmenitiesPicker } from './AmenitiesPicker';
@@ -9,13 +9,12 @@ import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
 import { useCurrency } from './CurrencyContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { queueCustomMutation } from '../lib/syncService';
 import { 
   Building2, Home, Trees, Tractor, Coffee, Ship, Tent, Caravan, Castle, Mountain, Box, Circle, Leaf,
   X, Sparkles, Check, Bed, Users, Trash2, Crown, Star, DoorOpen, Bath, 
-  ChevronDown, ChevronUp, ChevronLeft, Globe, MapPin, Loader2, Plus, Minus, Compass, Edit3, RefreshCw,
+  ChevronDown, ChevronUp, ChevronLeft, Globe, MapPin, Loader2, Plus, Minus,
   Eye, DollarSign, Layers, Shield, ArrowRight, Wand2, ShieldCheck,
-  Monitor, Tablet, Smartphone, Maximize2, Images, Columns, LayoutDashboard, Upload
+  Monitor, Tablet, Smartphone, Maximize2, Images, Columns, LayoutDashboard
 } from 'lucide-react';
 
 interface HostFormProps {
@@ -102,6 +101,9 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [savedAsDraft, setSavedAsDraft] = useState(false);
+  const submitting = useRef(false);
+  const submissionAttempt = useRef<{ source: string; body: string; key: string } | null>(null);
   const [newGuidelineInput, setNewGuidelineInput] = useState('');
 
   // Split Screen Live Preview State
@@ -112,115 +114,35 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
   // Form State
   const [formData, setFormData] = useState({
     title: existingListing?.title || '',
-    brand: (existingListing as any)?.brand || '',
-    brand_font: (existingListing as any)?.brand_font || 'font-display',
-    brand_color: (existingListing as any)?.brand_color || 'text-zinc-900',
     description: existingListing?.description || '',
     type: existingListing?.type || 'Resort',
     tagline: '',
     rentalMode: (existingListing as any)?.rentalMode || 'entire_place',
     address: existingListing?.address || '',
     city: existingListing?.city || '',
-    lat: existingListing?.lat || 11.6854,
-    lng: existingListing?.lng || 76.1320,
+    lat: existingListing?.lat ?? null,
+    lng: existingListing?.lng ?? null,
     nearby: existingListing?.nearby || [] as any[],
-    rooms: (() => {
-      if (existingListing?.rooms && existingListing.rooms.length > 0) {
-        return existingListing.rooms.map((r: any) => {
-          let roomPhotos: any[] = [];
-          if (Array.isArray(r.photos) && r.photos.length > 0) {
-            roomPhotos = r.photos;
-          } else if (existingListing?.photos && Array.isArray(existingListing.photos)) {
-            roomPhotos = existingListing.photos.filter((p: any) => 
-              p.tier === r.type || p.tier === r.id || (r.name && p.tier === r.name.toLowerCase().replace(/\s+/g, '_'))
-            );
-          }
-
-          const normalizedPhotos: PhotoData[] = roomPhotos.map((p: any, pIdx: number) => {
-            const photoUrl = typeof p === 'string' ? p : (p.previewUrl || p.url || p.imageUrl || '');
-            return {
-              id: p.id || `room-${r.id}-photo-${pIdx}-${Date.now()}`,
-              previewUrl: photoUrl,
-              url: photoUrl,
-              tier: r.type || p.tier || 'suites',
-              category: p.category || (pIdx === 0 ? 'bedroom' : 'bathroom'),
-              title: p.title || `${r.name || 'Room'} Space 0${pIdx + 1}`,
-              description: p.description || '',
-              is_sleeping_area: Boolean(p.is_sleeping_area || p.category === 'bedroom')
-            };
-          }).filter(p => !!p.previewUrl);
-
-          return {
-            ...r,
-            photos: normalizedPhotos
-          };
-        });
-      }
-
-      return [
-        { 
-          id: `room-${Date.now()}-1`, 
-          name: 'Presidential Suite', 
-          type: 'suites', 
-          icon: '👑', 
-          tag: 'Most Exclusive', 
-          price: 18500, 
-          capacity: 2, 
-          inventory_count: 2, 
-          description: 'Grand master suite featuring floor-to-ceiling glass, wraparound panoramic terrace, and private infinity jacuzzi.', 
-          specs: '1,200 sq.ft · 270° Valley View · Heated Jacuzzi', 
-          features: ['Private Jacuzzi', 'Valley View', 'Teak King Platform Bed', 'Rain Shower', 'Automated Curtains'], 
-          amenities: ['Jacuzzi', 'WiFi', 'Mini Bar', 'Espresso Machine'], 
-          photos: [
-            { id: 'pres-1', previewUrl: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1200&q=80', url: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1200&q=80', tier: 'suites', category: 'bedroom' as any, title: 'Presidential Master Suite', description: 'Panoramic glass suite with king bed.' },
-            { id: 'pres-2', previewUrl: 'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=1200&q=80', url: 'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=1200&q=80', tier: 'suites', category: 'bathroom' as any, title: 'Spa En-Suite', description: 'Volcanic stone soak tub.' },
-            { id: 'pres-3', previewUrl: 'https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&w=1200&q=80', url: 'https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&w=1200&q=80', tier: 'suites', category: 'balcony' as any, title: 'Horizon Terrace', description: 'Private wraparound deck.' }
-          ] 
-        },
-        { 
-          id: `room-${Date.now()}-2`, 
-          name: 'Deluxe Double Room', 
-          type: 'deluxe', 
-          icon: '🛏️', 
-          tag: 'Best Value', 
-          price: 11500, 
-          capacity: 2, 
-          inventory_count: 4, 
-          description: 'Spacious serene sanctuary with direct courtyard garden access and bespoke open-air stone bath.', 
-          specs: '650 sq.ft · Garden Verandah · Twin Plush Beds', 
-          features: ['Garden Access', 'Outdoor Stone Bath', 'Handcrafted Lounge', 'Bose Sound System'], 
-          amenities: ['Garden View', 'WiFi', 'Deep Soaking Tub'], 
-          photos: [
-            { id: 'del-1', previewUrl: 'https://images.unsplash.com/photo-1591088398332-8a7791972843?auto=format&fit=crop&w=1200&q=80', url: 'https://images.unsplash.com/photo-1591088398332-8a7791972843?auto=format&fit=crop&w=1200&q=80', tier: 'deluxe', category: 'bedroom' as any, title: 'Deluxe Garden Room', description: 'Plush organic cotton twin beds.' },
-            { id: 'del-2', previewUrl: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=1200&q=80', url: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=1200&q=80', tier: 'deluxe', category: 'bathroom' as any, title: 'Garden Bath', description: 'Open-air stone tub.' }
-          ] 
-        }
-      ];
-    })(),
+    rooms: (existingListing?.rooms && existingListing.rooms.length > 0)
+      ? existingListing.rooms.map((r: any) => ({ ...r, photos: (r.photos || []) }))
+      : [{ id: crypto.randomUUID(), name: '', type: 'deluxe', icon: '🛏️', tag: '', price: 0, capacity: 2, inventory_count: 0, description: '', specs: '', features: [] as string[], amenities: [] as string[], photos: [] }],
     maxGuests: existingListing?.maxGuests || 4,
     bedrooms: existingListing?.bedrooms || 2,
     beds: existingListing?.beds || 3,
     bathrooms: existingListing?.bathrooms || 2,
-    amenities: existingListing?.amenities || [
-      'High-Speed Wi-Fi (1 Gbps)',
-      'Temperature-Controlled Pool',
-      'Private Chef Available',
-      'Spa & Wellness Center',
-      'Air Conditioning',
-      'Dedicated EV Charger'
-    ] as string[],
+    amenities: existingListing?.amenities || [] as string[],
     amenity_clusters: existingListing?.amenity_clusters || { vibe: [], comfort: [], work: [], culinary: [] },
     child_safety_specs: existingListing?.child_safety_specs || [] as string[],
-    videoUrl: existingListing?.video_url || '',
+    videoUrl: (existingListing as any)?.videoUrl || existingListing?.video_url || '',
     hero_video_url: existingListing?.hero_video_url || '',
     hero_fallback_url: existingListing?.hero_fallback_url || '',
     dominant_color_hex: existingListing?.dominant_color_hex || '#0284C7',
-    experience_tags: existingListing?.experience_tags || ['Ocean Waves', 'Heated Infinity Pool', 'Private Chef Available', '1 Gbps Fiber WiFi', 'Panoramic Mountain View'] as string[],
-    concierge_privileges: (existingListing as any)?.concierge_privileges || 'All guests at this Encho Sanctuary receive direct access to our Walled Garden Host Concierge. Private dining experiences, sommelier cellar curation, private driver transfers, and customized wellness sessions can be coordinated seamlessly inside your Encho guest inbox.',
-    host_philosophy: (existingListing as any)?.host_philosophy || 'Our design philosophy is to allow natural sunlight and acoustic stillness to heal the modern soul. Every detail here is intentional.',
-    price: existingListing?.price?.toString() || '18500',
-    dynamicPricing: existingListing?.dynamicPricing || { weekendMultiplier: 1.15, seasonalMultiplier: 1.25 },
-    raw_rules: existingListing?.raw_rules || 'Quiet hours observed after 10 PM. No indoor smoking. Curated wellness atmosphere.',
+    experience_tags: existingListing?.experience_tags || [] as string[],
+    concierge_privileges: (existingListing as any)?.concierge_privileges || '',
+    host_philosophy: (existingListing as any)?.host_philosophy || '',
+    price: existingListing?.price?.toString() || '',
+    dynamicPricing: existingListing?.dynamicPricing || { weekendMultiplier: 1, seasonalMultiplier: 1 },
+    raw_rules: existingListing?.raw_rules || '',
     curated_guidelines: (() => {
       if (Array.isArray(existingListing?.curated_guidelines)) return existingListing.curated_guidelines;
       if (typeof existingListing?.curated_guidelines === 'string' && existingListing.curated_guidelines.trim()) {
@@ -230,11 +152,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         } catch {}
         return [existingListing.curated_guidelines];
       }
-      return [
-        "Heritage Sanctity: The 200-year-old sandstone stonework is preserved with organic floral care.",
-        "Aristocratic Silence: Sunset peacock hour is dedicated to acoustic tranquility.",
-        "Private Culinary Protocols: Royal Thali dining is prepared exclusively on brass dinnerware."
-      ];
+      return [];
     })(),
     seo_title: existingListing?.seo_title || '',
     seo_description: existingListing?.seo_description || '',
@@ -242,59 +160,25 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
     seo_image_url: existingListing?.seo_image_url || '',
   });
 
-  // Photos State (Step 4 · Property Grounds & Amenities)
+  // Photos State
   const [photos, setPhotos] = useState<PhotoData[]>(() => {
-    let propPhotos: any[] = [];
-    if (existingListing?.photos && Array.isArray(existingListing.photos) && existingListing.photos.length > 0) {
-      const common = existingListing.photos.filter((p: any) => !p.tier || p.tier === 'common');
-      if (common.length > 0) {
-        propPhotos = common;
-      }
-    }
+    const savedPhotos = existingListing?.photos?.filter(p => !p.tier || p.tier === 'common');
+    if (savedPhotos?.length) return savedPhotos.map(p => ({ ...p, previewUrl: p.url } as PhotoData));
+    const urls = existingListing?.imageUrls?.length 
+      ? existingListing.imageUrls 
+      : (existingListing?.imageUrl ? [existingListing.imageUrl] : []);
     
-    if (propPhotos.length === 0) {
-      // Check if we have room photos to prevent duplicating them into common
-      const hasRoomPhotos = existingListing?.rooms?.some((r: any) => 
-        (r.photos && r.photos.length > 0) || 
-        (existingListing.photos?.some((p: any) => p.tier === r.type || p.tier === r.id))
-      );
-      
-      if (!hasRoomPhotos) {
-        const urls = existingListing?.imageUrls?.length 
-          ? existingListing.imageUrls 
-          : (existingListing?.imageUrl ? [existingListing.imageUrl] : []);
-        propPhotos = urls.map((url: string, idx: number) => ({
-          id: `prop-photo-${idx}`,
-          url,
-          previewUrl: url,
-          tier: 'common',
-          category: idx === 0 ? 'exterior' : 'pool',
-          title: idx === 0 ? 'Sanctuary Architectural Facade' : 'Main Estate Horizon',
-          description: 'Property-wide grounds & shared luxury facilities.'
-        }));
-      }
-    }
-
-    if (propPhotos.length === 0) {
-      propPhotos = [
-        { id: 'prop-def-1', previewUrl: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=1600&q=80', url: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=1600&q=80', tier: 'common', category: 'exterior', title: 'Estate Entrance Facade', description: 'Signature architectural entrance.' },
-        { id: 'prop-def-2', previewUrl: 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=1600&q=80', url: 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=1600&q=80', tier: 'common', category: 'pool', title: 'Infinity Horizon Pool', description: 'Suspended mineral water pool.' },
-        { id: 'prop-def-3', previewUrl: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=1600&q=80', url: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=1600&q=80', tier: 'common', category: 'restaurant', title: 'Plantation Pavilion Dining', description: 'Artisanal culinary estate dining.' }
-      ];
-    }
-
-    return propPhotos.map((p: any, idx: number) => {
-      const photoUrl = typeof p === 'string' ? p : (p.previewUrl || p.url || p.imageUrl || '');
-      return {
-        id: p.id || `prop-photo-${idx}-${Date.now()}`,
-        previewUrl: photoUrl,
-        url: photoUrl,
+    if (urls.length > 0) {
+      return urls.map((url: string, index: number) => ({
+        id: `prop-photo-${index}`,
+        previewUrl: url,
         tier: 'common',
-        category: p.category || (idx === 0 ? 'exterior' : 'pool'),
-        title: p.title || (idx === 0 ? 'Sanctuary Architectural Facade' : 'Main Estate Horizon'),
-        description: p.description || 'Property-wide grounds & shared luxury facilities.'
-      };
-    }).filter(p => !!p.previewUrl);
+        category: 'exterior' as any,
+        title: '',
+        description: ''
+      }));
+    }
+    return [];
   });
 
   const [isCuratingRules, setIsCuratingRules] = useState(false);
@@ -302,8 +186,6 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
   const [aiResult, setAiResult] = useState<any>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isSuggestingPOIs, setIsSuggestingPOIs] = useState(false);
-  const [radarMode, setRadarMode] = useState<'ai' | 'manual'>('ai');
-  const [radarPillar, setRadarPillar] = useState<'destination' | 'restaurant'>('destination');
   const [expandedRoomId, setExpandedRoomId] = useState<string | null>(formData.rooms[0]?.id || null);
   const [newFeatureText, setNewFeatureText] = useState<{ [roomId: string]: string }>({});
   
@@ -346,49 +228,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
       ),
     ];
 
-    const fallbackPhotos: SpatialPhoto[] = spatialPhotos.length > 0 ? spatialPhotos : [
-      {
-        id: 'fallback-1',
-        url: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1600&q=80',
-        tier: 'suites',
-        category: 'exterior',
-        title: 'Main Sanctuary Vista',
-        description: 'Architectural facade overlooking private infinity terraces.',
-        isHero: true
-      },
-      {
-        id: 'fallback-2',
-        url: 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=1200&q=80',
-        tier: 'suites',
-        category: 'pool',
-        title: 'Heated Infinity Horizon',
-        description: 'Temperature-controlled lap pool with panoramic mountain views.'
-      },
-      {
-        id: 'fallback-3',
-        url: 'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1200&q=80',
-        tier: 'deluxe',
-        category: 'living_room',
-        title: 'Minimalist Pavilions',
-        description: 'Sunken living spaces finished with teakwood and brushed stone.'
-      },
-      {
-        id: 'fallback-4',
-        url: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=1200&q=80',
-        tier: 'deluxe',
-        category: 'bedroom',
-        title: 'Presidential Master Suite',
-        description: 'Custom king platform bed with floor-to-ceiling panoramic glass.'
-      },
-      {
-        id: 'fallback-5',
-        url: 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=1200&q=80',
-        tier: 'executive',
-        category: 'exterior',
-        title: 'Courtyard & Grounds',
-        description: 'Manicured tropical gardens and reflective water features.'
-      }
-    ];
+    const fallbackPhotos: SpatialPhoto[] = spatialPhotos;
 
     const allImageUrls = fallbackPhotos.map(p => p.url);
 
@@ -404,13 +244,14 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         type: roomTier,
         icon: r.icon || '👑',
         tag: r.tag || (idx === 0 ? 'Most Popular' : 'Recommended'),
-        price: Number(r.price) || (idx === 0 ? 18500 : 11500),
+        price: Number(r.price) || 0,
         capacity: Number(r.capacity) || 2,
-        inventory_count: Number(r.inventory_count) || 1,
-        description: r.description || 'Curated luxury accommodations with expansive views and bespoke private services.',
-        specs: r.specs || '1,200 sq.ft · 270° Valley View · Heated Jacuzzi',
-        features: Array.isArray(r.features) && r.features.length > 0 ? r.features : ['Private Terrace', 'Soaking Tub', 'Dedicated Butler'],
-        amenities: Array.isArray(r.amenities) && r.amenities.length > 0 ? r.amenities : ['WiFi', 'Air Conditioning', 'Espresso Machine'],
+        inventory_count: Number(r.inventory_count ?? 1),
+        inventory_source: r.inventory_source || 'unknown',
+        description: r.description || '',
+        specs: r.specs || '',
+        features: r.features || [],
+        amenities: r.amenities || [],
         photos: (r.photos || []).map((rp: any) => ({
           id: rp.id,
           url: rp.previewUrl || rp.url,
@@ -420,48 +261,44 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
           title: rp.title || r.name,
           description: rp.description || '',
           specs: rp.specs || '',
-          isHero: (rp as any).isHero || false,
-          is_sleeping_area: Boolean((rp as any).is_sleeping_area)
+          isHero: (rp as any).isHero || false
         })),
         imageUrls: roomPhotos
       };
     });
 
-    const basePrice = compiledRooms.length > 0 ? compiledRooms[0].price : (Number(formData.price) || 18500);
+    const basePrice = compiledRooms.length > 0 ? compiledRooms[0].price : (Number(formData.price) || 0);
 
     return {
       id: existingListing?.id || 'live-preview-sanctuary',
-      title: formData.title.trim() || 'Aman Sanctuary Estate · Sovereign Highland Retreat',
-      brand: formData.brand.trim() || '',
-      brand_font: formData.brand_font || 'font-display',
-      brand_color: formData.brand_color || 'text-zinc-900',
-      description: formData.description.trim() || 'Perched above pristine mist-laden valleys, this architectural masterpiece represents the absolute pinnacle of contemporary stillness. Designed with intentional spatial acoustics, floor-to-ceiling panoramic glass, and private heated infinity pavilions.',
+      title: formData.title.trim() || 'Your property preview',
+      description: formData.description.trim(),
       type: formData.type || 'Resort',
-      address: formData.address.trim() || 'Ridge Horizon Estate, Valley Road',
-      city: formData.city.trim() || 'Wayanad, Kerala',
+      address: formData.address.trim(),
+      city: formData.city.trim(),
       lat: formData.lat || 11.6854,
       lng: formData.lng || 76.1320,
       price: basePrice,
-      currency: (currency as any) || 'INR',
-      rating: 4.98,
-      reviewsCount: 48,
-      provider: user?.name || 'Encho Verified Host',
+      currency: 'INR',
+      rating: existingListing?.rating,
+      reviewCount: existingListing?.reviewCount,
+      provider: user?.name || '',
       imageUrl: allImageUrls[0],
       imageUrls: allImageUrls,
       photos: fallbackPhotos,
       imageCount: fallbackPhotos.length,
-      isVerified: true,
+      isVerified: existingListing?.isVerified || false,
       rooms: compiledRooms,
       rental_mode: (formData.rentalMode as any) || 'entire_place',
       maxGuests: formData.maxGuests || 4,
       bedrooms: formData.bedrooms || 2,
       beds: formData.beds || 3,
       bathrooms: formData.bathrooms || 2,
-      amenities: formData.amenities.length > 0 ? formData.amenities : ['Heated Pool', 'Private Chef', '1 Gbps WiFi', 'Air Conditioning', 'Free Parking', 'Spa'],
-      experience_tags: formData.experience_tags.length > 0 ? formData.experience_tags : ['Ocean Waves', 'Heated Infinity Pool', 'Private Chef Available', '1 Gbps Fiber WiFi', 'Panoramic Mountain View'],
-      concierge_privileges: formData.concierge_privileges || 'All guests receive dedicated access to our 24/7 Host Concierge for private cellar tastings, driver transfers, and in-villa wellness treatments.',
-      host_philosophy: formData.host_philosophy || 'Our design philosophy is to allow natural sunlight and acoustic stillness to heal the modern soul. Every detail here is intentional.',
-      raw_rules: formData.raw_rules || 'Quiet hours after twilight. No smoking indoors.',
+      amenities: formData.amenities,
+      experience_tags: formData.experience_tags,
+      concierge_privileges: formData.concierge_privileges,
+      host_philosophy: formData.host_philosophy,
+      raw_rules: formData.raw_rules,
       curated_guidelines: formData.curated_guidelines || 'We invite guests to embrace the tranquil atmosphere of the estate, observing quiet serenity after twilight.',
       child_safety_specs: formData.child_safety_specs || [],
       dominant_color_hex: formData.dominant_color_hex || '#0284C7',
@@ -480,36 +317,6 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
       seo_image_url: formData.seo_image_url || allImageUrls[0]
     };
   }, [formData, photos, user, currency, existingListing]);
-
-  // Hydrate full existing listing details on edit
-  useEffect(() => {
-    if (existingListing?.id && !String(existingListing.id).startsWith('demo-')) {
-      fetch(`/api/listings/${existingListing.id}?_t=${Date.now()}`, {
-        headers: getAuthHeaders()
-      })
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data) {
-          setFormData(prev => ({
-            ...prev,
-            brand: data.brand || (existingListing as any).brand || prev.brand || '',
-            brand_font: data.brand_font || (existingListing as any).brand_font || prev.brand_font || 'font-display',
-            brand_color: data.brand_color || (existingListing as any).brand_color || prev.brand_color || 'text-zinc-900',
-          }));
-        }
-      })
-      .catch(console.error);
-    }
-  }, [existingListing?.id]);
-
-  // Sync real-time preview to localStorage for instant cross-tab and modal fidelity
-  useEffect(() => {
-    try {
-      localStorage.setItem('hostPreviewListing', JSON.stringify(previewListing));
-    } catch (e) {
-      console.debug('Preview sync error:', e);
-    }
-  }, [previewListing]);
 
   // Upload helpers with hardened Auth headers and non-blocking base64 resilience
   const uploadPhotoFile = async (file: File): Promise<string> => {
@@ -555,61 +362,17 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         if (data.url || data.publicUrl) return data.url || data.publicUrl;
       }
     } catch (b64Err) {
-      console.warn('[PHOTO UPLOAD] Base64 upload route unavailable, using inline base64 URI:', b64Err);
+      console.error('[PHOTO UPLOAD] Upload failed:', b64Err);
     }
 
-    // Always return the valid base64 URI so unauthenticated or transient upload failures never break publishing
-    return base64;
+    throw new Error('A photo could not be uploaded. Please retry before submitting your property.');
   };
 
   const resolveAndUploadPhoto = async (photo: PhotoData): Promise<string> => {
     if (photo.file) return await uploadPhotoFile(photo.file);
-    return photo.url || photo.previewUrl || '';
-  };
-
-  const uploadVideoFile = async (file: File): Promise<string> => {
-    const headers = getAuthHeaders();
-    try {
-      if (file.size > 500 * 1024 * 1024) {
-        alert("Video file must be under 500MB.");
-        throw new Error("File too large");
-      }
-      const res = await fetch('/api/upload-video-url', {
-        method: 'POST',
-        headers
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const { uploadUrl, uploadId } = data;
-        
-        const uploadRes = await fetch(uploadUrl, {
-          method: 'PUT',
-          headers: { 'Content-Type': file.type },
-          body: file
-        });
-        
-        if (uploadRes.ok) {
-          return new Promise((resolve) => {
-             const poll = setInterval(async () => {
-                try {
-                  const statusRes = await fetch(`/api/mux/upload/${uploadId}`, { headers });
-                  const statusData = await statusRes.json();
-                  if (statusData.playbackId) {
-                    clearInterval(poll);
-                    resolve(`mux://${statusData.playbackId}`);
-                  }
-                } catch (e) {}
-             }, 3000);
-             setTimeout(() => { clearInterval(poll); resolve(`mux-pending://${uploadId}`); }, 60000);
-          });
-        }
-      }
-      throw new Error("Failed to upload video to Mux.");
-    } catch (err) {
-      console.error('Video upload failed', err);
-      alert("Failed to upload video.");
-      return '';
-    }
+    const url = photo.previewUrl || (photo as any).url;
+    if (typeof url !== 'string' || !/^(https?:\/\/|\/uploads\/)/.test(url)) throw new Error('A photo needs to be uploaded again before submission.');
+    return url;
   };
 
   // AI Curate Rules
@@ -688,45 +451,50 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
     addToast('Privilege Added', `Included: ${service}`, 'success');
   };
 
-  // AI Suggest POIs (Dual-Pillar: Destinations & Restaurants)
-  const suggestNearbyPOIs = async (): Promise<boolean> => {
-    if (!formData.city && !formData.address) {
-      addToast('Location Required', 'Please set the property city or address in Step 2 first.', 'info');
-      return false;
+  // AI Suggest POIs
+  const suggestNearbyPOIs = async () => {
+    if (!formData.city) {
+      addToast('City Required', 'Please set the property city in Step 2 first.', 'info');
+      return;
     }
     setIsSuggestingPOIs(true);
     try {
-      const res = await fetch('/api/ai/radar-scan', {
+      const res = await fetch('/api/ai/nearby-pois', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({
           lat: formData.lat,
           lng: formData.lng,
           city: formData.city,
-          address: formData.address
+          propertyType: formData.type
         })
       });
       if (res.ok) {
         const data = await res.json();
-        const combined = [
-          ...(Array.isArray(data.destinations) ? data.destinations : []),
-          ...(Array.isArray(data.restaurants) ? data.restaurants : [])
-        ];
-        if (combined.length > 0) {
+        if (data.pois && data.pois.length > 0) {
           setFormData(prev => ({
             ...prev,
-            nearby: combined
+            nearby: [...prev.nearby, ...data.pois]
           }));
-          addToast('Radar Scan Complete', `Curated ${data.destinations?.length || 0} destinations and ${data.restaurants?.length || 0} culinary spots!`, 'success');
-          setIsSuggestingPOIs(false);
-          return true;
+          addToast('Nearby POIs Generated', `Added ${data.pois.length} high-intent attraction points!`, 'success');
+          return;
         }
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      // Fallback
+    } finally {
+      setIsSuggestingPOIs(false);
     }
-    setIsSuggestingPOIs(false);
-    return false;
+
+    setFormData(prev => ({
+      ...prev,
+      nearby: [
+        ...prev.nearby,
+        { name: `${prev.city} Mountain Crest & Viewpoint`, distance: '3.2 km', type: 'nature', description: 'Scenic vantage point overlooking mist valleys.' },
+        { name: 'The Artisanal Cellar & Dining', distance: '1.8 km', type: 'dining', description: 'Organic farm-to-table culinary pavilion.' }
+      ]
+    }));
+    addToast('POIs Added', 'Populated recommended destination highlights.', 'success');
   };
 
   // Run AI Pre-Flight Scan
@@ -782,9 +550,9 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
   const validateStep = (step: number): boolean => {
     switch (step) {
       case 1: return formData.title.trim().length >= 10 && formData.type.length > 0;
-      case 2: return formData.city.trim().length > 0;
-      case 3: return formData.rooms.some((r: any) => r.name.trim().length > 0 && r.price > 0);
-      case 4: return true;
+      case 2: return formData.city.trim().length > 0 && formData.address.trim().length > 0;
+      case 3: return formData.rooms.length > 0 && formData.rooms.every((r: any) => r.name.trim().length > 0 && Number(r.price) > 0 && Number.isInteger(Number(r.capacity)) && Number(r.capacity) > 0 && Number.isInteger(Number(r.inventory_count)) && Number(r.inventory_count) >= 0);
+      case 4: return photos.length > 0 || formData.rooms.some((room: any) => room.photos?.length > 0);
       case 5: return true;
       case 6: return true;
       case 7: return true;
@@ -793,37 +561,14 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
     }
   };
 
-  const handleNextStep = async () => {
+  const handleNextStep = () => {
     if (!validateStep(currentStep)) {
       if (currentStep === 1) addToast('Missing Details', 'Please provide a descriptive title (min 10 characters) and property type.', 'error');
-      if (currentStep === 2) addToast('Location Required', 'Please set the property city/destination.', 'error');
-      if (currentStep === 3) addToast('Rooms Required', 'Please ensure at least one room classification has a valid nightly rate.', 'error');
+      if (currentStep === 2) addToast('Location Required', 'Enter the property city and street address.', 'error');
+      if (currentStep === 3) addToast('Check rooms', 'Every room needs a name, nightly rate, capacity and inventory.', 'error');
+      if (currentStep === 4) addToast('Property photos required', 'Add photos of your property or rooms before submitting for review.', 'error');
       return;
     }
-    
-    // Radar Destinations Verification (Step 2)
-    if (currentStep === 2) {
-      if (!formData.nearby || formData.nearby.length === 0) {
-        if (radarMode === 'ai') {
-          addToast('AI Radar Scan', 'Scanning Google Maps & Gemini AI for tourist destinations...', 'info');
-          const success = await suggestNearbyPOIs();
-          if (!success) {
-            addToast('Radar Scan Notice', 'Populated recommended destination highlights.', 'info');
-          }
-        } else {
-          addToast('Destinations Required', 'Please add at least one destination manually or switch to Smart AI Auto-Radar.', 'error');
-          return;
-        }
-      } else {
-        // Validate manual POIs have photo and URL
-        const invalidManualPOI = formData.nearby.find((poi: any) => poi.isManual && (!poi.photoUrl || !poi.googleMapsUrl));
-        if (invalidManualPOI) {
-          addToast('Manual Destination Incomplete', `"${invalidManualPOI.name || 'Destination'}" requires a Cover Photo and Google Maps Link.`, 'error');
-          return;
-        }
-      }
-    }
-    
     if (currentStep < 8) setCurrentStep(prev => prev + 1);
   };
 
@@ -832,11 +577,34 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
   };
 
   // Submit Handler
-  const handleSubmit = async (e: React.FormEvent) => {
+  const sendSubmission = async (attempt: { body: string; key: string }) => {
+    const res = await fetch('/api/property-review', {
+      method: 'POST', headers: { ...getAuthHeaders(), 'X-Idempotency-Key': attempt.key }, body: attempt.body
+    });
+    const result = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(result.error || 'Unable to submit your property for review.');
+    if (!result.submission?.id) throw new Error('Submission receipt was not returned. Retry this submission.');
+    const draft = result.submission.status === 'DRAFT';
+    setSavedAsDraft(draft);
+    setSubmitted(true);
+    addToast(draft ? 'Draft saved' : 'Submitted for review', draft ? 'Resume this draft from Properties whenever you are ready.' : 'Your property is saved. An admin will review it before publication.', 'success');
+    setTimeout(() => onSuccess(), 1600);
+  };
+  const handleSubmit = async (e: React.SyntheticEvent, intent: 'draft' | 'submit' = 'submit') => {
     e.preventDefault();
+    if (submitting.current) return;
+    const invalidStep = [1, 2, 3, 4].find(step => !validateStep(step));
+    if (invalidStep && intent === 'submit') { setCurrentStep(invalidStep); addToast('Check property details', 'Complete the property, location, room and photo details before submitting.', 'error'); return; }
+    if (!user || !token) { addToast('Sign in required', 'Sign in before submitting your property.', 'error'); return; }
+    submitting.current = true;
     setLoading(true);
 
     try {
+      const source = JSON.stringify([formData, photos, intent]);
+      if (submissionAttempt.current?.source === source) {
+        await sendSubmission(submissionAttempt.current);
+        return;
+      }
       const uploadedPhotos: SpatialPhoto[] = [];
       const uploadedImageUrls: string[] = [];
 
@@ -870,8 +638,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
             title: rp.title || room.name,
             description: rp.description || '',
             specs: rp.specs || '',
-            isHero: (rp as any).isHero || false,
-            is_sleeping_area: Boolean((rp as any).is_sleeping_area)
+            isHero: (rp as any).isHero || false
           };
           roomUploadedPhotos.push(spPhoto);
           uploadedPhotos.push(spPhoto);
@@ -880,14 +647,15 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         }
 
         processedRooms.push({
-          id: room.id,
+          id: String(room.id),
           name: room.name,
           type: room.type,
           icon: room.icon || '🛏️',
           tag: room.tag || '',
           price: Number(room.price) || 0,
           capacity: Number(room.capacity) || 2,
-          inventory_count: Number(room.inventory_count) || 1,
+          inventory_count: Number(room.inventory_count ?? 1),
+          inventory_source: room.inventory_source || 'unknown',
           description: room.description || '',
           specs: room.specs || '',
           features: room.features || [],
@@ -897,14 +665,11 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         });
       }
 
-      const primaryImageUrl = uploadedImageUrls[0] || 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1600&q=80';
+      const primaryImageUrl = uploadedImageUrls[0] || '';
       const basePrice = processedRooms.length > 0 ? processedRooms[0].price : parseFloat(formData.price);
 
       const payload = {
         title: formData.title,
-        brand: formData.brand,
-        brand_font: formData.brand_font,
-        brand_color: formData.brand_color,
         description: formData.description,
         price: basePrice,
         type: formData.type,
@@ -939,57 +704,19 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         seo_description: formData.seo_description || formData.description,
         seo_keywords: formData.seo_keywords,
         seo_image_url: formData.seo_image_url || primaryImageUrl,
-        draftId: existingListing?.id,
-        published_listing_id: existingListing?.id
+        intent,
+        draftId: (existingListing as any)?._reviewDraftId,
+        version: (existingListing as any)?._reviewVersion,
+        published_listing_id: existingListing?.id || null
       };
 
-      let responseListingId: number | string | undefined = existingListing?.id;
-
-      if (existingListing?.id) {
-        // Update existing listing live
-        const res = await fetch(`/api/listings/${existingListing.id}`, {
-          method: 'PUT',
-          headers: getAuthHeaders(),
-          body: JSON.stringify(payload)
-        });
-        if (!res.ok) {
-          const errJson = await res.json().catch(() => ({}));
-          throw new Error(errJson.error || `Listing update failed (status ${res.status})`);
-        }
-        // Background sync to drafts table
-        fetch('/api/listings/draft', {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: JSON.stringify({ ...payload, status: 'PUBLISHED', published_listing_id: existingListing.id })
-        }).catch(() => {});
-      } else {
-        // Publish new listing directly to live listings catalogue
-        const res = await fetch('/api/listings', {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: JSON.stringify(payload)
-        });
-        if (!res.ok) {
-          const errJson = await res.json().catch(() => ({}));
-          throw new Error(errJson.error || `Listing publication failed (status ${res.status})`);
-        }
-        const createdListing = await res.json();
-        responseListingId = createdListing.id;
-        // Background sync to drafts table
-        fetch('/api/listings/draft', {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: JSON.stringify({ ...payload, status: 'PUBLISHED', published_listing_id: createdListing.id })
-        }).catch(() => {});
-      }
-
-      queueCustomMutation('CREATE_OR_UPDATE_LISTING', { ...payload, id: responseListingId });
-      setSubmitted(true);
-      addToast('Listing Published Live (10/10)', 'Your architectural sanctuary is now immediately live for global guests on Encho!', 'success');
-      setTimeout(() => onSuccess(), 1600);
+      const body = JSON.stringify(payload);
+      submissionAttempt.current = { source, body, key: crypto.randomUUID() };
+      await sendSubmission(submissionAttempt.current);
     } catch (err: any) {
       addToast('Submission Error', err.message || 'Failed to publish listing', 'error');
     } finally {
+      submitting.current = false;
       setLoading(false);
     }
   };
@@ -1002,14 +729,15 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
       name: defaultClassification.name,
       type: defaultClassification.tier,
       icon: defaultClassification.icon,
-      tag: defaultClassification.defaultTag,
-      price: 15000,
+      tag: '',
+      price: 0,
       capacity: 2,
-      inventory_count: 1,
+      inventory_count: 0,
+      inventory_source: 'unknown',
       description: '',
-      specs: defaultClassification.defaultSpecs,
-      features: ['Panoramic View', 'King Platform Bed', 'Rain Shower'],
-      amenities: ['WiFi', 'Air Conditioning'],
+      specs: '',
+      features: [] as string[],
+      amenities: [] as string[],
       photos: []
     };
     setFormData(prev => ({ ...prev, rooms: [...prev.rooms, newRoom] }));
@@ -1017,6 +745,11 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
   };
 
   const removeRoom = (id: string) => {
+    if (existingListing?.id && Array.isArray(existingListing.rooms) && existingListing.rooms.some((room: any) => String(room.id) === String(id))) {
+      setFormData(prev => ({ ...prev, rooms: prev.rooms.map((room: any) => String(room.id) === String(id) ? { ...room, inventory_count: 0 } : room) }));
+      addToast('Room retained', 'Inventory set to zero. Existing room identity is retained for booking history; submit the change for review.', 'info');
+      return;
+    }
     if (formData.rooms.length <= 1) {
       addToast('Action Disallowed', 'A luxury property must maintain at least one room classification.', 'info');
       return;
@@ -1069,107 +802,24 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               <p className="text-slate-400 text-xs sm:text-sm mt-1.5 leading-relaxed">Establish the luxury narrative, architectural classification, and hospitality signature of your estate.</p>
             </div>
 
-            {/* Host Brand Identity (Typography & Identity) */}
-            <div className="space-y-5 bg-[#101726]/40 border border-slate-700/50 p-5 rounded-2xl">
-              <div className="space-y-2.5">
-                <div className="flex justify-between items-center">
-                  <label className="text-xs font-black uppercase tracking-wider text-slate-200">Host Brand Identity <span className="text-slate-500 font-medium lowercase tracking-normal">(Optional)</span></label>
-                  <span className={`text-xs font-mono font-bold px-2.5 py-1 rounded-lg border ${
-                    (formData.brand || '').length <= 12
-                      ? 'text-emerald-300 bg-emerald-950/40 border-emerald-500/30' 
-                      : 'text-rose-300 bg-rose-950/40 border-rose-500/30'
-                  }`}>
-                    {(formData.brand || '').length}/12 chars
-                  </span>
-                </div>
-                
-                <input 
-                  type="text" 
-                  maxLength={12}
-                  className="w-full bg-[#101726]/90 border border-slate-700/80 hover:border-slate-500 rounded-xl px-4 sm:px-5 py-3.5 sm:py-4 text-white placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 focus:border-[#0284C7] transition-all text-sm sm:text-base font-semibold shadow-inner min-w-0"
-                  value={formData.brand || ''} 
-                  onChange={e => {
-                      if (e.target.value.length <= 12) {
-                          setFormData({...formData, brand: e.target.value});
-                      }
-                  }} 
-                  placeholder="e.g. AMAN, THUSHARA" 
-                />
-              </div>
-
-              {/* Typography Selection */}
-              <div className="space-y-3">
-                 <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Brand Typography</label>
-                 <div className="grid grid-cols-2 gap-3">
-                    {[
-                      { id: 'font-display', name: 'Modernist', family: 'var(--font-display)', class: 'font-display' },
-                      { id: 'font-playfair', name: 'Classic Luxury', family: '"Playfair Display", serif', class: 'font-serif tracking-wide' },
-                      { id: 'font-cormorant', name: 'Heritage', family: '"Cormorant", serif', class: 'font-serif tracking-wider uppercase' },
-                      { id: 'font-montserrat', name: 'Minimalist', family: '"Montserrat", sans-serif', class: 'font-sans tracking-[0.2em] uppercase' }
-                    ].map(font => (
-                      <button
-                        key={font.id}
-                        type="button"
-                        onClick={() => setFormData({...formData, brand_font: font.id})}
-                        className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all ${
-                          formData.brand_font === font.id 
-                            ? 'border-emerald-500 bg-emerald-500/10' 
-                            : 'border-slate-700/50 bg-[#101726]/60 hover:border-slate-500 hover:bg-[#101726]'
-                        }`}
-                      >
-                        <span style={{ fontFamily: font.family }} className="text-base text-slate-100 mb-1">{formData.brand || 'ENCHO'}</span>
-                        <span className="text-[10px] text-slate-500 uppercase tracking-widest">{font.name}</span>
-                      </button>
-                    ))}
-                 </div>
-              </div>
-
-              {/* Color Selection */}
-              <div className="space-y-3">
-                 <label className="text-xs font-bold uppercase tracking-wider text-slate-300">Brand Color</label>
-                 <div className="flex flex-wrap gap-3">
-                    {[
-                      { id: 'text-zinc-900', color: '#18181B', name: 'Obsidian' },
-                      { id: 'text-amber-800', color: '#92400E', name: 'Gilded Bronze' },
-                      { id: 'text-teal-900', color: '#134E4A', name: 'Forest Estate' },
-                      { id: 'text-rose-900', color: '#881337', name: 'Terracotta' },
-                      { id: 'text-blue-950', color: '#172554', name: 'Midnight' }
-                    ].map(color => (
-                      <button
-                        key={color.id}
-                        type="button"
-                        onClick={() => setFormData({...formData, brand_color: color.id})}
-                        className={`w-8 h-8 rounded-full shadow-inner transition-all flex items-center justify-center ${
-                           formData.brand_color === color.id ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-[#0A0F1C] scale-110' : 'hover:scale-105 border border-slate-700'
-                        }`}
-                        style={{ backgroundColor: color.color }}
-                        title={color.name}
-                      >
-                         {formData.brand_color === color.id && <div className="w-1.5 h-1.5 rounded-full bg-white/80" />}
-                      </button>
-                    ))}
-                 </div>
-                 <p className="text-xs text-slate-500 pt-1">Typography and colors are optimized for our warm alabaster header.</p>
-              </div>
-            </div>
-
             {/* Listing Headline & Title */}
             <div className="space-y-2.5">
               <div className="flex justify-between items-center">
                 <label className="text-xs font-black uppercase tracking-wider text-slate-200">Listing Headline & Title *</label>
                 <span className={`text-xs font-mono font-bold px-2.5 py-1 rounded-lg border ${
-                  formData.title.length < 20 
+                  formData.title.length < 10
                     ? 'text-amber-300 bg-amber-950/40 border-amber-500/30' 
                     : 'text-emerald-300 bg-emerald-950/40 border-emerald-500/30'
                 }`}>
-                  {formData.title.length}/100 chars {formData.title.length >= 20 ? '✓ Optimal' : '(min 20)'}
+                  {formData.title.length}/100 chars {formData.title.length >= 10 ? '✓ Minimum met' : '(min 10)'}
                 </span>
               </div>
               <input 
                 type="text" 
                 maxLength={100}
                 className="w-full bg-[#101726]/90 border border-slate-700/80 hover:border-slate-500 rounded-2xl px-4 sm:px-5 py-3.5 sm:py-4 text-white placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 focus:border-[#0284C7] transition-all text-sm sm:text-base font-semibold shadow-inner min-w-0"
-                value={formData.title} 
+                value={formData.title}
+                aria-label="Listing title"
                 onChange={e => setFormData({...formData, title: e.target.value})} 
                 placeholder="e.g. Cloud Valley Sovereign Estate & Spa Sanctuary" 
               />
@@ -1301,7 +951,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               </div>
               <textarea 
                 className="w-full bg-[#101726]/90 border border-slate-700/80 hover:border-slate-500 rounded-2xl p-4 sm:p-5 text-white placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 focus:border-[#0284C7] transition-all text-xs sm:text-sm leading-relaxed h-32 font-normal resize-none shadow-inner min-w-0"
-                value={formData.description} 
+                value={formData.description}
+                aria-label="Property description"
                 onChange={e => setFormData({...formData, description: e.target.value})} 
                 placeholder="Perched on a dramatic ridgeline overlooking misty tea valleys, this architectural sanctuary merges minimalist stone pavilions with lush indigenous flora..."
               />
@@ -1318,7 +969,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               </div>
               <textarea 
                 className="w-full bg-[#101726]/90 border border-slate-700/80 hover:border-slate-500 rounded-2xl p-4 sm:p-5 text-white placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 focus:border-[#0284C7] transition-all text-xs sm:text-sm leading-relaxed h-24 font-medium italic resize-none shadow-inner min-w-0"
-                value={formData.host_philosophy} 
+                value={formData.host_philosophy}
+                aria-label="Hosting philosophy"
                 onChange={e => setFormData({...formData, host_philosophy: e.target.value})} 
                 placeholder="e.g. Our design philosophy is to allow natural sunlight and acoustic stillness to heal the modern soul. Every detail here is intentional."
               />
@@ -1354,7 +1006,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                 <input 
                   type="text" 
                   className="w-full bg-[#101726]/90 border border-slate-700/80 hover:border-slate-500 rounded-2xl px-4 py-3.5 text-white placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 focus:border-[#0284C7] text-xs sm:text-sm font-medium min-w-0"
-                  value={formData.address} 
+                  value={formData.address}
+                  aria-label="Property address"
                   onChange={e => setFormData({...formData, address: e.target.value})} 
                   placeholder="e.g. Ridge Road, Valley Sanctuary Estate"
                 />
@@ -1364,7 +1017,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                 <input 
                   type="text" 
                   className="w-full bg-[#101726]/90 border border-slate-700/80 hover:border-slate-500 rounded-2xl px-4 py-3.5 text-white placeholder:text-slate-500 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 focus:border-[#0284C7] text-xs sm:text-sm font-medium min-w-0"
-                  value={formData.city} 
+                  value={formData.city}
+                  aria-label="City"
                   onChange={e => setFormData({...formData, city: e.target.value})} 
                   placeholder="e.g. Wayanad, Kerala"
                 />
@@ -1375,6 +1029,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               <label className="text-xs font-black uppercase tracking-wider text-slate-200">Interactive Map Pin Location</label>
               <div className="rounded-3xl overflow-hidden border border-slate-800/80 bg-[#101726] p-2 shadow-2xl w-full">
                 <LocationPicker 
+                  lat={formData.lat}
+                  lng={formData.lng}
                   address={formData.address}
                   city={formData.city}
                   onChange={(updates) => setFormData(prev => ({ 
@@ -1387,315 +1043,72 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                 />
               </div>
               <div className="flex gap-4 text-xs font-mono text-slate-400 bg-slate-900/60 border border-slate-800 px-4 py-2 rounded-xl">
-                <span>LAT: <strong className="text-sky-400 font-bold">{formData.lat.toFixed(4)}</strong></span>
-                <span>LNG: <strong className="text-sky-400 font-bold">{formData.lng.toFixed(4)}</strong></span>
+                <span>LAT: <strong className="text-sky-400 font-bold">{formData.lat?.toFixed(4) ?? 'Select a location'}</strong></span>
+                <span>LNG: <strong className="text-sky-400 font-bold">{formData.lng?.toFixed(4) ?? 'Select a location'}</strong></span>
               </div>
             </div>
 
-            <div className="space-y-4 pt-4 border-t border-slate-800 w-full min-w-0">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Compass className="w-4 h-4 text-purple-400" />
-                  <label className="text-xs font-black uppercase tracking-wider text-slate-200">Neighborhood Radar & Culinary Concierge</label>
+            <div className="space-y-4 pt-3 border-t border-slate-800 w-full min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <label className="text-xs font-black uppercase tracking-wider text-slate-200">Curated Neighborhood Highlights</label>
+                  <p className="text-xs text-slate-500 mt-0.5">Points of interest shown to prospective guests on the spatial radar map.</p>
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">Curate top sights, viewpoints, and premier dining spots shown on the guest spatial radar map.</p>
-              </div>
-
-              {/* Mode Selection Cards: AI Auto-Radar vs Manual Entry */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Option 1: AI Auto-Radar */}
-                <div 
-                  onClick={() => {
-                    setRadarMode('ai');
-                    if (formData.nearby.length === 0) {
-                      suggestNearbyPOIs();
-                    }
-                  }}
-                  className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
-                    radarMode === 'ai' 
-                      ? 'bg-gradient-to-br from-purple-950/50 via-indigo-950/30 to-[#0A101C] border-purple-500/80 shadow-lg shadow-purple-950/50 ring-1 ring-purple-500/40' 
-                      : 'bg-[#101726]/60 border-slate-800 hover:border-slate-700 hover:bg-[#101726]'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5">
-                      <div className={`p-2 rounded-xl ${radarMode === 'ai' ? 'bg-purple-500/20 text-purple-300' : 'bg-slate-800 text-slate-400'}`}>
-                        <Sparkles className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
-                          Smart AI Auto-Radar
-                          <span className="px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider bg-purple-500/20 text-purple-300 rounded-full border border-purple-500/30">Auto</span>
-                        </h4>
-                        <p className="text-[11px] text-slate-400 mt-0.5">Google Maps API & Gemini AI auto-discover top sights & gourmet restaurants.</p>
-                      </div>
-                    </div>
-                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${radarMode === 'ai' ? 'border-purple-400 bg-purple-500' : 'border-slate-700'}`}>
-                      {radarMode === 'ai' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Option 2: Manual Host Curation */}
-                <div 
-                  onClick={() => setRadarMode('manual')}
-                  className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
-                    radarMode === 'manual' 
-                      ? 'bg-gradient-to-br from-sky-950/50 via-blue-950/30 to-[#0A101C] border-sky-500/80 shadow-lg shadow-sky-950/50 ring-1 ring-sky-500/40' 
-                      : 'bg-[#101726]/60 border-slate-800 hover:border-slate-700 hover:bg-[#101726]'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5">
-                      <div className={`p-2 rounded-xl ${radarMode === 'manual' ? 'bg-sky-500/20 text-sky-300' : 'bg-slate-800 text-slate-400'}`}>
-                        <Edit3 className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-bold text-white">Manual Custom Curation</h4>
-                        <p className="text-[11px] text-slate-400 mt-0.5">Add custom hidden gems with photos, cuisine tags, and Google Maps links.</p>
-                      </div>
-                    </div>
-                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${radarMode === 'manual' ? 'border-sky-400 bg-sky-500' : 'border-slate-700'}`}>
-                      {radarMode === 'manual' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* AI Auto Mode Controls & Action */}
-              {radarMode === 'ai' && (
-                <div className="p-4 rounded-2xl border border-purple-500/30 bg-purple-950/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-xl bg-purple-500/20 text-purple-300">
-                      <Globe className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h5 className="text-xs font-bold text-white">AI Dual-Pillar Radar Engine</h5>
-                      <p className="text-[11px] text-slate-400">
-                        {formData.nearby.length > 0 
-                          ? `${formData.nearby.filter((p: any) => p.categoryGroup !== 'restaurant' && !['fine_dining', 'cafe', 'farm_to_table', 'local_authentic', 'scenic_bar'].includes(p.type)).length} Sights & ${formData.nearby.filter((p: any) => p.categoryGroup === 'restaurant' || ['fine_dining', 'cafe', 'farm_to_table', 'local_authentic', 'scenic_bar'].includes(p.type)).length} Dining Spots Curated` 
-                          : 'Ready to auto-scan destinations and gourmet dining'}
-                      </p>
-                    </div>
-                  </div>
-                  <button 
-                    type="button" 
-                    disabled={isSuggestingPOIs}
-                    onClick={suggestNearbyPOIs} 
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-md shadow-purple-950/50 shrink-0"
-                  >
-                    {isSuggestingPOIs ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                    <span>{isSuggestingPOIs ? 'Scanning Coordinates...' : formData.nearby.length > 0 ? 'Re-scan Radar' : 'Scan Sights & Dining Now'}</span>
-                  </button>
-                </div>
-              )}
-
-              {/* Dual-Pillar Sub-Tabs: Tourist Sights vs Dining */}
-              <div className="flex items-center gap-2 p-1 bg-slate-900/80 rounded-2xl border border-slate-800 w-full sm:w-fit">
-                <button
-                  type="button"
-                  onClick={() => setRadarPillar('destination')}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                    radarPillar === 'destination'
-                      ? 'bg-purple-600 text-white shadow-md'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                  }`}
-                >
-                  <Compass className="w-3.5 h-3.5" />
-                  <span>Tourist Sights & Destinations ({formData.nearby.filter((p: any) => p.categoryGroup !== 'restaurant' && !['fine_dining', 'cafe', 'farm_to_table', 'local_authentic', 'scenic_bar'].includes(p.type)).length})</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRadarPillar('restaurant')}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                    radarPillar === 'restaurant'
-                      ? 'bg-amber-600 text-white shadow-md'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                  }`}
-                >
-                  <Coffee className="w-3.5 h-3.5" />
-                  <span>Restaurants & Dining ({formData.nearby.filter((p: any) => p.categoryGroup === 'restaurant' || ['fine_dining', 'cafe', 'farm_to_table', 'local_authentic', 'scenic_bar'].includes(p.type)).length})</span>
-                </button>
-              </div>
-
-              {/* Filtered Destinations / Restaurants List */}
-              <div className="space-y-2.5">
-                {formData.nearby.filter((p: any) => radarPillar === 'restaurant' 
-                  ? (p.categoryGroup === 'restaurant' || ['fine_dining', 'cafe', 'farm_to_table', 'local_authentic', 'scenic_bar'].includes(p.type))
-                  : (p.categoryGroup !== 'restaurant' && !['fine_dining', 'cafe', 'farm_to_table', 'local_authentic', 'scenic_bar'].includes(p.type))
-                ).length === 0 && (
-                  <div className="p-6 border border-slate-800 bg-[#0A101C] rounded-2xl flex flex-col items-center justify-center text-center">
-                    {radarPillar === 'destination' ? <Compass className="w-8 h-8 text-slate-600 mb-2" /> : <Coffee className="w-8 h-8 text-slate-600 mb-2" />}
-                    <h4 className="text-slate-300 text-sm font-bold">No {radarPillar === 'destination' ? 'Destinations' : 'Restaurants'} Added Yet</h4>
-                    <p className="text-slate-500 text-xs mt-1 max-w-xs">
-                      {radarMode === 'ai' 
-                        ? `Click "Scan Sights & Dining Now" above to automatically discover local ${radarPillar === 'destination' ? 'attractions' : 'culinary spots'}.`
-                        : `Click "Add Custom ${radarPillar === 'destination' ? 'Destination' : 'Restaurant'}" below to add a spot.`}
-                    </p>
-                  </div>
-                )}
-                {formData.nearby.map((poi: any, i: number) => {
-                  const isRest = poi.categoryGroup === 'restaurant' || ['fine_dining', 'cafe', 'farm_to_table', 'local_authentic', 'scenic_bar'].includes(poi.type);
-                  if (radarPillar === 'restaurant' && !isRest) return null;
-                  if (radarPillar === 'destination' && isRest) return null;
-
-                  return (
-                    <div key={poi.id || i} className={`flex flex-col gap-3 bg-[#101726]/90 p-4 rounded-2xl border ${poi.isManual ? (isRest ? 'border-amber-500/40 bg-[#16120b]' : 'border-sky-500/40 bg-[#0c1424]') : 'border-slate-800/80'} shadow-sm min-w-0`}>
-                      <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-800/60">
-                        <div className="flex items-center gap-2">
-                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
-                            poi.isManual 
-                              ? (isRest ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-sky-500/20 text-sky-300 border border-sky-500/30')
-                              : (isRest ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-purple-500/20 text-purple-300 border border-purple-500/30')
-                          }`}>
-                            {poi.isManual ? 'Custom Entry' : 'AI Curated'}
-                          </span>
-                          <span className="text-[11px] font-semibold text-slate-400">{poi.type ? poi.type.replace(/_/g, ' ').toUpperCase() : (isRest ? 'DINING' : 'DESTINATION')}</span>
-                          {poi.rating && (
-                            <span className="text-[11px] font-bold text-amber-400 flex items-center gap-0.5">
-                              ★ {poi.rating}
-                            </span>
-                          )}
-                        </div>
-                        <button 
-                          type="button" 
-                          onClick={() => setFormData({...formData, nearby: formData.nearby.filter((_, idx) => idx !== i)})}
-                          className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
-                          title="Remove item"
-                        >
-                          <Trash2 className="w-3.5 h-3.5"/>
-                        </button>
-                      </div>
-
-                      <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center">
-                        <select 
-                          className={`bg-[#090D16] border border-slate-700/80 rounded-xl px-2 py-2 text-white text-xs font-semibold focus:outline-none focus:ring-2 ${isRest ? 'focus:ring-amber-500' : 'focus:ring-purple-500'} w-full sm:w-32 shrink-0`}
-                          value={poi.type || (isRest ? 'fine_dining' : 'experience')}
-                          onChange={e => {
-                            const newNearby = [...formData.nearby];
-                            newNearby[i] = { ...poi, type: e.target.value };
-                            setFormData({...formData, nearby: newNearby});
-                          }}
-                        >
-                          {isRest ? (
-                            <>
-                              <option value="fine_dining">Fine Dining</option>
-                              <option value="farm_to_table">Farm-to-Table</option>
-                              <option value="cafe">Artisanal Cafe</option>
-                              <option value="local_authentic">Local Authentic</option>
-                              <option value="scenic_bar">Scenic Bar/Lounge</option>
-                            </>
-                          ) : (
-                            <>
-                              <option value="nature">Nature</option>
-                              <option value="culture">Culture</option>
-                              <option value="landmark">Landmark</option>
-                              <option value="viewpoint">Viewpoint</option>
-                              <option value="experience">Experience</option>
-                            </>
-                          )}
-                        </select>
-                        <input 
-                          type="text" 
-                          className={`bg-[#090D16] border border-slate-700/80 rounded-xl px-3.5 py-2 text-white text-xs font-semibold flex-1 min-w-0 focus:outline-none focus:ring-2 ${isRest ? 'focus:ring-amber-500' : 'focus:ring-purple-500'}`} 
-                          value={poi.name || ''} 
-                          placeholder={isRest ? "Restaurant/Cafe Name (e.g. The Plantation Pavilion)" : "Destination Name (e.g. Chembra Peak)"}
-                          onChange={e => {
-                            const newNearby = [...formData.nearby];
-                            newNearby[i] = { ...poi, name: e.target.value };
-                            setFormData({...formData, nearby: newNearby});
-                          }} 
-                        />
-                        {isRest && (
-                          <input 
-                            type="text" 
-                            className="bg-[#090D16] border border-slate-700/80 rounded-xl px-3.5 py-2 text-white text-xs font-medium w-full sm:w-44 shrink-0 min-w-0 focus:outline-none focus:ring-2 focus:ring-amber-500" 
-                            value={poi.cuisine || ''} 
-                            placeholder="Cuisine (e.g. Organic Farm-to-Table)"
-                            onChange={e => {
-                              const newNearby = [...formData.nearby];
-                              newNearby[i] = { ...poi, cuisine: e.target.value };
-                              setFormData({...formData, nearby: newNearby});
-                            }} 
-                          />
-                        )}
-                        <input 
-                          type="text" 
-                          className="bg-[#090D16] border border-slate-700/80 rounded-xl px-3.5 py-2 text-white text-xs font-medium w-full sm:w-28 shrink-0 min-w-0 focus:outline-none focus:ring-2 focus:ring-purple-500" 
-                          value={poi.distance || ''} 
-                          placeholder="e.g. 10 min drive"
-                          onChange={e => {
-                            const newNearby = [...formData.nearby];
-                            newNearby[i] = { ...poi, distance: e.target.value };
-                            setFormData({...formData, nearby: newNearby});
-                          }} 
-                        />
-                      </div>
-
-                      {poi.isManual && (
-                        <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-slate-800/80">
-                          {/* Image Upload Area */}
-                          <div className="relative w-full sm:w-1/3 h-24 bg-[#090D16] border border-slate-700/80 border-dashed rounded-xl overflow-hidden group">
-                            {poi.photoUrl ? (
-                              <img src={poi.photoUrl} alt="Cover" className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 group-hover:text-sky-400 transition-colors">
-                                <Images className="w-6 h-6 mb-1 opacity-70" />
-                                <span className="text-[10px] font-bold uppercase text-center px-2">Cover Photo Required</span>
-                              </div>
-                            )}
-                            <input 
-                              type="file" 
-                              accept="image/*"
-                              className="absolute inset-0 opacity-0 cursor-pointer"
-                              onChange={async (e) => {
-                                if (e.target.files && e.target.files[0]) {
-                                  const url = await uploadPhotoFile(e.target.files[0]);
-                                  const newNearby = [...formData.nearby];
-                                  newNearby[i] = { ...poi, photoUrl: url };
-                                  setFormData({...formData, nearby: newNearby});
-                                }
-                              }}
-                            />
-                          </div>
-                          {/* URL input */}
-                          <div className="flex-1 flex flex-col justify-center">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Google Maps Share Link *</label>
-                            <input 
-                              type="url"
-                              className={`bg-[#090D16] border border-slate-700/80 rounded-xl px-3.5 py-2 text-white text-xs font-semibold w-full focus:outline-none focus:ring-2 ${isRest ? 'focus:ring-amber-500' : 'focus:ring-sky-500'}`} 
-                              placeholder="https://maps.app.goo.gl/..."
-                              value={poi.googleMapsUrl || ''}
-                              onChange={e => {
-                                const newNearby = [...formData.nearby];
-                                newNearby[i] = { ...poi, googleMapsUrl: e.target.value };
-                                setFormData({...formData, nearby: newNearby});
-                              }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {/* Add Manual Button */}
                 <button 
                   type="button" 
-                  onClick={() => {
-                    setRadarMode('manual');
-                    const newEntry = radarPillar === 'destination'
-                      ? { id: `manual-dest-${Date.now()}`, name: '', distance: '', type: 'viewpoint', rating: 4.8, categoryGroup: 'destination', lat: formData.lat, lng: formData.lng, isManual: true }
-                      : { id: `manual-rest-${Date.now()}`, name: '', cuisine: 'Artisanal Cuisine', distance: '', type: 'fine_dining', rating: 4.9, categoryGroup: 'restaurant', lat: formData.lat, lng: formData.lng, isManual: true };
-                    setFormData({...formData, nearby: [...formData.nearby, newEntry]});
-                  }}
-                  className={`w-full py-3 border-2 border-dashed rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                    radarPillar === 'destination'
-                      ? 'border-slate-800 hover:border-purple-500/50 bg-[#101726]/40 hover:bg-[#101726] text-slate-400 hover:text-white'
-                      : 'border-slate-800 hover:border-amber-500/50 bg-[#101726]/40 hover:bg-[#101726] text-slate-400 hover:text-white'
-                  }`}
+                  disabled={isSuggestingPOIs}
+                  onClick={suggestNearbyPOIs} 
+                  className="px-4 py-2 bg-gradient-to-r from-purple-500/20 to-indigo-500/20 border border-purple-500/40 hover:bg-purple-600/30 text-purple-200 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-md shadow-purple-950/40 shrink-0"
                 >
-                  <Plus className="w-4 h-4"/> Add Custom {radarPillar === 'destination' ? 'Destination' : 'Restaurant'} Manually
+                  {isSuggestingPOIs ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-purple-400" />}
+                  <span>{isSuggestingPOIs ? 'Generating Radar...' : 'AI Suggest POIs'}</span>
+                </button>
+              </div>
+
+              <div className="space-y-2.5">
+                {formData.nearby.map((poi: any, i: number) => (
+                  <div key={i} className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center bg-[#101726]/90 p-3 rounded-2xl border border-slate-800/80 shadow-sm min-w-0">
+                    <span className="text-xl shrink-0 self-center">📍</span>
+                    <input 
+                      type="text" 
+                      className="bg-[#090D16] border border-slate-700/80 rounded-xl px-3.5 py-2 text-white text-xs font-semibold flex-1 min-w-0 focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
+                      value={poi.name || ''}
+                      aria-label="Nearby place name"
+                      placeholder="Attraction Name (e.g. Chembra Peak)"
+                      onChange={e => {
+                        const newNearby = [...formData.nearby];
+                        newNearby[i] = { ...poi, name: e.target.value };
+                        setFormData({...formData, nearby: newNearby});
+                      }} 
+                    />
+                    <input 
+                      type="text" 
+                      className="bg-[#090D16] border border-slate-700/80 rounded-xl px-3.5 py-2 text-white text-xs font-medium w-full sm:w-32 min-w-0 focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
+                      value={poi.distance || ''}
+                      aria-label="Nearby place distance"
+                      placeholder="Distance (e.g. 3.2 km)"
+                      onChange={e => {
+                        const newNearby = [...formData.nearby];
+                        newNearby[i] = { ...poi, distance: e.target.value };
+                        setFormData({...formData, nearby: newNearby});
+                      }} 
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => setFormData({...formData, nearby: formData.nearby.filter((_, idx) => idx !== i)})}
+                      className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors self-center cursor-pointer shrink-0"
+                    >
+                      <Trash2 className="w-4 h-4"/>
+                    </button>
+                  </div>
+                ))}
+
+                <button 
+                  type="button" 
+                  onClick={() => setFormData({...formData, nearby: [...formData.nearby, { name: '', distance: '', type: 'attraction' }]})}
+                  className="w-full py-3.5 border-2 border-dashed border-slate-800 hover:border-[#0284C7] bg-[#101726]/40 hover:bg-[#101726] rounded-2xl text-slate-400 hover:text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <Plus className="w-4 h-4"/> Add Neighborhood Point of Interest
                 </button>
               </div>
             </div>
@@ -1758,7 +1171,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                             type="button"
                             onClick={(e) => { e.stopPropagation(); removeRoom(room.id); }}
                             className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors cursor-pointer"
-                            title="Delete Room"
+                            title="Remove new room or retire existing room"
+                            aria-label={`Remove new room or retire ${room.name || 'existing room'}`}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -1816,7 +1230,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                             <input 
                               type="number" 
                               className="w-full bg-[#101726] border border-slate-700/80 rounded-xl px-3 py-2.5 text-white font-bold text-xs sm:text-sm min-w-0 focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
-                              value={room.price || ''} 
+                              value={room.price || ''}
+                              aria-label="Room nightly rate in INR"
                               onChange={e => updateRoom(room.id, 'price', parseFloat(e.target.value) || 0)} 
                               placeholder="18500"
                             />
@@ -1827,26 +1242,37 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                               type="number" 
                               min={1}
                               className="w-full bg-[#101726] border border-slate-700/80 rounded-xl px-3 py-2.5 text-white font-bold text-xs sm:text-sm min-w-0 focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
-                              value={room.capacity || 2} 
+                              value={room.capacity || 2}
+                              aria-label="Room guest capacity"
                               onChange={e => updateRoom(room.id, 'capacity', parseInt(e.target.value) || 2)} 
                             />
                           </div>
                           <div className="space-y-1.5 min-w-0">
-                            <label className="text-xs font-black uppercase tracking-wider text-slate-200">Units Available</label>
+                            <label className="text-xs font-black uppercase tracking-wider text-slate-200">Configured units</label>
                             <input 
                               type="number" 
-                              min={1}
+                              min={0}
                               className="w-full bg-[#101726] border border-slate-700/80 rounded-xl px-3 py-2.5 text-white font-bold text-xs sm:text-sm min-w-0 focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
-                              value={room.inventory_count || 1} 
-                              onChange={e => updateRoom(room.id, 'inventory_count', parseInt(e.target.value) || 1)} 
+                              value={room.inventory_count ?? 0}
+                              aria-label="Room inventory"
+                              onChange={e => updateRoom(room.id, 'inventory_count', Math.max(0, parseInt(e.target.value) || 0))}
                             />
+                            <label className="block text-xs text-slate-200 mt-2">Inventory source
+                              <select aria-label={`Inventory source for ${room.name || 'room'}`} className="block w-full bg-slate-900 text-white p-2 rounded border border-slate-600" value={room.inventory_source || 'unknown'} onChange={e => updateRoom(room.id, 'inventory_source', e.target.value)}>
+                                <option value="unknown">Not confirmed</option>
+                                <option value="encho_allocation">Reserved exclusively for Encho</option>
+                                <option value="external_sync">Managed on external channels</option>
+                              </select>
+                            </label>
+                            <p className="text-xs text-slate-400">Choose Encho allocation only for units you will not also sell elsewhere. External calendars need verified integration before instant booking.</p>
                           </div>
                           <div className="space-y-1.5 min-w-0">
                             <label className="text-xs font-black uppercase tracking-wider text-slate-200">Marketing Tag</label>
                             <input 
                               type="text" 
                               className="w-full bg-[#101726] border border-slate-700/80 rounded-xl px-3 py-2.5 text-white text-xs font-semibold min-w-0 focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
-                              value={room.tag || ''} 
+                              value={room.tag || ''}
+                              aria-label="Room tag"
                               onChange={e => updateRoom(room.id, 'tag', e.target.value)} 
                               placeholder="e.g. Most Popular"
                             />
@@ -1858,7 +1284,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                           <input 
                             type="text" 
                             className="w-full bg-[#101726] border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-white placeholder:text-slate-500 text-xs sm:text-sm min-w-0 focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
-                            value={room.specs || ''} 
+                            value={room.specs || ''}
+                            aria-label="Room specifications"
                             onChange={e => updateRoom(room.id, 'specs', e.target.value)} 
                             placeholder="e.g. 1,200 sq.ft · 270° Valley View · Heated Jacuzzi"
                           />
@@ -1868,7 +1295,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                           <label className="text-xs font-black uppercase tracking-wider text-slate-200">Subunit Description</label>
                           <textarea 
                             className="w-full bg-[#101726] border border-slate-700/80 rounded-xl p-3 text-white placeholder:text-slate-500 text-xs sm:text-sm h-20 min-w-0 focus:outline-none focus:ring-2 focus:ring-[#0284C7] resize-none" 
-                            value={room.description || ''} 
+                            value={room.description || ''}
+                            aria-label="Room description"
                             onChange={e => updateRoom(room.id, 'description', e.target.value)} 
                             placeholder="Describe the architectural nuances and amenities of this specific room..."
                           />
@@ -1889,7 +1317,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                           <div className="flex gap-2">
                             <input 
                               type="text" 
-                              value={newFeatureText[room.id] || ''} 
+                              value={newFeatureText[room.id] || ''}
+                              aria-label="New room feature"
                               onChange={e => setNewFeatureText(prev => ({ ...prev, [room.id]: e.target.value }))} 
                               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addRoomFeature(room.id); }}}
                               className="bg-[#101726] border border-slate-700/80 rounded-xl px-3.5 py-2 text-white text-xs flex-1 min-w-0 focus:outline-none focus:ring-2 focus:ring-[#0284C7]" 
@@ -1911,26 +1340,9 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                               <label className="text-xs font-black uppercase tracking-wider text-slate-200">Room Photos & Spatial Sub-Classification</label>
                               <p className="text-xs text-slate-500 mt-0.5">Upload photos for <strong className="text-slate-300">{room.name || 'this room'}</strong>.</p>
                             </div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {/* Founder Gate PROPOSED-007 Compliance Indicator */}
-                              {(() => {
-                                const count = (room.photos || []).length;
-                                const hasSleeping = (room.photos || []).some((p: any) => p.is_sleeping_area || p.category === 'bedroom');
-                                const isSatisfied = count >= 3 && hasSleeping;
-                                return (
-                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                                    isSatisfied
-                                      ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/30'
-                                      : 'bg-rose-950/40 text-rose-300 border-rose-500/30'
-                                  }`}>
-                                    {count}/3 photos {hasSleeping ? '· 🛏️ Sleeping' : '· ⚠️ Needs Sleeping Area'}
-                                  </span>
-                                );
-                              })()}
-                              <span className="shrink-0 text-[10px] font-bold text-amber-300 bg-amber-950/40 border border-amber-500/30 px-2 py-0.5 rounded-full whitespace-nowrap">
-                                🔒 Scoped: {room.name || 'Room'}
-                              </span>
-                            </div>
+                            <span className="shrink-0 text-[10px] font-bold text-amber-300 bg-amber-950/40 border border-amber-500/30 px-2 py-0.5 rounded-full whitespace-nowrap">
+                              🔒 Scoped: {room.name || 'Room'}
+                            </span>
                           </div>
                           <PhotoUpload 
                             photos={room.photos || []} 
@@ -1990,37 +1402,15 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-3 border-t border-slate-800 w-full min-w-0">
               <div className="space-y-1.5 min-w-0">
-                <label className="text-xs font-black uppercase tracking-wider text-slate-200">Cinematic Hero Video (.mp4)</label>
-                <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    className="flex-1 bg-[#101726]/90 border border-slate-700/80 hover:border-slate-500 rounded-xl px-3.5 py-2.5 text-white placeholder:text-slate-500 text-xs sm:text-sm font-medium focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 focus:border-[#0284C7] min-w-0" 
-                    value={formData.hero_video_url} 
-                    onChange={e => setFormData({...formData, hero_video_url: e.target.value})} 
-                    placeholder="Auto-fills on upload..."
-                  />
-                  <label className="shrink-0 flex items-center justify-center bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl px-4 cursor-pointer transition-colors">
-                    <span className="text-xs font-bold text-white flex items-center gap-2">
-                      <Upload className="w-4 h-4" /> Upload
-                    </span>
-                    <input 
-                      type="file" 
-                      accept="video/mp4,video/webm" 
-                      className="hidden" 
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          // Simple visual feedback during upload
-                          const orig = formData.hero_video_url;
-                          setFormData({...formData, hero_video_url: 'Uploading... please wait...'});
-                          const url = await uploadVideoFile(file);
-                          setFormData({...formData, hero_video_url: url || orig});
-                        }
-                      }} 
-                    />
-                  </label>
-                </div>
-                <p className="text-[10px] text-slate-500 font-medium">Auto-optimized for 4G (Mux HLS). Max 500MB.</p>
+                <label className="text-xs font-black uppercase tracking-wider text-slate-200">Hero Video (YouTube / MP4)</label>
+                <input 
+                  type="text" 
+                  className="w-full bg-[#101726]/90 border border-slate-700/80 hover:border-slate-500 rounded-xl px-3.5 py-2.5 text-white placeholder:text-slate-500 text-xs sm:text-sm font-medium focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 focus:border-[#0284C7] min-w-0" 
+                  value={formData.hero_video_url}
+                  aria-label="Property video URL"
+                  onChange={e => setFormData({...formData, hero_video_url: e.target.value})} 
+                  placeholder="https://youtube.com/watch?v=..."
+                />
               </div>
               <div className="space-y-1.5 min-w-0">
                 <label className="text-xs font-black uppercase tracking-wider text-slate-200">Brand Color Accent</label>
@@ -2028,7 +1418,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                   <input 
                     type="color" 
                     className="border-0 rounded-lg h-8 w-12 bg-transparent cursor-pointer" 
-                    value={formData.dominant_color_hex} 
+                    value={formData.dominant_color_hex}
+                    aria-label="Property accent color"
                     onChange={e => setFormData({...formData, dominant_color_hex: e.target.value})} 
                   />
                   <span className="font-mono text-xs font-bold text-slate-200">{formData.dominant_color_hex}</span>
@@ -2153,6 +1544,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                       </span>
                       <textarea
                         value={item}
+                        aria-label="House rule"
                         onChange={e => updateGuidelinePoint(idx, e.target.value)}
                         rows={2}
                         className="flex-1 bg-transparent border-0 text-xs sm:text-sm text-slate-200 placeholder:text-slate-600 focus:ring-0 focus:outline-none resize-none font-medium leading-relaxed"
@@ -2176,6 +1568,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                 <input
                   type="text"
                   value={newGuidelineInput}
+                  aria-label="New house rule"
                   onChange={e => setNewGuidelineInput(e.target.value)}
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
@@ -2246,6 +1639,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               <textarea
                 rows={4}
                 value={formData.concierge_privileges}
+                aria-label="Concierge privileges"
                 onChange={e => setFormData({ ...formData, concierge_privileges: e.target.value })}
                 placeholder="All guests at this Encho Sanctuary receive direct access to our Walled Garden Host Concierge. Private dining experiences, sommelier cellar curation, private driver transfers, and customized wellness sessions can be coordinated seamlessly inside your Encho guest inbox."
                 className="w-full bg-[#090D16] border border-slate-700/80 rounded-2xl p-4 text-white placeholder:text-slate-500 text-xs sm:text-sm focus:outline-none focus:ring-4 focus:ring-sky-500/20 resize-none font-medium leading-relaxed"
@@ -2267,6 +1661,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                     max="2.0" 
                     step="0.05"
                     value={formData.dynamicPricing.weekendMultiplier}
+                    aria-label="Weekend price multiplier"
                     onChange={e => setFormData({
                       ...formData,
                       dynamicPricing: { ...formData.dynamicPricing, weekendMultiplier: parseFloat(e.target.value) }
@@ -2286,6 +1681,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                     max="2.5" 
                     step="0.05"
                     value={formData.dynamicPricing.seasonalMultiplier}
+                    aria-label="Seasonal price multiplier"
                     onChange={e => setFormData({
                       ...formData,
                       dynamicPricing: { ...formData.dynamicPricing, seasonalMultiplier: parseFloat(e.target.value) }
@@ -2316,7 +1712,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                 <input 
                   type="text" 
                   className="w-full bg-[#101726]/90 border border-slate-700/80 rounded-xl px-4 py-3 text-white placeholder:text-slate-500 text-xs sm:text-sm font-medium focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 min-w-0" 
-                  value={formData.seo_title} 
+                  value={formData.seo_title}
+                  aria-label="Search result title"
                   onChange={e => setFormData({...formData, seo_title: e.target.value})} 
                   placeholder={formData.title || 'Luxury Sanctuary Villa'} 
                 />
@@ -2326,7 +1723,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                 <label className="text-xs font-black uppercase tracking-wider text-slate-200">SEO Meta Description</label>
                 <textarea 
                   className="w-full bg-[#101726]/90 border border-slate-700/80 rounded-xl p-3.5 text-white placeholder:text-slate-500 text-xs sm:text-sm h-20 focus:outline-none focus:ring-4 focus:ring-[#0284C7]/20 resize-none font-medium min-w-0" 
-                  value={formData.seo_description} 
+                  value={formData.seo_description}
+                  aria-label="Search result description"
                   onChange={e => setFormData({...formData, seo_description: e.target.value})} 
                   placeholder={formData.description.substring(0, 160) || 'Experience the highest standard of luxury hospitality...'} 
                 />
@@ -2435,12 +1833,12 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
           <ShieldCheck className="w-10 h-10 text-[#0284C7]" />
         </motion.div>
         <h1 className="text-3xl sm:text-4xl font-black text-white mb-2 tracking-tight font-display">
-          {existingListing ? 'Property Successfully Updated!' : 'Property Published Successfully!'}
+          {savedAsDraft ? 'Property draft saved' : 'Property submitted for review'}
         </h1>
         <p className="text-slate-400 max-w-md mx-auto text-sm leading-relaxed">
-          {existingListing 
-            ? "Your property alterations and room type rates have been written to the distributed ledger." 
-            : "Your architectural sanctuary is now live on the platform directory and ready for marketing distribution."}
+          {savedAsDraft ? 'Your progress is saved. Resume the draft from your Properties workspace.' : existingListing
+            ? "Your changes are awaiting admin review. Guests continue to see the currently published version."
+            : "Your property is saved and awaiting admin review before it appears to guests."}
         </p>
       </div>
     );
@@ -2517,6 +1915,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
             Cancel
           </button>
 
+          <button type="button" disabled={loading} onClick={e => void handleSubmit(e, 'draft')} className="px-3 py-2 text-sm rounded-xl border border-slate-600 text-slate-200 disabled:opacity-50">Save draft</button>
           <button 
             form="host-form" 
             type="submit" 
@@ -2524,7 +1923,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
             className="px-5 sm:px-6 py-2.5 bg-[#0284C7] hover:bg-[#0274B7] disabled:opacity-50 text-white font-extrabold text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-[#0284C7]/20 flex items-center gap-1.5 cursor-pointer"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-            <span>{loading ? 'Saving...' : existingListing ? 'Save Master' : 'Publish Listing'}</span>
+            <span>{loading ? 'Saving...' : existingListing ? 'Submit changes' : 'Submit for review'}</span>
           </button>
         </div>
       </header>
@@ -2534,11 +1933,13 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         <div className="max-w-7xl mx-auto flex items-center gap-2 justify-start sm:justify-center">
           {STEPS.map(s => {
             const isActive = currentStep === s.id;
-            const isCompleted = currentStep > s.id;
+            const isCompleted = currentStep > s.id && validateStep(s.id);
             return (
               <button
                 key={s.id}
                 type="button"
+                aria-current={isActive ? 'step' : undefined}
+                aria-label={`Step ${s.id}: ${s.name}`}
                 onClick={() => {
                   let canJump = true;
                   for (let i = 1; i < s.id; i++) {
@@ -2582,7 +1983,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
             isSplitView ? 'lg:w-[48%] xl:w-[45%]' : 'w-full'
           }`}>
             <div className="bg-[#0F1626]/85 border border-slate-800/80 rounded-3xl sm:rounded-[32px] p-4 sm:p-7 lg:p-8 shadow-[0_20px_60px_rgba(0,0,0,0.6)] backdrop-blur-xl w-full max-w-full overflow-hidden min-w-0">
-              <form id="host-form" onSubmit={handleSubmit}>
+              <form id="host-form" onSubmit={handleSubmit} aria-busy={loading} aria-label="Property listing setup">
+                <p className="sr-only" role="status">Step {currentStep} of {STEPS.length}: {STEPS.find(step => step.id === currentStep)?.name}</p>
                 <AnimatePresence mode="wait">
                   <motion.div 
                     key={currentStep} 
@@ -2592,7 +1994,10 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                     transition={{ duration: 0.2 }}
                     className="w-full min-w-0"
                   >
-                    {renderStep()}
+                    <fieldset disabled={loading} className="border-0 p-0 m-0 min-w-0">
+                      <legend className="sr-only">{STEPS.find(step => step.id === currentStep)?.name}</legend>
+                      {renderStep()}
+                    </fieldset>
                   </motion.div>
                 </AnimatePresence>
               </form>
@@ -2693,7 +2098,6 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                     onBack={() => {}}
                     isFavorite={false}
                     initialGalleryOpen={splitGalleryOpen}
-                    isPreview={true}
                     onToggleFavorite={() => addToast('Wishlist', 'Saved to wishlist (Live Simulation)', 'success')}
                     onBook={() => addToast('Reservation Simulator', 'Guest reservation checkout flow verified!', 'success')}
                     onContactHost={() => addToast('Host Concierge', 'Walled garden concierge chat opened (Live Simulation)', 'info')}
@@ -2735,7 +2139,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               className="px-7 py-2.5 bg-gradient-to-r from-[#0284C7] to-emerald-500 hover:from-[#0274B7] hover:to-emerald-600 disabled:opacity-50 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-xl shadow-emerald-500/20 flex items-center gap-2 cursor-pointer"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-              <span>{loading ? 'Publishing...' : 'Publish Listing'}</span>
+              <span>{loading ? 'Submitting...' : 'Submit for review'}</span>
             </button>
           )}
         </div>
@@ -2854,7 +2258,6 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                   listing={previewListing}
                   onBack={() => setIsPreviewOpen(false)}
                   isFavorite={false}
-                  isPreview={true}
                   initialGalleryOpen={previewInitialGallery}
                   onToggleFavorite={() => addToast('Wishlist', 'Saved to wishlist (Live Simulation Mode)', 'success')}
                   onBook={() => addToast('Reservation Simulator', 'Guest reservation checkout flow verified!', 'success')}

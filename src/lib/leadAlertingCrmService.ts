@@ -100,19 +100,18 @@ export class LeadAlertingCrmService {
     signatureHeader: string | undefined,
     rawBody: string | Buffer
   ): boolean {
-    const appSecret = process.env.META_APP_SECRET || 'encho_meta_secret_live_test_2026';
+    const appSecret = process.env.META_APP_SECRET;
+    if (!appSecret) return false;
     
     // In local test environments with intentionally omitted signature
-    if (process.env.NODE_ENV === 'test' && !signatureHeader) {
-      return true;
-    }
+
 
     if (!signatureHeader) {
       return false;
     }
 
-    const cleanSig = signatureHeader.replace('sha256=', '').trim();
-    if (!cleanSig) return false;
+    if (!/^sha256=[a-f0-9]{64}$/i.test(signatureHeader)) return false;
+    const cleanSig = signatureHeader.slice(7);
 
     try {
       const hmac = crypto.createHmac('sha256', appSecret);
@@ -570,60 +569,9 @@ export class LeadAlertingCrmService {
     initialMessage: string;
     poolOrClient: any;
   }): Promise<{ threadId: number; messageId: number; isExisting: boolean }> {
-    const { leadId, hostId, listingId, initialMessage, poolOrClient } = params;
-
-    // Check if guest user exists or use system guest ID
-    let guestId: number = hostId;
-    try {
-      const gRes = await poolOrClient.query(`SELECT id FROM users WHERE role = 'guest' ORDER BY id ASC LIMIT 1`);
-      if (gRes.rows.length > 0) {
-        guestId = gRes.rows[0].id;
-      } else {
-        const anyUser = await poolOrClient.query(`SELECT id FROM users ORDER BY id ASC LIMIT 1`);
-        if (anyUser.rows.length > 0) guestId = anyUser.rows[0].id;
-      }
-    } catch (_guestErr) {
-      // Non-fatal if guest resolution falls back to host
-    }
-
-    // Check for existing thread for this host/listing/guest combination
-    const threadCheck = await poolOrClient.query(`
-      SELECT id FROM threads
-      WHERE host_id = $1 AND listing_id = $2 AND guest_id = $3
-      LIMIT 1
-    `, [hostId, listingId, guestId]);
-
-    let threadId: number;
-    let isExisting = false;
-
-    if (threadCheck.rows.length > 0) {
-      threadId = threadCheck.rows[0].id;
-      isExisting = true;
-      await poolOrClient.query(`
-        UPDATE threads 
-        SET last_message = $1, lead_intent_score = '🔥 HOT LEAD', updated_at = CURRENT_TIMESTAMP
-        WHERE id = $2
-      `, [initialMessage, threadId]);
-    } else {
-      const newThreadRes = await poolOrClient.query(`
-        INSERT INTO threads (guest_id, host_id, listing_id, last_message, lead_intent_score)
-        VALUES ($1, $2, $3, $4, '🔥 HOT LEAD')
-        RETURNING id
-      `, [guestId, hostId, listingId, initialMessage]);
-      threadId = newThreadRes.rows[0].id;
-    }
-
-    const msgRes = await poolOrClient.query(`
-      INSERT INTO messages (thread_id, sender_id, receiver_id, content, is_sanitized)
-      VALUES ($1, $2, $3, $4, true)
-      RETURNING id
-    `, [threadId, guestId, hostId, initialMessage]);
-
-    return {
-      threadId,
-      messageId: msgRes.rows[0].id,
-      isExisting
-    };
+    // Ad leads are not authenticated Encho guests. Never assign an unrelated
+    // guest or host account to their messages. A verified claim flow is required.
+    throw new Error('LEAD_GUEST_IDENTITY_UNLINKED: inquiry retained in CRM; no guest thread created.');
   }
 
   /**
@@ -636,6 +584,9 @@ export class LeadAlertingCrmService {
   ): Promise<number[]> {
     const intentIds: number[] = [];
     const hostId = lead.host_id;
+    const ownerResult = await poolOrClient.query('SELECT email, phone FROM users WHERE id=$1', [hostId]);
+    const owner = ownerResult.rows[0];
+    if (!owner) throw new Error('Notification host account was not found.');
     const campaignTitle = campaign?.title || 'Your Listing Ad';
     const isHot = lead.ai_intent_badge === 'HOT_LEAD' || lead.intent_score >= 75;
     const alertPrefix = isHot ? '🔥 Hot Lead Alert' : '⚡ New Lead Received';
@@ -663,6 +614,7 @@ export class LeadAlertingCrmService {
     // 2. Email Notification Intent
     const emailTitle = `${alertPrefix}: Hot Lead for ${campaignTitle}`;
     const emailBody = `Hello Host,\n\nYou have a new inquiry from a verified advertising lead on Encho.\n\nProperty: ${campaignTitle}\nIntent Level: ${isHot ? 'High Priority' : 'Standard'}\n\nLog in to your Encho Host CRM to reply instantly without leaking contact information.`;
+    if (typeof owner.email === 'string' && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(owner.email)) {
     const emailRes = await poolOrClient.query(`
       INSERT INTO lead_notification_intents (
         lead_id, campaign_id, host_id, channel, recipient, title, body, metadata, status
@@ -673,16 +625,17 @@ export class LeadAlertingCrmService {
       lead.id,
       lead.campaign_id,
       hostId,
-      `host_${hostId}@encho.internal`,
+      owner.email,
       emailTitle,
       emailBody,
       JSON.stringify({ lead_id: lead.id, is_hot: isHot })
     ]);
     intentIds.push(emailRes.rows[0].id);
+    }
 
     // 3. Optional SMS/WhatsApp Notification Intent for Hot Leads
-    if (isHot) {
-      const smsBody = `[ENCHO] Hot Lead Alert for ${campaignTitle}! Click here to reply in Host CRM: https://encho.com/host/inbox`;
+    if (isHot && typeof owner.phone === 'string' && /^\+[1-9]\d{6,14}$/.test(owner.phone)) {
+      const smsBody = `[ENCHO] Hot Lead Alert for ${campaignTitle}! Open your Encho Host Inbox to reply.`;
       const smsRes = await poolOrClient.query(`
         INSERT INTO lead_notification_intents (
           lead_id, campaign_id, host_id, channel, recipient, title, body, metadata, status
@@ -693,7 +646,7 @@ export class LeadAlertingCrmService {
         lead.id,
         lead.campaign_id,
         hostId,
-        `+1555000${hostId.toString().padStart(4, '0')}`,
+        owner.phone,
         'Hot Lead SMS Alert',
         smsBody,
         JSON.stringify({ lead_id: lead.id })
@@ -710,9 +663,11 @@ export class LeadAlertingCrmService {
    */
   public static async processLeadNotificationQueue(
     poolOrClient: any,
-    options?: { maxBatch?: number; mockDispatcher?: (intent: any) => Promise<boolean> }
+    options?: { maxBatch?: number; dispatcher?: (intent: any) => Promise<boolean>; mockDispatcher?: (intent: any) => Promise<boolean> }
   ): Promise<{ processed: number; delivered: number; failed: number; dlq: number }> {
-    const maxBatch = options?.maxBatch || 50;
+    const dispatcher = options?.dispatcher || (process.env.NODE_ENV === 'test' ? options?.mockDispatcher : undefined);
+    if (!dispatcher) throw new Error('LEAD_NOTIFICATION_ADAPTER_UNAVAILABLE: outbox retained; no delivery claimed.');
+    const maxBatch = Math.min(100, Math.max(1, options?.maxBatch || 50));
     let processed = 0;
     let delivered = 0;
     let failed = 0;
@@ -746,13 +701,7 @@ export class LeadAlertingCrmService {
     for (const intent of claimRes.rows) {
       processed++;
       try {
-        let isDelivered = true;
-        if (options?.mockDispatcher) {
-          isDelivered = await options.mockDispatcher(intent);
-        } else {
-          // Default delivery dispatcher
-          console.log(`[LEAD NOTIFICATION] Dispatched ${intent.channel} to ${intent.recipient}: "${intent.title}"`);
-        }
+        const isDelivered = await dispatcher(intent);
 
         if (isDelivered) {
           await poolOrClient.query(`
@@ -784,7 +733,7 @@ export class LeadAlertingCrmService {
             WHERE id = $2
           `, [dispErr.message || 'Exceeded max retry attempts', intent.id]);
         } else {
-          const backoffSec = Math.pow(2, currentAttempt) * 15; // 30s, 60s
+          const backoffSec = Math.pow(2, currentAttempt) * 15 + Math.floor(Math.random() * 15);
           await poolOrClient.query(`
             UPDATE lead_notification_intents
             SET status = 'PENDING',
@@ -829,7 +778,7 @@ export class LeadAlertingCrmService {
     const currentLead = lockRes.rows[0];
 
     // Host Tenant Isolation Check
-    if (actorType === 'host' && hostId && Number(currentLead.host_id) !== Number(hostId)) {
+    if (actorType === 'host' && (!hostId || Number(currentLead.host_id) !== Number(hostId))) {
       await this.recordSecurityEvent({
         leadId,
         campaignId: currentLead.campaign_id,

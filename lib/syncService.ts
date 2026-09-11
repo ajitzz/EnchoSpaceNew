@@ -1,4 +1,5 @@
 import { get, set, del, keys } from 'idb-keyval';
+import { canReplayOffline } from './offlinePolicy';
 
 /**
  * Local-First Sync Service
@@ -68,6 +69,8 @@ export function registerCustomSyncHandler(id: string, handler: CustomMutationHan
 
 export async function queueMutation(url: string, method: string, body?: any, headers?: Record<string, string>): Promise<boolean> {
     const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+    const replayAllowed = canReplayOffline(url, method);
+    if (!isOnline && !replayAllowed) throw new Error('Reconnect to complete this action. It has not been queued.');
     if (isOnline) {
         try {
             const response = await fetch(url, {
@@ -81,7 +84,9 @@ export async function queueMutation(url: string, method: string, body?: any, hea
             if (response.ok) {
                 return true;
             }
+            if (!replayAllowed) throw new Error('The action was not confirmed. Refresh before trying again.');
         } catch (e) {
+            if (!replayAllowed) throw e;
             console.warn(`Direct mutation failed for ${url}, queuing offline`, e);
         }
     }
@@ -117,6 +122,11 @@ export async function processOfflineQueue(): Promise<void> {
 
         for (const item of queue) {
             try {
+                // Preserve legacy financial/booking requests for recovery, but never send them automatically.
+                if (item.type !== 'CUSTOM_MUTATION' && !canReplayOffline(item.url, item.method)) {
+                    remainingQueue.push(item);
+                    continue;
+                }
                 if (item.type === 'CUSTOM_MUTATION' && item.customId && customHandlers[item.customId]) {
                     const success = await customHandlers[item.customId](item);
                     if (!success) remainingQueue.push(item);

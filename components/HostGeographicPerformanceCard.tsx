@@ -1,4 +1,5 @@
 import React from 'react';
+import { PerformanceEmptyState } from './PerformanceEmptyState';
 import {
   MapPin,
   Eye,
@@ -35,6 +36,7 @@ export const HostGeographicPerformanceCard: React.FC<HostGeographicPerformanceCa
 }) => {
   const hasLocations = geographicBreakdown.length > 0;
   const hasImpressions = geographicBreakdown.some(g => g.impressions > 0);
+  if (!isLoading && !hasLocations) return <PerformanceEmptyState title="Geographic performance" />;
 
   if (isLoading) {
     return (

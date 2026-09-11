@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { MapPin, Navigation } from 'lucide-react';
 
@@ -17,6 +17,8 @@ const customIcon = new L.Icon({
 interface LocationPickerProps {
   address: string;
   city: string;
+  lat?: number | null;
+  lng?: number | null;
   onChange: (updates: { address: string; city: string; lat?: number; lng?: number }) => void;
 }
 
@@ -47,41 +49,27 @@ const DraggableMarker = ({ position, setPosition }: { position: L.LatLng; setPos
   );
 };
 
-export const LocationPicker: React.FC<LocationPickerProps> = ({ address, city, onChange }) => {
-  // Default to something central if no position is set, or if we want to default to say, Berlin
-  const [position, setPosition] = useState<L.LatLng>(new L.LatLng(52.5200, 13.4050));
-  const [loading, setLoading] = useState(false);
+function MapPosition({ position }: { position: L.LatLng }) {
+  const map = useMap();
+  useEffect(() => { map.panTo(position); }, [map, position]);
+  return null;
+}
 
-  // Reverse geocode when position changes
-  useEffect(() => {
-    const fetchAddress = async () => {
-      try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.lat}&lon=${position.lng}`);
-        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
-        if (data && data.address) {
-          const newCity = data.address.city || data.address.town || data.address.village || city;
-          const newAddress = data.name || `${data.address.road || ''} ${data.address.house_number || ''}`.trim() || address;
-          onChange({
-            city: newCity,
-            address: newAddress,
-            lat: position.lat,
-            lng: position.lng
-          });
-        }
-      } catch (error) {
-        console.error("Failed to reverse geocode", error);
-      }
-    };
-    
-    fetchAddress();
-  }, [position]);
+export const LocationPicker: React.FC<LocationPickerProps> = ({ address, city, lat, lng, onChange }) => {
+  // An initial map center is only a viewing aid; it is never saved as the property address.
+  const [position, setPosition] = useState<L.LatLng>(() => new L.LatLng(lat ?? 20.5937, lng ?? 78.9629));
+  const [loading, setLoading] = useState(false);
+  const selectPosition = (next: L.LatLng) => {
+    setPosition(next);
+    onChange({ address, city, lat: next.lat, lng: next.lng });
+  };
 
   const useCurrentLocation = () => {
     setLoading(true);
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setPosition(new L.LatLng(pos.coords.latitude, pos.coords.longitude));
+          selectPosition(new L.LatLng(pos.coords.latitude, pos.coords.longitude));
           setLoading(false);
         },
         () => {
@@ -120,7 +108,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({ address, city, o
       <div className="w-full h-80 rounded-2xl overflow-hidden shadow-sm border border-gray-200 relative">
         <MapContainer 
           center={position} 
-          zoom={13} 
+          zoom={lat != null && lng != null ? 13 : 5}
           scrollWheelZoom={false} 
           style={{ height: '100%', width: '100%' }}
         >
@@ -128,25 +116,28 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({ address, city, o
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          <DraggableMarker position={position} setPosition={setPosition} />
+          <MapPosition position={position} />
+          <DraggableMarker position={position} setPosition={selectPosition} />
         </MapContainer>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
         <div className="space-y-2">
-          <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">City</label>
+          <label htmlFor="property-city" className="text-sm font-bold text-gray-700 uppercase tracking-wider">City</label>
           <input 
+            id="property-city"
             required 
             value={city} 
             onChange={(e) => onChange({ city: e.target.value, address })}
             className="w-full p-4 rounded-2xl border border-gray-200 focus:ring-2 focus:ring-[#0284C7] outline-none transition-shadow" 
-            placeholder="e.g. Berlin" 
+            placeholder="City or destination"
           />
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-bold text-gray-700 uppercase tracking-wider">Street Address</label>
+          <label htmlFor="property-address" className="text-sm font-bold text-gray-700 uppercase tracking-wider">Street Address</label>
           <div className="relative">
             <input 
+              id="property-address"
               required 
               value={address} 
               onChange={(e) => onChange({ city, address: e.target.value })}

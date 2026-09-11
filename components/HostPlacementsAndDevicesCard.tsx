@@ -1,4 +1,5 @@
 import React from 'react';
+import { PerformanceEmptyState } from './PerformanceEmptyState';
 import {
   Smartphone,
   Layers,
@@ -39,6 +40,7 @@ export const HostPlacementsAndDevicesCard: React.FC<HostPlacementsAndDevicesCard
   deviceBreakdown = [],
   isLoading = false
 }) => {
+  if (!isLoading && !placementBreakdown.length && !deviceBreakdown.length) return <PerformanceEmptyState title="Placements and devices" />;
   if (isLoading) {
     return (
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm animate-pulse">

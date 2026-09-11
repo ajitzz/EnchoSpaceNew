@@ -8,6 +8,7 @@
  */
 
 import { GoogleAdsError } from './googleErrors.js';
+import { isGoogleSandboxEnabled } from '../../../../lib/providerMode.js';
 
 export interface GoogleAdsCredentials {
   developerToken: string;
@@ -38,7 +39,7 @@ export class GoogleAdsClient {
       mccCustomerId: credentials?.mccCustomerId || process.env.GOOGLE_ADS_MCC_CUSTOMER_ID || '123-456-7890'
     };
 
-    this.isSandboxMode = !process.env.GOOGLE_ADS_REFRESH_TOKEN || process.env.NODE_ENV === 'test';
+    this.isSandboxMode = isGoogleSandboxEnabled(process.env);
   }
 
   /**
@@ -55,6 +56,10 @@ export class GoogleAdsClient {
         mccCustomerId: this.credentials.mccCustomerId,
         permissions: ['CAMPAIGN_MANAGEMENT', 'REPORTING', 'CUSTOMER_MANAGEMENT']
       };
+    }
+
+    if (Object.values(this.credentials).some(value => !value || value.startsWith('SANDBOX_')) || this.credentials.mccCustomerId === '123-456-7890') {
+      throw new GoogleAdsError('GOOGLE_NOT_CONFIGURED', 'Google Ads credentials are not configured.', { statusCode: 503, errorClass: 'AUTHENTICATION' });
     }
 
     try {

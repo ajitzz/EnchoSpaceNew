@@ -706,8 +706,8 @@ export class CampaignControlCenterService {
     const escrow_status = truth.financial_safety?.escrow_status || 'HOLDING';
 
     let escrow_state_display = 'Protected in Escrow';
-    if (escrow_status === 'RELEASED' || (truth.publish_status === 'SUCCESS' && truth.meta_external_state?.meta_status === 'ACTIVE')) {
-      escrow_state_display = 'Active - Delivering';
+    if (escrow_status === 'RELEASED') {
+      escrow_state_display = 'Funds Released';
     } else if (escrow_status === 'REFUNDED_TO_WALLET') {
       escrow_state_display = 'Refunded to Wallet';
     } else if (escrow_status === 'UNFUNDED') {
@@ -924,68 +924,14 @@ export class CampaignControlCenterService {
     };
   }
 
-  public static buildGeographicBreakdown(truth: any) {
-    let locs: string[] = [];
-    if (Array.isArray(truth.target_locations_json)) {
-      locs = truth.target_locations_json.map((l: any) => typeof l === 'string' ? l : l.name || l.city || JSON.stringify(l));
-    } else if (typeof truth.target_locations === 'string' && truth.target_locations.trim()) {
-      locs = truth.target_locations.split(',').map((s: string) => s.trim()).filter(Boolean);
-    }
-    
-    if (locs.length === 0) {
-      locs = ['Primary Metro Area', 'Surrounding Regional Hub'];
-    }
-
-    const totalImps = Number(truth.performance_state?.impressions || 0);
-    const totalClicks = Number(truth.performance_state?.clicks || 0);
-    const totalLeads = Number(truth.performance_state?.conversions || 0);
-
-    return locs.map((locName: string, idx: number) => {
-      const weight = locs.length === 1 ? 1.0 : (idx === 0 ? 0.55 : (0.45 / (locs.length - 1)));
-      const locImps = Math.round(totalImps * weight);
-      const locClicks = Math.round(totalClicks * weight);
-      const locCtr = locImps > 0 ? Number(((locClicks / locImps) * 100).toFixed(2)) : 0;
-      const locLeads = Math.round(totalLeads * weight);
-
-      return {
-        location: locName,
-        impressions: locImps,
-        clicks: locClicks,
-        ctr: locCtr,
-        leads: locLeads,
-        delivery_status: totalImps > 0 ? 'ACTIVE_SERVING' : 'ACTIVE_IN_AUCTION',
-        share_percentage: Math.round(weight * 100)
-      };
-    });
+  public static buildGeographicBreakdown(_truth: any): any[] {
+    // Breakdown observations are not yet ingested. Do not distribute aggregate totals into invented segments.
+    return [];
   }
 
-  public static buildPlacementBreakdown(truth: any) {
-    const totalImps = Number(truth.performance_state?.impressions || 0);
-    const totalClicks = Number(truth.performance_state?.clicks || 0);
-
-    return [
-      {
-        platform: 'Instagram Reels',
-        share_percentage: 45,
-        impressions: Math.round(totalImps * 0.45),
-        clicks: Math.round(totalClicks * 0.45),
-        format: '9:16 Vertical Video'
-      },
-      {
-        platform: 'Instagram Feed & Explore',
-        share_percentage: 35,
-        impressions: Math.round(totalImps * 0.35),
-        clicks: Math.round(totalClicks * 0.35),
-        format: '1:1 Square'
-      },
-      {
-        platform: 'Facebook Feed & Stories',
-        share_percentage: 20,
-        impressions: Math.round(totalImps * 0.20),
-        clicks: Math.round(totalClicks * 0.20),
-        format: '1.91:1 Feed'
-      }
-    ];
+  public static buildPlacementBreakdown(_truth: any): any[] {
+    // Breakdown observations are not yet ingested. Do not distribute aggregate totals into invented segments.
+    return [];
   }
 
   public static buildFunnelMetrics(truth: any, actual_spend_cents: number, currency = 'USD') {
@@ -1009,6 +955,7 @@ export class CampaignControlCenterService {
       bookings_count,
       gross_booking_value: Number((gross_booking_value_cents / 100).toFixed(2)),
       gross_booking_value_cents,
+      attribution_status: 'UNAVAILABLE',
       click_rate,
       lead_rate,
       cost_per_lead: cpl,
@@ -1017,92 +964,26 @@ export class CampaignControlCenterService {
     };
   }
 
-  public static buildDemographicsBreakdown(truth: any) {
-    const totalImps = Number(truth.performance_state?.impressions || 0);
-    const totalClicks = Number(truth.performance_state?.clicks || 0);
-
-    const brackets = [
-      { age: '18-24', share_pct: 12, female_pct: 52, male_pct: 48 },
-      { age: '25-34', share_pct: 54, female_pct: 58, male_pct: 42 },
-      { age: '35-44', share_pct: 24, female_pct: 50, male_pct: 50 },
-      { age: '45-54', share_pct: 8, female_pct: 45, male_pct: 55 },
-      { age: '55+', share_pct: 2, female_pct: 40, male_pct: 60 }
-    ];
-
-    return brackets.map(b => {
-      const imps = Math.round(totalImps * (b.share_pct / 100));
-      const clicks = Math.round(totalClicks * (b.share_pct / 100));
-      const ctr = imps > 0 ? Number(((clicks / imps) * 100).toFixed(2)) : 0;
-      return {
-        age_group: b.age,
-        share_percentage: b.share_pct,
-        impressions: imps,
-        clicks: clicks,
-        ctr: ctr,
-        gender_distribution: {
-          female_percentage: b.female_pct,
-          male_percentage: b.male_pct
-        },
-        status: totalImps > 0 ? 'ACTIVE_SERVING' : 'TARGETED_ACTIVE'
-      };
-    });
+  public static buildDemographicsBreakdown(_truth: any): any[] {
+    // Breakdown observations are not yet ingested. Do not distribute aggregate totals into invented segments.
+    return [];
   }
 
-  public static buildDeviceBreakdown(truth: any) {
-    const totalImps = Number(truth.performance_state?.impressions || 0);
-    const totalClicks = Number(truth.performance_state?.clicks || 0);
-
-    const devices = [
-      { name: 'Mobile iOS (iPhone/iPad)', key: 'ios', share_pct: 58 },
-      { name: 'Mobile Android', key: 'android', share_pct: 36 },
-      { name: 'Desktop & Tablet Web', key: 'desktop', share_pct: 6 }
-    ];
-
-    return devices.map(d => {
-      const imps = Math.round(totalImps * (d.share_pct / 100));
-      const clicks = Math.round(totalClicks * (d.share_pct / 100));
-      const ctr = imps > 0 ? Number(((clicks / imps) * 100).toFixed(2)) : 0;
-      return {
-        device_name: d.name,
-        device_key: d.key,
-        share_percentage: d.share_pct,
-        impressions: imps,
-        clicks: clicks,
-        ctr: ctr,
-        status: totalImps > 0 ? 'ACTIVE_SERVING' : 'TARGETED_ACTIVE'
-      };
-    });
+  public static buildDeviceBreakdown(_truth: any): any[] {
+    // Breakdown observations are not yet ingested. Do not distribute aggregate totals into invented segments.
+    return [];
   }
 
-  public static buildAudienceInterestsBreakdown(truth: any) {
-    let rawInterests: string[] = [];
-    if (typeof truth.audience_interests === 'string' && truth.audience_interests.trim()) {
-      try {
-        const parsed = JSON.parse(truth.audience_interests);
-        rawInterests = Array.isArray(parsed) ? parsed : [truth.audience_interests];
-      } catch {
-        rawInterests = truth.audience_interests.split(',').map((s: string) => s.trim()).filter(Boolean);
-      }
-    }
-
-    if (rawInterests.length === 0) {
-      rawInterests = ['Luxury Travel & Resorts', 'Weekend Getaways', 'Nature & Mountain Escapes', 'Remote Work & Staycations'];
-    }
-
-    return rawInterests.map((interest: string, idx: number) => ({
-      interest_name: interest,
-      affinity_score: 95 - idx * 5,
-      response_index: 'HIGH_INTENT',
-      targeting_status: 'ACTIVE_BIDDING'
-    }));
+  public static buildAudienceInterestsBreakdown(_truth: any): any[] {
+    // Breakdown observations are not yet ingested. Do not distribute aggregate totals into invented segments.
+    return [];
   }
 
   public static buildMetaCryptographicProof(truth: any) {
-    const campaignId = truth.meta_external_state?.meta_campaign_id || `act_${truth.campaign_id}`;
-    const adsetId = truth.meta_external_state?.meta_adset_id || `adset_${truth.campaign_id}`;
-    const adId = truth.meta_external_state?.meta_ad_id || `ad_${truth.campaign_id}`;
-    const verifiedAt = truth.meta_external_state?.external_status_verified_at || new Date().toISOString();
-    const signature = `SHA256:META_INSIGHTS:${campaignId}:${adsetId}:${verifiedAt}`;
+    const campaignId = truth.meta_external_state?.meta_campaign_id || '';
+    const adsetId = truth.meta_external_state?.meta_adset_id || '';
+    const adId = truth.meta_external_state?.meta_ad_id || '';
+    const verifiedAt = truth.meta_external_state?.external_status_verified_at || '';
 
     return {
       provider: 'META',
@@ -1111,15 +992,15 @@ export class CampaignControlCenterService {
       meta_adset_id: adsetId,
       meta_ad_id: adId,
       verified_at: verifiedAt,
-      data_integrity_verified: true,
-      provenance_source: 'Meta Business Ad Insights Server-to-Server Webhook',
-      cryptographic_verification_signature: signature,
-      tamper_proof_guarantee: '100% Zero-Fabrication FAANG Certified'
+      data_integrity_verified: false,
+      provenance_source: 'Stored Meta reconciliation observation',
+      cryptographic_verification_signature: '',
+      tamper_proof_guarantee: ''
     };
   }
 
   public static buildPricingSyncStatus(truth: any) {
-    const listingPrice = truth.listing_price || 3500;
+    const listingPrice = truth.listing_price ?? null;
     const currency = truth.currency || 'INR';
     const formattedAmount = Number(listingPrice).toLocaleString('en-IN');
     const symbol = currency === 'INR' ? '₹' : (currency === 'EUR' ? '€' : (currency === 'GBP' ? '£' : '$'));
@@ -1128,9 +1009,9 @@ export class CampaignControlCenterService {
     return {
       listing_nightly_price: listingPrice,
       formatted_nightly_price: formatted,
-      sync_state: 'SYNCHRONIZED',
-      last_synced_at: truth.pricing_synced_at || truth.created_at || new Date().toISOString(),
-      active_ad_copy_preview: `Experience luxury stays from ${formatted}/night · Instant booking on Encho`,
+      sync_state: 'UNVERIFIED',
+      last_synced_at: truth.pricing_synced_at || null,
+      active_ad_copy_preview: '',
       currency
     };
   }
@@ -1894,4 +1775,3 @@ export class CampaignControlCenterService {
     return { allowed_actions, action_previews };
   }
 }
-

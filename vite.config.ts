@@ -63,15 +63,9 @@ export default defineConfig(() => {
               {
                 urlPattern: /\/api\/.*/i,
                 method: 'POST',
-                handler: 'NetworkOnly',
-                options: {
-                  backgroundSync: {
-                    name: 'api-syncQueue',
-                    options: {
-                      maxRetentionTime: 24 * 60 // 24 hours
-                    }
-                  }
-                }
+                // Payment, booking and approval writes require an online response.
+                // Never silently replay them after the user's session has changed.
+                handler: 'NetworkOnly'
               },
               {
                 urlPattern: /\/api\/image.*/i,
@@ -121,8 +115,16 @@ export default defineConfig(() => {
           output: {
             manualChunks(id) {
               if (id.includes('node_modules')) {
-                if (id.includes('react') || id.includes('react-dom')) {
+                // Match packages, not substrings such as lucide-react or react-leaflet.
+                // The broad match pulled mapping code into the React chunk and formed a cycle.
+                if (/\/node_modules\/(react|react-dom|scheduler)\//.test(id)) {
                   return 'vendor-react';
+                }
+                if (/\/node_modules\/(recharts|recharts-scale|react-redux|redux|redux-thunk|reselect|immer|decimal.js-light|tiny-invariant|victory-vendor|d3-[^/]+)\//.test(id) || id.includes('/node_modules/@reduxjs/')) {
+                  return 'vendor-charts';
+                }
+                if (id.includes('/node_modules/@vis.gl/')) {
+                  return 'vendor-google-maps';
                 }
                 if (id.includes('framer-motion')) {
                   return 'vendor-motion';

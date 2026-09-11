@@ -3,6 +3,8 @@ import { Grid } from 'lucide-react';
 import { MarketingCampaign, Listing, MetaPreflightDiagnosticReport, MetaPreflightGateResult } from '../types';
 import { MetaLocationTargeter } from './MetaLocationTargeter';
 import HostCampaignControlCenter from './HostCampaignControlCenter';
+import { CampaignReadinessStrip } from './CampaignReadinessStrip';
+import { CampaignStayScope } from './CampaignStayScope';
 import { 
   Sparkles, CheckCircle, AlertTriangle, ShieldAlert, Play, Pause, BarChart3, 
   Tv, Eye, MousePointerClick, TrendingUp, DollarSign, Target, Plus, 
@@ -1624,17 +1626,20 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
     <div className="max-w-7xl mx-auto px-4 py-8 md:py-12 animate-fade-in pb-40">
       
       {/* Upper Title & Brand Layout */}
+      <div className="workspace-panel p-4 mb-6 text-sm text-slate-700" role="note">
+        Campaigns require admin approval before publishing. Google campaign creation is under validation; only network-confirmed delivery should be treated as live.
+      </div>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
             <span className="text-[10px] font-black text-blue-600 uppercase tracking-[0.25em] block font-mono">
               Encho Space Marketing
             </span>
-            <span className="bg-blue-100 text-blue-700 text-[8.5px] font-bold uppercase px-2 py-0.5 rounded-full font-mono scale-90">Meta CAPI sandboxed</span>
+            <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-1 rounded-full">Admin-reviewed campaigns</span>
           
 {/* META CAMPAIGN ENGINEER SIDEBAR */}
 {showCreateModal && (
-  <div className="fixed right-0 top-0 bottom-0 w-[480px] bg-slate-50 border-l border-slate-200 shadow-2xl z-[100] p-5 overflow-y-auto flex flex-col">
+  <div className="fixed right-0 top-0 bottom-0 w-full max-w-[480px] bg-slate-50 border-l border-slate-200 shadow-2xl z-[100] p-5 overflow-y-auto flex flex-col">
     {/* Panel Header */}
     <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
       <div className="flex items-center space-x-2 text-indigo-600">
@@ -2375,9 +2380,12 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                   <motion.div 
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.1, duration: 0.3, ease: "easeOut" }}
+                    transition={{ delay: Math.min(idx, 4) * 0.04, duration: 0.2, ease: "easeOut" }}
                     key={campaign.id}
                     onClick={() => setSelectedCampaignForAnalytics(campaign)}
+                    tabIndex={0}
+                    aria-label={`View campaign ${campaign.title}`}
+                    onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setSelectedCampaignForAnalytics(campaign); } }}
                     className={`
                       bg-white p-5 rounded-3xl border transition-all duration-300 cursor-pointer text-left relative overflow-hidden
                       ${selectedCampaignForAnalytics?.id === campaign.id 
@@ -2385,6 +2393,8 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                         : 'border-zinc-150 hover:border-zinc-300 hover:shadow-md'}
                     `}
                   >
+                    <CampaignReadinessStrip campaign={campaign} />
+                    <CampaignStayScope campaignId={campaign.id} />
                     <div className="flex gap-4">
                       {/* Image */}
                       <img 
@@ -2945,59 +2955,11 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
 
                     {analyticsActiveTab === 'analytics' ? (
                       <div className="space-y-6 animate-fade-in">
-                        {/* Milestone 9.5: The ROAS (Return on Ad Spend) Dashboard & Interactive Multiplier Simulator */}
-                        <div className="bg-gradient-to-br from-blue-950/20 via-zinc-900/5 to-zinc-50 border border-blue-500/20 rounded-3xl p-5 space-y-4 shadow-sm">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <div className="w-7 h-7 rounded-xl bg-blue-600/10 flex items-center justify-center text-blue-600 font-black text-xs">
-                                ₹
-                              </div>
-                              <div>
-                                <h4 className="text-xs font-black uppercase tracking-wider text-gray-900">
-                                  Encho ROAS & Revenue Multiplier Engine
-                                </h4>
-                                <p className="text-[10px] text-zinc-500 font-light">
-                                  Real-time attribution & projected return on ad spend (FAANG Standard)
-                                </p>
-                              </div>
-                            </div>
-                            <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-black font-mono flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                              ROAS: 8.4x Multiplier
-                            </span>
-                          </div>
-
-                          {/* ROAS Metric Cards Grid */}
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div className="bg-white border border-zinc-200 p-3.5 rounded-2xl">
-                              <span className="text-[8.5px] font-black text-zinc-400 uppercase tracking-wider block mb-1">Total Ad Spend</span>
-                              <div className="text-lg font-black text-gray-900 font-mono">
-                                ₹{selectedCampaignForAnalytics.analytics?.spent?.toLocaleString() || '4,500'}
-                              </div>
-                              <span className="text-[9px] text-emerald-600 font-medium mt-0.5 block">15% Encho Optimization Fee Included</span>
-                            </div>
-                            <div className="bg-white border border-zinc-200 p-3.5 rounded-2xl">
-                              <span className="text-[8.5px] font-black text-zinc-400 uppercase tracking-wider block mb-1">Generated Bookings Value</span>
-                              <div className="text-lg font-black text-blue-600 font-mono">
-                                ₹{((selectedCampaignForAnalytics.analytics?.conversions || 1) * 28500).toLocaleString()}
-                              </div>
-                              <span className="text-[9px] text-zinc-500 font-medium mt-0.5 block">Direct High-Yield Stays Captured</span>
-                            </div>
-                            <div className="bg-white border border-zinc-200 p-3.5 rounded-2xl">
-                              <span className="text-[8.5px] font-black text-zinc-400 uppercase tracking-wider block mb-1">Net Profit ROAS</span>
-                              <div className="text-lg font-black text-emerald-600 font-mono">
-                                8.4x Multiplier
-                              </div>
-                              <span className="text-[9px] text-emerald-600 font-medium mt-0.5 block">Verified via CAPI Attribution</span>
-                            </div>
-                          </div>
-
-                          <div className="bg-blue-50/50 border border-blue-200/60 p-3 rounded-2xl flex items-center justify-between text-xs text-blue-900">
-                            <span className="font-light text-[11px]">
-                              💡 <strong>Attribution Note:</strong> CAPI confirms zero ad spend wasted on unavailable calendar dates thanks to the Smart Auto-Pause Circuit Breaker.
-                            </span>
-                          </div>
-                        </div>
+                        <section className="workspace-panel p-5" aria-label="Booking attribution">
+                          <div className="flex items-center gap-2 text-slate-900 font-semibold"><BarChart3 size={20} aria-hidden="true" /><h3>Booking attribution</h3></div>
+                          <p className="text-sm leading-relaxed text-slate-600 mt-2">Ad clicks and leads are shown below when reported by the network. Booking revenue and return on ad spend will appear once confirmed bookings can be linked to this campaign.</p>
+                          <p className="text-sm font-semibold text-slate-700 mt-3">Revenue attribution: not yet available</p>
+                        </section>
 
                         {/* Active Stats Panel */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -3186,71 +3148,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                           );
                         })()}
 
-                        {/* PILLAR 2: Honest Expectation Setting & "12x ROAS" Brutal Math Card */}
-                        <div className="bg-zinc-50 border border-zinc-200 rounded-3xl p-5 space-y-3.5 text-left select-none relative overflow-hidden">
-                          <div className="flex items-center gap-1.5">
-                            <ShieldCheck className="w-4 h-4 text-blue-600" />
-                            <span className="text-[10px] font-black uppercase tracking-wider text-gray-900">
-                              The Brutal Math of Luxury Bookings (Honest ROAS)
-                            </span>
-                          </div>
-                          
-                          <p className="text-[10.5px] text-zinc-500 leading-relaxed font-light">
-                            Other platforms promise fake "12x ROAS" lies to get your subscription. Encho values total transparency. Let's look at the actual physics of holiday marketing. This ad acts as a **publicity funnel** for luxury stays:
-                          </p>
-
-                          {/* Funnel Math Grid */}
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-white border border-zinc-200 p-3 rounded-2xl text-center">
-                            <div className="space-y-1">
-                              <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-wider block">1. Scale Views</span>
-                              <span className="text-sm font-black text-gray-900 font-mono">15,000+</span>
-                              <span className="text-[8px] text-zinc-500 block">Metropolitan Reach</span>
-                            </div>
-                            <div className="space-y-1 border-t sm:border-t-0 sm:border-l pt-2 sm:pt-0 border-zinc-100">
-                              <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-wider block">2. Clicks</span>
-                              <span className="text-sm font-black text-blue-600 font-mono">650+</span>
-                              <span className="text-[8px] text-zinc-500 block">Property Visits</span>
-                            </div>
-                            <div className="space-y-1 border-t sm:border-t-0 sm:border-l pt-2 sm:pt-0 border-zinc-100">
-                              <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-wider block">3. Leads</span>
-                              <span className="text-sm font-black text-amber-600 font-mono">10 - 15</span>
-                              <span className="text-[8px] text-zinc-500 block">Enquiry Boards</span>
-                            </div>
-                            <div className="space-y-1 border-t sm:border-t-0 sm:border-l pt-2 sm:pt-0 border-zinc-100">
-                              <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-wider block">4. Booking</span>
-                              <span className="text-sm font-black text-emerald-600 font-mono">1 - 2</span>
-                              <span className="text-[8px] text-zinc-500 block">High-Yield Stay</span>
-                            </div>
-                          </div>
-
-                          <div className="text-[10px] text-zinc-500 leading-relaxed font-light bg-blue-50/20 border border-blue-200/50 p-3 rounded-2xl">
-                            <strong>💡 Real Profit Math:</strong> At a price of ₹12,000 to ₹35,000 per night, securing **just a single luxury stay** from 600 metropolitan property visitors completely covers your monthly ad budget, turning every extra stay into pure, direct cash profit. Use our CRM Lead Board below to respond to enquiries in under 15 minutes!
-                          </div>
-                        </div>
-
-                        {/* Multi-Channel Distribution breakdown panel */}
-                        <div className="border border-zinc-200 rounded-2xl p-4 space-y-3">
-                          <span className="text-[10px] font-black text-zinc-400 uppercase tracking-wider block">
-                            Multi-Channel Feed Distribution
-                          </span>
-                          <div className="space-y-2.5 text-[10.5px]">
-                            {[
-                              { label: 'Instagram Feed & Stories (Couples range)', percentage: '45%', clicks: '293 clicks' },
-                              { label: 'Facebook Feed & Reels (Escapes segment)', percentage: '45%', clicks: '292 clicks' },
-                              { label: 'Google Search Ads (Direct Intent queries)', percentage: '10%', clicks: '65 clicks' },
-                            ].map((spec, i) => (
-                              <div key={i} className="space-y-1 select-none">
-                                <div className="flex justify-between items-center text-zinc-600 font-medium">
-                                  <span>{spec.label}</span>
-                                  <span className="font-mono text-gray-900 font-bold">{spec.percentage} ({spec.clicks})</span>
-                                </div>
-                                <div className="w-full bg-zinc-100 rounded-full h-1.5">
-                                  <div className="bg-zinc-800 h-1.5 rounded-full" style={{ width: spec.percentage }} />
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
+                        <CampaignReadinessStrip campaign={selectedCampaignForAnalytics} />
 
                         {/* PILLAR 1: Interactive Social Proof Sandbox Simulator */}
                         <div className="border border-zinc-200 rounded-3xl p-5 space-y-4">

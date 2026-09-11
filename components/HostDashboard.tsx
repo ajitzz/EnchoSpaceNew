@@ -7,11 +7,17 @@ import { Listing, Experience } from '../types';
 import { DashboardListingSkeleton, ReservationSkeleton } from './Skeletons';
 import { MapPin, Users, Calendar as CalendarIcon, DollarSign, Activity, Settings, Video, Loader2 } from 'lucide-react';
 import { useCurrency } from './CurrencyContext';
+import { HostOverview } from './HostOverview';
+import { WorkspaceNavigation } from './WorkspaceNavigation';
+import { PropertyReviewQueue } from './PropertyReviewQueue';
+import { HostPropertyCards } from './HostPropertyCards';
+import { LayoutDashboard, Building2, MessageSquare, Megaphone, ChartNoAxesCombined, CalendarDays } from 'lucide-react';
 
 const HostMarketing = lazy(() => import('./HostMarketing'));
 
 interface HostDashboardProps {
   view: 'today' | 'calendar' | 'listings' | 'messages' | 'analytics' | 'marketing';
+  onViewChange?: (view: HostDashboardProps['view']) => void;
   user: any;
   onNavigateToHostForm?: () => void;
   onEditListing?: (listing: Listing) => void;
@@ -20,7 +26,7 @@ interface HostDashboardProps {
   refreshTrigger?: number;
 }
 
-export default function HostDashboard({ view, user, onNavigateToHostForm, onEditListing, onNavigateToExperienceForm, onEditExperience, refreshTrigger = 0 }: HostDashboardProps) {
+export default function HostDashboard({ view, onViewChange, user, onNavigateToHostForm, onEditListing, onNavigateToExperienceForm, onEditExperience, refreshTrigger = 0 }: HostDashboardProps) {
   const { formatPrice } = useCurrency();
   const [listings, setListings] = useState<Listing[]>([]);
   const [experiences, setExperiences] = useState<Experience[]>([]);
@@ -30,15 +36,28 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
   const [selectedResId, setSelectedResId] = useState<string | number | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [msgInput, setMsgInput] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [pendingReservationId, setPendingReservationId] = useState<string | number | null>(null);
 
   useEffect(() => {
     let active = true;
-    if (!user) return;
+    if (!user) { setListings([]); setReservations([]); setExperiences([]); setLoading(false); return; }
+    setLoading(true);
+    setLoadError(null);
+    const controller = new AbortController();
+    const loadArray = async (url: string) => {
+      const response = await fetch(url, { signal: controller.signal, cache: 'no-store', headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` } });
+      if (!response.ok) throw new Error(`Could not load your workspace (${response.status}). Please retry.`);
+      const data = await response.json();
+      if (!Array.isArray(data)) throw new Error('The workspace returned an unexpected response. Please retry.');
+      return data;
+    };
     
     Promise.all([
-      fetch(`/api/listings?userId=${user.id}&_t=${Date.now()}`, { cache: 'no-store', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }).then(res => res.json()),
-      fetch(`/api/host/reservations?userId=${user.id}&_t=${Date.now()}`, { cache: 'no-store', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }).then(res => res.json()),
-      fetch(`/api/experiences?host_id=${user.id}&_t=${Date.now()}`, { cache: 'no-store', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }).then(res => res.json())
+      loadArray(`/api/listings?userId=${user.id}`),
+      loadArray(`/api/host/reservations?userId=${user.id}`),
+      listingType === 'experiences' ? loadArray(`/api/experiences?host_id=${user.id}`) : Promise.resolve([])
     ])
     .then(([listingsData, reservationsData, experiencesData]) => {
       if (!active) return;
@@ -57,13 +76,19 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
         setSelectedResId(resData[0].id);
       }
     })
-    .catch(console.error)
+    .catch(error => {
+      if (active && error.name !== 'AbortError') {
+        console.error('Host workspace request failed:', error);
+        setLoadError(error.message);
+        setListings([]); setReservations([]); setExperiences([]);
+      }
+    })
     .finally(() => {
       if (active) setLoading(false);
     });
 
-    return () => { active = false; };
-  }, [user, view, refreshTrigger]);
+    return () => { active = false; controller.abort(); };
+  }, [user?.id, listingType, refreshTrigger, retryCount]);
 
   useEffect(() => {
     if (selectedResId && view === 'messages') {
@@ -77,6 +102,9 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
   }, [selectedResId, view]);
 
   const updateReservationStatus = async (id: string | number, status: string) => {
+     if (pendingReservationId !== null) return;
+     setPendingReservationId(id);
+     setLoadError(null);
      try {
        const res = await fetch(`/api/host/reservations/${id}/status`, {
          method: 'PUT',
@@ -85,9 +113,12 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
        });
        if (res.ok) {
          setReservations(prev => prev.map(r => r.id === id ? { ...r, status } : r));
-       }
+       } else throw new Error('The reservation could not be updated. Refresh and try again.');
      } catch (e) {
-       console.error("Failed to update status");
+       console.error('Failed to update reservation status:', e);
+       setLoadError(e instanceof Error ? e.message : 'The reservation could not be updated.');
+     } finally {
+       setPendingReservationId(null);
      }
   };
 
@@ -119,108 +150,10 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
     const filteredReservations = reservations.filter(r => r.type === (listingType === 'stays' ? 'stay' : 'experience'));
 
     if (view === 'today') {
-      const pendingRes = filteredReservations.filter(r => r.status === 'pending');
-      const upcomingRes = filteredReservations.filter(r => r.status === 'confirmed');
-
-      return (
-        <div className="max-w-4xl mx-auto px-4 py-8 md:py-12 flex flex-col items-center text-center">
-          <h1 className="text-3xl md:text-5xl font-bold text-gray-900 mb-8 tracking-tight">Today</h1>
-          
-          <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm w-full max-w-xl mx-auto mb-10 flex items-center justify-between">
-            <div className="text-left">
-              <p className="text-sm text-gray-500 font-bold tracking-wider uppercase mb-1">Your account</p>
-              <h2 className="text-lg font-bold text-gray-900">Confirm your account information</h2>
-              <p className="text-gray-500">Required to get paid</p>
-            </div>
-            <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center text-2xl border border-orange-100 shadow-sm relative">
-               💼
-               <div className="absolute -bottom-1 -right-1 bg-pink-500 text-white rounded-full p-0.5 border-2 border-white">
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-               </div>
-            </div>
-          </div>
-
-          <div className="flex bg-gray-100 p-1 rounded-full mb-12 relative">
-              <button className="bg-gray-900 text-white px-6 py-2 rounded-full font-bold text-sm shadow-sm transition-all">Pending ({pendingRes.length})</button>
-              <button className="text-gray-600 hover:text-gray-900 px-6 py-2 rounded-full font-bold text-sm transition-colors">Upcoming ({upcomingRes.length})</button>
-          </div>
-
-          {loading ? (
-              <div className="w-full max-w-2xl mx-auto space-y-4 mt-8">
-                 <ReservationSkeleton />
-                 <ReservationSkeleton />
-                 <ReservationSkeleton />
-              </div>
-          ) : filteredReservations.length === 0 ? (
-            <div className="mt-8 opacity-60">
-                <img src="https://cdni.iconscout.com/illustration/premium/thumb/empty-state-2130362-1800926.png" alt="No reservations" className="w-48 h-48 mx-auto mb-6 grayscale opacity-70" />
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">You don't have any reservations</h3>
-                <p className="text-gray-500 font-medium">Any upcoming reservations will appear here.</p>
-            </div>
-          ) : (
-            <div className="w-full max-w-2xl mx-auto space-y-4 text-left">
-              {pendingRes.length > 0 && <h3 className="text-2xl font-bold text-gray-900 mb-6">Pending Approval</h3>}
-              {pendingRes.map((res: any, idx: number) => (
-                 <div key={res.id} className="bg-white p-6 rounded-3xl border border-gray-200 shadow-md flex flex-col md:flex-row items-center gap-6 relative overflow-hidden">
-                   <div className="absolute top-0 left-0 w-1 h-full bg-yellow-400"></div>
-                   <img src={res.listing.imageUrl || 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=500&q=80'} className="w-24 h-24 rounded-2xl object-cover bg-gray-100" alt="" />
-                   <div className="flex-1">
-                     <h4 className="text-lg font-bold text-gray-900">{res.listing.title}</h4>
-                     <p className="text-sm text-gray-500 font-medium">{res.name} • {res.phone}</p>
-                     <p className="text-sm text-gray-700 font-bold mt-2">Move in: {res.moveInDate}</p>
-                   </div>
-                   <div className="text-right flex flex-col items-end">
-                     <p className="text-xl font-bold text-gray-900">${res.totalRent}</p>
-                     <p className="text-xs text-yellow-600 font-bold uppercase mt-1 mb-3">Pending</p>
-                     <div className="flex gap-2">
-                       <button onClick={() => updateReservationStatus(res.id, 'confirmed')} className="px-4 py-2 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-gray-800 transition-colors">Accept</button>
-                       <button onClick={() => updateReservationStatus(res.id, 'declined')} className="px-4 py-2 bg-gray-100 text-gray-900 rounded-xl text-sm font-bold hover:bg-gray-200 transition-colors">Decline</button>
-                     </div>
-                   </div>
-                 </div>
-              ))}
-              
-              {upcomingRes.length > 0 && <h3 className="text-2xl font-bold text-gray-900 mb-6 pt-6">Upcoming Reservations</h3>}
-              {upcomingRes.map((res: any, idx: number) => (
-                 <div key={res.id} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col md:flex-row items-center gap-6">
-                   <img src={res.listing.imageUrl || 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=500&q=80'} className="w-24 h-24 rounded-2xl object-cover bg-gray-100" alt="" />
-                   <div className="flex-1">
-                     <h4 className="text-lg font-bold text-gray-900">{res.listing.title}</h4>
-                     <p className="text-sm text-gray-500 font-medium">{res.name} • {res.phone}</p>
-                     <p className="text-sm text-gray-700 font-bold mt-2">Move in: {res.moveInDate}</p>
-                   </div>
-                   <div className="text-right">
-                     <p className="text-xl font-bold text-gray-900">${res.totalRent}</p>
-                     <p className="text-xs text-green-600 font-bold uppercase mt-1">Confirmed</p>
-                     <div className="mt-3 flex flex-col items-end gap-2">
-                         <button onClick={() => updateReservationStatus(res.id, 'Completed')} className="px-3 py-1.5 bg-green-50 text-green-700 rounded-lg text-xs font-bold hover:bg-green-100 transition-colors">Mark Completed</button>
-                         <button onClick={() => updateReservationStatus(res.id, 'cancelled')} className="text-xs text-red-500 font-semibold hover:underline">Cancel booking</button>
-                     </div>
-                   </div>
-                 </div>
-              ))}
-
-              {filteredReservations.filter(r => r.status?.toLowerCase() === 'completed').length > 0 && (
-                  <>
-                    <h3 className="text-2xl font-bold text-gray-900 mb-6 pt-6">Completed</h3>
-                    {filteredReservations.filter(r => r.status?.toLowerCase() === 'completed').map((res: any) => (
-                        <div key={res.id} className="bg-gray-50 p-6 rounded-3xl border border-gray-100 flex flex-col md:flex-row items-center gap-6 opacity-75">
-                           <img src={res.listing.imageUrl || 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=500&q=80'} className="w-16 h-16 rounded-2xl object-cover bg-gray-200 grayscale" alt="" />
-                           <div className="flex-1">
-                             <h4 className="text-base font-bold text-gray-900">{res.listing.title}</h4>
-                             <p className="text-xs text-gray-500 font-medium">{res.name}</p>
-                           </div>
-                           <div className="text-right">
-                             <p className="text-xs text-gray-600 font-bold uppercase">Completed</p>
-                           </div>
-                        </div>
-                    ))}
-                  </>
-              )}
-            </div>
-          )}
-        </div>
-      );
+      return <HostOverview name={user?.name} listings={listingType === 'stays' ? listings : experiences as unknown as Listing[]} reservations={filteredReservations}
+        loading={loading} error={loadError} onRetry={() => setRetryCount(value => value + 1)}
+        onCreate={listingType === 'stays' ? onNavigateToHostForm : onNavigateToExperienceForm} onMarketing={() => onViewChange?.('marketing')}
+        onUpdate={updateReservationStatus} pendingId={pendingReservationId} formatPrice={formatPrice} />;
     }
 
     if (view === 'calendar') {
@@ -232,59 +165,18 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
            <div className="max-w-7xl mx-auto px-4 py-8 md:py-12 flex flex-col pb-40">
                <div className="flex items-center justify-between mb-8">
                    <h1 className="text-3xl md:text-5xl font-bold text-gray-900 tracking-tight">Your listings</h1>
-                   <button onClick={listingType === 'stays' ? onNavigateToHostForm : onNavigateToExperienceForm} className="w-12 h-12 bg-gray-900 hover:bg-gray-800 text-white rounded-full flex items-center justify-center transition-colors shadow-lg">
+                   <button type="button" aria-label={listingType === 'stays' ? 'Add a property' : 'Add an experience'} onClick={listingType === 'stays' ? onNavigateToHostForm : onNavigateToExperienceForm} className="w-12 h-12 bg-gray-900 hover:bg-gray-800 text-white rounded-full flex items-center justify-center transition-colors shadow-lg">
                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
                    </button>
                </div>
                
+               {listingType === 'stays' && <PropertyReviewQueue onResume={onEditListing} />}
                {loading ? (
                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                       {[1, 2, 3, 4].map(n => <DashboardListingSkeleton key={n} />)}
                    </div>
                ) : listingType === 'stays' ? (
-                   listings.length === 0 ? (
-                       <div className="bg-white border text-center p-12 lg:p-24 rounded-3xl text-gray-500 border-dashed w-full max-w-4xl font-medium">
-                         You don't have any stays yet. Click the + button to host your space!
-                       </div>
-                   ) : (
-                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                           {listings.map(listing => (
-                              <div key={listing.id} className="group cursor-pointer">
-                                  <div className="aspect-square w-full relative mb-3 overflow-hidden rounded-2xl bg-gray-200">
-                                      <img src={listing.imageUrl || 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=500'} alt={listing.title} className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500" />
-                                  </div>
-                                  <div className="flex justify-between items-start gap-2">
-                                      <div>
-                                          <h3 className="font-semibold text-gray-900">{listing.city}</h3>
-                                          <p className="text-sm text-gray-500 truncate w-full">{listing.title}</p>
-                                          <div className="mt-1 flex items-center gap-1">
-                                              <span className="font-semibold">${listing.price}</span>
-                                              <span className="text-gray-900">night</span>
-                                          </div>
-                                      </div>
-                                      <div className="flex shrink-0">
-                                          <button onClick={(e) => {
-                                              e.stopPropagation();
-                                              onEditListing?.(listing);
-                                          }} className="p-2 text-gray-400 hover:text-gray-900 transition-colors" title="Edit listing">
-                                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                                          </button>
-                                          <button onClick={(e) => {
-                                              e.stopPropagation();
-                                              if(confirm('Are you sure you want to delete this listing?')) {
-                                                  fetch(`/api/listings/${listing.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } })
-                                                  .then(() => setListings(prev => prev.filter(l => l.id !== listing.id)))
-                                                  .catch(err => console.error(err));
-                                              }
-                                          }} className="p-2 -mr-2 text-gray-400 hover:text-red-500 transition-colors" title="Delete listing">
-                                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                          </button>
-                                      </div>
-                                  </div>
-                              </div>
-                           ))}
-                       </div>
-                   )
+                   <HostPropertyCards listings={listings} onEdit={onEditListing} onDeleted={id => setListings(previous => previous.filter(listing => String(listing.id) !== id))} />
                ) : (
                    experiences.length === 0 ? (
                        <div className="bg-white border text-center p-12 lg:p-24 rounded-3xl text-gray-500 border-dashed w-full max-w-4xl font-medium">
@@ -416,7 +308,16 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
   return (
     <>
       <SEO title="Host Dashboard | Encho Space" description="Manage your properties, experiences, and reservations." />
-    <div className="flex flex-col h-full relative">
+    <div className="workspace-shell">
+       {onViewChange && <WorkspaceNavigation role="Host" active={view} onSelect={id => onViewChange(id as HostDashboardProps['view'])} items={[
+         { id: 'today', label: 'Overview', icon: LayoutDashboard, count: reservations.filter(r => r.status?.toLowerCase() === 'pending').length },
+         { id: 'listings', label: 'Properties', icon: Building2 },
+         { id: 'calendar', label: 'Calendar', icon: CalendarDays },
+         { id: 'messages', label: 'Inbox', icon: MessageSquare },
+         { id: 'marketing', label: 'Marketing', icon: Megaphone },
+         { id: 'analytics', label: 'Performance', icon: ChartNoAxesCombined },
+       ]} />}
+       <div className="workspace-body">
        {/* Global Toggle for Host */}
        <div className="w-full flex justify-center py-4 bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-gray-100">
           <div className="flex bg-gray-100 p-1 rounded-full relative">
@@ -424,9 +325,10 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
              <button onClick={() => setListingType('experiences')} className={`px-6 py-2 rounded-full font-bold text-sm transition-all ${listingType === 'experiences' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'}`}>Hosting Experiences</button>
           </div>
        </div>
+       {view !== 'today' && loadError && <div className="workspace-error mx-4 mt-4" role="alert"><span>{loadError}</span><button type="button" onClick={() => setRetryCount(value => value + 1)}>Retry</button></div>}
        {renderView()}
+       </div>
     </div>
     </>
   );
 }
-

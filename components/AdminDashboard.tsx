@@ -1,10 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { WorkspaceNavigation } from './WorkspaceNavigation';
+import { PropertyReviewQueue } from './PropertyReviewQueue';
+import { InventoryMappingStatus } from './InventoryMappingStatus';
+import { InventoryAuthorizationHistory } from './InventoryAuthorizationHistory';
+import { StayRecoveryQueue } from './StayRecoveryQueue';
+import { CampaignReadinessStrip } from './CampaignReadinessStrip';
+import { isCampaignAwaitingReview, hasObservedLiveDelivery } from '../lib/campaignReadiness';
 import { SEO } from './SEO';
 import { AdminSEOTab } from './AdminSEOTab';
 import { Listing } from '../types';
 import { HomeIcon, ListIcon,  TrashIcon, EditIcon, CheckCircle2Icon, UserIcon, XIcon } from './Icons';
 import { Map, Compass, MoreHorizontal, Edit3, Megaphone, Link, CreditCard, TrendingUp, Send, RefreshCw, Plus, Phone, Mail, Users, Globe, Building, Check, Search, Sparkles, Loader2, Upload, Zap, Shield, ShieldCheck, FileText, ChevronRight, ChevronDown as ChevronDownIcon, AlertTriangle, Eye, CheckCircle, XCircle, Crown, Film, Palette, Tag, Play, CheckCircle2, ShieldAlert, Bed } from 'lucide-react';
 import { useAuth, User } from './AuthContext';
+import { CampaignStayScope } from './CampaignStayScope';
 import AdminInbox from './AdminInbox';
 import { useCurrency } from './CurrencyContext';
 import { AdminExperiences } from './AdminExperiences';
@@ -22,7 +30,7 @@ interface AdminDashboardProps {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }) => {
   const { formatPrice } = useCurrency();
   const [adminMode, setAdminMode] = useState<'stays' | 'experiences'>('stays');
-  const [activeTab, setActiveTab] = useState<'analytics' | 'listings' | 'users' | 'settings' | 'offers' | 'reviews' | 'messages' | 'seo' | 'marketing'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'listings' | 'property-review' | 'recovery' | 'users' | 'settings' | 'offers' | 'reviews' | 'messages' | 'seo' | 'marketing'>('analytics');
   const [editingRoomsListing, setEditingRoomsListing] = useState<Listing | null>(null);
   // ADR-001: Rooms now have free-form name + tier key + icon + tag + description + specs
   const [editingRoomsData, setEditingRoomsData] = useState<any[]>([]);
@@ -55,34 +63,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
           alert("Error saving rooms.");
       }
   };
-
-  const handleTogglePublicationStatus = async (listing: Listing, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const currentStatus = listing.publication_status || 'published';
-    const targetStatus = currentStatus === 'published' ? 'draft' : 'published';
-    try {
-      const res = await fetch(`/api/admin/listings/${listing.id}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ publication_status: targetStatus })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        const errorMsg = data.details ? data.details.join('\n') : (data.error || 'Failed to update publication status');
-        alert(`PROPOSED-007 Validation Block:\n${errorMsg}`);
-        addToast('Publication Blocked', errorMsg, 'error');
-        return;
-      }
-      setListings(prev => prev.map(l => l.id === listing.id ? { ...l, publication_status: targetStatus } : l));
-      addToast('Status Updated', `Listing marked as ${targetStatus}.`, 'success');
-    } catch (err: any) {
-      console.error('[STATUS TOGGLE ERR]', err);
-      alert('Error communicating with server.');
-    }
-  };
   const [listings, setListings] = useState<Listing[]>([]);
   const [experiences, setExperiences] = useState<any[]>([]);
   const [experienceBookings, setExperienceBookings] = useState<any[]>([]);
@@ -90,6 +70,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   const [offers, setOffers] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
   const [marketingCampaigns, setMarketingCampaigns] = useState<any[]>([]);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [approvingCampaignId, setApprovingCampaignId] = useState<number | null>(null);
+  const approvalKeys = useRef(new globalThis.Map<number, string>());
+  const approvalInFlight = useRef(false);
   const [campaignFilter, setCampaignFilter] = useState<'all' | 'pending' | 'active' | 'escrow' | 'rejected'>('all');
   const [rejectingCampaignId, setRejectingCampaignId] = useState<number | null>(null);
   const [releasingEscrowId, setReleasingEscrowId] = useState<number | null>(null);
@@ -277,11 +261,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
 
   const fetchData = async () => {
     setLoading(true);
+    setWorkspaceError(null);
     try {
       const headers = { 'Authorization': `Bearer ${token}` };
       
       const [listingsRes, metricsRes, usersRes, whatsappRes, callRes, demoRes, offersRes, reviewsRes, expRes, expBookingsRes, expHostsRes, ratesRes, campaignsRes, outreachRes] = await Promise.all([
-        fetch('/api/listings?city=all', { headers }),
+        fetch('/api/listings?city=all'),
         fetch(`/api/admin/metrics?type=${adminMode}`, { headers }),
         fetch(`/api/admin/users?type=${adminMode}`, { headers }),
         fetch('/api/settings/whatsapp'),
@@ -296,6 +281,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
         fetch('/api/admin/marketing/campaigns', { headers }),
         fetch('/api/admin/outreach-leads', { headers })
       ]);
+      if (![listingsRes, metricsRes, usersRes, campaignsRes].every(response => response.ok)) {
+        setWorkspaceError('Some workspace data could not be refreshed. Previously loaded values may be out of date. Retry before making a decision.');
+      }
       
       if (listingsRes.ok) {
         const data = listingsRes.headers.get('content-type')?.includes('json') ? await listingsRes.json() : { error: 'Server returned non-JSON response: ' + (await listingsRes.text()).slice(0, 150) } as any;
@@ -359,6 +347,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
       fetchAdminPaymentOverview();
     } catch (e) {
       console.error("Failed to fetch admin data", e);
+      setWorkspaceError('The workspace could not be refreshed. Check your connection and retry.');
     } finally {
       setLoading(false);
     }
@@ -659,27 +648,38 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
     }
   };
 
+  const [reviewedScopeVersions, setReviewedScopeVersions] = useState<Record<string, string | null>>({});
   const handleApproveCampaign = async (id: number) => {
-    if (!confirm('Approve this campaign and push live to Meta Ad Network?')) return;
+    if (approvalInFlight.current) return;
+    if (!confirm('Approve this campaign? Publishing still requires recorded payment, released funds and provider checks.')) return;
+    approvalInFlight.current = true;
+    setApprovingCampaignId(id);
+    if (!approvalKeys.current.has(id)) approvalKeys.current.set(id, crypto.randomUUID());
     try {
       const res = await fetch(`/api/admin/marketing/campaigns/${id}/approve`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${token}`, 'X-Idempotency-Key': approvalKeys.current.get(id)!, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reviewed_scope_version: reviewedScopeVersions[String(id)] ?? null })
       });
       if (res.ok) {
         const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
-        addToast('Approved', 'Campaign approved and dispatched live to Meta Ad Network!', 'success');
+        addToast('Approval recorded', data.message || 'Approval recorded. Check delivery status for publishing progress.', 'success');
+        approvalKeys.current.delete(id);
         if (data.campaign) {
           setMarketingCampaigns(prev => prev.map(c => c.id === id ? data.campaign : c));
         } else {
-          setMarketingCampaigns(prev => prev.map(c => c.id === id ? { ...c, status: 'active', approved_at: new Date().toISOString() } : c));
+          await fetchData();
         }
       } else {
-        addToast('Error', 'Failed to approve campaign.', 'error');
+        const data = await res.json().catch(() => ({}));
+        addToast('Approval not saved', data.error || 'Refresh the campaign and retry.', 'error');
       }
     } catch (err) {
       console.error(err);
       addToast('Error', 'Connection failure during campaign approval.', 'error');
+    } finally {
+      approvalInFlight.current = false;
+      setApprovingCampaignId(null);
     }
   };
 
@@ -927,17 +927,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
 
   const handleDeleteListing = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('Are you sure you want to delete this listing?')) {
+    if (confirm('Permanently remove this unused property? Properties with linked history cannot be deleted.')) {
       try {
-        const res = await fetch(`/api/listings/${id}`, { method: 'DELETE' });
+        const res = await fetch(`/api/listings/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
         if (res.ok) {
           setListings(prev => prev.filter(l => l.id !== id));
           setMetrics(prev => ({ ...prev, totalListings: prev.totalListings - 1 }));
         } else {
-          alert("Failed to delete listing.");
+          const body = await res.json().catch(() => ({}));
+          alert(body.error || 'Failed to delete listing.');
         }
       } catch (err) {
         console.error("Delete error", err);
+        alert('Property removal could not be confirmed. Refresh before retrying.');
       }
     }
   };
@@ -1362,59 +1364,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   return (
     <>
       <SEO title="Admin Console | Encho Space" description="Encho Space Administration Console" />
-    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
-      {/* Sidebar */}
-      <aside className="w-full md:w-64 bg-white border-b md:border-r border-gray-200 p-4 md:p-6 flex flex-col shrink-0 md:min-h-screen sticky top-0 z-10">
-        <div className="font-bold tracking-tight text-xl mb-4 md:mb-10 text-gray-900 leading-none">
-          Encho<span className="text-[#0284C7]">Space</span> Admin
-        </div>
-        
-        <nav className="flex overflow-x-auto pb-2 md:pb-0 md:space-y-1 md:flex-col gap-2 md:gap-0 scrollbar-hide">
-          <button onClick={() => setActiveTab('analytics')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'analytics' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
-             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg> Analytics
-          </button>
-          <button onClick={() => setActiveTab('listings')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'listings' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
-             <ListIcon className="w-4 h-4" /> Properties
-          </button>
-          <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'users' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
-             <UserIcon className="w-4 h-4" /> Users
-          </button>
-          <button onClick={() => setActiveTab('offers')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'offers' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
-             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg> Offers
-          </button>
-          <button onClick={() => setActiveTab('reviews')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'reviews' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
-             <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg> Reviews
-          </button>
-          <button onClick={() => setActiveTab('messages')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'messages' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
-             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg> Messages
-          </button>
-          <button onClick={() => setActiveTab('settings')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'settings' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
-             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-             Settings
-          </button>
-          <button onClick={() => setActiveTab('seo')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'seo' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
-             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg>
-             SEO Metadata
-          </button>
-          <button onClick={() => setActiveTab('marketing')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'marketing' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
-             <Megaphone className="w-4 h-4" />
-             QC Marketing {marketingCampaigns.filter(c => c.status === 'pending').length > 0 && (
-               <span className="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                 {marketingCampaigns.filter(c => c.status === 'pending').length}
-               </span>
-             )}
-          </button>
-        </nav>
-        
-        <div className="mt-4 md:mt-auto pt-4 md:pt-0 border-t md:border-t-0 border-gray-200 shrink-0 flex items-center md:items-stretch">
-          <button onClick={onBack} className="w-full md:w-auto px-4 py-2 border border-gray-200 text-gray-700 rounded-lg font-medium text-sm hover:bg-gray-50 transition-colors whitespace-nowrap">
-             Exit to App
-          </button>
-        </div>
-      </aside>
+    <div className="workspace-shell">
+      <WorkspaceNavigation role="Admin" active={activeTab} onSelect={id => setActiveTab(id as typeof activeTab)} items={[
+        { id: 'analytics', label: 'Overview', icon: TrendingUp },
+        { id: 'listings', label: 'Properties', icon: Building },
+        { id: 'property-review', label: 'Property review', icon: ShieldCheck },
+        { id: 'recovery', label: 'Checkout recovery', icon: CreditCard },
+        { id: 'users', label: 'Guests & hosts', icon: Users },
+        { id: 'marketing', label: 'Marketing review', icon: Megaphone, count: marketingCampaigns.filter(isCampaignAwaitingReview).length },
+        { id: 'messages', label: 'Inbox', icon: Mail },
+        { id: 'offers', label: 'Offers', icon: Tag },
+        { id: 'reviews', label: 'Guest reviews', icon: ShieldCheck },
+        { id: 'seo', label: 'Search visibility', icon: Globe },
+        { id: 'settings', label: 'Settings & payments', icon: CreditCard },
+      ]} footer={<button type="button" onClick={onBack}>Return to guest app</button>} />
 
       {/* Main Content */}
-      <main className="flex-1 p-6 md:p-10 w-full overflow-x-hidden bg-gray-50/50 relative">
+      <main className="workspace-body workspace-content relative">
+        {workspaceError && <div role="alert" className="workspace-error"><AlertTriangle size={20} aria-hidden="true" /><span>{workspaceError}</span><button type="button" onClick={fetchData} disabled={loading}>Retry</button></div>}
         {/* Global Admin Toggle */}
         <div className="w-full flex justify-center mb-10 sticky top-0 z-20">
           <div className="flex bg-white p-1 rounded-full shadow-sm border border-gray-200 relative backdrop-blur-md">
@@ -1429,13 +1396,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
            <button onClick={onBack} className="text-sm font-medium text-gray-500 hover:text-gray-900">Exit</button>
         </div>
 
-        <div className="mb-8">
+        <div className="workspace-page-header">
+          <div>
+           <p className="workspace-eyebrow">Encho operations</p>
            <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight mb-2">
-             {activeTab === 'analytics' ? 'Analytics Overview' : activeTab === 'listings' ? (adminMode === 'stays' ? 'Properties' : 'Experiences') : activeTab === 'users' ? 'Users' : activeTab === 'offers' ? 'Offers' : activeTab === 'reviews' ? 'Reviews' : activeTab === 'messages' ? 'Messages' : 'Settings'}
+             {activeTab === 'recovery' ? 'Checkout recovery' : activeTab === 'property-review' ? 'Property review' : activeTab === 'analytics' ? 'Platform overview' : activeTab === 'listings' ? (adminMode === 'stays' ? 'Properties' : 'Experiences') : activeTab === 'users' ? 'Guests & hosts' : activeTab === 'offers' ? 'Offers' : activeTab === 'reviews' ? 'Guest reviews' : activeTab === 'messages' ? 'Inbox' : activeTab === 'marketing' ? 'Marketing operations' : activeTab === 'seo' ? 'Search visibility' : 'Settings & payments'}
            </h1>
            <p className="text-gray-500 text-sm">
-             {activeTab === 'analytics' ? 'Platform insights and revenue metrics' : activeTab === 'listings' ? (adminMode === 'stays' ? 'Manage all spaces across the platform' : 'Manage platform experiences') : activeTab === 'users' ? 'Manage customers and hosts' : activeTab === 'offers' ? 'Manage platform offers' : activeTab === 'reviews' ? 'Manage property reviews' : activeTab === 'messages' ? 'Manage platform messages' : 'Manage global settings'}
+             {activeTab === 'marketing' ? 'Review campaigns, inspect delivery and manage exceptions.' : activeTab === 'seo' ? 'Manage how properties appear in search.' : activeTab === 'analytics' ? 'Reservations, properties and the work that needs your attention.' : activeTab === 'listings' ? 'Review and manage property information across Encho.' : 'Manage your platform with a record of every decision.'}
            </p>
+          </div>
+          <button type="button" className="workspace-secondary" disabled={loading} onClick={fetchData}><RefreshCw size={17} className={loading ? 'animate-spin' : ''} aria-hidden="true" />{loading ? 'Refreshing…' : 'Refresh data'}</button>
         </div>
 
         {/* Metrics Bar */}
@@ -1630,37 +1601,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                           </span>
                                       )}
                                   </td>
-                                  <td className="px-6 py-4 font-medium text-gray-900">{formatPrice(listing.price, 'INR')}</td>
+                                  <td className="px-6 py-4 font-medium text-gray-900">{formatPrice(listing.price, 'INR')}<InventoryMappingStatus listingId={listing.id} rooms={listing.rooms} /><InventoryAuthorizationHistory listingId={listing.id} /></td>
                                   <td className="px-6 py-4">
-                                       {(() => {
-                                         const pubStatus = listing.publication_status || 'published';
-                                         const isPub = pubStatus === 'published';
-                                         return (
-                                           <button
-                                             type="button"
-                                             onClick={(e) => handleTogglePublicationStatus(listing, e)}
-                                             title={isPub ? "Click to unpublish/set to draft" : "Click to publish (runs PROPOSED-007 check)"}
-                                             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
-                                               isPub
-                                                 ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
-                                                 : pubStatus === 'in_review'
-                                                 ? 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200'
-                                                 : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 border border-zinc-200'
-                                             }`}
-                                           >
-                                             {isPub ? (
-                                               <>
-                                                 <CheckCircle2Icon className="w-3.5 h-3.5" /> Published
-                                               </>
-                                             ) : (
-                                               <>
-                                                 <AlertTriangle className="w-3.5 h-3.5" /> {pubStatus === 'in_review' ? 'In Review' : 'Draft'}
-                                               </>
-                                             )}
-                                           </button>
-                                         );
-                                       })()}
-                                   </td>
+                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700">
+                                         <CheckCircle2Icon className="w-3.5 h-3.5" /> Active
+                                      </span>
+                                  </td>
                                   <td className="px-6 py-4 text-right">
                                       <div className="flex justify-end items-center gap-2">
                                           <button onClick={(e) => openLuxuryStudioModal(listing, e)} title="God-Level Luxury Studio & Assets Moderation" className="p-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-md transition-colors font-bold shadow-xs border border-amber-200">
@@ -2038,6 +1984,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                      <AdminSEOTab items={adminMode === 'stays' ? listings : experiences} type={adminMode === 'stays' ? 'listing' : 'experience'} onSuccess={fetchData} />
                      <AdminSEOTab items={adminMode === 'stays' ? listings : experiences} type={adminMode === 'stays' ? 'listing' : 'experience'} onSuccess={fetchData} />
                   </div>
+              ) : activeTab === 'recovery' ? (
+                 <StayRecoveryQueue />
+              ) : activeTab === 'property-review' ? (
+                 <PropertyReviewQueue admin />
               ) : activeTab === 'marketing' ? (
                  <div className="p-6 space-y-8 max-w-6xl">
                     {/* Multi-Million Scale Hub Header */}
@@ -2212,13 +2162,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                                 <span className="text-gray-500 text-xs font-bold uppercase tracking-wider block mb-1">Active Ad Sets</span>
                                 <span className="text-3xl font-bold text-emerald-500">
-                                   {marketingCampaigns.filter(c => c.status === 'active' || c.status === 'approved').length}
+                                   {marketingCampaigns.filter(c => hasObservedLiveDelivery(c)).length}
                                 </span>
                              </div>
                              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
                                 <span className="text-gray-500 text-xs font-bold uppercase tracking-wider block mb-1">Total Active Ad Budget</span>
                                 <span className="text-3xl font-bold text-gray-900">
-                                   ₹{marketingCampaigns.reduce((sum, c) => sum + ((c.status === 'active' || c.status === 'approved') ? Number(c.budget) : 0), 0).toLocaleString()}
+                                   ₹{marketingCampaigns.reduce((sum, c) => sum + (hasObservedLiveDelivery(c) ? Number(c.budget) : 0), 0).toLocaleString()}
                                 </span>
                              </div>
                           </div>
@@ -2288,12 +2238,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                 return (
                                    <div className="grid grid-cols-1 gap-6 w-full">
                                       {filteredCampaigns.map((campaign) => {
-                                         const isPending = campaign.status === 'pending' || campaign.status === 'pending_approval' || campaign.status === 'PENDING_APPROVAL';
-                                         const isActive = campaign.status === 'active' || campaign.status === 'approved';
+                                         const isPending = isCampaignAwaitingReview(campaign);
+                                         const isActive = hasObservedLiveDelivery(campaign);
                                          const isRejected = campaign.status === 'rejected';
                                          return (
                                       <div key={campaign.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow flex flex-col md:flex-row text-left">
                                          <div className="p-6 flex-1 space-y-4">
+                                            <CampaignReadinessStrip campaign={campaign} />
+                                            <CampaignStayScope campaignId={campaign.id} readOnly onReviewed={version => setReviewedScopeVersions(previous => ({ ...previous, [campaign.id]: version }))} />
                                             <div className="flex flex-wrap items-center justify-between gap-3">
                                                <div className="space-y-1">
                                                   <div className="flex items-center gap-2">
@@ -2828,9 +2780,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                                <button 
                                                   type="button"
                                                   onClick={() => handleApproveCampaign(campaign.id)}
+                                                  disabled={approvingCampaignId !== null || !isPending}
                                                   className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs shadow-sm hover:shadow transition-all flex items-center justify-center gap-1.5"
                                                >
-                                                  <CheckCircle2Icon className="w-4 h-4" /> Approve & Launch
+                                                  <CheckCircle2Icon className="w-4 h-4" /> {approvingCampaignId === campaign.id ? 'Saving approval…' : 'Approve campaign'}
                                                </button>
                                                <button 
                                                   type="button"
@@ -5120,32 +5073,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                       </div>
                       <div className="text-right flex-shrink-0">
                         <p className="font-extrabold text-zinc-900 dark:text-white">₹{(room.price || 0).toLocaleString()}</p>
-                        <p className="text-[11px] text-zinc-500">{room.capacity || 2} guests · {room.inventory_count || 1} unit(s)</p>
-                        {(() => {
-                          const roomPhotos = Array.isArray(room.photos) ? room.photos : [];
-                          const approvedRoomPhotos = roomPhotos.filter((p: any) => !p.moderation_status || p.moderation_status === 'approved');
-                          const totalApproved = approvedRoomPhotos.length;
-                          const sleepingCount = approvedRoomPhotos.filter((p: any) => p.is_sleeping_area).length;
-                          const isCompliant = totalApproved >= 3 && sleepingCount >= 1;
-                          return (
-                            <div className="flex items-center justify-end gap-1.5 mt-1">
-                              <span
-                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                                  isCompliant
-                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400'
-                                    : 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400'
-                                }`}
-                                title={
-                                  isCompliant
-                                    ? 'PROPOSED-007 compliant: ≥3 approved photos with ≥1 sleeping area'
-                                    : `PROPOSED-007 check: ${totalApproved}/3 approved photos, ${sleepingCount}/1 sleeping area`
-                                }
-                              >
-                                📷 {totalApproved}/3 {sleepingCount >= 1 ? '🛏️' : '⚠️ No Bed'}
-                              </span>
-                            </div>
-                          );
-                        })()}
+                        <p className="text-[11px] text-zinc-500">{room.capacity || 2} guests · {room.inventory_count ?? 1} unit(s)</p>
                       </div>
                       <ChevronDownIcon className={`w-4 h-4 text-zinc-400 transition-transform flex-shrink-0 ${editingRoomExpandedIdx === idx ? 'rotate-180' : ''}`} />
                     </div>
@@ -5222,7 +5150,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                             <input
                               type="number"
                               min={1}
-                              value={room.inventory_count || 1}
+                              value={room.inventory_count ?? 1}
                               onChange={e => setEditingRoomsData(prev => prev.map((r: any, i: number) => i === idx ? { ...r, inventory_count: Number(e.target.value) } : r))}
                               className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm outline-none focus:ring-2 focus:ring-[#0284C7]"
                             />

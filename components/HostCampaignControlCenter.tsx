@@ -130,7 +130,7 @@ export const HostCampaignControlCenter: React.FC<HostCampaignControlCenterProps>
 
       // Automated Polling: refresh every 20 seconds while active/live
       pollingIntervalRef.current = setInterval(() => {
-        fetchCampaignTruth(false);
+        if (document.visibilityState === 'visible' && navigator.onLine) fetchCampaignTruth(false);
       }, 20000);
     }
 

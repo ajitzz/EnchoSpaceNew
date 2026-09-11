@@ -1,4 +1,5 @@
 import React from 'react';
+import { PerformanceEmptyState } from './PerformanceEmptyState';
 import {
   Users,
   PieChart,
@@ -42,6 +43,7 @@ export const HostDemographicsCard: React.FC<HostDemographicsCardProps> = ({
   isLoading = false
 }) => {
   const hasImpressions = demographicsBreakdown.some(d => d.impressions > 0);
+  if (!isLoading && !demographicsBreakdown.length && !audienceInterests.length) return <PerformanceEmptyState title="Audience performance" />;
 
   if (isLoading) {
     return (

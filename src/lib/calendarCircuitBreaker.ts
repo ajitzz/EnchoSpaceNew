@@ -5,8 +5,8 @@
  *
  * Non-Negotiable Rules:
  * 1. AUTO-PAUSE: Automatically pauses campaigns when a property becomes 100% occupied / unavailable for target dates.
- * 2. AUTO-RESUME: Automatically resumes campaigns when inventory becomes available IF AND ONLY IF the campaign
- *    was previously auto-paused by the system (pause_source = 'SYSTEM_AUTO_PAUSED').
+ * 2. AUTO-RESUME: Disabled until persisted campaign stay dates and dated inventory are verified.
+ *    Positive canonical stock alone is not evidence of availability.
  * 3. MANUAL PAUSE RESPECT: Campaigns manually paused by Host ('HOST_MANUAL') or Admin ('ADMIN_MANUAL') must NEVER
  *    be automatically resumed by the calendar circuit breaker.
  * 4. FINANCIAL PROTECTION: Auto-pause NEVER deletes or alters financial authorization / contracts. Remaining budget
@@ -16,6 +16,7 @@
  */
 
 import pg from 'pg';
+import { canonicalInventory } from '../../lib/roomInventory.js';
 import { MetaControlPlaneService, ActionActorContext } from './metaControlPlaneService.js';
 
 let globalPool: pg.Pool | null = null;
@@ -40,7 +41,7 @@ export interface CalendarEvaluationOptions {
 
 export interface CalendarCircuitBreakerResult {
   listing_id: number;
-  is_fully_booked: boolean;
+  is_fully_booked: boolean | null;
   active_campaigns_count: number;
   paused_campaigns_count: number;
   actions_taken: Array<{
@@ -76,7 +77,7 @@ export class CalendarCircuitBreaker {
     if (!options.forceEvaluation && now - lastEval < debounceMs) {
       return {
         listing_id: numListingId,
-        is_fully_booked: false,
+        is_fully_booked: null,
         active_campaigns_count: 0,
         paused_campaigns_count: 0,
         actions_taken: [{
@@ -93,28 +94,16 @@ export class CalendarCircuitBreaker {
 
     // 2. Fetch Listing & Active Bookings to determine availability
     const listingRes = await pool.query(
-      `SELECT id, user_id, title, dynamic_pricing FROM listings WHERE id = $1`,
+      `SELECT id, user_id, title, dynamic_pricing, rooms FROM listings WHERE id = $1`,
       [numListingId]
     );
     if (listingRes.rows.length === 0) {
       throw new Error(`Listing ${listingId} not found`);
     }
 
-    // Check confirmed / active bookings for this listing
-    const bookingsRes = await pool.query(
-      `SELECT id, status, move_in_date FROM bookings 
-       WHERE listing_id = $1 AND LOWER(status) IN ('confirmed', 'active', 'paid', 'occupied')`,
-      [numListingId]
-    );
-
-    // CMS Phase C Upgrade: Calculate true inventory across all room types
-    const inventoryRes = await pool.query(
-      `SELECT SUM(inventory_count) as total_inventory FROM room_types WHERE listing_id = $1`,
-      [numListingId]
-    );
-    const totalInventory = inventoryRes.rows[0]?.total_inventory || 1; // Fallback to 1 for legacy properties
-
-    const isFullyBooked = bookingsRes.rows.length >= totalInventory;
+    const totalInventory = canonicalInventory(listingRes.rows[0].rooms);
+    // Positive stock does not prove availability for a campaign's target dates.
+    const isFullyBooked = totalInventory === 0 ? true : null;
 
     // 3. Fetch all marketing campaigns linked to this listing
     const campaignsRes = await pool.query(
@@ -149,7 +138,7 @@ export class CalendarCircuitBreaker {
             'CALENDAR_AUTO_PAUSE',
             systemActor,
             {
-              reason: `Calendar Circuit Breaker: Property #${numListingId} is 100% booked for target dates`,
+              reason: `Calendar Circuit Breaker: Property #${numListingId} has zero configured room inventory`,
               customGraphFetcher: options.customGraphFetcher,
               idempotencyKey: options.correlationId ? `calendar_pause_${camp.id}_${options.correlationId}` : undefined
             },
@@ -159,7 +148,7 @@ export class CalendarCircuitBreaker {
           actionsTaken.push({
             campaign_id: camp.id,
             action: 'CALENDAR_AUTO_PAUSE',
-            reason: 'Property 100% occupied; paused to protect ad budget',
+            reason: 'Zero configured room inventory; pause requested to protect ad budget',
             success: pauseRes.success
           });
         } catch (err: any) {
@@ -173,64 +162,9 @@ export class CalendarCircuitBreaker {
         }
       }
     } else {
-      // AVAILABILITY RESTORED: Evaluate paused campaigns for AUTO-RESUME
-      const pausedCampaigns = campaigns.filter((c: any) => 
-        c.status === 'paused' || c.meta_effective_status === 'PAUSED' || c.meta_effective_status === 'CAMPAIGN_PAUSED'
-      );
-
-      for (const camp of pausedCampaigns) {
-        // MANDATORY SAFETY INVARIANT: Only campaigns auto-paused by the system may auto-resume!
-        if (camp.pause_source !== 'SYSTEM_AUTO_PAUSED') {
-          skippedManualPauses++;
-          actionsTaken.push({
-            campaign_id: camp.id,
-            action: 'SKIPPED',
-            reason: `Campaign was paused with source '${camp.pause_source || 'HOST_MANUAL'}'. Manual pause takes precedence over auto-resume.`,
-            success: true
-          });
-          continue;
-        }
-
-        // Financial Eligibility Check
-        const remainingBudget = Number(camp.budget || 0) - Number(camp.spent || 0);
-        if (remainingBudget <= 0) {
-          actionsTaken.push({
-            campaign_id: camp.id,
-            action: 'SKIPPED',
-            reason: `Campaign remaining budget is exhausted ($${remainingBudget}). Cannot auto-resume.`,
-            success: false
-          });
-          continue;
-        }
-
-        try {
-          const resumeRes = await MetaControlPlaneService.executeControlAction(
-            camp.id,
-            'CALENDAR_AUTO_RESUME',
-            systemActor,
-            {
-              reason: `Calendar Circuit Breaker: Property #${numListingId} inventory available; auto-resuming delivery`,
-              customGraphFetcher: options.customGraphFetcher,
-              idempotencyKey: options.correlationId ? `calendar_resume_${camp.id}_${options.correlationId}` : undefined
-            },
-            pool
-          );
-
-          actionsTaken.push({
-            campaign_id: camp.id,
-            action: 'CALENDAR_AUTO_RESUME',
-            reason: 'Inventory restored; campaign resumed',
-            success: resumeRes.success
-          });
-        } catch (err: any) {
-          actionsTaken.push({
-            campaign_id: camp.id,
-            action: 'CALENDAR_AUTO_RESUME',
-            reason: err.message,
-            success: false,
-            error: err.message
-          });
-        }
+      for (const camp of campaigns) {
+        if (camp.pause_source && camp.pause_source !== 'SYSTEM_AUTO_PAUSED') skippedManualPauses++;
+        actionsTaken.push({ campaign_id: camp.id, action: 'SKIPPED', reason: 'Date-specific availability is unverified. No automatic pause or resume authorized.', success: false });
       }
     }
 

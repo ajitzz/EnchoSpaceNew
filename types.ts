@@ -35,6 +35,7 @@ export interface Room {
   description?: string;     // Host-authored description shown on guest detail page
   specs?: string;           // Short specs e.g. "1200 sq.ft · Valley View · Jacuzzi"
   inventory_count?: number;
+  inventory_source?: 'unknown' | 'encho_allocation' | 'external_sync';
   tiers?: RoomTier[];
   photos?: SpatialPhoto[];  // Room-specific photos tagged to this room type
   min_stay_nights?: number;
@@ -386,4 +387,3 @@ export interface MetaPreflightDiagnosticReport {
   remediation_summary: string[];
   correlation_id?: string;
 }
-

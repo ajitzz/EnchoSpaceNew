@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PerformanceEmptyState } from './PerformanceEmptyState';
 import {
   DollarSign,
   RefreshCw,
@@ -14,7 +15,7 @@ import {
 export interface PricingSyncStatus {
   listing_nightly_price: number;
   formatted_nightly_price: string;
-  sync_state: 'SYNCHRONIZED' | 'SYNCING' | 'PENDING';
+  sync_state: 'SYNCHRONIZED' | 'SYNCING' | 'PENDING' | 'UNVERIFIED';
   last_synced_at: string;
   active_ad_copy_preview: string;
   currency: string;
@@ -49,6 +50,8 @@ export const HostDynamicPricingSyncCard: React.FC<HostDynamicPricingSyncCardProp
   const [showHistory, setShowHistory] = useState(false);
   const [historyList, setHistoryList] = useState<PricingHistoryEvent[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+
+  if (!pricingSyncStatus || pricingSyncStatus.sync_state === 'UNVERIFIED') return <PerformanceEmptyState title="Ad pricing sync" description="Provider-verified pricing synchronization is not available. Check the current listing price; no synchronized ad price is claimed." />;
 
   const price = pricingSyncStatus?.listing_nightly_price || 3500;
   const formatted = pricingSyncStatus?.formatted_nightly_price || `₹${Number(price).toLocaleString('en-IN')}`;

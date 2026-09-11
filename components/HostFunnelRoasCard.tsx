@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 
 export interface FunnelMetricsData {
+  attribution_status?: 'UNAVAILABLE' | 'VERIFIED';
   impressions: number;
   clicks: number;
   listing_views: number;
@@ -72,6 +73,7 @@ export const HostFunnelRoasCard: React.FC<HostFunnelRoasCardProps> = ({
   const impressions = funnelMetrics?.impressions || 0;
   const clicks = funnelMetrics?.clicks || 0;
   const leads = funnelMetrics?.direct_leads || 0;
+  const hasAttribution = funnelMetrics?.attribution_status === 'VERIFIED';
   const bookings = funnelMetrics?.bookings_count || 0;
   const grossCharge = financialSafety?.gross_host_charge || 0;
   const fee = financialSafety?.encho_fee || 0;
@@ -104,21 +106,21 @@ export const HostFunnelRoasCard: React.FC<HostFunnelRoasCardProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 tracking-tight">
-                Conversion Funnel & True ROAS
+                Campaign funnel & funding
               </h3>
               <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                100% Transparent
+                Reported data
               </span>
             </div>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Direct pipeline from raw ad impressions to Encho bookings
+              Network metrics and the funding recorded for this campaign
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
           <Sparkles className="w-4 h-4" />
-          <span>ROAS: {roas > 0 ? `${roas.toFixed(1)}x` : 'Entering Warm-up'}</span>
+          <span>ROAS: {hasAttribution ? `${roas.toFixed(1)}x` : 'Not yet available'}</span>
         </div>
       </div>
 
@@ -181,11 +183,11 @@ export const HostFunnelRoasCard: React.FC<HostFunnelRoasCardProps> = ({
                 4. Bookings
               </span>
               <span className="text-lg font-black text-emerald-700 dark:text-emerald-300 mt-1 block">
-                {bookings.toLocaleString()}
+                {hasAttribution ? bookings.toLocaleString() : '—'}
               </span>
             </div>
             <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium mt-2">
-              Confirmed Reservations
+              {hasAttribution ? 'Attributed reservations' : 'Attribution not yet available'}
             </span>
           </div>
         </div>

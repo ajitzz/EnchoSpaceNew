@@ -11,6 +11,9 @@ node_modules
 dist
 dist-ssr
 *.local
+# Generated repository snapshots can contain embedded historical secrets or PII.
+repomix.txt
+repomix-output.xml
 .env
 .env.*
 !.env.example
@@ -30,9 +33,3 @@ dist-ssr
 playwright-report
 test-results
 blob-report
-
-# Temporary scratch & patch scripts
-scratch/
-generate_*.sh
-patch_*.py
-patch_*.cjs

@@ -27,6 +27,7 @@ import { GoogleTelemetryMapper } from './googleTelemetryMapper.js';
 import { googleDcoStrategy } from './googleDcoStrategy.js';
 import { GoogleAdsError } from './googleErrors.js';
 import { DcoEvaluationOutput } from '../../dcoEngine.js';
+import { isGoogleSandboxEnabled } from '../../../../lib/providerMode.js';
 
 export class GoogleAdsProvider implements AdProvider {
   public readonly providerId: ProviderId = 'GOOGLE';
@@ -108,6 +109,9 @@ export class GoogleAdsProvider implements AdProvider {
     poolOrClient?: any
   ): Promise<ProviderPublishResult> {
     try {
+      if (!isGoogleSandboxEnabled(process.env)) {
+        throw new GoogleAdsError('GOOGLE_LIVE_PUBLISH_UNAVAILABLE', 'Live Google campaign creation has not been certified. No campaign was created or funded.', { statusCode: 503, errorClass: 'POLICY' });
+      }
       // 1. Financial Invariant Check
       const contractRes = poolOrClient ? await poolOrClient.query(
         `SELECT meta_authorized_spend, meta_remaining_authorization, currency FROM campaign_financial_contracts WHERE campaign_id = $1`,
@@ -271,7 +275,8 @@ export class GoogleAdsProvider implements AdProvider {
     poolOrClient?: any
   ): Promise<ProviderControlResult> {
     try {
-      // Step 1: Tenant Validation
+
+      if (!isGoogleSandboxEnabled(process.env)) throw new GoogleAdsError('GOOGLE_LIVE_CONTROL_UNAVAILABLE', 'This Google control has not been connected to verified live API mutations. No delivery change was confirmed.', { statusCode: 503, errorClass: 'POLICY' });     // Step 1: Tenant Validation
       if (poolOrClient && request.actorType === 'host') {
         const campRes = await poolOrClient.query(
           `SELECT host_id FROM host_marketing_campaigns WHERE id = $1`,
@@ -338,7 +343,8 @@ export class GoogleAdsProvider implements AdProvider {
     poolOrClient?: any
   ): Promise<ProviderControlResult> {
     try {
-      // Step 1: Tenant Validation
+
+      if (!isGoogleSandboxEnabled(process.env)) throw new GoogleAdsError('GOOGLE_LIVE_CONTROL_UNAVAILABLE', 'This Google control has not been connected to verified live API mutations. No delivery change was confirmed.', { statusCode: 503, errorClass: 'POLICY' });     // Step 1: Tenant Validation
       if (poolOrClient && request.actorType === 'host') {
         const campRes = await poolOrClient.query(
           `SELECT host_id FROM host_marketing_campaigns WHERE id = $1`,
@@ -421,7 +427,8 @@ export class GoogleAdsProvider implements AdProvider {
     poolOrClient?: any
   ): Promise<ProviderControlResult> {
     try {
-      if (request.newBudget.minor_units > request.authorizedLimit.minor_units) {
+
+      if (!isGoogleSandboxEnabled(process.env)) throw new GoogleAdsError('GOOGLE_LIVE_CONTROL_UNAVAILABLE', 'This Google control has not been connected to verified live API mutations. No delivery change was confirmed.', { statusCode: 503, errorClass: 'POLICY' });     if (request.newBudget.minor_units > request.authorizedLimit.minor_units) {
         throw new GoogleAdsError(
           'FINANCIAL_BUDGET_EXCEEDS_AUTHORIZATION',
           `Requested budget (${request.newBudget.minor_units}) exceeds authorization ceiling (${request.authorizedLimit.minor_units}).`,
@@ -483,7 +490,8 @@ export class GoogleAdsProvider implements AdProvider {
     poolOrClient?: any
   ): Promise<NormalizedDeliveryTruth> {
     try {
-      let rawStatus = 'ENABLED';
+
+      if (!isGoogleSandboxEnabled(process.env)) throw new Error('Live Google observation is not implemented');     let rawStatus = 'ENABLED';
       let rawPrimaryStatus = 'ELIGIBLE';
 
       if (poolOrClient) {
@@ -542,7 +550,8 @@ export class GoogleAdsProvider implements AdProvider {
     poolOrClient?: any
   ): Promise<ProviderReconciliationReport> {
     try {
-      let isConsistent = true;
+
+      if (!isGoogleSandboxEnabled(process.env)) throw new Error('Live Google reconciliation is not implemented');     let isConsistent = true;
       let skewDetected = false;
 
       if (poolOrClient && externalIds.externalCampaignId) {
@@ -572,7 +581,7 @@ export class GoogleAdsProvider implements AdProvider {
       return {
         campaignId,
         provider: 'GOOGLE',
-        isConsistent: true,
+        isConsistent: false,
         remoteStatus: 'UNKNOWN',
         localStatus: 'UNKNOWN',
         normalizedState: 'UNKNOWN',
@@ -591,6 +600,7 @@ export class GoogleAdsProvider implements AdProvider {
     dateWindow: { startDate: string; endDate: string },
     poolOrClient?: any
   ): Promise<NormalizedTelemetrySnapshot> {
+    if (!isGoogleSandboxEnabled(process.env)) throw new GoogleAdsError('GOOGLE_TELEMETRY_UNAVAILABLE', 'Live Google reporting is not connected. No metrics are available.', { statusCode: 503, errorClass: 'POLICY' });
     return GoogleTelemetryMapper.normalizeSnapshot(
       externalCampaignId,
       {
@@ -614,6 +624,7 @@ export class GoogleAdsProvider implements AdProvider {
     decision: DcoEvaluationOutput,
     poolOrClient?: any
   ) {
+    if (!isGoogleSandboxEnabled(process.env)) throw new GoogleAdsError('GOOGLE_DCO_UNAVAILABLE', 'Live Google creative optimization is not connected.', { statusCode: 503, errorClass: 'POLICY' });
     return googleDcoStrategy.applyWinnerDecision(campaignId, decision, poolOrClient);
   }
 }

@@ -14,6 +14,9 @@ const redis = isRedisConfigured
 const memoryStore = new Map<string, { status: number; body: any }>();
 
 export const idempotencyMiddleware = async (req: Request, res: Response, next: NextFunction) => {
+  // A pre-authentication IP cache can expose another account's payment response.
+  // Stay checkout has its own durable, body-bound transaction idempotency.
+  if (!(req as any).user?.id || req.originalUrl.startsWith('/api/stays/')) return next();
   // Only apply to state-mutating requests
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
     return next();
@@ -27,7 +30,7 @@ export const idempotencyMiddleware = async (req: Request, res: Response, next: N
 
   // Namespace the key based on user if authenticated, else IP to prevent collisions across users
   const userId = (req as any).user?.id || req.ip;
-  const scopedKey = `idempotency:${userId}:${idempotencyKey}`;
+  const scopedKey = `idempotency:${userId}:${req.method}:${req.originalUrl}:${idempotencyKey}`;
 
   try {
     if (redis) {

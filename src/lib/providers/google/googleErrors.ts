@@ -6,6 +6,10 @@
 import { ProviderError } from '../types.js';
 
 export type GoogleErrorCode =
+  | 'GOOGLE_NOT_CONFIGURED'
+  | 'GOOGLE_LIVE_PUBLISH_UNAVAILABLE'
+  | 'GOOGLE_LIVE_CONTROL_UNAVAILABLE'
+  | 'GOOGLE_DCO_UNAVAILABLE'
   | 'GOOGLE_AUTH_EXPIRED'
   | 'GOOGLE_RATE_LIMIT'
   | 'GOOGLE_TIMEOUT'
