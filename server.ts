@@ -133,7 +133,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
-import { toPublicStayProjection, toPublicListingCardProjection, generateListingSlug, escapeHtml, STAY_PUBLIC_SQL_COLUMNS, coarsenCoordinate } from './src/lib/stayProjection';
+import { toPublicStayProjection, toPublicListingCardProjection, generateListingSlug, escapeHtml, STAY_PUBLIC_SQL_COLUMNS, coarsenCoordinate } from './src/lib/stayProjection.js';
 
 export interface AuthRequest extends Request {
   user?: {
