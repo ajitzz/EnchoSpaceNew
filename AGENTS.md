@@ -1,5 +1,14 @@
 # Project Instructions
 
+## HARVO — Living Project Understanding
+
+- After reading `docs/ENCHO_ENGINEERING_CONSTITUTION.md`, read `HARVO.md` and the relevant files under `docs/harvo/` before project analysis, boardroom discussion, planning, or engineering work.
+- HARVO is the founder-requested living record of project understanding. Update it during active work whenever verified source findings, explicit founder decisions, or discussion insights change the understanding.
+- Keep verified implementation, historical acceptance, proposals, unknowns, and legal/provider blockers separate. A structural scan is not a completed line-by-line semantic review.
+- Record meaningful changes and superseded assumptions in `docs/harvo/DECISIONS.md`; preserve evidence, rationale, and history. Do not promote an assistant proposal to an approved decision.
+- HARVO supplements the Constitution and controlling domain decision registers; it does not silently override them, advance phases, accept milestones, or clear legal gates. Reverify relevant source before implementing from an old finding.
+- Maintain HARVO in this workspace during active sessions; no unattended background updating is implied.
+
 ## Architecture & User Roles
 - The platform follows a unified account model similar to Airbnb or Booking.com.
 - A single account can function as both a **Guest** (booking spaces) and a **Host** (listing spaces).
@@ -28,7 +37,8 @@ You operate strictly within a 4-Phase System. You will not move between phases w
 
 - **Phase 1 (The Boardroom)**: Strategy, debate, and business logic.
 - **Phase 2 (The Blueprint)**: Architecture, API mapping, and strict numbered milestone planning.
-- **Phase 3 (Execution)**: Coding exactly ONE milestone per response. You must output Current Completion Status: X% at the bottom.
+- **Phase 3 (Execution)**: Latest founder instruction HARVO-013 authorizes continuous execution of all remaining marketing milestones without routine permission stops; the earlier one-milestone-per-response restriction is superseded for this track. You must output Current Completion Status: X% at the bottom.
+  - *Authorized Marketing Track (13 September 2026, HARVO-012):* Follow `docs/implementation/HARVO_MARKETING_EXECUTION_PLAN.md`. M1, M2, M3, M7 and M8 are locally verified; M4, M5, M6 and M9 are partial; M10 requires actual pilot evidence. HARVO-017 continues authorized gap closure; see the current execution verification before changing acceptance status. Founder already authorized execution/testing; do not ask for another phase switch. Report milestone-count progress separately from production readiness. Existing guest/provider/legal gates remain.
   - *Current Active Track:* Encho Stays — India Stays Customer Journey (M1: ACCEPTED — ARCHITECTURAL BASELINE; M2: ACCEPTED — PUBLIC PROJECTION, CANONICAL ROUTING & PRIVACY BASELINE; M3: ACCEPTED — CANONICAL RELATIONAL ROOM & MEDIA AUTHORITY; M4: ACCEPTED — INVENTORY DAYS & ATOMIC HOLDS; M5: NOT STARTED — LEGALLY BLOCKED pending written Indian CA/tax-lawyer sign-off; M6A: AWAITING INDEPENDENT ACCEPTANCE — GUEST PRESENTATION TRUTH & LUXURY UX FOUNDATION; M6B: NOT STARTED — LEGALLY BLOCKED pending M5 and written Indian CA/tax-lawyer sign-off; M7–M15: NOT STARTED).
 - **Phase 4 (Audit)**: Adversarial QA, security, OWASP review, and refactoring.
 
@@ -42,7 +52,7 @@ You must understand these absolute business rules before writing a single line o
 
 1. **The Master Account Architecture (No Host OAuth)**: Hosts DO NOT connect their own Meta/Google accounts. We use a Master Encho Ad Account. Why? To prevent a single bad host from getting our API banned. We run the ads; they just fund them.
 2. **The AI Gatekeeper (Quality Control)**: Before an ad campaign even reaches a human Admin for approval, it must pass a strict AI Pre-Check. The AI grades the listing's copy, media, and targeting out of 10. If it scores below 8/10, the AI instantly rejects it and tells the host exactly what to fix. This protects our Master Ad Account from Meta policy violations.
-3. **The Advertising Engine Fee (The AdTech Margin)**: Advertising is strictly optional and separate from booking commission. When a host funds an ad campaign, the budget is billed as actual ad media spend plus a 15% AI optimization and management fee, plus applicable statutory taxes. This operates alongside our marketplace booking commission.
+3. **The Advertising Engine Fee (The AdTech Margin)**: Advertising is optional and separate from booking commission. Current founder direction HARVO-008/009 is defined campaign cost C plus admin-selected profit markup p on C, initially intended at 3–5%: target profit C × p; charge C × (1 + p). The earlier fixed 15% advertising-fee references in the historical playbook below are superseded for future design. Complete cost/tax/variance rules and live rates still need specification; existing contracts are unchanged. Flex booking commission remains separately 15%, with existing Growth exceptions.
 4. **The Dopamine UI (The Host Dashboard)**: We don't show boring spreadsheets. We show a "Campaign Reactor Core" (a visual fuel gauge of their budget). We show real-time "Traffic & Click" dopamine hits (impressions, clicks, leads). When the fuel gauge turns orange (budget low), they feel the psychological urge to hit the "Refuel" button.
 5. **The "Rahul-Proof" Smart Targeting**: Hosts are bad at marketing. By default, our AI selects the optimal targeting locations (e.g., targeting Los Angeles tech workers for a Joshua Tree cabin, not local desert residents) and Meta interests. If the host overrides it with a bad location, the AI warns them that their campaign grade will drop.
 6. **The Walled Garden CRM**: Leads generated from the ads MUST drop directly into the Encho Host Inbox. No leaking leads to WhatsApp or phone calls. The host must convert the lead into a booking inside our platform, capturing the payment and our commission.

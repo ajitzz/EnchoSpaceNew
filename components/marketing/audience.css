@@ -1,0 +1,20 @@
+.mkt-audience-picker{display:flex;flex-direction:column;gap:14px;margin:0;padding:0;border:0;min-width:0}
+.mkt-audience-picker legend{font-weight:600;margin-bottom:12px}
+.mkt-audience-picker .mkt-caption{margin:0;line-height:1.6}
+.mkt-country-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px}
+.mkt-location-search{display:flex;flex-direction:column;gap:10px}
+.mkt-location-search>div{display:flex;align-items:center;gap:8px;border:1px solid var(--mkt-line);border-radius:8px;padding:0 12px;background:var(--mkt-paper)}
+.mkt-location-search input{border:0!important;background:transparent!important;min-width:0;width:100%;min-height:46px}
+.mkt-location-search>div:focus-within{outline:2px solid var(--mkt-ink);outline-offset:3px}
+.mkt-location-feedback{display:flex;align-items:center;gap:8px;font-size:12px;min-height:20px;color:var(--mkt-muted)}
+.mkt-location-results{list-style:none;margin:0;padding:4px;border:1px solid var(--mkt-line);border-radius:8px;max-height:270px;overflow-y:auto}
+.mkt-location-results button{display:flex;align-items:center;gap:10px;width:100%;padding:12px;min-height:48px;border:0;border-radius:5px;background:transparent;text-align:left;color:var(--mkt-ink);cursor:pointer}
+.mkt-location-results button:hover:not(:disabled){background:#e8ecdf}
+.mkt-location-results button:disabled{opacity:.55;cursor:default}
+.mkt-location-results button>span{display:flex;flex:1;flex-direction:column;gap:4px;min-width:0}
+.mkt-location-results strong{font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+.mkt-location-results small{font-size:11px;color:var(--mkt-muted)}
+.mkt-audience-tags{display:flex;flex-wrap:wrap;gap:8px}
+.mkt-audience-tags>span{display:flex;align-items:center;gap:5px;max-width:100%;padding:2px 4px 2px 12px;background:#e8ecdf;border:1px solid var(--mkt-line);border-radius:8px;font-size:12px;overflow-wrap:anywhere}
+.mkt-audience-tags button{display:flex;align-items:center;justify-content:center;flex-shrink:0;min-width:38px;min-height:38px;border:0;background:transparent;color:var(--mkt-ink);cursor:pointer}
+.mkt-audience-picker button:focus-visible,.mkt-audience-picker select:focus-visible{outline:2px solid var(--mkt-ink);outline-offset:3px}

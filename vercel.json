@@ -59,5 +59,6 @@
       "maxDuration": 60,
       "includeFiles": "dist/**"
     }
-  }
+  },
+  "installCommand": "npm ci --include=dev"
 }

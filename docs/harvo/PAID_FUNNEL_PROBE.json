@@ -1,0 +1,250 @@
+{
+  "diagnostic": "HARVO offline paid funnel source reproduction",
+  "recordedAt": "2026-09-13T08:08:35.222Z",
+  "fixedClock": "2026-09-13T12:00:00.000Z",
+  "limits": "Extracted functions with synthetic inputs and in-process database stubs; not an HTTP, database, provider, concurrency or production test. No application import, network API, secrets or real IDs supplied.",
+  "sources": {
+    "src/lib/campaignControlCenterService.ts": {
+      "sha256": "e924644149f0e5761a405069e6618ab1bc5d8288d80fd47ff72f1510aa7afd51"
+    },
+    "server.ts": {
+      "sha256": "df81303766c0d79bc715685eacc40630aec6eb478ca3cc87fb50524e7f641d0d"
+    }
+  },
+  "locations": {
+    "buildGeographicBreakdown": {
+      "file": "src/lib/campaignControlCenterService.ts",
+      "line": 927
+    },
+    "buildPlacementBreakdown": {
+      "file": "src/lib/campaignControlCenterService.ts",
+      "line": 962
+    },
+    "buildFunnelMetrics": {
+      "file": "src/lib/campaignControlCenterService.ts",
+      "line": 991
+    },
+    "buildDemographicsBreakdown": {
+      "file": "src/lib/campaignControlCenterService.ts",
+      "line": 1020
+    },
+    "buildDeviceBreakdown": {
+      "file": "src/lib/campaignControlCenterService.ts",
+      "line": 1051
+    },
+    "buildMetaCryptographicProof": {
+      "file": "src/lib/campaignControlCenterService.ts",
+      "line": 1100
+    },
+    "buildPricingSyncStatus": {
+      "file": "src/lib/campaignControlCenterService.ts",
+      "line": 1121
+    },
+    "syncCampaignSpend": {
+      "file": "server.ts",
+      "line": 4954
+    }
+  },
+  "fixture": {
+    "campaign_id": 42,
+    "performance_state": {
+      "impressions": 1000,
+      "clicks": 100,
+      "conversions": 7
+    },
+    "currency": "INR"
+  },
+  "derived": {
+    "buildGeographicBreakdown": [
+      {
+        "location": "Primary Metro Area",
+        "impressions": 550,
+        "clicks": 55,
+        "ctr": 10,
+        "leads": 4,
+        "delivery_status": "ACTIVE_SERVING",
+        "share_percentage": 55
+      },
+      {
+        "location": "Surrounding Regional Hub",
+        "impressions": 450,
+        "clicks": 45,
+        "ctr": 10,
+        "leads": 3,
+        "delivery_status": "ACTIVE_SERVING",
+        "share_percentage": 45
+      }
+    ],
+    "buildPlacementBreakdown": [
+      {
+        "platform": "Instagram Reels",
+        "share_percentage": 45,
+        "impressions": 450,
+        "clicks": 45,
+        "format": "9:16 Vertical Video"
+      },
+      {
+        "platform": "Instagram Feed & Explore",
+        "share_percentage": 35,
+        "impressions": 350,
+        "clicks": 35,
+        "format": "1:1 Square"
+      },
+      {
+        "platform": "Facebook Feed & Stories",
+        "share_percentage": 20,
+        "impressions": 200,
+        "clicks": 20,
+        "format": "1.91:1 Feed"
+      }
+    ],
+    "buildDemographicsBreakdown": [
+      {
+        "age_group": "18-24",
+        "share_percentage": 12,
+        "impressions": 120,
+        "clicks": 12,
+        "ctr": 10,
+        "gender_distribution": {
+          "female_percentage": 52,
+          "male_percentage": 48
+        },
+        "status": "ACTIVE_SERVING"
+      },
+      {
+        "age_group": "25-34",
+        "share_percentage": 54,
+        "impressions": 540,
+        "clicks": 54,
+        "ctr": 10,
+        "gender_distribution": {
+          "female_percentage": 58,
+          "male_percentage": 42
+        },
+        "status": "ACTIVE_SERVING"
+      },
+      {
+        "age_group": "35-44",
+        "share_percentage": 24,
+        "impressions": 240,
+        "clicks": 24,
+        "ctr": 10,
+        "gender_distribution": {
+          "female_percentage": 50,
+          "male_percentage": 50
+        },
+        "status": "ACTIVE_SERVING"
+      },
+      {
+        "age_group": "45-54",
+        "share_percentage": 8,
+        "impressions": 80,
+        "clicks": 8,
+        "ctr": 10,
+        "gender_distribution": {
+          "female_percentage": 45,
+          "male_percentage": 55
+        },
+        "status": "ACTIVE_SERVING"
+      },
+      {
+        "age_group": "55+",
+        "share_percentage": 2,
+        "impressions": 20,
+        "clicks": 2,
+        "ctr": 10,
+        "gender_distribution": {
+          "female_percentage": 40,
+          "male_percentage": 60
+        },
+        "status": "ACTIVE_SERVING"
+      }
+    ],
+    "buildDeviceBreakdown": [
+      {
+        "device_name": "Mobile iOS (iPhone/iPad)",
+        "device_key": "ios",
+        "share_percentage": 58,
+        "impressions": 580,
+        "clicks": 58,
+        "ctr": 10,
+        "status": "ACTIVE_SERVING"
+      },
+      {
+        "device_name": "Mobile Android",
+        "device_key": "android",
+        "share_percentage": 36,
+        "impressions": 360,
+        "clicks": 36,
+        "ctr": 10,
+        "status": "ACTIVE_SERVING"
+      },
+      {
+        "device_name": "Desktop & Tablet Web",
+        "device_key": "desktop",
+        "share_percentage": 6,
+        "impressions": 60,
+        "clicks": 6,
+        "ctr": 10,
+        "status": "ACTIVE_SERVING"
+      }
+    ],
+    "buildFunnelMetrics": {
+      "impressions": 1000,
+      "clicks": 100,
+      "listing_views": 100,
+      "direct_leads": 7,
+      "bookings_count": 0,
+      "gross_booking_value": 0,
+      "gross_booking_value_cents": 0,
+      "click_rate": 10,
+      "lead_rate": 7,
+      "cost_per_lead": 14.29,
+      "net_roas": 0,
+      "currency": "INR"
+    },
+    "buildMetaCryptographicProof": {
+      "provider": "META",
+      "api_version": "Graph API v20.0",
+      "meta_campaign_id": "act_42",
+      "meta_adset_id": "adset_42",
+      "meta_ad_id": "ad_42",
+      "verified_at": "2026-09-13T12:00:00.000Z",
+      "data_integrity_verified": true,
+      "provenance_source": "Meta Business Ad Insights Server-to-Server Webhook",
+      "cryptographic_verification_signature": "SHA256:META_INSIGHTS:act_42:adset_42:2026-09-13T12:00:00.000Z",
+      "tamper_proof_guarantee": "100% Zero-Fabrication FAANG Certified"
+    },
+    "buildPricingSyncStatus": {
+      "listing_nightly_price": 3500,
+      "formatted_nightly_price": "₹3,500",
+      "sync_state": "SYNCHRONIZED",
+      "last_synced_at": "2026-09-13T12:00:00.000Z",
+      "active_ad_copy_preview": "Experience luxury stays from ₹3,500/night · Instant booking on Encho",
+      "currency": "INR"
+    }
+  },
+  "pacingWithoutProviderData": {
+    "elapsedSeconds": 600,
+    "analytics": {
+      "impressions": 900,
+      "clicks": 20,
+      "ctr": 2.3,
+      "conversions": 0,
+      "spent": 72
+    },
+    "capturedQueries": [
+      {
+        "sql": "UPDATE host_marketing_campaigns SET accumulated_spent = $1, accumulated_impressions = $2, accumulated_clicks = $3, accumulated_conversions = $4, last_pacing_calc_at = NOW(), pacing_mode = $5 WHERE id = $6",
+        "values": [
+          72,
+          900,
+          20,
+          0,
+          "standard",
+          42
+        ]
+      }
+    ]
+  }
+}

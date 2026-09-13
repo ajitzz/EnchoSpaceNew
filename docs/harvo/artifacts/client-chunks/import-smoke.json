@@ -1,0 +1,71 @@
+{
+  "node": "v24.21.0",
+  "directory": "/tmp/harvo-client-chunks-EzbXrA",
+  "noLiveBackend": true,
+  "requests": {
+    "local": 33,
+    "externalBlocked": 3
+  },
+  "blockedExternalOrigins": [
+    "https://js.stripe.com",
+    "https://accounts.google.com"
+  ],
+  "imported": [
+    "assets/vendor-react-CbHJ--Z5.js",
+    "assets/vendor-motion-B05V4K8r.js",
+    "assets/vendor-maps-BNbSQOCs.js",
+    "assets/vendor-icons-B9QAlzsr.js",
+    "assets/vendor-integrations-ClDhXDBf.js",
+    "assets/index-kJhuwivD.js",
+    "assets/MapSidebar-BAJX1W5S.js",
+    "assets/ListingDetails-DFffhP1S.js",
+    "assets/WishlistPage-C_U4Lsb1.js",
+    "assets/BookingPage-BVccoxRM.js",
+    "assets/CheckoutPage-DycqExWv.js",
+    "assets/ReservationsPage-oOHxbCRX.js",
+    "assets/HostForm-CjMXcbXe.js",
+    "assets/ListingDetailsNew-CmKCypO9.js",
+    "assets/HostExperienceForm-C-8n2Rru.js",
+    "assets/HostDashboard-DQRfK7Nn.js",
+    "assets/AdminDashboard-CetadSfk.js",
+    "assets/PhotoUpload-Dw-P4Ypa.js",
+    "assets/InboxPage-B87VNcYp.js",
+    "assets/ExperiencesPage-BRyAMvGC.js",
+    "assets/ExperienceDetails-oneizFHt.js",
+    "assets/format-CBpsKyOP.js",
+    "assets/HostMarketing-DkmKKsy2.js",
+    "assets/SettlementWorkspace-Bscu-kBO.js"
+  ],
+  "failures": [],
+  "pageErrors": [
+    "Failed to load Stripe.js"
+  ],
+  "expectedUnavailableIntegrations": [
+    "Failed to load Stripe.js"
+  ],
+  "unexpectedPageErrors": [],
+  "beforeInitialStaticJs": {
+    "files": [
+      "assets/index-8XfVH2xQ.js",
+      "assets/vendor-react-Dsz28WIu.js",
+      "assets/vendor-maps-6K38Wrqu.js",
+      "assets/vendor-motion-CQjPORuf.js",
+      "assets/vendor-integrations-D91dTXHZ.js"
+    ],
+    "bytes": 2242408,
+    "gzipBytes": 648684
+  },
+  "afterInitialStaticJs": {
+    "files": [
+      "assets/index-kJhuwivD.js",
+      "assets/vendor-react-CbHJ--Z5.js",
+      "assets/vendor-maps-BNbSQOCs.js",
+      "assets/vendor-motion-B05V4K8r.js",
+      "assets/vendor-icons-B9QAlzsr.js",
+      "assets/vendor-integrations-ClDhXDBf.js"
+    ],
+    "bytes": 1179941,
+    "gzipBytes": 348384
+  },
+  "staticChunkCycles": []
+}

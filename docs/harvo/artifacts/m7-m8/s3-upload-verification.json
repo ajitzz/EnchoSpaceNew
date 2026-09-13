@@ -1,0 +1,24 @@
+{
+  "recordedAt": "2026-09-13T11:24:36.462Z",
+  "command": "npx vitest run --config vitest.marketing-m1.config.ts src/test/harvo/s3_upload_contract.test.ts",
+  "passed": 25,
+  "failed": 0,
+  "durationMs": 3620,
+  "network": "forbidden request handler; explicit fixture credentials",
+  "sourceSha256": {
+    "src/lib/immutableS3Upload.ts": "7d504237a7e8f211ea44e77c6bc2cb9a5b68a6ab41ad5ad6b9594e1660e6c6a7",
+    "lib/mediaUploadHeaders.ts": "970b90a699fcdaa7f6f24aff6137f80140497f2b65826db8d32eab429b371ec9",
+    "components/HostForm.tsx": "0412c39e7be1765a9da57b879026854746bb8ee9fe1352d09d8eea5d4db4fa31",
+    "components/HostExperienceForm.tsx": "430fd51ea93ee32282fcae72a4a203df1e1437fce111a3ccdec1794d97b313c7",
+    "components/AdminExperiences.tsx": "c32b43057bb9ed768bd63038e1b8d6bcefc39ec399564b919e14c4611dc510c6",
+    "components/HostMarketing.tsx": "5c8def4ecb0a9c37cb4804f3a63329ed27c4fa4cd0454109aac55b2e970e7f81",
+    "lib/syncHandlers.ts": "6008f5c89a4b8d63f2211be57f66a65e2258c4019c3586045508c1fe75df6de7",
+    "src/test/harvo/s3_upload_contract.test.ts": "9d5071c0d04cdbc74dec6f99397685f7c83d2f231453998ac08bf0d0eb8546d9"
+  },
+  "limits": [
+    "No live S3 PUT or browser CORS checks",
+    "Bucket policy, old capabilities and external media immutability require deployment acceptance",
+    "Call-site checks are structural; esbuild parsed all changed application files"
+  ],
+  "focusedStrictTypecheck": "passed: helper, client header helper and contract test"
+}

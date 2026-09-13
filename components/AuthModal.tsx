@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
 import { GoogleLogin } from '@react-oauth/google';
-import { jwtDecode } from 'jwt-decode';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 
 interface AuthModalProps {
@@ -70,14 +69,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
       setLoading(true);
       setError('');
       if (!credentialResponse.credential) throw new Error('Google Sign-In failed');
-      const decoded: any = jwtDecode(credentialResponse.credential);
       const res = await fetch('/api/auth/google', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          googleId: decoded.sub,
-          email: decoded.email,
-          name: decoded.name || 'Google User'
+          credential: credentialResponse.credential
         }),
       });
       const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;

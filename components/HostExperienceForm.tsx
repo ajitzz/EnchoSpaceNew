@@ -10,6 +10,7 @@ import { useToast } from './ToastContext';
 import { Experience } from '../types';
 import { ExperienceDetails } from './ExperienceDetails';
 import { motion, AnimatePresence } from 'framer-motion';
+import { mediaUploadHeaders } from '../lib/mediaUploadHeaders';
 
 interface HostExperienceFormProps {
     onBack: () => void;
@@ -360,10 +361,10 @@ export const HostExperienceForm: React.FC<HostExperienceFormProps> = ({ onBack, 
                 body: JSON.stringify({ filename: file.name || 'photo.webp', contentType: file.type || 'image/webp' }),
             });
             if (presignRes.ok) {
-                const { uploadUrl, fileUrl } = presignRes.headers.get('content-type')?.includes('json') ? await presignRes.json() : { error: 'Server returned non-JSON response: ' + (await presignRes.text()).slice(0, 150) } as any;
+                const { uploadUrl, fileUrl, uploadHeaders } = presignRes.headers.get('content-type')?.includes('json') ? await presignRes.json() : { error: 'Server returned non-JSON response: ' + (await presignRes.text()).slice(0, 150) } as any;
                 const uploadRes = await fetch(uploadUrl, {
                     method: 'PUT',
-                    headers: { 'Content-Type': file.type || 'image/webp' },
+                    headers: mediaUploadHeaders(file.type || 'image/webp', uploadHeaders),
                     body: file,
                 });
                 if (uploadRes.ok) {

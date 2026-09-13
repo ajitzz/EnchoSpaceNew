@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Grid } from 'lucide-react';
+import CampaignStudio from './marketing/CampaignStudio';
+import { mediaUploadHeaders } from '../lib/mediaUploadHeaders';
 import { MarketingCampaign, Listing, MetaPreflightDiagnosticReport, MetaPreflightGateResult } from '../types';
 import { MetaLocationTargeter } from './MetaLocationTargeter';
 import HostCampaignControlCenter from './HostCampaignControlCenter';
@@ -23,7 +25,12 @@ interface HostMarketingProps {
 
 const generateWalletRefuelKey = () => `refuel_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-export default function HostMarketing({ user, listings }: HostMarketingProps) {
+export default function HostMarketing(props: HostMarketingProps) {
+  const [social, setSocial] = useState(false);
+  return social ? <div className="mkt-legacy-social"><div className="px-5 pt-6"><button className="mkt-text-button" onClick={() => setSocial(false)}><ArrowLeft size={16}/> Back to campaign studio</button><h1 className="text-2xl font-semibold mt-4">Social studio</h1></div><LegacyHostMarketing {...props} socialOnly onCreatePaidCampaign={() => setSocial(false)}/></div> : <CampaignStudio onOpenSocial={() => setSocial(true)}/>;
+}
+
+function LegacyHostMarketing({ user, listings, socialOnly = false, onCreatePaidCampaign }: HostMarketingProps & { socialOnly?: boolean; onCreatePaidCampaign?: () => void }) {
   const { addToast } = useToast();
   const { currency, setCurrency, formatPrice } = useCurrency();
   const [campaigns, setCampaigns] = useState<MarketingCampaign[]>([]);
@@ -99,11 +106,11 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   };
 
   useEffect(() => {
-    detectGeoRoute();
+    if (!socialOnly) detectGeoRoute();
   }, []);
 
   // Pillar 6: Encho Social Studio States
-  const [marketingViewTab, setMarketingViewTab] = useState<'paid' | 'social'>('paid');
+  const [marketingViewTab, setMarketingViewTab] = useState<'paid' | 'social'>(socialOnly ? 'social' : 'paid');
   const [socialPosts, setSocialPosts] = useState<any[]>([]);
   const [loadingSocialPosts, setLoadingSocialPosts] = useState(false);
   const [showCreatePostModal, setShowCreatePostModal] = useState(false);
@@ -433,6 +440,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   ];
 
   const fetchWallet = React.useCallback(async () => {
+    if (socialOnly) return;
     try {
       const token = localStorage.getItem('token');
       const res = await fetch('/api/marketing/wallet', {
@@ -535,6 +543,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   };
 
   const fetchCampaigns = async () => {
+    if (socialOnly) return;
     try {
       const token = localStorage.getItem('token');
       const res = await fetch('/api/marketing/campaigns', {
@@ -856,6 +865,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
   };
 
   useEffect(() => {
+    if (socialOnly) { void fetchSocialPosts(); return; }
     fetchCampaigns();
     fetchWallet();
     fetchSocialPosts();
@@ -1240,14 +1250,12 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       });
 
       if (response.status === 200) {
-        const { uploadUrl, fileUrl } = response.headers.get('content-type')?.includes('json') ? await response.json() : { error: 'Server returned non-JSON response: ' + (await response.text()).slice(0, 150) } as any;
+        const { uploadUrl, fileUrl, uploadHeaders } = response.headers.get('content-type')?.includes('json') ? await response.json() : { error: 'Server returned non-JSON response: ' + (await response.text()).slice(0, 150) } as any;
         setUploadProgress(50);
 
         const uploadResponse = await fetch(uploadUrl, {
           method: 'PUT',
-          headers: {
-            'Content-Type': file.type
-          },
+          headers: mediaUploadHeaders(file.type, uploadHeaders),
           body: file
         });
 
@@ -1624,7 +1632,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
     <div className="max-w-7xl mx-auto px-4 py-8 md:py-12 animate-fade-in pb-40">
       
       {/* Upper Title & Brand Layout */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
+      <div className="mkt-legacy-paid-header flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
             <span className="text-[10px] font-black text-blue-600 uppercase tracking-[0.25em] block font-mono">
@@ -2174,7 +2182,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       </div>
 
       {/* Meta Ad Account Sandboxing Safety Banner */}
-      <div className="mb-10 bg-gradient-to-r from-blue-500/5 to-cyan-500/5 border border-blue-100 rounded-3xl p-6 flex flex-col md:flex-row gap-5 items-start md:items-center">
+      <div className="mkt-legacy-paid-banner mb-10 bg-gradient-to-r from-blue-500/5 to-cyan-500/5 border border-blue-100 rounded-3xl p-6 flex flex-col md:flex-row gap-5 items-start md:items-center">
         <div className="p-3 bg-blue-100 text-blue-700 rounded-2xl">
           <ShieldCheck className="w-6 h-6" />
         </div>
@@ -2190,7 +2198,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
       </div>
 
       {/* Dynamic Navigation Tabs: Paid Ads vs Brand Social Studio */}
-      <div className="flex border-b border-gray-150 mb-10 gap-8">
+      <div className="mkt-legacy-tabs flex border-b border-gray-150 mb-10 gap-8">
         <button
           onClick={() => setMarketingViewTab('paid')}
           className={`pb-4 text-sm font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 focus:outline-none ${
@@ -4175,6 +4183,7 @@ export default function HostMarketing({ user, listings }: HostMarketingProps) {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
+                            if (socialOnly) { onCreatePaidCampaign?.(); return; }
                             setShowBoostPostModal(post);
                           }}
                           className="flex items-center gap-1 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all animate-pulse"

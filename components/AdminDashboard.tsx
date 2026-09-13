@@ -10,6 +10,7 @@ import { useCurrency } from './CurrencyContext';
 import { AdminExperiences } from './AdminExperiences';
 import { AdminOpsControlCenter } from './AdminOpsControlCenter';
 import { AdminMetaCampaignCommandCenter } from './AdminMetaCampaignCommandCenter';
+import AdminMarketingWorkspace from './marketing/AdminMarketingWorkspace';
 import { useToast } from './ToastContext';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { io } from 'socket.io-client';
@@ -122,7 +123,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   const [outreachLeads, setOutreachLeads] = useState<any[]>([]);
   const [outreachSearch, setOutreachSearch] = useState('');
   const [outreachFilter, setOutreachFilter] = useState<'all' | 'discovered' | 'contacted' | 'negotiating' | 'onboarded' | 'ignored'>('all');
-  const [marketingSubTab, setMarketingSubTab] = useState<'ops_control_center' | 'command_center' | 'moderation' | 'linkage' | 'outreach' | 'organic_social' | 'audit_logs' | 'geo_router'>('ops_control_center');
+  const [marketingSubTab, setMarketingSubTab] = useState<'ops_control_center' | 'command_center' | 'moderation' | 'linkage' | 'outreach' | 'organic_social' | 'audit_logs' | 'geo_router'>('command_center');
   const [adminSocialPosts, setAdminSocialPosts] = useState<any[]>([]);
   const [socialPostFilter, setSocialPostFilter] = useState<'all' | 'pending_approval' | 'approved' | 'rejected'>('all');
   const [loadingAdminSocialPosts, setLoadingAdminSocialPosts] = useState(false);
@@ -293,7 +294,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
         fetch('/api/admin/experience-bookings', { headers }),
         fetch('/api/admin/settings/experience-hosts', { headers }),
         fetch('/api/settings/payment_rates'),
-        fetch('/api/admin/marketing/campaigns', { headers }),
+        activeTab === 'marketing' && marketingSubTab !== 'command_center'
+          ? fetch('/api/admin/marketing/campaigns', { headers })
+          : Promise.resolve(new Response('[]', { headers: { 'Content-Type': 'application/json' } })),
         fetch('/api/admin/outreach-leads', { headers })
       ]);
       
@@ -2038,7 +2041,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                      <AdminSEOTab items={adminMode === 'stays' ? listings : experiences} type={adminMode === 'stays' ? 'listing' : 'experience'} onSuccess={fetchData} />
                      <AdminSEOTab items={adminMode === 'stays' ? listings : experiences} type={adminMode === 'stays' ? 'listing' : 'experience'} onSuccess={fetchData} />
                   </div>
-              ) : activeTab === 'marketing' ? (
+              ) : activeTab === 'marketing' ? (marketingSubTab === 'command_center' ? (<div><AdminMarketingWorkspace/><div className="px-6 py-4"><button className="text-xs text-gray-600 underline underline-offset-4" onClick={() => setMarketingSubTab('ops_control_center')}>Operations, social publishing and outreach</button></div></div>) : (<div><div className="px-6 py-4"><button className="text-sm text-gray-700 underline underline-offset-4" onClick={() => setMarketingSubTab('command_center')}>Back to campaign workspace</button></div>
                  <div className="p-6 space-y-8 max-w-6xl">
                     {/* Multi-Million Scale Hub Header */}
                     <div className="bg-gradient-to-r from-sky-900 to-indigo-950 p-6 md:p-8 rounded-3xl text-white shadow-xl relative overflow-hidden text-left">
@@ -2064,13 +2067,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                           type="button"
                           onClick={() => setMarketingSubTab('command_center')}
                           className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
-                             marketingSubTab === 'command_center'
+                             String(marketingSubTab) === 'command_center'
                                 ? 'border-indigo-600 text-indigo-900 font-bold bg-indigo-50 rounded-t-xl'
                                 : 'border-transparent text-gray-500 hover:text-gray-900'
                           }`}
                        >
                           <Zap className="w-4 h-4 text-indigo-600" />
-                          Meta Command Center (M6)
+                          Campaign workspace
                        </button>
                        <button
                           type="button"
@@ -2086,6 +2089,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                        </button>
                        <button
                           type="button"
+                          hidden
                           onClick={() => setMarketingSubTab('moderation')}
                           className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
                              marketingSubTab === 'moderation'
@@ -2162,9 +2166,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                     </div>
 
                     {/* Tab Content -1: Meta Command Center (M6) */}
-                    {marketingSubTab === 'command_center' && (
-                       <AdminMetaCampaignCommandCenter onBack={onBack} />
-                    )}
+
 
                     {/* Tab Content 0: Operations Control Center */}
                     {marketingSubTab === 'ops_control_center' && (
@@ -4585,7 +4587,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                        </div>
                     )}
                  </div>
-              ) : null}
+              </div>)) : null}
             </div>
         </div>
         

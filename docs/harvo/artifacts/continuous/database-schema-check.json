@@ -1,0 +1,151 @@
+{
+  "scope": "READ_ONLY_CONFIGURED_DATABASE_SCHEMA",
+  "observedAt": "2026-09-13T11:30:14.631Z",
+  "status": "READ_ONLY_INSPECTION_COMPLETED",
+  "tables": [
+    {
+      "table_name": "users",
+      "present": true
+    },
+    {
+      "table_name": "listings",
+      "present": true
+    },
+    {
+      "table_name": "media_assets",
+      "present": true
+    },
+    {
+      "table_name": "room_types",
+      "present": true
+    },
+    {
+      "table_name": "inventory_days",
+      "present": false
+    },
+    {
+      "table_name": "host_marketing_campaigns",
+      "present": true
+    },
+    {
+      "table_name": "provider_entities",
+      "present": true
+    },
+    {
+      "table_name": "provider_publishing_transactions",
+      "present": true
+    },
+    {
+      "table_name": "meta_publishing_transactions",
+      "present": true
+    },
+    {
+      "table_name": "marketing_campaign_workflows",
+      "present": false
+    },
+    {
+      "table_name": "marketing_jobs",
+      "present": false
+    },
+    {
+      "table_name": "marketing_finance_policies",
+      "present": false
+    },
+    {
+      "table_name": "marketing_finance_refunds",
+      "present": false
+    },
+    {
+      "table_name": "marketing_measurement_events",
+      "present": false
+    }
+  ],
+  "applicationRoleBypassesRls": true,
+  "columns": [
+    {
+      "table_name": "listings",
+      "column_name": "city",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "listings",
+      "column_name": "currency",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "listings",
+      "column_name": "description",
+      "data_type": "text"
+    },
+    {
+      "table_name": "listings",
+      "column_name": "id",
+      "data_type": "integer"
+    },
+    {
+      "table_name": "listings",
+      "column_name": "price",
+      "data_type": "numeric"
+    },
+    {
+      "table_name": "listings",
+      "column_name": "publication_status",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "listings",
+      "column_name": "slug",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "listings",
+      "column_name": "title",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "listings",
+      "column_name": "user_id",
+      "data_type": "integer"
+    },
+    {
+      "table_name": "media_assets",
+      "column_name": "category",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "media_assets",
+      "column_name": "entity_id",
+      "data_type": "integer"
+    },
+    {
+      "table_name": "media_assets",
+      "column_name": "entity_type",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "media_assets",
+      "column_name": "id",
+      "data_type": "integer"
+    },
+    {
+      "table_name": "media_assets",
+      "column_name": "is_hero",
+      "data_type": "boolean"
+    },
+    {
+      "table_name": "media_assets",
+      "column_name": "moderation_status",
+      "data_type": "character varying"
+    },
+    {
+      "table_name": "media_assets",
+      "column_name": "order_index",
+      "data_type": "integer"
+    },
+    {
+      "table_name": "media_assets",
+      "column_name": "url",
+      "data_type": "text"
+    }
+  ]
+}

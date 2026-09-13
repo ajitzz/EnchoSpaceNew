@@ -1,0 +1,14 @@
+{
+  "scope": "LOCAL_POSTGRESQL_RESTORE_ONLY_NOT_PRODUCTION_RECOVERY_ACCEPTANCE",
+  "observedAt": "2026-09-13T14:03:59.776Z",
+  "node": "v24.21.0",
+  "status": "FAILED",
+  "migrations": {
+    "011_harvo_marketing_measurement.sql": "616a76335587c7fbc00490a6d6530707f5af2738e36e680bf3313a949cdf44c2",
+    "012_harvo_marketing_settlement.sql": "aa96bf24b4c84c9d06bfd440f8726b57ca067f587f53d9531801c730aa79c714",
+    "013_harvo_marketing_conversion_delivery.sql": "1a0c0f2fa329a5ecab95569b9cca8120f21236e4e02b7bed94868d1e47709f24",
+    "014_harvo_marketing_request_limits.sql": "3441d1033c7793ec107d2f8f08b90f88bda8bde263dcc08de2abb849142cda98"
+  },
+  "postgresql": "18.0 (Homebrew)",
+  "failureType": "AssertionError"
+}

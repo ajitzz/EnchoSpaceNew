@@ -6,8 +6,8 @@
  * mutations on Google Responsive Search Ads (RSA).
  */
 
-import { ProviderId } from '../types.js';
-import { DcoEvaluationOutput } from '../../dcoEngine.js';
+import type { ProviderId } from '../types.js';
+import type { DcoEvaluationOutput } from '../../dcoEngine.js';
 
 export interface ProviderDcoMutationResult {
   provider: ProviderId;
@@ -26,9 +26,6 @@ export class GoogleDcoStrategy {
     decision: DcoEvaluationOutput,
     poolOrClient?: any
   ): Promise<ProviderDcoMutationResult> {
-    const actionsTaken: string[] = [];
-    const mutatedEntityIds: string[] = [];
-
     if (decision.result !== 'WINNER_IDENTIFIED' || !decision.winner_variant_id) {
       return {
         provider: 'GOOGLE',
@@ -40,40 +37,14 @@ export class GoogleDcoStrategy {
       };
     }
 
-    // 1. Identify losing variant IDs to unpin/remove from RSA asset list
-    for (const loserId of decision.loser_variant_ids) {
-      const assetExternalId = `google_asset_variant_${loserId}`;
-      mutatedEntityIds.push(assetExternalId);
-      actionsTaken.push(`UNPINNED_AND_ROTATED_ASSET_${loserId}`);
-
-      if (poolOrClient) {
-        await poolOrClient.query(`
-          UPDATE provider_entities
-          SET configured_status = 'PAUSED', updated_at = CURRENT_TIMESTAMP
-          WHERE campaign_id = $1 AND provider = 'GOOGLE' AND external_id = $2
-        `, [campaignId, assetExternalId]);
-      }
-    }
-
-    // 2. Prioritize / Pin winning asset
-    const winnerExternalId = `google_asset_variant_${decision.winner_variant_id}`;
-    mutatedEntityIds.push(winnerExternalId);
-    actionsTaken.push(`PINNED_HIGH_PERFORMING_ASSET_${decision.winner_variant_id}`);
-
-    if (poolOrClient) {
-      await poolOrClient.query(`
-        UPDATE provider_entities
-        SET configured_status = 'ACTIVE', updated_at = CURRENT_TIMESTAMP
-        WHERE campaign_id = $1 AND provider = 'GOOGLE' AND external_id = $2
-      `, [campaignId, winnerExternalId]);
-    }
-
+    // M1 containment: a local winner is not an applied Google mutation.
+    // Provider asset updates and their authorization belong to M6.
     return {
       provider: 'GOOGLE',
       campaignId,
-      success: true,
-      mutatedEntityIds,
-      actionsTaken,
+      success: false,
+      mutatedEntityIds: [],
+      actionsTaken: ['GOOGLE_DCO_NOT_IMPLEMENTED'],
       executedAt: new Date().toISOString()
     };
   }

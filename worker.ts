@@ -370,7 +370,7 @@ export async function runShadowDiscovery(poolInstance: pg.Pool): Promise<ShadowW
 
 export async function executeWorkerCycle(
   name: string,
-  activeFn: (pool?: any) => Promise<void>,
+  activeFn: (pool?: any) => Promise<unknown>,
   poolInstance: pg.Pool = workerPool
 ): Promise<WorkerCycleStats> {
   if (isShuttingDown) {
@@ -540,7 +540,7 @@ export async function googleReconciliationWorker() {
     async () => {
       try {
         const { googleAdsProvider } = await import('./src/lib/providers/google/GoogleAdsProvider.js');
-        return { reconciled: true, provider: 'GOOGLE' };
+        return { reconciled: false, provider: 'GOOGLE', code: 'HARVO_V2_REQUIRED' };
       } catch (e: any) {
         return { reconciled: false, error: e.message };
       }
@@ -556,7 +556,7 @@ export async function googleTelemetrySyncWorker() {
     async () => {
       try {
         const { googleAdsProvider } = await import('./src/lib/providers/google/GoogleAdsProvider.js');
-        return { synced: true, provider: 'GOOGLE' };
+        return { synced: false, provider: 'GOOGLE', code: 'HARVO_V2_REQUIRED' };
       } catch (e: any) {
         return { synced: false, error: e.message };
       }

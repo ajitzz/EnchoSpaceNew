@@ -1,5 +1,6 @@
 import { registerCustomSyncHandler } from './syncService';
 import { encodeImageToBlurhash } from './blurhash';
+import { mediaUploadHeaders } from './mediaUploadHeaders';
 
 async function uploadPhotoList(photoList: any[], token?: string) {
     const authToken = token || (typeof window !== 'undefined' ? localStorage.getItem('token') : '') || '';
@@ -40,11 +41,11 @@ async function uploadPhotoList(photoList: any[], token?: string) {
             throw new Error(`Failed to create upload URL (${presignRes.status}): ${errorText}`);
         }
         
-        const { uploadUrl, fileUrl } = presignRes.headers.get('content-type')?.includes('json') ? await presignRes.json() : { error: 'Server returned non-JSON response: ' + (await presignRes.text()).slice(0, 150) } as any;
+        const { uploadUrl, fileUrl, uploadHeaders } = presignRes.headers.get('content-type')?.includes('json') ? await presignRes.json() : { error: 'Server returned non-JSON response: ' + (await presignRes.text()).slice(0, 150) } as any;
 
         const uploadRes = await fetch(uploadUrl, {
             method: 'PUT',
-            headers: { 'Content-Type': file.type },
+            headers: mediaUploadHeaders(file.type, uploadHeaders),
             body: file,
         });
 

@@ -1,0 +1,10 @@
+{
+  "scope": "ISOLATED_BUILD_NO_DEPLOYMENT",
+  "client": "PASSED",
+  "server": "PASSED",
+  "projectTypes": "PASSED",
+  "envDir": false,
+  "directory": "/tmp/harvo-release-build-0Q3BEj",
+  "sourceManifest": "docs/harvo/CONTINUOUS_SOURCE_HASHES.json",
+  "largeChunkWarnings": true
+}

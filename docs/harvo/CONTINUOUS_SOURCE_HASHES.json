@@ -1,0 +1,370 @@
+{
+  "scope": "HARVO_CONTINUOUS_SOURCE_SNAPSHOT_NOT_PRODUCTION_DEPLOYMENT",
+  "date": "2026-09-13",
+  "files": [
+    {
+      "path": "components/AdminDashboard.tsx",
+      "sha256": "3fec0962da19fcf3f632e0edb322026799fa3270cbe9e1d8681b64d5be6d3a39"
+    },
+    {
+      "path": "components/AdminExperiences.tsx",
+      "sha256": "c32b43057bb9ed768bd63038e1b8d6bcefc39ec399564b919e14c4611dc510c6"
+    },
+    {
+      "path": "components/AuthModal.tsx",
+      "sha256": "34058573800976461697743491ccecfcdf89e1a91a604d0c6235ffcbbd7d94bf"
+    },
+    {
+      "path": "components/HostExperienceForm.tsx",
+      "sha256": "430fd51ea93ee32282fcae72a4a203df1e1437fce111a3ccdec1794d97b313c7"
+    },
+    {
+      "path": "components/HostForm.tsx",
+      "sha256": "0412c39e7be1765a9da57b879026854746bb8ee9fe1352d09d8eea5d4db4fa31"
+    },
+    {
+      "path": "components/HostMarketing.tsx",
+      "sha256": "5c8def4ecb0a9c37cb4804f3a63329ed27c4fa4cd0454109aac55b2e970e7f81"
+    },
+    {
+      "path": "components/marketing/AdminMarketingWorkspace.tsx",
+      "sha256": "b302c0f32e93ecc5a22bd766d7cb1e59f4082f02e6b29be6f34a3d4e9f32527a"
+    },
+    {
+      "path": "components/marketing/CampaignStudio.tsx",
+      "sha256": "0da31ca5051197a32761dfa5c2970c6f4ac064722855e0c79ff87aee7561d42a"
+    },
+    {
+      "path": "components/marketing/StudioShared.tsx",
+      "sha256": "2f0ada34fd2b49abdcfdbc4f43ee81b9312bbb5259be4342875bb7848abcad63"
+    },
+    {
+      "path": "components/marketing/api.ts",
+      "sha256": "37224ffa13c30d806effb4ecf4bdec9d7eda25815e4a0a1eb235077535be3477"
+    },
+    {
+      "path": "components/marketing/marketing.css",
+      "sha256": "872ab943117841cff363683ccf573e14610545a59dcbe999c1912f704fbc52ea"
+    },
+    {
+      "path": "components/marketing/types.ts",
+      "sha256": "e5e55dab593048dcc67eccd7e409a1d1d666ec9323401bcf1e46415d7fce36e4"
+    },
+    {
+      "path": "lib/mediaUploadHeaders.ts",
+      "sha256": "970b90a699fcdaa7f6f24aff6137f80140497f2b65826db8d32eab429b371ec9"
+    },
+    {
+      "path": "lib/syncHandlers.ts",
+      "sha256": "6008f5c89a4b8d63f2211be57f66a65e2258c4019c3586045508c1fe75df6de7"
+    },
+    {
+      "path": "package.json",
+      "sha256": "751039a275c4e92d1e006c74c58629de00f746f61bb331180fb32d27f70801e4"
+    },
+    {
+      "path": "scripts/verify-harvo-build.mjs",
+      "sha256": "348ef769de7194ef6028972030e554c8856be6f0623d0433ad68d42250dca0d0"
+    },
+    {
+      "path": "server.ts",
+      "sha256": "2ae663215556ca1d097ab512471cffae1c6ade0a53e82229b19270d4f813cb44"
+    },
+    {
+      "path": "src/lib/immutableS3Upload.ts",
+      "sha256": "7d504237a7e8f211ea44e77c6bc2cb9a5b68a6ab41ad5ad6b9594e1660e6c6a7"
+    },
+    {
+      "path": "src/lib/marketing/ai.ts",
+      "sha256": "768674fa3d79a2b023fb95b2eea1a36f40b5738ec4b0d7a5236160d74c92f4ce"
+    },
+    {
+      "path": "src/lib/marketing/assets.ts",
+      "sha256": "74c692807f9eeceaed923fbc46d3c90b2710be636513923a5686ffad321a4527"
+    },
+    {
+      "path": "src/lib/marketing/authentication.ts",
+      "sha256": "8ddb3b12a9c5d4484201e2f4f031cde703620fbf0782c03f4cb2a1bfcebc01d9"
+    },
+    {
+      "path": "src/lib/marketing/config.ts",
+      "sha256": "e6fc74fa2b8de2007877abee9ced22094a9a9bae69b287f3c0894ac44a017d4e"
+    },
+    {
+      "path": "src/lib/marketing/database.ts",
+      "sha256": "0940c0343339bf182e113cbe618c24efe0b7c57ec9b90ec211924e967f0c5502"
+    },
+    {
+      "path": "src/lib/marketing/domain.ts",
+      "sha256": "9873e7a048015dba86a87844505c842695f3eefcbd696787eb9bf3bb587aea9e"
+    },
+    {
+      "path": "src/lib/marketing/engine.ts",
+      "sha256": "713cef12cfb9823c2632e6eebbd3eef71b830ab67c9349faad1c1f2cd5723429"
+    },
+    {
+      "path": "src/lib/marketing/financeBridge.ts",
+      "sha256": "2eb28e083b148d01f494b07d092b94d63b6d8e3bd3ec65dfee5ca05bc28d1714"
+    },
+    {
+      "path": "src/lib/marketing/financeQuote.ts",
+      "sha256": "76873c29e1b907faf1f1ab42e3a8cc229fa966615434331bed18b6ff79792494"
+    },
+    {
+      "path": "src/lib/marketing/financeService.ts",
+      "sha256": "45f857b500177f976e7eb5a1e2b109492671e5becec4f63fc01a9540ab1b8537"
+    },
+    {
+      "path": "src/lib/marketing/jobs.ts",
+      "sha256": "4c69751acad5271a74d1f07ae219c57b7fe4df83a454ba7864e9e3fc92191ee4"
+    },
+    {
+      "path": "src/lib/marketing/legacyAuthorization.ts",
+      "sha256": "dd9d344478aa34b375106583c5c2b8454d76344a2622943e8dcb6bd3c1491073"
+    },
+    {
+      "path": "src/lib/marketing/localMedia.ts",
+      "sha256": "421cc43db3987465e0fd27cc1d6acb8e47a5bbd20cc40bd9649cc6af6d0650b1"
+    },
+    {
+      "path": "src/lib/marketing/measurement.ts",
+      "sha256": "4b3fe40c8388dffc70f718642421ef33513b0a5213ca64cfe343addb1720c9f4"
+    },
+    {
+      "path": "src/lib/marketing/metaEvents.ts",
+      "sha256": "51cc1ca701aad80572d2fcf841732e6fbdb6cde47e37088b9d74dd6d825f6584"
+    },
+    {
+      "path": "src/lib/marketing/payments.ts",
+      "sha256": "b930ceb8238b0aba58ff388456114ecbb76a2e056c9b671b72412f52aaa9914e"
+    },
+    {
+      "path": "src/lib/marketing/protection.ts",
+      "sha256": "1c90923e19496e6e813a014d68cddaecc1ed90be9bbf9babc87d9dcaac60c186"
+    },
+    {
+      "path": "src/lib/marketing/readiness.ts",
+      "sha256": "83789340cdf3e790477dd33b9d231f4cca53b44e59be8f54aeb83157d0bd3add"
+    },
+    {
+      "path": "src/lib/marketing/refunds.ts",
+      "sha256": "8cb087722b183205f78e77c750eae87ec53bc2645b84029852df6dfd88dba261"
+    },
+    {
+      "path": "src/lib/marketing/workflow.ts",
+      "sha256": "9475cab2548d380d98acaf83a9d02d50d0c15fb77cb5aab11701625b7d91ec6c"
+    },
+    {
+      "path": "src/lib/providers/AdProvider.ts",
+      "sha256": "b998556dda0985c0a74c21857e44eb00a9abb08393b6d2c1b2399be72db56777"
+    },
+    {
+      "path": "src/lib/providers/ProviderOperationStore.ts",
+      "sha256": "e3f834a4188511013403c20cb7cddc14166b3b6f26b0b46f549f9b29ed6ca5ca"
+    },
+    {
+      "path": "src/lib/providers/google/GoogleAdsClient.ts",
+      "sha256": "c90a843549c2122006b32c13592d75b14965694918b811831a8df9af06d7edd5"
+    },
+    {
+      "path": "src/lib/providers/google/GoogleAdsProvider.ts",
+      "sha256": "96a5650ca5a252e44df95d586b1ff794210b0e10e9589fe21adc6c91006c9c3f"
+    },
+    {
+      "path": "src/lib/providers/google/GoogleOfflineConversions.ts",
+      "sha256": "1eacec41fc63f372242f3ab8186558100a7a2ea67fd7bae546f273d25c26c028"
+    },
+    {
+      "path": "src/lib/providers/google/GooglePublishingStore.ts",
+      "sha256": "af045e26934703c4d1b48dcc31699cde5202920bc9a077fb7229a9b9cadcf499"
+    },
+    {
+      "path": "src/lib/providers/google/GoogleSearchPlan.ts",
+      "sha256": "674af809e61a5d658bedb55095ac763a39afa6428de3141478b14e72f66698e1"
+    },
+    {
+      "path": "src/lib/providers/google/googleDcoStrategy.ts",
+      "sha256": "46c51d930db6e5dfe8c7b863e5318764a2577f4f39424ba56d344a716e7c9df3"
+    },
+    {
+      "path": "src/lib/providers/google/googleDeliveryReducer.ts",
+      "sha256": "29eee1f407284481ae3e2af83b1643e599c9db94d62865d768c9c818efb434b0"
+    },
+    {
+      "path": "src/lib/providers/google/googleErrors.ts",
+      "sha256": "ca3a68fdde52d3853ce4c4bb0b6dbbb421bb027a7fa60566f6bf6f1556bb8d96"
+    },
+    {
+      "path": "src/lib/providers/google/googleTelemetryMapper.ts",
+      "sha256": "c1618a2c61249f20afaff2add57480b0014189e1dbade98aeaf9b20d08d646fa"
+    },
+    {
+      "path": "src/lib/providers/meta/MetaAdProvider.ts",
+      "sha256": "389920e8c474b3659d3298e6821000be5f8106ccc81d50d35c035f907adad3c9"
+    },
+    {
+      "path": "src/lib/providers/meta/MetaAdsClient.ts",
+      "sha256": "e326c7d4dc8ad2fe69a3792d565deb630e1ddd5d5327ddc053dbf2ffe90a160c"
+    },
+    {
+      "path": "src/lib/providers/meta/MetaCampaignPlan.ts",
+      "sha256": "ae018e1b9117e9804df0a653cfca67782e1d8adc6649e38b9abf9a5f562b09ed"
+    },
+    {
+      "path": "src/lib/providers/providerRegistry.ts",
+      "sha256": "460026c5a886322e619f0b79ef1fcc17dcb45066f015b02554ca8f8fa7c0bb5e"
+    },
+    {
+      "path": "src/lib/providers/schemas.ts",
+      "sha256": "06bf2c777e325e10439147ce296a94d63bbd5bfebe04e3f809314c5578cbf48a"
+    },
+    {
+      "path": "src/lib/providers/types.ts",
+      "sha256": "e2f6fa2c3f1a4fed6a3d40c124a393fb3398587b3d35320aa626a54dfabfb71d"
+    },
+    {
+      "path": "src/migrations/009_harvo_marketing_finance.sql",
+      "sha256": "25ca2c36169fed0b0b347b8341f61307007885dfbb51e60c276cbd310c6508a8"
+    },
+    {
+      "path": "src/migrations/010_harvo_marketing_workflow.sql",
+      "sha256": "89023e5f4ab669a1615fe0f1f32566727f14e87b2d26e27f7fb0e2fe6c77df0e"
+    },
+    {
+      "path": "src/migrations/011_harvo_marketing_measurement.sql",
+      "sha256": "616a76335587c7fbc00490a6d6530707f5af2738e36e680bf3313a949cdf44c2"
+    },
+    {
+      "path": "src/server/marketing/legacyBoundary.ts",
+      "sha256": "cd582491190edc3d665a405f492a3032652d88a15f1248d78c1f92cc11092fe6"
+    },
+    {
+      "path": "src/server/marketing/operator.ts",
+      "sha256": "fcd11aa3409e0d152fd26000c67095ce817a3bf072f71d58930cf66c3b371fcc"
+    },
+    {
+      "path": "src/server/marketing/router.ts",
+      "sha256": "4882186a1a6815c40f29347f29f421df22d9bd5ec644019339bde4fdce701a72"
+    },
+    {
+      "path": "src/server/marketing/runtime.ts",
+      "sha256": "37f095b4568e8260bb63790e879c65ac6316e6ba177374920c7cd6b437d76faa"
+    },
+    {
+      "path": "src/server/marketing/worker.ts",
+      "sha256": "293563594d840fc68808c8c004a72b1e3e50468b7a51f7f005d66f1458c973e0"
+    },
+    {
+      "path": "src/test/harvo/assets_deadline.test.ts",
+      "sha256": "65ef674f6546c3f72da30830460bc0520000739fad7e9f1953d0863ce6ccd6e3"
+    },
+    {
+      "path": "src/test/harvo/engine_acceptance.test.ts",
+      "sha256": "023f23a1f6783f2294bbbd1dc91bde4d0ffbf94697d1f2c908cb04a2eaf0fe76"
+    },
+    {
+      "path": "src/test/harvo/financeFixtures.ts",
+      "sha256": "39b700267c4546a4b7d4d8451b02a1665af4ae21938bef6dace4c8823c4dcc04"
+    },
+    {
+      "path": "src/test/harvo/finance_quote.test.ts",
+      "sha256": "e4f960d7eaf0d56cef6cdab77e7b134a2bf84932338345c145d7edc506c94da9"
+    },
+    {
+      "path": "src/test/harvo/finance_refunds.test.ts",
+      "sha256": "823dba7e33b428e8bae8155e3099ad6f1862af0ec64365a8baef006beeb29915"
+    },
+    {
+      "path": "src/test/harvo/finance_service.test.ts",
+      "sha256": "109bf523ff970f1262077d479db0088a781641647dbfe551b79963c64cca1874"
+    },
+    {
+      "path": "src/test/harvo/google_client.test.ts",
+      "sha256": "04cc04222d8e2247bf6fa53f6e2c6dfddad12fdc72d4c3c99c5aa1dc5ff85ba6"
+    },
+    {
+      "path": "src/test/harvo/google_provider.test.ts",
+      "sha256": "ab11fbf175f94f9cf74e7620c8e2b569219c506dfee3348af4d97e3a5012a779"
+    },
+    {
+      "path": "src/test/harvo/google_search_plan.test.ts",
+      "sha256": "4bacb2d87d2c73321c3f09bc3d8e90a9df7a9ef530b78a6081a312c8d6dec5d1"
+    },
+    {
+      "path": "src/test/harvo/google_store.test.ts",
+      "sha256": "7a7110c8cecdf001032877d97b47e5ce9ce7306107c552ff57630e194ac4dd9d"
+    },
+    {
+      "path": "src/test/harvo/marketing_measurement.test.ts",
+      "sha256": "3999c6f5e575c55bd03285a4cde8f6be9e58299254aac904d1680c3fe8d1edb4"
+    },
+    {
+      "path": "src/test/harvo/meta_client.test.ts",
+      "sha256": "f363da93e6ae978e067d1d94c50b3a5eb02965815f136fc1ef1154683593d77d"
+    },
+    {
+      "path": "src/test/harvo/meta_provider.test.ts",
+      "sha256": "480ac56afa12dc924bd7ac6ec0356c83db6110d764f4c282b7ed6c8e46858320"
+    },
+    {
+      "path": "src/test/harvo/operations_boundary.test.ts",
+      "sha256": "200ce4183ae50d72738206cb1d3df26139adfdcfecaa5d1c354b2be5e280b69a"
+    },
+    {
+      "path": "src/test/harvo/ops_security.test.ts",
+      "sha256": "769df0fb13e5082f133f336df67d52f3c31562ffd8ae0b95afb6b66d28f87278"
+    },
+    {
+      "path": "src/test/harvo/payment_gateway.test.ts",
+      "sha256": "1ed5db0f5fbe69a12cafcb4794d90e2fcd3d1eb9688dd558dfcdb193925a72b9"
+    },
+    {
+      "path": "src/test/harvo/postgres.ts",
+      "sha256": "e74bb0f7c8c46b93ab62254ced0713c503a6a3d61d0b6c99d6294bd764c9d9f8"
+    },
+    {
+      "path": "src/test/harvo/provider_controls.test.ts",
+      "sha256": "d7a3bf75985d99baabee438e294ddbdffb63192d2bd37684d0c0afadf55b966d"
+    },
+    {
+      "path": "src/test/harvo/router_contract.test.ts",
+      "sha256": "98ce3721516d3b9b7a9af3df482c978fe81b5866d51df9aad887dd59e637b572"
+    },
+    {
+      "path": "src/test/harvo/s3_upload_contract.test.ts",
+      "sha256": "9d5071c0d04cdbc74dec6f99397685f7c83d2f231453998ac08bf0d0eb8546d9"
+    },
+    {
+      "path": "src/test/harvo/security_and_guidance.test.ts",
+      "sha256": "a4c7d8ff0886a7cf7a7768cf0dddc3193c90ece1f257972e168685f7766c6550"
+    },
+    {
+      "path": "src/test/harvo/workflowPgFixture.ts",
+      "sha256": "e87f0a6102108687439149d47801364c78be65935c475c82dfe772cd30697a8f"
+    },
+    {
+      "path": "src/test/harvo/workflow_cancel.test.ts",
+      "sha256": "e061536b8132d20c66b29d15884bf3117d3dab55e46e6eec70e6b2c402941a0c"
+    },
+    {
+      "path": "src/test/harvo/workflow_engine.test.ts",
+      "sha256": "7f8b5b9e983d7c10a0c2a2762a3c375d667a10204d471eb21a849652b1d4fe89"
+    },
+    {
+      "path": "src/test/harvo/workflow_service.test.ts",
+      "sha256": "daf83d6796bad90e46120da6819b1bcb4428ef60a6670a2a0f77750709592960"
+    },
+    {
+      "path": "vite.config.ts",
+      "sha256": "94661e13faae5f539eb0e289a08700531ec9c69b8d36ee3559d629879f77d975"
+    },
+    {
+      "path": "vitest.marketing-m1.config.ts",
+      "sha256": "d736b05ddbb5a546cce4cdbc45bdf900b3f023fcdfdb617c8fad25a40aec9eea"
+    },
+    {
+      "path": "worker.ts",
+      "sha256": "4df6ed9ed805fdbebcb14161d3294405dde0b2e6294b24e2ae5b3b63e390b3fb"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "scope": "ISOLATED_LOCAL_ACCEPTANCE_NOT_PRODUCTION_LOAD",
+  "concurrency": 30,
+  "transports": "HTTP router and Unix-socket PostgreSQL; authentication injected; no external provider/payment requests",
+  "observedAt": "2026-09-13T13:23:51.908Z",
+  "postgresql": "18.0 (Homebrew)",
+  "concurrentCreates": {
+    "requests": 30,
+    "totalMs": 672,
+    "p50Ms": 578,
+    "p95Ms": 641,
+    "maximumMs": 644,
+    "sqlStatements": 216,
+    "sqlStatementsPerRequest": 7.2
+  },
+  "concurrentEdits": {
+    "requests": 30,
+    "totalMs": 264,
+    "p50Ms": 216,
+    "p95Ms": 252,
+    "maximumMs": 254,
+    "sqlStatements": 185,
+    "sqlStatementsPerRequest": 6.166666666666667
+  },
+  "concurrentReads": {
+    "requests": 30,
+    "totalMs": 274,
+    "p50Ms": 223,
+    "p95Ms": 266,
+    "maximumMs": 267,
+    "sqlStatements": 390,
+    "sqlStatementsPerRequest": 13
+  },
+  "concurrentCorrectness": {
+    "oneCreate": true,
+    "oneRevisionWinner": true,
+    "staleRevisionConflicts": 29,
+    "workspaceCampaignRows": 30,
+    "noCrossTenantRows": true
+  },
+  "restoreReplay": {
+    "elapsedMs": 2920,
+    "format": "PostgreSQL custom pg_dump / pg_restore into separate local database",
+    "sameCampaignIdentity": true,
+    "noDuplicateCreate": true,
+    "expiredPublishQuarantined": true,
+    "providerRequests": 0,
+    "forcedRlsPreserved": true,
+    "immutableAuditTriggerPreserved": true
+  }
+}

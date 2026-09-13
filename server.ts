@@ -1,3 +1,13 @@
+// @ts-nocheck
+import {createPublicAssetsMiddleware} from './src/server/deployment/staticAssets.js';
+import {databaseReadiness} from './src/server/deployment/databaseReadiness.js';
+import {createShutdown,drainHttpServer,isProcessEntry} from './src/server/deployment/lifecycle.js';
+import { createMarketingRuntime } from './src/server/marketing/runtime.js';
+import { createMarketingRouter, marketingErrorHandler } from './src/server/marketing/router.js';
+import { legacyMarketingBoundary } from './src/server/marketing/legacyBoundary.js';
+import { verifyGoogleIdentity } from './src/lib/marketing/authentication.js';
+import {resolvePersistedSession,legacySocialPublishingEnabled,socialApprovalPredicate,approveLegacySocialPost} from './src/lib/marketing/legacyAuthorization.js';
+import {issueLocalUpload,verifyLocalUpload,randomMediaKey,writeImmutableMedia} from './src/lib/marketing/localMedia.js';
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 // ==========================================
@@ -153,8 +163,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import pkg from 'pg';
 import { Redis } from '@upstash/redis';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { createImmutableS3Upload, createMediaUploadS3Client } from './src/lib/immutableS3Upload.js';
 import dotenv from 'dotenv';
 import Mux from '@mux/mux-node';
 import cors from 'cors';
@@ -179,7 +188,6 @@ import { DistributedLockService } from './src/lib/distributedLock.js';
 import {
   acquireHold,
   releaseHold,
-  sweepExpiredHolds,
   getHoldTtlSeconds,
   signGuestSession,
   verifyGuestSession,
@@ -231,6 +239,8 @@ if (!process.env.META_INSTAGRAM_ACCOUNT_ID && process.env.PHONE_NUMBER_ID) {
 
 
 let globalIoInstance: any = null;
+let managedHttpServer: http.Server | undefined;
+let serverDraining = false;
 
 export function broadcastDbEvent(req: any, type: string, targetUserIds?: (string | number | null | undefined)[]) {
   const io = (req && req.app && typeof req.app.get === 'function') ? req.app.get('io') : globalIoInstance;
@@ -385,6 +395,7 @@ if (isDbConfigured) {
 // Workers MUST ONLY run on dedicated long-running containers (Cloud Run worker.ts).
 // Vercel Serverless Functions, AWS Lambda, and test runners MUST NEVER execute background interval loops.
 export const shouldRunBackgroundWorkers = Boolean(
+  process.env.NODE_ENV !== 'production' &&
   process.env.DISABLE_BACKGROUND_WORKERS !== 'true' &&
   !process.env.VERCEL &&
   !process.env.NOW_REGION &&
@@ -625,7 +636,7 @@ const redis = isRedisConfigured
   : null;
 
 // Initialize S3
-const s3 = new S3Client({
+const s3 = createMediaUploadS3Client({
   region: process.env.AWS_REGION || 'us-east-1',
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
@@ -687,10 +698,11 @@ const socialPostSchema = z.object({
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.NODE_ENV === 'test' ? 0 : (process.env.PORT ? parseInt(process.env.PORT, 10) : 3000);
-const JWT_SECRET = process.env.JWT_SECRET || 'encho_default_secure_jwt_secret_change_in_production_2026';
-if (!process.env.JWT_SECRET) {
-  console.warn('[SECURITY WARNING] JWT_SECRET is not configured in environment. Using default fallback secret.');
+const configuredJwtSecret = process.env.JWT_SECRET;
+if ((process.env.NODE_ENV === 'production' || process.env.VERCEL) && (!configuredJwtSecret || configuredJwtSecret.length < 32)) {
+  throw new Error('JWT_SECRET must be configured with at least 32 characters before production startup.');
 }
+const JWT_SECRET = configuredJwtSecret && configuredJwtSecret.length >= 32 ? configuredJwtSecret : crypto.randomBytes(48).toString('hex');
 
 const META_API_TOKEN = process.env.META_API_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || "982841698238647";
@@ -727,63 +739,44 @@ async function sendWhatsAppMessage(toPhone: string, messageText: string): Promis
 
     const data = response.headers.get('content-type')?.includes('json') ? await response.json().catch(() => ({})) : { error: 'Server returned non-JSON response: ' + (await response.text()).slice(0, 150) } as any;
     if (!response.ok) {
-       console.warn("[WHATSAPP SYSTEM] API returned OAuthException or validation failure, falling back to secure sandbox channel:", data?.error || data);
-       console.log(`[WHATSAPP SANDBOX DELIVERED] Broadcast processed successfully via fallback channel:`);
-       console.log(`  - To: +${cleanedPhone}`);
-       console.log(`  - Text: "${messageText}"`);
-       return true; // Return true so that booking state transitions & messages continue uninterrupted
+      console.warn('[WHATSAPP DELIVERY FAILED]', { status: response.status });
+      return false;
     }
-    return true;
-  } catch (error) {
-    console.warn("[WHATSAPP SYSTEM] Network exception during message dispatch, falling back to sandbox channel:", error);
-    const cleanedPhone = toPhone.replace(/[^0-9]/g, '');
-    console.log(`[WHATSAPP SANDBOX DELIVERED] Broadcast processed successfully via fallback channel:`);
-    console.log(`  - To: +${cleanedPhone}`);
-    console.log(`  - Text: "${messageText}"`);
-    return true;
+    return Boolean(data?.messages?.[0]?.id);
+  } catch {
+    console.warn('[WHATSAPP DELIVERY FAILED] Provider request failed');
+    return false;
   }
 }
 
 // Auth Middleware
 // Optional Auth Middleware for Seamless Guest Checkouts
 export const optionalAuthenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    req.user = { id: 1, role: 'guest', email: 'guest@encho.space' };
-    return next();
-  }
-
-  jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
-    if (err) {
-      req.user = { id: 1, role: 'guest', email: 'guest@encho.space' };
-      return next();
-    }
-    req.user = user;
-    rlsStorage.run({ userId: user.id, isRequest: true, bypassRls: user.role === 'admin' }, () => {
-      next();
-    });
+  const token = req.headers.authorization?.split(' ')[1];
+  const guest = () => { req.user = { id: 1, role: 'guest', email: 'guest@encho.space' }; next(); };
+  if (!token) return guest();
+  jwt.verify(token, JWT_SECRET, {algorithms:['HS256']}, async (err: any, claims: any) => {
+    if (err) return guest();
+    try {
+      const user = await resolvePersistedSession(pool, claims);
+      req.user = user;
+      rlsStorage.run({ userId: user.id, isRequest: true, bypassRls: user.role === 'admin' }, () => next());
+    } catch { return res.status(401).json({ error: 'Account session is no longer available.' }); }
   });
 };
 
 export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ error: 'Authentication required. No token provided.' });
-  }
-
-  jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
-    if (err) {
-      return res.status(401).json({ error: 'Invalid or expired authentication token.' });
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Authentication required. No token provided.' });
+  jwt.verify(token, JWT_SECRET, {algorithms:['HS256']}, async (err: any, claims: any) => {
+    if (err) return res.status(401).json({ error: 'Invalid or expired authentication token.' });
+    try {
+      const user = await resolvePersistedSession(pool, claims);
+      req.user = user;
+      rlsStorage.run({ userId: user.id, isRequest: true, bypassRls: user.role === 'admin' }, () => next());
+    } catch (error: any) {
+      return res.status(error?.status === 401 ? 401 : 503).json({ error: 'Account session verification is unavailable.' });
     }
-    req.user = user;
-    // Propagate the authenticated host's context to enable genuine row-level security
-    rlsStorage.run({ userId: user.id, isRequest: true, bypassRls: user.role === 'admin' }, () => {
-      next();
-    });
   });
 };
 
@@ -938,7 +931,7 @@ app.use((req, res, next) => {
 
 // Process Liveness Probe — Instant 200 OK, Zero DB/Network/Worker Dependencies
 app.get('/api/health/live', (_req, res) => {
-  res.status(200).json({ status: 'alive', uptime: process.uptime(), timestamp: new Date().toISOString() });
+  res.status(serverDraining ? 503 : 200).json({ status: serverDraining ? 'draining' : 'alive', uptime: process.uptime(), timestamp: new Date().toISOString() });
 });
 
 // HTTP Request Logging
@@ -1087,7 +1080,7 @@ app.use('/api/', (req, res, next) => {
 const aiGatekeeperLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 30, // max 30 campaign evaluations per host per hour
-  skip: (req: any) => req.user?.role === 'admin' || req.user?.email === 'ajithsabzz@gmail.com',
+  skip: (req: any) => req.user?.role === 'admin',
   keyGenerator: (req) => {
     // Attempt to rate limit by user ID if authenticated, else IP
     return (req as any).user?.id ? `ai_limit_user_${(req as any).user.id}` : req.ip || 'unknown';
@@ -1174,6 +1167,24 @@ app.use(express.json({
   }
 }));
 
+const harvoMarketing = createMarketingRuntime(pool);
+app.use('/api/marketing/v2', createMarketingRouter(pool, harvoMarketing.workflow, harvoMarketing.finance, authenticateToken, harvoMarketing.targeting, {settlement:harvoMarketing.settlement,conversions:harvoMarketing.conversions,guidance:harvoMarketing.guidance,creative:harvoMarketing.creative}));
+app.get('/api/webhooks/marketing/v2/meta', (req,res,next) => { try { res.type('text/plain').send(harvoMarketing.metaEvents.challenge(req.query['hub.mode'],req.query['hub.verify_token'],req.query['hub.challenge'])); } catch(error) { next(error); } }, marketingErrorHandler);
+app.post('/api/webhooks/marketing/v2/:provider', async (req: any, res, next) => {
+  try {
+    const provider = String(req.params.provider).toUpperCase();
+    if (provider === 'META') {
+      if (!Buffer.isBuffer(req.rawBody)) return res.status(400).json({error:'Original webhook body required'});
+      return res.status(200).json(await harvoMarketing.metaEvents.ingest(req.rawBody,req.get('x-hub-signature-256')||''));
+    }
+    if (!['STRIPE','RAZORPAY'].includes(provider)) return res.status(404).json({ error: 'Webhook provider not found' });
+    if (!Buffer.isBuffer(req.rawBody)) return res.status(400).json({ error: 'Original webhook body required' });
+    const signature = provider === 'STRIPE' ? req.get('stripe-signature') : req.get('x-razorpay-signature');
+    res.status(200).json(await harvoMarketing.payments.ingest(provider as 'STRIPE'|'RAZORPAY',req.rawBody,signature || '',req.get('x-razorpay-event-id')));
+  } catch (error) { next(error); }
+}, marketingErrorHandler);
+app.use(legacyMarketingBoundary);
+
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/') && !req.path.startsWith('/api/health')) {
     if (!marketingSchemaInitialized && isDbConfigured) {
@@ -1185,65 +1196,16 @@ app.use((req, res, next) => {
 
 app.use(hpp()); // Protect against HTTP Parameter Pollution attacks
 
-// Phase 2.9.4: Evidence-based Readiness Probe (Database & AI configuration check)
-app.get('/api/health/ready', async (req, res) => {
+// Read-only readiness is database structural evidence, never advertising or financial acceptance.
+const readinessHandler = async (_req, res) => {
+  if(serverDraining || !isDbConfigured)return res.status(503).json({status:'not_ready',scope:'database_structure',reason:serverDraining?'draining':'database_not_configured'});
   try {
-    const isDbConnected = await pool.query('SELECT 1').then(() => true).catch(() => false);
-    const isAiConfigured = process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.includes('dummy');
-
-    if (isDbConnected) {
-      res.status(200).json({ status: 'ready', db: 'connected', ai: isAiConfigured ? 'configured' : 'dummy' });
-    } else {
-      res.status(503).json({ status: 'not_ready', db: 'disconnected' });
-    }
-  } catch (err) {
-    res.status(503).json({ status: 'not_ready', error: 'probe_failed' });
-  }
-});
-app.get('/api/encho/health', async (req, res) => {
-  try {
-    await ensureDbInitialized();
-    const tablesCheck = await pool.query(`
-      SELECT table_name
-      FROM information_schema.tables
-      WHERE table_schema = 'public'
-      AND table_name IN ('users', 'listings', 'host_marketing_campaigns', 'host_wallets', 'wallet_transactions', 'host_social_posts', 'admin_audit_logs', 'campaign_metrics', 'webhook_dlq', 'host_outreach_leads');
-    `);
-    const tables = tablesCheck.rows.map(r => r.table_name);
-
-    // Check RLS status
-    let rlsEnforced = true;
-    try {
-      const rlsCheck = await pool.query(`
-        SELECT relname, relrowsecurity
-        FROM pg_class
-        WHERE relname IN ('host_marketing_campaigns', 'host_wallets', 'host_outreach_leads')
-        AND relrowsecurity = true;
-      `);
-      rlsEnforced = rlsCheck.rows.length >= 0;
-    } catch(e) {
-      rlsEnforced = true;
-    }
-
-    res.json({
-      status: 'ok',
-      milestone: 1,
-      milestone_title: 'Host Campaign Dashboard UI & Reactive Reactor Core Infrastructure',
-      completion_rate: '100%',
-      industrial_grade_score: '10/10',
-      database: isDbConfigured ? 'connected' : 'disabled_fallback',
-      initialized_tables: tables,
-      table_count: tables.length,
-      wallet_ledger_integrity: 'valid_reconciled',
-      idempotency_engine: 'active',
-      rls_protection: rlsEnforced ? 'enforced' : 'active_fallback',
-      optimisation_fee_percent: 15,
-      timestamp: new Date().toISOString()
-    });
-  } catch (err: any) {
-    res.status(500).json({ status: 'error', error: err.message });
-  }
-});
+    const check=await databaseReadiness(pool);
+    return res.status(check.ready?200:503).json({status:check.ready?'ready':'not_ready',scope:'database_structure',...check});
+  } catch { return res.status(503).json({status:'not_ready',scope:'database_structure',reason:'database_probe_failed'}); }
+};
+app.get('/api/health/ready',readinessHandler);
+app.get('/api/encho/health',readinessHandler);
 app.use('/api', idempotencyMiddleware); // Milestone 4.5: Global API Idempotency
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
@@ -2946,6 +2908,13 @@ export const ensureMarketingSchema = async () => {
 let initPromise: Promise<void> | null = null;
 const ensureDbInitialized = async () => {
   if (!isDbConfigured) return;
+  if (process.env.NODE_ENV === 'production') {
+    if (marketingSchemaInitialized && usersTableInitialized && listingsTableInitialized) return;
+    const ready = await databaseReadiness(pool);
+    if (!ready.ready) throw new Error('DATABASE_MIGRATIONS_OR_ROLE_NOT_READY');
+    marketingSchemaInitialized = usersTableInitialized = listingsTableInitialized = true;
+    return;
+  }
   if (marketingSchemaInitialized && usersTableInitialized && listingsTableInitialized) return;
   if (!initPromise) {
     initPromise = (async () => {
@@ -3061,30 +3030,26 @@ app.post('/api/auth/otp/send', otpLimiter, async (req, res) => {
   if (!phone) return res.status(400).json({ error: 'Phone number is required' });
 
   // Generate 6 digit OTP
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const otp = crypto.randomInt(100000, 1000000).toString();
   otpStore.set(phone, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
 
-  console.log(`[DEV ONLY] OTP for ${phone} is ${otp}`);
 
   // Meta WA API sending using the global helper
   const messageText = `Your EnchoSpace verification code is: ${otp}`;
-  await sendWhatsAppMessage(phone, messageText);
-
-  // Always return success even if WA fails, for dev testing
-  res.json({ success: true, message: 'OTP sent successfully' });
+  const delivered = await sendWhatsAppMessage(phone, messageText);
+  if (!delivered) { otpStore.delete(phone); return res.status(503).json({ error: 'Verification code could not be sent. Try again later.' }); }
+  res.json({ success: true, message: 'Verification code sent' });
 });
 
-app.post('/api/auth/otp/verify', async (req, res) => {
+app.post('/api/auth/otp/verify', otpLimiter, async (req, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   const { phone, otp, name } = req.body;
   if (!phone || !otp) return res.status(400).json({ error: 'Phone and OTP are required' });
 
   const record = otpStore.get(phone);
   if (!record || record.otp !== otp || record.expiresAt < Date.now()) {
-    // Hidden "master" OTP for reviewer/dev testing
-    if (otp !== '123456') {
-      return res.status(400).json({ error: 'Invalid or expired OTP' });
-    }
+    otpStore.delete(phone);
+    return res.status(400).json({ error: 'Invalid or expired OTP' });
   }
 
   otpStore.delete(phone);
@@ -3145,11 +3110,7 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
     if (existing.rows.length > 0) return res.status(400).json({ error: 'Email already exists' });
 
     const hash = await bcrypt.hash(password, 10);
-    const adminEmail = process.env.ADMIN_EMAIL;
-    const isAdminAccount = (adminEmail && email.toLowerCase() === adminEmail.toLowerCase()) ||
-                           email.toLowerCase() === 'admin@enchospace.com' ||
-                           email.toLowerCase() === 'ajithsabzz@gmail.com';
-    const role = isAdminAccount ? 'admin' : 'user';
+    const role = 'user'; // Public registration never grants administrative privileges.
 
     const result = await pool.query(
       'INSERT INTO users (email, password_hash, name, role) VALUES ($1, $2, $3, $4) RETURNING id, email, name, role',
@@ -3175,10 +3136,6 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
 
 app.post('/api/auth/login', authLimiter, async (req, res) => {
   if (!isDbConfigured) {
-    if (req.body.email === 'ajithsabzz@gmail.com') {
-      const token = jwt.sign({ id: 1, role: 'admin', email: 'ajithsabzz@gmail.com' }, JWT_SECRET, { expiresIn: '7d' });
-      return res.json({ token, user: { id: 1, name: 'Ajith', email: 'ajithsabzz@gmail.com', role: 'admin' } });
-    }
     return res.status(503).json({ error: 'Database not configured.' });
   }
   try {
@@ -3198,15 +3155,6 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) return res.status(400).json({ error: 'Invalid credentials' });
 
-    const adminEmail = process.env.ADMIN_EMAIL;
-    const isAdminAccount = (adminEmail && user.email.toLowerCase() === adminEmail.toLowerCase()) ||
-                           user.email.toLowerCase() === 'admin@enchospace.com' ||
-                           user.email.toLowerCase() === 'ajithsabzz@gmail.com';
-
-    if (isAdminAccount && user.role !== 'admin') {
-      await pool.query("UPDATE users SET role = 'admin' WHERE id = $1", [user.id]);
-      user.role = 'admin';
-    }
 
     const token = jwt.sign({ id: user.id, role: user.role, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
     const can_host_experiences = await checkCanHostExperiences(user.email, user.role);
@@ -3224,40 +3172,24 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
   }
 });
 
-app.post('/api/auth/google', async (req, res) => {
+app.post('/api/auth/google', authLimiter, async (req, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
     await ensureUsersTable();
     dbConnectionError = null;
-    const { googleId, email, name } = req.body;
-
-    if (!googleId || !email || !name) {
-      return res.status(400).json({ error: 'Failed to retrieve Google profile data' });
-    }
-
-    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const identity = await verifyGoogleIdentity(req.body.credential, process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID);
+    const { googleId, email, name } = identity;
+    const result = await pool.query('SELECT * FROM users WHERE google_id=$1 OR lower(email)=lower($2)', [googleId,email]);
     let user;
-    const adminEmail = process.env.ADMIN_EMAIL;
-    const isAdminAccount = (adminEmail && email.toLowerCase() === adminEmail.toLowerCase()) ||
-                           email.toLowerCase() === 'admin@enchospace.com' ||
-                           email.toLowerCase() === 'ajithsabzz@gmail.com';
-    const expectedRole = isAdminAccount ? 'admin' : 'user';
-
+    if (result.rows.length > 1) return res.status(409).json({ error: 'Account linking needs support review.' });
     if (result.rows.length === 0) {
-      // Create user
-      const insertResult = await pool.query(
-        'INSERT INTO users (email, name, google_id, role) VALUES ($1, $2, $3, $4) RETURNING id, email, name, role',
-        [email, name, googleId, expectedRole]
-      );
-      user = insertResult.rows[0];
+      user=(await pool.query('INSERT INTO users(email,name,google_id,role) VALUES($1,$2,$3,$4) RETURNING id,email,name,role',[email,name,googleId,'user'])).rows[0];
     } else {
-      user = result.rows[0];
-      if (isAdminAccount && user.role !== 'admin') {
-        await pool.query("UPDATE users SET role = 'admin' WHERE id = $1", [user.id]);
-        user.role = 'admin';
-      }
+      user=result.rows[0];
+      if (user.google_id && user.google_id !== googleId) return res.status(401).json({ error: 'Google account does not match this account.' });
       if (!user.google_id) {
-        await pool.query('UPDATE users SET google_id = $1 WHERE id = $2', [googleId, user.id]);
+        if (!identity.authoritativeEmail || user.role === 'admin') return res.status(409).json({ error: 'Sign in with your existing method before linking Google.' });
+        await pool.query('UPDATE users SET google_id=$1 WHERE id=$2',[googleId,user.id]);
       }
     }
 
@@ -3284,15 +3216,6 @@ app.get('/api/auth/me', authenticateToken, async (req: AuthRequest, res) => {
     if (result.rows.length === 0) return res.status(401).json({ error: 'User not found, token invalid' });
     const user = result.rows[0];
 
-    const adminEmail = process.env.ADMIN_EMAIL;
-    const isAdminAccount = (adminEmail && user.email.toLowerCase() === adminEmail.toLowerCase()) ||
-                           user.email.toLowerCase() === 'admin@enchospace.com' ||
-                           user.email.toLowerCase() === 'ajithsabzz@gmail.com';
-
-    if (isAdminAccount && user.role !== 'admin') {
-      await pool.query("UPDATE users SET role = 'admin' WHERE id = $1", [user.id]);
-      user.role = 'admin';
-    }
 
     user.can_host_experiences = await checkCanHostExperiences(user.email, user.role);
     res.json({ user });
@@ -4050,51 +3973,30 @@ app.put('/api/mock-upload', (req, res) => {
   res.status(200).send('Mock upload successful');
 });
 
-app.put('/api/upload-local', express.raw({ type: '*/*', limit: '50mb' }), (req, res) => {
-  const filename = (req.query.filename as string) || `file-${Date.now()}`;
-  const cleanFilename = filename.replace(/[^a-zA-Z0-9.-]/g, '_');
+app.put('/api/upload-local', express.raw({ type: '*/*', limit: '50mb' }), async (req, res) => {
   try {
-    const filePath = path.join(process.cwd(), 'public', 'uploads', cleanFilename);
-    const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(filePath, req.body);
-    return res.status(200).json({ status: 'success', url: `/uploads/${cleanFilename}` });
-  } catch (err) {
-    console.warn('[LOCAL UPLOAD WARNING - read-only FS, returning data uri]:', err);
-    const base64Str = Buffer.isBuffer(req.body) ? req.body.toString('base64') : Buffer.from(req.body || '').toString('base64');
-    const dataUri = `data:image/webp;base64,${base64Str}`;
-    return res.status(200).json({ status: 'success', url: dataUri });
+    // An authenticated account obtains this capability from /api/upload-url. It cannot select a path.
+    const authorization=verifyLocalUpload(JWT_SECRET,req.query.ticket);
+    await resolvePersistedSession(pool,{id:authorization.userId});
+    if(req.get('Content-Type')?.split(';')[0]!==authorization.contentType)return res.status(422).json({error:'Upload content type does not match its authorization.'});
+    await writeImmutableMedia(path.join(process.cwd(),'public','uploads'),authorization.key,req.body);
+    return res.status(200).json({status:'success',url:`/uploads/${authorization.key}`});
+  } catch (error:any) {
+    return res.status(error?.status||503).json({error:error?.code?error.message:'Media storage is unavailable.',...(error?.code?{code:error.code}:{})});
   }
 });
 
-app.post('/api/upload-base64', authenticateToken, express.json({ limit: '50mb' }), (req: AuthRequest, res) => {
+app.post('/api/upload-base64', authenticateToken, express.json({ limit: '50mb' }), async (req: AuthRequest, res) => {
   try {
-    const { filename, contentType } = req.body;
-    const base64Data = req.body.base64Data || req.body.base64;
-    if (!base64Data) {
-      return res.status(400).json({ error: 'base64Data required' });
-    }
-    const cleanFilename = (filename || 'file.webp').replace(/[^a-zA-Z0-9.-]/g, '_');
-    const uniqueName = Date.now() + '-' + cleanFilename;
-    try {
-      const filePath = path.join(process.cwd(), 'public', 'uploads', uniqueName);
-      const dir = path.dirname(filePath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-      const buffer = Buffer.from(base64Data.replace(/^data:.*;base64,/, ''), 'base64');
-      fs.writeFileSync(filePath, buffer);
-      const fileUrl = `/uploads/${uniqueName}`;
-      return res.json({ url: fileUrl, publicUrl: fileUrl });
-    } catch (diskErr) {
-      console.warn('[BASE64 UPLOAD WARNING - read-only FS, returning base64 data uri]:', diskErr);
-      return res.json({ url: base64Data, publicUrl: base64Data });
-    }
-  } catch (err) {
-    console.error('[BASE64 UPLOAD ERROR]', err);
-    return res.status(500).json({ error: 'Failed to save base64 file' });
+    const base64Data=req.body.base64Data||req.body.base64;
+    if(typeof base64Data!=='string'||!base64Data)return res.status(400).json({error:'base64Data required'});
+    const contentType=req.body.contentType||base64Data.match(/^data:([^;]+);base64,/)?.[1];
+    const key=randomMediaKey(contentType);
+    const buffer=Buffer.from(base64Data.replace(/^data:.*;base64,/,''),'base64');
+    await writeImmutableMedia(path.join(process.cwd(),'public','uploads'),key,buffer);
+    const url=`/uploads/${key}`;return res.json({url,publicUrl:url});
+  } catch(error:any) {
+    return res.status(error?.status||503).json({error:error?.code?error.message:'Media storage is unavailable.',...(error?.code?{code:error.code}:{})});
   }
 });
 
@@ -4139,30 +4041,28 @@ app.post('/api/upload-url', authenticateToken, async (req, res) => {
     }
     // Security: Restrict allowed content types
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/quicktime', 'video/webm'];
-    const isAllowed = contentType.startsWith('image/') || contentType.startsWith('video/') || allowedTypes.includes(contentType);
+    const isAllowed = allowedTypes.includes(contentType);
     if (!isAllowed) {
        return res.status(400).json({ error: 'Invalid content type. Only images and videos are allowed.' });
     }
     // Validate AWS Configuration (Fallback to local storage / base64 if AWS S3 is not configured)
     if (!process.env.AWS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID === 'dummy' || !process.env.AWS_S3_BUCKET_NAME) {
-      const uniqueName = Date.now() + '-' + (filename ? filename.replace(/[^a-zA-Z0-9.-]/g, '_') : 'file.bin');
-      const uploadUrl = `/api/upload-local?filename=${encodeURIComponent(uniqueName)}`;
-      const fileUrl = `/uploads/${uniqueName}`;
-      return res.json({ uploadUrl, fileUrl, publicUrl: fileUrl });
+      const authorization=issueLocalUpload(JWT_SECRET,req.user.id,contentType);
+      const uploadUrl=`/api/upload-local?ticket=${encodeURIComponent(authorization.ticket)}`;
+      const fileUrl=`/uploads/${authorization.key}`;
+      return res.json({uploadUrl,fileUrl,publicUrl:fileUrl});
     }
 
-    const key = `listings/${Date.now()}-${filename.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-    const command = new PutObjectCommand({
-      Bucket: process.env.AWS_S3_BUCKET_NAME,
-      Key: key,
-      ContentType: contentType,
+    const key = `listings/${randomMediaKey(contentType)}`;
+    const { uploadUrl, uploadHeaders } = await createImmutableS3Upload(s3, {
+      bucket: process.env.AWS_S3_BUCKET_NAME,
+      key,
+      contentType,
     });
-
-    const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
 
     // Make sure we form the correct virtual-hosted style URL for S3
     const fileUrl = `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
-    res.json({ uploadUrl, fileUrl, publicUrl: fileUrl });
+    res.json({ uploadUrl, fileUrl, publicUrl: fileUrl, uploadHeaders });
   } catch (error) {
     console.error('Presigned URL Error:', error);
     res.status(500).json({ error: 'Failed to generate upload URL' });
@@ -4952,300 +4852,11 @@ async function mapConcurrent<T, R>(items: T[], limit: number, fn: (item: T) => P
 
 // Core function to calculate real-time campaign spend progression & active pacing metrics
 async function syncCampaignSpend(row: any): Promise<any> {
-  return rlsStorage.run({ bypassRls: true }, async () => {
-    try {
-      const imageUrl = row.listing_image || 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6';
-      const destinationUrl = `https://encho-space-chi.vercel.app/listings/${row.listing_id || ''}`;
-      const adHeadline = row.title || row.listing_title || 'Exclusive Resort Stay';
-      const adMessage = row.description || row.listing_desc || 'Book your luxury getaway stay with Encho Space.';
-
-      const fallbackAdMedias = [
-        { format: '1:1 Square (Feed)', aspect_ratio: '1:1', dimensions: '1080x1080', placement: 'Meta & Instagram Main Feed', url: imageUrl, hash: 'img_hash_1x1_feed_sac998311' },
-        { format: '9:16 Vertical (Stories & Reels)', aspect_ratio: '9:16', dimensions: '1080x1920', placement: 'Instagram Reels & Meta Stories', url: imageUrl, hash: 'img_hash_9x16_reels_sac998311' },
-        { format: '16:9 Landscape (In-Stream & Display)', aspect_ratio: '16:9', dimensions: '1920x1080', placement: 'Meta In-Stream Video & Google Display', url: imageUrl, hash: 'img_hash_16x9_instream_sac998311' }
-      ];
-
-      const rawRadius = Number(row.target_radius_km) || 50;
-      const effectiveRadiusKm = Math.max(25, rawRadius);
-      const targetCitiesList = row.target_locations ? row.target_locations.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
-      const citiesGeoSpecs = targetCitiesList.length > 0
-        ? targetCitiesList.map((cityName: string) => ({ name: cityName, radius: effectiveRadiusKm, distance_unit: 'kilometer' }))
-        : [{ name: row.listing_city || row.city || 'Metropolitan Hub', radius: effectiveRadiusKm, distance_unit: 'kilometer' }];
-
-      const fallbackAdsetSpecs = {
-        adset_name: `Encho AdSet - ${row.city || row.listing_title || 'Global'} (${(row.target_audience_persona || 'couples').toUpperCase()} #${row.id})`,
-        objective: 'OUTCOME_TRAFFIC', // Modified for sandbox certification due to Lead Gen permission limits // Milestone 8.3: Native Lead Forms
-      targeting_optimization: 'unconstrained', // Milestone 8.2: Advantage+ Broad Targeting
-        special_ad_category: 'HOUSING',
-        special_ad_category_country: ['IN', 'US', 'GB', 'AE', 'CA'],
-        daily_budget: Math.floor(Math.round(Number(row.budget || 2500) * 100 * 0.85) / Math.max(1, Number(row.duration_days || 1))),
-        billing_event: 'IMPRESSIONS',
-        optimization_goal: 'REACH',
-        bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
-        status: 'PAUSED',
-        targeting: {
-          age_range_note: '18-65+ (Meta HOUSING Special Category Mandatory Fixed Bound)',
-          gender_note: 'All Genders (Meta HOUSING Special Category Non-Discrimination Mandate)',
-          geo_locations: {
-            countries: ['IN', 'US', 'GB', 'AE', 'CA'],
-            cities: citiesGeoSpecs,
-            geo_radius_km: effectiveRadiusKm,
-            housing_category_rule: `Meta HOUSING SAC rules enforce min 25km radius around target city centres (Set: ${effectiveRadiusKm} km)`
-          },
-          publisher_platforms: ['facebook', 'instagram'],
-          facebook_positions: ['feed', 'story'],
-          instagram_positions: ['stream', 'story'],
-          interests: ['Luxury resort', 'Honeymoon', 'Boutique hotel']
-        }
-      };
-
-      const fallbackMetaSpecs = {
-        creative_name: `Encho Creative - ${adHeadline}`,
-        headline: adHeadline,
-        primary_text: adMessage,
-        feed_description: row.feed_description || `Experience high-end luxury living at ${adHeadline}.`,
-        call_to_action: 'BOOK_NOW',
-        destination_url: destinationUrl,
-        meta_pixel_id: row.meta_pixel_id || `act_pixel_${row.id}_998311`,
-        meta_capi_token: row.meta_capi_token || `capi_live_token_sac998311_${row.id}`,
-        dynamic_pricing_sync: 'LIVE_ACTIVE'
-      };
-
-      let parsedAdMedias = row.ad_medias;
-      if (typeof parsedAdMedias === 'string') {
-        try { parsedAdMedias = JSON.parse(parsedAdMedias); } catch (e) { parsedAdMedias = null; }
-      }
-      const adMedias = (Array.isArray(parsedAdMedias) && parsedAdMedias.length > 0) ? parsedAdMedias : fallbackAdMedias;
-
-      let parsedAdsetSpecs = row.adset_specifications;
-      if (typeof parsedAdsetSpecs === 'string') {
-        try { parsedAdsetSpecs = JSON.parse(parsedAdsetSpecs); } catch (e) { parsedAdsetSpecs = null; }
-      }
-      const adsetSpecifications = (parsedAdsetSpecs && Object.keys(parsedAdsetSpecs).length > 0) ? parsedAdsetSpecs : fallbackAdsetSpecs;
-
-      let parsedMetaSpecs = row.meta_specifications;
-      if (typeof parsedMetaSpecs === 'string') {
-        try { parsedMetaSpecs = JSON.parse(parsedMetaSpecs); } catch (e) { parsedMetaSpecs = null; }
-      }
-      const metaSpecifications = (parsedMetaSpecs && Object.keys(parsedMetaSpecs).length > 0) ? parsedMetaSpecs : fallbackMetaSpecs;
-
-      const metaCampaignId = row.meta_campaign_id || null;
-      const metaAdSetId = row.meta_adset_id || null;
-      const metaCreativeId = row.meta_creative_id || null;
-      const metaAdId = row.meta_ad_id || null;
-
-      const enhancedRow = {
-        ...row,
-        meta_campaign_id: metaCampaignId,
-        meta_adset_id: metaAdSetId,
-        meta_creative_id: metaCreativeId,
-        meta_ad_id: metaAdId,
-        ad_medias: adMedias,
-        adset_specifications: adsetSpecifications,
-        meta_specifications: metaSpecifications
-      };
-
-      // If the campaign is not active or payment is not paid or subscription is inactive, no budget burn occurs.
-      if (row.status !== 'active' || !row.subscription_active) {
-        const spentVal = parseFloat(Number(row.accumulated_spent || 0).toFixed(2));
-        const impressionsVal = Number(row.accumulated_impressions || 0);
-        const clicksVal = Number(row.accumulated_clicks || 0);
-        const conversionsVal = Number(row.accumulated_conversions || 0);
-        const ctrVal = parseFloat((impressionsVal > 0 ? (clicksVal / impressionsVal) * 100 : 2.8 + Math.sin(row.id * 10) * 0.6).toFixed(2));
-
-        return {
-          ...enhancedRow,
-          analytics: {
-            impressions: impressionsVal,
-            clicks: clicksVal,
-            ctr: ctrVal,
-            conversions: conversionsVal,
-            spent: spentVal
-          }
-        };
-      }
-
-      // If campaign is active, calculate spend since last_pacing_calc_at
-      const lastCalc = row.last_pacing_calc_at ? new Date(row.last_pacing_calc_at).getTime() : new Date(row.created_at).getTime();
-      const now = Date.now();
-      const elapsedSec = Math.max(0, (now - lastCalc) / 1000);
-
-      // If elapsed time is under 3 seconds, skip DB update to avoid DB write thrashing on repeated list polling
-      if (elapsedSec < 3.0) {
-        const spentVal = parseFloat(Number(row.accumulated_spent || 0).toFixed(2));
-        const impressionsVal = Number(row.accumulated_impressions || 0);
-        const clicksVal = Number(row.accumulated_clicks || 0);
-        const conversionsVal = Number(row.accumulated_conversions || 0);
-        const ctrVal = parseFloat((impressionsVal > 0 ? (clicksVal / impressionsVal) * 100 : 2.8 + Math.sin(row.id * 10) * 0.6).toFixed(2));
-
-        return {
-          ...enhancedRow,
-          analytics: {
-            impressions: impressionsVal,
-            clicks: clicksVal,
-            ctr: ctrVal,
-            conversions: conversionsVal,
-            spent: spentVal
-          }
-        };
-      }
-
-      // Determine pacing multiplier based on pacing_mode
-      let multiplier = 1.0;
-      if (row.pacing_mode === 'conservative') multiplier = 0.5;
-      else if (row.pacing_mode === 'accelerated') multiplier = 2.5;
-      else if (row.pacing_mode === 'paused') multiplier = 0.0;
-
-      if (multiplier === 0.0) {
-        try {
-          await pool.query('UPDATE host_marketing_campaigns SET last_pacing_calc_at = NOW() WHERE id = $1', [row.id]);
-        } catch (dbErr: any) {
-          console.warn(`[SYNC CAMPAIGN SPEND DB WARN] Campaign #${row.id} pause timestamp update: ${dbErr?.message}`);
-        }
-        const spentVal = parseFloat(Number(row.accumulated_spent || 0).toFixed(2));
-        const impressionsVal = Number(row.accumulated_impressions || 0);
-        const clicksVal = Number(row.accumulated_clicks || 0);
-        const conversionsVal = Number(row.accumulated_conversions || 0);
-        const ctrVal = parseFloat((impressionsVal > 0 ? (clicksVal / impressionsVal) * 100 : 2.8 + Math.sin(row.id * 10) * 0.6).toFixed(2));
-
-        return {
-          ...enhancedRow,
-          last_pacing_calc_at: new Date(),
-          analytics: {
-            impressions: impressionsVal,
-            clicks: clicksVal,
-            ctr: ctrVal,
-            conversions: conversionsVal,
-            spent: spentVal
-          }
-        };
-      }
-
-      // Base burn rate of ₹0.12 per second (approx ₹432 per hour at standard pacing)
-      const baseBurnPerSec = 0.12;
-      const rawBurn = elapsedSec * baseBurnPerSec * multiplier;
-
-      const currentSpent = Number(row.accumulated_spent || 0);
-      const budgetLimit = Number(row.budget || 2500);
-      const remainingBudget = Math.max(0, budgetLimit - currentSpent);
-
-      let actualBurn = rawBurn;
-      let reachesLimit = false;
-      let enchoOverspend = 0;
-
-      if (rawBurn >= remainingBudget) {
-        const overspendAllowance = budgetLimit * 0.02;
-        const totalPotentialSpend = currentSpent + rawBurn;
-
-        if (totalPotentialSpend > budgetLimit) {
-            if (totalPotentialSpend <= budgetLimit + overspendAllowance) {
-                actualBurn = rawBurn;
-                enchoOverspend = totalPotentialSpend - budgetLimit;
-            } else {
-                actualBurn = (budgetLimit + overspendAllowance) - currentSpent;
-                enchoOverspend = overspendAllowance;
-            }
-        } else {
-            actualBurn = rawBurn;
-        }
-
-        if (currentSpent + actualBurn >= budgetLimit) {
-           reachesLimit = true;
-        }
-      }
-
-      const baseImpressionPerSec = 1.5;
-      const rawNewImpressions = elapsedSec * baseImpressionPerSec * multiplier;
-      let actualNewImpressions = Math.floor(rawNewImpressions);
-
-      if (reachesLimit && rawBurn > 0) {
-        const ratio = actualBurn / rawBurn;
-        actualNewImpressions = Math.floor(rawNewImpressions * ratio);
-      }
-
-      const ctrVal = parseFloat((2.8 + Math.sin(row.id * 10) * 0.6).toFixed(2));
-
-      const newImpressionsTotal = Number(row.accumulated_impressions || 0) + actualNewImpressions;
-      const addedClicks = Math.floor(actualNewImpressions * (ctrVal / 100));
-      const newClicksTotal = Number(row.accumulated_clicks || 0) + addedClicks;
-
-      const addedConversions = Math.floor(addedClicks * 0.045);
-      const newConversionsTotal = Number(row.accumulated_conversions || 0) + addedConversions;
-
-      const newSpentTotal = currentSpent + actualBurn;
-
-      const nextStatus = reachesLimit ? 'completed' : row.status;
-      const nextPacingMode = reachesLimit ? 'paused' : row.pacing_mode;
-
-      // Safely persist spend updates without letting DB errors crash campaign fetch
-      try {
-        if (enchoOverspend > 0) {
-            await pool.query(`
-               INSERT INTO meta_overspend_ledger (campaign_id, host_id, overspend_amount)
-               VALUES ($1, $2, $3)
-            `, [row.id, row.host_id, enchoOverspend]);
-        }
-
-        await pool.query(`
-          UPDATE host_marketing_campaigns
-          SET accumulated_spent = $1,
-              accumulated_impressions = $2,
-              accumulated_clicks = $3,
-              accumulated_conversions = $4,
-              last_pacing_calc_at = NOW(),
-              pacing_mode = $5
-          WHERE id = $6
-        `, [
-          newSpentTotal,
-          newImpressionsTotal,
-          newClicksTotal,
-          newConversionsTotal,
-          nextPacingMode,
-          row.id
-        ]);
-
-        if (reachesLimit && ['active', 'CAMPAIGN_LIVE'].includes(row.status)) {
-            await transitionCampaignState({
-                campaignId: Number(row.id),
-                expectedCurrentState: row.status,
-                to: 'paused',
-                reason: 'Budget limit reached in pacing engine',
-                actorType: 'system'
-            }).catch(err => console.warn(`[PACING FSM WARN] Campaign #${row.id} transition to paused failed:`, err.message));
-        }
-      } catch (dbErr: any) {
-        console.warn(`[SYNC CAMPAIGN SPEND DB WARN] Campaign #${row.id} persistence skipped: ${dbErr?.message}`);
-      }
-
-      return {
-        ...enhancedRow,
-        status: nextStatus,
-        pacing_mode: nextPacingMode,
-        accumulated_spent: newSpentTotal,
-        accumulated_impressions: newImpressionsTotal,
-        accumulated_clicks: newClicksTotal,
-        accumulated_conversions: newConversionsTotal,
-        last_pacing_calc_at: new Date(),
-        analytics: {
-          impressions: newImpressionsTotal,
-          clicks: newClicksTotal,
-          ctr: ctrVal,
-          conversions: newConversionsTotal,
-          spent: parseFloat(newSpentTotal.toFixed(2))
-        }
-      };
-    } catch (err: any) {
-      console.error(`[SYNC CAMPAIGN SPEND ERROR] Campaign #${row?.id}: ${err?.message}`);
-      return row;
-    }
-  });
+  const { meta_capi_token, meta_access_token, api_token, ...safe } = row;
+  return { ...safe, analytics: null, analytics_availability: 'UNVERIFIED_LEGACY', analytics_note: 'Open the campaign studio for provider-observed metrics. Historical simulated analytics are excluded.' };
 }
 
-// ==========================================
-
-
-// ==========================================
-// HOST MARKETING CAMPAIGNS ENDPOINTS
+// // HOST MARKETING CAMPAIGNS ENDPOINTS
 // ==========================================
 
 
@@ -6469,7 +6080,7 @@ app.post('/api/host/social-posts/generate-caption', authenticateToken, async (re
 
     if (listing_id) {
       const userRes = await pool.query('SELECT role, email FROM users WHERE id = $1', [req.user?.id]);
-      const isAdmin = req.user?.role === 'admin' || (userRes.rows.length > 0 && (userRes.rows[0].role === 'admin' || userRes.rows[0].email === 'ajithsabzz@gmail.com'));
+      const isAdmin = userRes.rows[0]?.role === 'admin';
       const listingCheck = await pool.query('SELECT title, description, city, price FROM listings WHERE id = $1 AND (user_id = $2 OR $3 = true)', [listing_id, req.user?.id, isAdmin]);
       if (listingCheck.rows.length > 0) {
         title = listingCheck.rows[0].title;
@@ -6612,7 +6223,7 @@ app.post('/api/host/social-posts', authenticateToken, async (req: AuthRequest, r
       const listingCheck = await pool.query(`
         SELECT l.id FROM listings l
         LEFT JOIN users u ON u.id = $2
-        WHERE l.id = $1 AND (l.user_id = $2 OR u.role = 'admin' OR u.email = 'ajithsabzz@gmail.com' OR l.user_id IS NULL)
+        WHERE l.id = $1 AND (l.user_id = $2 OR u.role = 'admin')
       `, [listing_id, req.user?.id]);
       if (listingCheck.rows.length === 0) {
         return res.status(403).json({ error: 'Unauthorized: Listing does not belong to you or does not exist.' });
@@ -6762,7 +6373,7 @@ app.get('/api/admin/social-posts', authenticateToken, async (req: AuthRequest, r
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
     const userRes = await pool.query('SELECT role, email FROM users WHERE id = $1', [req.user?.id]);
-    const isAdmin = req.user?.role === 'admin' || (userRes.rows.length > 0 && (userRes.rows[0].role === 'admin' || userRes.rows[0].email === 'ajithsabzz@gmail.com'));
+    const isAdmin = userRes.rows[0]?.role === 'admin';
     if (!isAdmin) {
       return res.status(403).json({ error: 'Access denied: Administrators only' });
     }
@@ -6791,11 +6402,10 @@ const publishToInstagram = async (post: any) => {
   const igAccountId = process.env.META_INSTAGRAM_ACCOUNT_ID;
   const version = 'v19.0';
 
-  if (!token || !igAccountId || token === 'dummy') {
-    console.warn('[SOCIAL STUDIO PUBLISHER] META_ACCESS_TOKEN or META_INSTAGRAM_ACCOUNT_ID missing/dummy. Simulating publish.');
-    const simulatedId = post.external_media_id || `sim_ig_${post.id || 'mock'}`;
-    return { success: true, simulated: true, ig_media_id: simulatedId };
-  }
+  if (!legacySocialPublishingEnabled()) throw new Error('Legacy social publication requires explicit operator enablement.');
+  if (!token || !igAccountId || token === 'dummy') throw new Error('Verified Meta credentials are required for social publication.');
+  const authorization = await pool.query(`SELECT p.id FROM host_social_posts p WHERE p.id=$1 AND ${socialApprovalPredicate}`, [post.id]);
+  if (!authorization.rows[0]) throw new Error('A current administrator must approve the unchanged social post before publication.');
 
   // 1. RECONCILIATION & IDEMPOTENCY PRE-CHECK (CASE A & CASE B)
   const isPostRetry = (post.publish_attempt_count && post.publish_attempt_count > 0) || post.status === 'failed' || !!post.isRecovery;
@@ -6952,84 +6562,18 @@ app.post('/api/admin/social-posts/:id/approve', authenticateToken, async (req: A
     const { id } = req.params;
 
     const userRes = await pool.query('SELECT role, email FROM users WHERE id = $1', [req.user?.id]);
-    const isAdmin = req.user?.role === 'admin' || (userRes.rows.length > 0 && (userRes.rows[0].role === 'admin' || userRes.rows[0].email === 'ajithsabzz@gmail.com'));
+    const isAdmin = userRes.rows[0]?.role === 'admin';
     if (!isAdmin) {
       return res.status(403).json({ error: 'Access denied: Administrators only' });
     }
 
-    const previous = await pool.query('SELECT * FROM host_social_posts WHERE id = $1', [id]);
-    if (previous.rows.length === 0) {
-      return res.status(404).json({ error: 'Social post not found' });
-    }
-
-    const post = previous.rows[0];
-    const isFuture = post.scheduled_at && new Date(post.scheduled_at) > new Date();
-
-    let result;
-    if (isFuture) {
-      // Just approve it, let the scheduler publish it later
-      result = await pool.query(`
-        UPDATE host_social_posts
-        SET status = 'approved', admin_feedback = NULL
-        WHERE id = $1
-        RETURNING *
-      `, [id]);
-    } else {
-      // Immediate release. Try to publish synchronously so admin gets immediate feedback.
-      try {
-        const publishResult = await publishToInstagram(post);
-        if (publishResult.success) {
-           result = await pool.query(`
-             UPDATE host_social_posts
-             SET status = 'approved', published_at = CURRENT_TIMESTAMP, admin_feedback = NULL
-             WHERE id = $1
-             RETURNING *
-           `, [id]);
-        }
-      } catch (pubErr: any) {
-        // If it fails to publish, we still approve it but leave published_at as NULL
-        // so the background worker can retry it, OR we can return an error.
-        // Since it's an admin action, let's approve it and let the worker retry it.
-        console.error('[ADMIN APPROVE] Failed to publish immediately, falling back to worker:', pubErr.message);
-        result = await pool.query(`
-          UPDATE host_social_posts
-          SET status = 'approved', admin_feedback = NULL
-          WHERE id = $1
-          RETURNING *
-        `, [id]);
-      }
-    }
-
-    // Seed mock visual metrics
-    await pool.query(`
-      UPDATE host_social_posts
-      SET likes = $1, comments = $2, shares = $3
-      WHERE id = $4
-    `, [
-      Math.floor(Math.random() * 250) + 50,
-      Math.floor(Math.random() * 40) + 10,
-      Math.floor(Math.random() * 20) + 5,
-      id
-    ]);
-
-    await pool.query(`
-      INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-    `, [
-      req.user?.id,
-      'social_post',
-      id,
-      'approve_social_post',
-      JSON.stringify(previous.rows[0]),
-      JSON.stringify(result.rows[0]),
-      req.ip || req.socket.remoteAddress
-    ]);
+    const post = await approveLegacySocialPost(pool, Number(id), req.user.id, req.ip || req.socket.remoteAddress || null);
 
     broadcastDbEvent(req, 'marketing');
-    res.json({ success: true, post: result.rows[0] });
+    res.json({ success: true, post });
   } catch (error) {
     console.error('Error approving social post:', error);
-    res.status(500).json({ error: 'Failed to approve social post' });
+    res.status(error?.status || 500).json({ error: error?.code ? error.message : 'Failed to approve social post', ...(error?.code ? {code:error.code} : {}) });
   }
 });
 
@@ -7041,7 +6585,7 @@ app.post('/api/admin/social-posts/:id/reject', authenticateToken, async (req: Au
     const { feedback } = req.body;
 
     const userRes = await pool.query('SELECT role, email FROM users WHERE id = $1', [req.user?.id]);
-    const isAdmin = req.user?.role === 'admin' || (userRes.rows.length > 0 && (userRes.rows[0].role === 'admin' || userRes.rows[0].email === 'ajithsabzz@gmail.com'));
+    const isAdmin = userRes.rows[0]?.role === 'admin';
     if (!isAdmin) {
       return res.status(403).json({ error: 'Access denied: Administrators only' });
     }
@@ -7170,7 +6714,7 @@ app.post('/api/marketing/campaigns/:id/ai-check', authenticateToken, aiGatekeepe
   try {
     const { id } = req.params;
     const userRes = await pool.query('SELECT role, email FROM users WHERE id = $1', [req.user?.id]);
-    const isAdmin = req.user?.role === 'admin' || (userRes.rows.length > 0 && (userRes.rows[0].role === 'admin' || userRes.rows[0].email === 'ajithsabzz@gmail.com'));
+    const isAdmin = userRes.rows[0]?.role === 'admin';
 
     const check = await pool.query(`
       SELECT c.*, l.title as listing_title, l.description as listing_description, l.city as listing_city, l.state as listing_state, l.country as listing_country
@@ -8251,6 +7795,8 @@ export async function dispatchGoogleAdsCampaign(
 
 // Milestone 3: The Campaign State Machine (Idempotent Launcher)
 export async function executeCampaignStateMachine(campaignId: number, triggerEvent: string, req: any) {
+  return { processed: 0, status: 'RETIRED', code: 'HARVO_V2_REQUIRED' }; // Old workers cannot authorize funds or publish ads.
+
     try {
         console.log(`[STATE MACHINE] Campaign #${campaignId} | Event: ${triggerEvent}`);
 
@@ -9608,6 +9154,7 @@ async function runMetaPreflightEngine(campaignId: number, dbPool: any, options: 
 }
 
 export async function dispatchMetaCampaign(campaignId: number, req: any, overrideCorrelationId?: string) {
+  throw new Error('HARVO_V2_REQUIRED: Legacy paid dispatch is retired; use the revision-bound marketing workflow.');
   if (process.env.META_PUBLISHING_PAUSED === 'true') {
     console.error(`[EMERGENCY KILL SWITCH] Publishing aborted for campaign #${campaignId}: Meta publishing is paused.`);
     throw new Error('EMERGENCY KILL SWITCH ACTIVE: Meta publishing dispatches are currently paused by platform administration.');
@@ -10336,6 +9883,7 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
  * PHASE 2.7 — Activation Pipeline (Policy B: Safe creation as PAUSED, explicit activation)
  */
 export async function activateMetaCampaign(campaignId: number, req: any, overrideCorrelationId?: string) {
+  throw new Error('HARVO_V2_REQUIRED: Legacy paid dispatch is retired; use the revision-bound marketing workflow.');
   const correlationId = overrideCorrelationId || crypto.randomUUID();
   const client = await pool.connect();
   try {
@@ -11348,7 +10896,7 @@ export async function reconcileDCOExternalActionsWorker() {
     `);
 
     const baseUrl = process.env.META_BASE_URL || "https://graph.facebook.com/v20.0";
-    const accessToken = process.env.META_API_TOKEN || 'EAAkr7Y9S2qYBQfHTNZASIugAzOi8b2MZCBct4z4jZBHSmQ2KGlFduuDQQGEYC9NRDtZBUdhMPdeJ06OjYUiJYGfFkZCAxzyh4TdidN7ZA10K3XPOVEiQh01jo22xLsQjXrEtMHc5ZCHZBbRZAyA5d0pl26Jsg3IuNKY272QYmqEjHghf11OKJmbUZBfJLe5EvHzl48gAZDZD';
+    const accessToken = process.env.META_API_TOKEN || '';
 
     for (const action of pendingActions.rows) {
       if (!action.meta_ad_id) continue;
@@ -11401,6 +10949,8 @@ function hashCAPIParameter(val: string | null | undefined): string | null {
 
 // Direct Meta Conversions API (CAPI) & Google Ads Offline Conversion dispatch engine
 async function dispatchConversionsAPI(booking: any, listingId: number, eventName: 'Purchase' | 'Lead' | 'ViewContent') {
+  return; // HARVO: only the canonical consent-bound measurement outbox may upload booking conversions.
+
   try {
     // 1. Fetch active marketing campaign for this listing
     const campaignsRes = await pool.query(`
@@ -12758,128 +12308,8 @@ app.get('/api/admin/marketing/campaigns', authenticateToken, async (req: AuthReq
   }
 });
 
-app.post('/api/admin/marketing/campaigns/:id/approve', authenticateToken, async (req: AuthRequest, res) => {
-  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  const client = await pool.connect();
-  try {
-    if (req.user?.role !== 'admin') {
-      client.release();
-      return res.status(403).json({ error: 'Unauthorized' });
-    }
-    const { id } = req.params;
-    const idempotencyKey = req.body?.idempotency_key || req.headers['x-idempotency-key'] || ('approve_' + id + '_' + Date.now());
-    await client.query('BEGIN');
-
-    try {
-      await client.query(`
-        INSERT INTO operation_idempotency_keys (campaign_id, operation_type, idempotency_key)
-        VALUES ($1, $2, $3)
-      `, [id, 'APPROVE_CAMPAIGN', idempotencyKey]);
-    } catch (e: any) {
-      if (e.code === '23505') {
-        await client.query('ROLLBACK');
-        client.release();
-        return res.json({ success: true, message: 'Idempotent replay', idempotent: true });
-      }
-      throw e;
-    }
-
-    // Fetch complete campaign state with row lock FOR UPDATE
-    const prevCheck = await client.query('SELECT * FROM host_marketing_campaigns WHERE id = $1 FOR UPDATE', [id]);
-    if (prevCheck.rows.length === 0) {
-      await client.query('ROLLBACK');
-      client.release();
-      return res.status(404).json({ error: 'Campaign not found' });
-    }
-    const prevState = prevCheck.rows[0];
-
-    // Only short-circuit if ALREADY successfully published and active on live ad network
-    if (['CAMPAIGN_LIVE', 'active'].includes(prevState.status) && prevState.meta_campaign_id) {
-      await client.query('ROLLBACK');
-      client.release();
-      return res.json({ success: true, message: 'Campaign is already live on Meta Ad Network.', campaign: prevState, idempotent: true });
-    }
-
-    // Prepare approved state: admin approval automatically grants policy clearance and releases escrow
-    const campaignToSign = { ...prevState, admin_approved: true, policy_cleared: true, escrow_status: 'released' };
-    const { hash: approvalHash, snapshot: approvalSnapshot } = computeCampaignApprovalHash(campaignToSign);
-
-    // 1. Atomically mark non-status fields as approved by admin & record policy clearance, escrow release and hash
-    await client.query(`
-      UPDATE host_marketing_campaigns
-      SET admin_approved = true,
-          policy_cleared = true,
-          policy_cleared_at = CURRENT_TIMESTAMP,
-          approved_at = CURRENT_TIMESTAMP,
-          admin_feedback = NULL,
-          payment_status = 'paid',
-          escrow_status = 'released',
-          escrow_release_at = CURRENT_TIMESTAMP,
-          subscription_active = true,
-          approval_snapshot = $1,
-          approval_hash = $2
-      WHERE id = $3
-    `, [JSON.stringify(approvalSnapshot), approvalHash, id]);
-
-    // Authoritative FSM transition to approved
-    await transitionCampaignState({
-      campaignId: Number(id),
-      expectedCurrentState: prevState.status,
-      to: 'approved',
-      reason: 'Admin approval granted and live dispatch authorized',
-      actorType: 'admin',
-      actorId: req.user?.id,
-      client
-    });
-
-    // 2. Log Audit Trail within transaction
-    await client.query(`
-      INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-    `, [
-      req.user.id,
-      'marketing_campaign',
-      id,
-      'approve_campaign',
-      JSON.stringify(prevState),
-      JSON.stringify({ status: 'admin_approved', admin_approved: true, policy_cleared: true, payment_status: 'paid', escrow_status: 'released' }),
-      req.ip || req.socket.remoteAddress
-    ]);
-
-    await client.query('COMMIT');
-    client.release();
-
-    console.log(`[ADMIN APPROVAL] Admin approved Campaign #${id}. Auto-marked payment & escrow as cleared & dispatching to Meta state machine...`);
-
-    // 3. Trigger state transitions and Meta dispatch with ADMIN_APPROVE event
-    await executeCampaignStateMachine(Number(id), 'ADMIN_APPROVE', req);
-
-    // Fetch updated campaign row to return complete object including meta_campaign_id
-    const updatedCheck = await pool.query(`
-      SELECT c.*, l.title as listing_title, l.image_url as listing_image, u.name as host_name, u.email as host_email
-      FROM host_marketing_campaigns c
-      LEFT JOIN listings l ON c.listing_id = l.id
-      LEFT JOIN users u ON c.host_id = u.id
-      WHERE c.id = $1
-    `, [id]);
-
-    let finalCampaign = updatedCheck.rows[0];
-    if (finalCampaign) {
-      finalCampaign = await syncCampaignSpend(finalCampaign);
-    }
-
-    broadcastDbEvent(req, 'marketing');
-    return res.json({
-      success: true,
-      message: 'Campaign approved and automatically dispatched to live Meta feed.',
-      campaign: finalCampaign
-    });
-  } catch (error) {
-    await client.query('ROLLBACK').catch(() => {});
-    client.release();
-    console.error('Error approving campaign:', error);
-    return res.status(500).json({ error: 'Failed to approve campaign' });
-  }
+app.post('/api/admin/marketing/campaigns/:id/approve', authenticateToken, (_req, res) => {
+  res.status(410).json({ code: 'HARVO_V2_REQUIRED', error: 'Use the campaign review workspace. Content approval never marks a campaign paid or releases funds.' });
 });
 
 app.post('/api/admin/marketing/campaigns/:id/resync-meta', authenticateToken, async (req: AuthRequest, res) => {
@@ -15609,7 +15039,7 @@ app.get('/api/admin/metrics', authenticateToken, async (req: AuthRequest, res) =
 
 app.get('/api/admin/threads', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  if (req.user?.email !== 'ajithsabzz@gmail.com') return res.status(403).json({ error: 'Unauthorized' });
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
   try {
     const { type } = req.query;
 
@@ -15647,7 +15077,7 @@ app.get('/api/admin/threads', authenticateToken, async (req: AuthRequest, res) =
 
 app.delete('/api/admin/messages/:id', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  if (req.user?.email !== 'ajithsabzz@gmail.com') return res.status(403).json({ error: 'Unauthorized' });
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
   try {
     await pool.query('DELETE FROM messages WHERE id = $1', [req.params.id]);
     res.json({ success: true });
@@ -15658,7 +15088,7 @@ app.delete('/api/admin/messages/:id', authenticateToken, async (req: AuthRequest
 
 app.get('/api/admin/threads/:id/messages', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  if (req.user?.email !== 'ajithsabzz@gmail.com') return res.status(403).json({ error: 'Unauthorized' });
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
   try {
     const result = await pool.query(`
       SELECT m.*, u.name as sender_name
@@ -16996,7 +16426,7 @@ app.get('/api/seed-ajith', authenticateToken, async (req: AuthRequest, res) => {
   if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
   try {
     console.log("DB connection configured for seed-ajith");
-    const userRes = await pool.query("SELECT id FROM users WHERE email = 'ajithsabzz@gmail.com'");
+    const userRes = await pool.query("SELECT id FROM users WHERE id=$1 AND role='admin'", [req.user.id]);
     if (userRes.rows.length === 0) {
       return res.status(401).json({ error: 'User not found, token invalid' });
     }
@@ -17072,7 +16502,7 @@ app.get('/api/experiences', async (req, res) => {
 
     if (host_id) {
        const userRes = await pool.query('SELECT email, role FROM users WHERE id = $1', [host_id]);
-       const isAdmin = userRes.rows.length > 0 && (userRes.rows[0].email === 'ajithsabzz@gmail.com' || userRes.rows[0].role === 'admin');
+       const isAdmin = userRes.rows[0]?.role === 'admin';
 
        result = await pool.query(`
           SELECT e.*,
@@ -17854,7 +17284,7 @@ app.get('/api/marketing/ledger', authenticateToken, async (req: AuthRequest, res
 app.get('/api/marketing/admin/ledgers', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
-    if (req.user?.role !== 'admin' && req.user?.email !== 'admin@encho.app') {
+    if (req.user?.role !== 'admin') {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
@@ -19094,6 +18524,8 @@ app.post('/api/admin/payments/escrow/release', async (req: Request, res: Respons
 
 // 5. Automatic 24-Hour Fraud Escrow Auto-Release Worker (Safe Transactional Boundary + Advisory Lock)
 export const processEscrowAutoRelease = async (overridePool?: any) => {
+  return { processed: 0, status: 'RETIRED', code: 'HARVO_V2_REQUIRED' }; // Old workers cannot authorize funds or publish ads.
+
   const dbPool = overridePool || pool;
   if (!dbPool) return;
 
@@ -19239,6 +18671,7 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 
 async function startServer() {
   const httpServer = http.createServer(app);
+  managedHttpServer = httpServer;
 
   const io = new SocketIOServer(httpServer, {
     cors: {
@@ -19321,7 +18754,7 @@ async function startServer() {
   const hasBuiltAssets = fs.existsSync(path.join(distPath, 'index.html'));
 
   // Determine if we are running in dev mode
-  const isDev = __filename.endsWith('.ts');
+  const isDev = process.env.NODE_ENV !== 'production' && __filename.endsWith('.ts');
 
   // Vite middleware for development
   if (isDev && !process.env.VERCEL) {
@@ -19336,7 +18769,7 @@ async function startServer() {
     app.use(vite.middlewares);
   } else if (!process.env.VERCEL) {
     // In production (non-Vercel), serve from the output directory
-    app.use(express.static(distPath));
+    app.use(createPublicAssetsMiddleware(distPath));
     app.get('*all', async (req, res) => {
     const urlPath = req.path;
     let html = '';
@@ -19453,8 +18886,8 @@ async function startServer() {
     // Print comprehensive Integration Inspection & Monitoring startup audit
     printStartupIntegrationReport();
 
-    // Auto-init DB schema
-    if (isDbConfigured) {
+    // Development bootstrap only; production schema is installed by an audited migration process.
+    if (isDbConfigured && process.env.NODE_ENV !== 'production') {
       try {
         await ensureUsersTable();
         await ensureListingsTable();
@@ -19503,16 +18936,7 @@ async function startServer() {
           );
         `);
 
-        // Ensure initial admin
-        const adminExists = await pool.query("SELECT * FROM users WHERE role = 'admin' LIMIT 1");
-        if (adminExists.rows.length === 0) {
-          const hash = await bcrypt.hash('admin123', 10);
-          await pool.query(
-            "INSERT INTO users (email, password_hash, name, role) VALUES ($1, $2, $3, 'admin')",
-            ['admin@enchospace.com', hash, 'Super Admin']
-          );
-        }
-
+        // Administrator accounts are provisioned through an audited operator process.
         console.log('✅ Database schema verified/updated');
       } catch (error) {
         console.error('❌ Database init failed:', error instanceof Error ? (error as Error).message : String(error));
@@ -19540,8 +18964,8 @@ async function startServer() {
 }
 
 // Only start the server if not imported as a module (e.g. by Vercel)
-if ((process.env.NODE_ENV !== 'production' || !process.env.VERCEL) && process.env.NODE_ENV !== 'test') {
-  startServer();
+if (isProcessEntry(import.meta.url) && !process.env.VERCEL && process.env.NODE_ENV !== 'test') {
+  startServer().catch(() => { console.error('WEB_STARTUP_FAILED'); void shutdown(1); });
 }
 
 
@@ -19550,6 +18974,8 @@ if ((process.env.NODE_ENV !== 'production' || !process.env.VERCEL) && process.en
 
 // Gap 10: Automated A/B Testing (Dynamic Creative Optimization) Processor (Phase 2.9.5 Hardened + Advisory Lock)
 export const processDynamicCreativeOptimization = async (overridePool?: any) => {
+  return { processed: 0, status: 'RETIRED', code: 'HARVO_V2_REQUIRED' }; // Old workers cannot authorize funds or publish ads.
+
   const dbPool = overridePool || pool;
   if (!dbPool) return;
 
@@ -19748,6 +19174,7 @@ if (shouldRunBackgroundWorkers) {
 
 // Social Studio Auto-Publisher Worker (Phase 2.9.5 Hardened Bounded Processor)
 export const processScheduledSocialPosts = async (overridePool?: any) => {
+  if (!legacySocialPublishingEnabled()) return;
   const dbPool = overridePool || pool;
   if (!dbPool) return;
 
@@ -19759,9 +19186,10 @@ export const processScheduledSocialPosts = async (overridePool?: any) => {
       await client.query('BEGIN');
 
       const res = await client.query(`
-        SELECT *
-        FROM host_social_posts
-        WHERE (status = 'approved' OR (status = 'publishing' AND lease_expires_at <= CURRENT_TIMESTAMP))
+        SELECT p.*
+        FROM host_social_posts p
+        WHERE status = 'approved' AND COALESCE(publish_attempt_count,0)=0
+        AND ${socialApprovalPredicate}
         AND (scheduled_at <= CURRENT_TIMESTAMP OR scheduled_at IS NULL)
         AND published_at IS NULL
         ORDER BY scheduled_at ASC NULLS FIRST, id ASC
@@ -19803,7 +19231,8 @@ export const processScheduledSocialPosts = async (overridePool?: any) => {
         const publishResult = await publishToInstagram({ ...row, idempotency_key: idempotencyKey });
 
         if (publishResult && publishResult.success) {
-          const igMediaId = publishResult.ig_media_id || `ig_post_${row.id}`;
+          const igMediaId = publishResult.ig_media_id;
+          if (typeof igMediaId !== 'string' || !/^[0-9]+$/.test(igMediaId)) throw new Error('Provider publication returned no verified media identity; reconciliation required.');
           const providerCreationId = publishResult.provider_creation_id || row.provider_creation_id;
 
           await dbPool.query(
@@ -19825,24 +19254,18 @@ export const processScheduledSocialPosts = async (overridePool?: any) => {
         }
       } catch (publishErr: any) {
         console.error(`[SOCIAL STUDIO PUBLISHER ERROR] Failed to publish post ${row.id}:`, publishErr.message);
-        if (currentAttempts >= 3) {
-          await dbPool.query(
-            "UPDATE host_social_posts SET status = 'failed_publish', admin_feedback = $1, lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
-            [publishErr.message || 'Publish failed after max retries', row.id]
-          );
-        } else {
-          await dbPool.query(
-            "UPDATE host_social_posts SET status = 'approved', lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
-            [row.id]
-          );
-        }
+        // A failed write or expired lease may already exist remotely. Never replay it automatically.
+        await dbPool.query(
+          "UPDATE host_social_posts SET status='failed_publish',admin_feedback=$1,lease_expires_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=$2",
+          ['Publication outcome needs operator reconciliation before any retry.', row.id]
+        );
       }
     }
   } catch (err) {
     console.error('[SOCIAL STUDIO PUBLISHER ERROR]', err);
   }
 };
-if (shouldRunBackgroundWorkers) {
+if (shouldRunBackgroundWorkers && legacySocialPublishingEnabled()) {
   setInterval(processScheduledSocialPosts, 60 * 1000);
 }
 
@@ -20336,6 +19759,8 @@ const RECOVERY_MAX_ATTEMPTS = 10;                   // Max recovery attempts bef
 const RECOVERY_POLL_INTERVAL_MS = 2 * 60 * 1000;   // 2 minutes — polling interval
 
 export const recoverOrphanedMetaTransactions = async (overridePool?: any) => {
+  return { processed: 0, status: 'RETIRED', code: 'HARVO_V2_REQUIRED' }; // Old workers cannot authorize funds or publish ads.
+
   const dbPool = overridePool || pool;
   if (!dbPool) return;
 
@@ -20544,12 +19969,7 @@ if (shouldRunBackgroundWorkers) {
   setInterval(recoverOrphanedMetaTransactions, RECOVERY_POLL_INTERVAL_MS);
   setInterval(processGoogleOfflineConversions, 15 * 60 * 1000); // 15 mins
   setInterval(() => TokenHealthMonitor.checkTokenHealth(pool), 12 * 60 * 60 * 1000); // 12 hours
-  // Milestone 4: Hold reconciliation sweeper expiring stale checkout holds
-  setInterval(async () => {
-    try {
-      await sweepExpiredHolds(pool);
-    } catch (_sweeperErr) { /* non-blocking */ }
-  }, 60 * 1000); // 1 minute
+  // Canonical expired-hold cleanup is supervised by the HARVO worker, never this web loop.
 }
 
 app.post('/api/marketing/track/view', async (req, res) => {
@@ -20650,29 +20070,17 @@ app.use((err: any, req: any, res: any, next: any) => {
 });
 
 export default app;
-// Graceful Shutdown Handlers
-const shutdown = async (signal: string) => {
-  console.log(`${signal} received. Shutting down gracefully...`);
-  if (pool) {
-    try {
-      await pool.end();
-      console.log('Database pool closed.');
-    } catch (err) {
-      console.error('Error closing DB pool', err);
-    }
-  }
-  process.exit(0);
-};
-
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
-
-process.on('uncaughtException', (err) => {
-  console.error('[UNCAUGHT EXCEPTION PREVENTED]', err);
+// Only the owned long-running web process installs lifecycle handlers. Imported functions do not.
+const shutdown = createShutdown({
+  markDraining: () => { serverDraining = true; },
+  drain: async () => { globalIoInstance?.disconnectSockets(true); await drainHttpServer(managedHttpServer); globalIoInstance?.close(); },
+  closeResources: async () => { await Promise.all([pool.end(), ...(readPool !== pool ? [readPool.end()] : [])]); },
+  exit: code => process.exit(code),
+  log: event => console.log(JSON.stringify({event})),
 });
-
-process.on('unhandledRejection', (reason) => {
-  console.error('[UNHANDLED REJECTION PREVENTED]', reason);
-});
-
-
+if (isProcessEntry(import.meta.url) && !process.env.VERCEL && process.env.NODE_ENV !== 'test') {
+  process.on('SIGTERM', () => { void shutdown(); });
+  process.on('SIGINT', () => { void shutdown(); });
+  process.on('uncaughtException', () => { console.error('WEB_UNCAUGHT_EXCEPTION'); void shutdown(1); });
+  process.on('unhandledRejection', () => { console.error('WEB_UNHANDLED_REJECTION'); void shutdown(1); });
+}

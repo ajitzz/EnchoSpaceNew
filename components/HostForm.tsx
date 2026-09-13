@@ -10,6 +10,7 @@ import { useToast } from './ToastContext';
 import { useCurrency } from './CurrencyContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { queueCustomMutation } from '../lib/syncService';
+import { mediaUploadHeaders } from '../lib/mediaUploadHeaders';
 import { 
   Building2, Home, Trees, Tractor, Coffee, Ship, Tent, Caravan, Castle, Mountain, Box, Circle, Leaf,
   X, Sparkles, Check, Bed, Users, Trash2, Crown, Star, DoorOpen, Bath, 
@@ -527,7 +528,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         if (uploadUrl && publicUrl) {
           const uploadRes = await fetch(uploadUrl, {
             method: 'PUT',
-            headers: { 'Content-Type': file.type },
+            headers: mediaUploadHeaders(file.type, data.uploadHeaders),
             body: file
           });
           if (uploadRes.ok) return publicUrl;

@@ -3,6 +3,7 @@ import { Compass, Image as ImageIcon, Settings2, Plus, Trash2, Calendar, MapPin,
 import { useToast } from './ToastContext';
 import { useCurrency } from './CurrencyContext';
 import { PhotoUpload } from './PhotoUpload';
+import { mediaUploadHeaders } from '../lib/mediaUploadHeaders';
 
 interface AdminExperiencesProps {
   token: string;
@@ -364,10 +365,10 @@ const ExperienceEditor: React.FC<ExperienceEditorProps> = ({ experience, onClose
             body: JSON.stringify({ filename: file.name, contentType: file.type }),
         });
         if (!presignRes.ok) throw new Error('Failed to create upload URL');
-        const { uploadUrl, fileUrl } = presignRes.headers.get('content-type')?.includes('json') ? await presignRes.json() : { error: 'Server returned non-JSON response: ' + (await presignRes.text()).slice(0, 150) } as any;
+        const { uploadUrl, fileUrl, uploadHeaders } = presignRes.headers.get('content-type')?.includes('json') ? await presignRes.json() : { error: 'Server returned non-JSON response: ' + (await presignRes.text()).slice(0, 150) } as any;
         const uploadRes = await fetch(uploadUrl, {
             method: 'PUT',
-            headers: { 'Content-Type': file.type },
+            headers: mediaUploadHeaders(file.type, uploadHeaders),
             body: file,
         });
         if (!uploadRes.ok) throw new Error('Failed to upload file');

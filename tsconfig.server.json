@@ -3,7 +3,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "outDir": "./dist",
+    "outDir": "./build/server",
     "rootDir": ".",
     "strict": true,
     "esModuleInterop": true,
@@ -11,5 +11,9 @@
     "jsx": "react-jsx",
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["server.ts", "src/server/**/*.ts", "components/**/*.tsx", "api/**/*.ts"]
+  "include": [
+    "server.ts",
+    "src/server/**/*.ts",
+    "api/**/*.ts"
+  ]
 }

@@ -1,0 +1,12 @@
+{
+  "date": "2026-09-13",
+  "scope": "ISOLATED_LOCAL_NOT_LIVE_ACCEPTANCE",
+  "command": "env -i PATH=\"$PATH\" npm run test:marketing",
+  "testFiles": 24,
+  "tests": 591,
+  "failed": 0,
+  "durationSeconds": 189.65,
+  "externalProviderCalls": 0,
+  "productionDatabaseChanges": 0,
+  "liveAdSpend": 0
+}

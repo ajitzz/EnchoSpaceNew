@@ -1,5 +1,5 @@
 # ENCHO ENGINEERING CONSTITUTION
-**Status:** Active | **Last Updated:** 2026-08-07
+**Status:** Active | **Last Updated:** 2026-09-13
 
 ## 1. Executive Summary
 
@@ -23,7 +23,7 @@ To provide an ecosystem where high-quality property listings are matched with hi
 - **Host Booking Commission:**
   - **Flex Plan:** Default 15% booking commission (admin-configurable, snapshotted at booking confirmation) deducted from host payouts.
   - **Growth Plan:** ₹4,999 + GST per property per rolling 30-day period. Bookings confirmed during active Growth retain 0% booking commission.
-- **Advertising Engine:** Optional marketing campaigns are billed separately as actual media spend plus a 15% AI optimization/management fee plus applicable statutory taxes.
+- **Advertising Engine — founder direction updated 2026-09-13:** Optional campaigns recover defined campaign costs C plus an admin-selected profit markup p on those costs: profit = C × p; charge for that cost base = C × (1 + p). Intended introductory markup: 3–5%. At 5% on ₹10,000 costs, profit is ₹500 and charge is ₹10,500. This supersedes the earlier fixed 15% advertising-fee direction for future design. Cost/tax scope, charge-dependent fees, rounding, recognition/refund and variance rules remain to be specified; see HARVO section 23 and decisions HARVO-008/009. Existing accepted contracts and live rates are unchanged, and no implementation or legal gate is cleared by this decision.
 - **Walled Garden CRM:** Leads and inquiries remain on-platform to convert directly into verified reservations.
 
 ---
@@ -197,6 +197,8 @@ To proactively prevent Meta rejections, the AI Campaign Copilot evaluates host c
 
 ## 13. Incident History
 
+13 September 2026 M1 note: the Google synthetic-success defects are source/test findings, not a demonstrated production incident. Their remediation and remaining acceptance scope are recorded in `docs/harvo/M1_VERIFICATION.md` and findings H-048–H-052/H-054. INC-001 is not closed by this work; no live Meta incident root cause is asserted.
+
 | Incident ID | Date | Symptoms | Root Cause | Files Changed | Permanent Fix | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | INC-001 | 2026-08-07 | Campaign created, but Ad Set, Creative, Ad missing. Meta API Rejection. | TBD (Under Forensic Investigation) | `server.ts` | TBD | Investigating |
@@ -231,6 +233,8 @@ The Meta Publishing Engine is NOT complete until:
 ---
 
 ## 16. Development Phases
+
+**Current authorized marketing execution, 13 September 2026:** Founder instruction HARVO-012 advances the paid-marketing track to Phase 3. Follow `docs/implementation/HARVO_MARKETING_EXECUTION_PLAN.md`, continuously through the remaining milestones under founder instruction HARVO-013, which supersedes the earlier one-milestone-per-response restriction. The versioned HARVO workflow, cost-plus finance, real provider adapters, AI/human review, host/admin studios and operational hardening are implemented to the extent recorded in the continuous verification report. Milestone acceptance remains evidence-based; see the plan and current verification, not the historical M1-only progress statement. The legacy phase labels/certifications below are historical and must be read with the current HARVO audit; they do not override current findings or accept the guest track.
 
 **Phase 1: Architecture & Tracing (Current)**
 - Objectives: Establish visibility into the Meta API pipeline. Stop blind failures.
@@ -281,6 +285,16 @@ The Meta Publishing Engine is NOT complete until:
 3. Log all production incidents.
 4. This document is the absolute source of truth. Do not rely on AI conversation memory.
 
+## 19. Current Google paused publishing boundary — HARVO M1
+
+The Google adapter now issues v25 REST operations for an explicitly configured Search campaign, ad group, responsive-search ad, keywords and geo/language criteria. All spend-bearing objects start PAUSED. `success` means paused creation was read back and durably recorded, not advertising is live. Requests require the server-configured serving customer and landing origin, exact published-listing ownership/destination, and explicit Search inputs. INR/USD are the supported M1 currencies; daily budget is distinct from total authorization. Existing financial contracts provide a ceiling only, never evidence of captured funding.
+
+Short PostgreSQL transactions claim campaign-bound requests before network operations. Matching committed requests may replay; conflicting keys/payloads, abandoned requests, legacy entities without evidence and ambiguous external outcomes require reconciliation. No automatic claim takeover or re-creation. Provider identities must come from validated remote responses. Readback/persistence failures preserve uncertainty. Paused configuration, policy status and observed delivery remain distinct.
+
+Live dispatch in server.ts remains unconditionally contained. Adapter control and DCO methods cannot claim successful changes; implementation awaits the later authorization/optimization milestones. Legacy conversion uploads are unavailable by default. Google read methods return provider-sourced results or explicit unknown/unavailable states. Structural reconciliation does not certify creative/targeting, account eligibility or live delivery.
+
+M1 definition of done (local scope): explicit configuration and negative-path tests; actual transport/payload execution against isolated provider fixtures; real isolated PostgreSQL concurrency, replay and persistence tests; independent code review; full typecheck and build; synchronized evidence. These checks passed. Live provider acceptance, production RLS/load/restore validation, end-to-end financial/booking operation and UI acceptance remain later milestones. Existing guest legal gates remain intact.
+
 
 
 ## 4.6 Meta Campaign Engineering Brain
@@ -301,3 +315,38 @@ Capabilities include:
 | ADR-004 | 2026-08-11 | High-frequency analytics DB degradation | Raw Event Logging + Daily Upsert Rollup | Isolates write deltas into `campaign_raw_event_logs` and aggregates into `campaign_daily_rollups` to protect query performance. | Active |
 | ADR-005 | 2026-08-14 | Split UI Divergence & State Drift | Dual-Projection Canonical Truth Engine | Serves single source of truth to both Host Transparency View and Admin Ops Command Center with role-scoped projections. | Active |
 | ADR-006 | 2026-08-15 | Financial Risk & External Budget Over-spend | `campaign_financial_contracts` with DB Invariant Constraints | Enforces hard DB and runtime boundary: `gross_host_charge = encho_fee + meta_authorized_spend` & `configured_max <= authorized_spend`. Blocks external Meta over-spend. | Active |
+| ADR-HARVO-MKT-001 | 2026-09-13 | Google synthetic creation/control/reporting and ambiguous-write replay | Authenticated v25 paused Search foundation with durable claims, exact destination binding and verified provider evidence; live dispatch stays contained | Prevent fabricated success and duplicate creation while subsequent funding/control milestones are implemented | Implemented and locally verified; live acceptance pending |
+
+## 20. Current HARVO v2 authority — continuous execution, 13 September 2026
+
+This section supersedes conflicting historical marketing capabilities and certification language above. The current implementation and limitations are recorded in `docs/harvo/CONTINUOUS_EXECUTION_VERIFICATION.md`, `docs/harvo/OPERATIONS_RUNBOOK.md` and the milestone plan. Historical AI predictions, synthetic metrics or a successful local test are not production authority.
+
+The additive workflow is DRAFT → EVALUATING → AI_REJECTED or PENDING_ADMIN → APPROVED/ADMIN_REJECTED. Exact content revision, immutable quote, captured funds, risk hold and reserved budget remain independent. Publication uses PUBLISH_QUEUED → verified PROVIDER_PAUSED; activation uses ACTIVATION_QUEUED → observed PROVIDER_REVIEW. PAUSE_QUEUED/PAUSED and RECONCILIATION_REQUIRED retain actual operation identity and evidence. Configured ACTIVE does not establish current serving or fulfilled bookings. AI evaluation IDs/leases prevent expired or late reviews from changing later authority.
+
+Money uses new integer-minor-unit finance tables, immutable policy/quote/capture/journal evidence, balanced entries and transactionally guarded available/reserved/refund-payable balances. Admin markup is prospective 3–5% of defined costs. Booking commission and legacy balances are separate. Refund requests and jobs commit together; only a matching original-provider final refund changes refund payable. Final ad-cost settlement requires trusted billing-close evidence. The documentary dual-control workflow described below is implemented; automated provider import and post-close correction handling remain unconnected.
+
+Workers run in a separate explicit process with PostgreSQL claims, leases/fences and pending-job/revision checks. Unknown remote mutation is quarantined: a fence does not undo an HTTP request already sent. Signed webhook ingress persists minimal identifiers before acknowledgement; no provider/network query precedes durable receipt. Reporting retains unknown metrics and source freshness. Canonical booking events/corrections/outbox and actual conversion delivery transports exist. Trusted guest-checkout/capture and current-consent attribution authority remain unconnected; delivery stays blocked without those code-level verifier ports.
+
+Authentication resolves persisted roles, verifies Google identity server-side and contains historical email/OTP/password shortcuts. Uploads require current user authority and immutable object keys; conditional S3 write/client/CORS support is part of the scoped hardening. Application DB roles must not be superusers or BYPASSRLS. No migration or live spending was performed by the local verification run.
+
+Incident/findings record HARVO-CONT-001: independent local audit reproduced stale reservation/retry/read-state, payment-number/identity, webhook PII, interrupted-AI, legacy authorization and media-overwrite defects. These were corrected with bounded regression tests. No production compromise or financial loss was observed or asserted. Remaining configuration, settlement, checkout, storage deployment, model-quality and live-pilot evidence stay open.
+
+ADR-HARVO-MKT-002: adopt additive revision-bound workflow and cost-plus ledger without importing synthetic legacy balances. ADR-HARVO-MKT-003: separate local fences from irreversible remote outcome; require verified identities/readback and quarantine. ADR-HARVO-MKT-004: replace impression-led success claims with explicit provider observations and canonical booking evidence; keep advanced optimization gated. ADR-HARVO-MKT-005: authenticated immutable media and minimized signed-event envelopes protect reviewed assets and sensitive information.
+
+Definition of done: source and schema are synchronized; scoped adversarial contracts, real local PG/RLS/concurrency/restore tests, strict new-module checks and application build pass; host/admin browser acceptance is recorded; all external limitations are explicit. Production acceptance additionally requires real configured accounts, approved cost policy, canonical checkout/legal acceptance, actual bounded delivery/capture/refund/settlement and representative operating evidence. No completion percentage substitutes for those facts.
+
+### HARVO-017 implementation refinement — 13 September 2026
+
+The current marketing contract includes provider-origin Google targeting lookup, exact resource/label validation, immutable create-intent replay before read-only network verification, literal tenant-scoped history search and bounded keyset pagination. Marketing lookup and drafting budgets are atomically consumed in PostgreSQL (`014`), not independently reset per web instance. Grounded AI drafting cites existing listing phrases and requires explicit host application; it cannot change financial or publication authority.
+
+Documentary accounting close (`012`) stores original immutable document bytes/hashes and source provenance, exact provider-account/campaign/revision and invoice allocations, and an independent named currently persisted finance administrator's review. Commit rechecks authenticated provider stop, immutable evidence, reservation, pending/unknown operations and the independent authority inside a single ledger transaction. Configured stop is not billing finality. Provider overrun and released funds follow the accepted quote/cost policy. A host sees only owned summary amounts. Invoice imports, accounting sign-off and later billing-correction treatment are not inferred from document upload.
+
+Conversion delivery (`013`) uses pre-HTTP immutable destination/payload claims, Google Data Manager v1 purchases with destination diagnostics, Google Ads v25 order adjustments and Meta v26 Purchase CAPI. Unknown writes are never automatically resubmitted. Raw click identifiers exist only in accepted resolver memory and the outbound body; durable delivery records retain hashes, bounded receipts and account/action bindings. Canonical booking/capture and consent/attribution ports require accepted code integration; configuration strings cannot provide those ports. Meta correction/deletion limits remain explicit.
+
+Live activation requires those source ports and the selected channel's destination. A persisted queued activation repeats the guard before provider dispatch. Meta's configured canonical Purchase pixel must match both the publisher identity and the observed ad-set promoted object before a spending operation; a changed destination preserves the separate safety-pause path. This does not establish Google account-goal linkage or provider conversion acceptance without the corresponding remote evidence.
+
+Production builds place public Vite assets in `dist` and private compiled modules/migrations in `build/server`. Node24 is the defined image/runtime line. Web requests do not own legacy paid loops; the dedicated HARVO worker owns durable marketing work, canonical expired-hold cleanup, observations and the blocked-or-enabled canonical consumer. Worker progress/stall supervision and a bounded shutdown drain preserve unresolved remote outcomes. Health distinguishes process liveness from actual database/schema/RLS readiness; no production startup DDL is accepted as readiness. The deployment runbook and isolated compiled-process tests describe the current boundary.
+
+ADR-HARVO-MKT-006: separate public/private artifacts and explicit worker ownership; reject unsafe role/schema readiness rather than concealing missing migrations. ADR-HARVO-MKT-007: documentary dual-control financial closure, with authenticated containment evidence distinct from final billing. ADR-HARVO-MKT-008: canonical conversion delivery claims/receipts and explicit absent checkout/consent authority. ADR-HARVO-MKT-009: provider-resolved targeting and grounded human-applied drafting, with shared quotas and tenant-scoped historical navigation.
+
+Local finding record HARVO-GAP-001: deployment review reproduced wrong worker/public-artifact boundaries; compiled smoke reproduced symlinked entrypoint skipping startup. Integration review reproduced stale finance review UI and a search-debounce timer resetting initial pagination. These were corrected and scoped regression evidence is retained. This is a local engineering finding record, not a claim of an observed production incident. Existing guest phase/legal status remains unchanged. The Definition of Done in section20 still requires external operating and provider/financial/booking acceptance before a public launch claim.

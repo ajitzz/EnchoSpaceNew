@@ -1,0 +1,50 @@
+import {describe,it,expect,vi,beforeEach} from 'vitest';
+import {generateKeyPairSync} from 'node:crypto';
+import jwt from 'jsonwebtoken';
+import {readFileSync} from 'node:fs';
+import {verifyGoogleIdentity} from '../../lib/marketing/authentication.js';
+import {draftSchema,fingerprint,publicOrigin} from '../../lib/marketing/domain.js';
+import {CampaignAiReviewer,normalizeAiEvaluation} from '../../lib/marketing/ai.js';
+import {isPublicIp,generateAdCrops} from '../../lib/marketing/assets.js';
+import {assessBudgetProtection,optimizationAdvice} from '../../lib/marketing/protection.js';
+import {calculateCampaignCosts,readMarketingConfig} from '../../lib/marketing/config.js';
+import sharp from 'sharp';
+const {privateKey,publicKey}=generateKeyPairSync('rsa',{modulusLength:2048});
+const pem=publicKey.export({type:'spki',format:'pem'}).toString();
+const keys=async()=>({verified:pem});
+const claims={sub:'actual-provider-subject',email:'host@gmail.com',email_verified:true,name:'Host'};
+const token=(extra={},options={})=>jwt.sign({...claims,...extra},privateKey,{algorithm:'RS256',keyid:'verified',audience:'encho-client',issuer:'https://accounts.google.com',expiresIn:300,...options});
+const draft={listingId:1,title:'Mountain stay',provider:'META' as const,startDate:'2027-01-01',endDate:'2027-01-08',mediaBudgetMinor:'100000',dailyBudgetMinor:'10000',headline:'A quiet mountain stay',description:'Explore the rooms and choose your stay dates.',mediaIds:['10'],locations:['IN'],rightsConfirmed:true};
+const listing={id:1,hostId:2,title:'Mountain house',description:'Two rooms in the mountains.',slug:'mountain-house-1',city:'Munnar',publicationStatus:'published',currency:'INR',price:'4000',media:[{id:'10',url:'https://images.example.org/property.jpg',type:'IMAGE' as const,approved:true}]};
+describe('identity authority',()=>{
+ it('verifies the signed subject, audience, issuer and verified email',async()=>{expect(await verifyGoogleIdentity(token(),'encho-client',keys)).toMatchObject({googleId:claims.sub,email:claims.email,authoritativeEmail:true});});
+ it.each([['audience',{}, {audience:'different-client'}],['issuer',{}, {issuer:'https://attacker.example'}],['expiration',{}, {expiresIn:-10}],['email verification',{email_verified:false},{}]])('rejects invalid %s',async(_label,extra,options)=>{await expect(verifyGoogleIdentity(token(extra,options),'encho-client',keys)).rejects.toMatchObject({code:'IDENTITY_INVALID'});});
+ it('rejects client-decoded profile as credential',async()=>{await expect(verifyGoogleIdentity(claims,'encho-client',keys)).rejects.toMatchObject({code:'IDENTITY_INVALID'});});
+ it('rejects HS256 substitution',async()=>{const t=jwt.sign(claims,'an-untrusted-secret',{algorithm:'HS256',keyid:'verified'});await expect(verifyGoogleIdentity(t,'encho-client',keys)).rejects.toMatchObject({code:'IDENTITY_INVALID'});});
+ it('does not claim authoritative control over an arbitrary third-party email',async()=>{expect((await verifyGoogleIdentity(token({email:'host@external.example'}),'encho-client',keys)).authoritativeEmail).toBe(false);});
+ it('requires configuration',async()=>{await expect(verifyGoogleIdentity(token(),undefined,keys)).rejects.toMatchObject({code:'IDENTITY_NOT_CONFIGURED'});});
+ it('legacy source no longer issues passwords/roles without authority',()=>{const source=readFileSync(new URL('../../../server.ts',import.meta.url),'utf8');expect(source).not.toContain("otp !== '123456'");expect(source).not.toContain("bcrypt.hash('admin123'");expect(source).not.toContain('const isAdminAccount');expect(source).not.toContain('encho_default_secure_jwt_secret');expect(source).toContain('verifyGoogleIdentity(req.body.credential');});
+});
+describe('campaign input boundaries',()=>{
+ it('calculates an optional daily planning average without raising total authorization',()=>{const {dailyBudgetMinor,...input}=draft;const parsed=draftSchema.parse(input);expect(parsed.mediaBudgetMinor).toBe('100000');expect(parsed.dailyBudgetMinor).toBe('12500');});
+ it.each([{status:'LIVE'},{hostId:77},{adminApproved:true},{payment_status:'paid'},{externalCampaignId:'1234'},{mediaUrls:['https://attacker.example']}])('rejects client authority %j',extra=>expect(()=>draftSchema.parse({...draft,...extra})).toThrow());
+ it.each(['2027-02-30','not-a-date','2027-13-01'])('rejects invalid calendar %s without arithmetic crash',date=>expect(()=>draftSchema.parse({...draft,startDate:date})).toThrow());
+ it('fingerprints semantic object order consistently',()=>expect(fingerprint({b:2,a:{d:1,c:2}})).toBe(fingerprint({a:{c:2,d:1},b:2})));
+ it.each(['http://encho.space','https://127.0.0.1','https://localhost','https://secret:password@encho.space','https://encho.space/other'])('rejects noncanonical origin %s',value=>expect(()=>publicOrigin(value)).toThrow());
+});
+describe('media and AI evidence',()=>{
+ it.each(['127.0.0.1','10.1.2.3','169.254.169.254','172.16.5.5','192.168.1.1','100.64.1.2','198.18.0.1','::1','::ffff:127.0.0.1','fc00::1','2002:1234::1'])('blocks non-public destination %s',ip=>expect(isPublicIp(ip)).toBe(false));
+ it('permits routed public addresses only',()=>{expect(isPublicIp('8.8.8.8')).toBe(true);expect(isPublicIp('2606:4700:4700::1111')).toBe(true);});
+ it('creates actual correctly dimensioned crops from source pixels',async()=>{const original=await sharp({create:{width:1600,height:1600,channels:3,background:{r:28,g:76,b:51}}}).png().toBuffer();const crops=await generateAdCrops(original);for(const crop of crops){const m=await sharp(crop.data).metadata();expect(m.width).toBe(crop.width);expect(m.height).toBe(crop.height);expect(m.format).toBe('jpeg');}});
+ it('missing AI configuration produces explicit human review with null score',async()=>{const ai=new CampaignAiReviewer({mediaOrigins:new Set()});expect(await ai.evaluate(draftSchema.parse(draft),listing,2)).toMatchObject({status:'REQUIRES_REVIEW',score:null,revision:2,mediaReviewed:[]});});
+ it('an outage never becomes a pass',async()=>{const ai=new CampaignAiReviewer({apiKey:'local-fixture',model:'fixture',mediaOrigins:new Set(),loadImage:vi.fn().mockRejectedValue(new Error('network')),generate:vi.fn()});expect((await ai.evaluate(draftSchema.parse(draft),listing,1)).status).toBe('REQUIRES_REVIEW');});
+ it('sends real loaded pixels and persists evaluated asset identity',async()=>{const generate=vi.fn(async(parts:any[])=>{expect(parts[1].inlineData.data).toBe(Buffer.from('fixture-image-pixels').toString('base64'));return JSON.stringify({score:8.7,verdict:'PASS',notes:['Property facts and selected photo match the offer.'],suggestions:[]});});const ai=new CampaignAiReviewer({model:'fixture',mediaOrigins:new Set(),generate,loadImage:vi.fn().mockResolvedValue({data:Buffer.from('fixture-image-pixels'),mimeType:'image/jpeg',width:1200,height:1200})});expect(await ai.evaluate(draftSchema.parse(draft),listing,3)).toMatchObject({status:'PASSED',score:8.7,mediaReviewed:['10'],revision:3});});
+ it('does not certify unseen video',async()=>{const ai=new CampaignAiReviewer({model:'fixture',mediaOrigins:new Set(),generate:vi.fn()});expect((await ai.evaluate(draftSchema.parse(draft),{...listing,media:[{...listing.media[0],type:'VIDEO'}]},1)).status).toBe('REQUIRES_REVIEW');});
+ it('score below eight cannot pass and malformed score cannot parse',()=>{const context={revision:1,evidenceHash:'h',mediaReviewed:[],model:'fixture',evaluatedAt:new Date().toISOString()};expect(normalizeAiEvaluation({score:7.9,verdict:'PASS',notes:['Improve offer clarity.'],suggestions:[]},context).status).toBe('REJECTED');expect(()=>normalizeAiEvaluation({score:80,verdict:'PASS',notes:['Good'],suggestions:[]},context)).toThrow();});
+});
+describe('bounded optimization and configuration',()=>{
+ it('missing runtime policy grants no funding or live permission',()=>{const c=readMarketingConfig('');expect(c.fundingEnabled).toBe(false);expect(c.activationEnabled).toBe(false);expect(c.financialPolicy).toBe(null);});
+ it('unavailable or stale spend requests a protective pause',()=>{expect(assessBudgetProtection({provider:'META',authorizedMinor:'100000',spentMinor:null,dailyBudgetMinor:'10000',observedAt:null}).pause).toBe(true);expect(assessBudgetProtection({provider:'GOOGLE',authorizedMinor:'100000',spentMinor:'1000',dailyBudgetMinor:'10000',observedAt:'2020-01-01T00:00:00Z'}).pause).toBe(true);});
+ it('never recommends automatic spend increases from clicks alone',()=>{const result=optimizationAdvice({impressions:10000,clicks:400,capturedBookings:null,spendMinor:'100000',fulfilledContributionMinor:null});expect(result.automation).toBe('PAUSE_ONLY');expect(result.guaranteedBookingLift).toBe(false);expect(result.recommendations.join(' ')).toContain('verified captured-booking');});
+ it('grosses up explicit charge-dependent costs to an exact rounded fixed point',()=>{const config=readMarketingConfig('');config.financialPolicy={id:'test',version:1,currency:'INR',costCodes:[{code:'MEDIA_META',kind:'MEDIA',provider:'META'},{code:'GATEWAY',kind:'SERVICE'}],accountingApprovalReference:'test accounting evidence',taxApprovalReference:'test tax evidence',costScopeReference:'test cost scope',rounding:'HALF_UP',varianceHandling:'PLATFORM_ABSORBS_OVERRUN',markupMinBps:300,markupMaxBps:500};config.costRules=[{code:'GATEWAY',label:'Payment processing',base:'CHARGE',fixedMinor:'0',rateBps:200}];const result=calculateCampaignCosts(config,'META','100000',500);const c=result.costs.reduce((a,x)=>a+BigInt(x.amountMinor),0n),p=(c*500n+5000n)/10000n;expect(BigInt(result.costs[1].amountMinor)).toBe(((c+p)*200n+5000n)/10000n);});
+});

@@ -1,0 +1,44 @@
+# Local blueprint only: no provider, financial or legal acceptance is implied.
+services:
+  - type: web
+    name: encho-web
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: 1c-2g
+    numInstances: 1
+    autoDeployTrigger: off
+    # Start with process liveness; switch to /api/health/ready after staging migrations/RLS pass.
+    healthCheckPath: /api/health/live
+    maxShutdownDelaySeconds: 90
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DISABLE_BACKGROUND_WORKERS
+        value: "true"
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: HARVO_MARKETING_CONFIG
+        sync: false
+  - type: worker
+    name: encho-harvo-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile.worker
+    plan: 1c-2g
+    numInstances: 1
+    autoDeployTrigger: off
+    maxShutdownDelaySeconds: 90
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DISABLE_BACKGROUND_WORKERS
+        value: "true"
+      - key: HARVO_HOLD_SWEEPER_ENABLED
+        value: "true"
+      - key: DATABASE_URL
+        sync: false
+      - key: HARVO_MARKETING_CONFIG
+        sync: false

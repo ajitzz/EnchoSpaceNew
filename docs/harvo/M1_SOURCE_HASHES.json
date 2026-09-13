@@ -1,0 +1,64 @@
+{
+  "scope": "HARVO M1 implementation and test source; not deployed-version evidence",
+  "date": "2026-09-13",
+  "existing_application_migration_changes": [
+    "src/lib/providers/google/GoogleAdsClient.ts",
+    "src/lib/providers/google/GoogleAdsProvider.ts",
+    "src/lib/providers/google/googleDcoStrategy.ts",
+    "src/lib/providers/google/googleErrors.ts"
+  ],
+  "files": [
+    {
+      "path": "src/lib/providers/google/GoogleAdsClient.ts",
+      "sha256": "c90a843549c2122006b32c13592d75b14965694918b811831a8df9af06d7edd5"
+    },
+    {
+      "path": "src/lib/providers/google/GoogleAdsProvider.ts",
+      "sha256": "e92d138b2decce8fd85c8ead0a49910e11fe02a1c503079bb13fa750272dd6ee"
+    },
+    {
+      "path": "src/lib/providers/google/GooglePublishingStore.ts",
+      "sha256": "dd84685e4c7a8a46460d7f60c9172c97de48229c080fd564dc9cbdc9b267cb53"
+    },
+    {
+      "path": "src/lib/providers/google/GoogleSearchPlan.ts",
+      "sha256": "ebc1d088f63caf6406b7f094394cc867231f965d173cb632970249fd7ffc2cfc"
+    },
+    {
+      "path": "src/lib/providers/google/googleDcoStrategy.ts",
+      "sha256": "46c51d930db6e5dfe8c7b863e5318764a2577f4f39424ba56d344a716e7c9df3"
+    },
+    {
+      "path": "src/lib/providers/google/googleErrors.ts",
+      "sha256": "ca3a68fdde52d3853ce4c4bb0b6dbbb421bb027a7fa60566f6bf6f1556bb8d96"
+    },
+    {
+      "path": "src/test/google_dco.test.ts",
+      "sha256": "e2938f621297b2bf6d01f11bcdbfc1039dc978318340cb64392e8fc90da0198f"
+    },
+    {
+      "path": "src/test/harvo/google_client.test.ts",
+      "sha256": "04cc04222d8e2247bf6fa53f6e2c6dfddad12fdc72d4c3c99c5aa1dc5ff85ba6"
+    },
+    {
+      "path": "src/test/harvo/google_provider.test.ts",
+      "sha256": "ab22270dafe8239503dcd36c4c4bb5789ef19f8d6bab0a08b1f87d9e4bee92f0"
+    },
+    {
+      "path": "src/test/harvo/google_search_plan.test.ts",
+      "sha256": "0fad22c9b602d4e49783f84297bf8c4b2ed6f02b626daf5a619759c03662010a"
+    },
+    {
+      "path": "src/test/harvo/google_store.test.ts",
+      "sha256": "7a7110c8cecdf001032877d97b47e5ce9ce7306107c552ff57630e194ac4dd9d"
+    },
+    {
+      "path": "src/test/harvo/postgres.ts",
+      "sha256": "e74bb0f7c8c46b93ab62254ced0713c503a6a3d61d0b6c99d6294bd764c9d9f8"
+    },
+    {
+      "path": "vitest.marketing-m1.config.ts",
+      "sha256": "d736b05ddbb5a546cce4cdbc45bdf900b3f023fcdfdb617c8fad25a40aec9eea"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "checks": 29,
+  "pageErrors": [],
+  "writes": [
+    {
+      "pathname": "/api/marketing/v2/campaigns",
+      "rightsConfirmed": true
+    },
+    {
+      "pathname": "/api/marketing/v2/campaigns",
+      "rightsConfirmed": true
+    },
+    {
+      "pathname": "/api/marketing/v2/campaigns/1/pause",
+      "revision": 3
+    },
+    {
+      "pathname": "/api/marketing/v2/campaigns/1/pause",
+      "revision": 3
+    },
+    {
+      "pathname": "/api/marketing/v2/campaigns/1/pause",
+      "revision": 3
+    },
+    {
+      "pathname": "/api/marketing/v2/campaigns/1/refund",
+      "revision": 3
+    },
+    {
+      "pathname": "/api/marketing/v2/campaigns/1/cancel",
+      "revision": 3
+    },
+    {
+      "pathname": "/api/marketing/v2/campaigns/1/cancel",
+      "revision": 3
+    },
+    {
+      "pathname": "/api/marketing/v2/campaigns/1/review",
+      "revision": 4
+    }
+  ],
+  "screenshots": "/Users/ajit/Documents/EnchoSpaceNew/docs/harvo/artifacts/m7-m8",
+  "recordedAt": "2026-09-13T11:24:36.417Z",
+  "sourceSha256": {
+    "components/marketing/CampaignStudio.tsx": "0da31ca5051197a32761dfa5c2970c6f4ac064722855e0c79ff87aee7561d42a",
+    "components/marketing/AdminMarketingWorkspace.tsx": "b302c0f32e93ecc5a22bd766d7cb1e59f4082f02e6b29be6f34a3d4e9f32527a",
+    "components/marketing/StudioShared.tsx": "2f0ada34fd2b49abdcfdbc4f43ee81b9312bbb5259be4342875bb7848abcad63",
+    "components/marketing/types.ts": "e5e55dab593048dcc67eccd7e409a1d1d666ec9323401bcf1e46415d7fce36e4",
+    "components/marketing/api.ts": "37224ffa13c30d806effb4ecf4bdec9d7eda25815e4a0a1eb235077535be3477",
+    "components/marketing/marketing.css": "872ab943117841cff363683ccf573e14610545a59dcbe999c1912f704fbc52ea",
+    "docs/harvo/m7_m8_ui_qa.mjs": "78531642fbc3a4656101fb30b02104ada966f266bec8eaed3141081c7c693a9a"
+  }
+}

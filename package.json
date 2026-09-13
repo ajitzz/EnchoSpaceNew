@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && tsc -p tsconfig.server.json",
-    "start": "node dist/server.js",
+    "build": "vite build && tsc -p tsconfig.server.json && node scripts/deployment/package-server-assets.mjs && node scripts/deployment/verify-public-artifacts.mjs",
+    "start": "node build/server/server.js",
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
@@ -14,7 +14,13 @@
     "test:e2e": "playwright test",
     "ci-pipeline": "npm ci && npm run lint && npm run typecheck && npm run test && npm run build",
     "prepare": "husky || true",
-    "migrate": "tsx src/migrations/runner.ts"
+    "migrate": "tsx src/migrations/runner.ts",
+    "marketing:worker": "node build/server/src/server/marketing/worker.js",
+    "test:marketing": "vitest run --config vitest.marketing-m1.config.ts",
+    "marketing:check": "node build/server/src/server/marketing/operator.js check",
+    "marketing:register-policy": "node build/server/src/server/marketing/operator.js register-policy",
+    "marketing:worker:dev": "tsx src/server/marketing/worker.ts",
+    "marketing:worker:health": "node build/server/src/server/deployment/workerHealthcheck.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1073.0",
@@ -131,5 +137,8 @@
       "{ts,tsx}": "eslint --fix",
       "{ts,tsx,css,json}": "prettier --write"
     }
+  },
+  "engines": {
+    "node": "24.x"
   }
 }

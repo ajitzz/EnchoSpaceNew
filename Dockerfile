@@ -1,29 +1,22 @@
-# syntax=docker/dockerfile:1.4
-FROM node:20-alpine AS builder
-
+# syntax=docker/dockerfile:1
+FROM node:24.21.0-bookworm-slim AS builder
 WORKDIR /app
+ENV HUSKY=0
 COPY package*.json ./
-RUN npm ci
-
+RUN npm ci --include=dev
 COPY . .
 RUN npm run build
 
-FROM node:20-alpine AS runner
-
+FROM node:24.21.0-bookworm-slim AS runner
 WORKDIR /app
-ENV NODE_ENV=production
-
-# Install curl for healthchecks
-RUN apk add --no-cache curl
-
+ENV NODE_ENV=production DISABLE_BACKGROUND_WORKERS=true HUSKY=0
 COPY package*.json ./
-RUN npm ci --omit=dev
-
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/server.ts ./server.ts
-
+RUN npm ci --omit=dev && npm cache clean --force
+COPY --from=builder --chown=node:node /app/dist ./dist
+COPY --from=builder --chown=node:node /app/build/server ./build/server
+USER node
 EXPOSE 3000
-
-# Start server using tsx in production is usually avoided, but since our start script currently uses ts-node or dist/server, 
-# let's assume we run the build output. Wait, we use esbuild or tsx? Let's check how start is configured. 
-CMD ["npm", "run", "start"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health/live',{signal:AbortSignal.timeout(3000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+STOPSIGNAL SIGTERM
+CMD ["node", "build/server/server.js"]

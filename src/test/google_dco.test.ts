@@ -1,18 +1,16 @@
 /**
  * Phase 3.8: Google Ads DCO Strategy Test Suite
  *
- * Certified Scenarios:
- * 1. Rotates losing RSA headline assets on winner identified
- * 2. Pins winning asset in provider entities
- * 3. Handles inconclusive decisions with zero mutation
+ * Current containment scenarios: no local winner may claim an applied Google
+ * mutation before the authorized provider optimization implementation exists.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { googleDcoStrategy } from '../lib/providers/google/googleDcoStrategy.js';
 import { DcoEvaluationOutput } from '../lib/dcoEngine.js';
 
 describe('PHASE 3.8: GOOGLE ADS DCO STRATEGY TEST SUITE', () => {
-  it('1. Rotates losing assets and pins winning asset on WINNER_IDENTIFIED', async () => {
+  it('1. Reports unavailable optimization without mutating local or provider assets', async () => {
     const decision: DcoEvaluationOutput = {
       result: 'WINNER_IDENTIFIED',
       decision_metric: 'CONVERSIONS',
@@ -28,12 +26,13 @@ describe('PHASE 3.8: GOOGLE ADS DCO STRATEGY TEST SUITE', () => {
       evaluated_at: new Date()
     };
 
-    const res = await googleDcoStrategy.applyWinnerDecision(1, decision);
+    const db = { query: vi.fn() };
+    const res = await googleDcoStrategy.applyWinnerDecision(1, decision, db);
     expect(res.provider).toBe('GOOGLE');
-    expect(res.success).toBe(true);
-    expect(res.mutatedEntityIds).toContain('google_asset_variant_101');
-    expect(res.mutatedEntityIds).toContain('google_asset_variant_102');
-    expect(res.actionsTaken).toContain('PINNED_HIGH_PERFORMING_ASSET_101');
+    expect(res.success).toBe(false);
+    expect(res.mutatedEntityIds).toEqual([]);
+    expect(res.actionsTaken).toEqual(['GOOGLE_DCO_NOT_IMPLEMENTED']);
+    expect(db.query).not.toHaveBeenCalled();
   });
 
   it('2. Inconclusive decision results in zero mutations', async () => {
