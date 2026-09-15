@@ -161,6 +161,28 @@ body {
   min-height: 100dvh;
 }
 
+.site-legal-links {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 1.25rem 1rem 2rem;
+  background: #ffffff;
+  color: #4b5563;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+}
+
+.site-legal-links a {
+  color: #1f2937;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.site-legal-links a:hover {
+  color: #0284c7;
+}
+
 
 
 input, textarea, [contenteditable="true"] {
@@ -183,5 +205,4 @@ input, textarea, [contenteditable="true"] {
     -webkit-tap-highlight-color: transparent;
   }
 }
-
 

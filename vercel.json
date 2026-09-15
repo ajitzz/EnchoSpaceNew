@@ -24,6 +24,22 @@
   },
   "rewrites": [
     {
+      "source": "/privacy",
+      "destination": "/privacy.html"
+    },
+    {
+      "source": "/privacy/",
+      "destination": "/privacy.html"
+    },
+    {
+      "source": "/terms-of-service",
+      "destination": "/terms-of-service.html"
+    },
+    {
+      "source": "/terms-of-service/",
+      "destination": "/terms-of-service.html"
+    },
+    {
       "source": "/stay/:slug",
       "destination": "/api/seo?type=stay&slug=$slug"
     },
