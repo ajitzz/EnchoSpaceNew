@@ -783,7 +783,9 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
 // Hardened CORS policy: Exact production allowlist
 const canonicalProductionOrigins = [
   'https://encho.space',
-  'https://www.encho.space'
+  'https://www.encho.space',
+  'https://encho.co.in',
+  'https://www.encho.co.in'
 ];
 
 app.use(cors({
