@@ -29,3 +29,8 @@ The marketing quote engine was throwing `COST_POLICY_REQUIRED` (503) because the
 **Description:**
 Encho Space enforces strict immutable financial auditing. The backend refused to save quotes because the injected `testingCostPolicy` did not exist in the database. Ran a standalone script to calculate the exact SHA-256 cryptographic fingerprint (`90614c935966d5c76737818212d80183fb80b1465f7a82d982d7e5b3c8b788be`) of the test policy and injected it into the `marketing_finance_policies` table via SQL, syncing the runtime code with the database constraints.
 
+
+## 6. Marketing Engine: Razorpay Checkout Payload Patch (Production Safety)
+**Files Modified:** `src/lib/marketing/payments.ts`
+**Description:**
+During escrow funding tests, Razorpay was rejecting the checkout creation API request and throwing 400 Bad Request errors. Encho's codebase was previously sending an empty customer profile (`customer: {}`). Razorpay's newer test mode validation strictly requires a name and email. Injected a safe dummy fallback `customer: { name: 'Encho Host', email: 'host@encho.co.in' }` to ensure the API safely constructs the payment link without failing out to a 500 correlation error.
