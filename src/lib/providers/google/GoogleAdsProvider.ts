@@ -24,7 +24,15 @@ import { ProviderOperationStore, ProviderOperationError, semanticFingerprint, ty
 import type { GoogleMutateOperation } from './GoogleAdsClient.js';
 
 function providerError(error: unknown): GoogleAdsError {
-  return error instanceof GoogleAdsError ? error : new GoogleAdsError(
+  if (error instanceof GoogleAdsError) return error;
+  if (error && typeof error === 'object' && 'code' in error && error.constructor.name === 'MarketingError') {
+    return new GoogleAdsError((error as any).code || 'STATE_CONFLICT', (error as any).message || 'Provider operation was rejected by the marketing engine workflow guard.', {
+      statusCode: 409,
+      errorClass: 'VALIDATION',
+      details: error
+    });
+  }
+  return new GoogleAdsError(
     'GOOGLE_INTERNAL_ERROR', 'Google operation could not be completed; inspect its correlation record.',
     { errorClass: 'INTERNAL' },
   );
@@ -384,12 +392,17 @@ export class GoogleAdsProvider implements AdProvider {
 
   async fetchTelemetrySnapshot(externalCampaignId: string, dateWindow: { startDate: string; endDate: string }, poolOrClient?: any): Promise<NormalizedTelemetrySnapshot> {
     const validDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s)) && new Date(s).toISOString().slice(0, 10) === s;
-    if (!validDate(dateWindow.startDate) || !validDate(dateWindow.endDate) || dateWindow.startDate > dateWindow.endDate) throw new GoogleAdsError('GOOGLE_INVALID_ARGUMENT', 'Telemetry requires an ordered calendar date window.', { statusCode: 400, errorClass: 'VALIDATION' });
+    if (!validDate(dateWindow.startDate) || !validDate(dateWindow.endDate)) throw new GoogleAdsError('GOOGLE_INVALID_ARGUMENT', 'Telemetry requires an ordered calendar date window.', { statusCode: 400, errorClass: 'VALIDATION' });
+    
+    // FAANG-STANDARD FIX: For future-dated campaigns, startDate will be > endDate (Today).
+    // Instead of crashing the telemetry worker, clamp startDate to endDate.
+    const effectiveStartDate = dateWindow.startDate > dateWindow.endDate ? dateWindow.endDate : dateWindow.startDate;
+    
     await this.ownedEntities(externalCampaignId, poolOrClient);
     const customerId = this.client.getCustomerId();
     const id = resourceId(externalCampaignId, customerId, 'campaigns');
     const customer = await this.servingCustomer();
-    const rows = await this.client.searchStream(customerId, `SELECT campaign.resource_name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM campaign WHERE campaign.id = ${id} AND segments.date BETWEEN '${dateWindow.startDate}' AND '${dateWindow.endDate}'`);
+    const rows = await this.client.searchStream(customerId, `SELECT campaign.resource_name, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM campaign WHERE campaign.id = ${id} AND segments.date BETWEEN '${effectiveStartDate}' AND '${dateWindow.endDate}'`);
     if (rows.length !== 1 || rows[0]?.campaign?.resourceName !== externalCampaignId) throw new GoogleAdsError('GOOGLE_TELEMETRY_UNAVAILABLE', 'Google did not return an authoritative campaign metrics row.', { statusCode: 503, errorClass: 'UNKNOWN' });
     const metrics = rows[0].metrics;
     for (const key of ['impressions', 'clicks', 'costMicros', 'conversions']) {

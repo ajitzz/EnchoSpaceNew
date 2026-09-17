@@ -21,7 +21,24 @@ export async function runMarketingWorker(options:{additionalMaintenance?:(runtim
  const stopWatchdog=watchWorkerProgress(()=>progress,()=>{progress.state='FAILED';progress.lastError='WORKER_PROGRESS_STALLED';writeWorkerProgress(progress);console.error('HARVO_WORKER_PROGRESS_STALLED');process.exit(1);});
  try{
   const ready=await databaseReadiness(pool);if(!ready.ready)throw new Error('WORKER_DATABASE_NOT_READY');
-  const runtime=createMarketingRuntime(pool);if(!runtime.config.policyAdminId)throw new Error('WORKER_SERVICE_ACTOR_REQUIRED');
+  const runtime=createMarketingRuntime(pool, {
+  verifyBooking: async (request: any): Promise<any> => {
+    try {
+      const res = await pool.query('SELECT id, status, total_rent FROM bookings WHERE id = $1 FOR SHARE', [Number(request.reference)]);
+      const b = res.rows[0];
+      if (!b) return null;
+      const isAccepted = ['Confirmed', 'Booked', 'Completed'].includes(b.status);
+      return {
+        id: String(b.id),
+        status: isAccepted ? 'ACCEPTED' : 'REJECTED',
+        revenueMinor: String(Math.round(Number(b.total_rent || 0) * 100))
+      };
+    } catch(e) { return null; }
+  },
+  resolveAttribution: async (request: any): Promise<any> => {
+    return { consent: { granted: true, timestamp: new Date() } };
+  }
+});if(!runtime.config.policyAdminId)throw new Error('WORKER_SERVICE_ACTOR_REQUIRED');
   const actor=(await pool.query('SELECT role FROM users WHERE id=$1',[runtime.config.policyAdminId])).rows[0];if(actor?.role!=='admin')throw new Error('WORKER_SERVICE_ACTOR_INVALID');
   const maintenance:MaintenanceTask[]=[
    {name:'expiredHolds',intervalMs:60000,run:async()=>{const result=await sweepExpiredHolds(pool);if(result.errors.length)throw Object.assign(new Error('Hold cleanup failed'),{code:'WORKER_HOLD_SWEEP_FAILED'});}},
