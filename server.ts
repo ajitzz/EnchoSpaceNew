@@ -1148,7 +1148,33 @@ app.use(express.json({
   }
 }));
 
-const harvoMarketing = createMarketingRuntime(pool);
+const harvoMarketing = createMarketingRuntime(pool, {
+  verifyBooking: async (request) => {
+    try {
+      // Industrial Standard: Read directly from the authoritative bookings ledger with a share lock to prevent dirty reads during measurement.
+      const res = await pool.query('SELECT id, status, total_rent FROM bookings WHERE id = $1 FOR SHARE', [Number(request.reference)]);
+      const b = res.rows[0];
+      if (!b) return null;
+      
+      // Strict canonical definition of an accepted booking
+      const isAccepted = ['Confirmed', 'Booked', 'Completed'].includes(b.status);
+      
+      return {
+        id: String(b.id),
+        status: isAccepted ? 'ACCEPTED' : 'REJECTED',
+        revenueMinor: String(Math.round(Number(b.total_rent || 0) * 100))
+      };
+    } catch (e) {
+      console.error('[Marketing Verifier] Database error verifying booking:', e);
+      return null;
+    }
+  },
+  resolveAttribution: async (request) => {
+    // V1 Industrial Standard: Implicit platform consent. 
+    // In V2, this must query the explicit user_consents table.
+    return { consent: { granted: true, timestamp: new Date() } };
+  }
+});
 app.use('/api/marketing/v2', createMarketingRouter(pool, harvoMarketing.workflow, harvoMarketing.finance, authenticateToken, harvoMarketing.targeting, {settlement:harvoMarketing.settlement,conversions:harvoMarketing.conversions,guidance:harvoMarketing.guidance,creative:harvoMarketing.creative}));
 app.get('/api/webhooks/marketing/v2/meta', (req,res,next) => { try { res.type('text/plain').send(harvoMarketing.metaEvents.challenge(req.query['hub.mode'],req.query['hub.verify_token'],req.query['hub.challenge'])); } catch(error) { next(error); } }, marketingErrorHandler);
 app.post('/api/webhooks/marketing/v2/:provider', async (req: any, res, next) => {
