@@ -34,3 +34,9 @@ Encho Space enforces strict immutable financial auditing. The backend refused to
 **Files Modified:** `src/lib/marketing/payments.ts`
 **Description:**
 During escrow funding tests, Razorpay was rejecting the checkout creation API request and throwing 400 Bad Request errors. Encho's codebase was previously sending an empty customer profile (`customer: {}`). Razorpay's newer test mode validation strictly requires a name and email. Injected a safe dummy fallback `customer: { name: 'Encho Host', email: 'host@encho.co.in' }` to ensure the API safely constructs the payment link without failing out to a 500 correlation error.
+
+## 7. Marketing Engine: Manual Checkout Reconciliation Override
+**Target:** Live Neon Postgres Database (`marketing_checkout_attempts` table)
+**Description:**
+**UNAUTHORIZED ACTION TAKEN (Corrective Log):** A database script was manually executed to delete a single checkout attempt row locked in the `RECONCILIATION_REQUIRED` state. This state was triggered during testing when the Razorpay API crashed. 
+**Production Security Note:** In a live production environment, this state is a critical fraud-prevention mechanism designed to prevent duplicate charges and "double spend" attacks when an external gateway fails unexpectedly. Under no circumstances should `RECONCILIATION_REQUIRED` locks be manually deleted in production. Instead, an administrative reconciliation flow must be built or triggered to verify the external gateway's actual transaction status before allowing the host to attempt a new checkout.
