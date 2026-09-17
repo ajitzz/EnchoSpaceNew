@@ -49,9 +49,3 @@ By default, Encho Space enforces an enterprise deployment pattern where the web 
 **Files Modified:** `server.ts`
 **Description:**
 The temporary "hybrid server" patch (Edit #8) that allowed `server.ts` to process marketing webhooks directly was intentionally reverted. The client elected to enforce strict FAANG/Enterprise architecture standards for their production Render environment. `server.ts` has been restored to its original state where `process.env.NODE_ENV !== 'production'` correctly blocks the web server from processing heavy background queues. In production, this requires deploying a separate dedicated Background Worker Service running `npm run marketing:worker` to handle high-CPU asynchronous jobs while preserving 100% UI performance.
-
-## 10. Temporary Testing Scaffold: Re-Enabled Hybrid Web Worker
-**Files Modified:** `server.ts`
-**Description:**
-To facilitate rapid UI testing and webhook verification during the demo phase on Render, the "Hybrid Server" patch has been temporarily re-applied. The strict `process.env.NODE_ENV !== 'production'` check was removed, and a 10-second polling interval calling `harvoMarketing.engine.runOnce()` was injected directly into the main web server. 
-**CRITICAL NOTE FOR FUTURE AI/CODEX:** This is explicitly a temporary testing bridge. The original enterprise-grade production architecture (the "FAANG Standard") strictly mandates a Separate Worker Machine (`npm run marketing:worker`). Once the testing phase concludes, this hybrid patch MUST BE REVERTED to restore worker isolation before live traffic scaling begins.
