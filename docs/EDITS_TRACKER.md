@@ -45,3 +45,7 @@ During escrow funding tests, Razorpay was rejecting the checkout creation API re
 **Files Modified:** `server.ts`
 **Description:**
 By default, Encho Space enforces an enterprise deployment pattern where the web server (`server.ts`) completely disables all background cron timers if `process.env.NODE_ENV === 'production'`. This relies on a separate, dedicated worker process (`worker.ts`) to sweep and process the `marketing_jobs` queue (e.g. processing Razorpay payment capture webhooks). To keep costs low during the testing phase on Render.com (which uses `NODE_ENV=production`), the check was surgically removed. This forces the single Render web instance to execute its own background timers and process marketing webhooks instantly without requiring a secondary worker server.
+## 9. Architectural Reversion: Restored FAANG-Standard Background Worker Isolation
+**Files Modified:** `server.ts`
+**Description:**
+The temporary "hybrid server" patch (Edit #8) that allowed `server.ts` to process marketing webhooks directly was intentionally reverted. The client elected to enforce strict FAANG/Enterprise architecture standards for their production Render environment. `server.ts` has been restored to its original state where `process.env.NODE_ENV !== 'production'` correctly blocks the web server from processing heavy background queues. In production, this requires deploying a separate dedicated Background Worker Service running `npm run marketing:worker` to handle high-CPU asynchronous jobs while preserving 100% UI performance.
