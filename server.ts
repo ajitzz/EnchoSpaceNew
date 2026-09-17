@@ -1149,6 +1149,13 @@ app.use(express.json({
 }));
 
 const harvoMarketing = createMarketingRuntime(pool);
+
+if (shouldRunBackgroundWorkers) {
+  setInterval(() => {
+    harvoMarketing.engine.runOnce().catch(err => console.error('[WORKER] Marketing runOnce failed:', err));
+  }, 10 * 1000); // Check marketing queue every 10 seconds
+}
+
 app.use('/api/marketing/v2', createMarketingRouter(pool, harvoMarketing.workflow, harvoMarketing.finance, authenticateToken, harvoMarketing.targeting, {settlement:harvoMarketing.settlement,conversions:harvoMarketing.conversions,guidance:harvoMarketing.guidance,creative:harvoMarketing.creative}));
 app.get('/api/webhooks/marketing/v2/meta', (req,res,next) => { try { res.type('text/plain').send(harvoMarketing.metaEvents.challenge(req.query['hub.mode'],req.query['hub.verify_token'],req.query['hub.challenge'])); } catch(error) { next(error); } }, marketingErrorHandler);
 app.post('/api/webhooks/marketing/v2/:provider', async (req: any, res, next) => {
@@ -11476,6 +11483,7 @@ export const processLeadNotificationQueue = async (overridePool?: any) => {
   if (!dbPool) return { processed: 0, delivered: 0, failed: 0, dlq: 0 };
   return LeadAlertingCrmService.processLeadNotificationQueue(dbPool);
 };
+
 
 if (shouldRunBackgroundWorkers) {
   setInterval(() => WebhookWorkerService.processInboundWebhooks(pool, handleVerifiedPayment), 10 * 1000); // Check every 10 seconds for real-time webhooks
