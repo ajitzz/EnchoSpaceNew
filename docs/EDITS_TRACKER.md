@@ -62,3 +62,14 @@ Resolved the `GOOGLE_INTERNAL_ERROR` and `GOOGLE_INVALID_ARGUMENT` crashes occur
 **2. Telemetry Math Safety:** Patched `fetchTelemetrySnapshot` in `GoogleAdsProvider.ts` to gracefully clamp mathematically inverted date windows (e.g. `startDate > endDate`) when pulling metrics for future-dated campaigns, resolving widespread `TELEMETRY` background job crashes.
 **3. Worker Execution Parity:** The `marketing:worker` background process was failing because it lacked the strict FAANG-grade database compliance verifiers (`verifyBooking`, `resolveAttribution`) that were previously wired into the UI frontend. Surgically mirrored the exact implementation from `server.ts` into `src/server/marketing/worker.ts` ensuring the background queue processes `ACTIVATE` jobs with full conversion authority.
 **Current Situation:** The code is perfectly functional. The `ACTIVATE` job is currently safely blocking the campaign because the property has no open inventory for the advertised campaign dates. The host must adjust the property's calendar availability or shift the campaign dates, after which the background worker will seamlessly clear the operation and push the campaign live to Google Ads.
+
+## 12. Marketing Engine: UI Frontend Verifier Integration
+**Files Modified:** `server.ts`
+**Description:**
+Wired the strict, FAANG-standard database compliance verifiers (`verifyBooking` and `resolveAttribution`) directly into the `createMarketingRuntime` initialization within `server.ts`. This resolved the "Activation Blocked" frontend state, allowing the "Request Verified activation" button to properly light up in the Admin Dashboard. This was done to ensure the frontend runtime has identical conversion and tracking authority as the background worker (see Edit #11).
+
+## 13. Infrastructure Configuration: Vercel Environment Variables
+**Target:** Vercel Project Dashboard (Production Environment)
+**Description:**
+**Admin Infrastructure Action:** The following critical environment variables were manually injected into the Vercel production environment: `MUX_TOKEN_ID`, `MUX_TOKEN_SECRET`, `HARVO_HOLD_SWEEPER_ENABLED`, `HARVO_MARKETING_CONFIG`, and `HARVO_GOOGLE_DATA_MANAGER_REFRESH_TOKEN`. 
+**Architectural Ruling:** This was the **correct and necessary** architectural decision. Storing production API keys, refresh tokens, and master configurations as encrypted environment variables in the Vercel dashboard (instead of hardcoding them into the repository) enforces strict enterprise security. It ensures the runtime has secure access to third-party services (Mux, Google Ads) without exposing credentials to the codebase or git history.
