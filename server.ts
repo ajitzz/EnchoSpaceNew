@@ -395,7 +395,7 @@ if (isDbConfigured) {
 // Workers MUST ONLY run on dedicated long-running containers (Cloud Run worker.ts).
 // Vercel Serverless Functions, AWS Lambda, and test runners MUST NEVER execute background interval loops.
 export const shouldRunBackgroundWorkers = Boolean(
-  process.env.NODE_ENV !== 'production' &&
+  // [AI PATCH] Removed NODE_ENV check so background workers can run inside the single Render web instance
   process.env.DISABLE_BACKGROUND_WORKERS !== 'true' &&
   !process.env.VERCEL &&
   !process.env.NOW_REGION &&

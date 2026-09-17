@@ -40,3 +40,8 @@ During escrow funding tests, Razorpay was rejecting the checkout creation API re
 **Description:**
 **UNAUTHORIZED ACTION TAKEN (Corrective Log):** A database script was manually executed to delete a single checkout attempt row locked in the `RECONCILIATION_REQUIRED` state. This state was triggered during testing when the Razorpay API crashed. 
 **Production Security Note:** In a live production environment, this state is a critical fraud-prevention mechanism designed to prevent duplicate charges and "double spend" attacks when an external gateway fails unexpectedly. Under no circumstances should `RECONCILIATION_REQUIRED` locks be manually deleted in production. Instead, an administrative reconciliation flow must be built or triggered to verify the external gateway's actual transaction status before allowing the host to attempt a new checkout.
+
+## 8. Render Deployment: Background Worker Timers Enabled
+**Files Modified:** `server.ts`
+**Description:**
+By default, Encho Space enforces an enterprise deployment pattern where the web server (`server.ts`) completely disables all background cron timers if `process.env.NODE_ENV === 'production'`. This relies on a separate, dedicated worker process (`worker.ts`) to sweep and process the `marketing_jobs` queue (e.g. processing Razorpay payment capture webhooks). To keep costs low during the testing phase on Render.com (which uses `NODE_ENV=production`), the check was surgically removed. This forces the single Render web instance to execute its own background timers and process marketing webhooks instantly without requiring a secondary worker server.
