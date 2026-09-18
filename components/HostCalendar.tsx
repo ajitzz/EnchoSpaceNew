@@ -126,7 +126,8 @@ export default function HostCalendar({ listings, reservations = [] }: HostCalend
     if (!selectedListingId) return;
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/listings/${selectedListingId}/room-calendar`, {
+      const res = await fetch(`/api/listings/${selectedListingId}/room-calendar?_t=${Date.now()}`, {
+        cache: 'no-store',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
