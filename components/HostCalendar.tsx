@@ -144,6 +144,12 @@ export default function HostCalendar({ listings, reservations = [] }: HostCalend
   };
 
   useEffect(() => {
+    if (!selectedListingId && listings.length > 0) {
+      setSelectedListingId(listings[0].id);
+    }
+  }, [listings, selectedListingId]);
+
+  useEffect(() => {
     fetchCalendarMatrix();
   }, [selectedListingId, token]);
 
