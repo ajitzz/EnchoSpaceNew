@@ -3437,7 +3437,7 @@ app.get('/api/listings/:id/room-calendar', async (req, res) => {
 
     // 2. Fetch all confirmed/active bookings for this listing
     const bookingsRes = await pool.query(`
-      SELECT b.id, b.user_id, b.start_date, b.end_date, b.total_rent as total_price, b.status, b.guests, b.room_tier, b.room_unit_number, b.created_at,
+      SELECT b.id, b.user_id, b.start_date, b.end_date, b.total_price, b.status, b.guests, b.room_tier, b.room_unit_number, b.created_at,
              COALESCE(u.name, 'Encho Verified Guest') as guest_name,
              COALESCE(u.email, '') as guest_email,
              COALESCE(u.avatar, '') as guest_avatar
