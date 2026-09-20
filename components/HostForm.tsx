@@ -111,7 +111,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
   const [splitGalleryOpen, setSplitGalleryOpen] = useState(false);
 
   // Form State
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState(() => ({
     title: existingListing?.title || '',
     brand: (existingListing as any)?.brand || '',
     brand_font: (existingListing as any)?.brand_font || 'font-display',
@@ -122,8 +122,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
     rentalMode: (existingListing as any)?.rentalMode || 'entire_place',
     address: existingListing?.address || '',
     city: existingListing?.city || '',
-    lat: existingListing?.lat || 11.6854,
-    lng: existingListing?.lng || 76.1320,
+    lat: existingListing?.lat,
+    lng: existingListing?.lng,
     nearby: existingListing?.nearby || [] as any[],
     rooms: (() => {
       if (existingListing?.rooms && existingListing.rooms.length > 0) {
@@ -143,8 +143,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               id: p.id || `room-${r.id}-photo-${pIdx}-${Date.now()}`,
               previewUrl: photoUrl,
               url: photoUrl,
-              tier: r.type || p.tier || 'suites',
-              category: p.category || (pIdx === 0 ? 'bedroom' : 'bathroom'),
+              tier: String(r.type || r.id),
+              category: p.category || 'other',
               title: p.title || `${r.name || 'Room'} Space 0${pIdx + 1}`,
               description: p.description || '',
               is_sleeping_area: Boolean(p.is_sleeping_area || p.category === 'bedroom')
@@ -158,90 +158,41 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         });
       }
 
-      return [
-        { 
-          id: `room-${Date.now()}-1`, 
-          name: 'Presidential Suite', 
-          type: 'suites', 
-          icon: '👑', 
-          tag: 'Most Exclusive', 
-          price: 18500, 
-          capacity: 2, 
-          inventory_count: 2, 
-          description: 'Grand master suite featuring floor-to-ceiling glass, wraparound panoramic terrace, and private infinity jacuzzi.', 
-          specs: '1,200 sq.ft · 270° Valley View · Heated Jacuzzi', 
-          features: ['Private Jacuzzi', 'Valley View', 'Teak King Platform Bed', 'Rain Shower', 'Automated Curtains'], 
-          amenities: ['Jacuzzi', 'WiFi', 'Mini Bar', 'Espresso Machine'], 
-          photos: [
-            { id: 'pres-1', previewUrl: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1200&q=80', url: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1200&q=80', tier: 'suites', category: 'bedroom' as any, title: 'Presidential Master Suite', description: 'Panoramic glass suite with king bed.' },
-            { id: 'pres-2', previewUrl: 'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=1200&q=80', url: 'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=1200&q=80', tier: 'suites', category: 'bathroom' as any, title: 'Spa En-Suite', description: 'Volcanic stone soak tub.' },
-            { id: 'pres-3', previewUrl: 'https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&w=1200&q=80', url: 'https://images.unsplash.com/photo-1566665797739-1674de7a421a?auto=format&fit=crop&w=1200&q=80', tier: 'suites', category: 'balcony' as any, title: 'Horizon Terrace', description: 'Private wraparound deck.' }
-          ] 
-        },
-        { 
-          id: `room-${Date.now()}-2`, 
-          name: 'Deluxe Double Room', 
-          type: 'deluxe', 
-          icon: '🛏️', 
-          tag: 'Best Value', 
-          price: 11500, 
-          capacity: 2, 
-          inventory_count: 4, 
-          description: 'Spacious serene sanctuary with direct courtyard garden access and bespoke open-air stone bath.', 
-          specs: '650 sq.ft · Garden Verandah · Twin Plush Beds', 
-          features: ['Garden Access', 'Outdoor Stone Bath', 'Handcrafted Lounge', 'Bose Sound System'], 
-          amenities: ['Garden View', 'WiFi', 'Deep Soaking Tub'], 
-          photos: [
-            { id: 'del-1', previewUrl: 'https://images.unsplash.com/photo-1591088398332-8a7791972843?auto=format&fit=crop&w=1200&q=80', url: 'https://images.unsplash.com/photo-1591088398332-8a7791972843?auto=format&fit=crop&w=1200&q=80', tier: 'deluxe', category: 'bedroom' as any, title: 'Deluxe Garden Room', description: 'Plush organic cotton twin beds.' },
-            { id: 'del-2', previewUrl: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=1200&q=80', url: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=1200&q=80', tier: 'deluxe', category: 'bathroom' as any, title: 'Garden Bath', description: 'Open-air stone tub.' }
-          ] 
-        }
-      ];
+      return [] as Room[];
     })(),
-    maxGuests: existingListing?.maxGuests || 4,
-    bedrooms: existingListing?.bedrooms || 2,
-    beds: existingListing?.beds || 3,
-    bathrooms: existingListing?.bathrooms || 2,
-    amenities: existingListing?.amenities || [
-      'High-Speed Wi-Fi (1 Gbps)',
-      'Temperature-Controlled Pool',
-      'Private Chef Available',
-      'Spa & Wellness Center',
-      'Air Conditioning',
-      'Dedicated EV Charger'
-    ] as string[],
+    maxGuests: existingListing?.maxGuests ?? 0,
+    bedrooms: existingListing?.bedrooms ?? 0,
+    beds: existingListing?.beds ?? 0,
+    bathrooms: existingListing?.bathrooms ?? 0,
+    amenities: existingListing?.amenities || [] as string[],
     amenity_clusters: existingListing?.amenity_clusters || { vibe: [], comfort: [], work: [], culinary: [] },
     child_safety_specs: existingListing?.child_safety_specs || [] as string[],
     videoUrl: existingListing?.video_url || '',
     hero_video_url: existingListing?.hero_video_url || '',
     hero_fallback_url: existingListing?.hero_fallback_url || '',
     dominant_color_hex: existingListing?.dominant_color_hex || '#0284C7',
-    experience_tags: existingListing?.experience_tags || ['Ocean Waves', 'Heated Infinity Pool', 'Private Chef Available', '1 Gbps Fiber WiFi', 'Panoramic Mountain View'] as string[],
-    concierge_privileges: (existingListing as any)?.concierge_privileges || 'All guests at this Encho Sanctuary receive direct access to our Walled Garden Host Concierge. Private dining experiences, sommelier cellar curation, private driver transfers, and customized wellness sessions can be coordinated seamlessly inside your Encho guest inbox.',
-    host_philosophy: (existingListing as any)?.host_philosophy || 'Our design philosophy is to allow natural sunlight and acoustic stillness to heal the modern soul. Every detail here is intentional.',
-    price: existingListing?.price?.toString() || '18500',
-    dynamicPricing: existingListing?.dynamicPricing || { weekendMultiplier: 1.15, seasonalMultiplier: 1.25 },
-    raw_rules: existingListing?.raw_rules || 'Quiet hours observed after 10 PM. No indoor smoking. Curated wellness atmosphere.',
+    experience_tags: existingListing?.experience_tags || [] as string[],
+    concierge_privileges: (existingListing as any)?.concierge_privileges || '',
+    host_philosophy: (existingListing as any)?.host_philosophy || '',
+    price: existingListing?.price?.toString() || '',
+    dynamicPricing: existingListing?.dynamicPricing || { weekendMultiplier: 1, seasonalMultiplier: 1 },
+    raw_rules: existingListing?.raw_rules || '',
     curated_guidelines: (() => {
       if (Array.isArray(existingListing?.curated_guidelines)) return existingListing.curated_guidelines;
       if (typeof existingListing?.curated_guidelines === 'string' && existingListing.curated_guidelines.trim()) {
         try {
           const parsed = JSON.parse(existingListing.curated_guidelines);
           if (Array.isArray(parsed)) return parsed;
-        } catch {}
+        } catch { /* Older records contain plain text rather than JSON. */ }
         return [existingListing.curated_guidelines];
       }
-      return [
-        "Heritage Sanctity: The 200-year-old sandstone stonework is preserved with organic floral care.",
-        "Aristocratic Silence: Sunset peacock hour is dedicated to acoustic tranquility.",
-        "Private Culinary Protocols: Royal Thali dining is prepared exclusively on brass dinnerware."
-      ];
+      return [];
     })(),
     seo_title: existingListing?.seo_title || '',
     seo_description: existingListing?.seo_description || '',
     seo_keywords: existingListing?.seo_keywords || '',
     seo_image_url: existingListing?.seo_image_url || '',
-  });
+  }));
 
   // Photos State (Step 4 · Property Grounds & Amenities)
   const [photos, setPhotos] = useState<PhotoData[]>(() => {
@@ -269,19 +220,11 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
           url,
           previewUrl: url,
           tier: 'common',
-          category: idx === 0 ? 'exterior' : 'pool',
-          title: idx === 0 ? 'Sanctuary Architectural Facade' : 'Main Estate Horizon',
-          description: 'Property-wide grounds & shared luxury facilities.'
+          category: 'other',
+          title: '',
+          description: ''
         }));
       }
-    }
-
-    if (propPhotos.length === 0) {
-      propPhotos = [
-        { id: 'prop-def-1', previewUrl: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=1600&q=80', url: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=1600&q=80', tier: 'common', category: 'exterior', title: 'Estate Entrance Facade', description: 'Signature architectural entrance.' },
-        { id: 'prop-def-2', previewUrl: 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=1600&q=80', url: 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=1600&q=80', tier: 'common', category: 'pool', title: 'Infinity Horizon Pool', description: 'Suspended mineral water pool.' },
-        { id: 'prop-def-3', previewUrl: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=1600&q=80', url: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=1600&q=80', tier: 'common', category: 'restaurant', title: 'Plantation Pavilion Dining', description: 'Artisanal culinary estate dining.' }
-      ];
     }
 
     return propPhotos.map((p: any, idx: number) => {
@@ -291,9 +234,9 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         previewUrl: photoUrl,
         url: photoUrl,
         tier: 'common',
-        category: p.category || (idx === 0 ? 'exterior' : 'pool'),
-        title: p.title || (idx === 0 ? 'Sanctuary Architectural Facade' : 'Main Estate Horizon'),
-        description: p.description || 'Property-wide grounds & shared luxury facilities.'
+        category: p.category || 'other',
+        title: p.title || '',
+        description: p.description || ''
       };
     }).filter(p => !!p.previewUrl);
   });
@@ -325,7 +268,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         id: p.id,
         url: p.previewUrl,
         tier: p.tier || 'common',
-        category: (p.category as any) || 'exterior',
+        category: (p.category as any) || 'other',
         categoryLabel: (p as any).categoryLabel || '',
         title: p.title || '',
         description: p.description || '',
@@ -337,7 +280,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
           id: rp.id,
           url: rp.previewUrl || rp.url,
           tier: r.type || 'suites',
-          category: (rp.category as any) || 'bedroom',
+          category: (rp.category as any) || 'other',
           categoryLabel: (rp as any).categoryLabel || '',
           title: rp.title || r.name || '',
           description: rp.description || '',
@@ -347,76 +290,34 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
       ),
     ];
 
-    const fallbackPhotos: SpatialPhoto[] = spatialPhotos.length > 0 ? spatialPhotos : [
-      {
-        id: 'fallback-1',
-        url: 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1600&q=80',
-        tier: 'suites',
-        category: 'exterior',
-        title: 'Main Sanctuary Vista',
-        description: 'Architectural facade overlooking private infinity terraces.',
-        isHero: true
-      },
-      {
-        id: 'fallback-2',
-        url: 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?auto=format&fit=crop&w=1200&q=80',
-        tier: 'suites',
-        category: 'pool',
-        title: 'Heated Infinity Horizon',
-        description: 'Temperature-controlled lap pool with panoramic mountain views.'
-      },
-      {
-        id: 'fallback-3',
-        url: 'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1200&q=80',
-        tier: 'deluxe',
-        category: 'living_room',
-        title: 'Minimalist Pavilions',
-        description: 'Sunken living spaces finished with teakwood and brushed stone.'
-      },
-      {
-        id: 'fallback-4',
-        url: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=1200&q=80',
-        tier: 'deluxe',
-        category: 'bedroom',
-        title: 'Presidential Master Suite',
-        description: 'Custom king platform bed with floor-to-ceiling panoramic glass.'
-      },
-      {
-        id: 'fallback-5',
-        url: 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=1200&q=80',
-        tier: 'executive',
-        category: 'exterior',
-        title: 'Courtyard & Grounds',
-        description: 'Manicured tropical gardens and reflective water features.'
-      }
-    ];
+    const fallbackPhotos: SpatialPhoto[] = spatialPhotos;
 
     const allImageUrls = fallbackPhotos.map(p => p.url);
 
     const compiledRooms: Room[] = formData.rooms.map((r: any, idx: number) => {
-      const roomTier = r.type || (idx === 0 ? 'suites' : idx === 1 ? 'deluxe' : 'executive');
+      const roomTier = String(r.type || r.id);
       const roomPhotos = (r.photos && r.photos.length > 0)
         ? r.photos.map((rp: any) => rp.previewUrl || rp.url)
-        : allImageUrls.slice(0, 3);
+        : [];
 
       return {
         id: r.id || `room-${idx}`,
-        name: r.name || `Luxury Suite #${idx + 1}`,
+        name: r.name || 'Room name not supplied',
         type: roomTier,
         icon: r.icon || '👑',
-        tag: r.tag || (idx === 0 ? 'Most Popular' : 'Recommended'),
-        price: Number(r.price) || (idx === 0 ? 18500 : 11500),
-        capacity: Number(r.capacity) || 2,
-        inventory_count: Number(r.inventory_count) || 1,
-        description: r.description || 'Curated luxury accommodations with expansive views and bespoke private services.',
-        specs: r.specs || '1,200 sq.ft · 270° Valley View · Heated Jacuzzi',
-        features: Array.isArray(r.features) && r.features.length > 0 ? r.features : ['Private Terrace', 'Soaking Tub', 'Dedicated Butler'],
-        amenities: Array.isArray(r.amenities) && r.amenities.length > 0 ? r.amenities : ['WiFi', 'Air Conditioning', 'Espresso Machine'],
+        tag: r.tag || '',
+        price: Number(r.price) || 0,
+        capacity: Number(r.capacity) || 0,
+        inventory_count: Number(r.inventory_count) || 0,
+        description: r.description || '',
+        specs: r.specs || '',
+        features: Array.isArray(r.features) && r.features.length > 0 ? r.features : [],
+        amenities: Array.isArray(r.amenities) && r.amenities.length > 0 ? r.amenities : [],
         photos: (r.photos || []).map((rp: any) => ({
           id: rp.id,
           url: rp.previewUrl || rp.url,
           tier: roomTier,
-          category: (rp.category as any) || 'bedroom',
+          category: (rp.category as any) || 'other',
           categoryLabel: (rp as any).categoryLabel || '',
           title: rp.title || r.name,
           description: rp.description || '',
@@ -428,42 +329,42 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
       };
     });
 
-    const basePrice = compiledRooms.length > 0 ? compiledRooms[0].price : (Number(formData.price) || 18500);
+    const basePrice = compiledRooms.length > 0 ? compiledRooms[0].price : (Number(formData.price) || 0);
 
     return {
       id: existingListing?.id || 'live-preview-sanctuary',
-      title: formData.title.trim() || 'Aman Sanctuary Estate · Sovereign Highland Retreat',
+      title: formData.title.trim() || 'Your property preview',
       brand: formData.brand.trim() || '',
       brand_font: formData.brand_font || 'font-display',
       brand_color: formData.brand_color || 'text-zinc-900',
-      description: formData.description.trim() || 'Perched above pristine mist-laden valleys, this architectural masterpiece represents the absolute pinnacle of contemporary stillness. Designed with intentional spatial acoustics, floor-to-ceiling panoramic glass, and private heated infinity pavilions.',
+      description: formData.description.trim(),
       type: formData.type || 'Resort',
-      address: formData.address.trim() || 'Ridge Horizon Estate, Valley Road',
-      city: formData.city.trim() || 'Wayanad, Kerala',
-      lat: formData.lat || 11.6854,
-      lng: formData.lng || 76.1320,
+      address: formData.address.trim(),
+      city: formData.city.trim(),
+      lat: formData.lat,
+      lng: formData.lng,
       price: basePrice,
       currency: (currency as any) || 'INR',
-      rating: 4.98,
-      reviewsCount: 48,
-      provider: user?.name || 'Encho Verified Host',
+      rating: undefined,
+      reviewCount: 0,
+      provider: user?.name || 'Property host',
       imageUrl: allImageUrls[0],
       imageUrls: allImageUrls,
       photos: fallbackPhotos,
       imageCount: fallbackPhotos.length,
-      isVerified: true,
+      isVerified: false,
       rooms: compiledRooms,
       rental_mode: (formData.rentalMode as any) || 'entire_place',
-      maxGuests: formData.maxGuests || 4,
-      bedrooms: formData.bedrooms || 2,
-      beds: formData.beds || 3,
-      bathrooms: formData.bathrooms || 2,
-      amenities: formData.amenities.length > 0 ? formData.amenities : ['Heated Pool', 'Private Chef', '1 Gbps WiFi', 'Air Conditioning', 'Free Parking', 'Spa'],
-      experience_tags: formData.experience_tags.length > 0 ? formData.experience_tags : ['Ocean Waves', 'Heated Infinity Pool', 'Private Chef Available', '1 Gbps Fiber WiFi', 'Panoramic Mountain View'],
-      concierge_privileges: formData.concierge_privileges || 'All guests receive dedicated access to our 24/7 Host Concierge for private cellar tastings, driver transfers, and in-villa wellness treatments.',
-      host_philosophy: formData.host_philosophy || 'Our design philosophy is to allow natural sunlight and acoustic stillness to heal the modern soul. Every detail here is intentional.',
-      raw_rules: formData.raw_rules || 'Quiet hours after twilight. No smoking indoors.',
-      curated_guidelines: formData.curated_guidelines || 'We invite guests to embrace the tranquil atmosphere of the estate, observing quiet serenity after twilight.',
+      maxGuests: formData.maxGuests,
+      bedrooms: formData.bedrooms,
+      beds: formData.beds,
+      bathrooms: formData.bathrooms,
+      amenities: formData.amenities,
+      experience_tags: formData.experience_tags,
+      concierge_privileges: formData.concierge_privileges,
+      host_philosophy: formData.host_philosophy,
+      raw_rules: formData.raw_rules,
+      curated_guidelines: formData.curated_guidelines,
       child_safety_specs: formData.child_safety_specs || [],
       dominant_color_hex: formData.dominant_color_hex || '#0284C7',
       hero_video_url: formData.hero_video_url || formData.videoUrl || '',
@@ -556,11 +457,10 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         if (data.url || data.publicUrl) return data.url || data.publicUrl;
       }
     } catch (b64Err) {
-      console.warn('[PHOTO UPLOAD] Base64 upload route unavailable, using inline base64 URI:', b64Err);
+      console.warn('[PHOTO UPLOAD] Base64 upload route unavailable; publication is blocked:', b64Err);
     }
 
-    // Always return the valid base64 URI so unauthenticated or transient upload failures never break publishing
-    return base64;
+    throw new Error('Photo upload did not complete. Your draft is preserved; retry before publishing.');
   };
 
   const resolveAndUploadPhoto = async (photo: PhotoData): Promise<string> => {
@@ -599,7 +499,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                     clearInterval(poll);
                     resolve(`mux://${statusData.playbackId}`);
                   }
-                } catch (e) {}
+                } catch { /* A later bounded poll may recover; the deadline ends polling. */ }
              }, 3000);
              setTimeout(() => { clearInterval(poll); resolve(`mux-pending://${uploadId}`); }, 60000);
           });
@@ -620,7 +520,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
       const res = await fetch('/api/ai/curate-rules', {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ raw_rules: formData.raw_rules || 'Quiet hours at night. No smoking indoors. Pool safety.', property_type: formData.type })
+        body: JSON.stringify({ raw_rules: formData.raw_rules, property_type: formData.type })
       });
       if (res.ok) {
         const data = await res.json();
@@ -630,22 +530,15 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
             : (typeof data.curated_guidelines === 'string' ? data.curated_guidelines.split('\n').filter(Boolean) : []);
           if (lines.length > 0) {
             setFormData(prev => ({ ...prev, curated_guidelines: lines }));
-            addToast('Rules Curated (10/10)', 'Point-by-point Aristocratic Hospitality Guidelines crafted!', 'success');
+            addToast('Draft guidelines ready', 'Review each statement for accuracy before saving.', 'success');
+            setIsCuratingRules(false);
             return;
           }
         }
       }
-    } catch {}
+    } catch { console.warn('Rules curation request failed'); }
 
-    setFormData(prev => ({
-      ...prev,
-      curated_guidelines: [
-        "Heritage Sanctity: The sandstone stonework and artisan woodwork are preserved with natural organic care.",
-        "Aristocratic Silence: Sunset and twilight hours are dedicated to acoustic tranquility across all pavilions.",
-        "Private Culinary Protocols: Gourmet dining and private cellar service prepared exclusively to host specifications."
-      ]
-    }));
-    addToast('Guidelines Formatted', 'Populated point-by-point Aristocratic Hospitality Guidelines.', 'success');
+    addToast('Curation unavailable', 'Your existing guidelines are unchanged. Please try again or edit them yourself.', 'error');
     setIsCuratingRules(false);
   };
 
@@ -752,7 +645,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         setAiScore(data.score);
         setAiResult(data);
         if (data.cleared) {
-          addToast('AI Gatekeeper: Cleared (10/10)', data.headline || 'Listing verified for paid ad engines and guest booking!', 'success');
+          addToast('Draft assessment complete', 'Review the suggestions before submitting. This assessment does not approve advertising or booking.', 'success');
         } else {
           addToast('AI Gatekeeper: Needs Polish', data.headline || 'Please review required optimizations.', 'info');
         }
@@ -764,26 +657,16 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
       setIsScanning(false);
     }
 
-    const hasPhotos = (photos.length + formData.rooms.reduce((acc, r) => acc + (r.photos?.length || 0), 0)) >= 3;
-    const hasRooms = formData.rooms.length > 0 && formData.rooms.every((r: any) => r.name && r.price > 0);
-    const hasTitle = formData.title.length >= 15;
-    const calculatedScore = (hasPhotos && hasRooms && hasTitle) ? 9.4 : 7.2;
-
-    setAiScore(calculatedScore);
-    setAiResult({
-      score: calculatedScore,
-      cleared: calculatedScore >= 8.0,
-      headline: calculatedScore >= 8.0 ? 'Exceeds Aman Luxury Standards — Ready for Global Guests' : 'Listing needs additional photography and specs before ad launch',
-      strengths: ['Curated Room Subunits', 'Aman Sensory Atmosphere Deck', 'Verified Spatial Categorization'],
-      issues: calculatedScore < 8.0 ? ['Upload at least 3 high-resolution spatial photos', 'Provide detailed room descriptions'] : []
-    });
+    setAiScore(null);
+    setAiResult({cleared:false,status:'UNAVAILABLE'});
+    addToast('AI review unavailable', 'No approval was granted. Please retry the review or request administrator assistance.', 'error');
   };
 
   // Step Validation
   const validateStep = (step: number): boolean => {
     switch (step) {
       case 1: return formData.title.trim().length >= 10 && formData.type.length > 0;
-      case 2: return formData.city.trim().length > 0;
+      case 2: return formData.city.trim().length > 0 && Number.isFinite(formData.lat) && Number.isFinite(formData.lng);
       case 3: return formData.rooms.some((r: any) => r.name.trim().length > 0 && r.price > 0);
       case 4: return true;
       case 5: return true;
@@ -797,7 +680,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
   const handleNextStep = async () => {
     if (!validateStep(currentStep)) {
       if (currentStep === 1) addToast('Missing Details', 'Please provide a descriptive title (min 10 characters) and property type.', 'error');
-      if (currentStep === 2) addToast('Location Required', 'Please set the property city/destination.', 'error');
+      if (currentStep === 2) addToast('Location Required', 'Please choose the actual property location and city.', 'error');
       if (currentStep === 3) addToast('Rooms Required', 'Please ensure at least one room classification has a valid nightly rate.', 'error');
       return;
     }
@@ -835,6 +718,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
   // Submit Handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (![1,2,3].every(validateStep)) { addToast('Listing incomplete', 'Complete the property details, actual location, and room information before submitting.', 'error'); return; }
     setLoading(true);
 
     try {
@@ -847,7 +731,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
           id: p.id,
           url,
           tier: 'common',
-          category: (p.category as any) || 'exterior',
+          category: (p.category as any) || 'other',
           title: p.title || 'Sanctuary Common Grounds',
           description: p.description || '',
           specs: p.specs || '',
@@ -867,7 +751,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
             id: rp.id,
             url,
             tier: room.type || 'suites',
-            category: (rp.category as any) || 'bedroom',
+            category: (rp.category as any) || 'other',
             title: rp.title || room.name,
             description: rp.description || '',
             specs: rp.specs || '',
@@ -986,7 +870,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
 
       queueCustomMutation('CREATE_OR_UPDATE_LISTING', { ...payload, id: responseListingId });
       setSubmitted(true);
-      addToast('Listing Published Live (10/10)', 'Your architectural sanctuary is now immediately live for global guests on Encho!', 'success');
+      addToast('Listing saved', 'Your changes have been saved. Publication remains subject to the listing review process.', 'success');
       setTimeout(() => onSuccess(), 1600);
     } catch (err: any) {
       addToast('Submission Error', err.message || 'Failed to publish listing', 'error');
@@ -1003,14 +887,14 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
       name: defaultClassification.name,
       type: defaultClassification.tier,
       icon: defaultClassification.icon,
-      tag: defaultClassification.defaultTag,
-      price: 15000,
+      tag: '',
+      price: 0,
       capacity: 2,
       inventory_count: 1,
       description: '',
-      specs: defaultClassification.defaultSpecs,
-      features: ['Panoramic View', 'King Platform Bed', 'Rain Shower'],
-      amenities: ['WiFi', 'Air Conditioning'],
+      specs: '',
+      features: [],
+      amenities: [],
       photos: []
     };
     setFormData(prev => ({ ...prev, rooms: [...prev.rooms, newRoom] }));
@@ -1388,8 +1272,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                 />
               </div>
               <div className="flex gap-4 text-xs font-mono text-slate-400 bg-slate-900/60 border border-slate-800 px-4 py-2 rounded-xl">
-                <span>LAT: <strong className="text-sky-400 font-bold">{formData.lat.toFixed(4)}</strong></span>
-                <span>LNG: <strong className="text-sky-400 font-bold">{formData.lng.toFixed(4)}</strong></span>
+                <span>LAT: <strong className="text-sky-400 font-bold">{formData.lat?.toFixed(4) ?? 'Not set'}</strong></span>
+                <span>LNG: <strong className="text-sky-400 font-bold">{formData.lng?.toFixed(4) ?? 'Not set'}</strong></span>
               </div>
             </div>
 
@@ -1686,8 +1570,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                   onClick={() => {
                     setRadarMode('manual');
                     const newEntry = radarPillar === 'destination'
-                      ? { id: `manual-dest-${Date.now()}`, name: '', distance: '', type: 'viewpoint', rating: 4.8, categoryGroup: 'destination', lat: formData.lat, lng: formData.lng, isManual: true }
-                      : { id: `manual-rest-${Date.now()}`, name: '', cuisine: 'Artisanal Cuisine', distance: '', type: 'fine_dining', rating: 4.9, categoryGroup: 'restaurant', lat: formData.lat, lng: formData.lng, isManual: true };
+                      ? { id: `manual-dest-${Date.now()}`, name: '', distance: '', type: 'viewpoint', categoryGroup: 'destination', isManual: true }
+                      : { id: `manual-rest-${Date.now()}`, name: '', cuisine: '', distance: '', type: 'restaurant', categoryGroup: 'restaurant', isManual: true };
                     setFormData({...formData, nearby: [...formData.nearby, newEntry]});
                   }}
                   className={`w-full py-3 border-2 border-dashed rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
@@ -1790,8 +1674,8 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
                                     updateRoom(room.id, 'name', cls.name);
                                     updateRoom(room.id, 'type', cls.tier);
                                     updateRoom(room.id, 'icon', cls.icon);
-                                    if (!room.tag) updateRoom(room.id, 'tag', cls.defaultTag);
-                                    if (!room.specs) updateRoom(room.id, 'specs', cls.defaultSpecs);
+
+
                                   }}
                                   className={`p-3 rounded-xl border text-left transition-all cursor-pointer min-w-0 ${
                                     isSelected
@@ -2098,7 +1982,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
           </div>
         );
 
-      case 6:
+      case 6: {
         const currentGuidelines = Array.isArray(formData.curated_guidelines)
           ? formData.curated_guidelines
           : (typeof formData.curated_guidelines === 'string' ? [formData.curated_guidelines] : []);
@@ -2299,6 +2183,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
           </div>
         );
 
+      }
       case 7:
         return (
           <div className="space-y-8 animate-in fade-in duration-300 w-full min-w-0">

@@ -1,0 +1,48 @@
+{
+  "scope": "LOCAL_FIXTURE_ONLY",
+  "evidence": [
+    {
+      "screen": "guest",
+      "width": 1440,
+      "render": "PASSED",
+      "overflow": false,
+      "uncaughtErrors": []
+    },
+    {
+      "screen": "empty",
+      "width": 1440,
+      "render": "PASSED",
+      "overflow": false,
+      "uncaughtErrors": []
+    },
+    {
+      "screen": "builder",
+      "width": 1440,
+      "render": "PASSED",
+      "overflow": false,
+      "uncaughtErrors": []
+    },
+    {
+      "screen": "guest",
+      "width": 390,
+      "render": "PASSED",
+      "overflow": false,
+      "uncaughtErrors": []
+    },
+    {
+      "screen": "empty",
+      "width": 390,
+      "render": "PASSED",
+      "overflow": false,
+      "uncaughtErrors": []
+    },
+    {
+      "screen": "builder",
+      "width": 390,
+      "render": "PASSED",
+      "overflow": false,
+      "uncaughtErrors": []
+    }
+  ],
+  "requests": []
+}

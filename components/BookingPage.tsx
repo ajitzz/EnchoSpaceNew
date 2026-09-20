@@ -79,10 +79,12 @@ export const BookingPage: React.FC<BookingPageProps> = ({ listing, bookingDetail
       .catch(() => {});
   }, []);
 
+  const [openedAt] = useState(() => Date.now());
+  // Legacy presentation only; canonical guest checkout remains disabled.
   // Calculate Stay Duration
   const { nights, checkInFormatted, checkOutFormatted } = useMemo(() => {
-    const start = bookingDetails?.moveInDate ? new Date(bookingDetails.moveInDate) : new Date();
-    const end = bookingDetails?.checkOutDate ? new Date(bookingDetails.checkOutDate) : new Date(Date.now() + 3 * 86400000);
+    const start = bookingDetails?.moveInDate ? new Date(bookingDetails.moveInDate) : new Date(openedAt);
+    const end = bookingDetails?.checkOutDate ? new Date(bookingDetails.checkOutDate) : new Date(openedAt + 3 * 86400000);
     
     const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
     const n = diff > 0 ? diff : 1;
@@ -92,7 +94,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({ listing, bookingDetail
       checkInFormatted: start.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
       checkOutFormatted: end.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
     };
-  }, [bookingDetails?.moveInDate, bookingDetails?.checkOutDate]);
+  }, [bookingDetails?.moveInDate, bookingDetails?.checkOutDate, openedAt]);
 
   const handleCopy = (text: string, type: 'ref' | 'pin' | 'wifi') => {
     navigator.clipboard.writeText(text);

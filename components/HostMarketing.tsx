@@ -881,11 +881,9 @@ function LegacyHostMarketing({ user, listings, socialOnly = false, onCreatePaidC
     }
 
     // Establish Socket.io connection for 10/10 real-time campaign status synchronizations
-    const socket = io();
+    const socket = io({ auth: { token: localStorage.getItem('token') } });
     
-    if (user?.id) {
-      socket.emit('join_user', user.id);
-    }
+    socket.on('connect', () => { if (user?.id) socket.emit('join_user', user.id); });
 
     socket.on('db_changed', (data: any) => {
       if (data.type === 'marketing') {

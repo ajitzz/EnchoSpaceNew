@@ -1,7 +1,8 @@
+import { hasAsciiControl } from '../intentionalText.js';
 import { z } from 'zod';
 
 export const guidanceRequestSchema = z.object({ listingId: z.coerce.number().int().positive().safe(), provider: z.enum(['GOOGLE', 'META']) }).strict();
-const text = (max: number) => z.string().trim().min(1).max(max).refine(value => !/[\r\n\u0000-\u001f<>]/.test(value), 'Use plain single-line text');
+const text = (max: number) => z.string().trim().min(1).max(max).refine(value => !(/[<>]/.test(value) || hasAsciiControl(value)), 'Use plain single-line text');
 export const guidanceEvidenceSchema = z.object({ field: z.enum(['title', 'city', 'description']), quote: text(500) }).strict();
 const item = (max: number) => z.object({ text: text(max), evidence: z.array(guidanceEvidenceSchema).min(1).max(3) }).strict();
 export const guidanceSuggestionsSchema = z.object({

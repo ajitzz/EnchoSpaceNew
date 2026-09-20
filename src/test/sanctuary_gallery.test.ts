@@ -3,6 +3,13 @@ import { classifyListingPhotos, buildGalleryCategories, GALLERY_CATEGORIES } fro
 import { Listing, SpatialPhoto } from '../../types';
 
 describe('Sanctuary Spatial Gallery Architecture & Taxonomy Tests', () => {
+  it('keeps room-only photo identity and order while excluding common media from the room', () => {
+    const listing = {id:'room-photo-fixture', imageUrl:'/grounds.jpg', rooms:[{id:'r1',name:'Garden room',photos:[{id:'room-photo',url:'/room.jpg'}]}]} as unknown as Listing;
+    const photos=classifyListingPhotos(listing);
+    expect(photos.filter(photo=>photo.tier==='r1').map(photo=>photo.url)).toEqual(['/room.jpg']);
+    expect(photos.find(photo=>photo.url==='/grounds.jpg')?.tier).toBe('common');
+    expect(buildGalleryCategories(listing).map(category=>category.key)).toContain('r1');
+  });
   it('builds canonical default gallery categories with all and common spaces only', () => {
     const defaultCategories = buildGalleryCategories({ rooms: [] } as any);
     const keys = defaultCategories.map(c => c.key);

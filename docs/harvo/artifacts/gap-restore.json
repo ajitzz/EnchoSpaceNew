@@ -1,8 +1,8 @@
 {
   "scope": "LOCAL_POSTGRESQL_RESTORE_ONLY_NOT_PRODUCTION_RECOVERY_ACCEPTANCE",
-  "observedAt": "2026-09-13T14:03:59.776Z",
-  "node": "v24.21.0",
-  "status": "FAILED",
+  "observedAt": "2026-09-20T12:48:24.275Z",
+  "node": "v24.19.0",
+  "status": "PASSED",
   "migrations": {
     "011_harvo_marketing_measurement.sql": "616a76335587c7fbc00490a6d6530707f5af2738e36e680bf3313a949cdf44c2",
     "012_harvo_marketing_settlement.sql": "aa96bf24b4c84c9d06bfd440f8726b57ca067f587f53d9531801c730aa79c714",
@@ -10,5 +10,153 @@
     "014_harvo_marketing_request_limits.sql": "3441d1033c7793ec107d2f8f08b90f88bda8bde263dcc08de2abb849142cda98"
   },
   "postgresql": "18.0 (Homebrew)",
-  "failureType": "AssertionError"
+  "unprotectedServiceTables": [],
+  "productionIsolationAcceptance": "LOCAL_OPERATIONAL_RLS_VERIFIED_PRODUCTION_GRANTS_PENDING",
+  "restore": {
+    "format": "pg_dump -Fc / pg_restore into distinct local database",
+    "elapsedMs": 284,
+    "tables": {
+      "campaign_financial_contracts": {
+        "rows": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "host_marketing_campaigns": {
+        "rows": 2,
+        "sha256": "4fb84b80b10b493ad11859ed8d377a0f9d5b78ea1646011dffe415d24a29eab3"
+      },
+      "marketing_ai_attempts": {
+        "rows": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "marketing_booking_measurements": {
+        "rows": 1,
+        "sha256": "6d8354f432c6a0e9c26e459e5813b86f9667cb3aacfe54daf09203b5b9d86fee"
+      },
+      "marketing_campaign_revisions": {
+        "rows": 2,
+        "sha256": "842c11f7256e8c927f187df1116f8cbea7d26437572cbb6148a675f3c1945b3a"
+      },
+      "marketing_campaign_workflows": {
+        "rows": 2,
+        "sha256": "1cfc2e11f57786165da57859c79ab74c32292dc99dfd42b9aeae462f7312483d"
+      },
+      "marketing_checkout_attempts": {
+        "rows": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "marketing_commercial_preferences": {
+        "rows": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "marketing_conversion_deliveries": {
+        "rows": 1,
+        "sha256": "5263d93bfe90d5ef84a7245e31f1f230bb33fc3f5649608fce7c580248aa4996"
+      },
+      "marketing_conversion_delivery_events": {
+        "rows": 2,
+        "sha256": "635fa28910019c23c52d6a3597f8cc12a30889aeb6f2b2efc72c30ff408897c3"
+      },
+      "marketing_conversion_outbox": {
+        "rows": 1,
+        "sha256": "cdf560baa86efb45ee858abbd1750e516074e5184e21fcf1bf25d7347303527b"
+      },
+      "marketing_create_requests": {
+        "rows": 2,
+        "sha256": "212bbfbebc18cfcced2b183291ab9123b6c3ae381687653215998033432c660d"
+      },
+      "marketing_finance_accounts": {
+        "rows": 1,
+        "sha256": "e3ea7e6f56ed76d620e86fd6bcf583ebf815fdcb63447b07f05458d408c7740a"
+      },
+      "marketing_finance_authorizations": {
+        "rows": 1,
+        "sha256": "fc1f2d8ed71dbcfcd9d6def6e156083c4dac127e7316d610499848c17f1161dd"
+      },
+      "marketing_finance_captures": {
+        "rows": 1,
+        "sha256": "c19cf6908ef24e5a6b42fbb26a00ffbbf25391d4446a4c143f2526c9ccd96956"
+      },
+      "marketing_finance_journals": {
+        "rows": 3,
+        "sha256": "9b3aea0dc4a68241d6bed4c01682957135e9c82a2353574ff8f501bbcbc4e41b"
+      },
+      "marketing_finance_lines": {
+        "rows": 8,
+        "sha256": "6e2fceb8326b10b91f8e0329ad3764d172126b00283cc989f64d077c79aa89e7"
+      },
+      "marketing_finance_policies": {
+        "rows": 1,
+        "sha256": "8860f42efd634ff8110c4d5051ebfe563ef4cb659e651dd06ebd0b031c275282"
+      },
+      "marketing_finance_provider_events": {
+        "rows": 1,
+        "sha256": "232a4346d8c9f14b31598dfbe777ae0f67747ac4e5a1de6754e50d3676c8b311"
+      },
+      "marketing_finance_quotes": {
+        "rows": 1,
+        "sha256": "70a8698c0a18cd1f65dfd164ed7faea17d87c2aba78cfc03b3796d0d8c1b4c1d"
+      },
+      "marketing_finance_refund_operations": {
+        "rows": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "marketing_finance_refunds": {
+        "rows": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "marketing_finance_reservations": {
+        "rows": 1,
+        "sha256": "68002af00b987db7eb625969c9784e116f8de067483531f3be5f29e79f1ab008"
+      },
+      "marketing_jobs": {
+        "rows": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "marketing_measurement_events": {
+        "rows": 1,
+        "sha256": "8bc6ee009191fd51d19aaed425d2fe666d3e63430b836d036139d6e07869ef7f"
+      },
+      "marketing_request_limits": {
+        "rows": 1,
+        "sha256": "5278d845a2953f105415058bf67b852d02066a1750cb1de44b72a06e6c4a7faa"
+      },
+      "marketing_settlement_allocations": {
+        "rows": 3,
+        "sha256": "fe4a7ca30267afb75458a46acd95eae5184dc0799681ea631780116971d3e864"
+      },
+      "marketing_settlement_documents": {
+        "rows": 5,
+        "sha256": "dfcd88916412f5343556d9e67800e1afc007644711bb785b81c3bdf7255f2040"
+      },
+      "marketing_settlement_proposals": {
+        "rows": 1,
+        "sha256": "0fe4b5c30817f86d5bfb6c0e6432044d48e04c70be03b187901bb4ad256cf3c9"
+      },
+      "marketing_settlement_reviews": {
+        "rows": 1,
+        "sha256": "c7929f55f225a9877b20c2b53b2752d22e65f0a67c208cbfb95c832172f89666"
+      },
+      "marketing_workflow_events": {
+        "rows": 5,
+        "sha256": "fe95bb1b9cfb24a3ceed283caed59df00ea3e8da56f1ab95082de34e59f20fb5"
+      },
+      "provider_entities": {
+        "rows": 2,
+        "sha256": "eca1bba64ef12a801ed686633c52fb0fb054658e1fa81b1115c0fca7f18ac656"
+      },
+      "provider_publishing_transactions": {
+        "rows": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "identicalRowsAndEvidence": true,
+    "immutableTriggersPreserved": true,
+    "forcedRlsPreserved": true,
+    "nonownerIsolationVerified": true,
+    "settledJournalCount": 3,
+    "unknownConversionAttempts": 1,
+    "externalRequestsAfterRestore": 0,
+    "financialReplayIdempotent": true,
+    "scope": "011–014 plus workflow/finance/provider baseline; creative015 is not covered yet"
+  }
 }

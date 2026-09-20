@@ -1,3 +1,4 @@
+import { hasAsciiControl } from '../intentionalText.js';
 import { createHash } from 'node:crypto';
 
 export class MarketingFinanceError extends Error {
@@ -26,7 +27,7 @@ export interface CampaignQuote extends CampaignQuoteInput {
 export const MAX_FINANCE_MINOR = 9_223_372_036_854_775_807n;
 export function financeError(code: string, message: string): never { throw new MarketingFinanceError(code, message); }
 export function identifier(value: unknown, field: string, max = 255): string {
-  if (typeof value !== 'string' || !value || value.trim() !== value || value.length > max || /[\u0000-\u001f\u007f]/u.test(value)) financeError('FINANCE_INVALID_INPUT', `${field} is required and must be bounded intentional text.`);
+  if (typeof value !== 'string' || !value || value.trim() !== value || value.length > max || hasAsciiControl(value, true)) financeError('FINANCE_INVALID_INPUT', `${field} is required and must be bounded intentional text.`);
   return value;
 }
 export function minor(value: unknown, field: string, positive = false): bigint {

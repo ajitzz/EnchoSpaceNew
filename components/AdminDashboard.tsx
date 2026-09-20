@@ -11,6 +11,7 @@ import { AdminExperiences } from './AdminExperiences';
 import { AdminOpsControlCenter } from './AdminOpsControlCenter';
 import { AdminMetaCampaignCommandCenter } from './AdminMetaCampaignCommandCenter';
 import AdminMarketingWorkspace from './marketing/AdminMarketingWorkspace';
+import HostCalendar from './HostCalendar';
 import { useToast } from './ToastContext';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { io } from 'socket.io-client';
@@ -25,6 +26,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   const [adminMode, setAdminMode] = useState<'stays' | 'experiences'>('stays');
   const [activeTab, setActiveTab] = useState<'analytics' | 'listings' | 'users' | 'settings' | 'offers' | 'reviews' | 'messages' | 'seo' | 'marketing'>('analytics');
   const [editingRoomsListing, setEditingRoomsListing] = useState<Listing | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
   // ADR-001: Rooms now have free-form name + tier key + icon + tag + description + specs
   const [editingRoomsData, setEditingRoomsData] = useState<any[]>([]);
   const [editingRoomExpandedIdx, setEditingRoomExpandedIdx] = useState<number | null>(0);
@@ -371,8 +373,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
     fetchData();
 
     // Setup Socket.io client to listen for real-time changes
-    const socket = io();
-    socket.emit('join_admin');
+    const socket = io({ auth: { token: localStorage.getItem('token') } });
+    socket.on('connect', () => socket.emit('join_admin'));
 
     socket.on('db_changed', (data: any) => {
       // Refresh admin queue instantly on marketing, listing, experience, or outreach changes
@@ -1561,6 +1563,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
               ) : activeTab === 'listings' ? (
                 adminMode === 'stays' ? (
                 <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                   <div className="p-4"><p className="text-sm text-gray-600 mb-3">Review each property’s own room details and photos before publication. Missing content is shown as unavailable on the guest page.</p><button className="mkt-secondary" aria-expanded={calendarOpen} onClick={() => setCalendarOpen(value => !value)}>{calendarOpen ? 'Close property calendars' : 'Manage property calendars'}</button>
+                     {calendarOpen && <><p className="mkt-caption">Administrator calendar access is recorded. Select a property to review capacity and manage blocks.</p><HostCalendar listings={listings}/></>}
+                   </div>
                    <div className="overflow-x-auto">
                       <table className="w-full text-left text-sm whitespace-nowrap min-w-[800px]">
                    <thead className="bg-gray-50 text-gray-500 border-b border-gray-200">
@@ -1585,8 +1590,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                      <div className="flex items-center gap-3">
                                         <div className="w-12 h-12 rounded-lg bg-gray-100 overflow-hidden shrink-0 border border-gray-200/50 relative">
                                           {(() => {
-                                             const imgUrl = (listing.imageUrls && listing.imageUrls[0]) || listing.imageUrl || 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6';
-                                             return <img src={`${imgUrl}?w=100&h=100&fit=crop`} alt="" className="w-full h-full object-cover" />;
+                                             const imgUrl = (listing.imageUrls && listing.imageUrls[0]) || listing.imageUrl;
+                                             return imgUrl ? <img src={imgUrl} alt="" className="w-full h-full object-cover" /> : <span className="text-[10px] text-gray-500">No photo</span>;
                                           })()}
                                         </div>
                                         <div className="flex flex-col min-w-0">

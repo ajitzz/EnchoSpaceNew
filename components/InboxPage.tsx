@@ -39,7 +39,7 @@ interface Message {
 }
 
 const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'host' }) => {
-    const { user } = useAuth();
+    const { user, token } = useAuth();
     const [threads, setThreads] = useState<Thread[]>([]);
     const [activeThread, setActiveThread] = useState<Thread | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -174,10 +174,13 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
         fetchMessages();
         
         if (!socket) {
-          socket = io();
+          socket = io({ auth: { token } });
         }
         
-        socket.emit('join_thread', activeThread.id);
+        const threadSocket = socket;
+        const joinThread = () => threadSocket.emit('join_thread', activeThread.id);
+        threadSocket.on('connect', joinThread);
+        if (threadSocket.connected) joinThread();
         
         const handleNewMessage = (message: Message) => {
           if (message.sender_id !== user?.id) {
@@ -203,17 +206,19 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
             }
         };
 
-        socket.on('new_message', handleNewMessage);
-        socket.on('user_typing', handleUserTyping);
-        socket.on('user_stopped_typing', handleUserStoppedTyping);
+        threadSocket.on('new_message', handleNewMessage);
+        threadSocket.on('user_typing', handleUserTyping);
+        threadSocket.on('user_stopped_typing', handleUserStoppedTyping);
 
         return () => {
-            socket.off('new_message', handleNewMessage);
-            socket.off('user_typing', handleUserTyping);
-            socket.off('user_stopped_typing', handleUserStoppedTyping);
-            socket.emit('leave_thread', activeThread.id);
+            threadSocket.off('new_message', handleNewMessage);
+            threadSocket.off('user_typing', handleUserTyping);
+            threadSocket.off('user_stopped_typing', handleUserStoppedTyping);
+            threadSocket.emit('leave_thread', activeThread.id);
+            threadSocket.off('connect', joinThread);
+            threadSocket.disconnect(); if (socket === threadSocket) socket = null;
         };
-    }, [activeThread, user]);
+    }, [activeThread, user, token]);
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -226,7 +231,7 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
 
         if (socket) {
              if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-             socket.emit('typing_stop', { threadId: activeThread.id, userId: user.id });
+             socket?.emit('typing_stop', { threadId: activeThread.id, userId: user.id });
         }
 
         // Optimistic UI
@@ -498,10 +503,10 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
                                             onChange={e => {
                                                 setNewMessage(e.target.value);
                                                 if (socket && activeThread && user) {
-                                                    socket.emit('typing_start', { threadId: activeThread.id, userId: user.id });
+                                                    socket?.emit('typing_start', { threadId: activeThread.id, userId: user.id });
                                                     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
                                                     typingTimeoutRef.current = setTimeout(() => {
-                                                        socket.emit('typing_stop', { threadId: activeThread.id, userId: user.id });
+                                                        socket?.emit('typing_stop', { threadId: activeThread.id, userId: user.id });
                                                     }, 2000);
                                                 }
                                             }}

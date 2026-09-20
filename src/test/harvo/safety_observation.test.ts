@@ -1,3 +1,4 @@
+import { ProviderReportPending } from '../../lib/providers/reporting.js';
 import {afterAll,beforeAll,beforeEach,describe,expect,it,vi} from 'vitest';
 import {createWorkflowPgFixture,workflowConfig,workflowDraft} from './workflowPgFixture.js';
 import {MarketingWorkflowService,type WorkflowFinancePort} from '../../lib/marketing/workflow.js';
@@ -23,7 +24,7 @@ describe('independent local safety and durable fair observation scheduling',()=>
   telemetry.mockReset().mockImplementation(async()=>({dateStart:'2026-09-01',dateEnd:'2026-09-13',impressions:100,clicks:2,ctr:2,conversions:0,spend:{currency:'INR',minor_units:1000},observedAt:new Date().toISOString(),dataFreshness:'DELAYED'}));
   mutate.mockReset().mockRejectedValue(new Error('These read-only regressions must never mutate a provider.'));vi.spyOn(console,'error').mockImplementation(()=>undefined);
  });
- async function active(){const row=await workflow.create(host,workflowDraft({stayStartDate:'2099-01-02',stayEndDate:'2099-01-04'}));await fixture.pool.query("UPDATE marketing_campaign_workflows SET state='PROVIDER_REVIEW',provider_truth=$2,telemetry=$3 WHERE campaign_id=$1",[row.campaign_id,JSON.stringify({externalCampaignId:`isolated-provider-${row.campaign_id}`,configuredStatus:'ACTIVE',observedStatus:'UNKNOWN',observedAt:'2026-09-01T00:00:00Z',deliveryConfirmed:false}),JSON.stringify({impressions:7,clicks:1,spendMinor:'400',observedAt:'2026-09-01T00:00:00Z'})]);return row;}
+ async function active(){const row=await workflow.create(host,workflowDraft({startDate:'2026-09-01',endDate:'2026-09-30',stayStartDate:'2099-01-02',stayEndDate:'2099-01-04'}));await fixture.pool.query("UPDATE marketing_campaign_workflows SET state='PROVIDER_REVIEW',provider_truth=$2,telemetry=$3 WHERE campaign_id=$1",[row.campaign_id,JSON.stringify({externalCampaignId:`isolated-provider-${row.campaign_id}`,configuredStatus:'ACTIVE',observedStatus:'UNKNOWN',observedAt:'2026-09-01T00:00:00Z',deliveryConfirmed:false}),JSON.stringify({impressions:7,clicks:1,spendMinor:'400',observedAt:'2026-09-01T00:00:00Z'})]);return row;}
  const pauses=async()=>(await fixture.pool.query("SELECT * FROM marketing_jobs WHERE kind='PAUSE'")).rows;
  it.each(['INVENTORY_UNAVAILABLE','LISTING_CHANGED'])('queues %s containment before a never-resolving report is attempted',async reason=>{
   const row=await active();truth.mockImplementation(()=>new Promise(()=>undefined));
@@ -36,7 +37,7 @@ describe('independent local safety and durable fair observation scheduling',()=>
  it('rechecks local invalidation that occurs while actual reporting is in flight',async()=>{
   const row=await active();truth.mockImplementationOnce(async()=>{await fixture.pool.query('UPDATE listings SET price=price+100 WHERE id=20');return {normalizedState:'UNKNOWN',isLive:false,isServingImpressions:false,lastObservedAt:new Date().toISOString()};});
   await enqueue(fixture.pool,{campaignId:row.campaign_id,revision:1,kind:'TELEMETRY',key:'changed-during-read'});expect(await engine.runOnce()).toBe(true);
-  expect(await workflow.get(row.campaign_id,host)).toMatchObject({state:'PAUSE_QUEUED',last_error:'LISTING_CHANGED'});expect(telemetry).toHaveBeenCalledOnce();expect(mutate).not.toHaveBeenCalled();
+  expect(await workflow.get(row.campaign_id,host)).toMatchObject({state:'PAUSE_QUEUED',last_error:'SPEND_OBSERVATION_STALE, LISTING_CHANGED'});expect(telemetry).toHaveBeenCalledOnce();expect(mutate).not.toHaveBeenCalled();
  });
  it('preserves recorded metrics and a queued host pause when reporting fails',async()=>{
   const row=await active();truth.mockImplementationOnce(async()=>{await workflow.schedule(row.campaign_id,host,1,'PAUSE','host-pause-during-read');throw Object.assign(new Error('Unavailable provider report'),{code:'PROVIDER_UNAVAILABLE'});});
@@ -47,6 +48,37 @@ describe('independent local safety and durable fair observation scheduling',()=>
   const row=await active();await fixture.pool.query('UPDATE inventory_days SET booked_units=total_units');await enqueue(fixture.pool,{campaignId:row.campaign_id,revision:1,kind:'PROTECTION',key:'stale-safety-worker'});
   const claim=engine.queue.claim.bind(engine.queue);vi.spyOn(engine.queue,'claim').mockImplementationOnce(async()=>{const job=await claim();await fixture.pool.query("UPDATE marketing_jobs SET fence=fence+1,state='RETRY',lease_until=NULL WHERE id=$1",[job!.id]);return job;});
   expect(await engine.runOnce()).toBe(false);expect(await pauses()).toHaveLength(0);expect(truth).not.toHaveBeenCalled();expect((await workflow.get(row.campaign_id,host)).state).toBe('PROVIDER_REVIEW');
+ });
+ it('persists fresh status and completes a no-report job without fabricating spend or retry exhaustion',async()=>{
+  const row=await active();truth.mockResolvedValueOnce({normalizedState:'REVIEWING',isLive:false,isServingImpressions:false,lastObservedAt:new Date().toISOString()});
+  telemetry.mockRejectedValueOnce(new ProviderReportPending('NO_REPORT'));
+  const jobId=await enqueue(fixture.pool,{campaignId:row.campaign_id,revision:1,kind:'TELEMETRY',key:'empty-report'});
+  expect(await engine.runOnce()).toBe(true);
+  const current=await workflow.get(row.campaign_id,host);
+  expect(current).toMatchObject({state:'PAUSE_QUEUED',provider_truth:{observedStatus:'REVIEWING'},telemetry:{impressions:7,spendMinor:'400',report:{status:'NO_REPORT'}}});
+  expect((await fixture.pool.query('SELECT state,attempts FROM marketing_jobs WHERE id=$1',[jobId])).rows[0]).toEqual({state:'SUCCEEDED',attempts:1});
+  expect(mutate).not.toHaveBeenCalled();
+ });
+ it('does not mistake a fresh fetch for fresh source spend coverage',async()=>{
+  const row=await active();await enqueue(fixture.pool,{campaignId:row.campaign_id,revision:1,kind:'TELEMETRY',key:'source-delayed'});
+  expect(await engine.runOnce()).toBe(true);
+  expect(await workflow.get(row.campaign_id,host)).toMatchObject({state:'PAUSE_QUEUED',last_error:'SPEND_OBSERVATION_STALE',telemetry:{report:{status:'AVAILABLE'},dataAsOf:null}});
+ });
+ it('coalesces concurrent host refreshes and preserves ownership and revision checks',async()=>{
+  const row=await active();
+  const [a,b]=await Promise.all([workflow.requestObservation(row.campaign_id,host,1),workflow.requestObservation(row.campaign_id,host,1)]);
+  expect(a.jobId).toBe(b.jobId);expect(a.coalesced!==b.coalesced).toBe(true);
+  await expect(workflow.requestObservation(row.campaign_id,{id:11,role:'host'},1)).rejects.toMatchObject({status:404});
+  await expect(workflow.requestObservation(row.campaign_id,host,2)).rejects.toMatchObject({code:'REVISION_CONFLICT'});
+  expect((await fixture.pool.query("SELECT id FROM marketing_jobs WHERE kind='TELEMETRY'")).rows).toHaveLength(1);
+ });
+ it('keeps the last confirmed delivery and recovery error when only reporting succeeds',async()=>{
+  const row=await active();
+  await fixture.pool.query("UPDATE marketing_campaign_workflows SET state='RECONCILIATION_REQUIRED',last_error='EXTERNAL_STATE_UNKNOWN' WHERE campaign_id=$1",[row.campaign_id]);
+  truth.mockResolvedValueOnce({normalizedState:'UNKNOWN',isLive:false,isServingImpressions:false,lastObservedAt:null});
+  await enqueue(fixture.pool,{campaignId:row.campaign_id,revision:1,kind:'TELEMETRY',key:'partial-observation'});
+  expect(await engine.runOnce()).toBe(true);
+  expect(await workflow.get(row.campaign_id,host)).toMatchObject({state:'RECONCILIATION_REQUIRED',last_error:'EXTERNAL_STATE_UNKNOWN',provider_truth:{statusCheck:'ERROR',observedAt:'2026-09-01T00:00:00Z',deliveryConfirmed:false},telemetry:{report:{status:'AVAILABLE'},impressions:100}});
  });
  it('advances through more than 100 persistently failing campaigns across scheduler restarts',async()=>{
   const row=await active();

@@ -80,7 +80,7 @@ describe('Google monthly invoice authenticated read contract',()=>{
 
 describe('Google invoice evidence integration on disposable PostgreSQL',()=>{
  let fixture:Awaited<ReturnType<typeof createWorkflowPgFixture>>;
- beforeAll(async()=>{fixture=await createWorkflowPgFixture();await fixture.pool.query(readFileSync(new URL('../../migrations/012_harvo_marketing_settlement.sql',import.meta.url),'utf8'));});
+ beforeAll(async()=>{fixture=await createWorkflowPgFixture();for(const name of ['012_harvo_marketing_settlement.sql','016_harvo_google_invoice_imports.sql'])await fixture.pool.query(readFileSync(new URL(`../../migrations/${name}`,import.meta.url),'utf8'));});
  afterAll(async()=>{await fixture?.close();});
  beforeEach(async()=>{await fixture.reset();await fixture.pool.query("INSERT INTO users VALUES(91,'admin'),(92,'admin')");});
  const service=(importer:GoogleInvoiceImporter)=>new MarketingSettlementService(fixture.pool,{operatorIds:[90,91],policyReference:'isolated-dual-accounting-review',providerAccounts:{GOOGLE:binding.servingCustomerId},googleInvoices:importer});

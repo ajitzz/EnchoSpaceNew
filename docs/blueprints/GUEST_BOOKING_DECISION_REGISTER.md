@@ -125,3 +125,9 @@ The following proposals are **REJECTED** and prohibited from implementation:
 9. **[REJECTED] Runtime DDL (CREATE/ALTER TABLE on Boot):** Unacceptable for production database management.
 10. **[REJECTED] Disabling Quote Verification as Rollback:** Bypassing financial validation creates unrecoverable accounting liability.
 11. **[REJECTED] Dropping Financial/Inventory Tables as Rollback:** Destructive action causing catastrophic data loss.
+
+## 6. Implementation evidence addendum — 20 September 2026
+
+Under HARVO-026, a source and isolated test review reproduced presentation regressions against existing decisions 24/25/29/31/32/38/39. Public property pages, host drafts/previews and admin media presentation have been corrected to use supplied facts and stable room-specific photography, with explicit missing-data states. Synthetic reviews, room tiers, unrelated stock media, trust/approval fallback and the browser-computed guest fee/tax checkout path are removed or contained. Checkout remains unavailable until accepted canonical quotes/payment and the applicable legal gates exist.
+
+The dedicated presentation/gallery suite passes 33 tests; actual guest/empty-property/builder browser fixtures pass at desktop and mobile widths. This is implementation evidence only: **M6A still awaits independent acceptance; M5/M6B remain legally blocked.** No legal, tax, commission, inventory or payment decision is amended here. See [remediation verification](../harvo/REMEDIATION_EXECUTION_VERIFICATION.md) for scope, limitations and release conditions.

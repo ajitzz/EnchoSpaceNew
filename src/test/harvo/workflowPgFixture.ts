@@ -22,7 +22,7 @@ export async function createWorkflowPgFixture() {
     const legacyMetaDdl=serverSource.match(/CREATE TABLE IF NOT EXISTS meta_publishing_transactions \([\s\S]*?\n\s*\);/)?.[0];
     if(!legacyMetaDdl)throw new Error('The current legacy Meta operation schema is required by the isolated cancellation fixture');
     await pool.query(legacyMetaDdl);
-    for (const name of ['009_harvo_marketing_finance.sql', '010_harvo_marketing_workflow.sql']) {
+    for (const name of ['009_harvo_marketing_finance.sql', '010_harvo_marketing_workflow.sql', '019_marketing_operational_isolation.sql']) {
       await pool.query(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'));
     }
     const reset = async () => {

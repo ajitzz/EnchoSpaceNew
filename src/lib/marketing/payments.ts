@@ -53,7 +53,11 @@ export class CampaignPaymentGateway{
     if(typeof session.id!=='string'||!/^cs_[a-zA-Z0-9_]{3,200}$/.test(session.id)||!session.url||session.amount_total!==Number(quote.totalMinor)||session.currency!==quote.currency.toLowerCase()||session.client_reference_id!==quote.id)throw new MarketingError('PAYMENT_RESPONSE_INVALID','Checkout response did not confirm the requested identity and amount');id=session.id;url=session.url;
    }else{
     // Notifications are off; only the authenticated host receives the checkout URL.
-    const link=await this.razorpay!.paymentLink.create({amount:Number(quote.totalMinor),currency:'INR',accept_partial:false,customer:{name:'Encho Host',email:'host@encho.co.in'},reference_id:quote.id,description:`Encho campaign ${row.campaign_id}`,notify:{sms:false,email:false},reminder_enable:false,notes:{harvo_quote_id:quote.id},callback_url:`${origin}/host?marketing=payment-pending`,callback_method:'get'});
+    // Razorpay's API permits customer omission; the SDK incorrectly requires it.
+    // Preserve checkout identity without inventing a customer's personal information.
+    type LinkRequest = Parameters<Razorpay['paymentLink']['create']>[0];
+    const request: Omit<LinkRequest, 'customer'> = {amount:Number(quote.totalMinor),currency:'INR',accept_partial:false,reference_id:quote.id,description:`Encho campaign ${row.campaign_id}`,notify:{sms:false,email:false},reminder_enable:false,notes:{harvo_quote_id:quote.id},callback_url:`${origin}/host?marketing=payment-pending`,callback_method:'get'};
+    const link=await this.razorpay!.paymentLink.create(request as LinkRequest);
     if(typeof link.id!=='string'||!/^plink_[a-zA-Z0-9]{3,200}$/.test(link.id)||!link.short_url||Number(link.amount)!==Number(quote.totalMinor)||link.currency!=='INR'||link.reference_id!==quote.id)throw new MarketingError('PAYMENT_RESPONSE_INVALID','Checkout response did not confirm the requested identity and amount');id=link.id;url=link.short_url;
    }
    url=checkoutDestination(url,gateway);

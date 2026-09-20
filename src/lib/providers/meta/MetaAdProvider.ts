@@ -1,3 +1,4 @@
+import { ProviderReportPending } from '../reporting.js';
 import type { AdProvider } from '../AdProvider.js';
 import type { ProviderCapabilitySet, ProviderPublishRequest, ProviderPublishResult, ProviderEntity, ProviderControlRequest, ProviderControlResult, ProviderBudgetUpdateRequest, NormalizedDeliveryTruth, NormalizedTelemetrySnapshot, ProviderReconciliationReport } from '../types.js';
 import { providerRegistry } from '../providerRegistry.js';
@@ -270,6 +271,7 @@ export class MetaAdProvider implements AdProvider {
             throw new MetaAdsError('META_INVALID_ARGUMENT', 'An ordered date window is required.');
         const account = await this.account();
         const data = await this.client.get(`${externalCampaignId}/insights`, { fields: 'account_currency,impressions,clicks,spend,reach,actions', time_range: { since: window.startDate, until: window.endDate }, level: 'campaign' });
+        if (Array.isArray(data.data) && data.data.length === 0) throw new ProviderReportPending('NO_REPORT');
         const row = data.data?.length === 1 ? data.data[0] : null;
         if (!row || row.account_currency !== account.currency || ['impressions', 'clicks'].some(k => !/^(0|[1-9]\d*)$/.test(String(row[k]))) || !/^(0|[1-9]\d*)(\.\d{1,2})?$/.test(String(row.spend)))
             throw new MetaAdsError('META_TELEMETRY_UNAVAILABLE', 'Meta metrics are missing or invalid.');

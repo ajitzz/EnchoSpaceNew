@@ -87,7 +87,7 @@ export default defineConfig(() => {
               },
               {
                 // Money and campaign actions require a visible, current user intent.
-                urlPattern: /\/api\/(?!marketing\/v2(?:\/|$)|webhooks\/marketing\/v2(?:\/|$)).*/i,
+                urlPattern: /\/api\/(?!marketing\/v2(?:\/|$)|webhooks\/marketing\/v2(?:\/|$)|listings\/[^/]+\/room-calendar(?:\/|$)).*/i,
                 method: 'POST',
                 handler: 'NetworkOnly',
                 options: {

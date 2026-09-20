@@ -1,3 +1,4 @@
+import { hasAsciiControl } from '../intentionalText.js';
 import { GoogleAdsClient, type GoogleGeoTarget } from '../providers/google/GoogleAdsClient.js';
 import { MarketingError, type CampaignDraft } from './domain.js';
 
@@ -5,7 +6,7 @@ export interface GoogleLanguage { resourceName: string; name: string; code: stri
 type Client = Pick<GoogleAdsClient, 'getCustomerId' | 'searchStream' | 'suggestGeoTargets'>;
 const languagePattern = /^languageConstants\/[1-9]\d{0,19}$/;
 const geoPattern = /^geoTargetConstants\/[1-9]\d{0,19}$/;
-const text = (value: unknown): value is string => typeof value === 'string' && value.length > 0 && value.length <= 500 && !/[\x00-\x1f\x7f]/.test(value);
+const text = (value: unknown): value is string => typeof value === 'string' && value.length > 0 && value.length <= 500 && !hasAsciiControl(value, true);
 
 /** Cache only provider public metadata. No host financial or audience membership data is cached. */
 export class MarketingTargetingService {
@@ -28,7 +29,7 @@ export class MarketingTargetingService {
     } finally { this.pending.delete(key); }
   }
   async locations(query: string, countryCode?: string): Promise<GoogleGeoTarget[]> {
-    if (typeof query !== 'string' || query.trim().length < 2 || query.length > 80 || /[\x00-\x1f\x7f]/.test(query) || countryCode !== undefined && !/^[A-Z]{2}$/.test(countryCode)) throw new MarketingError('TARGETING_INPUT_INVALID', 'Enter a location name between 2 and 80 characters.', 422);
+    if (typeof query !== 'string' || query.trim().length < 2 || query.length > 80 || hasAsciiControl(query, true) || countryCode !== undefined && !/^[A-Z]{2}$/.test(countryCode)) throw new MarketingError('TARGETING_INPUT_INVALID', 'Enter a location name between 2 and 80 characters.', 422);
     const q = query.trim();
     return this.cached(`geo:${countryCode || ''}:${q}`, async () => (await this.client.suggestGeoTargets({ names: [q], ...(countryCode ? { countryCode } : {}) })).filter(v=>v.canonicalName.length<=120).slice(0, 30));
   }

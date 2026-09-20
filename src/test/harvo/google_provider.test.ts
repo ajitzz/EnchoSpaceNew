@@ -224,7 +224,7 @@ describe('HARVO Google provider — real transport code and isolated PostgreSQL'
 
   it.each(['EMPTY_METRICS', 'INVALID_METRICS'])('preserves missing observations for %s rather than substituting zero', async mode => {
     expect((await providerFixture().provider.createCampaignHierarchy(request(), pool)).success).toBe(true);
-    await expect(providerFixture(mode).provider.fetchTelemetrySnapshot(ids.campaign, { startDate: '2026-09-01', endDate: '2026-09-12' }, pool)).rejects.toMatchObject({ code: 'GOOGLE_TELEMETRY_UNAVAILABLE' });
+    await expect(providerFixture(mode).provider.fetchTelemetrySnapshot(ids.campaign, { startDate: '2026-09-01', endDate: '2026-09-12' }, pool)).rejects.toMatchObject({ code: mode === 'EMPTY_METRICS' ? 'PROVIDER_REPORT_PENDING' : 'GOOGLE_TELEMETRY_UNAVAILABLE' });
   });
 
   it('never pretends to apply unimplemented controls or DCO', async () => {

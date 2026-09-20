@@ -1,15 +1,16 @@
-// @ts-nocheck
+import {registerSecureRealtime} from './src/server/realtime.js';
+import {originAllowed} from './src/server/deployment/origins.js';
+import { installPoolIsolation } from './src/server/deployment/poolIsolation.js';
+import { registerCalendarRoutes } from './src/server/calendar.js';
 import {createPublicAssetsMiddleware} from './src/server/deployment/staticAssets.js';
 import {databaseReadiness} from './src/server/deployment/databaseReadiness.js';
 import {createShutdown,drainHttpServer,isProcessEntry} from './src/server/deployment/lifecycle.js';
-import { createMarketingRuntime } from './src/server/marketing/runtime.js';
+import { createDeployedMarketingRuntime } from './src/server/marketing/runtime.js';
 import { createMarketingRouter, marketingErrorHandler } from './src/server/marketing/router.js';
 import { legacyMarketingBoundary } from './src/server/marketing/legacyBoundary.js';
 import { verifyGoogleIdentity } from './src/lib/marketing/authentication.js';
 import {resolvePersistedSession,legacySocialPublishingEnabled,socialApprovalPredicate,approveLegacySocialPost} from './src/lib/marketing/legacyAuthorization.js';
 import {issueLocalUpload,verifyLocalUpload,randomMediaKey,writeImmutableMedia} from './src/lib/marketing/localMedia.js';
-/* eslint-disable @typescript-eslint/ban-ts-comment */
-// @ts-nocheck
 // ==========================================
 // PHASE 2.2: CENTRAL CAMPAIGN STATE MACHINE
 // ==========================================
@@ -136,7 +137,6 @@ export async function transitionCampaignState(params: {
 }
 // ==========================================
 
-// @ts-nocheck
 import fs from 'fs';
 import { AsyncLocalStorage } from 'async_hooks';
 import express, { Request, Response, NextFunction } from 'express';
@@ -145,9 +145,10 @@ import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { toPublicStayProjection, toPublicListingCardProjection, generateListingSlug, escapeHtml, STAY_PUBLIC_SQL_COLUMNS, coarsenCoordinate } from './src/lib/stayProjection.js';
 
-export interface AuthRequest extends Request {
+// These routes use named scalar parameters; persisted sessions normalize numeric IDs.
+export interface AuthRequest extends Request<Record<string, string>> {
   user?: {
-    id: number | string;
+    id: number;
     role: string;
     email?: string;
     name?: string;
@@ -423,8 +424,8 @@ async function triggerSmartAutoPause(listingId: any, bookingId: any) {
 
     // Dispatch real-time socket events
     try {
-      if (global.io) {
-        global.io.emit('db_changed', { type: 'marketing' });
+      if ((globalThis as typeof globalThis & { io?: SocketIOServer }).io) {
+        (globalThis as typeof globalThis & { io?: SocketIOServer }).io?.emit('db_changed', { type: 'marketing' });
       }
     } catch (_sockErr) {
       // Socket broadcast non-fatal
@@ -518,95 +519,9 @@ export async function queryAnalyticsRead(text: string, params?: any[]) {
   return await readPool.query(text, params);
 }
 
-// Wrap pool.query to support secure Row-Level Security session context propagation and resilient connection retries
-const originalPoolQuery = pool.query;
-const originalPoolConnect = pool.connect.bind(pool);
-
-async function executeQueryWithRetry(fn: () => Promise<any>, retries = 1, delay = 150): Promise<any> {
-  try {
-    return await fn();
-  } catch (err: any) {
-    const errMsg = (err?.message || '').toLowerCase();
-    const isConnError =
-      errMsg.includes('connection terminated') ||
-      errMsg.includes('connection timeout') ||
-      errMsg.includes('econnreset') ||
-      errMsg.includes('econnrefused') ||
-      errMsg.includes('etimedout') ||
-      errMsg.includes('epipe') ||
-      errMsg.includes('too many clients') ||
-      errMsg.includes('timeout overflow') ||
-      errMsg.includes('client has already been connected') ||
-      errMsg.includes('terminating connection') ||
-      errMsg.includes('server closed the connection') ||
-      errMsg.includes('ssl connection has been closed') ||
-      errMsg.includes('could not connect to server') ||
-      errMsg.includes('broken pipe') ||
-      err?.code === '08006' ||
-      err?.code === '08001' ||
-      err?.code === '08004' ||
-      err?.code === '57P01' ||
-      err?.code === '57P02' ||
-      err?.code === '57P03';
-    if (isConnError && retries > 0) {
-      const jitterDelay = delay + Math.floor(Math.random() * 100);
-      console.warn(`[DATABASE QUERY RETRY] Retrying query after transient error (${err?.message || err?.code}). Retries remaining: ${retries}`);
-      await new Promise(res => setTimeout(res, jitterDelay));
-      return executeQueryWithRetry(fn, retries - 1, delay * 2);
-    }
-    throw err;
-  }
-}
-
-pool.connect = originalPoolConnect;
-
-pool.query = async function (this: any, ...args: any[]) {
-  const [text, params, callback] = args;
-  if (typeof params === 'function' || typeof callback === 'function') {
-    return originalPoolQuery.apply(pool, args);
-  }
-
-  const store = rlsStorage.getStore();
-  const userId = store?.userId;
-  const isRequest = store?.isRequest;
-  const bypassRls = store?.bypassRls;
-
-  // Only apply RLS configuration when there is an active, authenticated non-admin userId in the request store.
-  // Otherwise, run direct queries immediately for optimal performance (e.g. unauthenticated or admin queries).
-  if (process.env.NODE_ENV !== 'test' && isDbConfigured && isRequest && userId && !bypassRls) {
-    return executeQueryWithRetry(async () => {
-      let client: any = null;
-      let hasError = false;
-      try {
-        client = await pool.connect();
-        // Set both configs in a single optimized query
-        await client.query(
-          `SELECT set_config('app.current_user_id', $1, false), set_config('app.bypass_rls', $2, false)`,
-          [String(userId), 'false']
-        );
-
-        const result = await client.query(text, params);
-        return result;
-      } catch (err) {
-        hasError = true;
-        throw err;
-      } finally {
-        if (client) {
-          if (!hasError) {
-            try {
-              await client.query(`SELECT set_config('app.current_user_id', '', false), set_config('app.bypass_rls', 'true', false)`);
-            } catch (resetErr) {
-              hasError = true;
-            }
-          }
-          client.release(hasError);
-        }
-      }
-    });
-  } else {
-    return executeQueryWithRetry(async () => originalPoolQuery.apply(pool, args));
-  }
-};
+// All reads, explicit clients and callbacks share the same transaction-local tenant boundary.
+installPoolIsolation(pool, () => rlsStorage.getStore());
+installPoolIsolation(readPool, () => rlsStorage.getStore());
 
 let dbConnectionError: string | null = null;
 if (isDbConfigured) {
@@ -751,7 +666,7 @@ async function sendWhatsAppMessage(toPhone: string, messageText: string): Promis
 
 // Auth Middleware
 // Optional Auth Middleware for Seamless Guest Checkouts
-export const optionalAuthenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const optionalAuthenticateToken = (req: Request & Pick<AuthRequest, 'user'>, res: Response, next: NextFunction) => {
   const token = req.headers.authorization?.split(' ')[1];
   const guest = () => { req.user = { id: 1, role: 'guest', email: 'guest@encho.space' }; next(); };
   if (!token) return guest();
@@ -765,7 +680,7 @@ export const optionalAuthenticateToken = (req: AuthRequest, res: Response, next:
   });
 };
 
-export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authenticateToken = (req: Request & Pick<AuthRequest, 'user'>, res: Response, next: NextFunction) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Authentication required. No token provided.' });
   jwt.verify(token, JWT_SECRET, {algorithms:['HS256']}, async (err: any, claims: any) => {
@@ -780,63 +695,7 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
   });
 };
 
-// Hardened CORS policy: Exact production allowlist
-const canonicalProductionOrigins = [
-  'https://encho.space',
-  'https://www.encho.space',
-  'https://encho.co.in',
-  'https://www.encho.co.in'
-];
-
-app.use(cors({
-  origin: function(origin, callback) {
-    // 1. Allow same-origin or non-browser server-to-server requests (no Origin header)
-    if (!origin) {
-      return callback(null, true);
-    }
-
-    const isProd = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
-    const configuredAllowedOrigins = process.env.ALLOWED_ORIGINS
-      ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
-      : [];
-
-    const exactProductionAllowedOrigins = new Set([
-      ...canonicalProductionOrigins,
-      ...configuredAllowedOrigins
-    ]);
-
-    if (isProd && !process.env.ALLOWED_ORIGINS && !(global as any).__loggedMissingAllowedOrigins) {
-      (global as any).__loggedMissingAllowedOrigins = true;
-      console.error(
-        '[SECURITY CONFIGURATION ERROR] Missing ALLOWED_ORIGINS environment variable in production runtime. ' +
-        'CORS will strictly accept only canonical production origins: https://encho.space, https://www.encho.space. ' +
-        'To allow custom staging or preview domains, explicitly define ALLOWED_ORIGINS as a comma-separated list of exact origins.'
-      );
-    }
-
-    // 2. In non-production or test runtimes without production simulation, preserve local development compatibility
-    if (!isProd) {
-      if (
-        origin.startsWith('http://localhost:') ||
-        origin.startsWith('https://localhost:') ||
-        origin.startsWith('http://127.0.0.1:') ||
-        exactProductionAllowedOrigins.has(origin)
-      ) {
-        return callback(null, true);
-      }
-      return callback(null, true);
-    }
-
-    // 3. In production runtime: EXACT allowlist match only (fail closed, NO broad *.vercel.app)
-    if (exactProductionAllowedOrigins.has(origin)) {
-      return callback(null, true);
-    }
-
-    // Fail closed: reject any origin not in exact allowlist
-    return callback(new Error(`Blocked by CORS policy: Origin '${origin}' is not in production allowlist`), false);
-  },
-  credentials: true
-}));
+app.use(cors({origin:(origin,callback)=>callback(originAllowed(origin)?null:new Error('Blocked by CORS policy: origin is not permitted'),originAllowed(origin)),credentials:true}));
 
 // CORS Error Interceptor: Fail closed with HTTP 403
 app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
@@ -1148,36 +1007,10 @@ app.use(express.json({
   }
 }));
 
-const harvoMarketing = createMarketingRuntime(pool, {
-  verifyBooking: async (request) => {
-    try {
-      // Industrial Standard: Read directly from the authoritative bookings ledger with a share lock to prevent dirty reads during measurement.
-      const res = await pool.query('SELECT id, status, total_rent FROM bookings WHERE id = $1 FOR SHARE', [Number(request.reference)]);
-      const b = res.rows[0];
-      if (!b) return null;
-      
-      // Strict canonical definition of an accepted booking
-      const isAccepted = ['Confirmed', 'Booked', 'Completed'].includes(b.status);
-      
-      return {
-        id: String(b.id),
-        status: isAccepted ? 'ACCEPTED' : 'REJECTED',
-        revenueMinor: String(Math.round(Number(b.total_rent || 0) * 100))
-      };
-    } catch (e) {
-      console.error('[Marketing Verifier] Database error verifying booking:', e);
-      return null;
-    }
-  },
-  resolveAttribution: async (request) => {
-    // V1 Industrial Standard: Implicit platform consent. 
-    // In V2, this must query the explicit user_consents table.
-    return { consent: { granted: true, timestamp: new Date() } };
-  }
-});
+const harvoMarketing = createDeployedMarketingRuntime(pool);
 app.use('/api/marketing/v2', createMarketingRouter(pool, harvoMarketing.workflow, harvoMarketing.finance, authenticateToken, harvoMarketing.targeting, {settlement:harvoMarketing.settlement,conversions:harvoMarketing.conversions,guidance:harvoMarketing.guidance,creative:harvoMarketing.creative}));
-app.get('/api/webhooks/marketing/v2/meta', (req,res,next) => { try { res.type('text/plain').send(harvoMarketing.metaEvents.challenge(req.query['hub.mode'],req.query['hub.verify_token'],req.query['hub.challenge'])); } catch(error) { next(error); } }, marketingErrorHandler);
-app.post('/api/webhooks/marketing/v2/:provider', async (req: any, res, next) => {
+app.get('/api/webhooks/marketing/v2/meta', (req: Request,res: Response,next: NextFunction) => { try { res.type('text/plain').send(harvoMarketing.metaEvents.challenge(req.query['hub.mode'],req.query['hub.verify_token'],req.query['hub.challenge'])); } catch(error) { next(error); } }, marketingErrorHandler);
+app.post('/api/webhooks/marketing/v2/:provider', async (req: any, res: Response, next: NextFunction) => {
   try {
     const provider = String(req.params.provider).toUpperCase();
     if (provider === 'META') {
@@ -1204,7 +1037,7 @@ app.use((req, res, next) => {
 app.use(hpp()); // Protect against HTTP Parameter Pollution attacks
 
 // Read-only readiness is database structural evidence, never advertising or financial acceptance.
-const readinessHandler = async (_req, res) => {
+const readinessHandler = async (_req: Request, res: Response) => {
   if(serverDraining || !isDbConfigured)return res.status(503).json({status:'not_ready',scope:'database_structure',reason:serverDraining?'draining':'database_not_configured'});
   try {
     const check=await databaseReadiness(pool);
@@ -1271,7 +1104,7 @@ Answer the user's question accurately. If they ask about something not listed, p
 
        let replyText = '';
        try {
-          const response = await ai.models.generateContent({
+          const response = await ai!.models.generateContent({
              model: "gemini-2.5-flash",
              contents: msg_body,
              config: {
@@ -2526,7 +2359,8 @@ export const ensureMarketingSchema = async () => {
       ALTER TABLE host_outreach_leads ENABLE ROW LEVEL SECURITY;
       DROP POLICY IF EXISTS host_leads_policy ON host_outreach_leads;
       CREATE POLICY host_leads_policy ON host_outreach_leads
-        USING (true OR current_setting('app.bypass_rls', true) = 'true');
+        USING (host_id = current_app_user_id() OR current_setting('app.bypass_rls', true) = 'true')
+        WITH CHECK (host_id = current_app_user_id() OR current_setting('app.bypass_rls', true) = 'true');
 
       -- 2. host_wallets
       ALTER TABLE host_wallets ENABLE ROW LEVEL SECURITY;
@@ -3388,268 +3222,8 @@ app.post('/api/listings/:id/calendar', authenticateToken, async (req: AuthReques
   }
 });
 
-// ==========================================
-// ROOM-AWARE MULTI-CHANNEL CALENDAR MATRIX (UNIT-LEVEL PMS)
-// ==========================================
-
-// 1. Fetch complete room matrix (rooms with inventory units, confirmed Encho bookings, external blocks)
-app.get('/api/listings/:id/room-calendar', async (req, res) => {
-  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  const listingId = req.params.id;
-  if (isNaN(Number(listingId))) return res.json({ listingId, rooms: [], bookings: [], blocks: [] });
-
-  try {
-    // 1. Fetch listing details to extract room types
-    const listingRes = await pool.query('SELECT id, title, rooms, user_id FROM listings WHERE id = $1', [listingId]);
-    if (listingRes.rows.length === 0) return res.status(404).json({ error: 'Listing not found' });
-    const listing = listingRes.rows[0];
-
-    // Normalize rooms
-    let rooms: any[] = [];
-    if (listing.rooms) {
-      rooms = typeof listing.rooms === 'string' ? JSON.parse(listing.rooms) : listing.rooms;
-    }
-    if (!Array.isArray(rooms) || rooms.length === 0) {
-      // Check room_types table
-      const rtRes = await pool.query('SELECT * FROM room_types WHERE listing_id = $1 ORDER BY id ASC', [listingId]);
-      if (rtRes.rows.length > 0) {
-        rooms = rtRes.rows.map((rt: any) => ({
-          id: String(rt.id),
-          name: rt.name,
-          type: rt.type || rt.name.toLowerCase().replace(/\s+/g, '_'),
-          icon: rt.icon || '🛏️',
-          tag: rt.tag || '',
-          price: parseFloat(rt.base_price),
-          capacity: rt.max_occupancy,
-          inventory_count: Number(rt.inventory_count) || 1,
-          specs: rt.specs || '',
-          description: rt.description || ''
-        }));
-      } else {
-        // Default sanctuary room fallback
-        rooms = [
-          { id: 'suites', name: 'Presidential Panorama Suite', type: 'suites', icon: '👑', price: 18500, capacity: 2, inventory_count: 3, tag: 'Master Luxury' },
-          { id: 'deluxe', name: 'Deluxe Garden Sanctuary', type: 'deluxe', icon: '🛏️', price: 11500, capacity: 2, inventory_count: 4, tag: 'Recommended' },
-          { id: 'executive', name: 'Executive Work Enclave', type: 'executive', icon: '💻', price: 7500, capacity: 1, inventory_count: 2, tag: 'Solo & Work' }
-        ];
-      }
-    }
-
-    // 2. Fetch all confirmed/active bookings for this listing
-    const bookingsRes = await pool.query(`
-      SELECT b.id, b.user_id, b.start_date, b.end_date, b.total_rent as total_price, b.status, b.guests, b.room_tier, b.room_unit_number, b.created_at,
-             COALESCE(u.name, 'Encho Verified Guest') as guest_name,
-             COALESCE(u.email, '') as guest_email,
-             COALESCE(u.avatar, '') as guest_avatar
-      FROM bookings b
-      LEFT JOIN users u ON b.user_id = u.id
-      WHERE b.listing_id = $1 AND b.status != 'cancelled'
-      ORDER BY b.start_date ASC
-    `, [listingId]);
-
-    // 3. Fetch all date blocks for this listing
-    const blocksRes = await pool.query(`
-      SELECT id, listing_id, room_tier_key, room_name, room_unit_number, start_date, end_date, block_source, guest_name, note, created_at
-      FROM room_calendar_blocks
-      WHERE listing_id = $1
-      ORDER BY start_date ASC
-    `, [listingId]);
-
-    // Format rooms with individual physical unit breakdown
-    const formattedRooms = rooms.map(r => {
-      const invCount = Math.max(1, Number(r.inventory_count) || 1);
-      const tierKey = r.type || r.id || 'suites';
-      
-      const units = [];
-      for (let u = 1; u <= invCount; u++) {
-        units.push({
-          unitNumber: u,
-          unitName: `${r.name} #${String(u).padStart(2, '0')}`,
-          tierKey: tierKey
-        });
-      }
-
-      return {
-        tierKey: tierKey,
-        name: r.name || 'Sanctuary Suite',
-        icon: r.icon || '🛏️',
-        price: Number(r.price) || 0,
-        capacity: Number(r.capacity) || 2,
-        inventoryCount: invCount,
-        tag: r.tag || '',
-        units: units
-      };
-    });
-
-    res.json({
-      listingId: Number(listingId),
-      listingTitle: listing.title,
-      hostId: listing.user_id,
-      rooms: formattedRooms,
-      bookings: bookingsRes.rows.map(b => ({
-        id: b.id,
-        roomTier: b.room_tier || 'suites',
-        roomUnitNumber: Number(b.room_unit_number) || 1,
-        guestName: b.guest_name,
-        guestEmail: b.guest_email,
-        guestAvatar: b.guest_avatar,
-        startDate: b.start_date ? new Date(b.start_date).toISOString().split('T')[0] : '',
-        endDate: b.end_date ? new Date(b.end_date).toISOString().split('T')[0] : '',
-        totalPrice: Number(b.total_price) || 0,
-        guestsCount: Number(b.guests) || 1,
-        status: b.status || 'confirmed',
-        source: 'encho'
-      })),
-      blocks: blocksRes.rows.map(blk => ({
-        id: blk.id,
-        roomTierKey: blk.room_tier_key,
-        roomName: blk.room_name || 'All Rooms',
-        roomUnitNumber: blk.room_unit_number ? Number(blk.room_unit_number) : 0, // 0 = all units
-        startDate: blk.start_date ? new Date(blk.start_date).toISOString().split('T')[0] : '',
-        endDate: blk.end_date ? new Date(blk.end_date).toISOString().split('T')[0] : '',
-        blockSource: blk.block_source || 'manual',
-        guestName: blk.guest_name || '',
-        note: blk.note || '',
-        createdAt: blk.created_at
-      }))
-    });
-  } catch (err) {
-    console.error('[ROOM CALENDAR GET ERROR]', err);
-    res.status(500).json({ error: 'Failed to fetch room calendar' });
-  }
-});
-
-// 2. Create date block for a specific room unit or entire estate
-app.post('/api/listings/:id/room-calendar/block', authenticateToken, async (req: AuthRequest, res) => {
-  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  const listingId = req.params.id;
-  const userId = req.user?.id;
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-
-  try {
-    // IDOR Check
-    const authCheck = await pool.query('SELECT user_id FROM listings WHERE id = $1', [listingId]);
-    if (authCheck.rows.length === 0) return res.status(404).json({ error: 'Listing not found' });
-    if (authCheck.rows[0].user_id !== userId && req.user?.role !== 'admin') {
-      return res.status(403).json({ error: 'Forbidden: You do not own this listing' });
-    }
-
-    const { roomTierKey, roomName, roomUnitNumber, startDate, endDate, blockSource, guestName, note } = req.body;
-    if (!startDate || !endDate) {
-      return res.status(400).json({ error: 'startDate and endDate are required' });
-    }
-
-    const sDate = new Date(startDate);
-    const eDate = new Date(endDate);
-    if (isNaN(sDate.getTime()) || isNaN(eDate.getTime()) || sDate > eDate) {
-      return res.status(400).json({ error: 'Invalid date range: startDate must be before or equal to endDate' });
-    }
-
-    let targetRoomTypeId = req.body.room_type_id || req.body.roomTypeId;
-    if (!targetRoomTypeId && roomTierKey && roomTierKey !== 'all') {
-      const matchRoom = await pool.query(
-        'SELECT id FROM room_types WHERE listing_id = $1 AND (type = $2 OR name = $3) LIMIT 1',
-        [listingId, roomTierKey, roomName || roomTierKey]
-      );
-      if (matchRoom.rows.length > 0) {
-        targetRoomTypeId = matchRoom.rows[0].id;
-      }
-    }
-
-    // If targetRoomTypeId is identified, use atomic transactional inventory authority
-    if (targetRoomTypeId) {
-      const blockResult = await createHostCalendarBlock(pool, {
-        listingId: Number(listingId),
-        roomTypeId: Number(targetRoomTypeId),
-        startDate,
-        endDate,
-        blockSource,
-        guestName,
-        note
-      });
-
-      if (!blockResult.success) {
-        return res.status(blockResult.statusCode).json({
-          error: blockResult.error,
-          code: blockResult.code,
-          details: blockResult.conflictDetails
-        });
-      }
-
-      triggerSmartAutoPause(listingId, `ROOM_BLOCK_${Date.now()}`).catch(err => {
-        console.warn('[CIRCUIT BREAKER] Auto-pause trigger notice:', err);
-      });
-
-      return res.status(201).json({
-        success: true,
-        message: 'Unit date block established successfully',
-        block: blockResult.block
-      });
-    }
-
-    // Fallback: unmapped property-wide block ('all') marked as ambiguous
-    const result = await pool.query(`
-      INSERT INTO room_calendar_blocks (listing_id, room_tier_key, room_name, room_unit_number, start_date, end_date, block_source, guest_name, note, mapping_status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ambiguous')
-      RETURNING *
-    `, [
-      listingId,
-      roomTierKey || 'all',
-      roomName || 'All Sanctuary Rooms',
-      roomUnitNumber !== undefined && roomUnitNumber !== null ? Number(roomUnitNumber) : 0,
-      startDate,
-      endDate,
-      blockSource || 'manual',
-      guestName || null,
-      note || null
-    ]);
-
-    triggerSmartAutoPause(listingId, `ROOM_BLOCK_${Date.now()}`).catch(err => {
-      console.warn('[CIRCUIT BREAKER] Auto-pause trigger notice:', err);
-    });
-
-    res.status(201).json({
-      success: true,
-      message: 'Unit date block established successfully',
-      block: result.rows[0]
-    });
-  } catch (err) {
-    console.error('[ROOM CALENDAR BLOCK CREATE ERROR]', err);
-    res.status(500).json({ error: 'Failed to create room calendar block' });
-  }
-});
-
-// 3. Remove date block
-app.delete('/api/listings/:id/room-calendar/block/:blockId', authenticateToken, async (req: AuthRequest, res) => {
-  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  const { id: listingId, blockId } = req.params;
-  const userId = req.user?.id;
-  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-
-  try {
-    // IDOR Check
-    const authCheck = await pool.query('SELECT user_id FROM listings WHERE id = $1', [listingId]);
-    if (authCheck.rows.length === 0) return res.status(404).json({ error: 'Listing not found' });
-    if (authCheck.rows[0].user_id !== userId && req.user?.role !== 'admin') {
-      return res.status(403).json({ error: 'Forbidden: You do not own this listing' });
-    }
-
-    const delRes = await pool.query(`
-      DELETE FROM room_calendar_blocks
-      WHERE id = $1 AND listing_id = $2
-      RETURNING id
-    `, [blockId, listingId]);
-
-    if (delRes.rows.length === 0) {
-      return res.status(404).json({ error: 'Date block not found' });
-    }
-
-    res.json({ success: true, message: 'Date block removed and dates restored to live pool' });
-  } catch (err) {
-    console.error('[ROOM CALENDAR BLOCK DELETE ERROR]', err);
-    res.status(500).json({ error: 'Failed to delete room calendar block' });
-  }
-});
+// Private calendars and public availability have separate, scoped contracts.
+registerCalendarRoutes(app, pool, authenticateToken, () => isDbConfigured);
 
 app.get('/api/admin/users', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
@@ -4023,7 +3597,7 @@ app.post('/api/upload-video-url', authenticateToken, async (req, res) => {
   }
 });
 
-app.get('/api/mux/upload/:uploadId', authenticateToken, async (req, res) => {
+app.get('/api/mux/upload/:uploadId', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const upload = await mux.video.uploads.retrieve(req.params.uploadId);
     if (upload.asset_id) {
@@ -4040,7 +3614,7 @@ app.get('/api/mux/upload/:uploadId', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/upload-url', authenticateToken, async (req, res) => {
+app.post('/api/upload-url', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const { filename, contentType } = req.body;
     if (!filename || !contentType) {
@@ -4054,7 +3628,7 @@ app.post('/api/upload-url', authenticateToken, async (req, res) => {
     }
     // Validate AWS Configuration (Fallback to local storage / base64 if AWS S3 is not configured)
     if (!process.env.AWS_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID === 'dummy' || !process.env.AWS_S3_BUCKET_NAME) {
-      const authorization=issueLocalUpload(JWT_SECRET,req.user.id,contentType);
+      const authorization=issueLocalUpload(JWT_SECRET,req.user!.id,contentType);
       const uploadUrl=`/api/upload-local?ticket=${encodeURIComponent(authorization.ticket)}`;
       const fileUrl=`/uploads/${authorization.key}`;
       return res.json({uploadUrl,fileUrl,publicUrl:fileUrl});
@@ -4346,13 +3920,13 @@ app.put('/api/listings/:id', authenticateToken, async (req: AuthRequest, res) =>
           for (const camp of activeCampaigns.rows) {
              console.log(`[DYNAMIC PRICING SYNC] Fired instant webhook to Meta API. Campaign #${camp.id} updated with new pricing/data to prevent bounce rates.`);
              if (io && req.user?.id) {
-               io.to(`user_${req.user.id}`).emit('notification', {
+               io.to(`user_${req.user!.id}`).emit('notification', {
                  type: 'dynamic_price_sync',
                  title: '⚡ Dynamic Price Synced',
                  message: `Meta Ad Creative auto-updated with new rate ($${price || 'updated'}) to prevent bounce rates!`,
                  campaignId: camp.id
                });
-               io.to(`user_${req.user.id}`).emit('dynamic_price_sync', {
+               io.to(`user_${req.user!.id}`).emit('dynamic_price_sync', {
                  campaignId: camp.id,
                  message: `Meta Ad Creative auto-updated with new rate ($${price || 'updated'}) to prevent bounce rates!`
                });
@@ -4936,7 +4510,7 @@ app.get('/api/marketing/analytics', authenticateToken, async (req: AuthRequest, 
       WHERE (c.host_id = $1 OR $2 = true)
     `, [hostId, isAdmin]);
 
-    const timeSeries = timeSeriesRes.rows.map(r => ({
+    const timeSeries = timeSeriesRes.rows.map((r: any) => ({
       date: r.date,
       impressions: Number(r.impressions),
       clicks: Number(r.clicks),
@@ -4997,9 +4571,9 @@ app.get(['/api/admin/marketing/campaigns/:id/control-center', '/api/admin/campai
   try {
     const { id } = req.params;
     const userId = req.user?.id;
-    const userRole = req.user?.role || 'admin';
+    const userRole = req.user?.role;
 
-    if (userRole !== 'admin' && !req.user?.isAdmin) {
+    if (userRole !== 'admin') {
       return res.status(403).json({ error: 'Admin role required' });
     }
 
@@ -5065,7 +4639,7 @@ app.get('/api/marketing/campaigns/:id/analytics', authenticateToken, async (req:
       WHERE campaign_id = $1
     `, [id]);
 
-    const timeSeries = timeSeriesRes.rows.map(r => ({
+    const timeSeries = timeSeriesRes.rows.map((r: any) => ({
       date: r.date,
       impressions: Number(r.impressions),
       clicks: Number(r.clicks),
@@ -5209,7 +4783,7 @@ app.get('/api/marketing/campaigns/:id/report/pdf', authenticateToken, async (req
 app.get('/api/admin/marketing/analytics/portfolio', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
-    if (req.user?.role !== 'admin' && !req.user?.isAdmin) {
+    if (req.user?.role !== 'admin') {
       return res.status(403).json({ error: 'Forbidden: Admin authorization required' });
     }
 
@@ -5308,7 +4882,7 @@ app.get('/api/marketing/leads/:id', authenticateToken, async (req: AuthRequest, 
       {
         userId: req.user?.id,
         role: req.user?.role,
-        isAdmin: req.user?.role === 'admin' || Boolean(req.user?.isAdmin)
+        isAdmin: req.user?.role === 'admin'
       },
       pool
     );
@@ -5331,7 +4905,7 @@ app.patch('/api/marketing/leads/:id/status', authenticateToken, async (req: Auth
       return res.status(400).json({ error: 'lead ID and to_state are required' });
     }
 
-    const isAdmin = req.user?.role === 'admin' || Boolean(req.user?.isAdmin);
+    const isAdmin = req.user?.role === 'admin';
     const updatedLead = await LeadAlertingCrmService.transitionLeadState({
       leadId,
       toState: to_state,
@@ -5420,7 +4994,7 @@ app.post('/api/marketing/leads/:id/message', authenticateToken, async (req: Auth
 app.post('/api/admin/marketing/leads/notifications/process', authenticateToken, async (req: AuthRequest, res: Response) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
-    if (req.user?.role !== 'admin' && !req.user?.isAdmin) {
+    if (req.user?.role !== 'admin') {
       return res.status(403).json({ error: 'Forbidden: Admin authorization required' });
     }
 
@@ -5437,7 +5011,7 @@ app.post('/api/admin/marketing/leads/notifications/process', authenticateToken, 
 app.get('/api/admin/marketing/leads/health', authenticateToken, async (req: AuthRequest, res: Response) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
-    if (req.user?.role !== 'admin' && !req.user?.isAdmin) {
+    if (req.user?.role !== 'admin') {
       return res.status(403).json({ error: 'Forbidden: Admin authorization required' });
     }
 
@@ -5489,8 +5063,6 @@ app.post('/api/marketing/pre-flight-check', authenticateToken, async (req: AuthR
         status: g.status,
         severity: g.severity,
         reason: g.message,
-        currentValue: g.current_value,
-        expectedValue: g.expected_value,
         remediation: g.action_required,
         field: g.field_ref,
         autoFixAvailable: ['target_radius_km', 'budget', 'feed_description', 'policy_cleared'].includes(g.field_ref || '')
@@ -5543,8 +5115,6 @@ app.get('/api/marketing/campaigns/:id/preflight', authenticateToken, async (req:
         status: g.status,
         severity: g.severity,
         reason: g.message,
-        currentValue: g.current_value,
-        expectedValue: g.expected_value,
         remediation: g.action_required,
         field: g.field_ref,
         autoFixAvailable: ['target_radius_km', 'budget', 'feed_description', 'policy_cleared'].includes(g.field_ref || '')
@@ -5634,7 +5204,7 @@ app.post('/api/marketing/copilot', authenticateToken, async (req: AuthRequest, r
        for (const file of files) {
           if (file.endsWith('.md')) {
              metaKnowledge += `\n--- ${file} ---\n`;
-             metaKnowledge += fsLib.readFileSync(path.join(metaDocsPath, file), 'utf8');
+             metaKnowledge += fs.readFileSync(path.join(metaDocsPath, file), 'utf8');
           }
        }
     }
@@ -5715,7 +5285,7 @@ app.post('/api/marketing/copilot', authenticateToken, async (req: AuthRequest, r
       }
     `;
 
-    const response = await ai.models.generateContent({
+    const response = await ai!.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
       config: {
@@ -5723,7 +5293,7 @@ app.post('/api/marketing/copilot', authenticateToken, async (req: AuthRequest, r
       }
     });
 
-    const result = JSON.parse(response.text);
+    const result = JSON.parse(response.text || (() => { throw new Error('AI response was empty'); })());
     res.json(result);
 
   } catch (error) {
@@ -5737,7 +5307,7 @@ app.post('/api/marketing/campaigns', authenticateToken, async (req: AuthRequest,
   try {
     const parseResult = campaignSchema.safeParse(req.body);
     if (!parseResult.success) {
-      return res.status(400).json({ error: 'Invalid input', details: parseResult.error.issues || parseResult.error.errors });
+      return res.status(400).json({ error: 'Invalid input', details: parseResult.error.issues });
     }
     const { listing_id, title, description, video_url, media_urls, platforms, budget, target_locations, target_radius_km, ad_format, feed_description, meta_pixel_id, meta_capi_token, google_conversion_id, google_conversion_label, target_audience_persona, audience_interests, ai_generated_ad_copies, target_locations_json } = parseResult.data;
 
@@ -5781,7 +5351,7 @@ app.post('/api/marketing/campaigns', authenticateToken, async (req: AuthRequest,
       INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
     `, [
-      req.user.id,
+      req.user!.id,
       'marketing_campaign',
       newCampaignId,
       'create_campaign',
@@ -5861,7 +5431,7 @@ app.put('/api/marketing/campaigns/:id', authenticateToken, async (req: AuthReque
     const { id } = req.params;
     const parseResult = campaignUpdateSchema.safeParse(req.body);
     if (!parseResult.success) {
-      return res.status(400).json({ error: 'Invalid input', details: parseResult.error.issues || parseResult.error.errors });
+      return res.status(400).json({ error: 'Invalid input', details: parseResult.error.issues });
     }
     const { title, description, video_url, media_urls, platforms, budget, status, target_locations, target_radius_km, ad_format, feed_description, rejected_fields, meta_pixel_id, meta_capi_token, google_conversion_id, google_conversion_label, target_audience_persona, audience_interests, ai_generated_ad_copies, target_locations_json } = parseResult.data;
 
@@ -6140,7 +5710,7 @@ app.post('/api/host/social-posts/generate-caption', authenticateToken, async (re
     `;
 
     try {
-        const response = await ai.models.generateContent({
+        const response = await ai!.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
             config: { responseMimeType: "application/json" }
@@ -6221,7 +5791,7 @@ app.post('/api/host/social-posts', authenticateToken, async (req: AuthRequest, r
   try {
     const parseResult = socialPostSchema.safeParse(req.body);
     if (!parseResult.success) {
-      return res.status(400).json({ error: 'Invalid input', details: parseResult.error.issues || parseResult.error.errors });
+      return res.status(400).json({ error: 'Invalid input', details: parseResult.error.issues });
     }
     const { listing_id, media_type, media_urls, hero_index, caption, hashtags, scheduled_at } = parseResult.data;
 
@@ -6574,11 +6144,11 @@ app.post('/api/admin/social-posts/:id/approve', authenticateToken, async (req: A
       return res.status(403).json({ error: 'Access denied: Administrators only' });
     }
 
-    const post = await approveLegacySocialPost(pool, Number(id), req.user.id, req.ip || req.socket.remoteAddress || null);
+    const post = await approveLegacySocialPost(pool, Number(id), req.user!.id, req.ip || req.socket.remoteAddress || null);
 
     broadcastDbEvent(req, 'marketing');
     res.json({ success: true, post });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error approving social post:', error);
     res.status(error?.status || 500).json({ error: error?.code ? error.message : 'Failed to approve social post', ...(error?.code ? {code:error.code} : {}) });
   }
@@ -6680,7 +6250,7 @@ app.post('/api/marketing/assets/upload', authenticateToken, upload.single('media
 
 // Milestone 4.8: Walled-Garden Meta Integration (Post to Encho Accounts on behalf of Host)
 app.post('/api/marketing/social/publish', authenticateToken, idempotencyMiddleware, async (req: AuthRequest, res) => {
-  if (!req.user || !req.user.id) return res.status(401).json({ error: 'Unauthorized' });
+  if (!req.user || !req.user!.id) return res.status(401).json({ error: 'Unauthorized' });
 
   const { media_url, caption, format, target_audience } = req.body;
   if (!media_url) return res.status(400).json({ error: 'Missing media asset.' });
@@ -6690,7 +6260,7 @@ app.post('/api/marketing/social/publish', authenticateToken, idempotencyMiddlewa
      const metaToken = process.env.META_ACCESS_TOKEN;
 
      if (!metaAccountId || !metaToken || metaToken === 'dummy') {
-        console.warn(`[SOCIAL ENGINE SIMULATION] Publishing ${format} to Encho Main Account on behalf of Host ${req.user.id}`);
+        console.warn(`[SOCIAL ENGINE SIMULATION] Publishing ${format} to Encho Main Account on behalf of Host ${req.user!.id}`);
         // Simulate a successful publish
         return res.json({
            status: 'published_simulated',
@@ -6839,7 +6409,7 @@ app.post('/api/marketing/campaigns/:id/ai-check', authenticateToken, aiGatekeepe
           }
         `;
 
-        const response = await ai.models.generateContent({
+        const response = await ai!.models.generateContent({
           model: "gemini-2.5-flash",
           contents: prompt,
           config: { responseMimeType: "application/json" }
@@ -7072,7 +6642,7 @@ app.get('/api/marketing/recommend-targeting', authenticateToken, async (req: Aut
           }
         `;
 
-        const response = await ai.models.generateContent({
+        const response = await ai!.models.generateContent({
           model: "gemini-2.5-flash",
           contents: prompt,
           config: { responseMimeType: "application/json" }
@@ -7155,7 +6725,7 @@ app.post('/api/marketing/grade-targeting', authenticateToken, aiGatekeeperLimite
           }
         `;
 
-        const response = await ai.models.generateContent({
+        const response = await ai!.models.generateContent({
           model: "gemini-2.5-flash",
           contents: prompt,
           config: { responseMimeType: "application/json" }
@@ -7360,7 +6930,7 @@ app.post('/api/marketing/ai-generate-copy', authenticateToken, aiGatekeeperLimit
           }
         `;
 
-        const response = await ai.models.generateContent({
+        const response = await ai!.models.generateContent({
           model: "gemini-2.5-flash",
           contents: prompt,
           config: { responseMimeType: "application/json" }
@@ -8088,7 +7658,7 @@ export async function getOrEstablishFinancialContract(
 async function evaluateMetaPreflightDiagnostics(
   campaignIdOrData: number | any,
   dbPool: any,
-  options: { isAdmin?: boolean; isDispatch?: boolean; externalReport?: any } = {}
+  options: { isAdmin?: boolean; isDispatch?: boolean; externalReport?: any; correlationId?: string } = {}
 ) {
   let campaign: any = null;
   let campaignId = 0;
@@ -8669,7 +8239,7 @@ async function evaluateMetaPreflightDiagnostics(
 
 export interface MetaErrorClassification {
   code_name: string;
-  category: 'AUTHENTICATION' | 'AUTHORIZATION' | 'APP_CONFIGURATION' | 'APP_REVIEW' | 'BUSINESS_ASSET' | 'AD_ACCOUNT' | 'PAGE' | 'INSTAGRAM' | 'CREATIVE' | 'CAMPAIGN_CONFIGURATION' | 'TARGETING' | 'BUDGET' | 'RATE_LIMIT' | 'TRANSIENT_META' | 'PLATFORM' | 'POLICY' | 'UNKNOWN';
+  category: 'PREFLIGHT' | 'NETWORK_TRANSPORT' | 'INTERNAL_APPLICATION' | 'EXTERNAL_BILLING' | 'AUTHENTICATION' | 'AUTHORIZATION' | 'APP_CONFIGURATION' | 'APP_REVIEW' | 'BUSINESS_ASSET' | 'AD_ACCOUNT' | 'PAGE' | 'INSTAGRAM' | 'CREATIVE' | 'CAMPAIGN_CONFIGURATION' | 'TARGETING' | 'BUDGET' | 'RATE_LIMIT' | 'TRANSIENT_META' | 'PLATFORM' | 'POLICY' | 'UNKNOWN';
   severity: 'BLOCKER' | 'CRITICAL' | 'WARNING';
   user_title: string;
   user_message: string;
@@ -9277,7 +8847,7 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
       throw new Error('Missing core Meta API credentials');
     }
 
-    const cleanAdAccountId = rawAdAccountId.startsWith('act_') ? rawAdAccountId : `act_${rawAdAccountId}`;
+    const cleanAdAccountId = rawAdAccountId!.startsWith('act_') ? rawAdAccountId : `act_${rawAdAccountId}`;
 
     // Using global classifyMetaError from Phase 11
 
@@ -9573,7 +9143,9 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
       });
       let imageHash = '';
       if (sqUpload && sqUpload.images) {
-        imageHash = Object.values(sqUpload.images)[0].hash;
+        const image = Object.values(sqUpload.images)[0] as {hash?:unknown} | undefined;
+         if (typeof image?.hash !== 'string' || !image?.hash) throw new Error('Meta returned no verified image hash');
+         imageHash = image!.hash as string;
       } else {
         throw new Error(`Meta Image Upload failed for variant ${i}`);
       }
@@ -9848,7 +9420,7 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
     ]);
 
     // Update host_marketing_campaigns (NEVER MARK LIVE)
-    const feedbackMsg = `${classification.user_title}: ${classification.recommended_action || classification.action_required || ''}`;
+    const feedbackMsg = `${classification.user_title}: ${classification.recommended_action || classification.recommended_action || ''}`;
 
     // Phase 2.9.1 - P0 Remediation: Never overwrite an UNKNOWN outcome with FAILED_PUBLISH
     if (!isUnknownOutcome) {
@@ -9877,7 +9449,7 @@ export async function dispatchMetaCampaign(campaignId: number, req: any, overrid
         classification.code_name,
         classification.requires_human_action,
         JSON.stringify(rawErrorPayload),
-        classification.action_required
+        classification.recommended_action
       ]);
     } catch (dlqErr) {
       console.error('[META DLQ FAULT] Failed to write to DLQ:', dlqErr);
@@ -11395,7 +10967,7 @@ export const processAsyncWebhookQueue = async (overridePool?: any) => {
                 return;
             }
 
-            const ids = queueRes.rows.map(r => r.id);
+            const ids = queueRes.rows.map((r: any) => r.id);
             await client.query(`
                 UPDATE async_webhook_queue
                 SET status = 'processing',
@@ -11504,7 +11076,7 @@ export const processLeadNotificationQueue = async (overridePool?: any) => {
 };
 
 if (shouldRunBackgroundWorkers) {
-  setInterval(() => WebhookWorkerService.processInboundWebhooks(pool, handleVerifiedPayment), 10 * 1000); // Check every 10 seconds for real-time webhooks
+  // Paid-marketing webhooks are processed by the durable v2 worker, not this legacy timer.
   setInterval(() => processLeadNotificationQueue(), 30 * 1000); // Check every 30 seconds
 }
 
@@ -11576,7 +11148,7 @@ app.post('/api/marketing/campaigns/:id/subscribe', authenticateToken, async (req
           }
         `;
 
-        const response = await ai.models.generateContent({
+        const response = await ai!.models.generateContent({
           model: "gemini-2.5-flash",
           contents: prompt,
           config: { responseMimeType: "application/json" }
@@ -11665,7 +11237,7 @@ app.post('/api/marketing/campaigns/:id/subscribe', authenticateToken, async (req
       try {
         await refuelClient.query('BEGIN');
 
-        await DoubleEntryLedgerService.recordTransaction(refuelClient, {
+        const ledgerReceipt = await DoubleEntryLedgerService.recordTransaction(refuelClient, {
           transactionRef: idempotencyKey || `refuel_tx_${campaign.id}_${Date.now()}`,
           eventType: 'AD_REFUEL',
           legacyTransactionType: 'campaign_funding',
@@ -11690,7 +11262,7 @@ app.post('/api/marketing/campaigns/:id/subscribe', authenticateToken, async (req
               escrow_release_at = NOW() + INTERVAL '24 hours',
               updated_at = CURRENT_TIMESTAMP
           WHERE id = $4
-        `, [`wtx_${txRes.rows[0].id}`, optimizationFee, adSpendPool, campaign.id]);
+        `, [`ledger_${ledgerReceipt.entryId}`, optimizationFee, adSpendPool, campaign.id]);
 
         // Authoritative FSM state transition to pending
         await transitionCampaignState({
@@ -12178,10 +11750,10 @@ app.post('/api/admin/marketing/kill-switch', authenticateToken, async (req: Auth
     await pool.query(`
       INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
       VALUES ($1, 'system_kill_switch', 0, 'emergency_kill_switch_toggle', $2, $3, $4)
-    `, [req.user.id, JSON.stringify({ active: !active }), JSON.stringify({ active }), req.ip || req.socket.remoteAddress]);
+    `, [req.user!.id, JSON.stringify({ active: !active }), JSON.stringify({ active }), req.ip || req.socket.remoteAddress]);
 
     broadcastDbEvent(req, 'marketing');
-    console.log(`[KILL SWITCH] Emergency publishing kill switch set to ${active ? 'ACTIVE (PAUSED)' : 'INACTIVE (RUNNING)'} by Admin #${req.user.id}`);
+    console.log(`[KILL SWITCH] Emergency publishing kill switch set to ${active ? 'ACTIVE (PAUSED)' : 'INACTIVE (RUNNING)'} by Admin #${req.user!.id}`);
     res.json({ success: true, kill_switch_active: !!active });
   } catch (error: any) {
     console.error('Error toggling kill switch:', error);
@@ -12223,7 +11795,7 @@ app.post('/api/admin/marketing/dlq/resolve/:id', authenticateToken, async (req: 
     await pool.query(`
       INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
       VALUES ($1, 'dlq_entry', $2, 'dlq_mark_resolved', NULL, $3, $4)
-    `, [req.user.id, id, JSON.stringify({ resolved: true }), req.ip || req.socket.remoteAddress]);
+    `, [req.user!.id, id, JSON.stringify({ resolved: true }), req.ip || req.socket.remoteAddress]);
 
     res.json({ success: true, message: `DLQ entry #${id} marked as resolved.` });
   } catch (error: any) {
@@ -12249,7 +11821,7 @@ app.post('/api/admin/marketing/rollback/:metaId', authenticateToken, async (req:
     await pool.query(`
       INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
       VALUES ($1, 'meta_object', 0, 'manual_meta_rollback', NULL, $2, $3)
-    `, [req.user.id, JSON.stringify({ meta_id: metaId, response: deleteData }), req.ip || req.socket.remoteAddress]);
+    `, [req.user!.id, JSON.stringify({ meta_id: metaId, response: deleteData }), req.ip || req.socket.remoteAddress]);
 
     res.json({ success: true, meta_id: metaId, response: deleteData });
   } catch (error: any) {
@@ -12330,7 +11902,7 @@ app.post('/api/admin/marketing/campaigns/:id/resync-meta', authenticateToken, as
     // Perform authoritative external GET verification & snapshot update
     const verifiedSnapshot = await MetaExternalSyncEngine.resyncCampaignExternalState(
       Number(id),
-      { userId: req.user.id, role: req.user.role, isAdmin: true },
+      { userId: req.user!.id, role: req.user!.role, isAdmin: true },
       {},
       pool
     );
@@ -12371,12 +11943,7 @@ app.post('/api/marketing/campaigns/:id/sync-telemetry', authenticateToken, async
 
     const syncResult = await MetaTelemetrySyncEngine.syncAdsInsights(
       Number(id),
-      rawData,
-      {
-        userId: req.user.id,
-        role: req.user.role,
-        isAdmin: req.user.role === 'admin'
-      },
+      { viewerContext: { userId: req.user!.id, role: req.user!.role, isAdmin: req.user!.role === 'admin' } },
       pool
     );
 
@@ -12395,12 +11962,7 @@ app.post('/api/marketing/campaigns/:id/sync-engagement', authenticateToken, asyn
 
     const syncResult = await MetaTelemetrySyncEngine.syncSocialEngagement(
       Number(id),
-      rawData,
-      {
-        userId: req.user.id,
-        role: req.user.role,
-        isAdmin: req.user.role === 'admin'
-      },
+      { viewerContext: { userId: req.user!.id, role: req.user!.role, isAdmin: req.user!.role === 'admin' } },
       pool
     );
 
@@ -12432,14 +11994,14 @@ app.post('/api/admin/marketing/campaigns/:id/reject', authenticateToken, async (
     if (prevState && (prevState.payment_status === 'paid' || ['active', 'CAMPAIGN_LIVE'].includes(prevState.status)) && prevState.budget) {
       const remainingBudget = Math.max(0, parseFloat(prevState.budget || 0) - parseFloat(prevState.spent || 0));
       if (remainingBudget > 0) {
-        await processAtomicRefund(Number(id), prevState.host_id, remainingBudget, 'campaign_cancellation_refund', `campaign_reject_${id}`, `Double-entry audit refund for rejected campaign #${id}`, req.user.id, 'reject_campaign', prevState, feedback);
+        await processAtomicRefund(Number(id), prevState.host_id, remainingBudget, 'campaign_cancellation_refund', `campaign_reject_${id}`, `Double-entry audit refund for rejected campaign #${id}`, req.user!.id, 'reject_campaign', prevState, feedback);
       }
     } else {
       // Gap 14: Immutable Admin Audit Trail (if no refund occurred)
       await pool.query(`
         INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
-      `, [req.user.id, 'marketing_campaign', id, 'reject_campaign', JSON.stringify(prevState), JSON.stringify({status: 'rejected', admin_feedback: feedback}), req.ip || req.socket.remoteAddress]);
+      `, [req.user!.id, 'marketing_campaign', id, 'reject_campaign', JSON.stringify(prevState), JSON.stringify({status: 'rejected', admin_feedback: feedback}), req.ip || req.socket.remoteAddress]);
     }
 
     broadcastDbEvent(req, 'marketing');
@@ -12514,10 +12076,10 @@ app.post([
     );
 
     try {
-      if (global.io) {
+      if ((globalThis as typeof globalThis & { io?: SocketIOServer }).io) {
         const campRes = await pool.query('SELECT host_id FROM host_marketing_campaigns WHERE id = $1', [id]);
         if (campRes.rows.length > 0) {
-          global.io.to(`user_${campRes.rows[0].host_id}`).emit('notification', {
+          (globalThis as typeof globalThis & { io?: SocketIOServer }).io?.to(`user_${campRes.rows[0].host_id}`).emit('notification', {
             type: 'campaign_paused',
             campaignId: id,
             message: `Your campaign #${id} was paused.`
@@ -12600,10 +12162,10 @@ app.post([
     );
 
     try {
-      if (global.io) {
+      if ((globalThis as typeof globalThis & { io?: SocketIOServer }).io) {
         const campRes = await pool.query('SELECT host_id FROM host_marketing_campaigns WHERE id = $1', [id]);
         if (campRes.rows.length > 0) {
-          global.io.to(`user_${campRes.rows[0].host_id}`).emit('notification', {
+          (globalThis as typeof globalThis & { io?: SocketIOServer }).io?.to(`user_${campRes.rows[0].host_id}`).emit('notification', {
             type: 'campaign_resumed',
             campaignId: id,
             message: `Your campaign #${id} was resumed and is live.`
@@ -12758,22 +12320,22 @@ app.post('/api/admin/marketing/campaigns/:id/kill-meta', authenticateToken, asyn
       }
     }
 
-    await transitionCampaignState({ campaignId: id, to: 'killed', reason: 'Killed and archived by Administrator. Unused budget refunded.', actorType: 'admin' });
+    await transitionCampaignState({ campaignId: Number(id), to: 'killed', reason: 'Killed and archived by Administrator. Unused budget refunded.', actorType: 'admin' });
 
     // Refund remaining unused budget to host wallet
     const remainingBudget = Math.max(0, parseFloat(campaign.budget || 0) - parseFloat(campaign.spent || 0));
     if (remainingBudget > 0 && campaign.payment_status === 'paid') {
-      await processAtomicRefund(Number(id), campaign.host_id, remainingBudget, 'campaign_cancellation_refund', `admin_kill_campaign_${id}`, `Admin kill-switch refund for campaign #${id}`, req.user.id, 'kill_meta_campaign', {status: campaign.status}, 'Killed by admin');
+      await processAtomicRefund(Number(id), campaign.host_id, remainingBudget, 'campaign_cancellation_refund', `admin_kill_campaign_${id}`, `Admin kill-switch refund for campaign #${id}`, req.user!.id, 'kill_meta_campaign', {status: campaign.status}, 'Killed by admin');
     } else {
       await pool.query(`
         INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
-      `, [req.user.id, 'marketing_campaign', id, 'kill_meta_campaign', JSON.stringify({status: campaign.status}), JSON.stringify({status: 'killed', refund: remainingBudget}), req.ip || req.socket.remoteAddress]);
+      `, [req.user!.id, 'marketing_campaign', id, 'kill_meta_campaign', JSON.stringify({status: campaign.status}), JSON.stringify({status: 'killed', refund: remainingBudget}), req.ip || req.socket.remoteAddress]);
     }
 
     try {
-      if (global.io) {
-        global.io.to(`user_${campaign.host_id}`).emit('notification', {
+      if ((globalThis as typeof globalThis & { io?: SocketIOServer }).io) {
+        (globalThis as typeof globalThis & { io?: SocketIOServer }).io?.to(`user_${campaign.host_id}`).emit('notification', {
           type: 'campaign_killed',
           campaignId: id,
           message: `Your campaign #${id} was killed by admin. Remaining budget (${remainingBudget}) refunded to wallet.`
@@ -12821,7 +12383,7 @@ app.post('/api/marketing/campaigns/:id/cancel', authenticateToken, async (req: A
       await pool.query(`
         INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
-      `, [req.user.id, 'marketing_campaign', id, 'cancel_campaign', JSON.stringify(prevState), JSON.stringify({status: 'cancelled'}), req.ip || req.socket.remoteAddress]);
+      `, [req.user!.id, 'marketing_campaign', id, 'cancel_campaign', JSON.stringify(prevState), JSON.stringify({status: 'cancelled'}), req.ip || req.socket.remoteAddress]);
     }
 
     broadcastDbEvent(req, 'marketing');
@@ -13925,7 +13487,7 @@ app.post('/api/v2/stays/holds/:id/release', async (req: Request, res: Response) 
 
   const body = req.body || {};
   const result = await releaseHold(pool, {
-    holdId: req.params.id,
+    holdId: String(req.params.id),
     holderPrincipal,
     isServerAdmin,
     reason: body.reason || 'GUEST_EXPLICIT_RELEASE'
@@ -15135,7 +14697,7 @@ Consider weekends and general seasonality. Output ONLY a valid JSON object in th
 {"price": number}
 Do NOT wrap it in markdown block.`;
 
-        const response = await ai.models.generateContent({
+        const response = await ai!.models.generateContent({
           model: "gemini-2.5-flash",
           contents: "Suggest optimal price in JSON.",
           config: {
@@ -15177,7 +14739,7 @@ ${history}
 
 Draft a polite, helpful, and concise response. Do not include quotes, placeholders, empty messages, '[Admin]', '[Host]', or any 'Replace this sample message' tags in the response text. The response must be a fully complete, ready-to-send message. Do not leave any blanks for the user to fill in.`;
 
-        const response = await ai.models.generateContent({
+        const response = await ai!.models.generateContent({
           model: "gemini-2.5-flash",
           contents: "Draft a reply to the guest based on the conversation.",
           config: {
@@ -15225,7 +14787,7 @@ Return ONLY a valid JSON object in this exact format, with no markdown code bloc
 {"title": "your suggested title", "description": "your suggested description"}
 Do NOT include any empty placeholders, brackets like [Insert City], or generic tags. The output must be fully formed and ready to publish without requiring any edits.`;
 
-        const response = await ai.models.generateContent({
+        const response = await ai!.models.generateContent({
           model: "gemini-2.5-flash",
           contents: "Generate title and description based on the details.",
           config: {
@@ -15264,7 +14826,7 @@ app.post('/api/ai/curate-rules', async (req, res) => {
       try {
         const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
         const prompt = "You are an executive hospitality director at an ultra-luxury 5-star estate (like Aman or Casa Angelina). Transform the following raw house rules into polite, sophisticated, aristocratic 'House Guidelines'. Retain all core boundaries (e.g. smoking, noise, checkout, pets) while completely eliminating hostile or aggressive phrasing. Format as 3-5 concise, elegant bullet points:\n\n" + rawRules;
-        const response = await ai.models.generateContent({
+        const response = await ai!.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: prompt,
         });
@@ -15436,7 +14998,7 @@ Return strictly a valid JSON object matching this exact structure:
 
 Respond ONLY with the raw JSON. No markdown codeblocks, no explanations.`;
 
-        const response = await ai.models.generateContent({
+        const response = await ai!.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: prompt,
         });
@@ -15451,8 +15013,8 @@ Respond ONLY with the raw JSON. No markdown codeblocks, no explanations.`;
           const parsed = JSON.parse(text);
           if (parsed && Array.isArray(parsed.destinations) && Array.isArray(parsed.restaurants)) {
             return res.json({
-              destinations: parsed.destinations.map(d => ({ ...d, categoryGroup: 'destination' })),
-              restaurants: parsed.restaurants.map(r => ({ ...r, categoryGroup: 'restaurant' }))
+              destinations: parsed.destinations.map((d: Record<string, unknown>) => ({ ...d, categoryGroup: 'destination' })),
+              restaurants: parsed.restaurants.map((r: Record<string, unknown>) => ({ ...r, categoryGroup: 'restaurant' }))
             });
           }
         }
@@ -15518,7 +15080,7 @@ ${ALL_AVAILABLE_TAGS.join(', ')}
 
 Return ONLY a raw JSON array like: ["Tag 1", "Tag 2", "Tag 3"]`;
 
-        const response = await ai.models.generateContent({
+        const response = await ai!.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: prompt,
         });
@@ -16433,7 +15995,7 @@ app.get('/api/seed-ajith', authenticateToken, async (req: AuthRequest, res) => {
   if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
   try {
     console.log("DB connection configured for seed-ajith");
-    const userRes = await pool.query("SELECT id FROM users WHERE id=$1 AND role='admin'", [req.user.id]);
+    const userRes = await pool.query("SELECT id FROM users WHERE id=$1 AND role='admin'", [req.user!.id]);
     if (userRes.rows.length === 0) {
       return res.status(401).json({ error: 'User not found, token invalid' });
     }
@@ -17378,7 +16940,7 @@ app.get('/api/marketing/wallet', authenticateToken, async (req: AuthRequest, res
 });
 
 // Milestone 6: The "Cold Start" Lead Alert System
-async function triggerColdStartAlert(hostId, listingTitle, threadId = null, req = null) {
+async function triggerColdStartAlert(hostId: number, listingTitle: string, threadId: string | null = null, req: Request | null = null) {
   try {
     // We NEVER include the lead's contact info or message in the alert.
     // This psychologically forces the host to open the Encho app.
@@ -17516,7 +17078,7 @@ app.post('/api/marketing/wallet/refuel', authenticateToken, async (req: AuthRequ
     if (!hostId) return res.status(401).json({ error: 'Unauthorized' });
     const parseResult = walletRefuelSchema.safeParse(req.body);
     if (!parseResult.success) {
-      return res.status(400).json({ error: 'Invalid input', details: parseResult.error.issues || parseResult.error.errors });
+      return res.status(400).json({ error: 'Invalid input', details: parseResult.error.issues });
     }
     const { amount, gateway } = parseResult.data;
 
@@ -17536,7 +17098,7 @@ app.post('/api/marketing/wallet/refuel', authenticateToken, async (req: AuthRequ
     const walletId = walletRes.rows[0].id;
 
     // Create pending transaction using idempotency
-    const idempotencyKey = req.headers['x-idempotency-key'] || `refuel_\${hostId}_\${Date.now()}`;
+    const idempotencyKey = req.get('x-idempotency-key') || `refuel_${hostId}_${Date.now()}`;
 
     const txRes = await pool.query(
       'SELECT id, status FROM wallet_transactions WHERE reference_id = $1',
@@ -18289,6 +17851,7 @@ app.post('/api/payments/geo-route/initiate', async (req: Request, res: Response)
       // Default: Stripe
 
       let stripeUrl: string | null = null;
+      let stripeSessionId: string;
 
       if (stripe) {
         try {
@@ -18314,6 +17877,7 @@ app.post('/api/payments/geo-route/initiate', async (req: Request, res: Response)
             metadata: { campaign_id: String(campaign_id || ''), host_id: String(hostId), idempotency_key: idempotencyKey }
           });
           stripeUrl = session.url;
+          stripeSessionId = session.id;
         } catch (sErr: any) {
           console.error('[STRIPE ERROR]', sErr);
           await client.query('ROLLBACK');
@@ -18328,14 +17892,14 @@ app.post('/api/payments/geo-route/initiate', async (req: Request, res: Response)
         `UPDATE processed_payments
          SET razorpay_payment_id = $1, razorpay_order_id = $2
          WHERE idempotency_key = $3`,
-        [session.id, session.id, idempotencyKey]
+        [stripeSessionId, stripeSessionId, idempotencyKey]
       );
       await client.query('COMMIT');
 
       return res.json({
         success: true,
         payment_gateway: 'stripe',
-        order_id: session.id,
+        order_id: stripeSessionId,
         url: stripeUrl,
         gross_amount: grossAmount,
         optimization_fee: optFee,
@@ -18681,75 +18245,20 @@ async function startServer() {
   managedHttpServer = httpServer;
 
   const io = new SocketIOServer(httpServer, {
-    cors: {
-      origin: function(origin, callback) {
-        const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3000', 'https://localhost:3000'];
-        if (!origin || allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
-          callback(null, true);
-        } else {
-          callback(new Error('Not allowed by CORS'));
-        }
-      },
-      methods: ["GET", "POST"],
-      credentials: true
-    }
+    cors: {origin:(origin,callback)=>callback(originAllowed(origin)?null:new Error('Blocked by CORS policy: origin is not permitted'),originAllowed(origin)),methods:['GET','POST'],credentials:true},
+    allowRequest:(request,callback)=>callback(null,originAllowed(request.headers.origin)),
+    maxHttpBufferSize:16384
   });
-
-  io.on('connection', (socket) => {
-    console.log('Client connected to socket.io:', socket.id);
-
-    socket.on('join_user', (userId) => {
-      console.log(`User ${userId} joined their personal room`);
-      socket.join(`user_${userId}`);
-    });
-
-    socket.on('join_admin', () => {
-      socket.join('admin_room');
-    });
-
-    socket.on('join_thread', (threadId) => {
-      console.log(`Socket ${socket.id} joined thread ${threadId}`);
-      socket.join(`thread_${threadId}`);
-    });
-
-    socket.on('leave_thread', (threadId) => {
-      socket.leave(`thread_${threadId}`);
-    });
-
-    socket.on('typing_start', (data) => {
-      socket.to(`thread_${data.threadId}`).emit('user_typing', { userId: data.userId });
-    });
-
-    socket.on('typing_stop', (data) => {
-      socket.to(`thread_${data.threadId}`).emit('user_stopped_typing', { userId: data.userId });
-    });
-
-    socket.on('join_listing', (listingId) => {
-       const room = `listing_${listingId}`;
-       socket.join(room);
-       const viewers = io.sockets.adapter.rooms.get(room)?.size || 1;
-       io.to(room).emit('listing_viewers', { viewers });
-    });
-
-    socket.on('leave_listing', (listingId) => {
-       const room = `listing_${listingId}`;
-       socket.leave(room);
-       const viewers = io.sockets.adapter.rooms.get(room)?.size || 0;
-       io.to(room).emit('listing_viewers', { viewers });
-    });
-
-    socket.on('disconnecting', () => {
-        socket.rooms.forEach(room => {
-            if (typeof room === 'string' && room.startsWith('listing_')) {
-               const viewers = (io.sockets.adapter.rooms.get(room)?.size || 1) - 1;
-               socket.to(room).emit('listing_viewers', { viewers });
-            }
-        });
-    });
-
-    socket.on('disconnect', () => {
-      console.log('Client disconnected:', socket.id);
-    });
+  registerSecureRealtime(io, {
+    authenticate:async token=>{
+      const claims=jwt.verify(token,JWT_SECRET,{algorithms:['HS256']});
+      if(typeof claims==='string'||typeof claims.exp!=='number')throw new Error('Session expiry required');
+      const principal=await resolvePersistedSession(pool,claims);
+      return {...principal,expiresAt:claims.exp*1000};
+    },
+    canAccessThread:(principal,threadId)=>rlsStorage.run({userId:principal.id,isRequest:true,bypassRls:false},async()=>
+      (await pool.query('SELECT id FROM threads WHERE id=$1 AND (guest_id=$2 OR host_id=$2)',[threadId,principal.id])).rows.length===1),
+    isPublishedListing:async listingId=>(await pool.query("SELECT id FROM listings WHERE id=$1 AND publication_status='published'",[listingId])).rows.length===1
   });
 
   // Make io available to routes
@@ -19014,7 +18523,7 @@ export const processDynamicCreativeOptimization = async (overridePool?: any) => 
           return;
         }
 
-        const ids = res.rows.map(r => r.id);
+        const ids = res.rows.map((r: any) => r.id);
         await client.query(`
           UPDATE host_marketing_campaigns
           SET dco_last_evaluated_at = CURRENT_TIMESTAMP,
@@ -19101,7 +18610,7 @@ export const runAnalyticsRollup = async (overridePool?: any) => {
           return;
         }
 
-        const rawLogIds = rawEventsRes.rows.map(r => r.id);
+        const rawLogIds = rawEventsRes.rows.map((r: any) => r.id);
 
         // Composite grouping by campaign_id + event_date
         const groupedMap = new Map<string, { campaign_id: number; date: string; impressions: number; clicks: number; conversions: number; spent: number }>();
@@ -19136,7 +18645,7 @@ export const runAnalyticsRollup = async (overridePool?: any) => {
         }
 
         // 3. Sync cumulative stats back to host_marketing_campaigns for updated campaigns
-        const impactedCampaignIds = Array.from(new Set(rawEventsRes.rows.map(r => r.campaign_id)));
+        const impactedCampaignIds = Array.from(new Set(rawEventsRes.rows.map((r: any) => r.campaign_id)));
         await client.query(`
           UPDATE host_marketing_campaigns c
           SET accumulated_impressions = COALESCE(r.total_impressions, 0),
@@ -19209,7 +18718,7 @@ export const processScheduledSocialPosts = async (overridePool?: any) => {
         return;
       }
 
-      const ids = res.rows.map(r => r.id);
+      const ids = res.rows.map((r: any) => r.id);
       await client.query(`
         UPDATE host_social_posts
         SET status = 'publishing',
@@ -19309,7 +18818,7 @@ export const processWebhookDLQ = async (overridePool?: any) => {
           return;
         }
 
-        const ids = dlqItems.rows.map(r => r.id);
+        const ids = dlqItems.rows.map((r: any) => r.id);
         await client.query(`
           UPDATE webhook_dlq
           SET lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '5 minutes'
@@ -19468,16 +18977,16 @@ export const processMetaReconciliation = async (overridePool?: any, overrideAcce
               reconciliation_lease_expires_at = CURRENT_TIMESTAMP + INTERVAL '5 minutes',
               reconciliation_attempt_count = reconciliation_attempt_count + 1
           WHERE id = ANY($1)
-        `, [staleTxRes.rows.map(r => r.id)]);
+        `, [staleTxRes.rows.map((r: any) => r.id)]);
       }
 
       for (const staleTx of staleTxRes.rows) {
         console.log(`[META RECONCILIATION] Reconciling stale transaction #${staleTx.id} (status: ${staleTx.publish_status})`);
 
         const [campVerification, adsetVerification, adVerification] = await Promise.all([
-          staleTx.meta_campaign_id ? verifyMetaExternalObjectDetailed(staleTx.meta_campaign_id, accessToken) : Promise.resolve({ outcome: 'MISSING' as const }),
-          staleTx.meta_adset_id ? verifyMetaExternalObjectDetailed(staleTx.meta_adset_id, accessToken) : Promise.resolve({ outcome: 'MISSING' as const }),
-          staleTx.meta_ad_id ? verifyMetaExternalObjectDetailed(staleTx.meta_ad_id, accessToken) : Promise.resolve({ outcome: 'MISSING' as const })
+          staleTx.meta_campaign_id ? verifyMetaExternalObjectDetailed(staleTx.meta_campaign_id, accessToken) : Promise.resolve<Awaited<ReturnType<typeof verifyMetaExternalObjectDetailed>>>({ outcome: 'MISSING' }),
+          staleTx.meta_adset_id ? verifyMetaExternalObjectDetailed(staleTx.meta_adset_id, accessToken) : Promise.resolve<Awaited<ReturnType<typeof verifyMetaExternalObjectDetailed>>>({ outcome: 'MISSING' }),
+          staleTx.meta_ad_id ? verifyMetaExternalObjectDetailed(staleTx.meta_ad_id, accessToken) : Promise.resolve<Awaited<ReturnType<typeof verifyMetaExternalObjectDetailed>>>({ outcome: 'MISSING' })
         ]);
 
         // Rule 3: If verification encounters network timeout or transport failure, PRESERVE EXTERNAL_OUTCOME_UNKNOWN
@@ -19580,10 +19089,10 @@ export const processMetaReconciliation = async (overridePool?: any, overrideAcce
 
       for (const tx of txRes.rows) {
         const [campV, adsetV, creativeV, adV] = await Promise.all([
-          tx.meta_campaign_id ? verifyMetaExternalObjectDetailed(tx.meta_campaign_id, accessToken) : Promise.resolve({ outcome: 'MISSING' as const }),
-          tx.meta_adset_id ? verifyMetaExternalObjectDetailed(tx.meta_adset_id, accessToken) : Promise.resolve({ outcome: 'MISSING' as const }),
-          tx.meta_creative_id ? verifyMetaExternalObjectDetailed(tx.meta_creative_id, accessToken) : Promise.resolve({ outcome: 'MISSING' as const }),
-          tx.meta_ad_id ? verifyMetaExternalObjectDetailed(tx.meta_ad_id, accessToken) : Promise.resolve({ outcome: 'MISSING' as const })
+          tx.meta_campaign_id ? verifyMetaExternalObjectDetailed(tx.meta_campaign_id, accessToken) : Promise.resolve<Awaited<ReturnType<typeof verifyMetaExternalObjectDetailed>>>({ outcome: 'MISSING' }),
+          tx.meta_adset_id ? verifyMetaExternalObjectDetailed(tx.meta_adset_id, accessToken) : Promise.resolve<Awaited<ReturnType<typeof verifyMetaExternalObjectDetailed>>>({ outcome: 'MISSING' }),
+          tx.meta_creative_id ? verifyMetaExternalObjectDetailed(tx.meta_creative_id, accessToken) : Promise.resolve<Awaited<ReturnType<typeof verifyMetaExternalObjectDetailed>>>({ outcome: 'MISSING' }),
+          tx.meta_ad_id ? verifyMetaExternalObjectDetailed(tx.meta_ad_id, accessToken) : Promise.resolve<Awaited<ReturnType<typeof verifyMetaExternalObjectDetailed>>>({ outcome: 'MISSING' })
         ]);
 
         // Rule 3: Transport failure during verification -> PRESERVE EXTERNAL_OUTCOME_UNKNOWN
@@ -19946,7 +19455,7 @@ export const recoverOrphanedMetaTransactions = async (overridePool?: any) => {
             'Recovery worker failed: ' + (orphanErr.message || 'Unknown error'),
             orphan.correlation_id,
             JSON.stringify({ attempt: attemptCount, error: orphanErr.message })
-          ]).catch(logErr => console.error('[RECOVERY WORKER] Failed to log recovery failure:', logErr));
+          ]).catch((logErr: unknown) => console.error('[RECOVERY WORKER] Failed to log recovery failure:', logErr));
         }
       }
 

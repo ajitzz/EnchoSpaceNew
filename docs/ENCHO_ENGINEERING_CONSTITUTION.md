@@ -1,5 +1,5 @@
 # ENCHO ENGINEERING CONSTITUTION
-**Status:** Active | **Last Updated:** 2026-09-13
+**Status:** Active | **Last Updated:** 2026-09-20
 
 ## 1. Executive Summary
 
@@ -350,3 +350,17 @@ Production builds place public Vite assets in `dist` and private compiled module
 ADR-HARVO-MKT-006: separate public/private artifacts and explicit worker ownership; reject unsafe role/schema readiness rather than concealing missing migrations. ADR-HARVO-MKT-007: documentary dual-control financial closure, with authenticated containment evidence distinct from final billing. ADR-HARVO-MKT-008: canonical conversion delivery claims/receipts and explicit absent checkout/consent authority. ADR-HARVO-MKT-009: provider-resolved targeting and grounded human-applied drafting, with shared quotas and tenant-scoped historical navigation.
 
 Local finding record HARVO-GAP-001: deployment review reproduced wrong worker/public-artifact boundaries; compiled smoke reproduced symlinked entrypoint skipping startup. Integration review reproduced stale finance review UI and a search-debounce timer resetting initial pagination. These were corrected and scoped regression evidence is retained. This is a local engineering finding record, not a claim of an observed production incident. Existing guest phase/legal status remains unchanged. The Definition of Done in section20 still requires external operating and provider/financial/booking acceptance before a public launch claim.
+
+## 21. Production remediation implementation — 20 September 2026
+
+HARVO-026 authorizes execution of the reviewed remediation plan. Current implementation, evidence and open gates are maintained in [REMEDIATION_EXECUTION_VERIFICATION.md](harvo/REMEDIATION_EXECUTION_VERIFICATION.md).
+
+**ADR:** Deployed marketing authority cannot be inferred from testing defaults, legacy booking rows or fabricated consent. Calendar guest availability is separate from private owner/admin records; canonical room-type capacity is not a physical-unit registry. Every pooled query/client uses explicit transaction-local authority. Calendar mutations retain idempotency receipts and immutable evidence. Delivery state, report availability, source freshness and funding/safety are independent observations. Unknown reporting coverage does not authorize blind spending.
+
+**Incident register (source findings; no unverified production incident claim):** Unsafe defaults/composition, weakened role readiness, public calendar data, stale-selection exposure, inconsistent block release, fabricated payment identity, permissive pool/lead policy and coupled status/report persistence are addressed in local source. Remote effects and deployment are unverified. The earlier application/server compiler defects are corrected locally; full-repository, deployment and operating acceptance remain separate.
+
+**ADR / current implementation addendum:** Private realtime subscriptions require signed sessions, persisted roles and participant checks; ongoing subscriptions are revalidated and role changes disconnect before any new authenticated packet can retain a privileged room. HTTP and Socket.IO share exact origin policy. Recovery inspection is read-only, admin/revision-bound and bounded; it is never permission to reset workflow or delete financial evidence. Guest/host/admin presentation uses supplied property facts and neutral missing-data states. The legacy client-calculated guest fee/tax checkout is unavailable pending accepted canonical pricing/payment; this does not alter a commercial or legal decision.
+
+**Incident / verification addendum:** The original unrestricted socket joins and synthetic public listing/host-preview facts were source-proven defects, not proof of a production breach. Isolated checks now include 936 HARVO tests (including the realtime race and operational RLS fixes) and 33 guest presentation tests, plus 12 fixture browser screen/viewport combinations. Full lint and both typechecks pass. Migration 019 now forces RLS on the three operational tables with owned receipts/enqueue and trusted service claims/global work; immutable attempt/preference history is preserved. Seven real non-bypass-role tests and the restore drill pass. Production grants, wider caller audit, complete recovery actions, provider hierarchy evidence and canonical checkout/measurement remain unaccepted. See the execution evidence for exact build/smoke results and test limitations.
+
+**Phase / Definition of Done:** Marketing remains in authorized Phase 3 with local adversarial validation. Release requires full checks, forced-RLS non-bypass-role tests, browser tenant switching, migration/grant verification, bounded provider/payment pilot and accepted genuine checkout/consent authority. Existing guest M5/M6B legal gates and historical milestone qualifications remain unchanged. No new milestone is accepted by this addendum.

@@ -247,7 +247,7 @@ describe('Google v25 bounded transport', () => {
     const transport = vi.fn(async () => json({ error: 'secret denied body' }, 401));
     const client = new GoogleAdsClient(credentials, { fetch: transport as typeof fetch });
     const error = await client.mutateOperations(customer, [campaign]).catch(value => value);
-    expect(error).toMatchObject({ code: 'GOOGLE_AUTH_EXPIRED', isRetryable: false });
+    expect(error).toMatchObject({ code: 'GOOGLE_AUTH_REJECTED', isRetryable: false });
     expect(transport).toHaveBeenCalledTimes(1);
     expect(error.message).not.toContain('secret');
   });

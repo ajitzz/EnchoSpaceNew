@@ -1,0 +1,113 @@
+{
+  "scope": "LOCAL_FIXTURE_BROWSER_ONLY",
+  "evidence": [
+    {
+      "screen": "calendar",
+      "width": 1440,
+      "render": "PASSED",
+      "overflow": false,
+      "uncaughtErrors": []
+    },
+    {
+      "screen": "host",
+      "width": 1440,
+      "render": "PASSED",
+      "overflow": false,
+      "uncaughtErrors": []
+    },
+    {
+      "screen": "admin",
+      "width": 1440,
+      "render": "PASSED",
+      "overflow": false,
+      "uncaughtErrors": []
+    },
+    {
+      "screen": "calendar",
+      "width": 390,
+      "render": "PASSED",
+      "overflow": false,
+      "uncaughtErrors": []
+    },
+    {
+      "screen": "host",
+      "width": 390,
+      "render": "PASSED",
+      "overflow": false,
+      "uncaughtErrors": []
+    },
+    {
+      "screen": "admin",
+      "width": 390,
+      "render": "PASSED",
+      "overflow": false,
+      "uncaughtErrors": []
+    }
+  ],
+  "requests": [
+    {
+      "path": "/api/listings/20/room-calendar",
+      "method": "GET"
+    },
+    {
+      "path": "/api/listings/21/room-calendar",
+      "method": "GET"
+    },
+    {
+      "path": "/api/marketing/v2/workspace",
+      "method": "GET"
+    },
+    {
+      "path": "/api/marketing/v2/campaigns/1/settlement",
+      "method": "GET"
+    },
+    {
+      "path": "/api/marketing/v2/campaigns/1/refresh",
+      "method": "POST"
+    },
+    {
+      "path": "/api/marketing/v2/admin/workspace",
+      "method": "GET"
+    },
+    {
+      "path": "/api/marketing/v2/campaigns/1/refresh",
+      "method": "POST"
+    },
+    {
+      "path": "/api/marketing/v2/admin/campaigns/1/recovery",
+      "method": "GET"
+    },
+    {
+      "path": "/api/listings/20/room-calendar",
+      "method": "GET"
+    },
+    {
+      "path": "/api/listings/21/room-calendar",
+      "method": "GET"
+    },
+    {
+      "path": "/api/marketing/v2/workspace",
+      "method": "GET"
+    },
+    {
+      "path": "/api/marketing/v2/campaigns/1/settlement",
+      "method": "GET"
+    },
+    {
+      "path": "/api/marketing/v2/campaigns/1/refresh",
+      "method": "POST"
+    },
+    {
+      "path": "/api/marketing/v2/admin/workspace",
+      "method": "GET"
+    },
+    {
+      "path": "/api/marketing/v2/campaigns/1/refresh",
+      "method": "POST"
+    },
+    {
+      "path": "/api/marketing/v2/admin/campaigns/1/recovery",
+      "method": "GET"
+    }
+  ]
+}

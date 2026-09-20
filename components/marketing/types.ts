@@ -19,8 +19,11 @@ export interface StudioCampaign {
   funding: { status: string; capturedMinor: MoneyMinor | null; reservedMinor: MoneyMinor | null; released: boolean;
     refundableMinor?: MoneyMinor; pendingRefundMinor?: MoneyMinor; refundedMinor?: MoneyMinor };
   contentApproval: { status: string; revision?: number | null };
-  delivery: { configuredStatus: string | null; observedStatus: string | null; observedAt: string | null; externalCampaignId?: string | null };
-  metrics: { impressions: number | null; clicks: number | null; ctr: number | null; profileVisits?: number | null; leads: number | null;
+  delivery: { configuredStatus: string | null; observedStatus: string | null; observedAt: string | null; externalCampaignId?: string | null; deliveryConfirmed?: boolean };
+  observationJob?: {id: string; status: string; attempts: number; updatedAt: string; nextAttemptAt: string} | null;
+  metrics: { report?: {status: 'AVAILABLE'|'NO_REPORT'|'NOT_STARTED'|'ERROR'; attemptedAt: string; dateStart: string; dateEnd: string} | null;
+    currency?: string | null; freshness?: string | null; dataAsOf?: string | null; dateStart?: string | null; dateEnd?: string | null; accountTimeZone?: string | null;
+    providerAttributedConversions?: number | null; impressions: number | null; clicks: number | null; ctr: number | null; profileVisits?: number | null; leads: number | null;
     bookings: number | null; spendMinor: MoneyMinor | null; observedAt: string | null; source: string | null } | null;
   blockers: string[];
   activationBlockers?:string[];

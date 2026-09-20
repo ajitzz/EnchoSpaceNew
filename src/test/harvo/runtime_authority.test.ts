@@ -1,6 +1,8 @@
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import type pg from 'pg';
-import {createMarketingRuntime} from '../../server/marketing/runtime.js';
+import {createMarketingRuntime,createDeployedMarketingRuntime} from '../../server/marketing/runtime.js';
+import {readFileSync} from 'node:fs';
+import ts from 'typescript';
 import {workflowConfig} from './workflowPgFixture.js';
 
 describe('Runtime activation requires canonical source authority',()=>{
@@ -26,6 +28,17 @@ describe('Runtime activation requires canonical source authority',()=>{
  it('does not replace the separately scoped Data Manager grant with an Ads refresh token',()=>{
   const {pool}=setup();vi.stubEnv('HARVO_GOOGLE_DATA_MANAGER_REFRESH_TOKEN','');vi.stubEnv('GOOGLE_ADS_REFRESH_TOKEN','isolated-ads-only');
   const runtime=createMarketingRuntime(pool);expect(runtime.conversions.readiness().google).toBe('NOT_CONFIGURED');expect(runtime.workflow.options.activationEnabled).toBe(false);
+ });
+ it('both executable entry points use the same composition without fabricated source authorities',()=>{
+  const {pool,query}=setup();const runtime=createDeployedMarketingRuntime(pool);
+  expect(runtime.conversions.readiness().canonicalSource).toBe('NOT_CONNECTED');
+  expect(runtime.workflow.options.activationEnabled).toBe(false);expect(query).not.toHaveBeenCalled();
+  for(const path of ['server.ts','src/server/marketing/worker.ts']){
+   const ast=ts.createSourceFile(path,readFileSync(path,'utf8'),ts.ScriptTarget.Latest,true);
+   const calls:ts.CallExpression[]=[];
+   const visit=(node:ts.Node)=>{if(ts.isCallExpression(node)&&ts.isIdentifier(node.expression)&&['createMarketingRuntime','createDeployedMarketingRuntime'].includes(node.expression.text))calls.push(node);ts.forEachChild(node,visit);};visit(ast);
+   expect(calls).toHaveLength(1);expect(calls[0].expression.getText(ast)).toBe('createDeployedMarketingRuntime');expect(calls[0].arguments).toHaveLength(1);
+  }
  });
  it.each(['','54321','12345'])('binds Meta activation to the exact publisher pixel: %s',pixel=>{
   const {pool}=setup();vi.stubEnv('HARVO_MARKETING_CONFIG',JSON.stringify({...workflowConfig,conversions:{meta:{pixelId:'12345'}}}));vi.stubEnv('META_ACCESS_TOKEN','isolated-meta-token');vi.stubEnv('META_PIXEL_ID',pixel);

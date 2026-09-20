@@ -1,3 +1,4 @@
+import { hasAsciiControl } from '../../intentionalText.js';
 /** Authenticated Google Ads transport. No implicit simulation or mutation retries. */
 import { GoogleAdsError } from './googleErrors.js';
 
@@ -192,7 +193,7 @@ export class GoogleAdsClient {
   public async suggestGeoTargets(input: { names?: string[]; resourceNames?: string[]; countryCode?: string }): Promise<GoogleGeoTarget[]> {
     const names = input.names;
     const resources = input.resourceNames;
-    if (!!names === !!resources || names && (!Array.isArray(names) || names.length < 1 || names.length > 25 || names.some(name => typeof name !== 'string' || name.trim().length < 2 || name.length > 100 || /[\x00-\x1f\x7f]/.test(name))) ||
+    if (!!names === !!resources || names && (!Array.isArray(names) || names.length < 1 || names.length > 25 || names.some(name => typeof name !== 'string' || name.trim().length < 2 || name.length > 100 || hasAsciiControl(name, true))) ||
         resources && (!Array.isArray(resources) || resources.length < 1 || resources.length > 25 || resources.some(name => typeof name !== 'string' || !/^geoTargetConstants\/[1-9]\d{0,19}$/.test(name))) ||
         input.countryCode !== undefined && !/^[A-Z]{2}$/.test(input.countryCode)) throw invalid('Choose a bounded location search or a list of Google location resources.');
     const token = await this.getFreshAccessToken();
@@ -210,7 +211,7 @@ export class GoogleAdsClient {
       const geo = item?.geoTargetConstant;
       if (!isObject(geo) || typeof geo.resourceName !== 'string' || !/^geoTargetConstants\/[1-9]\d{0,19}$/.test(geo.resourceName)) throw this.invalidResponse('read', requestId);
       if (geo.status !== 'ENABLED') continue;
-      if (['name', 'canonicalName', 'targetType'].some(key => typeof geo[key] !== 'string' || !geo[key].trim() || geo[key].length > 500 || /[\x00-\x1f\x7f]/.test(geo[key])) || typeof geo.countryCode !== 'string' || !/^[A-Z]{2}$/.test(geo.countryCode)) throw this.invalidResponse('read', requestId);
+      if (['name', 'canonicalName', 'targetType'].some(key => typeof geo[key] !== 'string' || !geo[key].trim() || geo[key].length > 500 || hasAsciiControl(geo[key], true)) || typeof geo.countryCode !== 'string' || !/^[A-Z]{2}$/.test(geo.countryCode)) throw this.invalidResponse('read', requestId);
       if (resources && !resources.includes(geo.resourceName) || input.countryCode && input.countryCode !== geo.countryCode) throw this.invalidResponse('read', requestId);
       const value = { resourceName: geo.resourceName, name: geo.name, canonicalName: geo.canonicalName, countryCode: geo.countryCode, targetType: geo.targetType };
       if (result.has(value.resourceName) && JSON.stringify(result.get(value.resourceName)) !== JSON.stringify(value)) throw this.invalidResponse('read', requestId);
@@ -383,8 +384,10 @@ export class GoogleAdsClient {
     const details = { httpStatus: status, operation: kind, ...(requestId ? { requestId } : {}) };
     if (kind === 'mutation' && (status >= 500 || status === 408)) return new GoogleAdsError('GOOGLE_UNKNOWN_OUTCOME',
       'Google mutation outcome is unknown; reconcile before another submission.', { statusCode: status, errorClass: 'UNKNOWN', isRetryable: false, details });
-    if (kind === 'oauth' || status === 401 || status === 403) return new GoogleAdsError('GOOGLE_AUTH_EXPIRED',
-      'Google authentication or account access was rejected.', { statusCode: status, errorClass: 'AUTHENTICATION', details });
+    if (status === 403 && kind !== 'oauth') return new GoogleAdsError('GOOGLE_ACCESS_DENIED',
+      'Google rejected account or API access. Check the project access level, account permissions and manager relationship.', { statusCode: status, errorClass: 'AUTHENTICATION', details });
+    if (kind === 'oauth' || status === 401) return new GoogleAdsError('GOOGLE_AUTH_REJECTED',
+      'Google rejected authentication. The response alone does not establish token expiry.', { statusCode: status, errorClass: 'AUTHENTICATION', details });
     if (status === 429) return new GoogleAdsError('GOOGLE_RATE_LIMIT', 'Google Ads rate limit reached.', {
       statusCode: status, errorClass: 'RATE_LIMIT', isRetryable: kind === 'read' || kind === 'validation', details
     });

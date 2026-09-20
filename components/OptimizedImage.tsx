@@ -115,8 +115,8 @@ export function OptimizedImage({
       `${getOptimizedUrl(cleanSrc, w, aspectRatio)} ${w}w`
   ).join(', ');
 
-  // Fallback image in case of failure
-  const fallbackSrc = 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?auto=format&fit=crop&w=800&q=75';
+  // Missing or failed property media must never be replaced with a different property.
+  if (!cleanSrc || hasError) return <div className={`flex items-center justify-center bg-gray-100 text-gray-500 ${className}`} role="img" aria-label={`${alt}: image unavailable`}><span className="p-4 text-sm">Image unavailable</span></div>;
 
   return (
     <div className={`relative overflow-hidden bg-gray-100 ${className}`}>
@@ -156,8 +156,8 @@ export function OptimizedImage({
          2. Native Lazy Loading & fetchPriority (LCP Optimization)
       */}
       <img
-        src={hasError ? fallbackSrc : optimizedSrc}
-        srcSet={hasError ? undefined : srcSet}
+        src={optimizedSrc}
+        srcSet={srcSet}
         sizes={sizes}
         alt={alt}
         loading={priority ? 'eager' : 'lazy'}

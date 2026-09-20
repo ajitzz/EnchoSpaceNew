@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Check, Clock3, ArrowUpRight, ShieldCheck, CircleHelp, AlertCircle } from 'lucide-react';
 import type { StudioCampaign, CampaignQuote, MarketingListing } from './types';
-import { humanStatus, money, observedTime } from './api';
+import { humanStatus, money, observedTime, marketingRequest } from './api';
 
 export function Notice({ children, error = false }: { children: React.ReactNode; error?: boolean }) {
   return <div className={`mkt-notice ${error ? 'mkt-notice-error' : ''}`} role={error ? 'alert' : 'status'}><AlertCircle size={17}/><div>{children}</div></div>;
@@ -49,21 +49,61 @@ export function CampaignProgress({ campaign }: { campaign: StudioCampaign }) {
     { label: 'Content review', value: humanStatus(campaign.contentApproval?.status), done: campaign.contentApproval?.status === 'APPROVED' && campaign.contentApproval.revision === campaign.revision },
     { label: 'Captured funding', value: humanStatus(campaign.funding?.status), done: fullyCaptured },
     { label: 'Risk clearance', value: campaign.funding?.released ? 'Released' : 'Awaiting clearance', done: campaign.funding?.released === true },
-    { label: 'Provider observation', value: humanStatus(campaign.delivery?.observedStatus), done: ['ACTIVE', 'LIVE'].includes(campaign.delivery?.observedStatus || '') },
+    { label: 'Delivery confirmation', value: campaign.delivery?.deliveryConfirmed ? 'Delivery observed' : campaign.delivery?.observedStatus === 'PAUSED' ? 'Paused at the network' : 'Awaiting confirmation', done: campaign.delivery?.deliveryConfirmed === true },
   ];
   return <ol className="mkt-progress" aria-label="Independent campaign gates">{gates.map(g => <li key={g.label} className={g.done ? 'is-complete' : ''}><span className="mkt-progress-icon">{g.done ? <Check size={15}/> : <Clock3 size={15}/>}</span><div><strong>{g.label}</strong><small>{g.value}</small></div></li>)}</ol>;
 }
 export function MetricsPanel({ campaign }: { campaign: StudioCampaign }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(timer); }, []);
   const m = campaign.metrics;
   const count = (value: number | null | undefined) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value.toLocaleString('en-IN') : '—';
-  const metrics = [['Impressions', count(m?.impressions)], ['Clicks', count(m?.clicks)], ['Click-through rate', typeof m?.ctr === 'number' && Number.isFinite(m.ctr) ? `${(m.ctr * 100).toFixed(2)}%` : '—'], ['Profile visits', count(m?.profileVisits)], ['Guest leads', count(m?.leads)], ['Attributed bookings', count(m?.bookings)], ['Provider spend', m?.spendMinor != null ? money(m.spendMinor, campaign.quote?.currency) : '—']];
-  return <section className="mkt-panel"><div className="mkt-section-heading"><div><span className="mkt-eyebrow">Observed outcomes</span><h3>From attention to bookings</h3></div><ArrowUpRight size={22}/></div>
+  const reportLabel = m?.report?.status === 'NO_REPORT' ? 'Waiting for the first network report'
+    : m?.report?.status === 'NOT_STARTED' ? 'Campaign reporting has not started'
+    : m?.report?.status === 'ERROR' ? 'Report refresh needs attention'
+    : m?.observedAt ? 'Latest reported performance' : 'Performance not yet available';
+  const metrics = [['Impressions', count(m?.impressions)], ['Clicks', count(m?.clicks)], ['Click-through rate', typeof m?.ctr === 'number' && Number.isFinite(m.ctr) ? `${(m.ctr * 100).toFixed(2)}%` : '—'], ['Property visits', count(m?.profileVisits)], ['Guest inquiries', count(m?.leads)], ['Verified attributed bookings', count(m?.bookings)], ['Reported media spend', m?.spendMinor != null && m.currency ? money(m.spendMinor, m.currency) : '—']];
+  const stale = !!m?.observedAt && (!Number.isFinite(Date.parse(m.observedAt)) || now-Date.parse(m.observedAt)>20*60*1000);
+  return <section className="mkt-panel"><div className="mkt-section-heading"><div><span className="mkt-eyebrow">Campaign performance</span><h3>From attention to bookings</h3></div><ArrowUpRight size={22}/></div>
+    <StatusPill>{stale ? 'Older report · refresh pending' : reportLabel}</StatusPill>
     <div className="mkt-metrics">{metrics.map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
-    <p className="mkt-caption">{m?.source ? `Source: ${m.source}. ` : 'Provider metrics are not available yet. '}Updated: {observedTime(m?.observedAt)}. A dash means unavailable, not zero. Attributed bookings do not establish incremental bookings.</p>
+    <p className="mkt-caption">{m?.dateStart && m.dateEnd ? `Reporting period: ${m.dateStart} → ${m.dateEnd}${m.accountTimeZone ? ` (${m.accountTimeZone})` : ''}. ` : ''}Retrieved: {observedTime(m?.observedAt)}. {m?.dataAsOf ? `Data current through: ${observedTime(m.dataAsOf)}.` : 'The network has not confirmed how current these totals are.'}</p>
+    <p className="mkt-caption">A dash means unavailable, not zero. Network reports can arrive late. Verified bookings and inquiries require Encho measurement; ad clicks are not bookings.</p>
+    <MediaBudgetMeter campaign={campaign}/>
+    <ObservationRefresh key={`${campaign.id}:${campaign.revision}`} campaign={campaign}/>
   </section>;
 }
+export function MediaBudgetMeter({ campaign }: { campaign: StudioCampaign }) {
+  const m=campaign.metrics, budget=campaign.mediaBudgetMinor;
+  const valid = typeof budget==='string' && /^[1-9]\d*$/.test(budget) && typeof m?.spendMinor==='string' && /^\d+$/.test(m.spendMinor)
+    && !!m.currency && m.currency === campaign.quote?.currency && m.dateStart===campaign.startDate;
+  if(!valid) return <div className="mkt-budget-meter"><span className="mkt-eyebrow">Media budget</span><p>Budget usage will appear when a compatible report is available.</p></div>;
+  const spent=BigInt(m!.spendMinor!), planned=BigInt(budget!), basisPoints=spent*10000n/planned;
+  const percent=Number(basisPoints>10000n?10000n:basisPoints)/100;
+  return <div className="mkt-budget-meter"><div className="mkt-section-heading"><strong>Reported media usage</strong><span>{percent.toFixed(1)}%</span></div>
+    <div className="mkt-budget-track" role="progressbar" aria-label="Reported media budget consumed" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100} aria-valuetext={`${money(m!.spendMinor,m!.currency!)} reported against ${money(budget,m!.currency!)} planned media`}><span style={{width:`${percent}%`}}/></div>
+    <p>{money(m!.spendMinor,m!.currency!)} reported / {money(budget,m!.currency!)} media plan</p>
+    {spent>planned && <Notice error>Reported spend exceeds the media plan. Encho operations must reconcile the overage.</Notice>}
+    <p className="mkt-caption">Media spend excludes Encho fees. Reports can be delayed; unused media allocation is not a refundable balance. Confirmed refundable funds are shown separately.</p>
+  </div>;
+}
+function ObservationRefresh({campaign}:{campaign:StudioCampaign}) {
+  const [busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState('');
+  async function refresh(){
+    setBusy(true);setError('');setMessage('');
+    try{
+      const result=await marketingRequest<{status:string;jobId:string;coalesced:boolean}>(`/campaigns/${campaign.id}/refresh`,{method:'POST',body:JSON.stringify({revision:campaign.revision})});
+      setMessage(result.coalesced ? `An existing refresh is ${humanStatus(result.status).toLowerCase()}. The workspace updates automatically.` : 'A network refresh is queued. New evidence will appear automatically when it arrives.');
+    }catch(reason){setError(reason instanceof Error?reason.message:'Refresh could not be queued.');}finally{setBusy(false);}
+  }
+  return <div className="mkt-observation-refresh"><button className="mkt-secondary" disabled={busy || !campaign.delivery?.externalCampaignId} onClick={()=>void refresh()}>{busy?'Requesting…':'Refresh network evidence'}</button>
+    {campaign.observationJob && <p className="mkt-caption">Last refresh: {humanStatus(campaign.observationJob.status)} · {observedTime(campaign.observationJob.updatedAt)}.</p>}
+    {!campaign.delivery?.externalCampaignId && <p className="mkt-caption">Network refresh becomes available after this campaign is submitted.</p>}
+    {message && <p role="status">{message}</p>}{error && <Notice error>{error}</Notice>}
+  </div>;
+}
 export function DeliveryEvidence({ campaign }: { campaign: StudioCampaign }) {
-  return <div className="mkt-evidence"><ShieldCheck size={20}/><div><strong>Provider delivery evidence</strong><dl><div><dt>Configured</dt><dd>{humanStatus(campaign.delivery?.configuredStatus)}</dd></div><div><dt>Observed</dt><dd>{humanStatus(campaign.delivery?.observedStatus)}</dd></div><div><dt>Last observation</dt><dd>{observedTime(campaign.delivery?.observedAt)}</dd></div></dl>
+  return <div className="mkt-evidence"><ShieldCheck size={20}/><div><strong>Campaign delivery</strong><dl><div><dt>Requested state</dt><dd>{humanStatus(campaign.delivery?.configuredStatus)}</dd></div><div><dt>Last confirmed state</dt><dd>{humanStatus(campaign.delivery?.observedStatus)}</dd></div><div><dt>Last observation</dt><dd>{observedTime(campaign.delivery?.observedAt)}</dd></div></dl>
     {campaign.delivery?.externalCampaignId && <code>{campaign.delivery.externalCampaignId}</code>}
     <p className="mkt-caption">Submission, approval and active delivery are separate events. Provider updates may be delayed.</p></div></div>;
 }

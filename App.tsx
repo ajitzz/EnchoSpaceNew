@@ -20,6 +20,17 @@ import { initSyncHandlers } from './lib/syncHandlers';
 
 import { ListingCardSkeleton, ListingDetailsSkeleton } from './components/Skeletons';
 
+function getListingSlug(listing: Listing): string {
+    if ('slug' in listing && typeof listing.slug === 'string' && listing.slug) return listing.slug;
+    const cleanTitle = String(listing.title || '')
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/[\s_-]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    return `${cleanTitle || 'stay'}-${listing.id}`;
+  }
+
 initSyncHandlers();
 
 function lazyWithRetry<T extends React.ComponentType<any>>(
@@ -197,7 +208,7 @@ function App() {
   const [hostView, setHostView] = useState<'today' | 'calendar' | 'listings' | 'messages' | 'analytics' | 'marketing'>('today');
   
   // Auth state
-  const { user } = useAuth();
+  const { user, token: sessionToken } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   // Animation & Data States
@@ -481,13 +492,14 @@ function App() {
         if (!socket) {
           socket = io({
             reconnectionDelayMax: 10000,
+            auth: { token: sessionToken },
           });
         }
         
-        socket.emit('join_user', user.id);
-        if (user.role === 'admin') {
-           socket.emit('join_admin');
-        }
+        const notificationSocket = socket;
+        const joinRooms = () => { notificationSocket.emit('join_user', user.id); if (user.role === 'admin') notificationSocket.emit('join_admin'); };
+        notificationSocket.on('connect', joinRooms);
+        if (notificationSocket.connected) joinRooms();
         
         const handleNotification = (notif: any) => {
           if (notif.type === 'new_message') {
@@ -525,10 +537,12 @@ function App() {
           }
         };
 
-        socket.on('notification', handleNotification);
+        notificationSocket.on('notification', handleNotification);
 
         return () => {
-           socket.off('notification', handleNotification);
+           notificationSocket.off('notification', handleNotification);
+           notificationSocket.off('connect', joinRooms);
+           notificationSocket.disconnect(); if (socket === notificationSocket) socket = null;
         };
 
     } else {
@@ -537,11 +551,12 @@ function App() {
         setExperienceBookings([]);
         clearBadge();
     }
-  }, [user, appMode, setBadge, clearBadge, showNotification]);
+  }, [user, sessionToken, appMode, setBadge, clearBadge, showNotification]);
 
   // Global db_changed listener
   useEffect(() => {
      if (!socket) return;
+     const changeSocket = socket;
      const handleDbChange = (data: { type: string }) => {
          if (data.type === 'listing') {
              handleSearch(city, filters);
@@ -553,9 +568,9 @@ function App() {
              .catch(console.error);
          }
      };
-      socket.on('db_changed', handleDbChange);
-      return () => { socket.off('db_changed', handleDbChange); };
-   }, [city, filters, user]);
+      changeSocket.on('db_changed', handleDbChange);
+      return () => { changeSocket.off('db_changed', handleDbChange); };
+   }, [city, filters, user, sessionToken]);
 
   const isFavorite = React.useCallback((id: string | number) => {
       const targetId = String(id);
@@ -817,16 +832,7 @@ function App() {
       }
   }, [flyAnimation]);
 
-  const getListingSlug = (listing: any): string => {
-    if (listing.slug) return listing.slug;
-    const cleanTitle = String(listing.title || '')
-      .toLowerCase()
-      .trim()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/[\s_-]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-    return `${cleanTitle || 'stay'}-${listing.id}`;
-  };
+
 
   // Handle browser history and back button via URL Hash & Path
   useEffect(() => {

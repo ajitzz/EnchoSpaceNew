@@ -11,7 +11,7 @@ export class WorkflowFinance implements WorkflowFinancePort{
  private markupBps:number;private preferenceVersion=0;
  constructor(private pool:pg.Pool,private config:MarketingRuntimeConfig,private gateway:CampaignPaymentGateway){this.markupBps=config.markupBps;}
  private service(hostId:number){return new MarketingFinanceService(this.pool,{actorContext:{id:hostId,role:'host'}});}
- async refreshPreference(){const r=await this.pool.query('SELECT version,markup_bps FROM marketing_commercial_preferences ORDER BY version DESC LIMIT 1');if(r.rows[0]){this.markupBps=r.rows[0].markup_bps;this.preferenceVersion=Number(r.rows[0].version);}}
+ async refreshPreference(){if(!this.config.policyAdminId)return;const r=await inTransaction(this.pool,{id:this.config.policyAdminId,role:'system'},c=>c.query('SELECT version,markup_bps FROM marketing_commercial_preferences ORDER BY version DESC LIMIT 1'));if(r.rows[0]){this.markupBps=r.rows[0].markup_bps;this.preferenceVersion=Number(r.rows[0].version);}}
  policy(){return {currency:this.config.currency,markupPercent:this.markupBps/100,configured:!!this.config.financialPolicy,version:this.preferenceVersion,costItems:this.config.costRules.map(r=>({label:r.label,amountMinor:r.fixedMinor}))};}
  async quote(row:any,_key:string){
   if(!this.config.financialPolicy)throw new MarketingError('COST_POLICY_REQUIRED','Register the actual campaign cost and tax policy before quoting',503);

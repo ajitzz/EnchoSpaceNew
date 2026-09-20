@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { StudioWorkspace } from './types';
+import {useAuth} from '../AuthContext';
 
 export async function marketingRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('token');
@@ -19,7 +20,8 @@ export async function marketingRequest<T>(path: string, options: RequestInit = {
 }
 
 export function useMarketingWorkspace(admin = false) {
-  const [workspace, setWorkspace] = useState<StudioWorkspace | null>(null);
+  const {token}=useAuth();
+  const [snapshot,setSnapshot]=useState<{token:string;query:string;admin:boolean;value:StudioWorkspace}|null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [search,setSearch]=useState(''),[listingSearch,setListingSearch]=useState(''),[filter,setFilter]=useState('all');
@@ -34,21 +36,23 @@ export function useMarketingWorkspace(admin = false) {
   if(queryListingSearch)params.set('listingSearch',queryListingSearch);
   if(filter!=='all')params.set('filter',filter);
   const query=params.toString();
+  const workspace=token&&snapshot?.token===token&&snapshot.query===query&&snapshot.admin===admin?snapshot.value:null;
   const request = useRef<AbortController | null>(null);
   const reload = useCallback(async () => {
     request.current?.abort();
+    if(!token){setSnapshot(null);setError('Sign in to access your campaign workspace.');setLoading(false);return;}
     const controller = new AbortController();
     request.current = controller;
     try {
-      const result = await marketingRequest<StudioWorkspace>(`${admin ? '/admin/workspace' : '/workspace'}${query?'?'+query:''}`, { signal: controller.signal });
+      const result = await marketingRequest<StudioWorkspace>(`${admin ? '/admin/workspace' : '/workspace'}${query?'?'+query:''}`, { signal: controller.signal,headers:{Authorization:`Bearer ${token}`} });
       if (!Array.isArray(result?.campaigns) || !Array.isArray(result?.listings) || !result.policy || !result.capabilities) {
         throw new Error('Campaign workspace data is incomplete. Please refresh.');
       }
-      if (!controller.signal.aborted) { setWorkspace(result); setError(''); }
+      if (!controller.signal.aborted) { setSnapshot({token,query,admin,value:result}); setError(''); }
     } catch (e) {
-      if (!controller.signal.aborted) setError(e instanceof Error ? e.message : 'The campaign workspace is unavailable.');
+      if (!controller.signal.aborted) {setSnapshot(null);setError(e instanceof Error ? e.message : 'The campaign workspace is unavailable.');}
     } finally { if (!controller.signal.aborted) setLoading(false); }
-  }, [admin,query]);
+  }, [admin,query,token]);
   useEffect(() => {
     setLoading(true);
     void reload();

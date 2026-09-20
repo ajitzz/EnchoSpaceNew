@@ -44,6 +44,11 @@ describe('truthful structural readiness',()=>{
  const pool=(input:{missing?:string;bypass?:boolean;force?:boolean;fail?:boolean}={})=>{const queries:string[]=[];const release=vi.fn();return {queries,release,connect:async()=>({release,query:async(sql:string)=>{queries.push(sql);if(input.fail&&sql.includes('pg_roles'))throw new Error('DB_FAILED');if(sql.includes('pg_roles'))return{rows:[{rolsuper:false,rolbypassrls:!!input.bypass}]};if(sql.includes('unnest'))return{rows:requiredRuntimeTables.map(name=>({name,present:name!==input.missing}))};if(sql.includes('pg_class'))return{rows:Array.from({length:requiredForcedRlsTables.length},()=>({relrowsecurity:true,relforcerowsecurity:input.force!==false}))};return{rows:[]};}})};};
  it('rejects missing migrations, bypass roles and disabled FORCE RLS despite a working connection',async()=>{for(const config of[{missing:'marketing_jobs'},{bypass:true},{force:false}])expect((await databaseReadiness(pool(config) as any)).ready).toBe(false);expect((await databaseReadiness(pool() as any)).ready).toBe(true);});
  it('only reads metadata, rolls back failed checks and always releases',async()=>{const p=pool({fail:true});await expect(databaseReadiness(p as any)).rejects.toThrow();expect(p.queries[0]).toBe('BEGIN READ ONLY');expect(p.queries.at(-1)).toBe('ROLLBACK');expect(p.release).toHaveBeenCalledOnce();expect(p.queries.some(x=>/CREATE|ALTER|INSERT|UPDATE|DELETE/.test(x))).toBe(false);});
+ it.each([undefined,{}, {rolsuper:true,rolbypassrls:false}, {rolsuper:false}, {rolbypassrls:false}])('requires explicit safe role flags: %j',async role=>{
+  const p=pool();const original=p.connect;
+  p.connect=async()=>{const c=await original();const query=c.query;c.query=async(sql:string)=>sql.includes('pg_roles')?{rows:role?[role]:[]} as any:query(sql);return c;};
+  expect((await databaseReadiness(p as any)).ready).toBe(false);
+ });
 });
 
 describe('worker supervision and draining',()=>{

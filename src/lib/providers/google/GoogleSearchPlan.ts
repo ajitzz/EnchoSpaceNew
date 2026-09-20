@@ -1,3 +1,4 @@
+import { hasAsciiControl } from '../../intentionalText.js';
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 import type { ProviderPublishRequest } from '../types.js';
@@ -68,7 +69,7 @@ function positiveInteger(value: unknown, field: string): number {
 
 function text(value: unknown, field: string, max: number): string {
   if (typeof value !== 'string' || !value.trim() || value.trim() !== value ||
-      value.length > max || /[\u0000-\u001f\u007f]/u.test(value)) {
+      value.length > max || hasAsciiControl(value, true)) {
     invalid(field, `must be intentional text of 1–${max} characters without surrounding whitespace or control characters`);
   }
   return value;

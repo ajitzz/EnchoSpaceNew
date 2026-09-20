@@ -131,7 +131,7 @@ describe('application caller contract wiring (source-only, no server import)', (
     expect(server).toContain('const s3 = createMediaUploadS3Client(');
     expect(route).toContain('createImmutableS3Upload(s3,');
     expect(route).toContain('publicUrl: fileUrl, uploadHeaders');
-    expect(route).toMatch(/issueLocalUpload\(JWT_SECRET,\s*req\.user\.id,\s*contentType\)/);
+    expect(route).toMatch(/issueLocalUpload\(JWT_SECRET,\s*req\.user!?\.id,\s*contentType\)/);
     const host = readFileSync('components/HostForm.tsx', 'utf8');
     const mux = host.slice(host.indexOf("fetch('/api/upload-video-url'"), host.indexOf("fetch('/api/upload-video-url'") + 650);
     expect(mux).toContain("headers: { 'Content-Type': file.type }");

@@ -1,3 +1,4 @@
+import { hasAsciiControl } from '../../intentionalText.js';
 import { isIP } from 'node:net';
 import type { ProviderPublishRequest } from '../types.js';
 import { semanticFingerprint } from '../ProviderOperationStore.js';
@@ -20,7 +21,7 @@ export function mediaUrl(value: unknown): string {
     catch {
         return fail('Invalid public HTTPS URL.');
     }
-    if (url.protocol !== 'https:' || url.username || url.password || url.hash || url.port || isIP(url.hostname.replace(/[\[\]]/g, '')) ||
+    if (url.protocol !== 'https:' || url.username || url.password || url.hash || url.port || isIP(url.hostname.replace(/[[\]]/g, '')) ||
         !/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/.test(url.hostname) || /(?:^|\.)(?:localhost|local|internal|lan|home|test|invalid|example)$/.test(url.hostname))
         return fail('A public HTTPS domain is required.');
     return url.href;
@@ -35,7 +36,7 @@ export function buildMetaCampaignPlan(request: ProviderPublishRequest, origin: s
         return fail('A valid campaign identity and positive INR/USD budget are required.');
     if (request.objective !== 'BOOKINGS')
         return fail('The website campaign requires the BOOKINGS objective.');
-    const text = (value: unknown, max: number): string => typeof value === 'string' && value.trim() === value && value.length > 0 && value.length <= max && !/[\x00-\x1f]/.test(value) ? value : fail('Intentional campaign copy is required.');
+    const text = (value: unknown, max: number): string => typeof value === 'string' && value.trim() === value && value.length > 0 && value.length <= max && !hasAsciiControl(value) ? value : fail('Intentional campaign copy is required.');
     const title = text(request.title, 100);
     const headline = text(request.creativeAssets?.headline, 100);
     const message = text(request.creativeAssets?.primaryText ?? request.creativeAssets?.description, 5000);

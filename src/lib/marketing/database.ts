@@ -2,7 +2,7 @@ import type pg from 'pg';
 import type {Actor} from './domain.js';
 import {MarketingError} from './domain.js';
 export async function inTransaction<T>(pool:pg.Pool,actor:Actor,work:(client:pg.PoolClient)=>Promise<T>):Promise<T>{
- const c=await pool.connect();try{await c.query('BEGIN');await c.query("SELECT set_config('app.current_user_id',$1,true),set_config('app.marketing_admin',$2,true),set_config('app.bypass_rls',$2,true),set_config('statement_timeout','8000',true),set_config('lock_timeout','3000',true)",[String(actor.id),String(actor.role==='admin'||actor.role==='system')]);const value=await work(c);await c.query('COMMIT');return value;}catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
+ const c=await pool.connect();let broken:Error|undefined;try{await c.query('BEGIN');await c.query("SELECT set_config('app.current_user_id',$1,true),set_config('app.marketing_admin',$2,true),set_config('app.bypass_rls',$2,true),set_config('statement_timeout','8000',true),set_config('lock_timeout','3000',true)",[String(actor.id),String(actor.role==='admin'||actor.role==='system')]);const value=await work(c);await c.query('COMMIT');return value;}catch(e){try{await c.query('ROLLBACK');}catch(rollbackError){broken=rollbackError as Error;}throw e;}finally{c.release(broken);}
 }
 export async function lockWorkflow(c:pg.PoolClient,id:number,actor:Actor){
  // Use the same parent lock order as provider/finance operations.

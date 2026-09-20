@@ -21,6 +21,8 @@ const get=path=>fetch(`http://127.0.0.1:${port}${path}`,{signal:AbortSignal.time
 try{
  let healthy=false;for(let attempt=0;attempt<120;attempt++){if(closed)break;try{healthy=(await get('/api/health/live')).status===200;}catch{}if(healthy)break;await new Promise(r=>setTimeout(r,250));}
  if(!healthy){writeFileSync(join(artifact,'runtime-smoke-failure.log'),logs);throw new Error('COMPILED_WEB_STARTUP_FAILED; isolated log saved in artifact directory');}
+ if((await fetch(`http://127.0.0.1:${port}/api/health/live`,{headers:{Origin:'https://www.encho.co.in.attacker.invalid'}})).status!==403)throw new Error('UNTRUSTED_ORIGIN_NOT_REJECTED');
+ if((await fetch(`http://127.0.0.1:${port}/api/health/live`,{headers:{Origin:'https://www.encho.co.in'}})).status!==200)throw new Error('CANONICAL_ORIGIN_REJECTED');
  if((await get('/api/health/ready')).status!==503)throw new Error('UNCONFIGURED_DATABASE_REPORTED_READY');
  for(const path of ['/server.js','/src/lib/marketing/config.js','/build/server/server.js','/.env.production'])if((await get(path)).status!==404)throw new Error('PRIVATE_PATH_NOT_REJECTED');
  if((await get('/stay/example-stay')).status!==200)throw new Error('CANONICAL_SPA_ROUTE_FAILED');

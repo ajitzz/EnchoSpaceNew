@@ -49,7 +49,7 @@ describe('HARVO engine durable execution boundaries on real PostgreSQL', () => {
     catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
   }
   async function quoted() {
-    const draft = workflowDraft({ stayStartDate: '2099-01-02', stayEndDate: '2099-01-04' });
+    const draft = workflowDraft({ startDate:'2026-09-01',endDate:'2026-09-30',stayStartDate: '2099-01-02', stayEndDate: '2099-01-04' });
     const row = await service.create(host, draft); await service.evaluate(row.campaign_id, host, 1); await service.submit(row.campaign_id, host, 1);
     await service.review(row.campaign_id, admin, { revision: 1, decision: 'APPROVE', note: 'Manual AI fallback review of actual media and policy.', mediaConfirmed: true, policyConfirmed: true });
     return service.quote(row.campaign_id, host, 1, 'funding-quote');

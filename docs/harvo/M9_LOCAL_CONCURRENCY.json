@@ -2,34 +2,34 @@
   "scope": "ISOLATED_LOCAL_ACCEPTANCE_NOT_PRODUCTION_LOAD",
   "concurrency": 30,
   "transports": "HTTP router and Unix-socket PostgreSQL; authentication injected; no external provider/payment requests",
-  "observedAt": "2026-09-13T13:23:51.908Z",
+  "observedAt": "2026-09-20T12:48:02.573Z",
   "postgresql": "18.0 (Homebrew)",
   "concurrentCreates": {
     "requests": 30,
-    "totalMs": 672,
-    "p50Ms": 578,
-    "p95Ms": 641,
-    "maximumMs": 644,
-    "sqlStatements": 216,
-    "sqlStatementsPerRequest": 7.2
+    "totalMs": 82,
+    "p50Ms": 73,
+    "p95Ms": 78,
+    "maximumMs": 78,
+    "sqlStatements": 336,
+    "sqlStatementsPerRequest": 11.2
   },
   "concurrentEdits": {
     "requests": 30,
-    "totalMs": 264,
-    "p50Ms": 216,
-    "p95Ms": 252,
-    "maximumMs": 254,
-    "sqlStatements": 185,
-    "sqlStatementsPerRequest": 6.166666666666667
+    "totalMs": 29,
+    "p50Ms": 23,
+    "p95Ms": 27,
+    "maximumMs": 27,
+    "sqlStatements": 189,
+    "sqlStatementsPerRequest": 6.3
   },
   "concurrentReads": {
     "requests": 30,
-    "totalMs": 274,
-    "p50Ms": 223,
-    "p95Ms": 266,
-    "maximumMs": 267,
-    "sqlStatements": 390,
-    "sqlStatementsPerRequest": 13
+    "totalMs": 50,
+    "p50Ms": 40,
+    "p95Ms": 48,
+    "maximumMs": 48,
+    "sqlStatements": 450,
+    "sqlStatementsPerRequest": 15
   },
   "concurrentCorrectness": {
     "oneCreate": true,
@@ -39,7 +39,7 @@
     "noCrossTenantRows": true
   },
   "restoreReplay": {
-    "elapsedMs": 2920,
+    "elapsedMs": 247,
     "format": "PostgreSQL custom pg_dump / pg_restore into separate local database",
     "sameCampaignIdentity": true,
     "noDuplicateCreate": true,

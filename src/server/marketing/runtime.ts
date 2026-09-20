@@ -55,5 +55,11 @@ export function createMarketingRuntime(pool:pg.Pool,authorities:Pick<ConversionC
  const workflow=new MarketingWorkflowService(pool,{ai:new CampaignAiReviewer({apiKey:process.env.GEMINI_API_KEY,model:process.env.GEMINI_MARKETING_MODEL,mediaOrigins:new Set(config.mediaOrigins)}),finance,publishingEnabled:config.publishingEnabled,activationEnabled:effectiveConfig.activationEnabled,activationBlockers,fundingEnabled:config.fundingEnabled&&payments.configured(config.currency),configurationReasons:reasons,validateTargeting:draft=>targeting.validateDraft(draft),metaCountries:config.meta.countries,
   resolveCreative:creative?((c,actor,draft)=>creative.resolveForCampaign(c,actor,{listingId:draft.listingId,sourceAssetId:draft.mediaIds[0],derivativeId:draft.creativeDerivativeId!,manifestHash:draft.creativeManifestHash!})):undefined,
   verifyCreativeForPublishing:creative? (async(row,actor)=>{await creative.verifyForPublishing(actor,{listingId:row.listing_id,sourceAssetId:row.draft.mediaIds[0],derivativeId:row.draft.creativeDerivativeId,manifestHash:row.draft.creativeManifestHash});}):undefined});
- return {config,payments,finance,workflow,targeting,guidance,settlement,conversions,creative,metaEvents:new MetaMarketingEvents(scoped,process.env.META_APP_SECRET,process.env.META_MARKETING_WEBHOOK_VERIFY_TOKEN),engine:new MarketingEngine(pool,workflow,effectiveConfig,payments,undefined,refunds)};
+ return {config,payments,finance,workflow,targeting,guidance,settlement,conversions,creative,metaEvents:new MetaMarketingEvents(scoped,process.env.META_APP_SECRET,process.env.META_MARKETING_WEBHOOK_VERIFY_TOKEN),engine:new MarketingEngine(scoped,workflow,effectiveConfig,payments,undefined,refunds)};
+}
+
+/** Web and worker composition remains blocked until canonical checkout/consent adapters are accepted.
+ * Operator configuration cannot manufacture these source authorities. */
+export function createDeployedMarketingRuntime(pool:pg.Pool){
+ return createMarketingRuntime(pool);
 }

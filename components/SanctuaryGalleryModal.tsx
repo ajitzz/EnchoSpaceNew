@@ -52,7 +52,7 @@ export function buildGalleryCategories(listing: Listing): CategoryConfig[] {
   // Add a tab per host-defined room type
   if (listing.rooms && (listing.rooms as any[]).length > 0) {
     (listing.rooms as any[]).forEach((room: any) => {
-      const tierKey = room.type || `room_${room.name?.replace(/\s+/g, '_').toLowerCase()}`;
+      const tierKey = String(room.type || room.id);
       categories.push({
         key: tierKey,
         label: room.name || tierKey,
@@ -62,13 +62,6 @@ export function buildGalleryCategories(listing: Listing): CategoryConfig[] {
         description: room.description || room.specs || `Explore the ${room.name || tierKey}.`
       });
     });
-  } else {
-    // Legacy fallback for listings without room config
-    categories.push(
-      { key: 'suites', label: 'Presidential Suites', shortLabel: 'Suites', icon: '👑', headline: 'Presidential Panorama Suites', description: 'Flagship luxury accommodations.' },
-      { key: 'deluxe', label: 'Deluxe Rooms', shortLabel: 'Deluxe', icon: '🛏️', headline: 'Deluxe Garden Sanctuaries', description: 'Spacious comfort with garden access.' },
-      { key: 'executive', label: 'Executive Studios', shortLabel: 'Executive', icon: '💻', headline: 'Executive Work Enclaves', description: 'Ergonomic productivity spaces.' }
-    );
   }
   return categories;
 }
@@ -77,23 +70,28 @@ export function buildGalleryCategories(listing: Listing): CategoryConfig[] {
 export const GALLERY_CATEGORIES = buildGalleryCategories({ rooms: [] } as any);
 
 
-/**
- * Intelligent Fallback Classifier:
- * Transforms raw image URLs into an award-winning architectural gallery schema
- * with rich contextual titles, descriptions, lighting time, and spatial specs.
- */
+/** Preserve supplied room identity and source order; raw media has no inferred room. */
 export function classifyListingPhotos(listing: Listing): SpatialPhoto[] {
   const result: SpatialPhoto[] = [];
   
   if (listing.photos && listing.photos.length > 0) {
-    listing.photos.forEach((photo: any, idx: number) => {
+    listing.photos.filter(photo => !!photo.url).forEach(photo => {
        result.push({
          ...photo,
          tier: photo.tier || 'common',
          category: photo.category || 'other',
        });
     });
-    return result;
+  }
+
+  for (const room of listing.rooms || []) {
+    const tier = String(room.type || room.id);
+    // A supplied listing-level set for this room is authoritative. Otherwise use
+    // the room's own photos, with the same order used by its inline gallery.
+    if (result.some(photo => photo.tier === tier)) continue;
+    for (const photo of room.photos || []) {
+      if (photo.url) result.push({...photo, tier, category: photo.category || 'other'});
+    }
   }
 
   // Fallback if no structured photos
@@ -105,28 +103,8 @@ export function classifyListingPhotos(listing: Listing): SpatialPhoto[] {
     });
   }
 
-  const fallbacks: { tier: any; category: any; title: string; desc: string; }[] = [
-    { tier: 'common', category: 'exterior', title: 'Architectural Facade', desc: 'Monolithic clean lines framing the landscape.' },
-    { tier: 'common', category: 'pool', title: 'Infinity Horizon Pool', desc: 'Heated mineral waters suspended over the valley.' },
-    { tier: 'suites', category: 'bedroom', title: 'Presidential Master Suite', desc: 'King-sized organic plush mattress.' },
-    { tier: 'suites', category: 'bathroom', title: 'Spa En-Suite', desc: 'Freestanding volcanic stone soak tub.' },
-    { tier: 'deluxe', category: 'bedroom', title: 'Deluxe Garden Room', desc: 'Private bamboo courtyard access.' },
-    { tier: 'executive', category: 'living_room', title: 'Executive Studio', desc: 'Ergonomic architectural workstation.' }
-  ];
-
   rawUrls.forEach((url, idx) => {
-    const template = fallbacks[idx % fallbacks.length];
-    result.push({
-      id: `fallback-photo-${idx}`,
-      url,
-      tier: template.tier,
-      category: template.category,
-      categoryLabel: template.category,
-      title: template.title,
-      description: template.desc,
-      specs: '',
-      isHero: idx === 0
-    });
+    if (!result.some(photo => photo.url === url)) result.push({id: `display-photo-${idx}`,url,tier:'common',category:'other',isHero:idx===0});
   });
 
   return result;
@@ -162,18 +140,8 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
 
   // Filtered photos for active tab: Room photos strictly at the top!
   const filteredPhotos = useMemo(() => {
-    if (selectedCategory === 'all') {
-      const roomPhotos = allPhotos.filter(p => p.tier !== 'common');
-      const commonPhotos = allPhotos.filter(p => p.tier === 'common');
-      return [...roomPhotos, ...commonPhotos];
-    }
-    if (selectedCategory === 'common') {
-      return allPhotos.filter(p => p.tier === 'common');
-    }
-    // For a specific room tier: 100% room photos first, common grounds photos only appended at the bottom
-    const roomPhotos = allPhotos.filter(p => p.tier === selectedCategory);
-    const commonPhotos = allPhotos.filter(p => p.tier === 'common');
-    return roomPhotos.length > 0 ? [...roomPhotos, ...commonPhotos] : commonPhotos;
+    if (selectedCategory === 'all') return allPhotos;
+    return allPhotos.filter(p => p.tier === selectedCategory);
   }, [allPhotos, selectedCategory]);
 
   // Group filtered photos by their Spatial Category for Bento Rendering
@@ -206,13 +174,6 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
     const counts: Record<string, number> = { all: allPhotos.length };
     allPhotos.forEach(p => {
       counts[p.tier] = (counts[p.tier] || 0) + 1;
-    });
-    // Add common photos to each non-common tier count
-    const commonCount = counts['common'] || 0;
-    galleryCategories.forEach(cat => {
-      if (cat.key !== 'all' && cat.key !== 'common') {
-        counts[cat.key] = (counts[cat.key] || 0) + commonCount;
-      }
     });
     return counts;
   }, [allPhotos, galleryCategories]);

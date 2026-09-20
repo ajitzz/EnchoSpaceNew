@@ -34,7 +34,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return storedUser ? JSON.parse(storedUser) : null;
     } catch (e) {
       console.error("Failed to parse stored user from localStorage:", e);
-      try { localStorage.removeItem('user'); } catch {}
+      try { localStorage.removeItem('user'); } catch { /* Storage can be disabled; discard the in-memory identity regardless. */ }
       return null;
     }
   });

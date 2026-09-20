@@ -1,5 +1,7 @@
 # HARVO — Paid marketing execution plan
 
+**20 September 2026 acceptance qualification:** The milestone verification below records the earlier local baseline. Discussion 019 reproduced subsequent regressions; it is not current release acceptance. HARVO-022 authorizes preserving valid fixes and remediating those regressions under the [production remediation plan](HARVO_PRODUCTION_REMEDIATION_PLAN.md), prepared before code changes. Production readiness is blocked until regression closure and the existing external gates are evidenced. No milestone is advanced by the new plan.
+
 Status: execution authorized by the founder on 13 September 2026. Phase 3; HARVO-013 authorizes continuous execution across the remaining milestones without routine approval stops. This track does not accept or bypass blocked guest-booking milestones. M1–M3 and M7–M8 are locally verified. M4–M6 and M9 have partial implementations with explicit unresolved acceptance dependencies; M10 has not run. See the latest GAP_CLOSURE_VERIFICATION.md and prior continuous verification report for exact source/test scope and configured-database evidence. Source findings and evidence in HARVO remain controlling; no blanket 10/10 certification is implied.
 
 ## Numbered milestones and acceptance

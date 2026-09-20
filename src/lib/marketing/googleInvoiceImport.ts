@@ -1,3 +1,4 @@
+import { hasAsciiControl } from '../intentionalText.js';
 import {createHash} from 'node:crypto';
 import {z} from 'zod';
 import {MarketingError} from './domain.js';
@@ -53,7 +54,7 @@ export class GoogleInvoiceImporter {
  constructor(options:GoogleInvoiceImporterOptions,dependencies:{fetch?:typeof fetch;timeoutMs?:number}={}){
   if(!customer.safeParse(options.servingCustomerId).success||!customer.safeParse(options.payingManagerCustomerId).success||options.servingCustomerId===options.payingManagerCustomerId||
    !new RegExp(`^customers/${options.servingCustomerId}/billingSetups/[1-9]\\d{0,29}$`).test(options.billingSetup)||!['INR','USD'].includes(options.currency)||
-   typeof options.monthlyInvoicingReference!=='string'||options.monthlyInvoicingReference.trim().length<10||options.monthlyInvoicingReference.length>255||/[\x00-\x1f\x7f]/.test(options.monthlyInvoicingReference)||
+   typeof options.monthlyInvoicingReference!=='string'||options.monthlyInvoicingReference.trim().length<10||options.monthlyInvoicingReference.length>255||hasAsciiControl(options.monthlyInvoicingReference, true)||
    typeof options.accessToken!=='function'||typeof options.developerToken!=='string'||!options.developerToken.trim()||options.developerToken.length>8192||/[\r\n]/.test(options.developerToken))
    fail('GOOGLE_INVOICE_CONFIGURATION_REQUIRED','Explicit monthly-invoicing, serving account, billing setup and paying-manager configuration is required',503);
   this.timeoutMs=dependencies.timeoutMs??30000;

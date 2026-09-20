@@ -120,6 +120,29 @@ describe('HARVO host/admin HTTP contracts against isolated PostgreSQL', () => {
     expect((await get('/workspace', 11).expect(200)).body.campaigns).toEqual([]);
     expect((await fixture.pool.query('SELECT * FROM marketing_jobs')).rows).toHaveLength(0);
   });
+  it('accepts the studio refresh body and coalesces revision-bound read requests',async()=>{
+    const row=await created();
+    await fixture.pool.query('UPDATE marketing_campaign_workflows SET provider_truth=$2 WHERE campaign_id=$1',[row.id,JSON.stringify({externalCampaignId:'isolated-provider-1'})]);
+    const first=await post(`/campaigns/${row.id}/refresh`,{revision:1}).expect(202);
+    const again=await post(`/campaigns/${row.id}/refresh`,{revision:1}).expect(202);
+    expect(first.body.jobId).toBe(again.body.jobId);expect(again.body.coalesced).toBe(true);
+    await post(`/campaigns/${row.id}/refresh`,{revision:2}).expect(409);
+    await post(`/campaigns/${row.id}/refresh`,{revision:1,reset:true}).expect(422);
+  });
+  it('restricts recovery inspection to current admins, preserves quarantine and excludes raw provider payloads',async()=>{
+    const row=await created();
+    await fixture.pool.query("UPDATE marketing_campaign_workflows SET state='RECONCILIATION_REQUIRED' WHERE campaign_id=$1",[row.id]);
+    await fixture.pool.query("INSERT INTO provider_publishing_transactions(campaign_id,provider,operation_type,idempotency_key,publish_status,is_unknown_outcome,payload,error_details) VALUES($1,'META','CREATE_HIERARCHY','unknown-operation','UNKNOWN',true,$2,'private provider response')",[row.id,JSON.stringify({access_token:'private-token'})]);
+    const before=(await fixture.pool.query('SELECT * FROM provider_publishing_transactions')).rows;
+    await get(`/admin/campaigns/${row.id}/recovery?revision=1`,10).expect(403);
+    await get(`/admin/campaigns/${row.id}/recovery?revision=2`,90).expect(409);
+    const result=await get(`/admin/campaigns/${row.id}/recovery?revision=1`,90).expect(200);
+    expect(result.body).toMatchObject({assessment:'QUARANTINED_REVIEW_REQUIRED',automaticRetryAllowed:false,revision:1});
+    expect(JSON.stringify(result.body)).not.toMatch(/private-token|private provider response|access_token/);
+    expect((await fixture.pool.query('SELECT * FROM provider_publishing_transactions')).rows).toEqual(before);
+    expect((await fixture.pool.query('SELECT state FROM marketing_campaign_workflows WHERE campaign_id=$1',[row.id])).rows[0].state).toBe('RECONCILIATION_REQUIRED');
+    await fixture.pool.query("UPDATE users SET role='host' WHERE id=90");await get(`/admin/campaigns/${row.id}/recovery?revision=1`,90).expect(403);
+  });
   it('deduplicates concurrent creation and rejects a changed body using the same user intent', async () => {
     const replies = await Promise.all(Array.from({ length: 6 }, () => post('/campaigns', workflowDraft(), 10, 'same-create-contract').expect(201)));
     expect(new Set(replies.map(r => r.body.id)).size).toBe(1);

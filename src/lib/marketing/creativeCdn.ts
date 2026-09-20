@@ -20,7 +20,7 @@ export function createCreativeCdnVerifier(origin: string, options: { timeoutMs?:
    if (signal.aborted || !ips.length || ips.some(ip => !isPublicIp(ip.address))) throw new Error('CDN address rejected');
    const selected = ips[0];
    return new Promise<{bytes: Buffer; contentType: string}>((resolve, reject) => {
-    const request = https.get(url, { signal, headers: { Accept: 'image/jpeg', 'Accept-Encoding': 'identity' }, lookup: ((_h: unknown, _o: unknown, cb: Function) => cb(null, selected.address, selected.family)) as never }, response => {
+    const request = https.get(url, { signal, headers: { Accept: 'image/jpeg', 'Accept-Encoding': 'identity' }, lookup: ((_h: unknown, _o: unknown, cb: (error: Error | null, address: string, family: number) => void) => cb(null, selected.address, selected.family)) as never }, response => {
      if (response.statusCode !== 200 || response.headers['content-encoding'] && response.headers['content-encoding'] !== 'identity') { response.resume(); reject(new Error('CDN response rejected')); return; }
      const parts: Buffer[] = []; let size = 0;
      response.on('data', (chunk: Buffer) => { size += chunk.length; if (size > expected.byteLength) { request.destroy(new Error('CDN byte limit')); return; } parts.push(chunk); });

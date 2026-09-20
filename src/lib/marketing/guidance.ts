@@ -1,3 +1,4 @@
+import { hasAsciiControl } from '../intentionalText.js';
 import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
 import { MarketingError, fingerprint, type Actor, type ListingEvidence, type MarketingProvider } from './domain.js';
@@ -15,7 +16,7 @@ function sourceEvidence(listing: ListingEvidence): GuidanceEvidence[] {
     { field: 'title', quote: clean(listing.title) }, { field: 'city', quote: clean(listing.city) },
     ...listing.description.split(/(?<=[.!?])\s+|[\r\n]+/u).map(quote => ({ field: 'description' as const, quote: clean(quote) })),
   ];
-  return values.filter(value => value.quote.length >= 2 && value.quote.length <= 500 && !/[<>\u0000-\u001f]/.test(value.quote) && !forbidden.test(value.quote) && !instructions.test(value.quote)).slice(0, 30);
+  return values.filter(value => value.quote.length >= 2 && value.quote.length <= 500 && !(/[<>]/.test(value.quote) || hasAsciiControl(value.quote)) && !forbidden.test(value.quote) && !instructions.test(value.quote)).slice(0, 30);
 }
 function validateGrounding(suggestions: z.infer<typeof guidanceSuggestionsSchema>, evidence: GuidanceEvidence[]) {
   for (const group of [suggestions.headlines, suggestions.descriptions, suggestions.keywords]) {

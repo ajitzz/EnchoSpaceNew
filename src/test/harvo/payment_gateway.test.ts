@@ -76,6 +76,17 @@ describe('HARVO gateway security with real PostgreSQL and no payment network', (
     return { provider, eventId: provider === 'STRIPE' ? payload.id : 'event_isolated_razor', payload, payloadHash: fingerprint(payload) };
   }
 
+  it('creates Razorpay checkout without fabricated customer information', async () => {
+    const { row, quote } = await campaignQuote();
+    await gateway.checkout(row, quote);
+    const request = sdk.razorCreate.mock.calls[0][0];
+    expect(request).not.toHaveProperty('customer');
+    expect(request).toMatchObject({ amount: Number(quote.totalMinor), reference_id: quote.id,
+      currency: 'INR', accept_partial: false, notify: { sms: false, email: false } });
+    await gateway.checkout(row, quote);
+    expect(sdk.razorCreate).toHaveBeenCalledTimes(1);
+  });
+
   it('rechecks cancellation under the campaign lock before claiming a fresh checkout',async()=>{
     const data=await campaignQuote();
     await fixture.pool.query("UPDATE marketing_campaign_workflows SET state='CANCELLED' WHERE campaign_id=$1",[data.row.campaign_id]);

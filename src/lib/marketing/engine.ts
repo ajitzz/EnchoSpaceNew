@@ -1,3 +1,4 @@
+import { ProviderReportPending } from '../providers/reporting.js';
 import type pg from 'pg';
 import {GoogleAdsClient} from '../providers/google/GoogleAdsClient.js';
 import {GoogleAdsProvider} from '../providers/google/GoogleAdsProvider.js';
@@ -116,15 +117,39 @@ export class MarketingEngine{
    if(await this.protectBeforeObservation(job,system))return;
    const externalId=row.provider_truth.externalCampaignId;
    const truth=await provider.fetchAuthoritativeDeliveryTruth(externalId,scoped);
-   const snapshot=await provider.fetchTelemetrySnapshot(externalId,{startDate:row.draft.startDate,endDate:new Date().toISOString().slice(0,10)},scoped);
+   // Status is useful even when performance aggregation has not returned a report.
+   await inTransaction(this.pool,system,async c=>{
+    const current=await lockWorkflow(c,row.campaign_id,system);await this.queue.assertFence(c,job);
+    if(current.revision!==job.revision||current.provider_truth?.externalCampaignId!==externalId)throw new MarketingError('REVISION_CONFLICT','Observation identity changed');
+    const validObservation=!!truth.lastObservedAt&&Number.isFinite(Date.parse(truth.lastObservedAt));
+    const observed=validObservation?{...current.provider_truth,observedStatus:truth.normalizedState,observedAt:truth.lastObservedAt,deliveryConfirmed:truth.isLive&&truth.isServingImpressions,statusCheck:'AVAILABLE'}:{...current.provider_truth,statusCheck:'ERROR',deliveryConfirmed:false};
+    await c.query('UPDATE marketing_campaign_workflows SET provider_truth=$2,updated_at=now() WHERE campaign_id=$1',[row.campaign_id,JSON.stringify(observed)]);
+    await event(c,current,system,'DELIVERY_OBSERVED',{jobId:job.id,status:truth.normalizedState,observedAt:truth.lastObservedAt});
+   });
+   const reportWindow={startDate:row.draft.startDate,endDate:new Date().toISOString().slice(0,10)};
+   let snapshot;
+   try{if(reportWindow.startDate>reportWindow.endDate)throw new ProviderReportPending('NOT_STARTED');snapshot=await provider.fetchTelemetrySnapshot(externalId,reportWindow,scoped);}
+   catch(error){
+    const pending=error instanceof ProviderReportPending;
+    const report={status:pending?error.reason:'ERROR',attemptedAt:new Date().toISOString(),dateStart:reportWindow.startDate,dateEnd:reportWindow.endDate};
+    await inTransaction(this.pool,system,async c=>{
+     const current=await lockWorkflow(c,row.campaign_id,system);await this.queue.assertFence(c,job);
+     if(current.revision!==job.revision||current.provider_truth?.externalCampaignId!==externalId)throw new MarketingError('REVISION_CONFLICT','Report identity changed');
+     await c.query('UPDATE marketing_campaign_workflows SET telemetry=$2,updated_at=now() WHERE campaign_id=$1',[row.campaign_id,JSON.stringify({...current.telemetry,report})]);
+     // No-report success does not grant blind spending. Keep the protective pause path.
+     await this.queueProtection(c,current,job,system,['SPEND_REPORT_UNCONFIRMED'],null);
+     await event(c,current,system,'PERFORMANCE_REPORT_OBSERVED',{jobId:job.id,...report});
+    });
+    if(pending)return;throw error;
+   }
    if(snapshot.spend.currency!==row.listing_snapshot.currency)throw new MarketingError('TELEMETRY_CURRENCY_MISMATCH','Provider report currency differs from the campaign');
-   const protection=assessBudgetProtection({provider:row.provider,authorizedMinor:row.draft.mediaBudgetMinor,spentMinor:String(snapshot.spend.minor_units),dailyBudgetMinor:row.draft.dailyBudgetMinor,observedAt:snapshot.observedAt});
-   await inTransaction(this.pool,system,async c=>{const current=await lockWorkflow(c,row.campaign_id,system);await this.queue.assertFence(c,job);if(current.revision!==job.revision)throw new MarketingError('REVISION_CONFLICT','Telemetry revision changed');
+   const protection=assessBudgetProtection({provider:row.provider,authorizedMinor:row.draft.mediaBudgetMinor,spentMinor:String(snapshot.spend.minor_units),dailyBudgetMinor:row.draft.dailyBudgetMinor,observedAt:snapshot.providerMetadata?.dataAsOf??null});
+   await inTransaction(this.pool,system,async c=>{const current=await lockWorkflow(c,row.campaign_id,system);await this.queue.assertFence(c,job);if(current.revision!==job.revision||current.provider_truth?.externalCampaignId!==externalId)throw new MarketingError('REVISION_CONFLICT','Telemetry revision changed');
     let reasons=protection.reasons;try{await this.workflow.assertCurrentListing(c,current,system);await assertMarketableInventory(c,current.listing_id,current.draft);}catch(e){reasons=[...reasons,(e as any).code||'PROPERTY_REVIEW_REQUIRED'];}
-    const configured=row.provider_truth.configuredStatus;
-    const observed={configuredStatus:configured,observedStatus:truth.normalizedState,observedAt:truth.lastObservedAt,externalCampaignId:externalId,deliveryConfirmed:truth.isLive&&truth.isServingImpressions};
-    const telemetry={impressions:snapshot.impressions,clicks:snapshot.clicks,ctr:snapshot.impressions>0?snapshot.ctr:null,spendMinor:String(snapshot.spend.minor_units),leads:null,bookings:null,providerAttributedConversions:snapshot.providerMetadata?.conversionDataAvailable===false?null:snapshot.conversions,observedAt:snapshot.observedAt,dataAsOf:snapshot.providerMetadata?.dataAsOf??null,source:row.provider,freshness:snapshot.dataFreshness,dateStart:snapshot.dateStart,dateEnd:snapshot.dateEnd};
-    await c.query('UPDATE marketing_campaign_workflows SET provider_truth=$2,telemetry=$3,last_error=NULL,updated_at=now() WHERE campaign_id=$1',[row.campaign_id,JSON.stringify(observed),JSON.stringify(telemetry)]);
+    const telemetry={report:{status:'AVAILABLE',attemptedAt:snapshot.observedAt,dateStart:snapshot.dateStart,dateEnd:snapshot.dateEnd},currency:snapshot.spend.currency,accountTimeZone:snapshot.providerMetadata?.accountTimeZone??null,impressions:snapshot.impressions,clicks:snapshot.clicks,ctr:snapshot.impressions>0?snapshot.ctr:null,spendMinor:String(snapshot.spend.minor_units),leads:null,bookings:null,providerAttributedConversions:snapshot.providerMetadata?.conversionDataAvailable===false?null:snapshot.conversions,observedAt:snapshot.observedAt,dataAsOf:snapshot.providerMetadata?.dataAsOf??null,source:row.provider,freshness:snapshot.dataFreshness,dateStart:snapshot.dateStart,dateEnd:snapshot.dateEnd};
+    // Reporting success cannot overwrite independently observed delivery or clear
+    // a financial/reconciliation failure recorded while this read was in flight.
+    await c.query('UPDATE marketing_campaign_workflows SET telemetry=$2,updated_at=now() WHERE campaign_id=$1',[row.campaign_id,JSON.stringify(telemetry)]);
     await this.queueProtection(c,current,job,system,reasons,snapshot.observedAt);
     await event(c,current,system,'TELEMETRY_OBSERVED',{source:row.provider,dateStart:snapshot.dateStart,dateEnd:snapshot.dateEnd,observedAt:snapshot.observedAt});
    });return;

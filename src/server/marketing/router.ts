@@ -21,6 +21,7 @@ import {CampaignDraftGuidance,guidanceRequestSchema} from '../../lib/marketing/g
 import {googleInvoiceImportSchema} from '../../lib/marketing/googleInvoiceImport.js';
 import {CreativeWorkflowService} from '../../lib/marketing/creativeWorkflow.js';
 import {creativeListSchema,creativeRequestSchema,creativeConfirmSchema,creativeReviewSchema} from '../../lib/marketing/creativeContract.js';
+import {inspectCampaignRecovery} from '../../lib/marketing/recovery.js';
 export function marketingErrorHandler(error:any,_req:any,res:any,_next:any){
  const correlationId=randomUUID();const known=error instanceof MarketingError||error instanceof GoogleAdsError||error instanceof MetaAdsError||error?.name==='MarketingFinanceError';
  const code=error instanceof z.ZodError?'INVALID_INPUT':known?error.code:error?.code==='42P01'?'MARKETING_MIGRATION_REQUIRED':'MARKETING_REQUEST_FAILED';
@@ -103,7 +104,7 @@ export function createMarketingRouter(pool:pg.Pool,service:MarketingWorkflowServ
  router.post('/admin/policy',admin,async(req,res)=>{const input=z.object({markupPercent:z.number().min(3).max(5),expectedVersion:z.number().int().nonnegative(),reason:z.string().min(10).max(1000)}).strict().parse(req.body);res.json(await finance.setMarkup(actor(res).id,input));});
  router.get('/campaigns/:id/events',async(req,res)=>{const row=await service.get(id(req),actor(res));const events=await inTransaction(pool,actor(res),async c=>(await c.query('SELECT id,revision,event_type,evidence,created_at FROM marketing_workflow_events WHERE campaign_id=$1 ORDER BY id DESC LIMIT 100',[row.campaign_id])).rows);res.json({events});});
  router.get('/campaigns/:id/advice',async(req,res)=>{const row=await service.get(id(req),actor(res));res.json(optimizationAdvice({impressions:row.telemetry?.impressions??null,clicks:row.telemetry?.clicks??null,capturedBookings:row.telemetry?.bookings??null,spendMinor:row.telemetry?.spendMinor??null,fulfilledContributionMinor:null}));});
- router.post('/campaigns/:id/refresh',async(req,res)=>{const row=await service.get(id(req),actor(res));requireNoPublicKeyLeak(req.body);await inTransaction(pool,actor(res),async c=>{await enqueue(c,{campaignId:row.campaign_id,revision:row.revision,kind:'TELEMETRY',key:`refresh:${row.campaign_id}:${Math.floor(Date.now()/300000)}`});});res.status(202).json({status:'QUEUED'});});
+ router.post('/campaigns/:id/refresh',async(req,res)=>{const input=z.object({revision:z.number().int().positive().optional()}).strict().parse(req.body||{});res.status(202).json(await service.requestObservation(id(req),actor(res),input.revision));});
  router.get('/admin/operations',admin,async(_req,res)=>{
   const result=await inTransaction(pool,actor(res),async c=>{
    const jobs=(await c.query("SELECT id,campaign_id,revision,kind,state,attempts,last_error,updated_at FROM marketing_jobs WHERE state IN ('DEAD','RECONCILIATION_REQUIRED','RUNNING') ORDER BY updated_at DESC LIMIT 100")).rows;
@@ -111,6 +112,7 @@ export function createMarketingRouter(pool:pg.Pool,service:MarketingWorkflowServ
    return {jobs,queues};
   });res.json({...result,observedAt:new Date().toISOString()});
  });
+ router.get('/admin/campaigns/:id/recovery',admin,async(req,res)=>{const query=z.object({revision:z.coerce.number().int().positive()}).strict().parse(req.query);res.json(await inspectCampaignRecovery(pool,actor(res),id(req),query.revision));});
  router.use(marketingErrorHandler);return router;
 }
 function requireNoPublicKeyLeak(body:unknown){z.object({}).strict().parse(body||{});}

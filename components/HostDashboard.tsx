@@ -224,7 +224,7 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
     }
 
     if (view === 'calendar') {
-       return <HostCalendar listings={listingType === 'stays' ? listings : experiences as any} reservations={filteredReservations} />;
+       return listingType === 'stays' ? <HostCalendar listings={listings} reservations={filteredReservations} /> : <p>Experience schedules are managed separately from property room calendars.</p>;
     }
 
     if (view === 'listings') {

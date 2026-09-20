@@ -30,7 +30,8 @@ export function GoogleAudiencePicker({ value, onChange }: { value: GoogleAudienc
   const [resolving, setResolving] = useState(value.geoIds.length > 0);
   const [languageLoading, setLanguageLoading] = useState(true);
   const [refresh, setRefresh] = useState(0);
-  const current = useRef({ value, onChange }); current.current = { value, onChange };
+  const current = useRef({ value, onChange });
+  useEffect(() => { current.current = { value, onChange }; }, [value, onChange]);
   const known = useRef(new Map<string, Location>());
   const geoKey = value.geoIds.join(',');
 

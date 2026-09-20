@@ -15,7 +15,7 @@ export async function loadApprovedImage(rawUrl:string,allowedOrigins:ReadonlySet
  const ips=await Promise.race([lookup(u.hostname,{all:true}),new Promise<never>((_resolve,reject)=>deadline.addEventListener('abort',()=>reject(new MarketingError('MEDIA_TIMEOUT','Media retrieval exceeded its deadline')),{once:true}))]);if(!ips.length||ips.some(v=>!isPublicIp(v.address)))throw new MarketingError('MEDIA_ORIGIN_BLOCKED','Media must resolve to an approved public origin');
  const selected=ips[0];
  const bytes=await new Promise<Buffer>((resolve,reject)=>{
-  const request=https.get(u,{signal:deadline,lookup:((_h:unknown,_o:unknown,cb:Function)=>cb(null,selected.address,selected.family)) as never,timeout:10000,headers:{Accept:'image/jpeg,image/png,image/webp'}},response=>{
+  const request=https.get(u,{signal:deadline,lookup:((_h:unknown,_o:unknown,cb:(error:Error|null,address:string,family:number)=>void)=>cb(null,selected.address,selected.family)) as never,timeout:10000,headers:{Accept:'image/jpeg,image/png,image/webp'}},response=>{
    if(response.statusCode!==200){response.resume();reject(new MarketingError('MEDIA_FETCH_FAILED','The approved image could not be retrieved'));return;}
    const parts:Buffer[]=[];let size=0;
    response.on('data',(chunk:Buffer)=>{size+=chunk.length;if(size>8*1024*1024){request.destroy(new Error('MEDIA_SIZE_LIMIT'));return;}parts.push(chunk);});
