@@ -60,6 +60,7 @@ export class MarketingTargetingService {
     return { locations: orderedGeo as GoogleGeoTarget[], languages: orderedLanguage as GoogleLanguage[] };
   }
   async validateDraft(draft: CampaignDraft) {
+    if(draft.strategySelection){if(draft.provider==='GOOGLE'){if(!draft.googleSearch)throw new MarketingError('SEARCH_TARGETING_REQUIRED','Choose Search text, keywords and language.',422);await this.resolve([],draft.googleSearch.languageConstants);}return;}
     if (draft.provider === 'META') {
       if (draft.locations.some(code => !this.metaCountries.includes(code))) throw new MarketingError('META_COUNTRY_NOT_ENABLED', 'Choose audience countries enabled for the Encho account.', 422);
       return;

@@ -1,3 +1,4 @@
+import {strategySelectionSchema} from '../../shared/adtech/contracts.js';
 import type {StoryEvidence} from '../../shared/marketingStory.js';
 import {flightScheduleSchema} from '../../shared/marketingFlight.js';
 import type {MarketingProduct} from './portfolio/contracts.js';
@@ -16,6 +17,7 @@ export const draftSchema = z.object({
  startDate: date, endDate: date, flightSchedule:flightScheduleSchema.optional(), stayStartDate:date.optional(),stayEndDate:date.optional(), mediaBudgetMinor: minorAmount, dailyBudgetMinor: minorAmount.optional(),
  headline: z.string().trim().min(3).max(100), description: z.string().trim().min(10).max(1000),
  mediaIds: z.array(z.string().regex(/^\d+$/)).min(1).max(6), locations: z.array(z.string().trim().min(2).max(120)).min(1).max(20),
+ strategySelection:strategySelectionSchema.optional(),
  rightsConfirmed: z.boolean().default(false),
  spatialStoryId:z.string().uuid().optional(),spatialStoryHash:z.string().regex(/^[a-f0-9]{64}$/).optional(),
  creativeDerivativeId:z.string().uuid().optional(),creativeManifestHash:z.string().regex(/^[a-f0-9]{64}$/).optional(),
@@ -23,7 +25,7 @@ export const draftSchema = z.object({
   version:z.literal(1).default(1),dailyBudgetMinor:minorAmount.optional(),bidding:z.literal('MAXIMIZE_CONVERSIONS').default('MAXIMIZE_CONVERSIONS'),containsEuPoliticalAdvertising:z.literal('DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING').default('DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING'),
   headlines: z.array(z.string().trim().min(1).max(30)).min(3).max(15), descriptions: z.array(z.string().trim().min(1).max(90)).min(2).max(4),
   keywords: z.array(z.object({text:z.string().trim().min(1).max(80),matchType:z.enum(['EXACT','PHRASE'])}).strict()).min(1).max(200),
-  geoTargetConstants:z.array(z.string().regex(/^geoTargetConstants\/\d+$/)).min(1).max(20),
+  geoTargetConstants:z.array(z.string().regex(/^geoTargetConstants\/\d+$/)).max(20),
   languageConstants:z.array(z.string().regex(/^languageConstants\/\d+$/)).min(1).max(10),
   geoMode:z.enum(['PRESENCE','PRESENCE_OR_INTEREST']).default('PRESENCE'),
  }).strict().optional(),
@@ -32,7 +34,8 @@ export const draftSchema = z.object({
  if(v.endDate <= v.startDate || new Date(v.endDate).getTime()-new Date(v.startDate).getTime()>89*86400000) c.addIssue({code:'custom',message:'Choose an end date after the start, within 90 days',path:['endDate']});
  if(BigInt(v.mediaBudgetMinor)<500n || BigInt(v.dailyBudgetMinor)<1n || BigInt(v.dailyBudgetMinor)>BigInt(v.mediaBudgetMinor)) c.addIssue({code:'custom',message:'Daily media budget must be positive and within total media budget (minimum 500 minor units)',path:['dailyBudgetMinor']});
  if((v.stayStartDate&&!v.stayEndDate)||(!v.stayStartDate&&v.stayEndDate)||(v.stayStartDate&&v.stayEndDate&&v.stayEndDate<=v.stayStartDate))c.addIssue({code:'custom',message:'Choose a valid guest stay date range',path:['stayEndDate']});
- if(v.provider==='META'&&v.locations.some(l=>!(/^[A-Z]{2}$/).test(l)))c.addIssue({code:'custom',message:'Meta targeting uses explicit enabled two-letter country codes, such as IN. City targeting has not been configured.',path:['locations']});
+ if(v.provider==='GOOGLE'&&!v.strategySelection&&v.googleSearch?.geoTargetConstants.length===0)c.addIssue({code:'custom',message:'Choose resolved Google locations',path:['googleSearch','geoTargetConstants']});
+ if(v.provider==='META'&&!v.strategySelection&&v.locations.some(l=>!(/^[A-Z]{2}$/).test(l)))c.addIssue({code:'custom',message:'Meta targeting uses explicit enabled two-letter country codes, such as IN. City targeting has not been configured.',path:['locations']});
  if(v.provider==='GOOGLE'&&v.googleSearch&&(!v.googleSearch.headlines.includes(v.headline)||!v.googleSearch.descriptions.includes(v.description)))c.addIssue({code:'custom',message:'Include the primary preview headline and description in the responsive Search assets',path:['googleSearch']});
  if(new Set(v.mediaIds).size!==v.mediaIds.length) c.addIssue({code:'custom',message:'Choose each asset once',path:['mediaIds']});
  if(!!v.spatialStoryId!==!!v.spatialStoryHash||v.spatialStoryId&&v.creativeDerivativeId)c.addIssue({code:'custom',message:'Choose one exact reviewed story or a single image variant',path:['spatialStoryId']});

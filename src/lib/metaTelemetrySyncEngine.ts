@@ -602,6 +602,8 @@ export class MetaTelemetrySyncEngine {
 
     const isNegativeCorrection = (newSpend < prevSpend) || (newClicks < prevClicks) || (newImpressions < prevImpressions);
 
+    // Legacy created_at is timestamp without time zone and rollups interpret it as UTC.
+    // Store UTC wall time explicitly; never inherit a connection-local timezone.
     // Emit Raw Event Delta Log for Single-Ad Campaign Lineage
     const rawImpDelta = newImpressions - prevImpressions;
     const rawClickDelta = newClicks - prevClicks;
@@ -613,14 +615,14 @@ export class MetaTelemetrySyncEngine {
         await db.query(
           `INSERT INTO campaign_raw_event_logs (
             campaign_id, impressions_delta, clicks_delta, conversions_delta, spent_delta, is_correction, processed, created_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, false, NOW())`,
+          ) VALUES ($1, $2, $3, $4, $5, $6, false, (NOW() AT TIME ZONE 'UTC'))`,
           [campaignId, rawImpDelta, rawClickDelta, rawConvDelta, rawSpendDelta, isNegativeCorrection]
         );
       } catch (e) {
         await db.query(
           `INSERT INTO campaign_raw_event_logs (
             campaign_id, impressions_delta, clicks_delta, conversions_delta, spent_delta, processed, created_at
-          ) VALUES ($1, $2, $3, $4, $5, false, NOW())`,
+          ) VALUES ($1, $2, $3, $4, $5, false, (NOW() AT TIME ZONE 'UTC'))`,
           [campaignId, rawImpDelta, rawClickDelta, rawConvDelta, rawSpendDelta]
         );
       }

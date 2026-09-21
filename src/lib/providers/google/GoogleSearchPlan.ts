@@ -1,3 +1,5 @@
+import {validateBoundStrategy} from '../../marketing/adtech/bindings.js';
+import {googleStrategyCriteria} from '../../marketing/adtech/compiler.js';
 import {parseSpatialCreative,type SpatialCreative} from '../spatialCreative.js';
 import {hasOnlyAttributionQuery} from '../../../shared/marketingAttribution.js';
 import {flightScheduleSchema} from '../../../shared/marketingFlight.js';
@@ -175,6 +177,7 @@ export function buildGoogleSearchPlan(
   // Search M1 is text-only; a supplied media URL is retained, never fetched or attached.
   if (request.creativeAssets.mediaUrl !== '') publicHttpsUrl(request.creativeAssets.mediaUrl, 'creativeAssets.mediaUrl');
   const metadata = record(request.metadata, 'metadata');
+  const strategy=metadata.adtechStrategy===undefined?null:validateBoundStrategy(metadata.adtechStrategy,'GOOGLE');
   const config = record(metadata.googleSearch, 'metadata.googleSearch');
   const permittedKeys = ['version', 'headlines', 'descriptions', 'keywords', 'geoTargetConstants',
     'languageConstants', 'geoMode', 'dailyBudgetMinor', 'budgetMode', 'bidding', 'containsEuPoliticalAdvertising'];
@@ -203,7 +206,7 @@ export function buildGoogleSearchPlan(
     invalid('googleSearch.containsEuPoliticalAdvertising', 'requires an explicit non-EU-political-advertising declaration');
   }
   if (config.geoMode !== 'PRESENCE' && config.geoMode !== 'PRESENCE_OR_INTEREST') invalid('googleSearch.geoMode', 'requires an explicit supported presence mode');
-  const locations = textArray(config.geoTargetConstants, 'googleSearch.geoTargetConstants', 1, 100, 64);
+  const locations = textArray(config.geoTargetConstants, 'googleSearch.geoTargetConstants', strategy?0:1, 100, 64);
   const languages = textArray(config.languageConstants, 'googleSearch.languageConstants', 1, 50, 64);
   if (locations.some(value => !/^geoTargetConstants\/[1-9]\d*$/.test(value))) invalid('googleSearch.geoTargetConstants', 'must contain resolved geoTargetConstants resource names');
   if (languages.some(value => !/^languageConstants\/[1-9]\d*$/.test(value))) invalid('googleSearch.languageConstants', 'must contain resolved languageConstants resource names');
@@ -219,6 +222,7 @@ export function buildGoogleSearchPlan(
   if (new Set(keywords.map(keyword => `${keyword.matchType}:${keyword.text.toLowerCase()}`)).size !== keywords.length) {
     invalid('googleSearch.keywords', 'must not contain duplicate text/match-type pairs');
   }
+  if(strategy&&keywords.some(k=>!strategy.profile.google.matchTypes.includes(k.matchType as 'EXACT'|'PHRASE')))invalid('keywords','match type is not permitted by the bound strategy');
   const hasStart = request.startTime !== undefined;
   const hasEnd = request.endTime !== undefined;
   if (hasStart !== hasEnd) invalid('campaign dates', 'startTime and endTime must be supplied together');
@@ -243,6 +247,9 @@ export function buildGoogleSearchPlan(
   const budgetResource = `customers/${customerId}/campaignBudgets/-1`;
   const campaignResource = `customers/${customerId}/campaigns/-2`;
   const adGroupResource = `customers/${customerId}/adGroups/-3`;
+  const strategyCriteria=strategy?googleStrategyCriteria(strategy,campaignResource):null;
+  const targetCpaMicros=strategy?.profile.google.targetCpaMinor?BigInt(strategy.profile.google.targetCpaMinor)*10000n:null;
+  if(targetCpaMicros!==null&&targetCpaMicros>9223372036854775807n)invalid('targetCpa','exceeds signed 64-bit micros');
   const operations: GoogleMutateOperation[] = [
     { campaignBudgetOperation: { create: {
       resourceName: budgetResource, name: `Encho ${request.campaignId} — ${title} budget`,
@@ -252,9 +259,9 @@ export function buildGoogleSearchPlan(
     { campaignOperation: { create: {
       resourceName: campaignResource, name: `Encho ${request.campaignId} — ${title}`,
       advertisingChannelType: 'SEARCH', status: 'PAUSED', campaignBudget: budgetResource,
-      maximizeConversions: {}, containsEuPoliticalAdvertising: config.containsEuPoliticalAdvertising,
+      maximizeConversions: targetCpaMicros===null?{}:{targetCpaMicros:targetCpaMicros.toString()}, containsEuPoliticalAdvertising: config.containsEuPoliticalAdvertising,
       networkSettings: { targetGoogleSearch: true, targetSearchNetwork: false, targetContentNetwork: false, targetPartnerSearchNetwork: false },
-      geoTargetTypeSetting: { positiveGeoTargetType: config.geoMode }, ...dates,
+      geoTargetTypeSetting: { positiveGeoTargetType: strategy?.profile.google.geoMode??config.geoMode }, ...dates,
     } } },
     { adGroupOperation: { create: {
       resourceName: adGroupResource, campaign: campaignResource,
@@ -266,7 +273,7 @@ export function buildGoogleSearchPlan(
         finalUrls: [landing.href],
       },
     } } },
-    ...locations.map(location => ({ campaignCriterionOperation: { create: { campaign: campaignResource, location: { geoTargetConstant: location } } } })),
+    ...(strategyCriteria?strategyCriteria.map(create=>({campaignCriterionOperation:{create}})):locations.map(location => ({ campaignCriterionOperation: { create: { campaign: campaignResource, location: { geoTargetConstant: location } } } }))),
     ...languages.map(language => ({ campaignCriterionOperation: { create: { campaign: campaignResource, language: { languageConstant: language } } } })),
     ...keywords.map(keyword => ({ adGroupCriterionOperation: { create: { adGroup: adGroupResource, status: 'PAUSED', keyword } } })),
   ];
@@ -286,6 +293,6 @@ export function buildGoogleSearchPlan(
   return {
     ...(spatial?{spatial,assetStart}:{}),operations, ...dates, fingerprint: createHash('sha256').update(fingerprintInput).digest('hex'), customerId, dailyBudgetMinor, budgetMode, budgetMinor,
     expectedResourceTypes: ['campaignBudgets', 'campaigns', 'adGroups', 'adGroupAds',
-      ...locations.map(() => 'campaignCriteria'), ...languages.map(() => 'campaignCriteria'), ...keywords.map(() => 'adGroupCriteria'),...(spatial?Array.from({length:6},()=>['assets','campaignAssets']).flat():[])],
+      ...(strategyCriteria??locations).map(() => 'campaignCriteria'), ...languages.map(() => 'campaignCriteria'), ...keywords.map(() => 'adGroupCriteria'),...(spatial?Array.from({length:6},()=>['assets','campaignAssets']).flat():[])],
   };
 }

@@ -28,9 +28,12 @@ try{
  if((await get('/stay/example-stay')).status!==200)throw new Error('CANONICAL_SPA_ROUTE_FAILED');
  child.kill('SIGTERM');const stopped=await Promise.race([exit,new Promise((_,reject)=>setTimeout(()=>reject(new Error('WEB_DRAIN_TIMEOUT')),10000).unref())]);
  if(stopped.code!==0||!logs.includes('PROCESS_STOPPED'))throw new Error('WEB_DRAIN_FAILED');
- const worker=spawnSync(process.execPath,['--import',guard,join(work,'server/src/server/marketing/worker.js')],{cwd:work,env,encoding:'utf8',timeout:15000});
- if(worker.status!==1||!worker.stderr.includes('HARVO_WORKER_FAILED')||worker.stderr.includes('ERR_MODULE_NOT_FOUND'))throw new Error('WORKER_FAIL_CLOSED_STARTUP_FAILED');
- const imported=spawnSync(process.execPath,['--import',guard,'--input-type=module','-e',`await import(${JSON.stringify(new URL('file://'+join(work,'server/src/server/marketing/worker.js')).href)});console.log('IMPORT_ONLY_OK')`],{cwd:work,env,encoding:'utf8',timeout:15000});
- if(imported.status!==0||!imported.stdout.includes('IMPORT_ONLY_OK')){writeFileSync(join(artifact,'worker-import-smoke-failure.log'),JSON.stringify({status:imported.status,signal:imported.signal,error:imported.error?.code,stdout:imported.stdout,stderr:imported.stderr}));throw new Error('WORKER_IMPORT_STARTED_SIDE_EFFECTS');}
- console.log(JSON.stringify({worker:'FAIL_CLOSED_AND_IMPORT_SAFE',scope:'ISOLATED_COMPILED_RUNTIME_NO_DATABASE_OR_PROVIDER',web:'PASSED',privatePaths:'REJECTED',databaseReadiness:'CORRECTLY_503',sigterm:'DRAINED',node:process.version}));
+ for(const [entry,failure] of [['worker.js','HARVO_WORKER_FAILED'],['adtechWorker.js','ADTECH_WORKER_FAILED']]){
+  const path=join(work,'server/src/server/marketing',entry);
+  const worker=spawnSync(process.execPath,['--import',guard,path],{cwd:work,env,encoding:'utf8',timeout:15000});
+  if(worker.status!==1||!worker.stderr.includes(failure)||worker.stderr.includes('ERR_MODULE_NOT_FOUND'))throw new Error('WORKER_FAIL_CLOSED_STARTUP_FAILED');
+  const imported=spawnSync(process.execPath,['--import',guard,'--input-type=module','-e',`await import(${JSON.stringify(new URL('file://'+path).href)});console.log('IMPORT_ONLY_OK')`],{cwd:work,env,encoding:'utf8',timeout:15000});
+  if(imported.status!==0||!imported.stdout.includes('IMPORT_ONLY_OK')){writeFileSync(join(artifact,'worker-import-smoke-failure.log'),JSON.stringify({entry,status:imported.status,signal:imported.signal,error:imported.error?.code,stdout:imported.stdout,stderr:imported.stderr}));throw new Error('WORKER_IMPORT_STARTED_SIDE_EFFECTS');}
+ }
+ console.log(JSON.stringify({workers:['marketing','adtechResearch'],worker:'FAIL_CLOSED_AND_IMPORT_SAFE',scope:'ISOLATED_COMPILED_RUNTIME_NO_DATABASE_OR_PROVIDER',web:'PASSED',privatePaths:'REJECTED',databaseReadiness:'CORRECTLY_503',sigterm:'DRAINED',node:process.version}));
 }finally{if(!closed){child.kill('SIGKILL');await exit;}rmSync(work,{recursive:true,force:true});}

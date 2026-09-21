@@ -48,8 +48,10 @@ export class MetaAdsClient {
     async post(path: string, parameters: Record<string, unknown>): Promise<any> { return this.request('POST', path, parameters); }
     private async request(method: 'GET' | 'POST', path: string, parameters: Record<string, unknown>): Promise<any> {
         const identity = this.identity();
-        if (!/^(?:act_)?[1-9]\d{0,29}(?:\/(?:campaigns|adsets|adcreatives|ads|advideos|adspixels|insights))?$/.test(path))
+        const geoSearch = method === 'GET' && path === 'search' && parameters.type === 'adgeolocation';
+        if (!geoSearch && !/^(?:act_)?[1-9]\d{0,29}(?:\/(?:campaigns|adsets|adcreatives|ads|advideos|adspixels|insights|delivery_estimate))?$/.test(path))
             throw new MetaAdsError('META_INVALID_ARGUMENT', 'Unsupported Meta resource path.');
+        if (path.endsWith('/delivery_estimate') && method !== 'GET') throw new MetaAdsError('META_INVALID_ARGUMENT', 'Geography validation is read-only.');
         if (path.startsWith('act_') && path.split('/')[0] !== identity.accountId)
             throw new MetaAdsError('META_OWNERSHIP_MISMATCH', 'Meta requests must use the configured ad account.');
         const body = new URLSearchParams();

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { runAnalyticsRollup, ensureMarketingSchema } from '../../server.ts';
 import pg from 'pg';
+import {MetaTelemetrySyncEngine} from '../lib/metaTelemetrySyncEngine.js';
 
 const { Pool } = pg;
 const pool = new Pool({
@@ -56,7 +57,7 @@ describe('Phase 2.6 Milestone 1 — Time-Series Analytics Date Correctness Suite
   it('TEST A — Historical Event Date: Event created yesterday appears under yesterday date, not today', async () => {
     await pool.query(`
       INSERT INTO campaign_raw_event_logs (campaign_id, impressions_delta, clicks_delta, conversions_delta, spent_delta, processed, created_at)
-      VALUES ($1, 100, 10, 1, 5.50, false, NOW() - INTERVAL '1 day')
+      VALUES ($1, 100, 10, 1, 5.50, false, (NOW() AT TIME ZONE 'UTC') - INTERVAL '1 day')
     `, [campaign1Id]);
 
     await runAnalyticsRollup();
@@ -78,7 +79,7 @@ describe('Phase 2.6 Milestone 1 — Time-Series Analytics Date Correctness Suite
   it('TEST B — Different Dates Multi-Bucket: Events for same campaign on different dates produce separate rollup rows', async () => {
     await pool.query(`
       INSERT INTO campaign_raw_event_logs (campaign_id, impressions_delta, clicks_delta, conversions_delta, spent_delta, processed, created_at)
-      VALUES ($1, 200, 20, 2, 10.00, false, NOW() - INTERVAL '2 days')
+      VALUES ($1, 200, 20, 2, 10.00, false, (NOW() AT TIME ZONE 'UTC') - INTERVAL '2 days')
     `, [campaign1Id]);
 
     await runAnalyticsRollup();
@@ -100,8 +101,8 @@ describe('Phase 2.6 Milestone 1 — Time-Series Analytics Date Correctness Suite
     await pool.query(`
       INSERT INTO campaign_raw_event_logs (campaign_id, impressions_delta, clicks_delta, conversions_delta, spent_delta, processed, created_at)
       VALUES 
-        ($1, 150, 15, 1, 7.50, false, NOW() - INTERVAL '3 days'),
-        ($1, 50, 5, 1, 2.50, false, NOW() - INTERVAL '3 days')
+        ($1, 150, 15, 1, 7.50, false, (NOW() AT TIME ZONE 'UTC') - INTERVAL '3 days'),
+        ($1, 50, 5, 1, 2.50, false, (NOW() AT TIME ZONE 'UTC') - INTERVAL '3 days')
     `, [campaign1Id]);
 
     await runAnalyticsRollup();
@@ -125,7 +126,7 @@ describe('Phase 2.6 Milestone 1 — Time-Series Analytics Date Correctness Suite
   it('TEST D — Historical + Current Event: Historical event + current event produce 2 separate daily buckets', async () => {
     await pool.query(`
       INSERT INTO campaign_raw_event_logs (campaign_id, impressions_delta, clicks_delta, conversions_delta, spent_delta, processed, created_at)
-      VALUES ($1, 300, 30, 3, 15.00, false, CURRENT_TIMESTAMP)
+      VALUES ($1, 300, 30, 3, 15.00, false, (CURRENT_TIMESTAMP AT TIME ZONE 'UTC'))
     `, [campaign1Id]);
 
     await runAnalyticsRollup();
@@ -147,8 +148,8 @@ describe('Phase 2.6 Milestone 1 — Time-Series Analytics Date Correctness Suite
     await pool.query(`
       INSERT INTO campaign_raw_event_logs (campaign_id, impressions_delta, clicks_delta, conversions_delta, spent_delta, processed, created_at)
       VALUES 
-        ($1, 400, 40, 4, 20.00, false, NOW() - INTERVAL '5 days'),
-        ($2, 500, 50, 5, 25.00, false, NOW() - INTERVAL '5 days')
+        ($1, 400, 40, 4, 20.00, false, (NOW() AT TIME ZONE 'UTC') - INTERVAL '5 days'),
+        ($2, 500, 50, 5, 25.00, false, (NOW() AT TIME ZONE 'UTC') - INTERVAL '5 days')
     `, [campaign1Id, campaign2Id]);
 
     await runAnalyticsRollup();
@@ -271,5 +272,16 @@ describe('Phase 2.6 Milestone 1 — Time-Series Analytics Date Correctness Suite
     `, [campaign2Id, host1Id]);
 
     expect(crossRes.rows.length).toBe(0);
+  });
+
+  it.each([false,true])('writes UTC evidence from a non-UTC telemetry connection (correction column: %s)',async correctionColumn=>{
+    if(correctionColumn)await pool.query('ALTER TABLE campaign_raw_event_logs ADD COLUMN is_correction BOOLEAN DEFAULT false');
+    const client=await pool.connect();
+    try{
+      await client.query("SET TIME ZONE 'Pacific/Kiritimati'");
+      expect((await MetaTelemetrySyncEngine.syncAdsInsights(campaign2Id,{forcedInsights:{impressions:correctionColumn?1002:1001,clicks:12,spend:4,conversions:1},viewerContext:{userId:host2Id}},client)).success).toBe(true);
+      const row=(await client.query("SELECT abs(extract(epoch FROM (created_at-(NOW() AT TIME ZONE 'UTC'))))::float AS age FROM campaign_raw_event_logs WHERE campaign_id=$1 ORDER BY id DESC LIMIT 1",[campaign2Id])).rows[0];
+      expect(row.age).toBeLessThan(5);
+    }finally{await client.query('RESET TIME ZONE');client.release();}
   });
 });

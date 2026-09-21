@@ -1,0 +1,80 @@
+{
+  "date": "2026-09-22",
+  "scope": "LOCAL_ONLY_NO_DEPLOYMENT",
+  "authority": "Discussion 034 / ADT-0 through ADT-7",
+  "environmentDirection": "Continue local verification; staging is not configured",
+  "node": "v24.19.0",
+  "baseCommit": "6e3bcfc",
+  "adtLocallyComplete": [
+    "ADT-0",
+    "ADT-1",
+    "ADT-2",
+    "ADT-3",
+    "ADT-4",
+    "ADT-5",
+    "ADT-6"
+  ],
+  "adtCompletionPercent": 87.5,
+  "historicalMarketingAcceptedMilestones": 5,
+  "fullRegression": {
+    "runs": 1,
+    "files": 155,
+    "passed": 1940,
+    "failed": 5,
+    "pending": 0,
+    "failedFile": "src/test/p2_6_m1_analytics_rollup.test.ts",
+    "note": "Retained initial full-sweep result. All five failures subsequently repaired and verified in targeted runs; no clean full rerun is claimed."
+  },
+  "targetedAfterRepair": {
+    "files": 5,
+    "passed": 80,
+    "failed": 0,
+    "newRegressionCases": 2,
+    "note": "Explicit UTC telemetry writes and fixture timestamps; actual +14-hour session tests for both raw-log schema variants."
+  },
+  "newAdtechTests": 85,
+  "browser": {
+    "scenariosPassed": 24,
+    "widths": [
+      1440,
+      390
+    ],
+    "externalNetwork": "BLOCKED",
+    "apiMode": "SYNTHETIC_FIXTURES_REAL_COMPONENTS",
+    "screenshots": "/var/folders/xz/n8vtdw5x6js6lj7q5y211s3h0000gn/T/encho-adtech-browser-lhj2y5"
+  },
+  "checks": {
+    "applicationTypecheck": "PASSED",
+    "serverCompilation": "PASSED",
+    "lint": "PASSED_WITH_EXISTING_BABEL_SIZE_NOTE",
+    "clientBuild": "PASSED_WITH_BUNDLE_SIZE_WARNINGS",
+    "privateServerAssets": "PACKAGED",
+    "publicArtifacts": "41_FILES_CHECKED",
+    "runtimeSmoke": "WEB_DRAIN_PRIVATE_PATHS_READINESS_AND_BOTH_WORKERS_PASSED"
+  },
+  "database": {
+    "engine": "DISPOSABLE_LOCAL_POSTGRESQL",
+    "exactMigrationBatch": "032\u2013035",
+    "rollbackRehearsal": "PASSED",
+    "nonBypassMigrationOwner": "PASSED",
+    "restrictedRuntimeCatalog": "PASSED",
+    "fullBootstrap": "NOT_ATTESTED",
+    "neon": "NOT_CONTACTED"
+  },
+  "canary": {
+    "status": "NOT_RUN",
+    "reason": "No isolated staging branch or approved test listing identities supplied"
+  },
+  "providerAcceptance": "NOT_ATTESTED",
+  "productionReady": false,
+  "committed": false,
+  "pushed": false,
+  "deployed": false,
+  "migrationChecksums": {
+    "032_marketing_adtech_registry.sql": "f0e83c16233563beb1aeb123df6ee2a07dad0e424f297bb3870ac0edfd538f2f",
+    "033_marketing_adtech_corridors.sql": "aac5b96f4a244ce8b7e045152b8e45b5a3ef0539095c28fa110c28a2c269f49f",
+    "034_marketing_adtech_bindings.sql": "1efe17cc3d24d9e5f8559a58cdae626395deff4bbb78a040f8e1d3e5c7668a76",
+    "035_marketing_corridor_inference.sql": "9f0fa5878095080d5f4b8ecce613e0a84d409e59b09ef5bc4d6e9109c5683f98"
+  },
+  "buildDirectory": "/tmp/harvo-release-build-BpBI0K"
+}

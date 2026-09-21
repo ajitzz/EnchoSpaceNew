@@ -3,7 +3,7 @@ import {useAuth} from '../AuthContext';
 import {marketingRequest, observedTime} from './api';
 import type {KeywordResearchEvidence} from '../../src/lib/marketing/portfolio/keywordContract';
 
-type Props = {listingId: string; geoIds: string[]; languageIds: string[]; keywords: string[]; disabled?: boolean; onSelect: (text: string) => void};
+type Props = {listingId: string; geoIds: string[]; languageIds: string[]; keywords: string[]; disabled?: boolean; matchType?:'EXACT'|'PHRASE';cityScopeOnly?:boolean; onSelect: (text: string) => void};
 type Result = {status: string; cached: boolean; evidence: KeywordResearchEvidence | null};
 const seedText = (value: string) => value.replace(/^(EXACT|PHRASE):\s*/, '').trim();
 const integer = (value: string | null) => value === null ? 'Unavailable' : BigInt(value).toLocaleString('en-IN');
@@ -19,7 +19,7 @@ export function KeywordResearchPanel(props: Props) {
   const {token} = useAuth();
   return token ? <Research key={JSON.stringify([token, props.listingId, props.geoIds, props.languageIds])} {...props}/> : null;
 }
-function Research({listingId, geoIds, languageIds, keywords, disabled, onSelect}: Props) {
+function Research({listingId, geoIds, languageIds, keywords, disabled, onSelect,matchType='EXACT',cityScopeOnly=false}: Props) {
   const [result, setResult] = useState<Result | null>(null), [error, setError] = useState(''), [loading, setLoading] = useState(false);
   const request = useRef<AbortController | null>(null);
   useEffect(() => () => request.current?.abort(), []);
@@ -40,6 +40,7 @@ function Research({listingId, geoIds, languageIds, keywords, disabled, onSelect}
   return <section className="mkt-keyword-research" aria-label="Search demand research">
     <h4>Explore search demand</h4>
     <p className="mkt-caption">Research uses your published property, selected locations and search phrases. Historical search volume and bid ranges are guidance; they do not predict clicks, bookings or your campaign’s cost.</p>
+    {cityScopeOnly&&<p className="mkt-caption">Keyword Planner evidence covers the selected feeder cities. It does not model exact radius circles or district exclusions. Coordinate-only audiences require a verified city before city-level research is available.</p>}
     {!ready && <p className="mkt-caption">Choose a property, audience locations and exactly one research language. Use up to 20 seed phrases.</p>}
     <button type="button" className="mkt-secondary" disabled={!ready || disabled || loading} onClick={() => void research()}>{loading ? 'Reading search evidence…' : 'Research keyword ideas'}</button>
     <div aria-live="polite">
@@ -55,7 +56,7 @@ function Research({listingId, geoIds, languageIds, keywords, disabled, onSelect}
             <div><dt>Competition</dt><dd>{idea.competition === 'UNKNOWN' ? 'Unavailable' : idea.competition.toLowerCase()}{idea.competitionIndex !== null ? ` · ${idea.competitionIndex}/100` : ''}</dd></div>
             <div><dt>Historical top-of-page bid range</dt><dd>{idea.lowTopOfPageBidMicros===null&&idea.highTopOfPageBidMicros===null?'Unavailable':`${bid(idea.lowTopOfPageBidMicros, result.evidence!.currency)} – ${bid(idea.highTopOfPageBidMicros, result.evidence!.currency)}`}</dd></div></dl>
           <button type="button" className="mkt-secondary" disabled={disabled || seeds.some(seed => seed.toLocaleLowerCase() === idea.text.toLocaleLowerCase())} onClick={() => onSelect(idea.text)}>
-            {seeds.some(seed => seed.toLocaleLowerCase() === idea.text.toLocaleLowerCase()) ? 'Selected' : `Add exact phrase: ${idea.text}`}
+            {seeds.some(seed => seed.toLocaleLowerCase() === idea.text.toLocaleLowerCase()) ? 'Selected' : `Add ${matchType.toLowerCase()} phrase: ${idea.text}`}
           </button>
         </li>)}</ul>
         <p className="mkt-caption">Only add phrases that truthfully describe your stay. Exact matching can include close variants. Missing values are unavailable, not zero.</p>

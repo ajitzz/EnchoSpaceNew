@@ -18,7 +18,7 @@ export function MetaAudiencePicker({ allowed, selected, onChange }: { allowed: s
   </fieldset>;
 }
 
-export function GoogleAudiencePicker({ value, onChange }: { value: GoogleAudience; onChange: (next: GoogleAudience) => void }) {
+export function GoogleAudiencePicker({ value, onChange, languagesOnly=false }: { languagesOnly?:boolean; value: GoogleAudience; onChange: (next: GoogleAudience) => void }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Location[]>([]);
   const [selected, setSelected] = useState<Location[]>([]);
@@ -84,7 +84,7 @@ export function GoogleAudiencePicker({ value, onChange }: { value: GoogleAudienc
   };
   const usable = !resolving && !resolveError;
   return <fieldset className="mkt-audience-picker"><legend>Where do your ideal guests live?</legend>
-    <p className="mkt-caption">Search for cities, regions or countries. Select the full location name to avoid places with similar names.</p>
+    {!languagesOnly&&<><p className="mkt-caption">Search for cities, regions or countries. Select the full location name to avoid places with similar names.</p>
     <label className="mkt-location-search"><span>Find an audience location</span><div><Search size={18}/><input type="search" maxLength={80} value={query} onChange={e => setQuery(e.target.value)} aria-label="Find an audience location" autoComplete="off"/></div></label>
     <div className="mkt-location-feedback" role="status" aria-live="polite">{searching ? <><Loader2 size={15} className="mkt-spin"/> Searching Google locations…</> : query.trim().length >= 2 && !searchError ? `${results.length} locations found` : 'Type at least two characters to search.'}</div>
     {searchError && <Notice error>{searchError}</Notice>}
@@ -93,7 +93,7 @@ export function GoogleAudiencePicker({ value, onChange }: { value: GoogleAudienc
     {resolveError && <Notice error>{resolveError} <button type="button" className="mkt-text-button" onClick={() => { known.current.clear(); changeLocations([]); }}>Clear unavailable selection</button></Notice>}
     <div className="mkt-audience-tags" aria-label="Selected audience locations">{selected.map(item => <span key={item.resourceName}>{item.canonicalName}<button type="button" aria-label={`Remove ${item.canonicalName}`} disabled={!usable} onClick={() => changeLocations(selected.filter(option => option.resourceName !== item.resourceName))}><X size={14}/></button></span>)}</div>
     <p className="mkt-caption">{value.geoIds.length}/20 locations selected. Your campaign targets the selected locations; text entered in the search box is not a selection.</p>
-    <label>Audience languages<select aria-label="Add an audience language" value="" disabled={languageLoading || !!languageError || value.languageIds.length >= 10} onChange={e => { if (e.target.value) onChange({ ...value, languageIds: [...value.languageIds, e.target.value] }); }}><option value="">{languageLoading ? 'Loading supported languages…' : 'Choose a language'}</option>{languages.filter(item => !value.languageIds.includes(item.resourceName)).map(item => <option key={item.resourceName} value={item.resourceName}>{item.name}</option>)}</select></label>
+    </>}<label>Audience languages<select aria-label="Add an audience language" value="" disabled={languageLoading || !!languageError || value.languageIds.length >= 10} onChange={e => { if (e.target.value) onChange({ ...value, languageIds: [...value.languageIds, e.target.value] }); }}><option value="">{languageLoading ? 'Loading supported languages…' : 'Choose a language'}</option>{languages.filter(item => !value.languageIds.includes(item.resourceName)).map(item => <option key={item.resourceName} value={item.resourceName}>{item.name}</option>)}</select></label>
     {languageError && <Notice error>{languageError}</Notice>}
     <div className="mkt-audience-tags" aria-label="Selected audience languages">{value.languageIds.map(id => <span key={id}>{languages.find(item => item.resourceName === id)?.name || (languageLoading ? 'Verifying language…' : 'Unavailable language')}<button type="button" aria-label={`Remove ${languages.find(item => item.resourceName === id)?.name || 'unavailable language'}`} onClick={() => onChange({ ...value, languageIds: value.languageIds.filter(item => item !== id) })}><X size={14}/></button></span>)}</div>
     <p className="mkt-caption">Choose languages your guests understand and that your listing can serve. Google supplies these targeting options.</p>

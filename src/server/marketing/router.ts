@@ -1,4 +1,7 @@
+import type {CorridorInferenceWorker} from '../../lib/marketing/adtech/inference.js';
 import type {CampaignOutcomes} from '../../lib/marketing/portfolio/outcomes.js';
+import {AdtechStrategyRegistry} from '../../lib/marketing/adtech/registry.js';
+import {createAdtechAdminRouter} from './adtechRoutes.js';
 import type {SpatialStories} from '../../lib/marketing/portfolio/spatialStories.js';
 import type {DestinationPools} from '../../lib/marketing/portfolio/pools.js';
 import type {MarketingPreflight} from '../../lib/marketing/portfolio/preflight.js';
@@ -37,7 +40,7 @@ export function marketingErrorHandler(error:any,_req:any,res:any,_next:any){
  console.error(JSON.stringify({event:'HARVO_REQUEST_FAILED',correlationId,code}));
  res.status(status).json({error:error instanceof z.ZodError?'Check the highlighted campaign fields and try again.':known?error.message:status===503?'The campaign upgrade requires its database migrations before this workspace can open.':'Campaign request failed. Use the correlation ID for support.',code,correlationId,...error instanceof z.ZodError?{fields:error.issues.map(i=>({path:i.path.join('.'),message:i.message}))}:{}});
 }
-export function createMarketingRouter(pool:pg.Pool,service:MarketingWorkflowService,finance:WorkflowFinance,authenticate:RequestHandler,targeting?:MarketingTargetingService,extensions:{outcomes?:CampaignOutcomes;stories?:SpatialStories;pools?:DestinationPools;preflight?:MarketingPreflight;settlement?:MarketingSettlementService;conversions?:ConversionConsumer;guidance?:CampaignDraftGuidance;creative?:CreativeWorkflowService;pauseRecovery?:MarketingPauseRecovery;facts?:CanonicalMarketingFacts;keywordResearch?:KeywordResearchService;portfolio?:SearchPortfolioConflictAnalyzer}={}){
+export function createMarketingRouter(pool:pg.Pool,service:MarketingWorkflowService,finance:WorkflowFinance,authenticate:RequestHandler,targeting?:MarketingTargetingService,extensions:{corridorInference?:CorridorInferenceWorker;outcomes?:CampaignOutcomes;stories?:SpatialStories;pools?:DestinationPools;preflight?:MarketingPreflight;settlement?:MarketingSettlementService;conversions?:ConversionConsumer;guidance?:CampaignDraftGuidance;creative?:CreativeWorkflowService;pauseRecovery?:MarketingPauseRecovery;facts?:CanonicalMarketingFacts;keywordResearch?:KeywordResearchService;portfolio?:SearchPortfolioConflictAnalyzer}={}){
  const router=Router();router.use(authenticate);router.use(rateLimit({windowMs:60000,limit:120,standardHeaders:'draft-8',legacyHeaders:false}));
  router.use(async(req:any,res,next)=>{try{
   const id=Number(req.user?.id);if(!Number.isSafeInteger(id)||id<=0)throw new MarketingError('AUTH_REQUIRED','Valid sign-in required',401);
@@ -51,6 +54,10 @@ export function createMarketingRouter(pool:pg.Pool,service:MarketingWorkflowServ
  const revision=(req:any)=>z.number().int().positive().parse(req.body.revision);
  const key=(req:any)=>z.string().min(8).max(160).regex(/^[a-zA-Z0-9:_-]+$/).parse(req.get('Idempotency-Key'));
  const admin:RequestHandler=(_req,res,next)=>actor(res).role==='admin'?next():next(new MarketingError('ADMIN_REQUIRED','Administrator access required',403));
+ router.get('/listings/:id/targeting-defaults',async(req,res)=>{if(!service.options.strategies?.required)throw new MarketingError('STRATEGY_NOT_CONFIGURED','Adaptive audience defaults are not enabled.',503);const id=z.coerce.number().int().positive().safe().parse(req.params.id);const provider=z.enum(['META','GOOGLE']).parse(req.query.provider);res.json(await service.options.strategies.defaults(res.locals.actor,id,provider));});
+ router.post('/listings/:id/corridor-research',async(req,res)=>{if(!extensions.corridorInference)throw new MarketingError('INFERENCE_NOT_CONFIGURED','Destination research is unavailable.',503);const body=z.object({provider:z.enum(['META','GOOGLE'])}).strict().parse(req.body);res.status(202).json(await extensions.corridorInference.request(actor(res),id(req),body.provider));});
+ router.get('/listings/:id/corridor-research',async(req,res)=>{if(!extensions.corridorInference)throw new MarketingError('INFERENCE_NOT_CONFIGURED','Destination research is unavailable.',503);res.json(await extensions.corridorInference.status(actor(res),id(req),z.enum(['META','GOOGLE']).parse(req.query.provider)));});
+ router.use('/admin/adtech',createAdtechAdminRouter(new AdtechStrategyRegistry(pool),extensions.corridorInference));
  const settlement=()=>{if(!extensions.settlement)throw new MarketingError('SETTLEMENT_NOT_CONFIGURED','Accounting close is not configured.',503);return extensions.settlement;};
  const creative=()=>{if(!extensions.creative)throw new MarketingError('CREATIVE_NOT_CONFIGURED','Reviewed image preparation is not configured in this environment.',503);return extensions.creative;};
  const uuid=(value:unknown)=>z.string().uuid().parse(value);

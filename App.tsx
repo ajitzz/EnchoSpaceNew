@@ -845,7 +845,8 @@ function App() {
       const hash = window.location.hash.replace('#', '').toUpperCase();
       const validViews = ['SEARCH', 'DETAILS', 'EXPERIENCE_DETAILS', 'BOOKING', 'CHECKOUT', 'WISHLIST', 'RESERVATIONS', 'MESSAGES', 'HOSTING', 'HOST_DASHBOARD', 'ADMIN', 'PREVIEW_HOST'];
       
-      if (/^\/explore\/(wayanad|coorg|goa)\/?$/.test(path)) {
+      if(path==='/admin/marketing/adtech'){setCurrentView('ADMIN');
+      } else if (/^\/explore\/(wayanad|coorg|goa)\/?$/.test(path)) {
         setCurrentView('EXPLORE');
       } else if (path.startsWith('/stay/')) {
         const propertySlug = path.split('/')[2];
@@ -979,7 +980,8 @@ function App() {
     let newPath = window.location.pathname;
     let targetHash = '';
     
-    if (currentView === 'EXPLORE') {
+    if(currentView==='ADMIN'&&window.location.pathname==='/admin/marketing/adtech'){newPath='/admin/marketing/adtech';
+    } else if (currentView === 'EXPLORE') {
       newPath = window.location.pathname;
     } else if (currentView === 'DETAILS' && selectedListing) {
       if (selectedListing.id === 'preview-id' || selectedListing.id === 'preview') {

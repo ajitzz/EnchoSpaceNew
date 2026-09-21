@@ -1,3 +1,5 @@
+import {publishedStrategyReference,loadPublishedStrategy} from '../../marketing/adtech/publishedStrategy.js';
+import {assertGoogleStrategyReadback} from '../../marketing/adtech/googleReadback.js';
 import type {ProviderStoryVerifier} from '../spatialCreative.js';
 import type {ProviderLandingVerifier} from '../ProviderOperationStore.js';
 import {accountLocalTime,flightScheduleSchema} from '../../../shared/marketingFlight.js';
@@ -127,6 +129,7 @@ export class GoogleAdsProvider implements AdProvider {
     let remoteEvidence: Record<string, unknown> | undefined;
     try {
       const customerId = this.client.getCustomerId();
+      const strategyReference = publishedStrategyReference(request);
       const plan = buildGoogleSearchPlan(request, customerId, this.options.publicOrigin ?? process.env.GOOGLE_ADS_LANDING_ORIGIN ?? '');
       if (request.metadata?.providerProtocol === 'HARVO_V2' && !this.options.authorize) throw new GoogleAdsError('GOOGLE_MUTATION_FAILED', 'Trusted V2 publishing authorization is required.', { errorClass: 'POLICY' });
       if(plan.spatial&&(!this.options.authorize||!this.options.verifySpatialStory))throw new GoogleAdsError('GOOGLE_CREATIVE_AUTHORITY_REQUIRED','Reviewed spatial creative authority is required.');
@@ -175,6 +178,7 @@ export class GoogleAdsProvider implements AdProvider {
       if (budget.resourceName !== externalBudgetId || !budgetMatches(budget, plan.budgetMode, plan.budgetMinor)) {
         throw new GoogleAdsError('GOOGLE_BUDGET_MISMATCH', 'Google budget type and amount do not match the explicit unshared campaign plan.', { errorClass: 'VALIDATION' });
       }
+      if(request.metadata?.adtechStrategy)await assertGoogleStrategyReadback(this.client,customerId,campaignNumericId,request.metadata.adtechStrategy);
       const spatialAssets:Array<Record<string,unknown>>=[];
       if(plan.spatial){
         const rows=await this.client.searchStream(customerId,`SELECT campaign_asset.resource_name,campaign_asset.campaign,campaign_asset.asset,campaign_asset.field_type,campaign_asset.status,asset.resource_name,asset.type,asset.final_urls,asset.sitelink_asset.link_text,asset.image_asset.full_size.width_pixels,asset.image_asset.full_size.height_pixels FROM campaign_asset WHERE campaign.id = ${campaignNumericId}`);
@@ -195,7 +199,7 @@ export class GoogleAdsProvider implements AdProvider {
         }
       }
       const entities: ProviderEntity[] = [
-        { campaign_id: request.campaignId, provider: 'GOOGLE', entity_type: 'CAMPAIGN', external_id: externalCampaignId, account_id: customerId, configured_status: 'PAUSED', effective_status: 'UNKNOWN', metadata: { ...(plan.spatial?{spatialManifestHash:plan.spatial.manifestHash,spatialAssets}:{}),budgetResourceName: externalBudgetId, budgetMode:plan.budgetMode, ...(plan.budgetMode==='CAMPAIGN_TOTAL'?{startDateTime:plan.startDateTime,endDateTime:plan.endDateTime,totalBudgetMinor:plan.budgetMinor,startTime:request.startTime,endTime:request.endTime}:{dailyBudgetMinor:plan.dailyBudgetMinor}), currency: customer.currencyCode, timeZone: customer.timeZone, fingerprint: plan.fingerprint } },
+        { campaign_id: request.campaignId, provider: 'GOOGLE', entity_type: 'CAMPAIGN', external_id: externalCampaignId, account_id: customerId, configured_status: 'PAUSED', effective_status: 'UNKNOWN', metadata: { ...strategyReference, ...(plan.spatial?{spatialManifestHash:plan.spatial.manifestHash,spatialAssets}:{}),budgetResourceName: externalBudgetId, budgetMode:plan.budgetMode, ...(plan.budgetMode==='CAMPAIGN_TOTAL'?{startDateTime:plan.startDateTime,endDateTime:plan.endDateTime,totalBudgetMinor:plan.budgetMinor,startTime:request.startTime,endTime:request.endTime}:{dailyBudgetMinor:plan.dailyBudgetMinor}), currency: customer.currencyCode, timeZone: customer.timeZone, fingerprint: plan.fingerprint } },
         { campaign_id: request.campaignId, provider: 'GOOGLE', entity_type: 'AD_GROUP', external_id: externalContainerId, parent_entity_id: externalCampaignId, account_id: customerId, configured_status: 'PAUSED', effective_status: 'UNKNOWN' },
         { campaign_id: request.campaignId, provider: 'GOOGLE', entity_type: 'AD', external_id: externalAdId, parent_entity_id: externalContainerId, account_id: customerId, configured_status: 'PAUSED', effective_status: 'UNKNOWN' },
       ];
@@ -285,7 +289,8 @@ export class GoogleAdsProvider implements AdProvider {
       const recordedBudgetMinor=budgetMode==='CAMPAIGN_TOTAL'?campaign.metadata?.totalBudgetMinor:campaign.metadata?.dailyBudgetMinor;
       if(operation==='RESUME'&&(!Number.isSafeInteger(recordedBudgetMinor)||recordedBudgetMinor<=0))throw new GoogleAdsError('GOOGLE_BUDGET_MISMATCH','Activation requires recorded budget evidence.');
       if (budget && (Object.keys(budget).some(key=>!['currency','minor_units'].includes(key)) || !Number.isSafeInteger(budget.minor_units) || budget.minor_units <= 0 || !['INR','USD'].includes(budget.currency) || BigInt(budget.minor_units) * 10000n > 9223372036854775807n)) throw new GoogleAdsError('GOOGLE_INVALID_ARGUMENT', 'Google budget must be positive supported-currency minor units; budget type cannot change.');
-      const semantic = { provider:'GOOGLE', operation, campaignId:request.campaignId, campaign:campaign.external_id, group:group.external_id, ad:ad.external_id, budgetMode,budget:budget ?? null };
+      const strategy = operation === 'PAUSE' ? null : await loadPublishedStrategy(pool,request.campaignId,'GOOGLE',campaign.metadata??{});
+      const semantic = { ...(strategy?{strategyHash:strategy.snapshotHash}:{}), provider:'GOOGLE', operation, campaignId:request.campaignId, campaign:campaign.external_id, group:group.external_id, ad:ad.external_id, budgetMode,budget:budget ?? null };
       store = new ProviderOperationStore(pool);
       const claim = await store.claim({ provider:'GOOGLE', campaignId:request.campaignId, operation, externalCampaignId:request.externalCampaignId,
         fingerprint:semanticFingerprint(semantic), idempotencyKey:request.idempotencyKey, correlationId:request.correlationId,
@@ -298,6 +303,7 @@ export class GoogleAdsProvider implements AdProvider {
         if (row.campaign?.resourceName !== campaign.external_id || row.adGroup?.resourceName !== group.external_id || row.adGroup.campaign !== campaign.external_id || row.adGroupAd?.resourceName !== ad.external_id) throw new GoogleAdsError('GOOGLE_OWNERSHIP_MISMATCH','Observed Google hierarchy changed.');
       };
       const before = await read(); verifyIdentity(before);
+      if(strategy)await assertGoogleStrategyReadback(this.client,customerId,campaignId,strategy);
       if (![before.campaign.status,before.adGroup.status,before.adGroupAd.status].every(status=>['PAUSED','ENABLED'].includes(status))) throw new GoogleAdsError('GOOGLE_INVALID_RESPONSE','Google hierarchy configuration could not be read before control.');
       if(operation==='RESUME'){
         const budgetId=resourceId(before.campaign.campaignBudget,customerId,'campaignBudgets');
@@ -340,6 +346,7 @@ export class GoogleAdsProvider implements AdProvider {
       mutationStarted = true; const response = await this.client.mutateOperations(customerId,operations); accepted = true;
       evidence = { resourceNames:response.results.map(r=>r.resourceName),requestId:response.requestId }; await store.step(transactionId,evidence);
       const after = await read(); verifyIdentity(after);
+      if(strategy)await assertGoogleStrategyReadback(this.client,customerId,campaignId,strategy);
       if (budget) {
         const budgetId = resourceId(after.campaign.campaignBudget,customerId,'campaignBudgets');
         const observed = oneRow(await this.client.searchStream(customerId, `SELECT campaign_budget.resource_name,campaign_budget.period,campaign_budget.amount_micros,campaign_budget.total_amount_micros,campaign_budget.explicitly_shared FROM campaign_budget WHERE campaign_budget.id = ${budgetId}`),'campaignBudget').campaignBudget;

@@ -1,3 +1,4 @@
+import type {StrategySelection} from '../../src/shared/adtech/contracts';
 import type {StoryEvidence} from '../../src/shared/marketingStory';
 import type {FlightSchedule} from '../../src/shared/marketingFlight';
 export type MoneyMinor = string;
@@ -10,6 +11,7 @@ export interface CampaignQuote {
   currency: string; status: string; lines: Array<{ label: string; amountMinor: MoneyMinor }>;
 }
 export interface StudioCampaign {
+  strategySelection?:StrategySelection;
   destinationMembership?:{id:string;poolId:string;state:string}|null;
   firstPartyOutcomes?:{source:'ENCHO_CONSENTED_EVENTS';scope:'CAMPAIGN_ALL_REVISIONS';completeness:'RECORDED_EVENTS_ONLY';observedAt:string;propertyVisits:string|null;inquiries:string|null;unreadMessages:string|null;bookings:string|null;lastInquiryAt:string|null};
   id: string | number; revision: number; listingId: string | number; title: string; provider: 'GOOGLE' | 'META'; status: string;
@@ -42,9 +44,10 @@ export interface StudioWorkspace {
   campaignListings?: MarketingListing[];
   page?: {limit:number;mayHaveMore:boolean;nextCursor:number|null;order?:string};
   listingPage?: {limit:number;mayHaveMore:boolean;nextCursor:number|null};
-  capabilities: { funding: boolean; publish: boolean; activate?: boolean; reason?: string; metaCountries?: string[] };
+  capabilities: { adtech?:boolean; funding: boolean; publish: boolean; activate?: boolean; reason?: string; metaCountries?: string[] };
 }
 export interface CampaignDraft {
+  strategySelection?:StrategySelection;
   listingId: string; title: string; provider: 'GOOGLE' | 'META'; objective: 'BOOKINGS';
   startDate: string; endDate: string; flightSchedule?:FlightSchedule; mediaBudgetMinor: MoneyMinor; dailyBudgetMinor?: MoneyMinor;
   headline: string; description: string; mediaIds: string[]; locations: string[];

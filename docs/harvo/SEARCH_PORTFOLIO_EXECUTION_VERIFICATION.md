@@ -143,3 +143,25 @@ Founder accepts the six preceding local workstreams and explicitly restricts thi
 The first new key-provision test encountered the isolation harness's deliberately absent dotenv `parse` export. Its test-local mock now exposes the pure parser while keeping automatic dotenv loading disabled; the final full run includes that test. A temporary compiled CLI probe initially lacked its dependency path; with the normal dependency layout supplied it correctly refused to start without explicit staging input. Neither issue required weakening isolation or changing business authority.
 
 **Rollout disposition:** local release checks pass. Dedicated product independence is verified; live activation remains blocked by absent accepted canonical booking/current-consent composition plus external prerequisites. Paid pool checkout remains unavailable. Historical completion remains **50% (5/10)**; staging cutover and M10's real pilot are separate gates.
+
+## HARVO-034 — production migration receipt, 21 September 2026
+
+The founder subsequently authorized the bounded production migration that the preceding local-only record had deferred. This receipt records observed execution against the Neon database used by the current `encho.co.in` Vercel production integration. Credentials and connection strings are intentionally omitted.
+
+| Check | Observed result |
+|---|---|
+| Target identity | Vercel's production Neon integration and the migration runner resolved to the same direct endpoint and `neondb` database. The unrelated `.env.local` endpoint was not used. |
+| Pre-run ledger | Repository migrations through 016 were recorded with valid checksums; the repository has no 008 SQL file. Pending set was exactly 017–031. |
+| Persistent runner | `npm run migrate` applied all 15 migrations, 017–031, in lexical order under advisory lock `82749102`; zero failures. |
+| Ledger integrity | Independent SHA-256 recomputation found 15/15 rows present and valid. Application timestamps span `2026-09-21T10:23:04.703Z` to `2026-09-21T10:23:10.783Z`. |
+| Lock release | `pg_locks` reported zero granted holders for the migration lock after completion. |
+| Route protection | Public request returned the expected HTTP 401. The existing authenticated host session returned HTTP 200. |
+| Response contract | HTTP 200 projection contained `listings`, `campaignListings`, `campaigns`, `policy`, `capabilities`, `page` and `listingPage`. |
+| Browser acceptance | Host dashboard → Marketing Engine loaded the campaign journal (five campaigns on the first page), campaign creation and refresh controls, without the migration-required banner. |
+
+This closes the reported production migration/workspace blocker. It does not certify provider publication, paid-pool settlement, canonical Purchase, specialist/legal review, remote branch protection or a live pilot. Historical marketing acceptance remains **50% (5/10)**.
+
+
+### Subsequent AdTech implementation — 22 September 2026
+
+Discussion 034's ADT-0–ADT-6 work is locally delivered. Its separate [execution verification](ADTECH_EXECUTION_VERIFICATION.md) preserves the single full sweep's five legacy analytics failures and successful targeted UTC-boundary repairs. The [delivery/runbook](../implementation/ADTECH_STRATEGY_DELIVERY.md) records migrations 032–035, forced RLS, strategy binding and UI/research scope. No new remote migration was performed. The founder confirmed staging is not configured; no provider canary or historical paid-marketing acceptance is inferred.

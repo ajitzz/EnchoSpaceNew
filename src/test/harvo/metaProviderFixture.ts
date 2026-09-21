@@ -76,9 +76,9 @@ export function fixture(mode = 'OK', authorize: ProviderAuthorizationGuard | und
             return json({}, 503);
         const base = { id: path, account_id: mode === 'FOREIGN_ACCOUNT' ? '999999999' : '123456789' };
         if (path === ids.campaign)
-            return json({ ...base, status: mode === 'ACTIVE_CREATED' ? 'ACTIVE' : state.campaign, effective_status: state.campaign });
+            return json({ ...base, status: mode === 'ACTIVE_CREATED' ? 'ACTIVE' : state.campaign, effective_status: state.campaign, ...(mode==='ADTECH'?{...state.posts.find(p=>p.path.endsWith('/campaigns'))?.payload,status:state.campaign}:{}) });
         if (path === ids.adset)
-            return json({ ...base, campaign_id: ids.campaign, status: state.adset, effective_status: state.adset, lifetime_budget: mode === 'WRONG_BUDGET' ? '1' : state.budget, promoted_object: state.promoted });
+            return json({ ...base, campaign_id: ids.campaign, status: state.adset, effective_status: state.adset, lifetime_budget: mode === 'WRONG_BUDGET' ? '1' : state.budget, promoted_object: state.promoted, ...(mode==='ADTECH'?{...state.posts.find(p=>p.path.endsWith('/adsets'))?.payload,status:state.adset}:{}) });
         if (path === ids.creative){const spec=structuredClone(state.creative.object_story_spec);if(mode==='STORY_DRIFT'&&spec?.link_data?.child_attachments)spec.link_data.child_attachments[0].name='Unapproved claim';return json({ ...base, object_story_spec:spec });}
         if (path === ids.ad)
             return json({ ...base, campaign_id: ids.campaign, adset_id: mode === 'FOREIGN_PARENT' ? '999' : ids.adset, creative: { id: ids.creative }, status: state.ad, effective_status: state.ad });

@@ -1,3 +1,4 @@
+import AdtechWorkspace from './marketing/AdtechWorkspace';
 import React, { useState, useEffect } from 'react';
 import { SEO } from './SEO';
 import { AdminSEOTab } from './AdminSEOTab';
@@ -24,7 +25,7 @@ interface AdminDashboardProps {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }) => {
   const { formatPrice } = useCurrency();
   const [adminMode, setAdminMode] = useState<'stays' | 'experiences'>('stays');
-  const [activeTab, setActiveTab] = useState<'analytics' | 'listings' | 'users' | 'settings' | 'offers' | 'reviews' | 'messages' | 'seo' | 'marketing'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'listings' | 'users' | 'settings' | 'offers' | 'reviews' | 'messages' | 'seo' | 'marketing'>(window.location.pathname==='/admin/marketing/adtech'?'marketing':'analytics');
   const [editingRoomsListing, setEditingRoomsListing] = useState<Listing | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
   // ADR-001: Rooms now have free-form name + tier key + icon + tag + description + specs
@@ -2046,7 +2047,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                      <AdminSEOTab items={adminMode === 'stays' ? listings : experiences} type={adminMode === 'stays' ? 'listing' : 'experience'} onSuccess={fetchData} />
                      <AdminSEOTab items={adminMode === 'stays' ? listings : experiences} type={adminMode === 'stays' ? 'listing' : 'experience'} onSuccess={fetchData} />
                   </div>
-              ) : activeTab === 'marketing' ? (marketingSubTab === 'command_center' ? (<div><AdminMarketingWorkspace/><div className="px-6 py-4"><button className="text-xs text-gray-600 underline underline-offset-4" onClick={() => setMarketingSubTab('ops_control_center')}>Operations, social publishing and outreach</button></div></div>) : (<div><div className="px-6 py-4"><button className="text-sm text-gray-700 underline underline-offset-4" onClick={() => setMarketingSubTab('command_center')}>Back to campaign workspace</button></div>
+              ) : activeTab === 'marketing' ? (window.location.pathname==='/admin/marketing/adtech' ? <AdtechWorkspace/> : marketingSubTab === 'command_center' ? (<div><a className="mkt-secondary" href="/admin/marketing/adtech">Strategy control center</a><AdminMarketingWorkspace/><div className="px-6 py-4"><button className="text-xs text-gray-600 underline underline-offset-4" onClick={() => setMarketingSubTab('ops_control_center')}>Operations, social publishing and outreach</button></div></div>) : (<div><div className="px-6 py-4"><button className="text-sm text-gray-700 underline underline-offset-4" onClick={() => setMarketingSubTab('command_center')}>Back to campaign workspace</button></div>
                  <div className="p-6 space-y-8 max-w-6xl">
                     {/* Multi-Million Scale Hub Header */}
                     <div className="bg-gradient-to-r from-sky-900 to-indigo-950 p-6 md:p-8 rounded-3xl text-white shadow-xl relative overflow-hidden text-left">

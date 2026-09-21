@@ -1,3 +1,4 @@
+import {compileMetaStrategy} from '../../marketing/adtech/compiler.js';
 import {parseSpatialCreative} from '../spatialCreative.js';
 import {hasOnlyAttributionQuery} from '../../../shared/marketingAttribution.js';
 import { hasAsciiControl } from '../../intentionalText.js';
@@ -8,7 +9,7 @@ import { MetaAdsError } from './MetaAdsClient.js';
 export interface MetaWebsiteConfig {
     version: 1;
     countries: string[];
-    placements: Array<'FACEBOOK_FEED' | 'FACEBOOK_REELS' | 'INSTAGRAM_FEED' | 'INSTAGRAM_REELS'>;
+    placements: Array<'FACEBOOK_FEED' | 'FACEBOOK_REELS' | 'INSTAGRAM_FEED' | 'INSTAGRAM_REELS' | 'FACEBOOK_STORIES' | 'INSTAGRAM_STORIES'>;
     specialAdCategories: Array<'HOUSING'>;
     thumbnailUrl?: string;
 }
@@ -54,6 +55,7 @@ export function buildMetaCampaignPlan(request: ProviderPublishRequest, origin: s
 
     if (!['IMAGE', 'VIDEO'].includes(request.creativeAssets.mediaType ?? ''))
         return fail('Choose an actual image or video asset.');
+    const strategy=request.metadata?.adtechStrategy===undefined?null:compileMetaStrategy(request.metadata.adtechStrategy);
     const config = request.metadata?.metaWebsite as MetaWebsiteConfig;
     if (!config || config.version !== 1 || !Array.isArray(config.countries) || !config.countries.length || config.countries.length > 20 || config.countries.some(c => !/^[A-Z]{2}$/.test(c)) ||
         !Array.isArray(config.specialAdCategories) || (config.specialAdCategories.length > 0 && JSON.stringify(config.specialAdCategories) !== '["HOUSING"]'))
@@ -61,7 +63,7 @@ export function buildMetaCampaignPlan(request: ProviderPublishRequest, origin: s
     if (Object.keys(config).some(key => !['version','countries','placements','specialAdCategories','thumbnailUrl'].includes(key)) || new Set(config.countries).size !== config.countries.length)
         return fail('Campaign configuration contains unsupported or duplicate targeting settings.');
     if (!Array.isArray(config.placements) || !config.placements.length || new Set(config.placements).size !== config.placements.length ||
-        config.placements.some(p => !['FACEBOOK_FEED', 'FACEBOOK_REELS', 'INSTAGRAM_FEED', 'INSTAGRAM_REELS'].includes(p)))
+        config.placements.some(p => ![ 'FACEBOOK_FEED', 'FACEBOOK_REELS', 'INSTAGRAM_FEED', 'INSTAGRAM_REELS',...(strategy?['FACEBOOK_STORIES','INSTAGRAM_STORIES']:[])].includes(p)))
         return fail('Explicit supported placements are required.');
     if (config.placements.some(p => p.startsWith('INSTAGRAM')) && !identity.instagramId)
         return fail('An authorized Encho Instagram identity is required for Instagram placements.');
@@ -76,11 +78,11 @@ export function buildMetaCampaignPlan(request: ProviderPublishRequest, origin: s
     const thumbnail = request.creativeAssets.mediaType === 'VIDEO' ? mediaUrl(config.thumbnailUrl) : undefined;
     const fb = config.placements.filter(p => p.startsWith('FACEBOOK')).map(p => p.endsWith('REELS') ? 'facebook_reels' : 'feed');
     const ig = config.placements.filter(p => p.startsWith('INSTAGRAM')).map(p => p.endsWith('REELS') ? 'reels' : 'stream');
-    const targeting = { geo_locations: { countries: config.countries }, publisher_platforms: [...(fb.length ? ['facebook'] : []), ...(ig.length ? ['instagram'] : [])], ...(fb.length ? { facebook_positions: fb } : {}), ...(ig.length ? { instagram_positions: ig } : {}) };
-    const campaign = { name: `Encho ${request.campaignId} — ${title}`, objective: 'OUTCOME_SALES', status: 'PAUSED', buying_type: 'AUCTION', special_ad_categories: config.specialAdCategories, ...(config.specialAdCategories.length ? { special_ad_category_country: config.countries } : {}), is_adset_budget_sharing_enabled: false };
+    const targeting = strategy?.targeting??{ geo_locations: { countries: config.countries }, publisher_platforms: [...(fb.length ? ['facebook'] : []), ...(ig.length ? ['instagram'] : [])], ...(fb.length ? { facebook_positions: fb } : {}), ...(ig.length ? { instagram_positions: ig } : {}) };
+    const campaign = { name: `Encho ${request.campaignId} — ${title}`, objective: strategy?.objective??'OUTCOME_SALES', status: 'PAUSED', buying_type: 'AUCTION', special_ad_categories: strategy?.special_ad_categories??config.specialAdCategories, ...(config.specialAdCategories.length ? { special_ad_category_country: config.countries } : {}), is_adset_budget_sharing_enabled: false };
     const adset = { name: `Encho ${request.campaignId} — Website bookings`, status: 'PAUSED', lifetime_budget: request.budget.minor_units.toString(),
         start_time: new Date(start).toISOString(), end_time: new Date(end).toISOString(), billing_event: 'IMPRESSIONS', optimization_goal: 'OFFSITE_CONVERSIONS', bid_strategy: 'LOWEST_COST_WITHOUT_CAP', destination_type: 'WEBSITE',
-        promoted_object: { pixel_id: identity.pixelId, custom_event_type: 'PURCHASE' }, targeting };
+        promoted_object: { pixel_id: identity.pixelId, custom_event_type: strategy?.conversionEvent??'PURCHASE' }, targeting, ...(strategy?{optimization_goal:strategy.optimization_goal,bid_strategy:strategy.bid_strategy,...(strategy.bid_amount?{bid_amount:strategy.bid_amount}:{}),attribution_spec:strategy.attribution_spec}:{}) };
     const { idempotencyKey, correlationId, ...semanticRequest } = request;
     const fingerprint = semanticFingerprint({ request: semanticRequest, identity, campaign, adset, origin: trusted.origin });
     return { campaign, adset, fingerprint, spatial, asset, thumbnail, landing, headline, message, mediaType: request.creativeAssets.mediaType!,

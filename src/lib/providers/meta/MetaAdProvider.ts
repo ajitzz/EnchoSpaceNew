@@ -1,3 +1,6 @@
+import {publishedStrategyReference,loadPublishedStrategy} from '../../marketing/adtech/publishedStrategy.js';
+import {MarketingError} from '../../marketing/domain.js';
+import {assertMetaStrategyReadback} from '../../marketing/adtech/compiler.js';
 import type {ProviderStoryVerifier} from '../spatialCreative.js';
 import {randomUUID} from 'node:crypto';
 import { ProviderReportPending } from '../reporting.js';
@@ -10,6 +13,7 @@ import { MetaAdsClient, metaAdsClient, MetaAdsError, metaId, META_ADS_API_VERSIO
 import { buildMetaCampaignPlan } from './MetaCampaignPlan.js';
 import { StructuredLogger } from '../../observability/structuredLogger.js';
 function failure(error: unknown): MetaAdsError {
+    if(error instanceof MarketingError && /^(STRATEGY_|META_STRATEGY_)/.test(error.code))return new MetaAdsError(error.code,error.message);
     return error instanceof MetaAdsError ? error : error instanceof ProviderOperationError ? new MetaAdsError(error.code, error.message, error.unknownOutcome) : new MetaAdsError('META_INTERNAL_ERROR', 'Meta operation could not be completed.');
 }
 export class MetaAdProvider implements AdProvider {
@@ -50,6 +54,7 @@ export class MetaAdProvider implements AdProvider {
         let writeStarted = false;
         const evidence: Record<string, any> = { creationState: 'PAUSED', deliveryConfirmed: false, ids: {} };
         try {
+            const strategyReference = publishedStrategyReference(request);
             const identity = this.client.identity();
             const plan = buildMetaCampaignPlan(request, this.options.publicOrigin ?? process.env.META_ADS_LANDING_ORIGIN ?? '', identity);
             store = new ProviderOperationStore(pool);
@@ -100,6 +105,7 @@ export class MetaAdProvider implements AdProvider {
             const observed = await this.readHierarchy({ campaign, adset, creative, ad });
             if ([observed.campaign.status, observed.adset.status, observed.ad.status].some(s => s !== 'PAUSED') || String(observed.adset.lifetime_budget) !== String(request.budget.minor_units) || observed.adset.promoted_object?.pixel_id !== identity.pixelId || observed.adset.promoted_object?.custom_event_type !== 'PURCHASE')
                 throw new MetaAdsError('META_READBACK_MISMATCH', 'Paused hierarchy, budget or pixel was not verified.', true);
+            if(request.metadata?.adtechStrategy)assertMetaStrategyReadback(request.metadata.adtechStrategy,observed.campaign,observed.adset);
             const story = observed.creative.object_story_spec;
             if(plan.spatial){
                 const cards=story?.link_data?.child_attachments;
@@ -112,7 +118,7 @@ export class MetaAdProvider implements AdProvider {
                 throw new MetaAdsError('META_READBACK_MISMATCH', 'Creative identity or property destination was not verified.', true);
             const entities: ProviderEntity[] = [
                 { campaign_id: request.campaignId, provider: 'META', entity_type: 'CAMPAIGN', external_id: campaign, account_id: identity.accountId, configured_status: 'PAUSED', effective_status: 'UNKNOWN', metadata: { fingerprint: plan.fingerprint } },
-                { campaign_id: request.campaignId, provider: 'META', entity_type: 'AD_SET', external_id: adset, parent_entity_id: campaign, account_id: identity.accountId, configured_status: 'PAUSED', effective_status: 'UNKNOWN', metadata: { budgetMinor: request.budget.minor_units, budgetKind: 'LIFETIME', currency: request.budget.currency } },
+                { campaign_id: request.campaignId, provider: 'META', entity_type: 'AD_SET', external_id: adset, parent_entity_id: campaign, account_id: identity.accountId, configured_status: 'PAUSED', effective_status: 'UNKNOWN', metadata: { ...strategyReference, budgetMinor: request.budget.minor_units, budgetKind: 'LIFETIME', currency: request.budget.currency } },
                 { campaign_id: request.campaignId, provider: 'META', entity_type: 'CREATIVE', external_id: creative, account_id: identity.accountId, configured_status: 'UNKNOWN', effective_status: 'UNKNOWN', metadata: { mediaUrl: plan.asset, videoId } },
                 { campaign_id: request.campaignId, provider: 'META', entity_type: 'AD', external_id: ad, parent_entity_id: adset, account_id: identity.accountId, configured_status: 'PAUSED', effective_status: 'UNKNOWN' }
             ];
@@ -167,8 +173,8 @@ export class MetaAdProvider implements AdProvider {
     }) {
         const identity = this.client.identity();
         const [campaign, adset, creative, ad] = await Promise.all([
-            this.client.get(ids.campaign, { fields: 'id,account_id,status,effective_status' }),
-            this.client.get(ids.adset, { fields: 'id,account_id,campaign_id,status,effective_status,lifetime_budget,promoted_object' }),
+            this.client.get(ids.campaign, { fields: 'id,account_id,status,effective_status,objective,special_ad_categories' }),
+            this.client.get(ids.adset, { fields: 'id,account_id,campaign_id,status,effective_status,lifetime_budget,promoted_object,targeting,optimization_goal,bid_strategy,bid_amount,attribution_spec' }),
             this.client.get(ids.creative, { fields: 'id,account_id,object_story_spec' }),
             this.client.get(ids.ad, { fields: 'id,account_id,campaign_id,adset_id,creative,status,effective_status' })
         ]);
@@ -206,13 +212,15 @@ export class MetaAdProvider implements AdProvider {
                 throw new MetaAdsError('META_INVALID_BUDGET', 'The approved lifetime budget must be recorded before a spending operation.');
             if (budget && (!Number.isSafeInteger(budget.minor_units) || budget.minor_units <= 0 || !['INR', 'USD'].includes(budget.currency)))
                 throw new MetaAdsError('META_INVALID_BUDGET', 'A positive supported-currency budget is required.');
-            const semantic = { provider: 'META', operation, campaignId: request.campaignId, ids, budget: budget ?? null };
+            const strategy = operation === 'PAUSE' ? null : await loadPublishedStrategy(pool,request.campaignId,'META',recorded);
+            const semantic = { provider: 'META', operation, campaignId: request.campaignId, ids, budget: budget ?? null, ...(strategy?{strategyHash:strategy.snapshotHash}:{}) };
             store = new ProviderOperationStore(pool);
             const claim = await store.claim({ provider: 'META', campaignId: request.campaignId, operation, externalCampaignId: ids.campaign, fingerprint: semanticFingerprint(semantic), idempotencyKey: request.idempotencyKey, correlationId: request.correlationId, ...(operation !== 'PAUSE' ? { budgetMinor: budget?.minor_units ?? recorded.budgetMinor, budgetKind: 'LIFETIME' as const, currency: budget?.currency ?? recorded.currency } : {}) }, semantic, this.options.authorize);
             if (claim.result)
                 return claim.result;
             txId = claim.id;
             const before = await this.readHierarchy(ids);
+            if(strategy)assertMetaStrategyReadback(strategy,before.campaign,before.adset);
             if (operation !== 'PAUSE' && String(before.adset.lifetime_budget) !== String(recorded.budgetMinor))
                 throw new MetaAdsError('META_INVALID_BUDGET', 'Remote lifetime budget differs from approved evidence.');
             if (operation !== 'PAUSE' && (before.adset.promoted_object?.pixel_id !== this.client.identity().pixelId || before.adset.promoted_object?.custom_event_type !== 'PURCHASE'))
@@ -230,6 +238,7 @@ export class MetaAdProvider implements AdProvider {
                     throw new MetaAdsError('META_UNKNOWN_OUTCOME', 'Meta control acknowledgment was not verified.', true);
             }
             const after = await this.readHierarchy(ids);
+            if(strategy)assertMetaStrategyReadback(strategy,after.campaign,after.adset);
             if (operation !== 'PAUSE' && (after.adset.promoted_object?.pixel_id !== this.client.identity().pixelId || after.adset.promoted_object?.custom_event_type !== 'PURCHASE'))
                 throw new MetaAdsError('META_UNKNOWN_OUTCOME', 'Meta conversion destination changed during control; reconciliation is required.', true);
             if (budget ? String(after.adset.lifetime_budget) !== String(budget.minor_units) : [after.campaign.status, after.adset.status, after.ad.status].some(s => s !== target))
