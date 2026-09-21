@@ -143,6 +143,8 @@ export interface ProviderBudgetUpdateRequest {
 }
 
 export interface NormalizedDeliveryTruth {
+  /** Hierarchy eligibility is separate from confirmed impression delivery. */
+  readiness?: import('./deliveryEvidence.js').DeliveryReadiness;
   provider: ProviderId;
   externalCampaignId: string;
   normalizedState: NormalizedDeliveryState;

@@ -1,3 +1,4 @@
+import {hasOnlyAttributionQuery} from '../../shared/marketingAttribution.js';
 import { createHash } from 'node:crypto';
 import type { ProviderEntity } from './types.js';
 import { generateListingSlug } from '../stayProjection.js';
@@ -48,6 +49,7 @@ type Identity = {
 };
 /** Trusted server composition only; no request-body media approval flag is accepted. */
 export type ProviderMediaVerifier = (context:ProviderAuthorizationContext,identity:Identity,transactionClient:any)=>Promise<{mediaUrl:string}>;
+export type ProviderLandingVerifier = (context:ProviderAuthorizationContext,identity:Identity,transactionClient:any)=>Promise<void>;
 /** Row-locked durable operation claims; no expiry or automatic replay of uncertain external writes. */
 export class ProviderOperationStore {
     constructor(private readonly pool: any) {
@@ -75,7 +77,7 @@ export class ProviderOperationStore {
             client.release();
         }
     }
-    async claim(context: ProviderAuthorizationContext, payload: unknown, authorize?: ProviderAuthorizationGuard, identity?: Identity,verifyMedia?:ProviderMediaVerifier): Promise<{
+    async claim(context: ProviderAuthorizationContext, payload: unknown, authorize?: ProviderAuthorizationGuard, identity?: Identity,verifyMedia?:ProviderMediaVerifier,verifyLanding?:ProviderLandingVerifier): Promise<{
         id: number;
         result?: any;
         resumeEvidence?: any;
@@ -97,6 +99,10 @@ export class ProviderOperationStore {
                     Number(listing?.user_id) !== identity.hostId || listing?.publication_status !== 'published' ||
                     landing.pathname !== `/stay/${encodeURIComponent(listing.slug || generateListingSlug(listing.title, listing.id))}`) {
                     throw new ProviderOperationError('OWNERSHIP_MISMATCH', 'Campaign must advertise its host’s published property.');
+                }
+                if(landing.search){
+                    if(!hasOnlyAttributionQuery(landing)||!verifyLanding)throw new ProviderOperationError('ATTRIBUTION_INVALID','A trusted campaign reference verifier is required.');
+                    await verifyLanding(context,identity,client);
                 }
                 if (identity.mediaUrl) {
                     const media = await client.query("SELECT id FROM media_assets WHERE entity_type='listing' AND entity_id=$1 AND url=$2 AND moderation_status='approved' FOR SHARE", [identity.listingId, identity.mediaUrl]);

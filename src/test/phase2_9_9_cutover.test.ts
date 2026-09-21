@@ -248,38 +248,22 @@ describe('PHASE 2.9.9: CONTROLLED PRODUCTION WORKER CUTOVER CERTIFICATION SUITE'
   // ================================================================
   // PHASE 2.9.9-F: Cutover Dynamic Creative Optimization (DCO)
   // ================================================================
-  it('Phase 2.9.9-F: Cutover DCO — processDynamicCreativeOptimization evaluates epoch exactly once', async () => {
-    process.env.ACTIVE_WORKER_CLASSES = 'runAnalyticsRollup,processAsyncWebhookQueue,processWebhookDLQ,recoverOrphanedMetaTransactions,processMetaReconciliation,processDynamicCreativeOptimization';
-    expect(isWorkerActive('processDynamicCreativeOptimization')).toBe(true);
-
-    // Run active DCO evaluation
-    await processDynamicCreativeOptimization(pool);
-
-    // Verify campaign media_urls was optimized to winning image [urls[0]]
-    const checkDco = await pool.query('SELECT media_urls FROM host_marketing_campaigns WHERE id = $1', [dcoCampId]);
-    const urls = typeof checkDco.rows[0].media_urls === 'string' ? JSON.parse(checkDco.rows[0].media_urls) : checkDco.rows[0].media_urls;
-    expect(urls.length).toBe(1);
-    expect(urls[0]).toBe('https://img1.jpg');
+  it('Phase 2.9.9-F: retired DCO worker cannot rewrite approved campaign media', async () => {
+    process.env.WORKER_MODE = 'ACTIVE';
+    const before = (await pool.query('SELECT * FROM host_marketing_campaigns WHERE id=$1',[dcoCampId])).rows;
+    expect(await processDynamicCreativeOptimization(pool)).toEqual({processed:0,status:'RETIRED',code:'HARVO_V2_REQUIRED'});
+    expect((await pool.query('SELECT * FROM host_marketing_campaigns WHERE id=$1',[dcoCampId])).rows).toEqual(before);
   });
 
   // ================================================================
   // PHASE 2.9.9-G: Cutover Escrow Auto-Release Worker
   // ================================================================
-  it('Phase 2.9.9-G: Cutover Escrow — processEscrowAutoRelease transactionally releases holding funds', async () => {
-    process.env.WORKER_MODE = 'ACTIVE'; // All workers now fully active
-    expect(isWorkerActive('processEscrowAutoRelease')).toBe(true);
-
-    // Run active escrow release
-    await processEscrowAutoRelease(pool);
-
-    // Verify campaign escrow status transitioned to 'released'
-    const checkEscrow = await pool.query('SELECT escrow_status FROM host_marketing_campaigns WHERE id = $1', [escrowCampId]);
-    expect(checkEscrow.rows[0].escrow_status).toBe('released');
-
-    // Verify pre-authorized dispatch transaction was created with idempotency protection
-    const checkTx = await pool.query('SELECT publish_status FROM meta_publishing_transactions WHERE campaign_id = $1', [escrowCampId]);
-    expect(checkTx.rows.length).toBeGreaterThan(0);
-    expect(checkTx.rows[0].publish_status).toBe('PRECHECK_RUNNING');
+  it('Phase 2.9.9-G: retired escrow worker cannot release funds or create dispatch authority', async () => {
+    process.env.WORKER_MODE = 'ACTIVE';
+    const before = (await pool.query('SELECT * FROM host_marketing_campaigns WHERE id=$1',[escrowCampId])).rows;
+    expect(await processEscrowAutoRelease(pool)).toEqual({processed:0,status:'RETIRED',code:'HARVO_V2_REQUIRED'});
+    expect((await pool.query('SELECT * FROM host_marketing_campaigns WHERE id=$1',[escrowCampId])).rows).toEqual(before);
+    expect((await pool.query('SELECT * FROM meta_publishing_transactions WHERE campaign_id=$1',[escrowCampId])).rows).toHaveLength(0);
   });
 
   // ================================================================

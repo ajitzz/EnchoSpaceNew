@@ -1,53 +1,67 @@
-import { describe, it, expect } from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import jwt from 'jsonwebtoken';
 import supertest from 'supertest';
+import pg from 'pg';
 import app from '../../server.js';
 
-describe('GOOGLE OAUTH PRODUCTION ORIGIN & SIGN-IN FORENSICS', () => {
-  const PRODUCTION_ORIGIN = 'https://encho-space-chi.vercel.app';
-  const EXPECTED_CLIENT_ID = '977982063830-0eq4c0i2oassrdmj71aevnktr17hasa7.apps.googleusercontent.com';
+// Only Google's certificate retrieval is replaced. The route still verifies real
+// RS256 signatures, issuer, audience, expiry and verified-email claims.
+const fixture = vi.hoisted(() => ({privateKey: '', publicKey: ''}));
+vi.mock('../lib/marketing/authentication.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('../lib/marketing/authentication.js')>();
+  const {generateKeyPairSync} = await import('node:crypto');
+  const pair = generateKeyPairSync('rsa', {modulusLength: 2048});
+  fixture.privateKey = pair.privateKey.export({type: 'pkcs8', format: 'pem'}).toString();
+  fixture.publicKey = pair.publicKey.export({type: 'spki', format: 'pem'}).toString();
+  return {...actual, verifyGoogleIdentity: (credential: unknown, audience?: string) =>
+    actual.verifyGoogleIdentity(credential, audience, async () => ({fixture: fixture.publicKey}))};
+});
+const audience = 'fixture.apps.googleusercontent.com';
+const pool = new pg.Pool();
+function credential(claims: Record<string, unknown> = {}, options: jwt.SignOptions = {}) {
+  return jwt.sign({sub: 'signed-google-subject', email: 'signed-user@gmail.com', email_verified: true, name: 'Signed User', ...claims}, fixture.privateKey,
+    {algorithm: 'RS256', keyid: 'fixture', audience, issuer: 'https://accounts.google.com', expiresIn: 300, ...options});
+}
 
-  it('1. Production origin matches exact HTTPS scheme, host, and port requirements', () => {
-    const originUrl = new URL(PRODUCTION_ORIGIN);
-    expect(originUrl.protocol).toBe('https:');
-    expect(originUrl.hostname).toBe('encho-space-chi.vercel.app');
-    expect(originUrl.port).toBe(''); // default 443
-    expect(originUrl.origin).toBe('https://encho-space-chi.vercel.app');
-  });
-
-  it('2. /api/config endpoint exports the authoritative Google OAuth Client ID', async () => {
-    const request = supertest(app);
-    const res = await request.get('/api/config');
+describe('Google sign-in HTTP contract', () => {
+  beforeEach(() => {vi.stubEnv('GOOGLE_CLIENT_ID', audience); vi.stubEnv('VITE_GOOGLE_CLIENT_ID', audience);});
+  afterEach(() => vi.unstubAllEnvs());
+  it('exports the configured public client ID', async () => {
+    const res = await supertest(app).get('/api/config');
     expect(res.status).toBe(200);
-    expect(res.body.googleClientId).toBeDefined();
-    expect(res.body.googleClientId).toContain('.apps.googleusercontent.com');
+    expect(res.body.googleClientId).toBe(audience);
   });
-
-  it('3. /api/auth/google successfully handles Google Identity Services credential exchange', async () => {
-    const request = supertest(app);
-    const res = await request.post('/api/auth/google').send({
-      googleId: 'test_gis_sub_9999',
-      email: 'enchoenclave@gmail.com',
-      name: 'Encho Enclave'
-    });
+  it('uses verified claims, ignores client identity/role overrides and issues a usable session', async () => {
+    const res = await supertest(app).post('/api/auth/google').send({credential: credential(), googleId: 'forged', email: 'attacker@example.com', name: 'Forged', role: 'admin'});
     expect(res.status).toBe(200);
-    expect(res.body.user).toBeDefined();
-    expect(res.body.user.email).toBe('enchoenclave@gmail.com');
-    expect(res.body.token).toBeDefined();
-
-    // Verify /api/auth/me accepts the issued token
-    const meRes = await request.get('/api/auth/me').set('Authorization', `Bearer ${res.body.token}`);
-    expect(meRes.status).toBe(200);
-    expect(meRes.body.user.email).toBe('enchoenclave@gmail.com');
+    expect(res.body.user).toMatchObject({email: 'signed-user@gmail.com', name: 'Signed User', role: 'user'});
+    const me = await supertest(app).get('/api/auth/me').set('Authorization', `Bearer ${res.body.token}`);
+    expect(me.status).toBe(200);
+    expect(me.body.user.id).toBe(res.body.user.id);
+    expect((await pool.query('SELECT google_id FROM users WHERE id=$1', [res.body.user.id])).rows[0].google_id).toBe('signed-google-subject');
   });
-
-  it('4. Rejects invalid or missing Google profile payloads (fail-closed)', async () => {
-    const request = supertest(app);
-    const res = await request.post('/api/auth/google').send({
-      googleId: '',
-      email: '',
-      name: ''
-    });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toContain('Failed to retrieve Google profile data');
+  it.each([
+    ['unsigned profile', () => ({googleId: 'forged', email: 'unsigned@gmail.com'})],
+    ['missing credential', () => ({})],
+    ['malformed credential', () => ({credential: 'malformed'})],
+    ['wrong audience', () => ({credential: credential({}, {audience: 'another-client'})})],
+    ['wrong issuer', () => ({credential: credential({}, {issuer: 'https://attacker.example'})})],
+    ['expired credential', () => ({credential: credential({}, {expiresIn: -10})})],
+    ['unverified email', () => ({credential: credential({email_verified: false})})],
+    ['symmetric signature substitution', () => ({credential: jwt.sign({sub: 'forged'}, 'untrusted-secret', {algorithm: 'HS256', keyid: 'fixture'})})],
+  ])('rejects %s without issuing a session or changing users', async (_label, payload) => {
+    const before = (await pool.query('SELECT id,email,google_id,role FROM users ORDER BY id')).rows;
+    const res = await supertest(app).post('/api/auth/google').send(payload());
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe('IDENTITY_INVALID');
+    expect(res.body.token).toBeUndefined();
+    expect((await pool.query('SELECT id,email,google_id,role FROM users ORDER BY id')).rows).toEqual(before);
+  });
+  it('reports missing identity configuration as unavailable', async () => {
+    vi.stubEnv('GOOGLE_CLIENT_ID', ''); vi.stubEnv('VITE_GOOGLE_CLIENT_ID', '');
+    const res = await supertest(app).post('/api/auth/google').send({credential: credential()});
+    expect(res.status).toBe(503);
+    expect(res.body.code).toBe('IDENTITY_NOT_CONFIGURED');
+    expect(res.body.token).toBeUndefined();
   });
 });

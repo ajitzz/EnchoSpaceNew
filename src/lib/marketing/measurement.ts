@@ -1,3 +1,4 @@
+import {randomUUID} from 'node:crypto';
 import type pg from 'pg';
 import { z } from 'zod';
 import { MarketingError, fingerprint, minorAmount, type Actor, type MarketingProvider } from './domain.js';
@@ -35,6 +36,7 @@ export type BookingVerificationRequest = {
  */
 export type CanonicalBookingVerifier = (request: BookingVerificationRequest, client: pg.PoolClient) => Promise<VerifiedCanonicalBooking>;
 export type ConversionUpload = {
+    purchaseEventId?:string;
     id: string;
     idempotencyKey: string;
     kind: 'PURCHASE' | 'RESTATEMENT' | 'RETRACTION';
@@ -153,7 +155,8 @@ export class MarketingMeasurementService {
                 kind = net(v) === 0n ? 'RETRACTION' : 'RESTATEMENT';
             if (!kind)
                 return { orderId: v.orderId, duplicate: false, outboxId: null };
-            const payload: Omit<ConversionUpload, 'id' | 'idempotencyKey'> = { kind, orderId: v.orderId, bookingId: v.bookingId, provider: v.attribution.provider, campaignId: v.campaignId, hostId: v.hostId, listingId: v.listingId, externalCampaignId: v.attribution.externalCampaignId, amountMinor: net(v).toString(), currency: v.currency, occurredAt: v.occurredAt, capturedAt: v.capturedAt, attributionEvidenceId: v.attribution.evidenceId, consentRecordId: v.consent.recordId, acceptanceReference: v.acceptanceReference };
+            const purchaseEventId=purchase?purchase.payload.purchaseEventId:randomUUID();
+            const payload: Omit<ConversionUpload, 'id' | 'idempotencyKey'> = { ...(purchaseEventId?{purchaseEventId}:{}),kind, orderId: v.orderId, bookingId: v.bookingId, provider: v.attribution.provider, campaignId: v.campaignId, hostId: v.hostId, listingId: v.listingId, externalCampaignId: v.attribution.externalCampaignId, amountMinor: net(v).toString(), currency: v.currency, occurredAt: v.occurredAt, capturedAt: v.capturedAt, attributionEvidenceId: v.attribution.evidenceId, consentRecordId: v.consent.recordId, acceptanceReference: v.acceptanceReference };
             const inserted = await c.query('INSERT INTO marketing_conversion_outbox(order_id,host_id,provider,event_id,kind,depends_on,payload) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id', [v.orderId, v.hostId, v.attribution.provider, v.eventId, kind, uploads.at(-1)?.id ?? null, JSON.stringify(payload)]);
             return { orderId: v.orderId, duplicate: false, outboxId: inserted.rows[0].id };
         });

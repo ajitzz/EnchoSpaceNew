@@ -1,3 +1,6 @@
+import {useProviderContractFixture} from './harvo/providerContractFixture.js';
+import {providerFixture,request,ids} from './harvo/googleProviderFixture.js';
+import {GooglePublishingStore} from '../lib/providers/google/GooglePublishingStore.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DoubleEntryLedgerService } from '../lib/doubleEntryLedgerService';
 import { GoogleAdsProvider } from '../lib/providers/google/GoogleAdsProvider';
@@ -214,43 +217,14 @@ describe('Milestone 4 — External Side-Effect Idempotency & Failure-Recovery Ma
   // 3. GOOGLE ADS HIERARCHY IDEMPOTENCY & DETERMINISTIC IDENTITY
   // =========================================================================
   describe('3. Google Ads Provider Hierarchy Idempotency', () => {
-    it('generates deterministic resource identifiers and reuses hierarchy across retries', async () => {
-      const mockGoogleClient = new GoogleAdsClient();
-      const provider = new GoogleAdsProvider(mockGoogleClient);
-
-      const request: any = {
-        campaignId: 88,
-        hostId: 10,
-        listingId: 101,
-        title: 'Luxury Penthouse in Tokyo',
-        objective: 'OUTCOME_TRAFFIC',
-        correlationId: 'corr_gads_m4_test',
-        idempotencyKey: 'gads_publish_camp_88',
-        budget: { currency: 'USD', minor_units: 10000 },
-        targetAudience: {
-          locations: ['JP'],
-          interests: ['travel']
-        },
-        creativeAssets: {
-          headline: 'Luxury Penthouse in Tokyo',
-          description: 'Experience Tokyo from above',
-          landingPageUrl: 'https://encho.app/listings/88',
-          mediaUrl: 'https://encho.app/tokyo.jpg'
-        }
-      };
-
-      // First execution
-      const res1 = await provider.createCampaignHierarchy(request, mockClient);
-      expect(res1.success).toBe(true);
-      expect(res1.externalCampaignId).toContain('campaigns/88');
-      expect(res1.externalContainerId).toContain('adGroups/ag_88');
-
-      // Second execution (simulating retry after timeout/restart)
-      const res2 = await provider.createCampaignHierarchy(request, mockClient);
-      expect(res2.success).toBe(true);
-      expect(res2.externalCampaignId).toBe(res1.externalCampaignId);
-      expect(res2.externalContainerId).toBe(res1.externalContainerId);
-      expect(res2.externalAdId).toBe(res1.externalAdId);
+    const db=useProviderContractFixture();
+    it('reuses remotely returned resource identities across duplicate requests',async()=>{
+      const {provider,state}=providerFixture();
+      const first=await provider.createCampaignHierarchy(request(),db.pool);
+      expect(first).toMatchObject({success:true,externalCampaignId:ids.campaign,externalContainerId:ids.group,externalAdId:ids.ad});
+      expect(await provider.createCampaignHierarchy(request(),db.pool)).toMatchObject({...first,isDuplicate:true});
+      expect(state.mutations).toBe(1);
+      expect((await db.pool.query('SELECT id FROM provider_entities')).rows).toHaveLength(3);
     });
   });
 

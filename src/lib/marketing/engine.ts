@@ -1,3 +1,6 @@
+import type {SpatialStories} from './portfolio/spatialStories.js';
+import type {ProviderStoryVerifier} from '../providers/spatialCreative.js';
+import type {MarketingAttributionLinks} from './portfolio/attribution.js';
 import { ProviderReportPending } from '../providers/reporting.js';
 import type pg from 'pg';
 import {GoogleAdsClient} from '../providers/google/GoogleAdsClient.js';
@@ -6,7 +9,7 @@ import {MetaAdsClient} from '../providers/meta/MetaAdsClient.js';
 import {MetaAdProvider} from '../providers/meta/MetaAdProvider.js';
 import type {AdProvider} from '../providers/AdProvider.js';
 import type {ProviderPublishRequest} from '../providers/types.js';
-import type {ProviderAuthorizationGuard,ProviderMediaVerifier} from '../providers/ProviderOperationStore.js';
+import type {ProviderAuthorizationGuard,ProviderMediaVerifier,ProviderLandingVerifier} from '../providers/ProviderOperationStore.js';
 import {MarketingFinanceService} from './financeService.js';
 import {MarketingWorkflowService} from './workflow.js';
 import {MarketingJobQueue,type MarketingJob,enqueue} from './jobs.js';
@@ -19,11 +22,11 @@ import {assertMarketableInventory,assessBudgetProtection} from './protection.js'
 
 export class MarketingEngine{
  readonly queue:MarketingJobQueue;private running=false;
- constructor(private pool:pg.Pool,private workflow:MarketingWorkflowService,private config:MarketingRuntimeConfig,private payments:CampaignPaymentGateway,private providerFactory?:(row:any,authorize:ProviderAuthorizationGuard)=>AdProvider,private refunds?:CampaignRefundGateway){this.queue=new MarketingJobQueue(pool);}
+ constructor(private pool:pg.Pool,private workflow:MarketingWorkflowService,private config:MarketingRuntimeConfig,private payments:CampaignPaymentGateway,private providerFactory?:(row:any,authorize:ProviderAuthorizationGuard)=>AdProvider,private refunds?:CampaignRefundGateway,private attribution?:MarketingAttributionLinks,private stories?:SpatialStories){this.queue=new MarketingJobQueue(pool);}
  private request(row:any,job:MarketingJob):ProviderPublishRequest{
-  const draft=row.draft;if(row.provider==='META'&&draft.locations.some((country:string)=>!this.config.meta.countries.includes(country)))throw new MarketingError('TARGETING_NOT_ENABLED','Selected Meta countries are not enabled by the operator policy');const source=row.listing_snapshot.media.find((m:any)=>m.id===draft.mediaIds[0]);if(!source)throw new MarketingError('ASSET_MISSING','Approved campaign asset is missing');const creative=row.listing_snapshot.campaignCreative;const asset=creative?{...source,url:creative.url}:source;if(draft.creativeDerivativeId&&(!creative||creative.derivativeId!==draft.creativeDerivativeId||creative.manifestHash!==draft.creativeManifestHash))throw new MarketingError('CREATIVE_EVIDENCE_MISMATCH','The queued image variant does not match the reviewed campaign revision.');
+  const draft=row.draft;if(row.provider==='META'&&draft.locations.some((country:string)=>!this.config.meta.countries.includes(country)))throw new MarketingError('TARGETING_NOT_ENABLED','Selected Meta countries are not enabled by the operator policy');const source=row.listing_snapshot.media.find((m:any)=>m.id===draft.mediaIds[0]);if(!source)throw new MarketingError('ASSET_MISSING','Approved campaign asset is missing');const creative=row.listing_snapshot.spatialStory?.manifest.cards[0].image??row.listing_snapshot.campaignCreative;const asset=creative?{...source,url:creative.url}:source;if(draft.creativeDerivativeId&&(!creative||creative.derivativeId!==draft.creativeDerivativeId||creative.manifestHash!==draft.creativeManifestHash))throw new MarketingError('CREATIVE_EVIDENCE_MISMATCH','The queued image variant does not match the reviewed campaign revision.');
   if(row.provider==='GOOGLE'&&!draft.googleSearch)throw new MarketingError('SEARCH_CONFIGURATION_REQUIRED','Explicit Search keywords, locations, language and responsive text are required');
-  return {campaignId:row.campaign_id,hostId:row.host_id,listingId:row.listing_id,title:draft.title,objective:'BOOKINGS',budget:{currency:row.listing_snapshot.currency,minor_units:Number(draft.mediaBudgetMinor)},startTime:row.provider==='GOOGLE'?draft.startDate:`${draft.startDate}T00:00:00Z`,endTime:row.provider==='GOOGLE'?draft.endDate:`${draft.endDate}T23:59:59Z`,targetAudience:{locations:draft.locations},creativeAssets:{headline:draft.headline,description:draft.description,primaryText:draft.description,mediaUrl:asset.url,mediaType:asset.type,callToAction:'BOOK_NOW',landingPageUrl:`${publicOrigin(this.config.origin)}/stay/${row.listing_snapshot.slug}`},idempotencyKey:job.dedupe_key,correlationId:job.id,metadata:{providerProtocol:'HARVO_V2',revision:row.revision,listingHash:row.listing_hash,...row.provider==='GOOGLE'?{googleSearch:{...draft.googleSearch,version:1,budgetMode:'CAMPAIGN_TOTAL',dailyBudgetMinor:Number(draft.dailyBudgetMinor),bidding:'MAXIMIZE_CONVERSIONS',containsEuPoliticalAdvertising:'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING'}}:{metaWebsite:{version:1,...this.config.meta,countries:draft.locations,...(asset.type==='VIDEO'?{thumbnailUrl:row.listing_snapshot.media.find((m:any)=>m.type==='IMAGE'&&draft.mediaIds.includes(m.id))?.url}:{})}}}};
+  return {campaignId:row.campaign_id,hostId:row.host_id,listingId:row.listing_id,title:draft.title,objective:'BOOKINGS',budget:{currency:row.listing_snapshot.currency,minor_units:Number(draft.mediaBudgetMinor)},startTime:row.provider==='GOOGLE'?draft.startDate:(draft.flightSchedule?.startsAt??`${draft.startDate}T00:00:00Z`),endTime:row.provider==='GOOGLE'?draft.endDate:(draft.flightSchedule?.endsAt??`${draft.endDate}T23:59:59Z`),targetAudience:{locations:draft.locations},creativeAssets:{headline:draft.headline,description:draft.description,primaryText:draft.description,mediaUrl:asset.url,mediaType:asset.type,callToAction:'BOOK_NOW',landingPageUrl:`${publicOrigin(this.config.origin)}/stay/${row.listing_snapshot.slug}`},idempotencyKey:job.dedupe_key,correlationId:job.id,metadata:{...(draft.flightSchedule?{flightSchedule:draft.flightSchedule}:{}),providerProtocol:'HARVO_V2',revision:row.revision,listingHash:row.listing_hash,...row.provider==='GOOGLE'?{googleSearch:{...draft.googleSearch,version:1,budgetMode:'CAMPAIGN_TOTAL',dailyBudgetMinor:Number(draft.dailyBudgetMinor),bidding:'MAXIMIZE_CONVERSIONS',containsEuPoliticalAdvertising:'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING'}}:{metaWebsite:{version:1,...this.config.meta,countries:draft.locations,...(asset.type==='VIDEO'?{thumbnailUrl:row.listing_snapshot.media.find((m:any)=>m.type==='IMAGE'&&draft.mediaIds.includes(m.id))?.url}:{})}}}};
  }
  private provider(row:any,job:MarketingJob){
   const guard:ProviderAuthorizationGuard=async(context,c)=>{
@@ -32,6 +35,7 @@ export class MarketingEngine{
    const expected=context.operation==='CREATE_HIERARCHY'?'PUBLISH_QUEUED':context.operation==='PAUSE'?'PAUSE_QUEUED':context.operation==='RESUME'?'ACTIVATION_QUEUED':null;
    if(!expected||current.state!==expected||current.pending_job_id!==job.id)throw new MarketingError('STATE_CONFLICT','Provider operation is not authorized by the workflow state');
    if(context.operation!=='PAUSE'){
+    await this.workflow.options.guardDedicated?.(c,current);
     if(context.operation==='CREATE_HIERARCHY'&&!this.config.publishingEnabled)throw new MarketingError('PUBLISH_NOT_CONFIGURED','Provider publishing is disabled');
     if(!this.config.providerClearance[current.provider as 'GOOGLE'|'META'])throw new MarketingError('PROVIDER_CLEARANCE_REQUIRED','Provider account and advertiser classification clearance is required');
     if(current.content_approval.status!=='APPROVED'||current.content_approval.revision!==current.revision)throw new MarketingError('CONTENT_APPROVAL_REQUIRED','Current revision approval is required');
@@ -41,7 +45,8 @@ export class MarketingEngine{
      if(this.workflow.options.activationBlockers?.(current.provider).length)throw new MarketingError('CONVERSION_AUTHORITY_REQUIRED','Accepted canonical booking and consent conversion authority is required for this provider.');
      if(!this.config.activationEnabled||!this.config.checkoutAcceptanceReference)throw new MarketingError('ACTIVATION_NOT_CLEARED','Live advertising and verified booking checkout must be cleared');
      await assertMarketableInventory(c,row.listing_id,current.draft);
-     if(Date.parse(current.draft.endDate+'T23:59:59Z')<=Date.now())throw new MarketingError('CAMPAIGN_ENDED','Advertising flight has ended');
+     if(current.draft.flightSchedule&&Date.parse(current.draft.flightSchedule.startsAt)>Date.now())throw new MarketingError('CAMPAIGN_NOT_STARTED','Scheduled advertising cannot start early');
+     if(Date.parse(current.draft.flightSchedule?.endsAt??(current.draft.endDate+'T23:59:59Z'))<=Date.now())throw new MarketingError('CAMPAIGN_ENDED','Advertising flight has ended');
      // Search total-budget campaigns require at least three inclusive calendar days.
      if(current.provider==='GOOGLE'&&(Date.parse(current.draft.endDate)-Date.parse(current.draft.startDate))/86400000<2)throw new MarketingError('GOOGLE_FLIGHT_TOO_SHORT','Google total-budget campaigns require at least three inclusive calendar days');
     }
@@ -50,13 +55,22 @@ export class MarketingEngine{
   };
   const verifyCampaignMedia:ProviderMediaVerifier=async(context,identity,c)=>{
    const current=await lockWorkflow(c,context.campaignId,{id:row.host_id,role:'system'});
-   if(context.operation!=='CREATE_HIERARCHY'||context.provider!=='META'||!current.draft.creativeDerivativeId||current.host_id!==identity.hostId||current.listing_id!==identity.listingId)throw new MarketingError('CREATIVE_EVIDENCE_MISMATCH','An exact reviewed campaign image variant is required.');
+   if(context.operation!=='CREATE_HIERARCHY'||context.provider!=='META'||(!current.draft.creativeDerivativeId&&!current.draft.spatialStoryId)||current.host_id!==identity.hostId||current.listing_id!==identity.listingId)throw new MarketingError('CREATIVE_EVIDENCE_MISMATCH','An exact reviewed campaign image variant is required.');
    await this.workflow.assertCurrentListing(c,current,{id:row.host_id,role:'system'});
-   const creative=current.listing_snapshot.campaignCreative;
+   const creative=current.listing_snapshot.spatialStory?.manifest.cards[0].image??current.listing_snapshot.campaignCreative;
    if(!creative||creative.url!==identity.mediaUrl)throw new MarketingError('CREATIVE_EVIDENCE_MISMATCH','The provider image differs from the reviewed campaign variant.');
    return {mediaUrl:creative.url};
   };
-  return this.providerFactory?.(row,guard)||(row.provider==='GOOGLE'?new GoogleAdsProvider(new GoogleAdsClient(),{publicOrigin:this.config.origin,authorize:guard}):new MetaAdProvider(new MetaAdsClient(),{publicOrigin:this.config.origin,authorize:guard,verifyCampaignMedia}));
+  const verifyLanding:ProviderLandingVerifier=async(context,identity,c)=>{
+   if(!this.attribution)throw new MarketingError('ATTRIBUTION_UNAVAILABLE','Campaign reference verification is unavailable.',503);
+   await this.attribution.verifyLanding(c,{campaignId:context.campaignId,revision:row.revision,provider:context.provider,hostId:identity.hostId,listingId:identity.listingId,url:identity.landingUrl});
+  };
+  const verifySpatialStory:ProviderStoryVerifier=async(request,c)=>{
+   const current=await lockWorkflow(c,row.campaign_id,{id:row.host_id,role:'system'});
+   if(!this.stories||!this.attribution||!current.listing_snapshot.spatialStory)throw new MarketingError('STORY_NOT_CONFIGURED','Reviewed creative and signed attribution are required.',503);
+   await this.stories.verifyPayload(c,{id:row.host_id,role:'system'},request,current.listing_snapshot.spatialStory,url=>this.attribution!.verifyLanding(c,{campaignId:row.campaign_id,revision:row.revision,provider:row.provider,hostId:row.host_id,listingId:row.listing_id,url}).then(()=>{}));
+  };
+  return this.providerFactory?.(row,guard)||(row.provider==='GOOGLE'?new GoogleAdsProvider(new GoogleAdsClient(),{publicOrigin:this.config.origin,authorize:guard,verifyLanding,verifySpatialStory}):new MetaAdProvider(new MetaAdsClient(),{publicOrigin:this.config.origin,authorize:guard,verifyCampaignMedia,verifyLanding,verifySpatialStory}));
  }
  async runOnce(){if(this.running)return false;this.running=true;let job:MarketingJob|null=null;let timer:ReturnType<typeof setInterval>|undefined;
   try{job=await this.queue.claim();if(!job)return false;const active=job;timer=setInterval(()=>{void this.queue.heartbeat(active).catch(()=>{ /* final transaction independently rejects the stale fence */ });},30000);
@@ -93,6 +107,9 @@ export class MarketingEngine{
   }
   if(!job.campaign_id)throw new MarketingError('CAMPAIGN_REQUIRED','Job must be bound to a campaign');
   const row=await this.workflow.get(job.campaign_id,system);if(row.revision!==job.revision)throw new MarketingError('REVISION_CONFLICT','Queued revision is obsolete');
+  if(job.kind==='ACTIVATE'&&row.pending_job_id!==job.id&&['PAUSE_QUEUED','PAUSED'].includes(row.state)){
+   await inTransaction(this.pool,system,async c=>{await this.queue.assertFence(c,job);await event(c,row,system,'SCHEDULED_ACTIVATION_SUPERSEDED',{jobId:job.id});});return;
+  }
   const scoped=actorPool(this.pool,{id:row.host_id,role:'system'});const provider=this.provider(row,job);
   if(job.kind==='PUBLISH'){
    if(row.draft.creativeDerivativeId){
@@ -101,7 +118,13 @@ export class MarketingEngine{
    }
    // Compatibility ceiling for the M1 Google store; this is not a revenue or capture snapshot.
    await inTransaction(this.pool,system,async c=>{const current=await lockWorkflow(c,row.campaign_id,system);await this.queue.assertFence(c,job);await this.workflow.options.finance.authorize(c,current,'CREATE_HIERARCHY');await c.query(`INSERT INTO campaign_financial_contracts(campaign_id,gross_host_charge,encho_fee_amount,meta_authorized_spend,meta_remaining_authorization,currency) VALUES($1,$2,0,$2,$2,$3) ON CONFLICT(campaign_id) DO NOTHING`,[row.campaign_id,row.draft.mediaBudgetMinor,row.listing_snapshot.currency]);});
-   const result=await provider.createCampaignHierarchy(this.request(row,job),scoped);
+   const request=this.request(row,job);
+   if(this.attribution)request.creativeAssets.landingPageUrl=await this.attribution.issue(row.campaign_id,row.revision);
+   if(row.listing_snapshot.spatialStory){
+    if(!this.stories||!this.attribution)throw new MarketingError('STORY_NOT_CONFIGURED','Reviewed stories require signed attribution.',503);
+    request.metadata!.spatialCreative=await this.stories.compile({id:row.host_id,role:'host'},row.listing_snapshot.spatialStory,row.provider,card=>this.attribution!.issue(row.campaign_id,row.revision,card));
+   }
+   const result=await provider.createCampaignHierarchy(request,scoped);
    if(!result.success)throw new MarketingError(result.error?.code||'PROVIDER_PUBLISH_FAILED',result.error?.message||'Provider creation could not be verified');
    await this.record(job,row,'PROVIDER_PAUSED',{configuredStatus:'PAUSED',observedStatus:'PAUSED',observedAt:new Date().toISOString(),externalCampaignId:result.externalCampaignId,deliveryConfirmed:false},'PROVIDER_PAUSED_CREATION_VERIFIED');return;
   }
@@ -121,10 +144,11 @@ export class MarketingEngine{
    await inTransaction(this.pool,system,async c=>{
     const current=await lockWorkflow(c,row.campaign_id,system);await this.queue.assertFence(c,job);
     if(current.revision!==job.revision||current.provider_truth?.externalCampaignId!==externalId)throw new MarketingError('REVISION_CONFLICT','Observation identity changed');
-    const validObservation=!!truth.lastObservedAt&&Number.isFinite(Date.parse(truth.lastObservedAt));
-    const observed=validObservation?{...current.provider_truth,observedStatus:truth.normalizedState,observedAt:truth.lastObservedAt,deliveryConfirmed:truth.isLive&&truth.isServingImpressions,statusCheck:'AVAILABLE'}:{...current.provider_truth,statusCheck:'ERROR',deliveryConfirmed:false};
+    const observationAge=truth.lastObservedAt?Date.now()-Date.parse(truth.lastObservedAt):NaN;
+    const validObservation=truth.provider===row.provider&&truth.externalCampaignId===externalId&&Number.isFinite(observationAge)&&observationAge>=-5000&&observationAge<=60000;
+    const observed=validObservation?{...current.provider_truth,observedStatus:truth.normalizedState,observedAt:truth.lastObservedAt,deliveryConfirmed:truth.isLive&&truth.isServingImpressions,readiness:truth.readiness??null,statusCheck:'AVAILABLE',statusAttemptedAt:new Date().toISOString()}:{...current.provider_truth,statusCheck:'ERROR',statusAttemptedAt:new Date().toISOString(),deliveryConfirmed:false};
     await c.query('UPDATE marketing_campaign_workflows SET provider_truth=$2,updated_at=now() WHERE campaign_id=$1',[row.campaign_id,JSON.stringify(observed)]);
-    await event(c,current,system,'DELIVERY_OBSERVED',{jobId:job.id,status:truth.normalizedState,observedAt:truth.lastObservedAt});
+    await event(c,current,system,validObservation?'DELIVERY_OBSERVED':'DELIVERY_OBSERVATION_UNAVAILABLE',validObservation?{jobId:job.id,status:truth.normalizedState,readiness:truth.readiness??null,observedAt:truth.lastObservedAt}:{jobId:job.id,code:'STATUS_EVIDENCE_NOT_CURRENT_OR_BOUND'});
    });
    const reportWindow={startDate:row.draft.startDate,endDate:new Date().toISOString().slice(0,10)};
    let snapshot;
@@ -168,12 +192,27 @@ export class MarketingEngine{
    if(row.revision!==job.revision)throw new MarketingError('REVISION_CONFLICT','Observation revision changed before local protection');
    if(row.state==='PAUSE_QUEUED')return true;
    const reasons:string[]=[];
+   if(row.draft.flightSchedule&&Date.parse(row.draft.flightSchedule.endsAt)<=Date.now())reasons.push('SCHEDULED_FLIGHT_ENDED');
    try{await this.workflow.assertCurrentListing(c,row,actor);await assertMarketableInventory(c,row.listing_id,row.draft);}
    catch(error){if(!(error instanceof MarketingError))throw error;reasons.push(error.code);}
    return this.queueProtection(c,row,job,actor,reasons,null);
   });
  }
  private async record(job:MarketingJob,row:any,state:string,truth:unknown,eventType:string){await inTransaction(this.pool,{id:row.host_id,role:'system'},async c=>{const current=await lockWorkflow(c,row.campaign_id,{id:row.host_id,role:'system'});await this.queue.assertFence(c,job);if(current.revision!==job.revision||current.pending_job_id!==job.id)throw new MarketingError('REVISION_CONFLICT','Campaign operation authority changed');await c.query('UPDATE marketing_campaign_workflows SET state=$2,pending_job_id=NULL,provider_truth=$3,last_error=NULL,updated_at=now() WHERE campaign_id=$1',[row.campaign_id,state,JSON.stringify(truth)]);await event(c,current,{id:row.host_id,role:'system'},eventType,{jobId:job.id,truth});});}
+ /** Native provider end dates are primary; this bounded sweep adds local containment.
+  * No automatic activation is inferred from funding or calendar eligibility. */
+ async scheduleFlightStops(){
+  if(!this.config.policyAdminId)return;
+  const actor={id:this.config.policyAdminId,role:'system' as const};
+  const due=await inTransaction(this.pool,actor,async c=>(await c.query(`SELECT campaign_id FROM marketing_campaign_workflows WHERE state IN ('LIVE','PROVIDER_REVIEW') AND draft ? 'flightSchedule' AND (draft->'flightSchedule'->>'endsAt')::timestamptz<=clock_timestamp() ORDER BY campaign_id LIMIT 100`)).rows);
+  for(const item of due)await inTransaction(this.pool,actor,async c=>{
+   const row=await lockWorkflow(c,item.campaign_id,actor);
+   if(!['LIVE','PROVIDER_REVIEW'].includes(row.state)||!row.draft.flightSchedule||Date.parse(row.draft.flightSchedule.endsAt)>Date.now())return;
+   const id=await enqueue(c,{campaignId:row.campaign_id,revision:row.revision,kind:'PAUSE',key:`flight-end:${row.campaign_id}:${row.revision}`,payload:{reason:'SCHEDULED_FLIGHT_ENDED'}});
+   await c.query("UPDATE marketing_campaign_workflows SET state='PAUSE_QUEUED',pending_job_id=$2,updated_at=now() WHERE campaign_id=$1",[row.campaign_id,id]);
+   await event(c,row,actor,'SCHEDULED_STOP_QUEUED',{jobId:id,endsAt:row.draft.flightSchedule.endsAt});
+  });
+ }
  async scheduleRefunds(){if(!this.config.policyAdminId)return;await inTransaction(this.pool,{id:this.config.policyAdminId,role:'system'},async c=>{
   const rows=(await c.query(`SELECT r.id FROM marketing_finance_refunds r LEFT JOIN marketing_finance_refund_operations o ON o.refund_id=r.id WHERE r.status='REQUESTED' AND (o.refund_id IS NULL OR o.external_refund_id IS NOT NULL) ORDER BY r.updated_at LIMIT 100`)).rows;
   for(const row of rows)await enqueue(c,{kind:'REFUND',key:`refund-observe:${row.id}:${Math.floor(Date.now()/300000)}`,payload:{refundRequestId:row.id}});

@@ -3,10 +3,11 @@ import { accessSync, constants, existsSync, mkdtempSync, mkdirSync, readFileSync
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 import { randomInt } from 'node:crypto';
-import pg from 'pg';
+import type pg from 'pg';
 
 /** A fresh local cluster, Unix socket only. Never reads database environment URLs. */
-export async function createLocalPostgresFixture() {
+export async function createLocalPostgresFixture(options: {schema?: 'provider'|'empty'; driver?: typeof pg} = {}) {
+  const driver = options.driver ?? (await import('pg')).default;
   const configured = process.env.HARVO_POSTGRES_BIN?.trim();
   const candidates = configured ? [resolve(configured)] : [
     ...(process.env.PATH || '').split(delimiter).filter(Boolean), '/opt/homebrew/opt/postgresql@18/bin',
@@ -38,8 +39,10 @@ export async function createLocalPostgresFixture() {
   try {
     command('initdb', ['-D', data, '-U', 'harvo_test', '--auth=trust', '--no-locale', '--encoding=UTF8']);
     command('pg_ctl', ['-D', data, '-l', join(directory, 'postgres.log'), '-o', `-h '' -k '${socket}' -p ${port}`, '-w', 'start']);
-    pool = new pg.Pool({ host: socket, port, user: 'harvo_test', database: 'postgres', max: 15,
+    pool = new driver.Pool({ host: socket, port, user: 'harvo_test', database: 'postgres', max: 15,
       connectionTimeoutMillis: 3000, idleTimeoutMillis: 1000 });
+
+    if (options.schema === 'empty') return {pool, close};
 
     // Exact current provider/financial DDL, read as text only. No application import.
     const serverSource = readFileSync(new URL('../../../server.ts', import.meta.url), 'utf8');

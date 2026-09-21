@@ -417,28 +417,21 @@ describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
 
   // Test 10: Real PostgreSQL concurrency certification (proves 100 simultaneous requests constraint)
   it('Test 10: Real PostgreSQL concurrency audit verification (100 simultaneous requests on dedicated test DB)', async () => {
-    const { execSync } = await import('child_process');
-    try {
-      const output = execSync('npx tsx scripts/bench_concurrency_pg.ts', {
-        encoding: 'utf8',
-        env: { ...process.env, DISPOSABLE_PG_URL: 'postgresql://ajit@127.0.0.1:5439/encho_disposable_test' }
-      });
-      const lines = output.trim().split('\n');
-      const jsonLine = lines[lines.length - 1];
-      const result = JSON.parse(jsonLine);
+    const { execFileSync } = await import('node:child_process');
+    const output = execFileSync(process.execPath, ['--import','tsx','scripts/bench_concurrency_pg.ts'], {
+      encoding: 'utf8',
+      timeout: 60000,
+      env: { PATH:process.env.PATH, HARVO_POSTGRES_BIN:process.env.HARVO_POSTGRES_BIN, NODE_ENV:'test' }
+    });
+    const lines = output.trim().split('\n');
+    const jsonLine = lines[lines.length - 1];
+    const result = JSON.parse(jsonLine);
 
-      // Invariants: EXACTLY 1 succeeds, EXACTLY 99 fail with 409 conflict, 0 unhandled errors
-      expect(result.successes).toBe(1);
-      expect(result.conflicts).toBe(99);
-      expect(result.others).toBe(0);
-      expect(result.totalHeldUnits).toBe(2); // 1 held unit * 2 nights
-    } catch (err: any) {
-      if (err.message && err.message.includes('ECONNREFUSED')) {
-        console.warn('[M4 CONCURRENCY TEST] Disposable PostgreSQL daemon on port 5439 not reachable; test skipped per environment configuration.');
-      } else {
-        throw err;
-      }
-    }
+    // Invariants: EXACTLY 1 succeeds, EXACTLY 99 fail with 409 conflict, 0 unhandled errors
+    expect(result.successes).toBe(1);
+    expect(result.conflicts).toBe(99);
+    expect(result.others).toBe(0);
+    expect(result.totalHeldUnits).toBe(2); // 1 held unit * 2 nights
   });
 
   // Test 11: Legacy calendar block safety — mapped host block prevents hold
@@ -1020,6 +1013,4 @@ describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
     expect(res.code).toBe('CONFLICT_LEDGER_WRITE_FAILED');
   });
 });
-
-
 

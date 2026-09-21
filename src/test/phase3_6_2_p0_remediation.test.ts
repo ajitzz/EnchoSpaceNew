@@ -7,51 +7,33 @@
 import { describe, it, expect, vi } from 'vitest';
 import { GoogleAdsProvider } from '../lib/providers/google/GoogleAdsProvider.js';
 
-// P0-1: createCampaignHierarchy — financial DB query failure MUST propagate
-describe('P0-1: GoogleAdsProvider.createCampaignHierarchy — financial DB failure propagates', () => {
-  it('throws when campaign_financial_contracts query fails (never treats DB error as "no contract")', async () => {
-    const provider = new GoogleAdsProvider();
-    const dbError = new Error('DB_CONNECTION_LOST: ECONNRESET');
-    const mockPool = { query: vi.fn().mockRejectedValueOnce(dbError) };
-    const request = {
-      campaignId: 1001,
-      idempotencyKey: 'idem-p0-1',
-      correlationId: 'corr-p0-1',
-      budget: { minor_units: 5000, currency: 'USD' },
-      creativeAssets: { headline: 'Test', description: 'Desc', imageUrl: '' },
-      targeting: { geo: [], interests: [] }
-    } as any;
-    const result = await provider.createCampaignHierarchy(request, mockPool);
-    expect(result.success).toBe(false);
-    expect(result.error).toBeDefined();
-    expect(result.error!.message).toContain('DB_CONNECTION_LOST');
-    expect(mockPool.query).toHaveBeenCalledTimes(1);
+import {useProviderContractFixture} from './harvo/providerContractFixture.js';
+import {providerFixture,request,ids} from './harvo/googleProviderFixture.js';
+describe('Google financial read failures fail closed with safe errors',()=>{
+ const db=useProviderContractFixture();
+ it('does not treat a failing financial read as an absent authorization',async()=>{
+  const {provider,transport}=providerFixture();
+  const client=await db.pool.connect();const query=client.query.bind(client);let failed=false;
+  const wrapped={connect:async()=>({query:async(sql:string,params?:any[])=>{
+   if(sql.includes('campaign_financial_contracts')){failed=true;throw new Error('DB_CONNECTION_LOST private connection details');}
+   return query(sql,params);
+  },release:()=>client.release()})};
+  const result=await provider.createCampaignHierarchy(request(),wrapped);
+  expect(failed).toBe(true);expect(result.success).toBe(false);expect(transport).not.toHaveBeenCalled();
+  expect(JSON.stringify(result)).not.toContain('private connection details');
+  expect((await db.pool.query('SELECT * FROM provider_publishing_transactions')).rows).toHaveLength(0);
+ });
+ it('propagates an authorization database failure before remote control',async()=>{
+  await providerFixture().provider.createCampaignHierarchy(request(),db.pool);
+  const failed=providerFixture('OK',async(_ctx,tx)=>{
+   await tx.query('SELECT * FROM campaign_financial_contracts WHERE campaign_id=$1',[1]);
+   throw new Error('DB_TIMEOUT private query details');
   });
-});
-
-// P0-2: resumeCampaign — financial-check DB failure MUST propagate
-describe('P0-2: GoogleAdsProvider.resumeCampaign — resume financial-check DB failure surfaces as error', () => {
-  it('surfaces error when campaign_financial_contracts query fails, never bypassing authorization', async () => {
-    const provider = new GoogleAdsProvider();
-    const dbError = new Error('DB_TIMEOUT: query cancelled');
-    const mockPool = {
-      query: vi.fn()
-        .mockResolvedValueOnce({ rows: [{ host_id: 42 }] })
-        .mockRejectedValueOnce(dbError)
-    };
-    const request = {
-      campaignId: 1002,
-      externalCampaignId: 'ext-1002',
-      actorType: 'host',
-      actorId: 42,
-      idempotencyKey: 'idem-p0-2',
-      correlationId: 'corr-p0-2'
-    } as any;
-    const result = await provider.resumeCampaign(request, mockPool);
-    expect(result.success).toBe(false);
-    expect(result.error).toBeDefined();
-    expect(result.error!.message).toContain('DB_TIMEOUT');
-  });
+  const result=await failed.provider.resumeCampaign({campaignId:1,externalCampaignId:ids.campaign,action:'RESUME',actorType:'admin',actorId:1,idempotencyKey:'database-failure',correlationId:'fixture'},db.pool);
+  expect(result.success).toBe(false);expect(failed.transport).not.toHaveBeenCalled();
+  expect(JSON.stringify(result)).not.toContain('private query details');
+  expect((await db.pool.query("SELECT * FROM provider_publishing_transactions WHERE operation_type='RESUME'")).rows).toHaveLength(0);
+ });
 });
 
 // P0-3: provider_publishing_transactions failure MUST NOT silently fallback to legacy

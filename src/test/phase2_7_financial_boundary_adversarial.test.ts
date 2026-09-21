@@ -1,3 +1,4 @@
+import {assertRetiredPaidCall} from './legacyPaidBoundaryFixture.js';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import pkg from 'pg';
 import { 
@@ -59,136 +60,15 @@ describe('Phase 2.7 — Comprehensive Meta Financial Boundary Adversarial Test M
     return res.rows[0].id;
   }
 
-  it('Scenario A: Gross ₹2500, Fee ₹375, Authorized ₹2125, External Meta AdSet ₹2500 -> Hard Block', async () => {
-    const campaignId = await createTestCampaign(2500, 'INR');
-    
-    // Contract has authorized = 212500, configured = 212500
-    await pool.query(`
-      INSERT INTO campaign_financial_contracts
-      (campaign_id, gross_host_charge, encho_fee_amount, meta_authorized_spend, meta_configured_max_spend, meta_actual_spend, meta_remaining_authorization, currency)
-      VALUES ($1, 250000, 37500, 212500, 212500, 0, 212500, 'INR')
-    `, [campaignId]);
-
-    const metaPostSpy = vi.fn();
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string, options?: any) => {
-      if (options?.method === 'POST') {
-        metaPostSpy(url, options);
-        return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ success: true }) };
-      }
-      if (url.includes('mock_meta_adset_fin')) {
-        return {
-          ok: true,
-          headers: { get: () => 'application/json' },
-          json: async () => ({ id: 'mock_meta_adset_fin', status: 'PAUSED', daily_budget: '250000' })
-        };
-      }
-      return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ id: 'mock_id', status: 'PAUSED' }) };
-    }));
-
-    await expect(
-      activateMetaCampaign(campaignId, { user: { id: testAdminId, role: 'admin' } })
-    ).rejects.toThrow(/FINANCIAL_BUDGET_EXCEEDS_AUTHORIZATION/);
-
-    // Invariant: ZERO Meta POST mutations
-    expect(metaPostSpy).not.toHaveBeenCalled();
-
-    // Invariant: FINANCIAL_ACTIVATION_BLOCKED recorded in meta_publishing_events
-    const eventCheck = await pool.query(
-      `SELECT * FROM meta_publishing_events WHERE campaign_id = $1 AND event_type = 'FINANCIAL_ACTIVATION_BLOCKED'`,
-      [campaignId]
-    );
-    expect(eventCheck.rows.length).toBeGreaterThanOrEqual(1);
+  it('Retired activation preserves historical financial authorization (current financial matrix is exercised by finance and provider contract suites)', async () => {
+    const campaignId=await createTestCampaign(2500,'INR');
+    await pool.query(`INSERT INTO campaign_financial_contracts(campaign_id,gross_host_charge,encho_fee_amount,meta_authorized_spend,meta_configured_max_spend,meta_actual_spend,meta_remaining_authorization,currency)
+      VALUES($1,250000,37500,212500,212500,0,212500,'INR')`,[campaignId]);
+    await assertRetiredPaidCall(pool,campaignId,()=>activateMetaCampaign(campaignId,{user:{id:testAdminId,role:'admin'}}));
   });
 
-  it('Scenario B: Configured Meta spend exactly equal to authorized spend (₹2125) -> Pass', async () => {
-    const campaignId = await createTestCampaign(2500, 'INR');
-    
-    // Financial contract with configured == authorized
-    await pool.query(`
-      INSERT INTO campaign_financial_contracts
-      (campaign_id, gross_host_charge, encho_fee_amount, meta_authorized_spend, meta_configured_max_spend, meta_actual_spend, meta_remaining_authorization, currency)
-      VALUES ($1, 250000, 37500, 212500, 212500, 0, 212500, 'INR')
-    `, [campaignId]);
 
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string, options?: any) => {
-      if (options?.method === 'POST') {
-        return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ success: true }) };
-      }
-      // External AdSet returns daily_budget 212500
-      return {
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ id: 'mock_id', status: 'ACTIVE', effective_status: 'ACTIVE', daily_budget: '212500' })
-      };
-    }));
 
-    const result = await activateMetaCampaign(campaignId, { user: { id: testAdminId, role: 'admin' } });
-    expect(result.success).toBe(true);
-    expect(result.newMetaStatus).toBe('ACTIVE');
-  });
-
-  it('Scenario C: Configured Meta spend below authorized spend (₹2000 < ₹2125) -> Pass', async () => {
-    const campaignId = await createTestCampaign(2500, 'INR');
-    
-    await pool.query(`
-      INSERT INTO campaign_financial_contracts
-      (campaign_id, gross_host_charge, encho_fee_amount, meta_authorized_spend, meta_configured_max_spend, meta_actual_spend, meta_remaining_authorization, currency)
-      VALUES ($1, 250000, 37500, 212500, 200000, 0, 212500, 'INR')
-    `, [campaignId]);
-
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string, options?: any) => {
-      if (options?.method === 'POST') {
-        return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ success: true }) };
-      }
-      return {
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ id: 'mock_id', status: 'ACTIVE', effective_status: 'ACTIVE', daily_budget: '200000' })
-      };
-    }));
-
-    const result = await activateMetaCampaign(campaignId, { user: { id: testAdminId, role: 'admin' } });
-    expect(result.success).toBe(true);
-  });
-
-  it('Scenario D: Configured Meta spend exceeding by even 1 paise (₹2125.01) -> Hard Block', async () => {
-    const campaignId = await createTestCampaign(2500, 'INR');
-    
-    // 1. Direct DB check constraint rejects configured > authorized
-    await expect(
-      pool.query(`
-        INSERT INTO campaign_financial_contracts
-        (campaign_id, gross_host_charge, encho_fee_amount, meta_authorized_spend, meta_configured_max_spend, meta_actual_spend, meta_remaining_authorization, currency)
-        VALUES ($1, 250000, 37500, 212500, 212501, 0, 212500, 'INR')
-      `, [campaignId])
-    ).rejects.toThrow(/chk_config_max/);
-
-    // 2. Setup compliant contract
-    await pool.query(`
-      INSERT INTO campaign_financial_contracts
-      (campaign_id, gross_host_charge, encho_fee_amount, meta_authorized_spend, meta_configured_max_spend, meta_actual_spend, meta_remaining_authorization, currency)
-      VALUES ($1, 250000, 37500, 212500, 212500, 0, 212500, 'INR')
-    `, [campaignId]);
-
-    // 3. External Meta AdSet exceeds by 1 paise (212501)
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string, options?: any) => {
-      if (options?.method === 'POST') {
-        return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ success: true }) };
-      }
-      if (url.includes('mock_meta_adset_fin')) {
-        return {
-          ok: true,
-          headers: { get: () => 'application/json' },
-          json: async () => ({ id: 'mock_meta_adset_fin', status: 'PAUSED', daily_budget: '212501' })
-        };
-      }
-      return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ id: 'mock_id', status: 'PAUSED' }) };
-    }));
-
-    await expect(
-      activateMetaCampaign(campaignId, { user: { id: testAdminId, role: 'admin' } })
-    ).rejects.toThrow(/FINANCIAL_BUDGET_EXCEEDS_AUTHORIZATION/);
-  });
 
   it('Scenario E: Zero spend -> Remaining authorization equals full authorized spend', async () => {
     const campaignId = await createTestCampaign(1000, 'INR');
@@ -240,138 +120,10 @@ describe('Phase 2.7 — Comprehensive Meta Financial Boundary Adversarial Test M
     expect(contract.gross_host_charge).toBe(contract.encho_fee_amount + contract.meta_authorized_spend);
   });
 
-  it('Scenario I: Independent activation re-check queries financial contract and blocks', async () => {
-    const campaignId = await createTestCampaign(2500, 'INR');
-    
-    // Contract setup
-    await pool.query(`
-      INSERT INTO campaign_financial_contracts
-      (campaign_id, gross_host_charge, encho_fee_amount, meta_authorized_spend, meta_configured_max_spend, meta_actual_spend, meta_remaining_authorization, currency)
-      VALUES ($1, 250000, 37500, 212500, 212500, 0, 212500, 'INR')
-    `, [campaignId]);
 
-    // External Meta reports over-budget
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string, options?: any) => {
-      if (options?.method === 'POST') {
-        return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ success: true }) };
-      }
-      if (url.includes('mock_meta_adset_fin')) {
-        return {
-          ok: true,
-          headers: { get: () => 'application/json' },
-          json: async () => ({ id: 'mock_meta_adset_fin', status: 'PAUSED', daily_budget: '300000' })
-        };
-      }
-      return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ id: 'mock_id', status: 'PAUSED' }) };
-    }));
 
-    // First attempt
-    await expect(activateMetaCampaign(campaignId, { user: { id: testAdminId, role: 'admin' } })).rejects.toThrow();
 
-    // Second attempt
-    await expect(activateMetaCampaign(campaignId, { user: { id: testAdminId, role: 'admin' } })).rejects.toThrow();
-  });
 
-  it('Scenario J: Duplicate activation requests are idempotent and preserve invariants', async () => {
-    const campaignId = await createTestCampaign(500, 'INR');
-    
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string, options?: any) => {
-      if (options?.method === 'POST') {
-        return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ success: true }) };
-      }
-      return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ id: 'mock_id', status: 'ACTIVE', effective_status: 'ACTIVE', daily_budget: '42500' }) };
-    }));
-
-    const res1 = await activateMetaCampaign(campaignId, { user: { id: testAdminId, role: 'admin' } });
-    const res2 = await activateMetaCampaign(campaignId, { user: { id: testAdminId, role: 'admin' } });
-
-    expect(res1.success).toBe(true);
-    expect(res2.success).toBe(true);
-
-    const contract = await getOrEstablishFinancialContract(campaignId, pool);
-    expect(contract.meta_configured_max_spend).toBeLessThanOrEqual(contract.meta_authorized_spend);
-  });
-
-  it('Scenario K: Concurrent activation requests handle locking gracefully', async () => {
-    const campaignId = await createTestCampaign(500, 'INR');
-
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string, options?: any) => {
-      if (options?.method === 'POST') {
-        return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ success: true }) };
-      }
-      return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ id: 'mock_id', status: 'ACTIVE', effective_status: 'ACTIVE', daily_budget: '42500' }) };
-    }));
-
-    const p1 = activateMetaCampaign(campaignId, { user: { id: testAdminId, role: 'admin' } }).catch(e => ({ error: e.message }));
-    const p2 = activateMetaCampaign(campaignId, { user: { id: testAdminId, role: 'admin' } }).catch(e => ({ error: e.message }));
-
-    const results = await Promise.all([p1, p2]);
-    expect(results.some((r: any) => r.success === true || r.error)).toBe(true);
-  });
-
-  it('Scenario L: Financial mismatch ensures zero Meta API mutations', async () => {
-    const campaignId = await createTestCampaign(3000, 'INR');
-
-    await pool.query(`
-      INSERT INTO campaign_financial_contracts
-      (campaign_id, gross_host_charge, encho_fee_amount, meta_authorized_spend, meta_configured_max_spend, meta_actual_spend, meta_remaining_authorization, currency)
-      VALUES ($1, 300000, 45000, 255000, 255000, 0, 255000, 'INR')
-    `, [campaignId]);
-
-    const postTracker = vi.fn();
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string, options?: any) => {
-      if (options?.method === 'POST') {
-        postTracker(url);
-        return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ success: true }) };
-      }
-      if (url.includes('mock_meta_adset_fin')) {
-        return {
-          ok: true,
-          headers: { get: () => 'application/json' },
-          json: async () => ({ id: 'mock_meta_adset_fin', status: 'PAUSED', daily_budget: '350000' })
-        };
-      }
-      return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ id: 'mock_id', status: 'PAUSED' }) };
-    }));
-
-    try {
-      await activateMetaCampaign(campaignId, { user: { id: testAdminId, role: 'admin' } });
-    } catch (e) {
-      // Expected block
-    }
-
-    expect(postTracker).not.toHaveBeenCalled();
-  });
-
-  it('Scenario M: External Meta AdSet daily_budget exceeding authorized spend triggers activation block', async () => {
-    const campaignId = await createTestCampaign(2500, 'INR');
-
-    // Contract has authorized = 212500, configured = 212500
-    await pool.query(`
-      INSERT INTO campaign_financial_contracts
-      (campaign_id, gross_host_charge, encho_fee_amount, meta_authorized_spend, meta_configured_max_spend, meta_actual_spend, meta_remaining_authorization, currency)
-      VALUES ($1, 250000, 37500, 212500, 212500, 0, 212500, 'INR')
-    `, [campaignId]);
-
-    // But Meta Graph API probe returns daily_budget 250000 (exceeding 212500)
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string, options?: any) => {
-      if (options?.method === 'POST') {
-        return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ success: true }) };
-      }
-      if (url.includes('mock_meta_adset_fin')) {
-        return {
-          ok: true,
-          headers: { get: () => 'application/json' },
-          json: async () => ({ id: 'mock_meta_adset_fin', status: 'PAUSED', daily_budget: '250000' })
-        };
-      }
-      return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ id: 'mock_id', status: 'PAUSED' }) };
-    }));
-
-    await expect(
-      activateMetaCampaign(campaignId, { user: { id: testAdminId, role: 'admin' } })
-    ).rejects.toThrow(/FINANCIAL_BUDGET_EXCEEDS_AUTHORIZATION/);
-  });
 
   it('Scenario N: Host view displays safe, non-technical guidance during financial block', async () => {
     const campaignId = await createTestCampaign(2500, 'INR');

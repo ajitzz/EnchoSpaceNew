@@ -1,3 +1,5 @@
+import {parseSpatialCreative} from '../spatialCreative.js';
+import {hasOnlyAttributionQuery} from '../../../shared/marketingAttribution.js';
 import { hasAsciiControl } from '../../intentionalText.js';
 import { isIP } from 'node:net';
 import type { ProviderPublishRequest } from '../types.js';
@@ -43,9 +45,13 @@ export function buildMetaCampaignPlan(request: ProviderPublishRequest, origin: s
     const landing = mediaUrl(request.creativeAssets.landingPageUrl);
     const destination = new URL(landing);
     const trusted = new URL(mediaUrl(origin));
-    if (trusted.pathname !== '/' || trusted.search || destination.origin !== trusted.origin || destination.search || !/^\/stay\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(destination.pathname))
+    if (trusted.pathname !== '/' || trusted.search || destination.origin !== trusted.origin || (destination.search&&!hasOnlyAttributionQuery(destination)) || !/^\/stay\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(destination.pathname))
         return fail('Campaign must link to a canonical property page on the configured origin.');
     const asset = mediaUrl(request.creativeAssets.mediaUrl);
+    const spatial=request.metadata?.spatialCreative===undefined?undefined:parseSpatialCreative(request.metadata.spatialCreative,landing,'META');
+    if(spatial&&request.creativeAssets.mediaType!=='IMAGE')return fail('Spatial carousels require four reviewed image cards.');
+    if(spatial)for(const card of spatial.cards)mediaUrl(card.imageUrl);
+
     if (!['IMAGE', 'VIDEO'].includes(request.creativeAssets.mediaType ?? ''))
         return fail('Choose an actual image or video asset.');
     const config = request.metadata?.metaWebsite as MetaWebsiteConfig;
@@ -77,7 +83,7 @@ export function buildMetaCampaignPlan(request: ProviderPublishRequest, origin: s
         promoted_object: { pixel_id: identity.pixelId, custom_event_type: 'PURCHASE' }, targeting };
     const { idempotencyKey, correlationId, ...semanticRequest } = request;
     const fingerprint = semanticFingerprint({ request: semanticRequest, identity, campaign, adset, origin: trusted.origin });
-    return { campaign, adset, fingerprint, asset, thumbnail, landing, headline, message, mediaType: request.creativeAssets.mediaType!,
+    return { campaign, adset, fingerprint, spatial, asset, thumbnail, landing, headline, message, mediaType: request.creativeAssets.mediaType!,
         creative: (videoId?: string) => ({ name: `Encho ${request.campaignId} — ${headline}`, object_story_spec: { page_id: identity.pageId, ...(ig.length ? { instagram_user_id: identity.instagramId } : {}),
-                ...(videoId ? { video_data: { video_id: videoId, image_url: thumbnail, title: headline, message, call_to_action: { type: 'BOOK_TRAVEL', value: { link: landing } } } } : { link_data: { link: landing, name: headline, message, picture: asset, call_to_action: { type: 'BOOK_TRAVEL', value: { link: landing } } } }) } }) };
+                ...(videoId ? { video_data: { video_id: videoId, image_url: thumbnail, title: headline, message, call_to_action: { type: 'BOOK_TRAVEL', value: { link: landing } } } } : { link_data: { link: landing, name: headline, message, ...(spatial?{child_attachments:spatial.cards.map(card=>({name:card.title,picture:card.imageUrl,link:card.landingUrl,call_to_action:{type:'BOOK_TRAVEL',value:{link:card.landingUrl}}})),multi_share_optimized:false,multi_share_end_card:false}:{picture:asset}), call_to_action: { type: 'BOOK_TRAVEL', value: { link: landing } } } }) } }) };
 }

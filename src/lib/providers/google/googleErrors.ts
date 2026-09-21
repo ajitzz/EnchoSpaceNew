@@ -7,6 +7,7 @@ import { ProviderError } from '../types.js';
 
 export type GoogleErrorCode =
   | 'GOOGLE_CONFIGURATION_REQUIRED'
+  | 'GOOGLE_CREATIVE_AUTHORITY_REQUIRED'
   | 'GOOGLE_INVALID_RESPONSE'
   | 'GOOGLE_PARTIAL_FAILURE'
   | 'GOOGLE_AUTH_EXPIRED'

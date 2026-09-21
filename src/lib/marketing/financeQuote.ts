@@ -17,6 +17,7 @@ export interface CampaignQuoteInput {
   campaignId: number; hostId: number; listingId: number; campaignRevision: string;
   costs: FinanceCost[]; remittanceTaxMinor: string; markupBps: number;
   idempotencyKey: string; expiresAt: string;
+  product?: {kind:"DESTINATION_POOL";poolId:string;membershipId:string;policyVersion:number;consentHash:string;contributionMinor:string};
 }
 export interface CampaignQuote extends CampaignQuoteInput {
   protocol: 'HARVO_MARKETING_COST_PLUS_V1'; currency: FinanceCurrency; policyId: string; policyVersion: number;

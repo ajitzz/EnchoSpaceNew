@@ -1,3 +1,6 @@
+import {InquiryInbox} from './src/lib/marketing/inquiryInbox.js';
+import {measurementVisitor} from './src/server/marketing/measurementRouter.js';
+import {createMeasurementRouter} from './src/server/marketing/measurementRouter.js';
 import {registerSecureRealtime} from './src/server/realtime.js';
 import {originAllowed} from './src/server/deployment/origins.js';
 import { installPoolIsolation } from './src/server/deployment/poolIsolation.js';
@@ -9,6 +12,7 @@ import { createDeployedMarketingRuntime } from './src/server/marketing/runtime.j
 import { createMarketingRouter, marketingErrorHandler } from './src/server/marketing/router.js';
 import { legacyMarketingBoundary } from './src/server/marketing/legacyBoundary.js';
 import { verifyGoogleIdentity } from './src/lib/marketing/authentication.js';
+import { MarketingError } from './src/lib/marketing/domain.js';
 import {resolvePersistedSession,legacySocialPublishingEnabled,socialApprovalPredicate,approveLegacySocialPost} from './src/lib/marketing/legacyAuthorization.js';
 import {issueLocalUpload,verifyLocalUpload,randomMediaKey,writeImmutableMedia} from './src/lib/marketing/localMedia.js';
 // ==========================================
@@ -1008,7 +1012,10 @@ app.use(express.json({
 }));
 
 const harvoMarketing = createDeployedMarketingRuntime(pool);
-app.use('/api/marketing/v2', createMarketingRouter(pool, harvoMarketing.workflow, harvoMarketing.finance, authenticateToken, harvoMarketing.targeting, {settlement:harvoMarketing.settlement,conversions:harvoMarketing.conversions,guidance:harvoMarketing.guidance,creative:harvoMarketing.creative}));
+app.get('/api/stays/:slug/spatial-story',rateLimit({windowMs:60000,limit:60,standardHeaders:'draft-8',legacyHeaders:false}),async(req:Request,res:Response,next:NextFunction)=>{try{res.setHeader('Cache-Control','no-store');res.json(await harvoMarketing.stories.publicStory(String(req.params.slug)));}catch(error){next(error);}},marketingErrorHandler);
+app.get('/api/explore/:destination', rateLimit({windowMs:60000,limit:30,standardHeaders:'draft-8',legacyHeaders:false}),async(req:Request,res:Response,next:NextFunction)=>{try{res.setHeader('Cache-Control','no-store');res.json(await harvoMarketing.pools.collection(String(req.params.destination)));}catch(error){next(error);}},marketingErrorHandler);
+app.use('/api/marketing/measurement',createMeasurementRouter(harvoMarketing.config.origin,harvoMarketing.touchpoints),marketingErrorHandler);
+app.use('/api/marketing/v2', createMarketingRouter(pool, harvoMarketing.workflow, harvoMarketing.finance, authenticateToken, harvoMarketing.targeting, {outcomes:harvoMarketing.outcomes,stories:harvoMarketing.stories,pools:harvoMarketing.pools,preflight:harvoMarketing.preflight,settlement:harvoMarketing.settlement,conversions:harvoMarketing.conversions,guidance:harvoMarketing.guidance,creative:harvoMarketing.creative,pauseRecovery:harvoMarketing.pauseRecovery,facts:harvoMarketing.facts,keywordResearch:harvoMarketing.keywordResearch,portfolio:harvoMarketing.portfolio}));
 app.get('/api/webhooks/marketing/v2/meta', (req: Request,res: Response,next: NextFunction) => { try { res.type('text/plain').send(harvoMarketing.metaEvents.challenge(req.query['hub.mode'],req.query['hub.verify_token'],req.query['hub.challenge'])); } catch(error) { next(error); } }, marketingErrorHandler);
 app.post('/api/webhooks/marketing/v2/:provider', async (req: any, res: Response, next: NextFunction) => {
   try {
@@ -1795,6 +1802,10 @@ const ensureListingsTable = async () => {
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS external_status_verified_at TIMESTAMP WITH TIME ZONE;`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS external_status_verification_source VARCHAR(100);`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS insights_synced_at TIMESTAMP WITH TIME ZONE;`);
+  // Migration 021 parity: absent observations remain NULL, never synthetic zero evidence.
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS telemetry_source_metadata JSONB;`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS engagement_synced_at TIMESTAMP WITH TIME ZONE;`);
+  await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS engagement_source_metadata JSONB;`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS meta_status VARCHAR(50);`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS meta_effective_status VARCHAR(50);`);
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS meta_review_status VARCHAR(50);`);
@@ -3038,6 +3049,9 @@ app.post('/api/auth/google', authLimiter, async (req, res) => {
     const can_host_experiences = await checkCanHostExperiences(user.email, user.role);
     res.json({ user: { id: user.id, email: user.email, name: user.name, role: user.role, can_host_experiences }, token });
   } catch (error: any) {
+    if (error instanceof MarketingError) {
+      return res.status(error.status).json({ code: error.code, error: error.message });
+    }
     const msg = error?.message || String(error);
     console.error('Google auth error:', msg);
     if (msg.includes('exceeded the compute time quota')) {
@@ -14184,184 +14198,27 @@ app.get('/api/threads', authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
-app.post('/api/threads', authenticateToken, async (req: AuthRequest, res) => {
-  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  try {
-    const { listingId, experienceId, hostId } = req.body;
-    const guestId = req.user?.id;
-    console.log('POST /api/threads body:', req.body, 'guestId:', guestId);
-
-    if (isNaN(Number(listingId)) && isNaN(Number(experienceId))) {
-      return res.json({ id: 99999, listing_id: listingId, experience_id: experienceId, guest_id: guestId, host_id: hostId, unread_count_guest: 0, unread_count_host: 0 });
-    }
-
-    // Create or get existing thread
-    let result;
-    if (listingId) {
-      result = await pool.query(`
-        SELECT * FROM threads WHERE listing_id = $1 AND guest_id = $2
-      `, [listingId, guestId]);
-    } else {
-      result = await pool.query(`
-        SELECT * FROM threads WHERE experience_id = $1 AND guest_id = $2
-      `, [experienceId, guestId]);
-    }
-
-    if (result.rows.length === 0) {
-      let finalHostId = hostId ? hostId : null;
-      if (!finalHostId) {
-        if (listingId) {
-          const listingRes = await pool.query('SELECT user_id FROM listings WHERE id = $1', [listingId]);
-          if (listingRes.rows.length > 0) {
-            finalHostId = listingRes.rows[0].user_id || null;
-          }
-        } else if (experienceId) {
-          // Experiences host defaults to first admin for now, or just leave as null which implies admin
-          finalHostId = 1; // Temporary hack, or we can add host_id to experiences
-        }
-      }
-
-      try {
-          if (listingId) {
-            result = await pool.query(`
-              INSERT INTO threads (listing_id, guest_id, host_id)
-              VALUES ($1, $2, $3) RETURNING *
-            `, [listingId, guestId, finalHostId]);
-          } else {
-            result = await pool.query(`
-              INSERT INTO threads (experience_id, guest_id, host_id)
-              VALUES ($1, $2, $3) RETURNING *
-            `, [experienceId, guestId, finalHostId]);
-          }
-      } catch (insertErr: any) {
-          if (insertErr.message && insertErr.message.includes('foreign key constraint')) {
-              console.warn('Foreign key violation for host_id, inserting with host_id = null');
-              if (listingId) {
-                result = await pool.query(`
-                  INSERT INTO threads (listing_id, guest_id, host_id)
-                  VALUES ($1, $2, $3) RETURNING *
-                `, [listingId, guestId, null]);
-              } else {
-                result = await pool.query(`
-                  INSERT INTO threads (experience_id, guest_id, host_id)
-                  VALUES ($1, $2, $3) RETURNING *
-                `, [experienceId, guestId, null]);
-              }
-          } else {
-              throw insertErr;
-          }
-      }
-    }
-    res.json(result.rows[0]);
-  } catch (error: unknown) {
-    console.error('Failed to create thread', error);
-    res.status(500).json({ error: 'Failed to create thread', details: (error as Error).message });
-  }
-});
-
-app.get('/api/threads/:id/messages', authenticateToken, async (req: AuthRequest, res) => {
-  if (!isDbConfigured) return res.json([]);
-  try {
-    const { id } = req.params;
-
-    if (isNaN(Number(id))) return res.json([]);
-
-    const result = await pool.query(`
-      SELECT m.*, u.name as sender_name
-      FROM messages m
-      JOIN users u ON m.sender_id = u.id
-      WHERE m.thread_id = $1
-      ORDER BY m.created_at ASC
-    `, [id]);
-
-    // mark as read
-    const userId = req.user?.id;
-    await pool.query(`
-      UPDATE messages SET is_read = true WHERE thread_id = $1 AND receiver_id = $2
-    `, [id, userId]);
-
-    await pool.query(`
-      UPDATE threads SET unread_count_guest = CASE WHEN guest_id = $2 THEN 0 ELSE unread_count_guest END,
-                         unread_count_host = CASE WHEN host_id = $2 THEN 0 ELSE unread_count_host END
-      WHERE id = $1
-    `, [id, userId]);
-
-    res.json(result.rows);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch thread messages' });
-  }
-});
-
-app.post('/api/threads/:id/messages', authenticateToken, messageLimiter, async (req: AuthRequest, res) => {
-  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  try {
-    const { id } = req.params;
-    const { receiverId, content } = req.body;
-    const senderId = req.user?.id;
-
-    if (!content || String(content).trim() === '') {
-       return res.status(400).json({ error: 'Message content cannot be empty.' });
-    }
-
-    const { sanitized, wasSanitized } = maskContactInfo(content || '');
-    if (isNaN(Number(id))) return res.json({ id: Date.now(), thread_id: id, sender_id: senderId, receiver_id: receiverId, content, created_at: new Date(), is_read: false });
-
-    const result = await pool.query(`
-      INSERT INTO messages (thread_id, sender_id, receiver_id, content, is_sanitized)
-      VALUES ($1, $2, $3, $4, $5) RETURNING *
-    `, [id, senderId, receiverId, sanitized, wasSanitized]);
-
-    const message = result.rows[0];
-
-    // Gap 7: "Cold Start" Lead Alert System (Multi-Channel Ping)
-    // Only send if message is from guest to host
-    if (receiverId) {
-      const threadCheck = await pool.query("SELECT guest_id, host_id, listing_id, experience_id FROM threads WHERE id = $1", [id]);
-      if (threadCheck.rows.length > 0) {
-         const t = threadCheck.rows[0];
-         if (String(senderId) === String(t.guest_id) && String(receiverId) === String(t.host_id)) {
-            let propertyName = "your property";
-            if (t.listing_id) {
-               const lCheck = await pool.query("SELECT title FROM listings WHERE id = $1", [t.listing_id]);
-               if (lCheck.rows.length > 0) propertyName = lCheck.rows[0].title;
-            } else if (t.experience_id) {
-               const eCheck = await pool.query("SELECT title FROM experiences WHERE id = $1", [t.experience_id]);
-               if (eCheck.rows.length > 0) propertyName = eCheck.rows[0].title;
-            }
-            await triggerColdStartAlert(t.host_id, propertyName, id, req);
-         }
-      }
-    }
-
-    // update thread
-    await pool.query(`
-      UPDATE threads
-      SET last_message = $2, updated_at = CURRENT_TIMESTAMP,
-          unread_count_guest = unread_count_guest + CASE WHEN guest_id = $3 THEN 1 ELSE 0 END,
-          unread_count_host = unread_count_host + CASE WHEN host_id = $3 THEN 1 ELSE 0 END
-      WHERE id = $1
-    `, [id, sanitized, receiverId]);
-
-    const io = req.app.get('io');
-    if (io) {
-      // Emit to the thread room
-      io.to(`thread_${id}`).emit('new_message', message);
-
-      // Emit notification to receiver's personal user room
-      if (receiverId) {
-        io.to(`user_${receiverId}`).emit('notification', {
-          type: 'new_message',
-          message: message,
-          threadId: id
-        });
-      }
-    }
-
-    res.json(message);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to send message' });
-  }
-});
+const inquiryInbox=new InquiryInbox(pool,maskContactInfo,harvoMarketing.touchpoints);
+app.post('/api/threads',authenticateToken,messageLimiter,async(req:AuthRequest,res:Response,next:NextFunction)=>{
+  if(!isDbConfigured)return res.status(503).json({error:'DB not configured'});
+  try{res.json(await inquiryInbox.create({id:Number(req.user!.id),role:'host'},req.body));}catch(error){next(error);}
+},marketingErrorHandler);
+app.get('/api/threads/:id/messages',authenticateToken,async(req:AuthRequest,res:Response,next:NextFunction)=>{
+  if(!isDbConfigured)return res.status(503).json({error:'DB not configured'});
+  try{res.json(await inquiryInbox.messages({id:Number(req.user!.id),role:'host'},Number(req.params.id),req.query.before));}catch(error){next(error);}
+},marketingErrorHandler);
+app.post('/api/threads/:id/messages',authenticateToken,messageLimiter,async(req:AuthRequest,res:Response,next:NextFunction)=>{
+  if(!isDbConfigured)return res.status(503).json({error:'DB not configured'});
+  try{
+    const actor={id:Number(req.user!.id),role:'host' as const};
+    const result=await inquiryInbox.send(actor,Number(req.params.id),req.body,measurementVisitor(req));
+    const sockets=result.duplicate?null:req.app.get('io');
+    sockets?.to(`thread_${result.thread.id}`).emit('new_message',result.message);
+    sockets?.to(`user_${result.message.receiver_id}`).emit('notification',{type:'new_message',threadId:result.thread.id,message:'You have a new inquiry reply in Encho.'});
+    sockets?.to(`user_${result.message.receiver_id}`).emit('db_changed',{type:'inquiries'});
+    res.json(result.message);
+  }catch(error){next(error);}
+},marketingErrorHandler);
 
 app.get('/api/unread-counts', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.json({ unread: 0 });
@@ -17975,122 +17832,9 @@ app.get('/api/admin/payments/overview', async (req: Request, res: Response) => {
   }
 });
 
-// 4. Admin Force Release Escrow Endpoint
-app.post('/api/admin/payments/escrow/release', async (req: Request, res: Response) => {
-  let releaseClient;
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-    const token = authHeader.substring(7);
-    let decoded: any;
-    try {
-      const secret = JWT_SECRET;
-      if (!secret) {
-        return res.status(401).json({ error: 'Invalid or expired authentication token' });
-      }
-      decoded = jwt.verify(token, secret) as any;
-    } catch (jwtErr) {
-      return res.status(401).json({ error: 'Invalid or expired authentication token' });
-    }
-    const adminId = decoded.userId || decoded.id;
-
-    const { campaign_id } = req.body;
-    if (!campaign_id) return res.status(400).json({ error: 'campaign_id is required' });
-
-    releaseClient = await pool.connect();
-    await releaseClient.query('BEGIN');
-    const cRes = await releaseClient.query('SELECT * FROM host_marketing_campaigns WHERE id = $1 FOR UPDATE', [campaign_id]);
-
-    if (cRes.rows.length === 0) {
-      await releaseClient.query('ROLLBACK');
-      releaseClient.release();
-      return res.status(404).json({ error: 'Campaign not found' });
-    }
-
-    const campaign = cRes.rows[0];
-
-    // Check prerequisites
-    if (!campaign.admin_approved) {
-      await releaseClient.query('ROLLBACK');
-      releaseClient.release();
-      return res.status(400).json({ error: 'Campaign is not admin approved' });
-    }
-    if (campaign.payment_status !== 'paid' && campaign.payment_status !== 'PAYMENT_SUCCESS') {
-      await releaseClient.query('ROLLBACK');
-      releaseClient.release();
-      return res.status(400).json({ error: 'Payment is not settled' });
-    }
-
-    await releaseClient.query(
-      `UPDATE host_marketing_campaigns
-       SET escrow_status = 'released', updated_at = CURRENT_TIMESTAMP
-       WHERE id = $1`,
-      [campaign_id]
-    );
-
-    await logAdminAudit(adminId, 'campaign_escrow', campaign_id, 'force_release_escrow', { escrow_status: campaign.escrow_status }, { escrow_status: 'released' });
-
-    // Advance through FSM correctly to reach META_API_PUSH
-    if (campaign.status === 'escrow') {
-        await transitionCampaignState({ campaignId: campaign_id, to: 'ASSET_PREP', reason: 'Escrow released', actorType: 'admin', client: releaseClient });
-        await transitionCampaignState({ campaignId: campaign_id, to: 'META_API_PUSH', reason: 'Async dispatch started', actorType: 'system', client: releaseClient });
-    } else if (campaign.status === 'approved') {
-        await transitionCampaignState({ campaignId: campaign_id, to: 'META_API_PUSH', reason: 'Escrow released, dispatching to Meta', actorType: 'admin', client: releaseClient });
-    } else if (campaign.status === 'ASSET_PREP') {
-        await transitionCampaignState({ campaignId: campaign_id, to: 'META_API_PUSH', reason: 'Async dispatch started', actorType: 'system', client: releaseClient });
-    }
-
-    await releaseClient.query('COMMIT');
-    releaseClient.release();
-    releaseClient = undefined;
-
-    let dispatchError: any;
-    try {
-        const metaSuccess = await dispatchMetaCampaign(campaign_id, { protocol: 'https', get: () => 'localhost' });
-        if (!metaSuccess) {
-            // Find true error from meta_publishing_transactions
-            const errQuery = await pool.query(`SELECT error_details FROM meta_publishing_transactions WHERE campaign_id = $1 ORDER BY created_at DESC LIMIT 1`, [campaign_id]);
-            if (errQuery.rows.length > 0 && errQuery.rows[0].error_details) {
-                const details = typeof errQuery.rows[0].error_details === 'string' ? JSON.parse(errQuery.rows[0].error_details) : errQuery.rows[0].error_details;
-                dispatchError = new Error(details?.error?.message || 'Meta dispatch failed (see transaction log)');
-            } else {
-                dispatchError = new Error('Meta dispatch failed');
-            }
-            const currentStatusCheck = await pool.query(`SELECT status FROM host_marketing_campaigns WHERE id = $1`, [campaign_id]);
-            if (currentStatusCheck.rows[0]?.status !== 'failed_publish') {
-                await transitionCampaignState({ campaignId: campaign_id, to: 'failed_publish', reason: `Meta dispatch failed: ${dispatchError.message}`, actorType: 'system' });
-            }
-        } else if (process.env.ENABLE_GOOGLE_ADS_DISPATCH === 'true') {
-            await dispatchGoogleAdsCampaign(campaign_id, { protocol: 'https', get: () => 'localhost' });
-        }
-    } catch (err: any) {
-        dispatchError = err;
-        const currentStatusCheck = await pool.query(`SELECT status FROM host_marketing_campaigns WHERE id = $1`, [campaign_id]);
-        if (currentStatusCheck.rows[0]?.status !== 'failed_publish') {
-            await transitionCampaignState({ campaignId: campaign_id, to: 'failed_publish', reason: `Meta dispatch failed: ${err.message}`, actorType: 'system' });
-        }
-    }
-
-    broadcastDbEvent(req, 'marketing');
-
-    if (dispatchError) {
-        return res.status(500).json({ error: dispatchError.message || 'Meta dispatch failed', details: dispatchError });
-    }
-
-    return res.json({
-      success: true,
-      message: `Escrow for Campaign #${campaign_id} force-released by Admin. Ad spend dispatched to Meta & Google network.`
-    });
-
-  } catch (err: any) {
-    if (releaseClient) {
-      await releaseClient.query('ROLLBACK').catch(() => {});
-      releaseClient.release();
-    }
-    res.status(500).json({ error: err.message || 'Failed to release escrow' });
-  }
+// The legacy manual release path cannot authorize revision-bound campaign funds.
+app.post('/api/admin/payments/escrow/release', (_req: Request, res: Response) => {
+  res.status(410).json({code:'HARVO_V2_REQUIRED',error:'Use the campaign review workspace. Legacy escrow release is retired.'});
 });
 
 // 5. Automatic 24-Hour Fraud Escrow Auto-Release Worker (Safe Transactional Boundary + Advisory Lock)
@@ -18587,6 +18331,9 @@ export const runAnalyticsRollup = async (overridePool?: any) => {
       try {
         console.log('[ANALYTICS ROLLUP] Aggregating bounded raw ad metrics into lightweight time-series table...');
         await client.query('BEGIN');
+        // A timestamp -> timestamptz -> date cast otherwise uses the connection's
+        // timezone and can move a UTC boundary event into the next reporting day.
+        await client.query("SET LOCAL TIME ZONE 'UTC'");
 
         // 1. Fetch bounded chunk of unprocessed raw event log IDs with deterministic ordering and SKIP LOCKED
         const rawEventsRes = await client.query(`

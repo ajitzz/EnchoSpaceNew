@@ -1,3 +1,6 @@
+import {parseSpatialCreative,type SpatialCreative} from '../spatialCreative.js';
+import {hasOnlyAttributionQuery} from '../../../shared/marketingAttribution.js';
+import {flightScheduleSchema} from '../../../shared/marketingFlight.js';
 import { hasAsciiControl } from '../../intentionalText.js';
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
@@ -37,6 +40,8 @@ export interface GoogleSearchConfig {
 }
 
 export interface GoogleSearchPlan {
+  spatial?:SpatialCreative;
+  assetStart?:number;
   operations: GoogleMutateOperation[];
   fingerprint: string;
   expectedResourceTypes: string[];
@@ -44,6 +49,8 @@ export interface GoogleSearchPlan {
   budgetMode: 'DAILY' | 'CAMPAIGN_TOTAL';
   budgetMinor: number;
   customerId: string;
+  startDateTime?:string;
+  endDateTime?:string;
 }
 
 function invalid(field: string, expectation: string): never {
@@ -160,7 +167,7 @@ export function buildGoogleSearchPlan(
   const origin = publicHttpsUrl(allowedLandingOrigin, 'allowedLandingOrigin');
   if (origin.pathname !== '/' || origin.search) invalid('allowedLandingOrigin', 'must contain only the trusted website origin');
   const landing = publicHttpsUrl(request.creativeAssets.landingPageUrl, 'creativeAssets.landingPageUrl');
-  if (landing.origin !== origin.origin || landing.search ||
+  if (landing.origin !== origin.origin || (landing.search&&!hasOnlyAttributionQuery(landing)) ||
       !/^\/stay\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(landing.pathname) ||
       request.creativeAssets.landingPageUrl !== landing.href) {
     invalid('creativeAssets.landingPageUrl', 'must be an exact canonical /stay/<slug> URL on the trusted origin without query parameters');
@@ -226,6 +233,13 @@ export function buildGoogleSearchPlan(
     // Google interprets these full-day bounds in the serving customer's timezone.
     dates = { startDateTime: `${start} 00:00:00`, endDateTime: `${end} 23:59:59` };
   }
+  if(metadata.flightSchedule!==undefined){
+    const parsed=flightScheduleSchema.safeParse(metadata.flightSchedule);
+    if(!parsed.success||parsed.data.startsAt.slice(0,10)!==request.startTime||parsed.data.endsAt.slice(0,10)!==request.endTime)invalid('flightSchedule','must be the exact versioned India flight');
+    // Search has documented daily granularity. The durable activation job enforces
+    // 06:00 locally; native full-day end supplies an independent remote stop.
+    dates={startDateTime:`${request.startTime} 00:00:00`,endDateTime:`${request.endTime} 23:59:59`};
+  }
   const budgetResource = `customers/${customerId}/campaignBudgets/-1`;
   const campaignResource = `customers/${customerId}/campaigns/-2`;
   const adGroupResource = `customers/${customerId}/adGroups/-3`;
@@ -256,12 +270,22 @@ export function buildGoogleSearchPlan(
     ...languages.map(language => ({ campaignCriterionOperation: { create: { campaign: campaignResource, language: { languageConstant: language } } } })),
     ...keywords.map(keyword => ({ adGroupCriterionOperation: { create: { adGroup: adGroupResource, status: 'PAUSED', keyword } } })),
   ];
+  const spatial=metadata.spatialCreative===undefined?undefined:parseSpatialCreative(metadata.spatialCreative,landing.href,'GOOGLE');
+  const assetStart=operations.length;
+  if(spatial){
+    const definitions=[...spatial.cards.map(card=>({type:'SITELINK',asset:{sitelinkAsset:{linkText:card.title},finalUrls:[card.landingUrl]}})),...spatial.images.map(image=>({type:'AD_IMAGE',asset:{imageAsset:{data:image.data}}}))];
+    definitions.forEach((definition,index)=>{
+      const resourceName=`customers/${customerId}/assets/-${index+10}`;
+      operations.push({assetOperation:{create:{resourceName,...definition.asset}}});
+      operations.push({campaignAssetOperation:{create:{campaign:campaignResource,asset:resourceName,fieldType:definition.type,status:'ENABLED'}}});
+    });
+  }
   const { idempotencyKey: _idempotencyKey, correlationId: _correlationId, ...semanticRequest } = request;
   const fingerprintInput = canonicalJson({ version: 1, customerId, allowedLandingOrigin: origin.origin, request: semanticRequest, operations });
   if (Buffer.byteLength(fingerprintInput, 'utf8') > 1_000_000) invalid('request', 'exceeds the supported semantic payload size');
   return {
-    operations, fingerprint: createHash('sha256').update(fingerprintInput).digest('hex'), customerId, dailyBudgetMinor, budgetMode, budgetMinor,
+    ...(spatial?{spatial,assetStart}:{}),operations, ...dates, fingerprint: createHash('sha256').update(fingerprintInput).digest('hex'), customerId, dailyBudgetMinor, budgetMode, budgetMinor,
     expectedResourceTypes: ['campaignBudgets', 'campaigns', 'adGroups', 'adGroupAds',
-      ...locations.map(() => 'campaignCriteria'), ...languages.map(() => 'campaignCriteria'), ...keywords.map(() => 'adGroupCriteria')],
+      ...locations.map(() => 'campaignCriteria'), ...languages.map(() => 'campaignCriteria'), ...keywords.map(() => 'adGroupCriteria'),...(spatial?Array.from({length:6},()=>['assets','campaignAssets']).flat():[])],
   };
 }

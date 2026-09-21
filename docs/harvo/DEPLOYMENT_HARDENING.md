@@ -65,3 +65,12 @@ node scripts/deployment/smoke-runtime.mjs /absolute/path/to/isolated-build
 ```
 
 The Docker tag is present in the [official Node image manifest](https://raw.githubusercontent.com/docker-library/official-images/master/library/node). This is tag availability evidence, not a Linux image build or deployment result.
+
+
+## HARVO-033 additive runtime requirements
+
+The current [delivery report](../implementation/SEARCH_PORTFOLIO_FINAL_DELIVERY.md) adds migrations 027–031, private consent/attribution/story/inquiry tables, expiring browser payloads, and pool membership contracts. Exact new runtime grants and sequence usage are specified there and validated by `verifyPortfolioCatalog`; actual Neon readiness has not been established by local tests. Retention owns bounded deletion of browser payloads even when signing is disabled; the worker also owns timed-flight containment and bounded pool inventory checks. None of these tasks enables paid pooled publishing or the blocked canonical Purchase composition. Promote web/worker together, preserve audit/financial records, and do not roll back to a publisher unaware of the new revision authority.
+
+## HARVO-034 local-only rollout preparation
+
+Follow [HARVO-034 rollout plan](../implementation/HARVO_034_ROLLOUT_PLAN.md) for the exact staged sequence, new grants, Dedicated Stays acceptance journey and pilot criteria. Founder explicitly deferred remote connections until `.env.staging.local` is configured. `portfolioRehearsalCli.js` is an explicit-file, pinned-direct-endpoint, verified-TLS **rollback rehearsal**, not a migration apply command. It refuses missing/drifted prior checksums and unsafe runtime membership; local tests use disposable PostgreSQL only. Local `.env.harvo-attribution.local` is private and ignored, and is loaded only when explicitly requested. Do not promote local keys or the developer's existing enabled flags to production. The legacy runner's checksum warnings are not release acceptance.

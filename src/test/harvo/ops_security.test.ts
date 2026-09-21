@@ -70,7 +70,16 @@ describe('HARVO immutable local upload capabilities and legacy containment',()=>
  it('only enables legacy social publication with an explicit exact opt-in',()=>{for(const value of [undefined,'1','TRUE','false'])expect(legacySocialPublishingEnabled({HARVO_LEGACY_SOCIAL_PUBLISHING_ENABLED:value})).toBe(false);expect(legacySocialPublishingEnabled({HARVO_LEGACY_SOCIAL_PUBLISHING_ENABLED:'true'})).toBe(true);});
  it('binds random paths to authenticated account, content type and expiry, rejecting tampering',()=>{
   const a=issueLocalUpload(secret,10,'image/jpeg',1000000),b=issueLocalUpload(secret,10,'image/jpeg',1000000);expect(a.key).not.toBe(b.key);expect(verifyLocalUpload(secret,a.ticket,1000001)).toMatchObject({userId:10,key:a.key,contentType:'image/jpeg'});
-  expect(()=>verifyLocalUpload(secret,a.ticket,1600000)).toThrow();expect(()=>verifyLocalUpload(secret,a.ticket.replace(/.$/,'x'),1000001)).toThrow();expect(()=>issueLocalUpload(secret,10,'image/svg+xml')).toThrow();
+  const [payload,signature]=a.ticket.split('.'),changed=(signature[0]==='A'?'B':'A')+signature.slice(1);
+  expect(()=>verifyLocalUpload(secret,a.ticket,1600000)).toThrow();expect(()=>verifyLocalUpload(secret,`${payload}.${changed}`,1000001)).toThrow();expect(()=>issueLocalUpload(secret,10,'image/svg+xml')).toThrow();
+ });
+ it('rejects base64 signature aliases that decode to identical bytes',()=>{
+  const {ticket}=issueLocalUpload(secret,10,'image/jpeg',1000000),[payload,signature]=ticket.split('.');
+  const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  const alias=signature.slice(0,-1)+alphabet[alphabet.indexOf(signature.at(-1)!)+1];
+  expect(Buffer.from(alias,'base64url')).toEqual(Buffer.from(signature,'base64url'));
+  for(const value of [alias,signature+'=',signature+'\n'])expect(()=>verifyLocalUpload(secret,`${payload}.${value}`,1000001)).toThrow();
+  expect(verifyLocalUpload(secret,ticket,1000001).userId).toBe(10);
  });
  it('uses exclusive file creation so replay cannot alter an approved URL',async()=>{
   const a=issueLocalUpload(secret,10,'image/jpeg');await writeImmutableMedia(directory,a.key,Buffer.from('original'));

@@ -1,6 +1,8 @@
+import DestinationCollection from './components/marketing/DestinationCollection';
 
 import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { SEO } from './components/SEO';
+import { MeasurementChoices } from './components/marketing/MeasurementChoices';
 import { uiAudio } from './components/audio';
 import Header from './components/Header';
 import FilterBar from './components/FilterBar';
@@ -103,7 +105,7 @@ function useNetworkState() {
   return isOnline;
 }
 
-type ViewState = 'SEARCH' | 'DETAILS' | 'DETAILS_BETA' | 'WISHLIST' | 'BOOKING' | 'CHECKOUT' | 'RESERVATIONS' | 'HOSTING' | 'HOSTING_EXPERIENCE' | 'ADMIN' | 'MESSAGES' | 'EXPERIENCES' | 'EXPERIENCE_DETAILS';
+type ViewState = 'EXPLORE' | 'SEARCH' | 'DETAILS' | 'DETAILS_BETA' | 'WISHLIST' | 'BOOKING' | 'CHECKOUT' | 'RESERVATIONS' | 'HOSTING' | 'HOSTING_EXPERIENCE' | 'ADMIN' | 'MESSAGES' | 'EXPERIENCES' | 'EXPERIENCE_DETAILS';
 
 let socket: any = null;
 
@@ -200,7 +202,7 @@ function App() {
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
   const [selectedExperience, setSelectedExperience] = useState<Experience | null>(null);
   const [hoveredListingId, setHoveredListingId] = useState<string | null>(null);
-  const [currentView, setCurrentView] = useState<ViewState>('SEARCH');
+  const [currentView, setCurrentView] = useState<ViewState>(()=>/^\/explore\/(wayanad|coorg|goa)\/?$/.test(window.location.pathname)?'EXPLORE':'SEARCH');
   const [hostDashboardRefresh, setHostDashboardRefresh] = useState(0);
   const [editingListing, setEditingListing] = useState<Listing | null>(null);
   const [editingExperience, setEditingExperience] = useState<Experience | null>(null);
@@ -834,14 +836,18 @@ function App() {
 
 
 
+  const [routeReady,setRouteReady]=useState(false);
   // Handle browser history and back button via URL Hash & Path
   useEffect(() => {
     const handlePopState = async () => {
+      setRouteReady(false);
       const path = window.location.pathname;
       const hash = window.location.hash.replace('#', '').toUpperCase();
       const validViews = ['SEARCH', 'DETAILS', 'EXPERIENCE_DETAILS', 'BOOKING', 'CHECKOUT', 'WISHLIST', 'RESERVATIONS', 'MESSAGES', 'HOSTING', 'HOST_DASHBOARD', 'ADMIN', 'PREVIEW_HOST'];
       
-      if (path.startsWith('/stay/')) {
+      if (/^\/explore\/(wayanad|coorg|goa)\/?$/.test(path)) {
+        setCurrentView('EXPLORE');
+      } else if (path.startsWith('/stay/')) {
         const propertySlug = path.split('/')[2];
         if (propertySlug === 'preview' || propertySlug === 'preview-id') {
           const previewStr = localStorage.getItem('hostPreviewListing');
@@ -955,6 +961,7 @@ function App() {
           }
         }
       }
+      setRouteReady(true);
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -965,12 +972,16 @@ function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []); // Run only on mount and unmount
 
-  // Sync state to URL
+  // Preserve the canonical deep link while its listing is loaded asynchronously.
+  // Measurement choices remove campaign parameters only after the guest's decision.
   useEffect(() => {
+    if(!routeReady)return;
     let newPath = window.location.pathname;
     let targetHash = '';
     
-    if (currentView === 'DETAILS' && selectedListing) {
+    if (currentView === 'EXPLORE') {
+      newPath = window.location.pathname;
+    } else if (currentView === 'DETAILS' && selectedListing) {
       if (selectedListing.id === 'preview-id' || selectedListing.id === 'preview') {
         newPath = '/stay/preview';
       } else {
@@ -984,14 +995,17 @@ function App() {
       targetHash = currentView === 'SEARCH' ? '' : `#${currentView.toLowerCase()}`;
     }
 
-    const currentUrl = window.location.pathname + window.location.hash;
-    const targetUrl = newPath + targetHash;
+    if(currentView==='DETAILS'&&newPath===window.location.pathname&&/^#(?:vistas|suites|wellness|grounds)$/.test(window.location.hash))targetHash=window.location.hash;
+    const search=newPath===window.location.pathname?window.location.search:'';
+    const currentUrl = window.location.pathname + window.location.search + window.location.hash;
+    const targetUrl = newPath + search + targetHash;
 
     if (currentUrl !== targetUrl) {
       if (currentUrl === '/' && targetUrl === '') return;
       window.history.pushState(null, '', targetUrl || '/');
+      window.dispatchEvent(new Event('encho:navigation'));
     }
-  }, [currentView, selectedListing, selectedExperience]);
+  }, [currentView, selectedListing, selectedExperience,routeReady]);
 
   const pageVariants = {
     initial: { opacity: 0, x: 50 },
@@ -1008,6 +1022,7 @@ function App() {
   };
 
   const renderView = () => {
+    if(currentView==='EXPLORE')return <DestinationCollection destination={window.location.pathname.split('/')[2]} onBack={()=>setCurrentView('SEARCH')}/>;
     if (currentView === 'ADMIN') {
         return (
             <motion.div key="admin" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition}>
@@ -1599,6 +1614,7 @@ function App() {
   return (
     <>
       <SEO />
+      <MeasurementChoices />
       <NetworkStatus />
       <InstallPrompt />
       <AnimatePresence mode="wait">
@@ -1652,4 +1668,3 @@ function App() {
 }
 
 export default App;
-

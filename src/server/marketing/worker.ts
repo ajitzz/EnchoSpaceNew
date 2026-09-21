@@ -1,4 +1,5 @@
 import pg from 'pg';
+import {purgeExpiredMeasurementPayloads} from '../../lib/marketing/portfolio/touchpoints.js';
 import {createDeployedMarketingRuntime} from './runtime.js';
 import {sweepExpiredHolds} from '../../services/inventoryHoldService.js';
 import {databaseReadiness} from '../deployment/databaseReadiness.js';
@@ -25,6 +26,9 @@ export async function runMarketingWorker(options:{additionalMaintenance?:(runtim
   const actor=(await pool.query('SELECT role FROM users WHERE id=$1',[runtime.config.policyAdminId])).rows[0];if(actor?.role!=='admin')throw new Error('WORKER_SERVICE_ACTOR_INVALID');
   const maintenance:MaintenanceTask[]=[
    {name:'expiredHolds',intervalMs:60000,run:async()=>{const result=await sweepExpiredHolds(pool);if(result.errors.length)throw Object.assign(new Error('Hold cleanup failed'),{code:'WORKER_HOLD_SWEEP_FAILED'});}},
+   {name:'measurementRetention',intervalMs:60000,run:async()=>{await purgeExpiredMeasurementPayloads(pool,{id:runtime.config.policyAdminId!,role:'system'});}},
+   {name:'destinationEligibility',intervalMs:15000,run:async()=>{await runtime.pools.sweepEligibility();}},
+   {name:'scheduledFlightStops',intervalMs:15000,run:async()=>{await runtime.engine.scheduleFlightStops();}},
    {name:'campaignObservations',intervalMs:300000,run:async()=>{await runtime.engine.scheduleObservations();}},
    ...(runtime.creative?[{name:'creativePreparation',intervalMs:5000,run:async()=>{await runtime.creative!.runOnce();}}]:[]),
    {name:'canonicalConversions',intervalMs:60000,run:async()=>{await runtime.conversions.runOnce();}},

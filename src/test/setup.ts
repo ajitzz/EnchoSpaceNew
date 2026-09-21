@@ -2,11 +2,17 @@ import { enforceTestDatabaseSafety } from './db_safety';
 enforceTestDatabaseSafety();
 import '@testing-library/jest-dom';
 
-import { vi } from 'vitest';
+import { afterAll, vi } from 'vitest';
+
+const legacyFixture = vi.hoisted(() => ({close: null as null | (() => Promise<void>)}));
+afterAll(async () => {await legacyFixture.close?.();}, 30000);
 
 vi.mock('pg', async (importOriginal) => {
   const { newDb } = await import('pg-mem');
   const db = newDb();
+  const { readFileSync } = await import('node:fs');
+  const { randomUUID } = await import('node:crypto');
+  db.public.registerFunction({name: 'gen_random_uuid', returns: (await import('pg-mem')).DataType.uuid, impure: true, implementation: randomUUID});
 
   // Fix pg-mem DECIMAL(10,2), set_config and DO $$ procedural blocks AST bug by intercepting queries
   (db.public as any).interceptQueries((queryText: string) => {
@@ -23,14 +29,19 @@ vi.mock('pg', async (importOriginal) => {
     return null;
   });
 
-  // Seed essential schema for FSM and reconciliation tests
-  db.public.none(`
+  // Legacy pg-mem fixture: baseline columns mirror ensureUsersTable and
+  // ensureListingsTable/ensureMarketingSchema in server.ts. This is not RLS,
+  // foreign-key, migration, or transaction acceptance; those use real Postgres.
+  const baselineSql = `
     CREATE TABLE users (
       id SERIAL PRIMARY KEY,
-      email VARCHAR(255) UNIQUE NOT NULL,
+      email VARCHAR(255) UNIQUE,
       password_hash VARCHAR(255),
       name VARCHAR(255) NOT NULL,
       google_id VARCHAR(255) UNIQUE,
+      phone VARCHAR(255) UNIQUE,
+      avatar TEXT,
+      editorial_quote VARCHAR(255),
       role VARCHAR(50) DEFAULT 'user',
       wallet_balance FLOAT DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -40,13 +51,6 @@ vi.mock('pg', async (importOriginal) => {
       published_listing_id INTEGER,
       status VARCHAR(50) DEFAULT 'DRAFT'
     );
-    CREATE TABLE meta_publishing_events (
-      id SERIAL PRIMARY KEY,
-      campaign_id INTEGER,
-      event_type VARCHAR(50),
-      status VARCHAR(50),
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
     CREATE TABLE campaigns (
       id SERIAL PRIMARY KEY,
       listing_id INTEGER,
@@ -54,14 +58,6 @@ vi.mock('pg', async (importOriginal) => {
       status VARCHAR(50),
       budget FLOAT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE campaign_metrics (
-      campaign_id INTEGER,
-      date DATE,
-      impressions INTEGER,
-      clicks INTEGER,
-      spend FLOAT,
-      leads INTEGER
     );
     CREATE TABLE inbound_webhooks (
       webhook_id SERIAL PRIMARY KEY,
@@ -80,7 +76,14 @@ vi.mock('pg', async (importOriginal) => {
       listing_id INTEGER,
       user_id INTEGER,
       status VARCHAR(50),
-      total_price FLOAT,
+      move_in_date VARCHAR(50) NOT NULL,
+      configuration VARCHAR(50),
+      name VARCHAR(255) NOT NULL,
+      phone VARCHAR(50) NOT NULL,
+      total_rent DECIMAL NOT NULL,
+      check_out_date VARCHAR(255),
+      payment_intent_id VARCHAR(255),
+      payment_gateway VARCHAR(50),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE calendar_prices (
@@ -100,6 +103,7 @@ vi.mock('pg', async (importOriginal) => {
       type VARCHAR(50) NOT NULL,
       address VARCHAR(255),
       city VARCHAR(100),
+      country VARCHAR(100) DEFAULT '',
       image_url TEXT,
       image_urls JSONB,
       photos JSONB,
@@ -186,9 +190,21 @@ vi.mock('pg', async (importOriginal) => {
     );
     CREATE TABLE host_marketing_campaigns (
       id SERIAL PRIMARY KEY,
+      host_id INTEGER,
       listing_id INTEGER,
+      title VARCHAR(255) NOT NULL,
+      description TEXT,
+      video_url TEXT,
+      media_urls JSONB DEFAULT '[]'::jsonb,
+      platforms JSONB DEFAULT '[]'::jsonb,
       status VARCHAR(50) DEFAULT 'draft',
-      budget FLOAT DEFAULT 0
+      budget DECIMAL DEFAULT 2500,
+      admin_feedback TEXT,
+      subscription_active BOOLEAN DEFAULT false,
+      analytics JSONB DEFAULT '{"impressions":0,"clicks":0,"ctr":0,"conversions":0,"spent":0}'::jsonb,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      approved_at TIMESTAMP
     );
     CREATE TABLE inventory_days (
       id SERIAL PRIMARY KEY,
@@ -267,7 +283,33 @@ vi.mock('pg', async (importOriginal) => {
       CONSTRAINT uq_booking_hold_nights UNIQUE (hold_id, inventory_day_id),
       CONSTRAINT chk_booking_hold_nights_units CHECK (units >= 1)
     );
-  `);
+  `;
+  const marketingSql = readFileSync(new URL('../../scripts/testing/fixtures/legacy-marketing.sql', import.meta.url), 'utf8');
+  if (process.env.ENCHO_LEGACY_POSTGRES === '1') {
+    const real = await importOriginal<typeof import('pg')>();
+    const {createLocalPostgresFixture} = await import('./harvo/postgres.js');
+    const fixture = await createLocalPostgresFixture({schema: 'empty', driver: real.default});
+    const pools = new Set<InstanceType<typeof real.Pool>>();
+    const clients = new Set<InstanceType<typeof real.Client>>();
+    legacyFixture.close = async () => {
+      try {
+        const results = await Promise.allSettled([...pools].map(pool => pool.end()).concat([...clients].map(client => client.end())));
+        const failures = results.filter(result => result.status === 'rejected');
+        if (failures.length) throw new AggregateError(failures.map(result => result.reason), 'Legacy fixture connection cleanup failed');
+      } finally { await fixture.close(); }
+    };
+    await fixture.pool.query(baselineSql + marketingSql);
+    class Pool extends real.Pool {
+      constructor(_options?: unknown) {super({...fixture.pool.options}); pools.add(this);}
+      override end() {pools.delete(this); return super.end();}
+    }
+    class Client extends real.Client {
+      constructor(_options?: unknown) {super({...fixture.pool.options}); clients.add(this);}
+      override end() {clients.delete(this); return super.end();}
+    }
+    return {...real, default: {...real.default, Pool, Client}, Pool, Client};
+  }
+  db.public.none(baselineSql + marketingSql);
 
   const { Pool, Client } = db.adapters.createPg();
   return {

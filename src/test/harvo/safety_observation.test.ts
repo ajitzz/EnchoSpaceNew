@@ -20,7 +20,7 @@ describe('independent local safety and durable fair observation scheduling',()=>
   await fixture.reset();vi.restoreAllMocks();
   await fixture.pool.query("INSERT INTO room_types VALUES(1,20,'INR')");await fixture.pool.query("INSERT INTO inventory_days(listing_id,room_type_id,calendar_date,total_units) SELECT 20,1,d::date,2 FROM generate_series('2099-01-02'::date,'2099-01-03'::date,interval '1 day') d");
   workflow=new MarketingWorkflowService(fixture.pool,{ai:new CampaignAiReviewer({mediaOrigins:new Set()}),finance:{} as WorkflowFinancePort,fundingEnabled:false,publishingEnabled:false,activationEnabled:false,configurationReasons:[]});engine=runner();
-  truth.mockReset().mockImplementation(async()=>({normalizedState:'UNKNOWN',isLive:false,isServingImpressions:false,lastObservedAt:new Date().toISOString()}));
+  truth.mockReset().mockImplementation(async(externalCampaignId:string)=>({provider:'META',externalCampaignId,normalizedState:'UNKNOWN',isLive:false,isServingImpressions:false,lastObservedAt:new Date().toISOString()}));
   telemetry.mockReset().mockImplementation(async()=>({dateStart:'2026-09-01',dateEnd:'2026-09-13',impressions:100,clicks:2,ctr:2,conversions:0,spend:{currency:'INR',minor_units:1000},observedAt:new Date().toISOString(),dataFreshness:'DELAYED'}));
   mutate.mockReset().mockRejectedValue(new Error('These read-only regressions must never mutate a provider.'));vi.spyOn(console,'error').mockImplementation(()=>undefined);
  });
@@ -35,7 +35,7 @@ describe('independent local safety and durable fair observation scheduling',()=>
   expect((await fixture.pool.query("SELECT evidence FROM marketing_workflow_events WHERE event_type='PROTECTION_PAUSE_QUEUED'")).rows[0].evidence).toEqual({reasons:[reason],observation:null});
  });
  it('rechecks local invalidation that occurs while actual reporting is in flight',async()=>{
-  const row=await active();truth.mockImplementationOnce(async()=>{await fixture.pool.query('UPDATE listings SET price=price+100 WHERE id=20');return {normalizedState:'UNKNOWN',isLive:false,isServingImpressions:false,lastObservedAt:new Date().toISOString()};});
+  const row=await active();truth.mockImplementationOnce(async()=>{await fixture.pool.query('UPDATE listings SET price=price+100 WHERE id=20');return {provider:'META',externalCampaignId:`isolated-provider-${row.campaign_id}`,normalizedState:'UNKNOWN',isLive:false,isServingImpressions:false,lastObservedAt:new Date().toISOString()};});
   await enqueue(fixture.pool,{campaignId:row.campaign_id,revision:1,kind:'TELEMETRY',key:'changed-during-read'});expect(await engine.runOnce()).toBe(true);
   expect(await workflow.get(row.campaign_id,host)).toMatchObject({state:'PAUSE_QUEUED',last_error:'SPEND_OBSERVATION_STALE, LISTING_CHANGED'});expect(telemetry).toHaveBeenCalledOnce();expect(mutate).not.toHaveBeenCalled();
  });
@@ -50,7 +50,7 @@ describe('independent local safety and durable fair observation scheduling',()=>
   expect(await engine.runOnce()).toBe(false);expect(await pauses()).toHaveLength(0);expect(truth).not.toHaveBeenCalled();expect((await workflow.get(row.campaign_id,host)).state).toBe('PROVIDER_REVIEW');
  });
  it('persists fresh status and completes a no-report job without fabricating spend or retry exhaustion',async()=>{
-  const row=await active();truth.mockResolvedValueOnce({normalizedState:'REVIEWING',isLive:false,isServingImpressions:false,lastObservedAt:new Date().toISOString()});
+  const row=await active();truth.mockResolvedValueOnce({provider:'META',externalCampaignId:`isolated-provider-${row.campaign_id}`,normalizedState:'REVIEWING',isLive:false,isServingImpressions:false,lastObservedAt:new Date().toISOString()});
   telemetry.mockRejectedValueOnce(new ProviderReportPending('NO_REPORT'));
   const jobId=await enqueue(fixture.pool,{campaignId:row.campaign_id,revision:1,kind:'TELEMETRY',key:'empty-report'});
   expect(await engine.runOnce()).toBe(true);
@@ -75,7 +75,7 @@ describe('independent local safety and durable fair observation scheduling',()=>
  it('keeps the last confirmed delivery and recovery error when only reporting succeeds',async()=>{
   const row=await active();
   await fixture.pool.query("UPDATE marketing_campaign_workflows SET state='RECONCILIATION_REQUIRED',last_error='EXTERNAL_STATE_UNKNOWN' WHERE campaign_id=$1",[row.campaign_id]);
-  truth.mockResolvedValueOnce({normalizedState:'UNKNOWN',isLive:false,isServingImpressions:false,lastObservedAt:null});
+  truth.mockResolvedValueOnce({provider:'META',externalCampaignId:`isolated-provider-${row.campaign_id}`,normalizedState:'UNKNOWN',isLive:false,isServingImpressions:false,lastObservedAt:null});
   await enqueue(fixture.pool,{campaignId:row.campaign_id,revision:1,kind:'TELEMETRY',key:'partial-observation'});
   expect(await engine.runOnce()).toBe(true);
   expect(await workflow.get(row.campaign_id,host)).toMatchObject({state:'RECONCILIATION_REQUIRED',last_error:'EXTERNAL_STATE_UNKNOWN',provider_truth:{statusCheck:'ERROR',observedAt:'2026-09-01T00:00:00Z',deliveryConfirmed:false},telemetry:{report:{status:'AVAILABLE'},impressions:100}});
@@ -91,6 +91,20 @@ describe('independent local safety and durable fair observation scheduling',()=>
   await runner().scheduleObservations();pending=(await fixture.pool.query("SELECT campaign_id FROM marketing_jobs WHERE state='PENDING'")).rows;expect(pending).toHaveLength(205);expect(new Set(pending.map(x=>x.campaign_id)).size).toBe(205);
   await runner().scheduleObservations();expect((await fixture.pool.query("SELECT id FROM marketing_jobs WHERE state='PENDING'")).rows).toHaveLength(205);
   expect(truth).not.toHaveBeenCalled();expect(telemetry).not.toHaveBeenCalled();expect(mutate).not.toHaveBeenCalled();
+ });
+ it.each(['foreign-campaign','wrong-provider','stale','future'])('retains prior evidence when status readback is %s',async invalid=>{
+  const row=await active();
+  const evidence={provider:'META',externalCampaignId:`isolated-provider-${row.campaign_id}`,normalizedState:'LIVE',isLive:true,isServingImpressions:true,lastObservedAt:new Date().toISOString()};
+  if(invalid==='foreign-campaign')evidence.externalCampaignId='foreign-campaign';
+  if(invalid==='wrong-provider')evidence.provider='GOOGLE';
+  if(invalid==='stale')evidence.lastObservedAt=new Date(Date.now()-120000).toISOString();
+  if(invalid==='future')evidence.lastObservedAt=new Date(Date.now()+120000).toISOString();
+  truth.mockResolvedValueOnce(evidence);
+  await enqueue(fixture.pool,{campaignId:row.campaign_id,revision:1,kind:'TELEMETRY',key:`invalid-${invalid}`});
+  expect(await engine.runOnce()).toBe(true);
+  expect((await workflow.get(row.campaign_id,host)).provider_truth).toMatchObject({observedStatus:'UNKNOWN',observedAt:'2026-09-01T00:00:00Z',statusCheck:'ERROR',deliveryConfirmed:false});
+  const events=(await fixture.pool.query("SELECT event_type FROM marketing_workflow_events WHERE event_type IN ('DELIVERY_OBSERVED','DELIVERY_OBSERVATION_UNAVAILABLE')")).rows;
+  expect(events).toEqual([{event_type:'DELIVERY_OBSERVATION_UNAVAILABLE'}]);
  });
  it('keeps an existing observation retry as the sole job owner across sweep windows',async()=>{
   const row=await active();await enqueue(fixture.pool,{campaignId:row.campaign_id,revision:1,kind:'TELEMETRY',key:'owned-observation'});await fixture.pool.query("UPDATE marketing_jobs SET state='RETRY',created_at='1999-01-01',run_after=now()+interval '1 hour'");

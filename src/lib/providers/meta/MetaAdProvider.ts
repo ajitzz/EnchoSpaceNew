@@ -1,8 +1,11 @@
+import type {ProviderStoryVerifier} from '../spatialCreative.js';
+import {randomUUID} from 'node:crypto';
 import { ProviderReportPending } from '../reporting.js';
+import {metaHierarchyEvidence} from '../deliveryEvidence.js';
 import type { AdProvider } from '../AdProvider.js';
 import type { ProviderCapabilitySet, ProviderPublishRequest, ProviderPublishResult, ProviderEntity, ProviderControlRequest, ProviderControlResult, ProviderBudgetUpdateRequest, NormalizedDeliveryTruth, NormalizedTelemetrySnapshot, ProviderReconciliationReport } from '../types.js';
 import { providerRegistry } from '../providerRegistry.js';
-import { ProviderOperationStore, ProviderOperationError, semanticFingerprint, type ProviderAuthorizationGuard, type ProviderAuthorizationContext,type ProviderMediaVerifier } from '../ProviderOperationStore.js';
+import { ProviderOperationStore, ProviderOperationError, semanticFingerprint, type ProviderAuthorizationGuard, type ProviderAuthorizationContext,type ProviderMediaVerifier,type ProviderLandingVerifier } from '../ProviderOperationStore.js';
 import { MetaAdsClient, metaAdsClient, MetaAdsError, metaId, META_ADS_API_VERSION } from './MetaAdsClient.js';
 import { buildMetaCampaignPlan } from './MetaCampaignPlan.js';
 import { StructuredLogger } from '../../observability/structuredLogger.js';
@@ -17,6 +20,8 @@ export class MetaAdProvider implements AdProvider {
         publicOrigin?: string;
         authorize?: ProviderAuthorizationGuard;
         verifyCampaignMedia?:ProviderMediaVerifier;
+        verifyLanding?:ProviderLandingVerifier;
+        verifySpatialStory?:ProviderStoryVerifier;
     } = {}) { }
     private async account(currency?: string) {
         const identity = this.client.identity();
@@ -49,12 +54,14 @@ export class MetaAdProvider implements AdProvider {
             const plan = buildMetaCampaignPlan(request, this.options.publicOrigin ?? process.env.META_ADS_LANDING_ORIGIN ?? '', identity);
             store = new ProviderOperationStore(pool);
             const context: ProviderAuthorizationContext = { provider: 'META', campaignId: request.campaignId, operation: 'CREATE_HIERARCHY', fingerprint: plan.fingerprint, idempotencyKey: request.idempotencyKey, correlationId: request.correlationId, budgetMinor: request.budget.minor_units, budgetKind: 'LIFETIME', currency: request.budget.currency };
+            if(plan.spatial&&(!this.options.verifySpatialStory||!this.options.authorize))throw new MetaAdsError('META_CREATIVE_AUTHORITY_REQUIRED','Reviewed spatial creative authority is required.');
             const guard: ProviderAuthorizationGuard | undefined = this.options.authorize ? async (ctx, tx) => {
                 if (plan.thumbnail && !(await tx.query("SELECT id FROM media_assets WHERE entity_type='listing' AND entity_id=$1 AND url=$2 AND moderation_status='approved' FOR SHARE", [request.listingId, plan.thumbnail])).rows.length)
                     throw new MetaAdsError('META_MEDIA_NOT_APPROVED', 'Video thumbnail must be an approved property image.');
+                if(plan.spatial)await this.options.verifySpatialStory!(request,tx);
                 return this.options.authorize!(ctx, tx);
             } : undefined;
-            const claim = await store.claim(context, { identity, plan: { campaign: plan.campaign, adset: plan.adset, asset: plan.asset, landing: plan.landing } }, guard, { hostId: request.hostId, listingId: request.listingId, landingUrl: plan.landing, mediaUrl: plan.asset },this.options.verifyCampaignMedia);
+            const claim = await store.claim(context, { identity, plan: { campaign: plan.campaign, adset: plan.adset, asset: plan.asset, landing: plan.landing } }, guard, { hostId: request.hostId, listingId: request.listingId, landingUrl: plan.landing, mediaUrl: plan.asset },this.options.verifyCampaignMedia,this.options.verifyLanding);
             if (claim.result)
                 return { ...claim.result, isDuplicate: true };
             transactionId = claim.id;
@@ -94,6 +101,12 @@ export class MetaAdProvider implements AdProvider {
             if ([observed.campaign.status, observed.adset.status, observed.ad.status].some(s => s !== 'PAUSED') || String(observed.adset.lifetime_budget) !== String(request.budget.minor_units) || observed.adset.promoted_object?.pixel_id !== identity.pixelId || observed.adset.promoted_object?.custom_event_type !== 'PURCHASE')
                 throw new MetaAdsError('META_READBACK_MISMATCH', 'Paused hierarchy, budget or pixel was not verified.', true);
             const story = observed.creative.object_story_spec;
+            if(plan.spatial){
+                const cards=story?.link_data?.child_attachments;
+                if(!Array.isArray(cards)||cards.length!==4||cards.some((card:any,index:number)=>card.name!==plan.spatial!.cards[index].title||card.link!==plan.spatial!.cards[index].landingUrl)||story?.link_data?.multi_share_optimized!==false)
+                    throw new MetaAdsError('META_PARTIAL_CREATION','Observed carousel order, captions or destinations differ from the reviewed story.');
+            }
+
             if (story?.page_id !== identity.pageId || (identity.instagramId && plan.adset.targeting.publisher_platforms.includes('instagram') && story.instagram_user_id !== identity.instagramId) ||
                 (plan.mediaType === 'IMAGE' ? story?.link_data?.link !== plan.landing : story?.video_data?.video_id !== videoId || story?.video_data?.call_to_action?.value?.link !== plan.landing))
                 throw new MetaAdsError('META_READBACK_MISMATCH', 'Creative identity or property destination was not verified.', true);
@@ -247,12 +260,26 @@ export class MetaAdProvider implements AdProvider {
     async resumeCampaign(request: ProviderControlRequest, pool?: any) { return this.control(request, 'RESUME', pool); }
     async updateBudget(request: ProviderBudgetUpdateRequest, pool?: any) { return this.control(request, 'UPDATE_BUDGET', pool); }
     async fetchAuthoritativeDeliveryTruth(externalCampaignId: string, pool?: any): Promise<NormalizedDeliveryTruth> {
+        const correlationId = randomUUID(), started = performance.now();
         try {
             const observed = await this.readHierarchy(await this.owned(undefined, externalCampaignId, pool));
-            const paused = [observed.campaign, observed.adset, observed.ad].some(v => v.status === 'PAUSED' || v.effective_status === 'PAUSED' || v.effective_status === 'CAMPAIGN_PAUSED' || v.effective_status === 'ADSET_PAUSED');
-            return { provider: 'META', externalCampaignId, normalizedState: paused ? 'PAUSED' : 'UNKNOWN', rawStatus: observed.campaign.status, rawEffectiveStatus: observed.ad.effective_status, isLive: false, isServingImpressions: false, lastObservedAt: new Date().toISOString(), reconciliationRequired: !paused };
+            const result = metaHierarchyEvidence(externalCampaignId, [observed.campaign, observed.adset, observed.ad], this.apiVersion);
+            // Account eligibility must also be read before showing a ready hierarchy.
+            if (result.readiness === 'ELIGIBLE') await this.account();
+            return result;
         }
-        catch {
+        catch (error) {
+            const diagnostic = failure(error);
+            // Never serialize provider messages, bodies, credentials or campaign IDs.
+            const errorCode = /^(?:META|PROVIDER)_[A-Z_]{1,64}$/.test(diagnostic.code) ? diagnostic.code : 'META_OBSERVATION_FAILED';
+            const trace = diagnostic.details.traceId;
+            const providerTraceId = typeof trace === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(trace) ? trace : undefined;
+            StructuredLogger.warn('Provider status observation failed', {
+                correlationId, provider: 'META', apiVersion: this.apiVersion,
+                operation: 'OBSERVE_HIERARCHY', outcome: 'UNKNOWN', errorCode,
+                durationMs: Math.max(0, Math.round(performance.now() - started)),
+                ...(providerTraceId ? {providerTraceId} : {}),
+            });
             return { provider: 'META', externalCampaignId, normalizedState: 'UNKNOWN', rawStatus: 'UNKNOWN', rawEffectiveStatus: 'UNKNOWN', isLive: false, isServingImpressions: false, lastObservedAt: '', reconciliationRequired: true };
         }
     }

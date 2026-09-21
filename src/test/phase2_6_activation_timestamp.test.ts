@@ -1,3 +1,4 @@
+import {assertRetiredPaidCall} from './legacyPaidBoundaryFixture.js';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { dispatchMetaCampaign, evaluateCampaignDCO, computeCampaignApprovalHash } from '../../server.ts';
 import pg from 'pg';
@@ -183,60 +184,19 @@ describe('PHASE 2.6 — VARIANT ACTIVATION TIMESTAMP REMEDIATION', () => {
     );
   };
 
-  it('A. Successful ACTIVE Meta verification populates variant_activated_at', async () => {
+  it('A. retired dispatch cannot create activation timestamps', async () => {
     await prepareForDispatch();
-    const mock = setupMockFetch('ACTIVE');
-    try {
-      const ok = await dispatchMetaCampaign(campaignId, { user: { id: testHostId } } as any);
-      expect(ok).toBe(true);
-
-      const variants = await pool.query(
-        `SELECT * FROM campaign_creative_variants WHERE campaign_id = $1 ORDER BY id ASC`,
-        [campaignId]
-      );
-      expect(variants.rows.length).toBe(2);
-      expect(variants.rows[0].variant_activated_at).not.toBeNull();
-      expect(variants.rows[1].variant_activated_at).not.toBeNull();
-    } finally {
-      mock.restore();
-    }
+    await assertRetiredPaidCall(pool,campaignId,()=>dispatchMetaCampaign(campaignId,{user:{id:testHostId}} as any));
   });
 
-  it('B. PAUSED Meta Ad does NOT populate variant_activated_at', async () => {
+  it('B. retired dispatch cannot create activation timestamps', async () => {
     await prepareForDispatch();
-    const mock = setupMockFetch('PAUSED');
-    try {
-      const ok = await dispatchMetaCampaign(campaignId, { user: { id: testHostId } } as any);
-      expect(ok).toBe(true);
-
-      const variants = await pool.query(
-        `SELECT * FROM campaign_creative_variants WHERE campaign_id = $1 ORDER BY id ASC`,
-        [campaignId]
-      );
-      expect(variants.rows.length).toBe(2);
-      expect(variants.rows[0].variant_activated_at).toBeNull();
-      expect(variants.rows[1].variant_activated_at).toBeNull();
-    } finally {
-      mock.restore();
-    }
+    await assertRetiredPaidCall(pool,campaignId,()=>dispatchMetaCampaign(campaignId,{user:{id:testHostId}} as any));
   });
 
-  it('C. Failed external verification does NOT populate variant_activated_at', async () => {
+  it('C. retired dispatch cannot create activation timestamps', async () => {
     await prepareForDispatch();
-    const mock = setupMockFetch('FAIL');
-    try {
-      const result = await dispatchMetaCampaign(campaignId, { user: { id: testHostId } } as any);
-      expect(result).toBe(false);
-
-      const variants = await pool.query(
-        `SELECT * FROM campaign_creative_variants WHERE campaign_id = $1`,
-        [campaignId]
-      );
-      const activeVariants = variants.rows.filter(v => v.variant_activated_at !== null);
-      expect(activeVariants.length).toBe(0);
-    } finally {
-      mock.restore();
-    }
+    await assertRetiredPaidCall(pool,campaignId,()=>dispatchMetaCampaign(campaignId,{user:{id:testHostId}} as any));
   });
 
   it('D. NULL activation timestamp causes Step 4A: VARIANT_NOT_ACTIVATED', async () => {
@@ -256,7 +216,7 @@ describe('PHASE 2.6 — VARIANT ACTIVATION TIMESTAMP REMEDIATION', () => {
     expect(result.decision_reason).not.toBe('VARIANT_TOO_YOUNG');
   });
 
-  it('F. Re-dispatch/reconciliation does not overwrite an existing activation timestamp', async () => {
+  it('F. Retired re-dispatch preserves an existing activation timestamp', async () => {
     await prepareForDispatch();
 
     const initialTimestamp = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
@@ -267,20 +227,7 @@ describe('PHASE 2.6 — VARIANT ACTIVATION TIMESTAMP REMEDIATION', () => {
       [campaignId, initialTimestamp]
     );
 
-    const mock = setupMockFetch('ACTIVE');
-    try {
-      const ok = await dispatchMetaCampaign(campaignId, { user: { id: testHostId } } as any);
-      expect(ok).toBe(true);
-
-      const variants = await pool.query(
-        `SELECT * FROM campaign_creative_variants WHERE campaign_id = $1 ORDER BY id ASC`,
-        [campaignId]
-      );
-      const updatedTimestamp0 = new Date(variants.rows[0].variant_activated_at).toISOString();
-      expect(new Date(updatedTimestamp0).getTime()).toBe(new Date(initialTimestamp).getTime());
-    } finally {
-      mock.restore();
-    }
+    await assertRetiredPaidCall(pool,campaignId,()=>dispatchMetaCampaign(campaignId,{user:{id:testHostId}} as any));
   });
 
   it('G. Exactly 24 hours from variant_activated_at satisfies the age boundary', async () => {

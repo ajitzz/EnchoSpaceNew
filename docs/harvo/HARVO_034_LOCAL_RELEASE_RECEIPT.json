@@ -1,0 +1,86 @@
+{
+  "authority": "HARVO-034, subsequent local-only clarification",
+  "recordedAt": "2026-09-21T09:40:07.067719+00:00",
+  "scope": "LOCAL_ONLY_NOT_STAGED_OR_PRODUCTION_ACCEPTANCE",
+  "node": "v24.19.0",
+  "head": "37803a17100a9efe0ca273022364110e87628644",
+  "worktreeUncommitted": true,
+  "fullRegression": {
+    "passed": 1860,
+    "failed": 0,
+    "pending": 0,
+    "files": 144,
+    "runsThisExecution": 1
+  },
+  "checks": {
+    "applicationTypeScript": "PASSED",
+    "serverTypeScriptAndCompilation": "PASSED",
+    "repositoryLint": "PASSED",
+    "changedFinalFilesLint": "PASSED",
+    "clientBuild": "PASSED",
+    "compiledSmoke": "PASSED",
+    "browserScenarios": 20,
+    "publicArtifactFiles": 40,
+    "localSigningSecretFoundInPublicBuild": false
+  },
+  "migrationRehearsal": {
+    "database": "disposable local PostgreSQL",
+    "priorHistory": "synthetic fixture metadata, not a full 001-026 bootstrap",
+    "newSql": "exact migrations 027-031",
+    "execution": "APPLY_AND_GRANT_THEN_ROLLBACK",
+    "restrictedRole": true,
+    "checks": [
+      "forced RLS/policies/immutable triggers/minimum privileges",
+      "checksum drift refusal",
+      "concurrent migration refusal",
+      "privileged or owner membership refusal",
+      "default overgrant rollback",
+      "DDL and history rollback"
+    ],
+    "manifest": [
+      {
+        "version": "027_marketing_attribution_links.sql",
+        "sha256": "6f24c5a1e05fe87f6c816024b95671d61cd499b68ca564ba562535e7806daa91"
+      },
+      {
+        "version": "028_marketing_consent_touchpoints.sql",
+        "sha256": "f732578fad0a7d50df83ed971c79b2b06342f707034c0967b864b8640b05e9aa"
+      },
+      {
+        "version": "029_marketing_destination_pools.sql",
+        "sha256": "10e517cc537355604962f59662486d24f5ba7aad110a567ae01e0afbb4afd6e3"
+      },
+      {
+        "version": "030_marketing_spatial_stories.sql",
+        "sha256": "50990d62f3c8cee903269789e8247872adf3c62c00b71735ec5f12f50e063779"
+      },
+      {
+        "version": "031_marketing_inquiry_attribution.sql",
+        "sha256": "312e6258b8a79107f2a2ee4d65afb3deceac8f94be5c1b30f88ccd6fe912ec91"
+      }
+    ]
+  },
+  "attributionKeys": {
+    "scope": "local explicit-load file only",
+    "mode": "0600",
+    "bytesPerKey": 32,
+    "encoding": "canonical base64url",
+    "runtimeValidated": true,
+    "existingKeyOverwrite": false,
+    "hostingSecretsChanged": false
+  },
+  "external": {
+    "neonConnected": false,
+    "providerCalled": false,
+    "paymentAttempted": false,
+    "deployed": false,
+    "pilotRun": false
+  },
+  "readiness": {
+    "dedicatedProductIndependent": true,
+    "dedicatedLiveActivation": "BLOCKED_CANONICAL_BOOKING_AND_CONSENT_COMPOSITION_PLUS_EXTERNAL_ACCEPTANCE",
+    "paidPool": "POOL_EXECUTION_UNAVAILABLE",
+    "historicalAcceptedMilestones": 5,
+    "historicalTotalMilestones": 10
+  }
+}

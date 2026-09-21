@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import pkg from 'pg';
 import jwt from 'jsonwebtoken';
@@ -19,6 +19,13 @@ import {
 } from '../lib/stayProjection';
 
 import { __mockRedisStore } from './setup';
+
+vi.hoisted(() => {
+  // This suite explicitly exercises the mocked cache. Never inherit a real URL/token.
+  vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://redis-fixture.invalid');
+  vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'isolated-fixture-token');
+});
+afterAll(() => vi.unstubAllEnvs());
 
 const { Pool } = pkg;
 const JWT_SECRET = process.env.JWT_SECRET || 'encho_super_secure_jwt_secret_change_in_prod';

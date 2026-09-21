@@ -20,7 +20,7 @@ describe('Phase 2.5 Industrial Meta Delivery Integrity Hardening', () => {
       testUserId = userRes.rows[0].id;
     } else {
       const newUser = await pool.query(
-        "INSERT INTO users (name, email, password, role) VALUES ('Test Host', 'test_host_25@encho.com', 'hash', 'host') RETURNING id"
+        "INSERT INTO users (name, email, password_hash, role) VALUES ('Test Host', 'test_host_25@encho.com', 'hash', 'host') RETURNING id"
       );
       testUserId = newUser.rows[0].id;
     }

@@ -17,3 +17,23 @@
 .mkt-budget-track{height:12px;border-radius:999px;background:#dce3db;overflow:hidden;margin:14px 0}
 .mkt-budget-track>span{display:block;height:100%;background:var(--mkt-ink,#173c32);border-radius:inherit}
 .mkt-observation-refresh{border-top:1px solid var(--mkt-line,#dce3db);padding-top:18px;margin-top:18px}
+
+.mkt-keyword-research { border: 1px solid var(--mkt-line, #dce3da); padding: 18px; border-radius: 16px; min-width: 0; }
+.mkt-keyword-research h4 { margin: 0 0 8px; }
+.mkt-keyword-ideas { display: grid; gap: 12px; list-style: none; padding: 0; max-height: 480px; overflow-y: auto; }
+.mkt-keyword-ideas li { padding: 14px; border: 1px solid var(--mkt-line, #dce3da); border-radius: 12px; overflow-wrap: anywhere; }
+.mkt-keyword-ideas dl { display: grid; gap: 8px; font-size: 12px; }
+.mkt-keyword-ideas dd { margin: 2px 0 0; font-weight: 600; }
+.mkt-keyword-ideas dt { color: var(--mkt-muted, #58675e); }
+.mkt-keyword-ideas button { white-space: normal; text-align: left; max-width: 100%; }
+.mkt-shadow-review { margin-top: 1.25rem; display: grid; gap: .8rem; border-top: 1px solid var(--mkt-line, #d7ded5); padding-top: 1rem; }
+.mkt-shadow-review label { display: grid; gap: .35rem; font-size: .85rem; }
+.mkt-shadow-review input, .mkt-shadow-review select, .mkt-shadow-review textarea { width: 100%; min-width: 0; padding: .7rem; border: 1px solid var(--mkt-line, #d7ded5); border-radius: .45rem; color: var(--mkt-ink); background: white; font: inherit; }
+.mkt-shadow-review textarea { min-height: 6rem; resize: vertical; }
+
+/* Destination product stays within the campaign design system. */
+.mkt-pool-card{margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--mkt-line,#d9dfd6)}.mkt-pools>p{max-width:75ch}.mkt-collection-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.5rem;margin:2rem 0}.mkt-collection-card{border:1px solid #d9dfd6;border-radius:1rem;overflow:hidden;background:white;color:var(--mkt-ink);text-decoration:none}.mkt-collection-card.is-featured{grid-column:1/-1;display:grid;grid-template-columns:3fr 2fr}.mkt-collection-card img{width:100%;height:300px;object-fit:cover}.mkt-collection-card>div{padding:1.5rem}.mkt-collection-card h2{font:32px/1.2 Georgia,serif;margin:.75rem 0 1.5rem}.mkt-destination>nav{display:flex;justify-content:space-between;align-items:center}.mkt-destination .mkt-header{padding-top:3rem}@media(max-width:650px){.mkt-collection-grid{grid-template-columns:1fr}.mkt-collection-card.is-featured{display:block}.mkt-collection-card img{height:230px}.mkt-collection-card h2{font-size:26px}}
+
+.mkt-story-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}.mkt-story-grid figure{margin:0}.mkt-story-grid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:12px}.mkt-story-grid fieldset{min-width:0}.mkt-story-grid figcaption{padding:10px 0}.mkt-story-grid small{display:block;margin-top:6px}.mkt-story-review{padding:20px 0;border-top:1px solid var(--mkt-line)}.mkt-public-story{padding:32px 24px;max-width:1280px;margin:auto}.mkt-public-story h2{font:32px Georgia,serif;margin-bottom:20px}.mkt-public-story h3{font:20px Georgia,serif;margin-top:12px}.mkt-public-story article{scroll-margin-top:110px}.mkt-creative-workspace details>summary{cursor:pointer;padding:16px 0}.mkt-story-grid select{max-width:100%}@media(max-width:900px){.mkt-story-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:480px){.mkt-story-grid{grid-template-columns:1fr}.mkt-public-story{padding:24px 16px}}
+
+.mkt-preflight .mkt-review-list>div{display:grid;grid-template-columns:minmax(0,1fr) minmax(100px,auto);align-items:start;gap:16px}.mkt-preflight .mkt-review-list dd{overflow-wrap:normal;word-break:normal;max-width:140px}.mkt-pools>.mkt-section-heading>button{flex-shrink:0;overflow-wrap:normal}@media(max-width:650px){.mkt-pools>.mkt-section-heading{align-items:flex-start;flex-direction:column}.mkt-pools>.mkt-section-heading>button{align-self:flex-start}}

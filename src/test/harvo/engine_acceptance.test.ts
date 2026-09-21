@@ -3,7 +3,7 @@ import express,{type RequestHandler} from 'express';
 import request from 'supertest';
 import pg from 'pg';
 import {execFileSync} from 'node:child_process';
-import {existsSync,mkdtempSync,rmSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdirSync,mkdtempSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {performance} from 'node:perf_hooks';
@@ -29,7 +29,7 @@ describe('HARVO local 30-request concurrency and PostgreSQL backup/replay drill'
   const clients=await Promise.all(Array.from({length:15},()=>fixture.pool.connect()));for(const c of clients){instrument(c);c.release();}fixture.pool.on('connect',instrument);
   service=build(fixture.pool).service;report.postgresql=(await fixture.pool.query('SHOW server_version')).rows[0].server_version;
  });
- afterAll(async()=>{await fixture?.close();if(report.concurrentReads&&report.restoreReplay)writeFileSync(new URL('../../../docs/harvo/M9_LOCAL_CONCURRENCY.json',import.meta.url),JSON.stringify(report,null,2)+'\n');});
+ afterAll(async()=>{await fixture?.close();if(report.concurrentReads&&report.restoreReplay){const directory=new URL('../../../test-results/harvo/',import.meta.url);mkdirSync(directory,{recursive:true});writeFileSync(new URL('concurrency.json',directory),JSON.stringify(report,null,2)+'\n');}});
  async function concurrent(name:string,run:(index:number)=>PromiseLike<any>){
   const latencies:number[]=[];statements=0;counting=true;const start=performance.now();let results:any[];
   try{results=await Promise.all(Array.from({length:30},async(_,index)=>{const then=performance.now();const result=await run(index);latencies.push(performance.now()-then);return result;}));}

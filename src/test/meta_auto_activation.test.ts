@@ -330,7 +330,7 @@ describe('PHASE 3.7C: META AUTO-ACTIVATION & DELIVERY TRUTH REGRESSION SUITE', (
     ).rejects.toThrow(/Tenant isolation prevents access/);
   });
 
-  it('TEST 16: Clean End-to-End Application Approval FSM Flow -> executeCampaignStateMachine -> CAMPAIGN_LIVE without direct SQL mutation', async () => {
+  it('TEST 16: retired approval FSM cannot publish or invent LIVE even with legacy paid flags', async () => {
     // 1. Seed a brand new draft campaign with complete preflight attributes
     const seed = Math.floor(1000000 + Math.random() * 8000000);
     const draftRes = await pool.query(`
@@ -387,30 +387,11 @@ describe('PHASE 3.7C: META AUTO-ACTIVATION & DELIVERY TRUTH REGRESSION SUITE', (
       headers: {}
     };
 
-    // Execute through the real application state machine
-    await executeCampaignStateMachine(fsmCampId, 'ADMIN_APPROVE', req);
-
-    // 3. Verify final DB state reached CAMPAIGN_LIVE solely via application FSM
-    const finalCampRes = await pool.query(
-      'SELECT status, meta_status, meta_effective_status, meta_campaign_id, meta_adset_id, meta_ad_id FROM host_marketing_campaigns WHERE id = $1',
-      [fsmCampId]
-    );
-    const finalCamp = finalCampRes.rows[0];
-
-    expect(finalCamp.status).toBe('CAMPAIGN_LIVE');
-    expect(finalCamp.meta_status).toBe('ACTIVE');
-    expect(finalCamp.meta_effective_status).toBe('ACTIVE');
-    expect(finalCamp.meta_campaign_id).toBeDefined();
-    expect(finalCamp.meta_adset_id).toBeDefined();
-
-    // 4. Verify FSM transition events in meta_publishing_events
-    const eventsRes = await pool.query(
-      'SELECT event_type, from_state, to_state FROM meta_publishing_events WHERE campaign_id = $1 ORDER BY id ASC',
-      [fsmCampId]
-    );
-    const eventTypes = eventsRes.rows.map(r => r.event_type);
-    expect(eventTypes).toContain('STATE_TRANSITION');
-    expect(eventTypes).toContain('AUTO_ACTIVATION_SUCCESS');
+    const before = (await pool.query('SELECT * FROM host_marketing_campaigns WHERE id=$1',[fsmCampId])).rows;
+    expect(await executeCampaignStateMachine(fsmCampId,'ADMIN_APPROVE',req)).toEqual({processed:0,status:'RETIRED',code:'HARVO_V2_REQUIRED'});
+    expect((await pool.query('SELECT * FROM host_marketing_campaigns WHERE id=$1',[fsmCampId])).rows).toEqual(before);
+    expect((await pool.query('SELECT * FROM meta_publishing_events WHERE campaign_id=$1',[fsmCampId])).rows).toHaveLength(0);
+    expect((await pool.query('SELECT * FROM provider_entities WHERE campaign_id=$1',[fsmCampId])).rows).toHaveLength(0);
   });
 
   it('TEST 17: Provider Entities Ad-ID Synchronization & Reconciliation Invariant Assertion', async () => {

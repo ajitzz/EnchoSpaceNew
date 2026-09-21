@@ -2,15 +2,15 @@ import type pg from 'pg';
 import {MarketingFinanceService,authorizeSpending,assertCampaignNeverSubmitted} from './financeService.js';
 import {type CampaignQuote,minor,identifier} from './financeQuote.js';
 import {type MarketingRuntimeConfig,calculateCampaignCosts} from './config.js';
-import {MarketingError,requireRevision,type Actor} from './domain.js';
+import {MarketingError,requireRevision,fingerprint,type Actor} from './domain.js';
 import {inTransaction,lockWorkflow,event} from './database.js';
 import {enqueue} from './jobs.js';
 import type {WorkflowFinancePort} from './workflow.js';
 import type {CampaignPaymentGateway} from './payments.js';
 export class WorkflowFinance implements WorkflowFinancePort{
  private markupBps:number;private preferenceVersion=0;
- constructor(private pool:pg.Pool,private config:MarketingRuntimeConfig,private gateway:CampaignPaymentGateway){this.markupBps=config.markupBps;}
- private service(hostId:number){return new MarketingFinanceService(this.pool,{actorContext:{id:hostId,role:'host'}});}
+ constructor(private pool:pg.Pool,private config:MarketingRuntimeConfig,private gateway:CampaignPaymentGateway,private quoteProduct?: (c:pg.PoolClient,row:any)=>Promise<import("./financeQuote.js").CampaignQuoteInput["product"]>){this.markupBps=config.markupBps;}
+ private service(hostId:number){return new MarketingFinanceService(this.pool,{actorContext:{id:hostId,role:'host'},validateQuote:this.quoteProduct?async(c,input)=>{const row=(await c.query('SELECT * FROM marketing_campaign_workflows WHERE campaign_id=$1',[input.campaignId])).rows[0];if(!row||fingerprint(await this.quoteProduct!(c,row)??null)!==fingerprint(input.product??null))throw new MarketingError('POOL_QUOTE_CHANGED','The destination contribution contract changed before quoting.');}:undefined});}
  async refreshPreference(){if(!this.config.policyAdminId)return;const r=await inTransaction(this.pool,{id:this.config.policyAdminId,role:'system'},c=>c.query('SELECT version,markup_bps FROM marketing_commercial_preferences ORDER BY version DESC LIMIT 1'));if(r.rows[0]){this.markupBps=r.rows[0].markup_bps;this.preferenceVersion=Number(r.rows[0].version);}}
  policy(){return {currency:this.config.currency,markupPercent:this.markupBps/100,configured:!!this.config.financialPolicy,version:this.preferenceVersion,costItems:this.config.costRules.map(r=>({label:r.label,amountMinor:r.fixedMinor}))};}
  async quote(row:any,_key:string){
@@ -20,7 +20,8 @@ export class WorkflowFinance implements WorkflowFinancePort{
   const old=await inTransaction(this.pool,{id:row.host_id,role:'host'},async c=>(await c.query('SELECT id,snapshot FROM marketing_finance_quotes WHERE campaign_id=$1 AND revision=$2 ORDER BY created_at DESC LIMIT 1',[row.campaign_id,String(row.revision)])).rows[0]);
   if(old)return {id:old.id,snapshot:old.snapshot};
   await this.refreshPreference();const costs=calculateCampaignCosts(this.config,row.provider,row.draft.mediaBudgetMinor,this.markupBps);
-  const quote=await service.quote({campaignId:row.campaign_id,hostId:row.host_id,listingId:row.listing_id,campaignRevision:String(row.revision),...costs,markupBps:this.markupBps,idempotencyKey:`campaign-quote:${row.campaign_id}:${row.revision}`,expiresAt:new Date(new Date(row.updated_at).getTime()+24*3600000).toISOString()},this.config.financialPolicy);
+  const product=this.quoteProduct?await inTransaction(this.pool,{id:row.host_id,role:'host'},c=>this.quoteProduct!(c,row)):undefined;
+  const quote=await service.quote({...product?{product}:{},campaignId:row.campaign_id,hostId:row.host_id,listingId:row.listing_id,campaignRevision:String(row.revision),...costs,markupBps:this.markupBps,idempotencyKey:`campaign-quote:${row.campaign_id}:${row.revision}`,expiresAt:new Date(new Date(row.updated_at).getTime()+24*3600000).toISOString()},this.config.financialPolicy);
   return {id:quote.id,snapshot:quote};
  }
  async snapshot(row:any){return (await this.snapshots([row],{id:row.host_id,role:'host'})).get(row.campaign_id)!;}
@@ -145,7 +146,7 @@ export class WorkflowFinance implements WorkflowFinancePort{
    await authorizeSpending(c,{reservationId:row.reservation_id,campaignId:row.campaign_id,hostId:row.host_id,revision:String(row.revision),provider:row.provider,accountId,amountMinor:row.draft.mediaBudgetMinor,idempotencyKey:`spend:${row.campaign_id}:${row.revision}:${row.provider}`});
   }
  }
- async fund(row:any,_key:string){const quote=await inTransaction(this.pool,{id:row.host_id,role:'host'},async c=>(await c.query('SELECT id,snapshot,expires_at FROM marketing_finance_quotes WHERE id=$1 AND host_id=$2',[row.quote_id,row.host_id])).rows[0]);if(!quote)throw new MarketingError('QUOTE_REQUIRED','A current funding quote is required');if(new Date(quote.expires_at).getTime()<=Date.now())throw new MarketingError('QUOTE_EXPIRED','This funding quote expired. A new approved campaign quote is required.');return this.gateway.checkout(row,{...quote.snapshot,id:quote.id});}
+ async fund(row:any,_key:string){const quote=await inTransaction(this.pool,{id:row.host_id,role:'host'},async c=>{const current=await lockWorkflow(c,row.campaign_id,{id:row.host_id,role:'host'});requireRevision(current,row.revision);if(this.quoteProduct)await this.quoteProduct(c,current);return (await c.query('SELECT id,snapshot,expires_at FROM marketing_finance_quotes WHERE id=$1 AND host_id=$2',[row.quote_id,row.host_id])).rows[0];});if(!quote)throw new MarketingError('QUOTE_REQUIRED','A current funding quote is required');if(new Date(quote.expires_at).getTime()<=Date.now())throw new MarketingError('QUOTE_EXPIRED','This funding quote expired. A new approved campaign quote is required.');return this.gateway.checkout(row,{...quote.snapshot,id:quote.id});}
  async setMarkup(actorId:number,input:{markupPercent:number;expectedVersion:number;reason:string}){
   if(!Number.isFinite(input.markupPercent)||input.markupPercent<3||input.markupPercent>5||Math.round(input.markupPercent*100)!==input.markupPercent*100||!Number.isInteger(input.expectedVersion)||!input.reason||input.reason.trim().length<10)throw new MarketingError('POLICY_INPUT_INVALID','Choose 3–5% profit markup and record why the prospective policy changes',422);
   await inTransaction(this.pool,{id:actorId,role:'admin'},async c=>{await c.query('SELECT pg_advisory_xact_lock(7824,0)');const current=(await c.query('SELECT version FROM marketing_commercial_preferences ORDER BY version DESC LIMIT 1')).rows[0];if(Number(current?.version||0)!==input.expectedVersion)throw new MarketingError('POLICY_VERSION_CONFLICT','Markup policy changed. Reload before editing.');await c.query('INSERT INTO marketing_commercial_preferences(markup_bps,actor_id,reason) VALUES($1,$2,$3)',[Math.round(input.markupPercent*100),actorId,input.reason.trim()]);});await this.refreshPreference();return this.policy();

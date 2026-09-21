@@ -18,7 +18,9 @@ export function verifyLocalUpload(secret:string,ticket:unknown,now=Date.now()){
   if(typeof ticket!=='string'||ticket.length>1500)throw new Error();
   const pieces=ticket.split('.');if(pieces.length!==2)throw new Error();
   const expected=createHmac('sha256',secret).update(`HARVO_LOCAL_UPLOAD:${pieces[0]}`).digest();const actual=Buffer.from(pieces[1],'base64url');
-  if(actual.length!==expected.length||!timingSafeEqual(actual,expected))throw new Error();
+  // Buffer decoding tolerates padding and unused-bit aliases. Require the exact
+  // canonical signature spelling issued by this service before authenticating.
+  if(actual.toString('base64url')!==pieces[1]||actual.length!==expected.length||!timingSafeEqual(actual,expected))throw new Error();
   const value=capabilitySchema.parse(JSON.parse(Buffer.from(pieces[0],'base64url').toString('utf8')));
   if(value.expiresAt<=now||value.expiresAt>now+10*60000||!extensions[value.contentType]||!value.key.endsWith(`.${extensions[value.contentType]}`))throw new Error();
   return value;

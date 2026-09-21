@@ -30,8 +30,33 @@ jobs:
     - name: Run Type Checking
       run: npm run typecheck
 
+    - name: Configure disposable PostgreSQL fixtures
+      run: |
+        PG_BIN="$(dirname "$(find /usr/lib/postgresql -name initdb -type f | sort -V | tail -1)")"
+        test -x "$PG_BIN/initdb"
+        test -x "$PG_BIN/pg_dump"
+        echo "HARVO_POSTGRES_BIN=$PG_BIN" >> "$GITHUB_ENV"
+
     - name: Run Tests
-      run: npm run test
+      run: |
+        mkdir -p test-results
+        # Raw assertion/provider payloads stay on the ephemeral runner, not in artifacts.
+        set +e
+        npm run test -- --reporter=json --outputFile=test-results/full-suite.json > test-results/full-suite.log 2>&1
+        test_status=$?
+        node scripts/testing/summarize-results.mjs test-results/full-suite.json test-results/ci-summary.json
+        summary_status=$?
+        if [ "$test_status" -ne 0 ]; then exit "$test_status"; fi
+        exit "$summary_status"
+
+    - name: Preserve test evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: isolated-test-evidence
+        path: test-results/ci-summary.json
+        if-no-files-found: ignore
+        retention-days: 7
 
     - name: Build Application
       run: npm run build

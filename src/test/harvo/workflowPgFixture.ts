@@ -22,13 +22,13 @@ export async function createWorkflowPgFixture() {
     const legacyMetaDdl=serverSource.match(/CREATE TABLE IF NOT EXISTS meta_publishing_transactions \([\s\S]*?\n\s*\);/)?.[0];
     if(!legacyMetaDdl)throw new Error('The current legacy Meta operation schema is required by the isolated cancellation fixture');
     await pool.query(legacyMetaDdl);
-    for (const name of ['009_harvo_marketing_finance.sql', '010_harvo_marketing_workflow.sql', '019_marketing_operational_isolation.sql']) {
+    for (const name of ['009_harvo_marketing_finance.sql', '010_harvo_marketing_workflow.sql', '019_marketing_operational_isolation.sql','020_marketing_pause_recovery.sql','022_marketing_pause_recovery_attempts.sql']) {
       await pool.query(readFileSync(new URL(`../../migrations/${name}`, import.meta.url), 'utf8'));
     }
     const reset = async () => {
       const tables = (await pool.query("SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename LIKE 'marketing_%'")).rows.map(row => `"${row.tablename}"`).join(',');
       await pool.query(`TRUNCATE ${tables},users,host_marketing_campaigns,listings,media_assets RESTART IDENTITY CASCADE`);
-      await pool.query("INSERT INTO users VALUES(10,'host'),(11,'host'),(90,'admin')");
+      await pool.query("INSERT INTO users(id,role) VALUES(10,'host'),(11,'host'),(90,'admin')");
       await pool.query("INSERT INTO listings(id,user_id,title,slug,publication_status,description,city,currency,price) VALUES(20,10,'Garden Villa','garden-villa-20','published','A garden villa with three guest rooms.','Bengaluru','INR',5000),(21,11,'Other Villa','other-villa-21','published','An independently owned property.','Mysuru','INR',6000)");
       await pool.query("INSERT INTO media_assets(id,entity_type,entity_id,url,category,moderation_status,is_hero) VALUES(100,'listing',20,'https://media.encho.example/villa.jpg','image','approved',true),(101,'listing',21,'https://media.encho.example/other.jpg','image','approved',true),(102,'listing',20,'https://media.encho.example/pending.jpg','image','pending',false)");
     };

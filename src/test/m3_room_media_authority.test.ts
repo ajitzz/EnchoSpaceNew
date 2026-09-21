@@ -30,6 +30,10 @@ describe('Phase 3 Milestone 3 — Canonical Relational Room & Media Authority', 
 
   beforeAll(async () => {
     pool = new Pool();
+    // Authorization reads current persisted authority, not only the JWT claim.
+    await pool.query(`INSERT INTO users (id, email, name, role) VALUES
+      (999, 'admin@encho.space', 'Fixture Admin', 'admin'),
+      (1001, 'host@encho.space', 'Fixture Host', 'host')`);
   });
 
   beforeEach(async () => {

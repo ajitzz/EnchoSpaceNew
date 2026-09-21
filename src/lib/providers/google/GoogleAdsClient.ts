@@ -30,6 +30,7 @@ const RESOURCE_KINDS = {
   adGroupOperation: { collection: 'adGroups', result: 'adGroupResult', composite: false },
   adGroupCriterionOperation: { collection: 'adGroupCriteria', result: 'adGroupCriterionResult', composite: true },
   adGroupAdOperation: { collection: 'adGroupAds', result: 'adGroupAdResult', composite: true },
+  campaignAssetOperation: { collection: 'campaignAssets', result: 'campaignAssetResult', composite: true },
   assetOperation: { collection: 'assets', result: 'assetResult', composite: false }
 } as const;
 type OperationKind = keyof typeof RESOURCE_KINDS;
@@ -220,6 +221,18 @@ export class GoogleAdsClient {
     return [...result.values()];
   }
 
+  /** Bounded read-only research, always scoped to the configured serving customer. */
+  public async generateKeywordIdeas(input:{canonicalUrl:string;keywords:string[];geoTargetConstants:string[];languageConstant:string}):Promise<unknown> {
+    let url:URL;try{url=new URL(input.canonicalUrl);}catch{throw invalid('A canonical property URL is required.');}
+    if(url.protocol!=='https:'||url.username||url.password||url.port||url.search||url.hash||!/^\/stay\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(url.pathname)||
+      !Array.isArray(input.keywords)||input.keywords.length>20||input.keywords.some(v=>typeof v!=='string'||v.length<2||v.length>80||hasAsciiControl(v))||
+      !Array.isArray(input.geoTargetConstants)||input.geoTargetConstants.length<1||input.geoTargetConstants.length>20||input.geoTargetConstants.some(v=>!/^geoTargetConstants\/[1-9]\d{0,19}$/.test(v))||!/^languageConstants\/[1-9]\d{0,19}$/.test(input.languageConstant))throw invalid('Bounded canonical keyword research parameters are required.');
+    const seed=input.keywords.length?{keywordAndUrlSeed:{url:url.href,keywords:input.keywords}}:{urlSeed:{url:url.href}};
+    const {data}=await this.adsRequest(this.getCustomerId(),':generateKeywordIdeas',{language:input.languageConstant,geoTargetConstants:input.geoTargetConstants,
+      includeAdultKeywords:false,keywordPlanNetwork:'GOOGLE_SEARCH',pageSize:100,...seed},'read');
+    return data;
+  }
+
   public async mutateOperations(customerId: string, operations: GoogleMutateOperation[], options: { validateOnly?: boolean } = {}): Promise<GoogleMutationResult> {
     const customer = normalizeGoogleCustomerId(customerId);
     if (customer !== this.getCustomerId()) throw new GoogleAdsError('GOOGLE_OWNERSHIP_MISMATCH', 'Google mutations must use the configured serving account.', {
@@ -294,6 +307,7 @@ export class GoogleAdsClient {
         case 'adGroupCriterionOperation': return { adGroupCriterionOperation: action };
         case 'adGroupAdOperation': return { adGroupAdOperation: action };
         case 'assetOperation': return { assetOperation: action };
+        case 'campaignAssetOperation': return { campaignAssetOperation: action };
       }
     });
     return this.mutateOperations(customer, operations);
@@ -354,7 +368,8 @@ export class GoogleAdsClient {
   private isResourceName(value: unknown, customer: string, kind: OperationKind, allowTemporary: boolean): value is string {
     const resource = RESOURCE_KINDS[kind];
     const id = allowTemporary ? '-?[1-9]\\d{0,19}' : '[1-9]\\d{0,19}';
-    return typeof value === 'string' && new RegExp(`^customers/${customer}/${resource.collection}/${id}${resource.composite ? `~${id}` : ''}$`).test(value);
+    const suffix=kind==='campaignAssetOperation'?`${id}~${id}~(?:SITELINK|AD_IMAGE|13|26)`: `${id}${resource.composite ? `~${id}` : ''}`;
+    return typeof value === 'string' && new RegExp(`^customers/${customer}/${resource.collection}/${suffix}$`).test(value);
   }
 
   private async adsRequest(customer: string, method: string, payload: unknown, kind: RequestKind): Promise<{ data: any; requestId?: string }> {

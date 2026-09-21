@@ -43,6 +43,16 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
     const [threads, setThreads] = useState<Thread[]>([]);
     const [activeThread, setActiveThread] = useState<Thread | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
+    const [olderAvailable,setOlderAvailable]=useState(false);
+    const [olderBusy,setOlderBusy]=useState(false);
+    const [olderError,setOlderError]=useState('');
+    const activeThreadId=useRef<number|undefined>(undefined);useEffect(()=>{activeThreadId.current=activeThread?.id;return()=>{activeThreadId.current=undefined;};},[activeThread?.id]);
+    async function loadOlder(){
+      if(!activeThread||!messages.length)return;const threadId=activeThread.id;setOlderBusy(true);setOlderError('');
+      try{const response=await fetch(`/api/threads/${threadId}/messages?before=${messages[0].id}`,{headers:{Authorization:`Bearer ${token}`}});if(!response.ok)throw new Error('Earlier messages could not be loaded.');const data=await response.json();if(activeThreadId.current!==threadId)return;setMessages(previous=>[...data,...previous]);setOlderAvailable(data.length===200);}
+      catch(e){if(activeThreadId.current===threadId)setOlderError(e instanceof Error?e.message:'Earlier messages could not be loaded.');}
+      finally{if(activeThreadId.current===threadId)setOlderBusy(false);}
+    }
     const [newMessage, setNewMessage] = useState('');
     const [loading, setLoading] = useState(true);
     const [isTyping, setIsTyping] = useState(false);
@@ -161,7 +171,8 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
             })
             .then(data => {
                 if (Array.isArray(data)) {
-                    setMessages(data);
+                    if(activeThreadId.current!==activeThread.id)return;
+                    setMessages(data);setOlderAvailable(data.length===200);
                     scrollToBottom();
                 }
             })
@@ -170,7 +181,7 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
 
         setTranslatedMessages({});
         setTranslatingIds({});
-        setMessages([]);
+        setMessages([]);setOlderAvailable(false);setOlderBusy(false);setOlderError('');
         fetchMessages();
         
         if (!socket) {
@@ -248,7 +259,7 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
         scrollToBottom();
 
         try {
-            const success = await queueMutation(`/api/threads/${activeThread.id}/messages`, 'POST', { receiverId, content: msgStr }, { 'Authorization': `Bearer ${localStorage.getItem('token')}` });
+            const success = await queueMutation(`/api/threads/${activeThread.id}/messages`, 'POST', { receiverId, content: msgStr, clientEventId: crypto.randomUUID(), ...(()=>{try{const id=sessionStorage.getItem('encho-measurement-visit');return id?{measurementVisitId:id}:{};}catch{return {};}})() }, { 'Authorization': `Bearer ${localStorage.getItem('token')}` });
             if (!success && !navigator.onLine) {
                  // Nothing special, it was queued.
             } else if (success) {
@@ -376,6 +387,8 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
                             {/* Chat Messages */}
                             <div className="flex-1 overflow-y-auto p-6 space-y-6">
                                 <AnimatePresence initial={false}>
+                                {olderAvailable&&<button disabled={olderBusy} onClick={()=>void loadOlder()} className="text-sm underline">{olderBusy?'Loading earlier messages…':'Load earlier messages'}</button>}
+                                {olderError&&<p role="alert">{olderError}</p>}
                                 {messages.map(msg => {
                                     const isMe = msg.sender_id === user?.id;
                                     const isTranslated = !!translatedMessages[msg.id];

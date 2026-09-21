@@ -57,18 +57,21 @@ export function MetricsPanel({ campaign }: { campaign: StudioCampaign }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(timer); }, []);
   const m = campaign.metrics;
+  const outcomes=campaign.firstPartyOutcomes;
+  const recorded=(value:string|null|undefined)=>typeof value==='string'&&/^\d+$/.test(value)?BigInt(value).toLocaleString('en-IN'):'—';
   const count = (value: number | null | undefined) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value.toLocaleString('en-IN') : '—';
   const reportLabel = m?.report?.status === 'NO_REPORT' ? 'Waiting for the first network report'
     : m?.report?.status === 'NOT_STARTED' ? 'Campaign reporting has not started'
     : m?.report?.status === 'ERROR' ? 'Report refresh needs attention'
     : m?.observedAt ? 'Latest reported performance' : 'Performance not yet available';
-  const metrics = [['Impressions', count(m?.impressions)], ['Clicks', count(m?.clicks)], ['Click-through rate', typeof m?.ctr === 'number' && Number.isFinite(m.ctr) ? `${(m.ctr * 100).toFixed(2)}%` : '—'], ['Property visits', count(m?.profileVisits)], ['Guest inquiries', count(m?.leads)], ['Verified attributed bookings', count(m?.bookings)], ['Reported media spend', m?.spendMinor != null && m.currency ? money(m.spendMinor, m.currency) : '—']];
+  const metrics = [['Impressions', count(m?.impressions)], ['Clicks', count(m?.clicks)], ['Click-through rate', typeof m?.ctr === 'number' && Number.isFinite(m.ctr) ? `${(m.ctr * 100).toFixed(2)}%` : '—'], ['Consented property visits', recorded(outcomes?.propertyVisits)], ['Recorded guest inquiries', recorded(outcomes?.inquiries)], ['Verified attributed bookings', recorded(outcomes?.bookings)], ['Reported media spend', m?.spendMinor != null && m.currency ? money(m.spendMinor, m.currency) : '—']];
   const stale = !!m?.observedAt && (!Number.isFinite(Date.parse(m.observedAt)) || now-Date.parse(m.observedAt)>20*60*1000);
   return <section className="mkt-panel"><div className="mkt-section-heading"><div><span className="mkt-eyebrow">Campaign performance</span><h3>From attention to bookings</h3></div><ArrowUpRight size={22}/></div>
     <StatusPill>{stale ? 'Older report · refresh pending' : reportLabel}</StatusPill>
     <div className="mkt-metrics">{metrics.map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
     <p className="mkt-caption">{m?.dateStart && m.dateEnd ? `Reporting period: ${m.dateStart} → ${m.dateEnd}${m.accountTimeZone ? ` (${m.accountTimeZone})` : ''}. ` : ''}Retrieved: {observedTime(m?.observedAt)}. {m?.dataAsOf ? `Data current through: ${observedTime(m.dataAsOf)}.` : 'The network has not confirmed how current these totals are.'}</p>
     <p className="mkt-caption">A dash means unavailable, not zero. Network reports can arrive late. Verified bookings and inquiries require Encho measurement; ad clicks are not bookings.</p>
+    {outcomes&&<div className="mkt-first-party"><p className="mkt-caption">Encho events across this campaign’s revisions, checked {observedTime(outcomes.observedAt)}. Counts cover recorded consented activity; they do not include every visitor or booking. Cancelled and refunded bookings are excluded.</p>{outcomes.unreadMessages&&BigInt(outcomes.unreadMessages)>0n&&<p role="status"><a href="/#messages">{recorded(outcomes.unreadMessages)} unread campaign inquiry messages · Open your inbox</a></p>}</div>}
     <MediaBudgetMeter campaign={campaign}/>
     <ObservationRefresh key={`${campaign.id}:${campaign.revision}`} campaign={campaign}/>
   </section>;
@@ -96,22 +99,38 @@ function ObservationRefresh({campaign}:{campaign:StudioCampaign}) {
       setMessage(result.coalesced ? `An existing refresh is ${humanStatus(result.status).toLowerCase()}. The workspace updates automatically.` : 'A network refresh is queued. New evidence will appear automatically when it arrives.');
     }catch(reason){setError(reason instanceof Error?reason.message:'Refresh could not be queued.');}finally{setBusy(false);}
   }
-  return <div className="mkt-observation-refresh"><button className="mkt-secondary" disabled={busy || !campaign.delivery?.externalCampaignId} onClick={()=>void refresh()}>{busy?'Requesting…':'Refresh network evidence'}</button>
+  return <div className="mkt-observation-refresh"><button className="mkt-secondary" disabled={busy || !campaign.delivery?.submitted} onClick={()=>void refresh()}>{busy?'Requesting…':'Refresh network evidence'}</button>
     {campaign.observationJob && <p className="mkt-caption">Last refresh: {humanStatus(campaign.observationJob.status)} · {observedTime(campaign.observationJob.updatedAt)}.</p>}
-    {!campaign.delivery?.externalCampaignId && <p className="mkt-caption">Network refresh becomes available after this campaign is submitted.</p>}
+    {!campaign.delivery?.submitted && <p className="mkt-caption">Network refresh becomes available after this campaign is submitted.</p>}
     {message && <p role="status">{message}</p>}{error && <Notice error>{error}</Notice>}
   </div>;
 }
-export function DeliveryEvidence({ campaign }: { campaign: StudioCampaign }) {
+export function DeliveryEvidence({ campaign, showProviderIdentity = false }: { campaign: StudioCampaign; showProviderIdentity?: boolean }) {
+  const [now,setNow]=useState(()=>Date.now());
+  useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),30000);return()=>clearInterval(timer);},[]);
+  const delivery=campaign.delivery;
+  const observed=Date.parse(delivery?.observedAt||'');
+  const stale=!Number.isFinite(observed)||now-observed>20*60*1000||observed>now+60000;
+  const label=delivery?.statusCheck==='ERROR'?'Status refresh needs attention':stale?'Waiting for current network status'
+    :delivery?.readiness==='ELIGIBLE'?'Eligible at the network'
+    :delivery?.readiness==='LIMITED'?'Eligible with network limits'
+    :delivery?.readiness==='PENDING'?'Waiting for network eligibility'
+    :delivery?.readiness==='LEARNING'?'Network bidding is learning'
+    :delivery?.readiness==='REVIEWING'?'Network review in progress'
+    :delivery?.readiness==='BLOCKED'?'Network delivery needs attention'
+    :delivery?.observedStatus==='PAUSED'?'Paused at the network':'Delivery not yet confirmed';
   return <div className="mkt-evidence"><ShieldCheck size={20}/><div><strong>Campaign delivery</strong><dl><div><dt>Requested state</dt><dd>{humanStatus(campaign.delivery?.configuredStatus)}</dd></div><div><dt>Last confirmed state</dt><dd>{humanStatus(campaign.delivery?.observedStatus)}</dd></div><div><dt>Last observation</dt><dd>{observedTime(campaign.delivery?.observedAt)}</dd></div></dl>
-    {campaign.delivery?.externalCampaignId && <code>{campaign.delivery.externalCampaignId}</code>}
-    <p className="mkt-caption">Submission, approval and active delivery are separate events. Provider updates may be delayed.</p></div></div>;
+    <StatusPill>{label}</StatusPill>
+    {delivery?.statusCheck==='ERROR'&&<p className="mkt-caption">The latest status check failed at {observedTime(delivery.statusAttemptedAt)}. The previous observation above is retained; it does not establish the current state.</p>}
+    {showProviderIdentity && campaign.delivery?.externalCampaignId && <code>{campaign.delivery.externalCampaignId}</code>}
+    <p className="mkt-caption">Eligibility means the reviewed campaign can compete for delivery. It does not confirm that an ad is being shown now. Performance totals and status checks update separately.</p></div></div>;
 }
 export function CampaignPlanDetails({ campaign, currency }: { campaign: StudioCampaign; currency?: string }) {
   const google = campaign.provider === 'GOOGLE';
   const range = (start?: string, end?: string) => start && end ? `${start} → ${end}` : 'Not defined';
   return <section className="mkt-panel"><span className="mkt-eyebrow">Revision {campaign.revision} · Delivery plan</span><h3>The campaign being reviewed</h3>
     <dl className="mkt-review-list">
+      <div><dt>Campaign product</dt><dd>{campaign.destinationMembership?'Destination contribution plan':'Dedicated stay'}{!campaign.destinationMembership&&campaign.product?.kind==='DEDICATED_STAY' && /^\/stay\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(campaign.product.canonicalPath) && <><br/><a href={campaign.product.canonicalPath}>View the advertised property</a><br/><small>Property evidence is bound to this revision.</small></>}</dd></div>
       <div><dt>Channel</dt><dd>{google ? 'Google Search' : 'Facebook & Instagram'}</dd></div>
       <div><dt>Ad flight</dt><dd>{range(campaign.startDate, campaign.endDate)}<br/><small>{google ? 'Google Ads account time zone' : 'UTC'}</small></dd></div>
       <div><dt>Guest stay nights</dt><dd>{range(campaign.stayStartDate, campaign.stayEndDate)}<br/><small>Property local · checkout exclusive</small></dd></div>

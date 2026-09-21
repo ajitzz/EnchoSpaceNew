@@ -75,47 +75,20 @@ describe('P0-6 Escrow Remediation and Canary Blocker', () => {
     }
   });
 
-  it('Escrow release DB transaction commits before dispatch begins, transitions to META_API_PUSH, and preserves Meta error on dispatch failure', async () => {
-    // Pause Meta publishing to trigger immediate dispatch failure without network delays
-    const originalMetaPaused = process.env.META_PUBLISHING_PAUSED;
-    process.env.META_PUBLISHING_PAUSED = 'true';
-
-    // Create campaign
-    const campRes = await pool.query(`
-      INSERT INTO host_marketing_campaigns 
-      (title, listing_id, host_id, status, budget, admin_approved, escrow_status, payment_status) 
-      VALUES ('Test Camp', $1, $2, 'approved', 150, true, 'holding', 'paid') RETURNING id`, 
-      [testListingId, testHostId]
-    );
+  it.each(['anonymous','host','admin'])('retired escrow release rejects %s with no funds, state, or audit mutation', async (actor) => {
+    const campRes = await pool.query(`INSERT INTO host_marketing_campaigns(title,listing_id,host_id,status,budget,admin_approved,escrow_status,payment_status)
+      VALUES('Legacy attempt',$1,$2,'approved',150,true,'holding','paid') RETURNING *`,[testListingId,testHostId]);
     testCampaignId = campRes.rows[0].id;
-
-    console.log('1. Created campaign', testCampaignId);
-
-    const res = await request(app)
-      .post('/api/admin/payments/escrow/release')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ campaign_id: testCampaignId });
-
-    console.log('2. Request finished:', res.status, res.body);
-
-    expect(res.status).toBe(500);
-    // Even if it transitions to failed_publish twice (or fails), the escrow must be released
-    
-    console.log('3. Running verify query');
-    const verifyRes = await pool.query('SELECT status, escrow_status FROM host_marketing_campaigns WHERE id = $1', [testCampaignId]);
-    console.log('4. Verify query returned:', verifyRes.rows[0]);
-    
-    expect(verifyRes.rows[0].escrow_status).toBe('released');
-    
-    expect(verifyRes.rows[0].status).toBe('failed_publish');
-
-    console.log('5. Restoring env');
-    if (originalMetaPaused !== undefined) {
-      process.env.META_PUBLISHING_PAUSED = originalMetaPaused;
-    } else {
-      delete process.env.META_PUBLISHING_PAUSED;
-    }
-    console.log('6. Test case finished');
-  }, 15000);
-
+    const before = campRes.rows[0];
+    const auditBefore = (await pool.query('SELECT * FROM admin_audit_logs ORDER BY id')).rows;
+    const call = request(app).post('/api/admin/payments/escrow/release');
+    if(actor!=='anonymous') call.set('Authorization',`Bearer ${actor==='admin'?adminToken:jwt.sign({userId:testHostId,role:'admin'},process.env.JWT_SECRET!)}`);
+    const response = await call.send({campaign_id:testCampaignId});
+    expect(response.status).toBe(410);expect(response.body.code).toBe('HARVO_V2_REQUIRED');
+    expect((await pool.query('SELECT * FROM host_marketing_campaigns WHERE id=$1',[testCampaignId])).rows[0]).toEqual(before);
+    expect((await pool.query('SELECT * FROM admin_audit_logs ORDER BY id')).rows).toEqual(auditBefore);
+    expect((await pool.query('SELECT * FROM meta_publishing_transactions WHERE campaign_id=$1',[testCampaignId])).rows).toHaveLength(0);
+    await pool.query('DELETE FROM host_marketing_campaigns WHERE id=$1',[testCampaignId]);
+    testCampaignId=0;
+  });
 });

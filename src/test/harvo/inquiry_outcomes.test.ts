@@ -1,0 +1,76 @@
+import {afterAll,beforeAll,beforeEach,describe,expect,it} from 'vitest';
+import {readFileSync} from 'node:fs';
+import {randomUUID} from 'node:crypto';
+import pg from 'pg';
+import {createWorkflowPgFixture,workflowConfig,workflowDraft} from './workflowPgFixture.js';
+import {installInquirySchema} from './inquiryPgSchema.js';
+import {MarketingWorkflowService} from '../../lib/marketing/workflow.js';
+import {CampaignAiReviewer} from '../../lib/marketing/ai.js';
+import {WorkflowFinance} from '../../lib/marketing/financeBridge.js';
+import {CampaignPaymentGateway} from '../../lib/marketing/payments.js';
+import {MarketingAttributionLinks} from '../../lib/marketing/portfolio/attribution.js';
+import {MarketingTouchpoints} from '../../lib/marketing/portfolio/touchpoints.js';
+import {CampaignOutcomes} from '../../lib/marketing/portfolio/outcomes.js';
+import {InquiryInbox} from '../../lib/marketing/inquiryInbox.js';
+import {inTransaction} from '../../lib/marketing/database.js';
+const admin={id:90,role:'system' as const},host={id:10,role:'host' as const},guest={id:11,role:'host' as const},origin='https://encho.example';
+describe('SP7 first-party inquiry authority and tenant rollups',()=>{
+ let fixture:Awaited<ReturnType<typeof createWorkflowPgFixture>>,runtime:pg.Pool,workflow:MarketingWorkflowService,inbox:InquiryInbox,touchpoints:MarketingTouchpoints,links:MarketingAttributionLinks,outcomes:CampaignOutcomes;
+ beforeAll(async()=>{
+  fixture=await createWorkflowPgFixture();await installInquirySchema(fixture.pool);
+  for(const name of ['011_harvo_marketing_measurement.sql','027_marketing_attribution_links.sql','028_marketing_consent_touchpoints.sql','029_marketing_destination_pools.sql','031_marketing_inquiry_attribution.sql'])await fixture.pool.query(readFileSync('src/migrations/'+name,'utf8'));
+  await fixture.pool.query(`CREATE ROLE inquiry_runtime LOGIN NOSUPERUSER NOBYPASSRLS;GRANT USAGE ON SCHEMA public TO inquiry_runtime;
+   GRANT SELECT ON users,listings,experiences,marketing_campaign_workflows,marketing_attribution_links,marketing_booking_measurements,marketing_pool_memberships TO inquiry_runtime;
+   GRANT SELECT,INSERT,UPDATE ON threads,messages TO inquiry_runtime;
+   GRANT SELECT,INSERT,DELETE ON marketing_measurement_payloads TO inquiry_runtime;
+   GRANT SELECT,INSERT ON marketing_attribution_links,marketing_attribution_touchpoints,marketing_measurement_consents,marketing_inquiry_attributions TO inquiry_runtime;
+   GRANT USAGE ON SEQUENCE threads_id_seq,messages_id_seq,marketing_measurement_consents_sequence_seq TO inquiry_runtime;`);
+  runtime=new pg.Pool({...fixture.pool.options,user:'inquiry_runtime',max:8});
+  links=new MarketingAttributionLinks(runtime,admin,origin,{active:'test',keys:{test:Buffer.alloc(32,8).toString('base64url')}});
+  touchpoints=new MarketingTouchpoints(runtime,admin,links);
+  inbox=new InquiryInbox(runtime,text=>({sanitized:text.replace('guest@example.com','[REDACTED]'),wasSanitized:text.includes('@')}),touchpoints);
+  outcomes=new CampaignOutcomes(runtime,admin,true,false);
+  workflow=new MarketingWorkflowService(fixture.pool,{ai:new CampaignAiReviewer({mediaOrigins:new Set()}),finance:new WorkflowFinance(fixture.pool,workflowConfig,new CampaignPaymentGateway(fixture.pool,{origin})),publishingEnabled:false,activationEnabled:false,fundingEnabled:false,configurationReasons:[]});
+ });
+ beforeEach(async()=>{await fixture.reset();});afterAll(async()=>{await runtime?.end();await fixture?.close();});
+ async function visit(){const campaign=await workflow.create(host,workflowDraft()),url=new URL(await links.issue(campaign.campaign_id,1)),eventId=randomUUID();const recorded=await touchpoints.record({eventId,token:url.searchParams.get('enc_ref'),path:url.pathname,disclosureVersion:'encho-measurement-v1',measurement:true,adUserData:false,personalization:false,parameters:{}},undefined,'browser');return {campaignId:campaign.campaign_id,eventId,cookie:recorded.cookie};}
+ it('derives listing ownership, rejects manufactured recipients and isolates message reads/writes',async()=>{
+  await expect(inbox.create(guest,{listingId:20,hostId:90})).rejects.toMatchObject({code:'THREAD_NOT_FOUND'});
+  await expect(inbox.create(guest,{listingId:99999})).rejects.toMatchObject({code:'THREAD_NOT_FOUND'});
+  const threads=await Promise.all(Array.from({length:4},()=>inbox.create(guest,{listingId:20,hostId:10})));
+  expect(new Set(threads.map(t=>t.id)).size).toBe(1);const thread=threads[0];
+  await expect(inbox.send(guest,thread.id,{content:'Hello',receiverId:90})).rejects.toMatchObject({code:'THREAD_NOT_FOUND'});
+  await inbox.send(guest,thread.id,{content:'Ask guest@example.com',receiverId:10});
+  expect((await inbox.messages(host,thread.id))[0].content).toBe('Ask [REDACTED]');
+  await expect(inbox.messages({id:90,role:'host'},thread.id)).rejects.toMatchObject({code:'THREAD_NOT_FOUND'});
+  await expect(inbox.send({id:90,role:'host'},thread.id,{content:'Spoof'})).rejects.toMatchObject({code:'THREAD_NOT_FOUND'});
+ });
+ it('atomically deduplicates an offline replay and records one consented conversation without cross-host evidence',async()=>{
+  const v=await visit(),thread=await inbox.create(guest,{listingId:20}),body={content:'Are these stay dates available?',receiverId:10,clientEventId:randomUUID(),measurementVisitId:v.eventId};
+  const results=await Promise.all(Array.from({length:6},()=>inbox.send(guest,thread.id,body,v.cookie)));
+  expect(new Set(results.map(r=>r.message.id)).size).toBe(1);
+  expect((await fixture.pool.query('SELECT * FROM messages')).rowCount).toBe(1);
+  expect((await fixture.pool.query('SELECT * FROM marketing_inquiry_attributions')).rowCount).toBe(1);
+  await expect(inbox.send(guest,thread.id,{...body,content:'Changed'},v.cookie)).rejects.toMatchObject({code:'IDEMPOTENCY_CONFLICT'});
+  const view=await outcomes.decorate(host,{campaigns:[{id:v.campaignId}]});
+  expect(view.campaigns[0].firstPartyOutcomes).toMatchObject({propertyVisits:'1',inquiries:'1',unreadMessages:'1',bookings:null,completeness:'RECORDED_EVENTS_ONLY'});
+  await expect(outcomes.decorate(guest,{campaigns:[{id:v.campaignId}]})).rejects.toMatchObject({code:'CAMPAIGN_NOT_FOUND'});
+  expect((await inTransaction(runtime,guest,c=>c.query('SELECT * FROM marketing_inquiry_attributions'))).rowCount).toBe(0);
+  await expect(fixture.pool.query('DELETE FROM marketing_inquiry_attributions')).rejects.toThrow(/append-only/);
+  await inbox.messages(host,thread.id);expect((await outcomes.decorate(host,{campaigns:[{id:v.campaignId}]})).campaigns[0].firstPartyOutcomes?.unreadMessages).toBe('0');
+ });
+ it('does not attribute a revoked or other-visitor touchpoint and still permits legitimate messaging',async()=>{
+  const v=await visit(),thread=await inbox.create(guest,{listingId:20});
+  await inbox.send(guest,thread.id,{content:'Unrelated browser',measurementVisitId:v.eventId},links.createVisitor());
+  await touchpoints.revoke(v.cookie,randomUUID());
+  await inbox.send(guest,thread.id,{content:'Permission withdrawn',measurementVisitId:v.eventId},v.cookie);
+  expect((await fixture.pool.query('SELECT * FROM marketing_inquiry_attributions')).rowCount).toBe(0);
+  expect((await fixture.pool.query('SELECT * FROM messages')).rowCount).toBe(2);
+ });
+ it('paginates bounded history without revealing a non-participant conversation',async()=>{
+  const thread=await inbox.create(guest,{listingId:20});
+  await fixture.pool.query("INSERT INTO messages(thread_id,sender_id,receiver_id,content) SELECT $1,11,10,'History '||g FROM generate_series(1,205) g",[thread.id]);
+  const recent=await inbox.messages(host,thread.id),older=await inbox.messages(host,thread.id,recent[0].id);
+  expect(recent).toHaveLength(200);expect(older).toHaveLength(5);expect(older.at(-1).id).toBeLessThan(recent[0].id);
+ });
+});

@@ -1,3 +1,6 @@
+import {useProviderContractFixture} from './harvo/providerContractFixture.js';
+import {providerFixture,request,ids} from './harvo/googleProviderFixture.js';
+import {GooglePublishingStore} from '../lib/providers/google/GooglePublishingStore.js';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DoubleEntryLedgerService } from '../lib/doubleEntryLedgerService';
 import { GoogleAdsProvider } from '../lib/providers/google/GoogleAdsProvider';
@@ -172,38 +175,17 @@ describe('Milestone 4.1 — Case B Golden Failure Verification Matrix', () => {
   // 4. GOOGLE ADS HIERARCHY CASE B: Hierarchy created, local state lost
   // =========================================================================
   describe('4. Google Ads Hierarchy — Case B Recovery', () => {
-    it('recovers deterministic Google Ads hierarchy resources without duplicating provider entities', async () => {
-      const mockGoogleClient = new GoogleAdsClient();
-      const provider = new GoogleAdsProvider(mockGoogleClient);
-
-      const request: any = {
-        campaignId: 9922,
-        hostId: 15,
-        listingId: 301,
-        title: 'Kyoto Traditional Machiya',
-        objective: 'OUTCOME_TRAFFIC',
-        correlationId: 'corr_case_b_gads',
-        idempotencyKey: 'gads_case_b_camp_9922',
-        budget: { currency: 'USD', minor_units: 15000 },
-        targetAudience: { locations: ['JP'] },
-        creativeAssets: {
-          headline: 'Kyoto Traditional Machiya',
-          description: 'Historic wooden stay in central Kyoto',
-          landingPageUrl: 'https://encho.app/listings/301',
-          mediaUrl: 'https://encho.app/kyoto.jpg'
-        }
-      };
-
-      // Worker 1 executes hierarchy creation
-      const res1 = await provider.createCampaignHierarchy(request, mockClient);
-      expect(res1.success).toBe(true);
-      expect(res1.externalCampaignId).toBe('customers/9904998948/campaigns/9922');
-
-      // Worker 2 retries from scratch (Case B: local DB cache cleared/lost)
-      const res2 = await provider.createCampaignHierarchy(request, mockClient);
-      expect(res2.success).toBe(true);
-      expect(res2.externalCampaignId).toBe(res1.externalCampaignId);
-      expect(res2.externalContainerId).toBe(res1.externalContainerId);
+    const db=useProviderContractFixture();
+    it('quarantines known remote identities after local completion loss without guessing or re-creating IDs',async()=>{
+      const {provider,state}=providerFixture();
+      const fail=vi.spyOn(GooglePublishingStore.prototype,'complete').mockRejectedValueOnce(new Error('fixture database completion lost'));
+      const first=await provider.createCampaignHierarchy(request(),db.pool);fail.mockRestore();
+      expect(first.success).toBe(false);
+      const row=(await db.pool.query('SELECT publish_status,is_unknown_outcome,response FROM provider_publishing_transactions')).rows[0];
+      expect(row.is_unknown_outcome).toBe(true);
+      expect(JSON.stringify(row.response)).toContain(ids.campaign);
+      expect((await provider.createCampaignHierarchy({...request(),idempotencyKey:'recovery-attempt'},db.pool)).success).toBe(false);
+      expect(state.mutations).toBe(1);
     });
   });
 

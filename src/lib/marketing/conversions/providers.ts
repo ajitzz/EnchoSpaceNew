@@ -31,6 +31,7 @@ export class CanonicalConversionProviders {
   prepare(item: ConversionUpload, attribution: VerifiedConversionAttribution): PreparedConversion {
     const now = this.options.now?.() ?? new Date();
     if (!Number.isFinite(Date.parse(item.capturedAt)) || !Number.isFinite(Date.parse(item.occurredAt)) || Date.parse(item.capturedAt) > Date.parse(item.occurredAt) || Date.parse(item.occurredAt) > now.getTime()) throw new MarketingError('CONVERSION_TIME_INVALID', 'Verified conversion times are invalid');
+    if(item.purchaseEventId!==undefined&&!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(item.purchaseEventId))throw new MarketingError('CONVERSION_EVENT_ID_INVALID','Purchase deduplication requires its canonical event UUID');
     const value = wireMoney(item.amountMinor);
     if (item.kind === 'PURCHASE' && value <= 0 || item.kind === 'RETRACTION' && value !== 0) throw new MarketingError('CONVERSION_AMOUNT_INVALID', 'Conversion kind and value disagree');
     if (item.provider === 'GOOGLE') {
@@ -61,7 +62,7 @@ export class CanonicalConversionProviders {
     if (source.protocol !== 'https:' || source.username || source.password || source.search || source.hash || !cfg.allowedOrigins.includes(source.origin) || !source.pathname.startsWith('/stay/')) throw new MarketingError('CONVERSION_SOURCE_INVALID', 'The canonical property event URL must be an approved HTTPS stay page');
     if (!a.fbc && !a.externalIdSha256) throw new MarketingError('META_MATCH_EVIDENCE_REQUIRED', 'A verified Meta click or consented hashed external identifier is required');
     const user = { client_user_agent: a.userAgent, ...(a.fbc ? { fbc: a.fbc } : {}), ...(a.fbp ? { fbp: a.fbp } : {}), ...(a.externalIdSha256 ? { external_id: [a.externalIdSha256] } : {}) };
-    return { transport: 'META_CAPI_V26', destination: { accountId: cfg.pixelId, actionId: 'Purchase' }, url: `https://graph.facebook.com/v26.0/${cfg.pixelId}/events`, body: { data: [{ event_name: 'Purchase', event_id: stablePurchaseId(item.orderId), event_time: Math.floor(Date.parse(item.capturedAt) / 1000), action_source: 'website', event_source_url: source.href, opt_out: attribution.consent.adPersonalization !== 'GRANTED', user_data: user, custom_data: { value, currency: item.currency, order_id: item.orderId } }] } };
+    return { transport: 'META_CAPI_V26', destination: { accountId: cfg.pixelId, actionId: 'Purchase' }, url: `https://graph.facebook.com/v26.0/${cfg.pixelId}/events`, body: { data: [{ event_name: 'Purchase', event_id: item.purchaseEventId??stablePurchaseId(item.orderId), event_time: Math.floor(Date.parse(item.capturedAt) / 1000), action_source: 'website', event_source_url: source.href, opt_out: attribution.consent.adPersonalization !== 'GRANTED', user_data: user, custom_data: { value, currency: item.currency, order_id: item.orderId } }] } };
   }
   private async headers(transport: PreparedConversion['transport']) {
     if (transport === 'META_CAPI_V26') return { 'Content-Type': 'application/json', Authorization: `Bearer ${this.options.meta!.accessToken}` };

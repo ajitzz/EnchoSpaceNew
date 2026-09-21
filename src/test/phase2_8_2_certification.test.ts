@@ -50,6 +50,7 @@ describe('PHASE 2.8.2 — META COMMAND PLANE INDEPENDENT CERTIFICATION', () => {
   });
 
   afterAll(async () => {
+    await pool.query('DELETE FROM meta_publishing_transactions WHERE campaign_id = $1', [testCampaignId]);
     await pool.query('DELETE FROM host_marketing_campaigns WHERE id = $1', [testCampaignId]);
     await pool.query('DELETE FROM listings WHERE id = $1', [testListingId]);
     await pool.query('DELETE FROM users WHERE id IN ($1, $2)', [testHostId, testAdminId]);
@@ -145,8 +146,8 @@ describe('PHASE 2.8.2 — META COMMAND PLANE INDEPENDENT CERTIFICATION', () => {
 
     // Insert mock successful publish tx
     await pool.query(`
-      INSERT INTO meta_publishing_transactions (campaign_id, publish_status, correlation_id)
-      VALUES ($1, 'SUCCESS', 'test-corr-id')
+      INSERT INTO meta_publishing_transactions (campaign_id, publish_status, correlation_id, idempotency_key)
+      VALUES ($1, 'SUCCESS', 'test-corr-id', 'fixture-publish')
     `, [testCampaignId]);
 
     const adminTruth = await CampaignControlCenterService.getCampaignTruth(

@@ -1,3 +1,4 @@
+import {spatialStoryCopy} from '../../shared/marketingStory.js';
 import type pg from 'pg';
 import {randomUUID} from 'node:crypto';
 import {generateListingSlug} from '../stayProjection.js';
@@ -17,7 +18,7 @@ export interface WorkflowFinancePort {
  fund(row:any,key:string):Promise<{url?:string;status:string;blockers?:string[]}>;
  policy():{currency:string;markupPercent:number;configured:boolean;version?:number;costItems?:{label:string;amountMinor:string}[]};
 }
-export interface WorkflowOptions{ai:CampaignAiReviewer;finance:WorkflowFinancePort;publishingEnabled:boolean;activationEnabled:boolean;fundingEnabled:boolean;configurationReasons:string[];evaluationTimeoutMs?:number;validateTargeting?:(draft:CampaignDraft)=>Promise<void>;metaCountries?:readonly string[];activationBlockers?:(provider:'GOOGLE'|'META')=>string[];resolveCreative?:(c:pg.PoolClient,actor:Actor,draft:CampaignDraft,listing:ListingEvidence)=>Promise<CampaignCreativeEvidence>;verifyCreativeForPublishing?:(row:any,actor:Actor)=>Promise<void>;}
+export interface WorkflowOptions{resolveStory?:(c:pg.PoolClient,actor:Actor,draft:CampaignDraft)=>Promise<NonNullable<ListingEvidence['spatialStory']>>;guardDedicated?:(c:pg.PoolClient,row:any)=>Promise<void>;bindProduct?:(c:pg.PoolClient,actor:Actor,listing:ListingEvidence)=>Promise<NonNullable<ListingEvidence['marketingProduct']>>;verifyProduct?:(c:pg.PoolClient,actor:Actor,product:NonNullable<ListingEvidence['marketingProduct']>)=>Promise<unknown>;ai:CampaignAiReviewer;finance:WorkflowFinancePort;publishingEnabled:boolean;activationEnabled:boolean;fundingEnabled:boolean;configurationReasons:string[];evaluationTimeoutMs?:number;validateTargeting?:(draft:CampaignDraft)=>Promise<void>;metaCountries?:readonly string[];activationBlockers?:(provider:'GOOGLE'|'META')=>string[];resolveCreative?:(c:pg.PoolClient,actor:Actor,draft:CampaignDraft,listing:ListingEvidence)=>Promise<CampaignCreativeEvidence>;verifyCreativeForPublishing?:(row:any,actor:Actor)=>Promise<void>;}
 export async function readListing(c:pg.PoolClient,id:number,actor:Actor):Promise<ListingEvidence>{
  const r=await c.query(`SELECT id,user_id,title,description,slug,city,publication_status,currency,price FROM listings WHERE id=$1 AND ($2 OR user_id=$3) FOR SHARE`,[id,actor.role==='admin'||actor.role==='system',actor.id]);
  if(!r.rows[0])throw new MarketingError('LISTING_NOT_AVAILABLE','Property not found',404);const l=r.rows[0];
@@ -31,6 +32,14 @@ export class MarketingWorkflowService{
   if(!Number.isInteger(this.evaluationTimeoutMs)||this.evaluationTimeoutMs<1||this.evaluationTimeoutMs>60000)throw new MarketingError('EVALUATION_TIMEOUT_INVALID','Evaluation timeout must be between 1 and 60000 milliseconds',500);
  }
  private async creativeSnapshot(c:pg.PoolClient,draft:CampaignDraft,listing:ListingEvidence,actor:Actor):Promise<ListingEvidence>{
+  if(draft.spatialStoryId){
+   if(!this.options.resolveStory)throw new MarketingError('STORY_NOT_CONFIGURED','Reviewed spatial creative is unavailable.',503);
+   const story=await this.options.resolveStory(c,actor,draft);
+   const copy=spatialStoryCopy(draft.provider);
+   if(draft.headline!==copy.headline||draft.description!==copy.description||draft.provider==='GOOGLE'&&(fingerprint(draft.googleSearch?.headlines)!==fingerprint(copy.googleSearch!.headlines)||fingerprint(draft.googleSearch?.descriptions)!==fingerprint(copy.googleSearch!.descriptions)))throw new MarketingError('STORY_COPY_CHANGED','Spatial campaigns use neutral framing and exact reviewed property facts. Re-select the approved story to restore its copy.');
+   if(story.manifest.cards.some(card=>!draft.mediaIds.includes(card.image.sourceAssetId))||!draft.mediaIds.includes(story.manifest.landscapeImage.sourceAssetId))throw new MarketingError('STORY_MEDIA_MISMATCH','Select every source image in the approved story.');
+   return {...listing,spatialStory:story};
+  }
   if(!draft.creativeDerivativeId)return listing;
   const source=listing.media.find(m=>m.id===draft.mediaIds[0]);
   if(draft.provider!=='META'||!source?.approved||source.type!=='IMAGE')throw new MarketingError('CREATIVE_SOURCE_INVALID','A reviewed image variant must use the first approved still image of this Meta campaign.');
@@ -72,7 +81,7 @@ export class MarketingWorkflowService{
    await c.query('SELECT pg_advisory_xact_lock(7825,$1)',[actor.id]);
    const replay=(await c.query('SELECT * FROM marketing_create_requests WHERE host_id=$1 AND request_key=$2',[actor.id,requestKey])).rows[0];
    if(replay){if(replay.fingerprint!==fingerprint(draft))throw new MarketingError('IDEMPOTENCY_CONFLICT','Draft creation key is already bound to different content');return (await c.query('SELECT * FROM marketing_campaign_workflows WHERE campaign_id=$1',[replay.campaign_id])).rows[0];}
-   const listing=await readListing(c,draft.listingId,actor);assertListing(draft,listing,actor.id);const snapshot=await this.creativeSnapshot(c,draft,listing,actor);
+   const listing=await readListing(c,draft.listingId,actor);assertListing(draft,listing,actor.id);const snapshot={...await this.creativeSnapshot(c,draft,listing,actor)};if(this.options.bindProduct)snapshot.marketingProduct=await this.options.bindProduct(c,actor,snapshot);
    const parent=await c.query(`INSERT INTO host_marketing_campaigns(host_id,listing_id,title,description,platforms,budget,status) VALUES($1,$2,$3,$4,$5,$6,'HARVO_V2') RETURNING id`,[actor.id,draft.listingId,draft.title,draft.description,JSON.stringify([draft.provider.toLowerCase()]),Number(draft.mediaBudgetMinor)/100]);
    const id=parent.rows[0].id;
    const row=(await c.query(`INSERT INTO marketing_campaign_workflows(campaign_id,host_id,listing_id,revision,provider,state,draft,listing_snapshot,listing_hash) VALUES($1,$2,$3,1,$4,'DRAFT',$5,$6,$7) RETURNING *`,[id,actor.id,draft.listingId,draft.provider,JSON.stringify(draft),JSON.stringify(snapshot),fingerprint(listing)])).rows[0];
@@ -80,14 +89,20 @@ export class MarketingWorkflowService{
    await this.saveRevision(c,row);await event(c,row,actor,'DRAFT_CREATED',{listingHash:row.listing_hash});return row;
   });
  }
- private async saveRevision(c:pg.PoolClient,row:any){await c.query(`INSERT INTO marketing_campaign_revisions(campaign_id,revision,host_id,draft,listing_snapshot,listing_hash) VALUES($1,$2,$3,$4,$5,$6)`,[row.campaign_id,row.revision,row.host_id,row.draft,row.listing_snapshot,row.listing_hash]);}
+ private async saveRevision(c:pg.PoolClient,row:any){await c.query(`INSERT INTO marketing_campaign_revisions(campaign_id,revision,host_id,draft,listing_snapshot,listing_hash) VALUES($1,$2,$3,$4,$5,$6)`,[row.campaign_id,row.revision,row.host_id,row.draft,row.listing_snapshot,row.listing_hash]);
+  const product=row.listing_snapshot.marketingProduct;
+  if(product){if(product.kind!=='DEDICATED_STAY')throw new MarketingError('PRODUCT_NOT_ENABLED','Pooled campaigns require their separate accepted contribution contract.');
+   await c.query('INSERT INTO marketing_revision_products(campaign_id,revision,host_id,listing_id,kind,fact_snapshot_id,contract) VALUES($1,$2,$3,$4,$5,$6,$7)',[row.campaign_id,row.revision,row.host_id,row.listing_id,product.kind,product.factSnapshotId,JSON.stringify(product)]);
+  }
+ }
  async update(id:number,actor:Actor,revision:number,input:unknown){
   const draft=draftSchema.parse(input);
   if(this.options.validateTargeting){const current=await this.get(id,actor);requireRevision(current,revision);if(!editableStates.has(current.state)||current.quote_id)throw new MarketingError('CAMPAIGN_LOCKED','Quoted or dispatched campaigns are immutable.');if(draft.listingId!==current.listing_id||draft.provider!==current.provider)throw new MarketingError('IDENTITY_IMMUTABLE','Property and provider cannot change on an existing campaign');await this.options.validateTargeting(draft);}
   return inTransaction(this.pool,actor,async c=>{const row=await lockWorkflow(c,id,actor);requireRevision(row,revision);
+   await this.options.guardDedicated?.(c,row);
    if(!editableStates.has(row.state)||row.quote_id)throw new MarketingError('CAMPAIGN_LOCKED','Quoted or dispatched campaigns are immutable. Create a new campaign revision before funding.');
    if(draft.listingId!==row.listing_id||draft.provider!==row.provider)throw new MarketingError('IDENTITY_IMMUTABLE','Property and provider cannot change on an existing campaign');
-   const listing=await readListing(c,row.listing_id,actor);assertListing(draft,listing,row.host_id);const snapshot=await this.creativeSnapshot(c,draft,listing,actor);
+   const listing=await readListing(c,row.listing_id,actor);assertListing(draft,listing,row.host_id);const snapshot={...await this.creativeSnapshot(c,draft,listing,actor)};if(this.options.bindProduct)snapshot.marketingProduct=await this.options.bindProduct(c,actor,snapshot);
    const updated=(await c.query(`UPDATE marketing_campaign_workflows SET revision=revision+1,state='DRAFT',draft=$2,listing_snapshot=$3,listing_hash=$4,ai='{"status":"NOT_EVALUATED","score":null,"notes":[]}',content_approval='{"status":"PENDING","revision":null}',updated_at=now() WHERE campaign_id=$1 RETURNING *`,[id,JSON.stringify(draft),JSON.stringify(snapshot),fingerprint(listing)])).rows[0];
    await this.saveRevision(c,updated);await event(c,updated,actor,'DRAFT_REVISED',{previousRevision:row.revision});return updated;
   });
@@ -96,6 +111,7 @@ export class MarketingWorkflowService{
   await this.recoverExpiredEvaluations(actor,id);
   const evaluationId=randomUUID();
   const row=await inTransaction(this.pool,actor,async c=>{const row=await lockWorkflow(c,id,actor);requireRevision(row,revision);
+   await this.options.guardDedicated?.(c,row);
    if(!editableStates.has(row.state)||row.quote_id)throw new MarketingError('CAMPAIGN_LOCKED','This revision is locked');
    // Cross-process host rate limit. The lock and attempt insertion share one transaction.
    await c.query('SELECT pg_advisory_xact_lock(7824,$1)',[row.host_id]);
@@ -129,7 +145,7 @@ export class MarketingWorkflowService{
    const updated=(await c.query('UPDATE marketing_campaign_workflows SET state=$2,content_approval=$3,updated_at=now() WHERE campaign_id=$1 RETURNING *',[id,input.decision==='APPROVE'?'APPROVED':'ADMIN_REJECTED',JSON.stringify(approval)])).rows[0];await event(c,updated,actor,'ADMIN_CONTENT_REVIEW',approval);return updated;
   });
  }
- async assertCurrentListing(c:pg.PoolClient,row:any,actor:Actor){const listing=await readListing(c,row.listing_id,actor);assertListing(row.draft,listing,row.host_id);if(fingerprint(listing)!==row.listing_hash)throw new MarketingError('LISTING_CHANGED','Property price, details or media changed. Review a new campaign before publication.');const current=await this.creativeSnapshot(c,row.draft,listing,actor);if(fingerprint(current.campaignCreative??null)!==fingerprint(row.listing_snapshot.campaignCreative??null))throw new MarketingError('CREATIVE_EVIDENCE_CHANGED','Image-variant approval changed. Review a new campaign revision.');}
+ async assertCurrentListing(c:pg.PoolClient,row:any,actor:Actor){const product=row.listing_snapshot.marketingProduct;if(product){if(!this.options.verifyProduct)throw new MarketingError('PRODUCT_VERIFIER_REQUIRED','Canonical product evidence must be configured before using this revision.',503);await this.options.verifyProduct(c,actor,product);}const listing=await readListing(c,row.listing_id,actor);assertListing(row.draft,listing,row.host_id);if(fingerprint(listing)!==row.listing_hash)throw new MarketingError('LISTING_CHANGED','Property price, details or media changed. Review a new campaign before publication.');const current=await this.creativeSnapshot(c,row.draft,listing,actor);if(fingerprint(current.spatialStory??null)!==fingerprint(row.listing_snapshot.spatialStory??null))throw new MarketingError('STORY_EVIDENCE_CHANGED','The reviewed story changed.');if(fingerprint(current.campaignCreative??null)!==fingerprint(row.listing_snapshot.campaignCreative??null))throw new MarketingError('CREATIVE_EVIDENCE_CHANGED','Image-variant approval changed. Review a new campaign revision.');}
  async quote(id:number,actor:Actor,revision:number,key:string){
   const row=await this.get(id,actor);requireRevision(row,revision);if(row.state!=='APPROVED')throw new MarketingError('CONTENT_APPROVAL_REQUIRED','Approve the exact campaign content before finalizing its funding quote');
   const result=await this.options.finance.quote(row,key);
@@ -143,19 +159,28 @@ export class MarketingWorkflowService{
   let row=await this.get(id,actor);requireRevision(row,revision);
   if(action==='ACTIVATE'&&this.options.activationBlockers?.(row.provider).length)throw new MarketingError('CONVERSION_AUTHORITY_REQUIRED','Accepted booking capture, current consent and this channel’s conversion destination are required before spending.',503);
   return inTransaction(this.pool,actor,async c=>{row=await lockWorkflow(c,id,actor);requireRevision(row,revision);
+   if(action!=='PAUSE')await this.options.guardDedicated?.(c,row);
    const operationKey=action==='PUBLISH'?`PUBLISH:${id}:${revision}`:`${action}:${id}:${revision}:${key}`;
    const previous=(await c.query('SELECT state FROM marketing_jobs WHERE dedupe_key=$1',[operationKey])).rows[0];
    if(previous?.state==='SUCCEEDED')return row;
    if(previous&&['DEAD','RECONCILIATION_REQUIRED'].includes(previous.state))throw new MarketingError('OPERATION_RECONCILIATION_REQUIRED','The previous operation needs verified reconciliation before another attempt');
-   const expected=action==='PUBLISH'?['APPROVED','PUBLISH_QUEUED']:action==='ACTIVATE'?['PROVIDER_PAUSED','PAUSED','ACTIVATION_QUEUED']:['PROVIDER_REVIEW','LIVE','PAUSED','PROVIDER_PAUSED','PAUSE_QUEUED','RECONCILIATION_REQUIRED'];
+   const expected=action==='PUBLISH'?['APPROVED','PUBLISH_QUEUED']:action==='ACTIVATE'?['PROVIDER_PAUSED','PAUSED','ACTIVATION_QUEUED']:['PROVIDER_REVIEW','LIVE','PAUSED','PROVIDER_PAUSED','ACTIVATION_QUEUED','PAUSE_QUEUED','RECONCILIATION_REQUIRED'];
    if(!expected.includes(row.state))throw new MarketingError('STATE_CONFLICT','This action is not available in the current campaign state');
+   if(action==='PAUSE'&&row.state==='ACTIVATION_QUEUED'){
+    const activation=(await c.query('SELECT state,attempts FROM marketing_jobs WHERE id=$1 FOR UPDATE',[row.pending_job_id])).rows[0];
+    if(!activation||activation.state!=='PENDING'||activation.attempts!==0)throw new MarketingError('CONTROL_IN_PROGRESS','Activation may have been dispatched. Refresh its evidence before requesting pause.');
+    await c.query("UPDATE marketing_jobs SET state='DEAD',fence=fence+1,last_error='SCHEDULED_ACTIVATION_CANCELLED',lease_until=NULL,updated_at=now() WHERE id=$1",[row.pending_job_id]);
+    await event(c,row,actor,'SCHEDULED_ACTIVATION_CANCELLED',{jobId:row.pending_job_id,reason:'PAUSE_REQUESTED'});
+    // Retain the provider pause/readback path; cancelling a local timer is not proof of remote state.
+   }
    if(action!=='PAUSE'){
+    if(action==='ACTIVATE'&&row.draft.flightSchedule&&Date.parse(row.draft.flightSchedule.endsAt)<=Date.now())throw new MarketingError('CAMPAIGN_ENDED','This scheduled flight has ended');
     if(row.content_approval.status!=='APPROVED'||row.content_approval.revision!==row.revision)throw new MarketingError('CONTENT_APPROVAL_REQUIRED','Exact-revision content approval is required');
     await this.assertCurrentListing(c,row,actor);
     if(action==='PUBLISH'&&!row.reservation_id){const reservation=await this.options.finance.reserveLocked(c,row,`reserve:${id}:${revision}`);row.reservation_id=reservation.id;await c.query('UPDATE marketing_campaign_workflows SET reservation_id=$2 WHERE campaign_id=$1',[id,reservation.id]);}
     await this.options.finance.authorize(c,row,action==='PUBLISH'?'CREATE_HIERARCHY':'RESUME');
    }
-   const jobId=await enqueue(c,{campaignId:id,revision,kind:action,key:operationKey,payload:{actorId:actor.id,actorRole:actor.role}});
+   const jobId=await enqueue(c,{campaignId:id,revision,kind:action,key:operationKey,...(action==='ACTIVATE'&&row.draft.flightSchedule?{runAfter:row.draft.flightSchedule.startsAt}:{}),payload:{actorId:actor.id,actorRole:actor.role}});
    const state=action==='PUBLISH'?'PUBLISH_QUEUED':action==='ACTIVATE'?'ACTIVATION_QUEUED':'PAUSE_QUEUED';await c.query('UPDATE marketing_campaign_workflows SET state=$2,pending_job_id=$3,updated_at=now() WHERE campaign_id=$1',[id,state,jobId]);await event(c,row,actor,'OPERATION_QUEUED',{action,jobId});return {...row,state};
   });
  }
@@ -169,12 +194,12 @@ export class MarketingWorkflowService{
    await event(c,row,actor,'OBSERVATION_REQUESTED',{jobId});return {status:'PENDING',jobId,coalesced:false};
   });
  }
- async project(row:any,financial?:any){
+ async project(row:any,financial?:any,audience: 'host'|'admin'='host'){
   const observationJob=row.observation_job!==undefined?row.observation_job:await inTransaction(this.pool,{id:row.host_id,role:'host'},async c=>(await c.query("SELECT id,state,attempts,updated_at,run_after FROM marketing_jobs WHERE campaign_id=$1 AND revision=$2 AND kind='TELEMETRY' ORDER BY created_at DESC,id DESC LIMIT 1",[row.campaign_id,row.revision])).rows[0]??null);
   const finance=financial??await this.options.finance.snapshot(row);const truth=row.provider_truth;const telemetry=row.telemetry;
   const activationBlockers=this.options.activationBlockers?.(row.provider)??[];const blockers=[...this.options.configurationReasons,...activationBlockers];if(row.ai.status!=='PASSED')blockers.push(row.ai.status==='REQUIRES_REVIEW'?'AI could not certify this revision; documented human review is required.':'Campaign AI review has not passed.');
   if(row.content_approval.status!=='APPROVED')blockers.push('Administrator content approval is pending.');if(!finance.funding?.released)blockers.push('Captured funding and risk-release evidence are required before spending.');if(row.last_error)blockers.push(row.last_error);
-  return {id:row.campaign_id,revision:row.revision,listingId:row.listing_id,listingTitle:row.listing_snapshot.title,title:row.draft.title,provider:row.provider,status:row.state,...row.draft,creativePreview:row.listing_snapshot.campaignCreative??null,observationJob:observationJob?{id:observationJob.id,status:observationJob.state,attempts:observationJob.attempts,updatedAt:observationJob.updated_at,nextAttemptAt:observationJob.run_after}:null,ai:row.ai,quote:finance.quote||null,funding:finance.funding||{status:'UNFUNDED',capturedMinor:null,reservedMinor:null,released:false},contentApproval:row.content_approval,delivery:{configuredStatus:truth?.configuredStatus??null,observedStatus:truth?.observedStatus??null,observedAt:truth?.observedAt??null,externalCampaignId:truth?.externalCampaignId??null,deliveryConfirmed:truth?.deliveryConfirmed===true},metrics:telemetry?{impressions:telemetry.impressions??null,clicks:telemetry.clicks??null,ctr:telemetry.ctr??null,profileVisits:telemetry.profileVisits??null,leads:telemetry.leads??null,bookings:telemetry.bookings??null,spendMinor:telemetry.spendMinor??null,observedAt:telemetry.observedAt??null,source:telemetry.source??null,currency:telemetry.currency??null,report:telemetry.report??null,freshness:telemetry.freshness??null,dataAsOf:telemetry.dataAsOf??null,dateStart:telemetry.dateStart??null,dateEnd:telemetry.dateEnd??null,accountTimeZone:telemetry.accountTimeZone??null,providerAttributedConversions:telemetry.providerAttributedConversions??null}:null,blockers,activationBlockers};
+  return {id:row.campaign_id,revision:row.revision,listingId:row.listing_id,listingTitle:row.listing_snapshot.title,title:row.draft.title,provider:row.provider,status:row.state,...row.draft,product:row.listing_snapshot.marketingProduct?{kind:row.listing_snapshot.marketingProduct.kind,canonicalPath:row.listing_snapshot.marketingProduct.canonicalPath,evidenceVersion:1}:null,spatialStory:row.listing_snapshot.spatialStory??null,creativePreview:row.listing_snapshot.campaignCreative??null,observationJob:observationJob?{id:observationJob.id,status:observationJob.state,attempts:observationJob.attempts,updatedAt:observationJob.updated_at,nextAttemptAt:observationJob.run_after}:null,ai:row.ai,quote:finance.quote||null,funding:finance.funding||{status:'UNFUNDED',capturedMinor:null,reservedMinor:null,released:false},contentApproval:row.content_approval,delivery:{readiness:truth?.readiness??null,statusCheck:truth?.statusCheck??null,statusAttemptedAt:truth?.statusAttemptedAt??null,configuredStatus:truth?.configuredStatus??null,observedStatus:truth?.observedStatus??null,observedAt:truth?.observedAt??null,submitted:!!truth?.externalCampaignId,externalCampaignId:audience==='admin'?truth?.externalCampaignId??null:null,deliveryConfirmed:truth?.deliveryConfirmed===true},metrics:telemetry?{impressions:telemetry.impressions??null,clicks:telemetry.clicks??null,ctr:telemetry.ctr??null,profileVisits:telemetry.profileVisits??null,leads:telemetry.leads??null,bookings:telemetry.bookings??null,spendMinor:telemetry.spendMinor??null,observedAt:telemetry.observedAt??null,source:telemetry.source??null,currency:telemetry.currency??null,report:telemetry.report??null,freshness:telemetry.freshness??null,dataAsOf:telemetry.dataAsOf??null,dateStart:telemetry.dateStart??null,dateEnd:telemetry.dateEnd??null,accountTimeZone:telemetry.accountTimeZone??null,providerAttributedConversions:telemetry.providerAttributedConversions??null}:null,blockers,activationBlockers};
  }
  async workspace(actor:Actor,input:WorkspaceQuery={}){
   const query=workspaceQuerySchema.parse(input);
@@ -192,6 +217,6 @@ export class MarketingWorkflowService{
    return {rows,listings:ls.map(listingView),campaignListings:related.map(listingView),nextCursor:all.length>30?Number(rows.at(-1).campaign_id):null,listingNextCursor:listingRows.length>50?Number(ls.at(-1).id):null};
   });
   const finances=await this.options.finance.snapshots?.(data.rows,actor);
-  return {listings:data.listings,campaignListings:data.campaignListings,campaigns:await Promise.all(data.rows.map(r=>this.project(r,finances?.get(r.campaign_id)))),policy:this.options.finance.policy(),capabilities:{funding:this.options.fundingEnabled,publish:this.options.publishingEnabled,activate:this.options.activationEnabled,reason:this.options.configurationReasons.join(' '),metaCountries:[...(this.options.metaCountries??[])]},page:{limit:30,mayHaveMore:data.nextCursor!==null,nextCursor:data.nextCursor,order:'CREATED_NEWEST'},listingPage:{limit:50,mayHaveMore:data.listingNextCursor!==null,nextCursor:data.listingNextCursor}};
+  return {listings:data.listings,campaignListings:data.campaignListings,campaigns:await Promise.all(data.rows.map(r=>this.project(r,finances?.get(r.campaign_id),actor.role==='admin'?'admin':'host'))),policy:this.options.finance.policy(),capabilities:{funding:this.options.fundingEnabled,publish:this.options.publishingEnabled,activate:this.options.activationEnabled,reason:this.options.configurationReasons.join(' '),metaCountries:[...(this.options.metaCountries??[])]},page:{limit:30,mayHaveMore:data.nextCursor!==null,nextCursor:data.nextCursor,order:'CREATED_NEWEST'},listingPage:{limit:50,mayHaveMore:data.listingNextCursor!==null,nextCursor:data.listingNextCursor}};
  }
 }

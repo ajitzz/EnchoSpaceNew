@@ -24,6 +24,7 @@ export interface VerifiedRefund {
   status: 'SUCCEEDED' | 'FAILED';
 }
 export interface FinanceDependencies {
+  validateQuote?: (client:pg.PoolClient,input:CampaignQuoteInput)=>Promise<void>;
   /** Supplied by authenticated server composition, never copied from request JSON. */
   actorContext?: { id: number; role: 'host' | 'admin' | 'system' };
   /** Defaults off. A real approved policy and gateway setup must be established by the composition root. */
@@ -122,6 +123,7 @@ export class MarketingFinanceService {
       const quote = buildCampaignQuote(input, policy, prior ? parse<CampaignQuote>(prior.snapshot).quotedAt : now);
       const campaign = (await client.query('SELECT id,host_id,listing_id FROM host_marketing_campaigns WHERE id=$1 FOR SHARE', [input.campaignId])).rows[0];
       if (!campaign || Number(campaign.host_id) !== input.hostId || Number(campaign.listing_id) !== input.listingId) financeError('FINANCE_FORBIDDEN', 'Campaign and property ownership do not match.');
+      await this.dependencies.validateQuote?.(client,input);
       const storedPolicy = (await client.query('SELECT fingerprint FROM marketing_finance_policies WHERE policy_id=$1 AND version=$2', [policy.id, policy.version])).rows[0];
       if (storedPolicy?.fingerprint !== quote.policyFingerprint) financeError('FINANCE_POLICY_REQUIRED', 'An exact registered financial policy version is required.');
       const id = randomUUID();

@@ -10,12 +10,9 @@
  * - 0 unhandled errors or double-allocations
  */
 
-import pkg from 'pg';
+import {readFileSync} from 'node:fs';
+import {createLocalPostgresFixture} from '../src/test/harvo/postgres.js';
 import { acquireHold } from '../src/services/inventoryHoldService.js';
-
-const { Pool } = pkg;
-
-const connectionString = process.env.DISPOSABLE_PG_URL || 'postgresql://ajit@127.0.0.1:5439/encho_disposable_test';
 
 export async function runConcurrencyBenchmark(): Promise<{
   successes: number;
@@ -23,33 +20,31 @@ export async function runConcurrencyBenchmark(): Promise<{
   others: number;
   totalHeldUnits: number;
 }> {
-  const pool = new Pool({
-    connectionString,
-    max: 120
-  });
+  // No caller-supplied URL and no destructive cleanup of a pre-existing database.
+  const fixture = await createLocalPostgresFixture({schema:'empty'});
+  const pool = fixture.pool;
 
   try {
-    // Reset and seed benchmark room
-    await pool.query('DELETE FROM booking_hold_nights');
-    await pool.query('DELETE FROM booking_holds');
-    await pool.query('DELETE FROM inventory_days');
-    await pool.query('DELETE FROM room_calendar_blocks');
-    await pool.query('DELETE FROM legacy_block_conflict_ledger');
-    await pool.query('DELETE FROM room_types');
-    await pool.query('DELETE FROM listings');
-    await pool.query('DELETE FROM users');
+    // Explicit minimal legacy dependencies, followed by complete canonical migrations.
+    // No DDL extraction from application startup and no live database connection.
+    await pool.query(readFileSync(new URL('./testing/fixtures/inventory-baseline.sql',import.meta.url),'utf8'));
+    for(const migration of ['003_canonical_room_and_media_authority.sql','004_canonical_constraints.sql',
+      '005_inventory_days_and_atomic_holds.sql','006_legacy_calendar_block_mapping.sql','007_legacy_conflict_ledger_uniqueness.sql'])
+      await pool.query(readFileSync(new URL(`../src/migrations/${migration}`,import.meta.url),'utf8'));
+    await pool.query('INSERT INTO users VALUES(801)');
+    await pool.query("INSERT INTO listings(id,user_id,title,publication_status) VALUES(801,801,'Bench Villa','published')");
+    await pool.query("INSERT INTO room_types(id,listing_id,name,type,base_price,inventory_count) VALUES(801,801,'Single Suite','suite',10000,1)");
 
-    await pool.query("INSERT INTO users (id, email, name) VALUES (801, 'host_bench@encho.space', 'Bench Host')");
-    await pool.query("INSERT INTO listings (id, user_id, title, city, price, type) VALUES (801, 801, 'Bench Villa', 'Goa', 10000, 'villa')");
-    await pool.query("INSERT INTO room_types (id, listing_id, name, inventory_count) VALUES (801, 801, 'Single Suite', 1)");
-
+    const anchor = Date.now();
+    const date = (offset: number) => new Date(anchor + offset * 86400000).toISOString().slice(0,10);
+    const checkIn = date(30), checkOut = date(32);
     const holdPromises = [];
     for (let i = 0; i < 100; i++) {
       holdPromises.push(
         acquireHold(pool, {
           roomTypeId: 801,
-          checkIn: '2026-12-15',
-          checkOut: '2026-12-17',
+          checkIn,
+          checkOut,
           quantity: 1,
           idempotencyKey: `idem-concurrent-bench-${i}`,
           holderPrincipal: `user:${9000 + i}`
@@ -69,7 +64,7 @@ export async function runConcurrencyBenchmark(): Promise<{
 
     return { successes, conflicts, others, totalHeldUnits };
   } finally {
-    await pool.end();
+    await fixture.close();
   }
 }
 
@@ -77,7 +72,7 @@ if (process.argv[1]?.endsWith('bench_concurrency_pg.ts') || process.argv[1]?.end
   runConcurrencyBenchmark()
     .then(result => {
       console.log(JSON.stringify(result));
-      if (result.successes === 1 && result.conflicts === 99 && result.others === 0) {
+      if (result.successes === 1 && result.conflicts === 99 && result.others === 0 && result.totalHeldUnits === 2) {
         process.exit(0);
       } else {
         process.exit(1);

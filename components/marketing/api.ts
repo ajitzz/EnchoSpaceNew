@@ -1,6 +1,11 @@
+import {io} from 'socket.io-client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { StudioWorkspace } from './types';
 import {useAuth} from '../AuthContext';
+
+export class MarketingRequestError extends Error {
+  constructor(message:string,readonly code:string|null){super(message);this.name='MarketingRequestError';}
+}
 
 export async function marketingRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('token');
@@ -14,7 +19,7 @@ export async function marketingRequest<T>(path: string, options: RequestInit = {
     const message = fields.length ? `Campaign fields need attention. ${fields.slice(0, 6).map((field: any) => `${field.path}: ${field.message}`).join(' ')}`
       : typeof body?.error === 'string' ? body.error : 'This campaign action could not be completed. Please refresh and try again.';
     const correlation = typeof body?.correlationId === 'string' && /^[a-f0-9-]{36}$/i.test(body.correlationId) ? ` Support reference: ${body.correlationId}.` : '';
-    throw new Error(`${message}${correlation}`);
+    throw new MarketingRequestError(`${message}${correlation}`,typeof body?.code==='string'&&/^[A-Z_]{1,100}$/.test(body.code)?body.code:null);
   }
   return body as T;
 }
@@ -59,8 +64,11 @@ export function useMarketingWorkspace(admin = false) {
     const timer = setInterval(() => { if (!document.hidden) void reload(); }, 30000);
     const onVisible = () => { if (!document.hidden) void reload(); };
     document.addEventListener('visibilitychange', onVisible);
-    return () => { clearInterval(timer); request.current?.abort(); document.removeEventListener('visibilitychange', onVisible); };
-  }, [reload]);
+    const socket=token?io({auth:{token},reconnectionAttempts:3}):null;
+    let inquiryRefresh:ReturnType<typeof setTimeout>|undefined;
+    socket?.on('db_changed',(event:{type?:string})=>{if(event?.type==='inquiries'&&!inquiryRefresh)inquiryRefresh=setTimeout(()=>{inquiryRefresh=undefined;if(!document.hidden)void reload();},750);});
+    return () => { socket?.disconnect();clearTimeout(inquiryRefresh);clearInterval(timer); request.current?.abort(); document.removeEventListener('visibilitychange', onVisible); };
+  }, [reload,token]);
   return { workspace, loading, error, reload, search,setSearch,listingSearch,setListingSearch,filter,
     setFilter:(value:string)=>{setFilter(value);setCursors([]);},
     campaignPage:cursors.length+1,listingPage:listingCursors.length+1,

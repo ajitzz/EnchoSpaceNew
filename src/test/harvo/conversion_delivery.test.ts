@@ -120,7 +120,7 @@ describe('HARVO provider conversion delivery — real isolated PostgreSQL', () =
   it('sends Meta only the original captured event and requires a one-event receipt', async () => {
     await meta(); const consumer = await ingest(); await consumer.runOnce(); const payload = requests[0].body.data[0];
     expect(payload).toMatchObject({ event_name: 'Purchase', event_time: 1789293540, action_source: 'website', event_source_url: 'https://stays.example/stay/fixture', custom_data: { value: 2000, currency: 'INR', order_id: 'order-1' } });
-    expect(payload.event_id).toMatch(/^harvo-purchase-[a-f0-9]{64}$/); expect(payload.opt_out).toBe(true); expect(payload.user_data).not.toHaveProperty('em'); expect((await rows())[0].outbox_status).toBe('ACCEPTED');
+    expect(payload.event_id).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/); expect(payload.opt_out).toBe(true); expect(payload.user_data).not.toHaveProperty('em'); expect((await rows())[0].outbox_status).toBe('ACCEPTED');
   });
   it.each([0, 2, null])('quarantines Meta events_received=%s', async count => {
     await meta(); handler = async () => response({ events_received: count, fbtrace_id: 'trace' }); const consumer = await ingest(); await consumer.runOnce(); expect((await rows())[0].outbox_status).toBe('UNKNOWN');

@@ -1,3 +1,5 @@
+import {hasOnlyAttributionQuery} from '../../../shared/marketingAttribution.js';
+import type {ProviderLandingVerifier} from '../ProviderOperationStore.js';
 import type { ProviderEntity, ProviderPublishRequest, ProviderPublishResult } from '../types.js';
 import { GoogleAdsError } from './googleErrors.js';
 import { generateListingSlug } from '../../stayProjection.js';
@@ -74,7 +76,7 @@ function validateResult(result: ProviderPublishResult, campaignId: number, custo
  * into an automatic re-create; explicit reconciliation is a later milestone.
  */
 export class GooglePublishingStore {
-  constructor(private readonly pool: any, private readonly authorize?: ProviderAuthorizationGuard) {
+  constructor(private readonly pool: any, private readonly authorize?: ProviderAuthorizationGuard,private readonly verifyLanding?:ProviderLandingVerifier) {
     if (!pool || typeof pool.connect !== 'function') throw invalid('Publishing requires a PostgreSQL connection pool.');
   }
 
@@ -123,12 +125,16 @@ export class GooglePublishingStore {
         let landing: URL;
         try { landing = new URL(request.creativeAssets?.landingPageUrl); }
         catch { throw invalid('An absolute HTTPS property destination is required.'); }
-        if (landing.protocol !== 'https:' || landing.username || landing.password || landing.search || landing.hash) {
+        if (landing.protocol !== 'https:' || landing.username || landing.password || (landing.search&&!hasOnlyAttributionQuery(landing)) || landing.hash) {
           throw invalid('Property destination must use HTTPS without credentials, query parameters or fragments.');
         }
         if (!listing || Number(listing.user_id) !== request.hostId || listing.publication_status !== 'published'
           || landing.pathname !== `/stay/${encodeURIComponent(listing.slug || generateListingSlug(listing.title, listing.id))}`) {
           throw new GoogleAdsError('GOOGLE_OWNERSHIP_MISMATCH', 'Campaign destination must match the host’s published canonical property.', { statusCode: 403, errorClass: 'VALIDATION' });
+        }
+        if(landing.search){
+          if(!this.verifyLanding)throw invalid('A trusted campaign reference verifier is required.');
+          await this.verifyLanding({provider:'GOOGLE',campaignId:request.campaignId,operation:'CREATE_HIERARCHY',fingerprint,idempotencyKey:request.idempotencyKey,correlationId:request.correlationId},{hostId:request.hostId,listingId:request.listingId,landingUrl:landing.href},client);
         }
         const existing = (await client.query(
           `SELECT * FROM provider_publishing_transactions

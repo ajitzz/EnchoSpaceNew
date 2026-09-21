@@ -1,3 +1,4 @@
+import {PublicSpatialStory} from './marketing/PublicSpatialStory';
 import { useAuth } from './AuthContext';
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform, useMotionTemplate, useMotionValueEvent } from 'framer-motion';
@@ -577,6 +578,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
           <h1 className="text-3xl md:text-5xl font-display font-semibold tracking-tight text-zinc-900">{listing.title}</h1>
           <p className="mt-3 text-zinc-500">{[listing.location?.locality, listing.location?.city || listing.city].filter(Boolean).join(', ')}</p>
         </section>
+        {'slug' in listing && typeof listing.slug === 'string' && listing.slug && <PublicSpatialStory key={listing.slug} slug={listing.slug}/>}
 
         {/* ========================================================================= */}
         {/* ZONE 1: HIGH-CONVERSION SPLIT GRID (Top -> End of Host Section)           */}

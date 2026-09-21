@@ -10,6 +10,9 @@ import type {VerifiedConversionAttribution} from '../../lib/marketing/conversion
 import {consumeMarketingRequestBudget} from '../../lib/marketing/requestLimits.js';
 import {testPolicy,testQuoteInput} from './financeFixtures.js';
 import {workflowDraft} from './workflowPgFixture.js';
+import {MarketingPauseRecovery} from '../../lib/marketing/pauseRecovery.js';
+import {enqueue} from '../../lib/marketing/jobs.js';
+import {fingerprint} from '../../lib/marketing/domain.js';
 
 export const restoreHost={id:10,role:'host' as const},restoreAdmin={id:90,role:'admin' as const},restoreReviewer={id:91,role:'admin' as const};
 export const restorePolicy='isolated-restore-accounting-procedure';
@@ -50,4 +53,22 @@ export async function prepareRestoreConversion(pool:pg.Pool,fetcher:typeof fetch
  const make=(target:pg.Pool,transport:typeof fetch)=>createConversionConsumer(target,{actorContext:{id:90,role:'system'},verifyBooking:async()=>booking,resolveAttribution:async()=>attribution,now:()=>now,fetch:transport,google:{customerId:'1234567890',servingCustomerId:'1234567890',conversionActionId:'5001',accessToken:async()=>'restore-fixture-token'}});
  const consumer=make(pool,fetcher);await consumer.ingest('fixture-booking-reference');await consumer.runOnce();
  return {campaignId:row.campaign_id,booking,make};
+}
+
+/** A committed fixture pause, adopted through the real service before backup. */
+export async function prepareRestorePause(pool: pg.Pool) {
+ const row = await restoreWorkflow(pool).create(restoreHost, workflowDraft({title:'Isolated pause recovery restore campaign'}), 'restore-pause-campaign');
+ const campaignId = row.campaign_id;
+ const key = 'restore-committed-pause';
+ const jobId = await enqueue(pool, {campaignId, revision:1, kind:'PAUSE', key});
+ await pool.query("UPDATE marketing_jobs SET state='RECONCILIATION_REQUIRED',last_error='LOCAL_COMPLETION_LOST' WHERE id=$1", [jobId]);
+ await pool.query("UPDATE marketing_campaign_workflows SET state='RECONCILIATION_REQUIRED',pending_job_id=$2,last_error='LOCAL_COMPLETION_LOST',provider_truth=$3 WHERE campaign_id=$1", [campaignId, jobId, JSON.stringify({externalCampaignId:'82001', configuredStatus:'ACTIVE'})]);
+ await pool.query("INSERT INTO provider_entities(campaign_id,provider,entity_type,external_id,account_id) VALUES($1,'META','CAMPAIGN','82001','987654321')", [campaignId]);
+ await pool.query(`INSERT INTO provider_publishing_transactions(campaign_id,provider,operation_type,idempotency_key,correlation_id,publish_status,is_unknown_outcome,payload,response,external_campaign_id)
+  VALUES($1,'META','PAUSE',$2,$3,'COMMITTED',FALSE,$4,$5,'82001')`, [campaignId, key, jobId, JSON.stringify({protocol:'HARVO_PROVIDER_OPERATION_V2'}), JSON.stringify({success:true, provider:'META', externalCampaignId:'82001', newStatus:'PAUSED', normalizedDeliveryState:'PAUSED'})]);
+ const input = {revision:1, reason:'Isolated restore fixture verifying preservation of committed pause adoption.'};
+ const requestKey = 'restore-pause-adoption';
+ const recovery = new MarketingPauseRecovery(pool, async binding => ({...binding, configuredStatus:'PAUSED', observedAt:new Date().toISOString(), evidenceHash:fingerprint({scope:'ISOLATED_RESTORE_FIXTURE', binding})}));
+ const result = await recovery.adopt(restoreAdmin, campaignId, input, requestKey);
+ return {campaignId, input, requestKey, result};
 }

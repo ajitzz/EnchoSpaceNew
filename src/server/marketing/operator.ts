@@ -1,6 +1,6 @@
 import {actorPool} from '../../lib/marketing/database.js';
 import {readFileSync} from 'node:fs';
-import {createHash} from 'node:crypto';
+import {deployedMigrationManifest} from '../deployment/recoveryReadiness.js';
 import {parse} from 'dotenv';
 import pg from 'pg';
 import {readMarketingConfig} from '../../lib/marketing/config.js';
@@ -27,9 +27,11 @@ try{
    const stored=await new MarketingFinanceService(pool,{actorContext:{id:config.policyAdminId!,role:'admin'}}).persistPolicy(config.financialPolicy,config.policyAdminId!);
    console.log(JSON.stringify({event:'HARVO_POLICY_REGISTERED',version:stored.version,fingerprint:fingerprint(stored)}));
   }else{
-   const migrations=['009_harvo_marketing_finance.sql','010_harvo_marketing_workflow.sql','011_harvo_marketing_measurement.sql','012_harvo_marketing_settlement.sql','013_harvo_marketing_conversion_delivery.sql','014_harvo_marketing_request_limits.sql','015_harvo_marketing_creative_review.sql','016_harvo_google_invoice_imports.sql'];
    const results=[];
-   for(const name of migrations){let local:string;try{local=createHash('sha256').update(readFileSync(new URL(`../../migrations/${name}`,import.meta.url))).digest('hex');}catch{throw new Error(`Expected migration is unavailable: ${name}`);}const row=(await pool.query('SELECT checksum FROM schema_migrations WHERE version=$1',[name])).rows[0];results.push({migration:name,status:!row?'MISSING':row.checksum===local?'MATCHED':'CHECKSUM_MISMATCH'});}
+   for(const {version:name,checksum} of deployedMigrationManifest()){
+    const row=(await pool.query('SELECT checksum FROM schema_migrations WHERE version=$1',[name])).rows[0];
+    results.push({migration:name,status:!row?'MISSING':row.checksum===checksum?'MATCHED':'CHECKSUM_MISMATCH'});
+   }
    const jobs=(await actorPool(pool,{id:config.policyAdminId!,role:'system'}).query("SELECT kind,state,count(*)::int AS count FROM marketing_jobs GROUP BY kind,state ORDER BY kind,state")).rows;
    const role=(await pool.query('SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user')).rows[0];
    console.log(JSON.stringify({evidence:'READ_ONLY_DATABASE_CHECK',migrations:results,jobs,applicationRoleBypassesRls:!!(role?.rolsuper||role?.rolbypassrls)},null,2));
