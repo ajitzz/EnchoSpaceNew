@@ -5,10 +5,11 @@ import pg from 'pg';
 import {createWorkflowPgFixture} from './workflowPgFixture.js';
 import {verifyPortfolioCatalog} from '../../server/deployment/portfolioReadiness.js';
 
-describe('SP1–SP3 deployment privilege and policy contract',()=>{
+describe.each(['text','varchar(32)'])('SP1–SP3 deployment privilege and policy contract with %s publication status',(publicationType)=>{
  let fixture:Awaited<ReturnType<typeof createWorkflowPgFixture>>,runtime:pg.Pool;
  beforeAll(async()=>{
   fixture=await createWorkflowPgFixture();await installInquirySchema(fixture.pool);
+  if(publicationType!=='text')await fixture.pool.query(`ALTER TABLE listings ALTER COLUMN publication_status TYPE ${publicationType}`);
   for(const name of ['014_harvo_marketing_request_limits.sql','023_marketing_product_facts.sql','024_marketing_keyword_research.sql','025_marketing_revision_products.sql','026_search_portfolio_shadow.sql','027_marketing_attribution_links.sql','028_marketing_consent_touchpoints.sql','029_marketing_destination_pools.sql','030_marketing_spatial_stories.sql','031_marketing_inquiry_attribution.sql'])await fixture.pool.query(readFileSync(`src/migrations/${name}`,'utf8'));
   await fixture.pool.query(`CREATE ROLE portfolio_readiness LOGIN NOSUPERUSER NOBYPASSRLS; GRANT USAGE ON SCHEMA public TO portfolio_readiness;
    GRANT SELECT,INSERT ON marketing_fact_snapshots,marketing_revision_products,marketing_campaign_search_targets,marketing_campaign_search_scopes,marketing_search_conflict_assessments,marketing_search_conflict_reviews,marketing_attribution_links,marketing_measurement_consents,marketing_attribution_touchpoints TO portfolio_readiness;

@@ -2,6 +2,10 @@
 
 Authority: founder's autonomous ADT-0 through ADT-7 directive, 22 September 2026. This record distinguishes local software evidence from external staging, provider and production acceptance.
 
+**Latest ADT-7 update:** the later founder instruction explicitly authorized primary Neon from `.env`, migrations 032–035 and Listing 1 for a zero-spend paused canary. The migrations committed with matching checksums and passing AdTech catalog/minimum-grant inspection for `encho_app_prod`. Actual login remains unverified; production still uses the RLS-bypassing owner role. The production VARCHAR policy-rendering discrepancy is corrected and tested locally. Live geography preflight cannot resolve the required exact district, so no ad was created. The [production rollout report](../implementation/ADTECH_PRODUCTION_ROLLOUT.md) and [new receipt](ADTECH_PRODUCTION_ROLLOUT_RECEIPT.json) preserve the exact results. ADT-7 remains PARTIAL; do not overwrite the historical local receipt below.
+
+**Current validation:** baseline `e4b9af4` full suite **1,947 passed / 0 failed / 0 pending, 155 files**. Subsequent narrow catalog-check correction: **47 targeted tests passed**, including both TEXT/VARCHAR schemas and adversarial RLS checks. TypeScript, lint, isolated client/server build, compiled runtime smoke and 24 fixture browser scenarios pass. The baseline full run is not represented as a full run of the later correction.
+
 ## ADT-0 — locally verified
 
 Typed shared contracts cover profiles, canonical exact-paise price evidence, provider-specific geography and campaign strategy snapshots. Price intervals are read from versioned registry data; approved boundaries and budget hypotheses are seeded in migration SQL, not JSX or route constants. Unclassified prices and ambiguous room/entire-stay bases fail explicitly. Capability checks refuse unsupported automatic placements and unintegrated lead conversion authority rather than silently changing campaign type.

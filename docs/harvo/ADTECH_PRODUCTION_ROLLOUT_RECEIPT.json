@@ -1,0 +1,128 @@
+{
+  "date": "2026-09-22",
+  "scope": "PARTIAL_PRODUCTION_ROLLOUT_NOT_CERTIFICATION",
+  "baselineCommit": "e4b9af45bfa03f0ca978b8faf03afdf4c573a757",
+  "authority": "ADT-7 founder directive and explicit primary .env / paused Listing 1 clarification",
+  "stagingConfigured": false,
+  "migration": {
+    "scope": "PRODUCTION_SCHEMA_APPLY_NOT_RUNTIME_OR_PROVIDER_ACCEPTANCE",
+    "commit": "e4b9af45bfa03f0ca978b8faf03afdf4c573a757",
+    "startedAt": "2026-09-22T07:33:10.128Z",
+    "database": "neondb",
+    "advisoryLock": 82749102,
+    "transaction": "SINGLE_HELD_CONNECTION_SINGLE_TRANSACTION",
+    "versions": [
+      {
+        "version": "032_marketing_adtech_registry.sql",
+        "checksum": "f0e83c16233563beb1aeb123df6ee2a07dad0e424f297bb3870ac0edfd538f2f",
+        "status": "APPLIED"
+      },
+      {
+        "version": "033_marketing_adtech_corridors.sql",
+        "checksum": "aac5b96f4a244ce8b7e045152b8e45b5a3ef0539095c28fa110c28a2c269f49f",
+        "status": "APPLIED"
+      },
+      {
+        "version": "034_marketing_adtech_bindings.sql",
+        "checksum": "1efe17cc3d24d9e5f8559a58cdae626395deff4bbb78a040f8e1d3e5c7668a76",
+        "status": "APPLIED"
+      },
+      {
+        "version": "035_marketing_corridor_inference.sql",
+        "checksum": "9f0fa5878095080d5f4b8ecce613e0a84d409e59b09ef5bc4d6e9109c5683f98",
+        "status": "APPLIED"
+      }
+    ],
+    "runtimeRole": "encho_app_prod",
+    "adtechNamedRoleCatalog": {
+      "ready": true,
+      "policyValid": true,
+      "privileges": true,
+      "immutable": true,
+      "integrity": true
+    },
+    "actualRuntimeLoginVerified": false,
+    "committedAt": "2026-09-22T07:33:12.781Z",
+    "status": "COMMITTED",
+    "lockReleased": true
+  },
+  "baselineFullRegression": {
+    "passed": 1947,
+    "failed": 0,
+    "pending": 0,
+    "files": 155,
+    "source": "e4b9af4",
+    "durationSeconds": 256.7
+  },
+  "readinessCorrection": {
+    "files": [
+      "src/server/deployment/portfolioReadiness.ts",
+      "src/test/harvo/portfolio_readiness.test.ts"
+    ],
+    "targetedTestsPassed": 47,
+    "targetedFiles": 3,
+    "fullSuiteRerunAfterCorrection": false,
+    "contract": "Exact pg_catalog text/varchar publication status policy rendering; boolean structure preserved"
+  },
+  "localChecks": {
+    "typecheck": "PASSED",
+    "lint": "PASSED",
+    "clientServerBuild": "PASSED",
+    "compiledRuntime": "PASSED",
+    "browser": {
+      "passed": 24,
+      "viewports": [
+        1440,
+        390
+      ],
+      "network": "BLOCKED_FIXTURES"
+    }
+  },
+  "productionChecks": {
+    "livenessHttp": 200,
+    "anonymousWorkspaceHttp": 401,
+    "readinessHttp": 503,
+    "missingTablesAfterMigration": [],
+    "deployedRoleBypassesRls": true,
+    "actualRestrictedRuntimeLoginVerified": false,
+    "authenticatedBrowserWorkspace": "CAMPAIGN_JOURNAL_RENDERED_AFTER_REFRESH"
+  },
+  "canary": {
+    "approvedListingId": 1,
+    "canonicalPriceMinor": "4800000",
+    "currency": "INR",
+    "tier": "PREMIUM",
+    "suppliedPriceRupees": 8000,
+    "canonicalPriceChanged": false,
+    "approvedCorridorVersions": 0,
+    "geographyEvidenceRows": 0,
+    "metaRegionCandidates": {
+      "northGoa": 0,
+      "southGoa": 0,
+      "wayanad": 0
+    },
+    "googleMatchingDistrictSuggestions": {
+      "northGoa": 0,
+      "southGoa": 0,
+      "wayanad": 0
+    },
+    "googleExactNameCatalogMatches": 0,
+    "geoPreflightScope": "READ_ONLY",
+    "providerWrites": 0,
+    "adsCreated": 0,
+    "activations": 0,
+    "adSpendCausedMinor": "0",
+    "status": "BLOCKED_BEFORE_PROVIDER_MUTATION"
+  },
+  "blockers": [
+    "Production owner role bypasses RLS; restricted role lacks predecessor grants and actual login evidence",
+    "Server geocoder configuration unavailable",
+    "Exact provider district exclusions unresolved; no approved corridor",
+    "Actual paused provider hierarchy/readback not performed",
+    "Dedicated worker deployment and existing checkout/consent/provider/legal gates remain unverified"
+  ],
+  "adtCompleteMilestones": 7,
+  "adtTotalMilestones": 8,
+  "adtCompletionPercent": 87.5,
+  "productionCertified": false
+}

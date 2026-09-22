@@ -1,6 +1,6 @@
 # Dynamic AdTech strategy delivery
 
-Date: 22 September 2026. Authority: the founder's ADT-0–ADT-7 directive, continuing Discussion 034. The latest environment instruction is **local verification only; staging is not configured**.
+Date: 22 September 2026. Authority: the founder's ADT-0–ADT-7 directive, continuing Discussion 034. The initial delivery below records local-only evidence. The subsequent explicit production directive and clarification authorize 032–035 on primary Neon and a strictly PAUSED canary. The [production rollout report](ADTECH_PRODUCTION_ROLLOUT.md) supersedes the local-only boundary for that operation: migrations committed, but restricted-runtime and provider district/canary gates remain open. Staging remains unconfigured.
 
 ## Delivery and acceptance
 

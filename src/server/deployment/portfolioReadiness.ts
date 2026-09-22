@@ -38,8 +38,17 @@ const policies=[
 
 /** Deployment evidence, not authority to install grants or migrations. Reads catalog metadata only. */
 export async function verifyPortfolioCatalog(c:pg.PoolClient){
+ // The production legacy column is pg_catalog.varchar; isolated/new schemas use text.
+ // PostgreSQL deparses its safe varchar-to-text comparison with an explicit cast.
+ // Accept that exact schema-bound spelling only, never erase arbitrary policy casts/grouping.
+ const statusType=(await c.query(`SELECT t.typname,n.nspname FROM pg_attribute a
+  JOIN pg_type t ON t.oid=a.atttypid JOIN pg_namespace n ON n.oid=t.typnamespace
+  WHERE a.attrelid=to_regclass('public.listings') AND a.attname='publication_status' AND NOT a.attisdropped`)).rows[0];
+ const statusTypeValid=statusType?.nspname==='pg_catalog'&&['text','varchar'].includes(statusType.typname);
+ const expectedCheck=(check:string)=>statusType?.typname==='varchar'
+  ?check.replaceAll("(listings.publication_status = 'published'::text)","((listings.publication_status)::text = 'published'::text)") :check;
  const rows=(await c.query("SELECT tablename,policyname,permissive,roles::text[] AS roles,cmd,qual,with_check FROM pg_policies WHERE schemaname='public' AND tablename=ANY($1::text[])",[portfolioTables])).rows;
- const policyValid=rows.length===policies.length&&policies.every(expected=>rows.some(row=>row.tablename===expected.table&&row.policyname===expected.name&&row.permissive==='PERMISSIVE'&&JSON.stringify(row.roles)==='["public"]'&&row.cmd===expected.cmd&&normalize(row.qual)===normalize(expected.using)&&normalize(row.with_check)===normalize(expected.check)));
+ const policyValid=statusTypeValid&&rows.length===policies.length&&policies.every(expected=>rows.some(row=>row.tablename===expected.table&&row.policyname===expected.name&&row.permissive==='PERMISSIVE'&&JSON.stringify(row.roles)==='["public"]'&&row.cmd===expected.cmd&&normalize(row.qual)===normalize(expected.using)&&normalize(row.with_check)===normalize(expectedCheck(expected.check))));
  const grants=(await c.query(`SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,pg_has_role(current_user,c.relowner,'USAGE') AS owns,
   has_table_privilege(current_user,c.oid,'SELECT') AS can_read,has_table_privilege(current_user,c.oid,'INSERT') AS can_insert,
   has_table_privilege(current_user,c.oid,'UPDATE') AS can_update,has_table_privilege(current_user,c.oid,'DELETE') AS can_delete,
