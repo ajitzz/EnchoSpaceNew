@@ -6,7 +6,9 @@
 
 The founder explicitly authorized the primary Neon database in `.env`, sequential migrations 032–035 under advisory lock `82749102`, and a strictly PAUSED, zero-spend provider canary. Staging remains unconfigured. Listing 1 is approved for the canary; using it avoids creating a synthetic public property. This supersedes the earlier local-only instruction for this bounded rollout. No activation is authorized.
 
-The Vercel production dashboard identifies `e4b9af45bfa03f0ca978b8faf03afdf4c573a757` as the deployed source for `www.encho.co.in`. Its connected `neon-bole-door` integration matches `.env`'s direct endpoint and database `neondb`. The different `.env.local` endpoint was not used.
+Before migration, the Vercel production dashboard identified `e4b9af45bfa03f0ca978b8faf03afdf4c573a757` as the deployed source for `www.encho.co.in`. Its connected `neon-bole-door` integration matches `.env`'s direct endpoint and database `neondb`. The different `.env.local` endpoint was not used.
+
+The readiness correction and rollout receipts were subsequently pushed to GitHub `main` as `635cc6522d826b543442edcd44ad9aac1e4b4815`. Vercel deployment `AqEojyN44mh9GsBKPk8hCLLeMdj7` reached **Ready** and acquired the production domain. A fresh live readiness request confirms `portfolio.policyValid: true`; overall readiness remains 503 because the privileged runtime and grant blockers remain. Vercel's deployment status is not an application-readiness certificate.
 
 ## Persistent migration execution
 

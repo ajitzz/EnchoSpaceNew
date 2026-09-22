@@ -79,6 +79,10 @@
     }
   },
   "productionChecks": {
+    "verifiedDeploymentCommit": "635cc6522d826b543442edcd44ad9aac1e4b4815",
+    "vercelDeploymentId": "AqEojyN44mh9GsBKPk8hCLLeMdj7",
+    "vercelDeploymentStatus": "READY",
+    "portfolioPolicyValidAfterDeployment": true,
     "livenessHttp": 200,
     "anonymousWorkspaceHttp": 401,
     "readinessHttp": 503,

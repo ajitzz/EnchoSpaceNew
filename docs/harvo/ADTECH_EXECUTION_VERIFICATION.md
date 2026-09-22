@@ -6,6 +6,8 @@ Authority: founder's autonomous ADT-0 through ADT-7 directive, 22 September 2026
 
 **Current validation:** baseline `e4b9af4` full suite **1,947 passed / 0 failed / 0 pending, 155 files**. Subsequent narrow catalog-check correction: **47 targeted tests passed**, including both TEXT/VARCHAR schemas and adversarial RLS checks. TypeScript, lint, isolated client/server build, compiled runtime smoke and 24 fixture browser scenarios pass. The baseline full run is not represented as a full run of the later correction.
 
+**Deployed correction:** GitHub main `635cc65` reached Vercel production Ready. The live readiness endpoint now reports `portfolio.policyValid: true`, confirming the VARCHAR correction against the production catalog. Overall HTTP 503 remains correct until runtime-role and privilege requirements pass; no provider canary was created.
+
 ## ADT-0 — locally verified
 
 Typed shared contracts cover profiles, canonical exact-paise price evidence, provider-specific geography and campaign strategy snapshots. Price intervals are read from versioned registry data; approved boundaries and budget hypotheses are seeded in migration SQL, not JSX or route constants. Unclassified prices and ambiguous room/entire-stay bases fail explicitly. Capability checks refuse unsupported automatic placements and unintegrated lead conversion authority rather than silently changing campaign type.
