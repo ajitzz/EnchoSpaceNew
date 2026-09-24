@@ -1451,6 +1451,13 @@ Under continuous CR1 Phase 3 execution and FAANG L7/L8 Zero-Trust engineering pr
 - **Mid-Transaction Connection Drop Rollback:** Database connection stream drop simulated mid-execution during membership grant write: clean atomic rollback executed with 0 zombie grants and 0 uncommitted audit commands.
 - **5-Click Concurrency Burst Fencing:** 5 simultaneous assignment claim submissions within 200ms deduplicated via in-flight promise cache and idempotency keys: exactly 1 database write executed, 4 identical replays returned with `isReplay: true`.
 - **Monotonic Directory Sync Sequence Guard:** Inverted IdP/SCIM directory sync delivery (sequence 4 arriving after sequence 8) safely rejected as stale (`isStale: true`), maintaining directory authority and strictly preventing privilege regression.
-- **Dual-Control Maker-Checker & Step-Up MFA:** Strictly enforces dual-control approval on privileged actions; proposers attempting self-approval are rejected (`MAKER_CHECKER_SELF_APPROVAL_FORBIDDEN`). Privileged approvals without step-up authentication fail closed (`STEP_UP_MFA_REQUIRED`).
 - **Test Baseline:** Verified with 5 adversarial tests in `src/test/harvo/cr1_p2_workforce_engine.test.ts` (100% passing).
 
+#### CR1 checkpoint: Track 2 statutory tax clearance digest & CA checksum manifest generation (24 September 2026)
+
+Under continuous CR1 Phase 3 execution and FAANG L7/L8 Zero-Trust engineering protocol, Track 2 (Statutory Tax Clearance Memorandum & CA Checksum Manifest for Packages P4.3, M5, M6B) was verified and generated:
+- **Tax Clearance Engine & CLI Generator:** Implemented `TaxClearanceEngine` in `src/lib/compliance/taxClearanceEngine.ts` and CLI generator in `scripts/compliance/generate-ca-tax-packet.mjs` with zero `any` types, Transactional Outbox for tax withholding ledgers, and 200ms burst deduplication.
+- **Cryptographic Fingerprint:** Evaluated `docs/compliance/TRACK_2_STATUTORY_TAX_CLEARANCE_MEMORANDUM_AND_CA_PACKET.md` (10,512 bytes) and generated canonical SHA-256 digest: `0d8aa45f6390aa87b451076271d992839672d1b8826b1ef1c29446bde5d594f2`.
+- **Machine-Readable Manifest:** Generated `docs/harvo/receipts/STATUTORY_TAX_CLEARANCE_DIGEST.json` recording statutory parameters (Section 9(5) CGST, 1% Section 52 TCS, 1% Section 194-O TDS, 15% Flex commission, 18% AdTech margin GST) and ICAI UDIN attestation schema.
+- **Fail-Closed Statutory Gate Invariant:** Affirms that `STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` remains strictly locked (HTTP 503) until physical/digital execution of the clearance opinion by an accredited ICAI Chartered Accountant with verified 18-character UDIN.
+- **Test Baseline:** Verified with 5 adversarial tests in `src/test/harvo/track2_tax_clearance.test.ts` (100% passing) and CLI runner execution outputting valid `DIGEST_GENERATED` structured JSON diagnostics.

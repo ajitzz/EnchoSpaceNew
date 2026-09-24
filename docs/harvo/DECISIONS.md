@@ -1041,6 +1041,27 @@ production readiness assertion follows. See the dedicated hardening receipt.
 - **Verified Suite Quality Matrix:**
   - Adversarial suite: **1 test suite, 5 passing tests (100%)** (`cr1_p2_workforce_engine.test.ts`).
   - Phase P2 workforce suite: **5 test suites, 78 passing tests (100%)** (`cr1_iam_assignment.test.ts`, `cr1_privileged_actions.test.ts`, `cr1_workforce_invitations.test.ts`, `cr1_workforce_lifecycle.test.ts`, `cr1_workforce_step_up.test.ts`).
+  - Production asset bundle: verified 44 public assets.
+
+### CR1-023 — Track 2 Statutory Tax Clearance Memorandum & CA Checksum Manifest Generation (24 September 2026)
+
+**Status:** Implementation, adversarial suite, and digital digest generation verified locally under founder CR1 directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Packages verified & hardened:**
+  - **P4.3, M5, M6B (Statutory Tax Clearance, CA Opinion Packet & Checksum Manifest):**
+    - Implemented `TaxClearanceEngine` in `src/lib/compliance/taxClearanceEngine.ts` and CLI runner `scripts/compliance/generate-ca-tax-packet.mjs` with strict TypeScript contracts (0 `any` types), Transactional Outbox for tax withholding ledgers, and 200ms burst deduplication.
+    - Cryptographically fingerprinted `docs/compliance/TRACK_2_STATUTORY_TAX_CLEARANCE_MEMORANDUM_AND_CA_PACKET.md` with SHA-256 digest `0d8aa45f6390aa87b451076271d992839672d1b8826b1ef1c29446bde5d594f2`.
+    - Generated machine-readable manifest `docs/harvo/receipts/STATUTORY_TAX_CLEARANCE_DIGEST.json` recording statutory parameters (Section 9(5) CGST, 1% Section 52 TCS, 1% Section 194-O TDS, 15% Flex commission, 18% AdTech margin GST) and ICAI UDIN attestation schema.
+    - Enforced fail-closed statutory invariant: `STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` remains strictly locked until physical/digital execution by an accredited ICAI Chartered Accountant with verified 18-character UDIN.
+    - Authored and verified adversarial regression suite in `src/test/harvo/track2_tax_clearance.test.ts` (5 deterministic tests on isolated local runtime):
+      1. *Adversarial Scenario 1 (Mid-Transaction Connection Drop Rollback):* Verified atomic rollback on mid-execution database socket termination during tax withholding write; clean atomic `ROLLBACK` verified with zero zombie invoices and zero uncommitted withholding entries.
+      2. *Adversarial Scenario 2 (5-Click Concurrency Burst in 200ms):* Rapid identical tax submissions deduplicated via in-flight promise caching and idempotency keys; exactly 1 database write executed, 4 deduplicated replays returned with `isReplay: true`.
+      3. *Adversarial Scenario 3 (Out-of-Order Tax Filing Webhook):* Inverted GSTR-8 monthly filing sequence (month 5 arriving after month 7) safely rejected as stale (`isStale: true`, `applied: false`), preserving filing authority.
+      4. *Scenario 4 (Checksum Fingerprint & Tamper Detection):* Altering memorandum text immediately produces divergent hash, preventing unauthorized contract mutation.
+      5. *Scenario 5 (Statutory Rate Precision & UDIN Attestation):* Exact calculation of 1% TCS, 18% GST, 15% commission with paise precision. Non-18-char or malformed UDIN fails closed (`INVALID_UDIN`).
+- **Verified Suite Quality Matrix:**
+  - Adversarial suite: **1 test suite, 5 passing tests (100%)** (`track2_tax_clearance.test.ts`).
+  - CLI manifest generator: **0 errors** (`DIGEST_GENERATED`, SHA-256 `0d8aa45f6390aa87b451076271d992839672d1b8826b1ef1c29446bde5d594f2`).
   - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
   - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
   - Production asset bundle: verified 44 public assets.
+
