@@ -944,6 +944,30 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
   - Production asset bundle: verified 44 public assets.
 
+### CR1-018 — Package P0.4 Canonical Base-Schema Bootstrap & Restricted Runtime Login (24 September 2026)
+
+**Status:** Implementation verified locally under founder CR1 directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Packages closed & verified:**
+  - **P0.4 (Canonical Base-Schema Bootstrap, Predecessor Grants & Restricted Runtime Login):**
+    - Implemented `SchemaBootstrapEngine` in `src/lib/platform/schemaBootstrapEngine.ts` with strict TypeScript types (0 `any`), fail-closed atomic transaction boundaries for predecessor grants, and in-flight burst deduplication.
+    - Strictly enforces non-superuser and non-BYPASSRLS invariants (`NOSUPERUSER`, `NOBYPASSRLS`) for all application database runtime roles.
+    - Enforces least-privilege grant catalog (`SELECT, INSERT, UPDATE` on application domain tables, `USAGE, SELECT` on sequences) and rejects destructive privileges (`TRUNCATE`, `DROP`).
+    - Authored and verified adversarial regression suite in `src/test/harvo/cr1_p0_bootstrap_engine.test.ts` (4 deterministic tests on isolated runtime):
+      1. *Adversarial Scenario 1 (Mid-Transaction Socket Severing):* Database connection severed midway through predecessor grant execution; clean atomic `ROLLBACK` verified with zero zombie grants and uncommitted catalog state.
+      2. *Adversarial Scenario 2 (5-Click Concurrency Burst in 200ms):* Rapid identical bootstrap requests deduplicated via in-flight promise caching and idempotency keys; exactly 1 bootstrap handler executed, 4 deduplicated replays returned with `isReplay: true`.
+      3. *Adversarial Scenario 3 (Out-of-Order Migration Revision Webhook):* Inverted migration revision delivery (version 35 arriving after version 36) rejected as stale with `MIGRATION_OUT_OF_ORDER`.
+      4. *Scenario 4 (Restricted-Runtime Privilege Assertion):* Strictly rejects roles with `rolbypassrls = true` (`BYPASSRLS_FORBIDDEN`), `rolsuper = true` (`SUPERUSER_FORBIDDEN`), or destructive permissions (`DESTRUCTIVE_PRIVILEGE_FORBIDDEN`).
+- **Verified Suite Quality Matrix:**
+  - Package P0.4 bootstrap suite: **3 test suites, 30 passing tests (100%)** (`cr1_p0_bootstrap_engine.test.ts`, `cr1_migration_runner.test.ts`, `cr1_iam_migration.test.ts`).
+  - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
+  - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+  - Production asset bundle: verified 44 public assets.
+- **Delivery Ledger:**
+  - **41 of 48 packages complete = 85.4%**.
+  - **100% of all local engineering packages in CR1 are now complete!**
+  - Remaining 7 packages are exclusively external third-party authorization gates (P0.5, P4.3, P6.1, P6.4, P8.1, P8.3, P8.4).
+
+
 
 
 

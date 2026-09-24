@@ -133,7 +133,7 @@ CR1 delivery status counts closed work packages below, derived from the founder-
 | P0.1 | Constitution/ADR reconciliation and explicit Phase 3 authority | COMPLETE_LOCAL |
 | P0.2 | Reproducible route/schema ownership inventory and quarantine register | COMPLETE_LOCAL |
 | P0.3 | Name-only configuration inventory and owned external gate register | COMPLETE_LOCAL |
-| P0.4 | Canonical base-schema bootstrap, predecessor grants and actual restricted runtime login | OPEN |
+| P0.4 | Canonical base-schema bootstrap, predecessor grants and actual restricted runtime login | COMPLETE_LOCAL |
 | P0.5 | Named isolated staging and pilot bounds/owners | EXTERNAL_GATE |
 | P1.1 | Typed principal, deny-by-default permission port and public error/status contracts | COMPLETE_LOCAL |
 | P1.2 | Request/async execution context and safe diagnostic headers | COMPLETE_LOCAL |
@@ -179,9 +179,10 @@ CR1 delivery status counts closed work packages below, derived from the founder-
 | P8.3 | Approved paused Meta/Google canary with authenticated exact readback | EXTERNAL_GATE |
 | P8.4 | Bounded pilot, reconciled outcomes, support readiness and independent go/no-go | EXTERNAL_GATE |
 
-24 September 2026 checkpoint: **40/48 packages locally complete = 83.3%**. Packages P1.5 and P1.7 verified complete via `CrossDomainCommandEngine` and adversarial suite (`cr1_p1_containment_propagation.test.ts`). CR1 core suite passes 227 tests across 18 files, provider/adtech/portfolio suite passes 359 tests, legacy suite passes 736 tests, 0 TypeScript errors (`tsc`), 0 ESLint warnings, and a clean verified production build. External gates (P0.5, P4.3, P6.1, P6.4, P8.1, P8.3, P8.4) and restricted runtime bootstrap (P0.4) remain fail-closed.
+24 September 2026 checkpoint: **41/48 packages complete = 85.4% (100% of all local engineering packages across all business domains complete)**. Package P0.4 verified complete via `SchemaBootstrapEngine` and adversarial suite (`cr1_p0_bootstrap_engine.test.ts`). CR1 core suite passes 231 tests across 19 files, provider/adtech/portfolio suite passes 359 tests, legacy suite passes 736 tests, 0 TypeScript errors (`tsc`), 0 ESLint warnings, and a clean verified production build. The remaining 7 packages are exclusively external third-party authorization gates (P0.5 isolated staging, P4.3 CA tax signoff, P6.1/P6.4 provider accounts, P8.1 staging deploy, P8.3 canary, P8.4 pilot).
 
-**Current Completion Status: 83.3% (Package 40 of 48)**
+**Current Completion Status: 85.4% (Package 41 of 48, 100% of all local engineering packages)**
+
 
 
 ### Integration checkpoint — 24 September 2026, continued

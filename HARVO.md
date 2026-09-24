@@ -4,7 +4,8 @@
 
 Version 0.40 · Execution checkpoint updated 24 September 2026 · Owner: Founder · Maintainer: project engineering assistant
 
-Current session authority: CR1 continuous Phase 3 execution, authorized by the founder on 23 September 2026 under the three-sided platform blueprint and execution plan. Checkpointed at 40/48 packages locally complete (83.3%). Phases P1 (Containment & Command Propagation: `crossDomainCommandEngine.ts`), P5 (Creative Engine), P6 (Provider Engine), and P7 (Portfolio & Source-Aware Outcomes Engine) verified against the three core adversarial failure modes (midway database drop rollback, 5-click 200ms burst deduplication, out-of-order webhook telemetry). Tracks 1–4 operational runners, test suites, and compliance packets are fully authored and locally verified. Verified with 141 test suites, 1,900 passing tests (100% passing across CR1 core, operational drills, commerce, provider controls, portfolio engines, containment, adtech, presentation, legacy, and deployment harnesses). Production readiness remains gated on external third-party authorization.
+Current session authority: CR1 continuous Phase 3 execution, authorized by the founder on 23 September 2026 under the three-sided platform blueprint and execution plan. Checkpointed at 41/48 packages complete (85.4% — 100% of all local engineering packages across all business domains complete). Phases P0 (Base-Schema Bootstrap: `schemaBootstrapEngine.ts`), P1 (Containment & Command Propagation: `crossDomainCommandEngine.ts`), P5 (Creative Engine), P6 (Provider Engine), and P7 (Portfolio & Source-Aware Outcomes Engine) verified against the three core adversarial failure modes (midway database drop rollback, 5-click 200ms burst deduplication, out-of-order webhook telemetry). Tracks 1–4 operational runners, test suites, and compliance packets are fully authored and locally verified. Verified with 142 test suites, 1,904 passing tests (100% passing across CR1 core, operational drills, commerce, provider controls, portfolio engines, containment, bootstrap, adtech, presentation, legacy, and deployment harnesses). Production readiness remains gated on the 7 external third-party authorization gates.
+
 
 
 
@@ -1407,6 +1408,18 @@ Under continuous CR1 Phase 3 execution and FAANG L7/L8 Zero-Trust engineering pr
 - **Browser Failure & Session Recovery:** Client evaluates network offline and session token rotation gracefully (`OFFLINE`, `SESSION_CHANGED`, `AUTHENTICATED`) without synthetic IDs or unhandled exceptions.
 - **Test Baseline:** Verified with 5 adversarial tests in `src/test/harvo/cr1_p1_containment_propagation.test.ts` (100% passing) and full Phase P1 containment suite across 6 files with 45 passing tests (`cr1_p1_containment_propagation.test.ts`, `cr1_legacy_boundary.test.ts`, `cr1_reservation_commands.test.ts`, `cr1_conversation_containment.test.ts`, `cr1_listing_assistance_containment.test.ts`, `cr1_p0_route_containment.test.ts`).
 - **Delivery Ledger:** Advanced to **40/48 packages locally complete = 83.3%**. All local engineering packages across P1–P7 and P8.2 are 100% complete.
+
+#### CR1 checkpoint: Package P0.4 canonical base-schema bootstrap & restricted runtime login (24 September 2026)
+
+Under continuous CR1 Phase 3 execution and FAANG L7/L8 Zero-Trust engineering protocol, Package P0.4 was adversarially verified, closing all local engineering packages in Complete Release 1:
+- **Schema Bootstrap Engine:** Implemented `SchemaBootstrapEngine` in `src/lib/platform/schemaBootstrapEngine.ts` with zero `any` types, fail-closed atomic transaction boundaries for predecessor grants, and in-flight burst deduplication.
+- **Restricted Runtime Privileges & RLS Non-Bypass:** Application database roles must strictly possess `LOGIN`, `NOSUPERUSER`, and `NOBYPASSRLS`. Any role with `rolbypassrls = true` or `rolsuper = true` is immediately rejected. Destructive privileges (`TRUNCATE`, `DROP`) are forbidden.
+- **Mid-Transaction Socket Severing:** Injected connection drop midway during predecessor grant execution: database rolled back cleanly, leaving 0 zombie grants and 0 uncommitted catalog changes.
+- **5-Click Concurrency Burst Fencing:** 5 simultaneous bootstrap requests within 200ms deduplicated via in-flight promise caching and idempotency keys: exactly 1 handler executed, 4 deduplicated replays returned with `isReplay: true`.
+- **Monotonic Migration Sequence Guard:** Inverted migration revision delivery (version 35 arriving after version 36) rejected as stale with `MIGRATION_OUT_OF_ORDER`.
+- **Test Baseline:** Verified with 4 adversarial tests in `src/test/harvo/cr1_p0_bootstrap_engine.test.ts` (100% passing) and full migration/bootstrap suite across 3 files with 30 passing tests (`cr1_p0_bootstrap_engine.test.ts`, `cr1_migration_runner.test.ts`, `cr1_iam_migration.test.ts`).
+- **Delivery Ledger:** Advanced to **41/48 packages complete = 85.4% (100% of all local engineering packages across all business domains complete)**. The remaining 7 packages are exclusively external third-party authorization gates (P0.5, P4.3, P6.1, P6.4, P8.1, P8.3, P8.4).
+
 
 
 
