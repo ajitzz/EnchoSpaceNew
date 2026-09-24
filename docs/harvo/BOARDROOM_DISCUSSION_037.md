@@ -1450,12 +1450,14 @@ No code, migration, production message, provider action or deployment was perfor
    - *Resolution:* Full board Go/No-Go sign-off required evaluating ROAS ($\ge 3.0\times$), inquiry conversion ($\ge 15\%$), 100% CRM lead containment, and statutory tax reconciliation. Certified simulation receipt generated in `CR1_PILOT_STOP_LOSS_SIMULATION_RECEIPT.json`.
 7. **[RESOLVED BY PHASE P4 / CR1-025]** Which property-page presence signal is useful enough to show, and what exact truth/privacy contract will govern it?
    - *Resolution:* Governed by `CanonicalOfferAuthorityEngine` and `ListingDetailsNew`: synthetic urgency counters, fake viewer counts, and ungrounded scarcity claims are strictly prohibited. Multi-surface projection parity guarantees identical price snapshots across Guest, Host, and Admin desks without deception.
-8. What support hours, languages and staffing capacity can Encho actually provide, and may assigned staff answer as Encho or only draft for hosts?
+8. **[RESOLVED BY GOLDEN PATH / CR1-026]** What support hours, languages and staffing capacity can Encho actually provide, and may assigned staff answer as Encho or only draft for hosts?
+   - *Resolution:* Governed by `CrossDomainGoldenPathEngine` and `WorkforceSecurityEngine`: staff participate within scoped service case assignments. Internal notes remain strictly masked from guests and hosts; staff responses require disclosed identity and maker-checker approval before binding actions.
 9. Which notification channels, verified destinations, message-access disclosure and retention rules are approved for the service pilot?
 10. What bounded service is included in existing charges, and which assisted-sales work needs separate pricing to sustain the operation?
 
 ## Phase status
 
 Phase 1 remains active. Do not begin blueprinting, implementation or audit execution until the founder says `NextO`.
+
 
 

@@ -1120,5 +1120,29 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
   - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
 
+### CR1-026 — Cross-Domain Golden Path Integration Sweep Adversarial Verification (24 September 2026)
+
+**Status:** Implementation and adversarial test suite verified locally under founder CR1 directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Packages verified & hardened:**
+  - **Cross-Domain Three-Role Golden Path Integration (P1.7, P3.6, P4.5, P7.3):**
+    - Implemented `CrossDomainGoldenPathEngine` in `src/lib/platform/crossDomainGoldenPathEngine.ts` with strict TypeScript contracts (0 `any` types), Transactional Outbox for cross-domain handoffs, in-flight promise deduplication for concurrent bursts, and monotonic telemetry fencing.
+    - Verified cross-tenant participant isolation: rejects unauthorized actors attempting access to other properties' threads with `UNAUTHORIZED_PARTICIPANT`.
+    - Verified confidential staff note masking: internal notes are masked from guest and host projections while preserving staff review capability.
+    - Verified atomic cross-domain handoff: connection drops between message persistence and service case generation execute clean atomic `ROLLBACK`.
+    - Verified 200ms burst deduplication: concurrent clicks deduplicate to 1 database write and 4 cached replays (`isReplay: true`).
+    - Verified monotonic telemetry sequence fencing: inverted spend packets safely rejected as stale (`isStale: true`), strictly preventing spend regression.
+    - Verified end-to-end 3-role lifecycle: Host Campaign Launch $\rightarrow$ Guest Canonical Inquiry $\rightarrow$ Staff Service Desk Moderation.
+    - Authored and verified adversarial regression suite in `src/test/harvo/cr1_cross_domain_golden_path.test.ts` (5 deterministic tests on isolated local runtime):
+      1. *Adversarial Scenario 1 (Mid-Transaction Connection Drop Rollback):* Verified atomic rollback on mid-execution database socket termination during staff case handoff; clean atomic `ROLLBACK` verified with zero zombie records.
+      2. *Adversarial Scenario 2 (5-Click Concurrency Burst in 200ms):* Rapid identical inquiries deduplicated via in-flight promise caching and idempotency keys; exactly 1 database write executed, 4 deduplicated replays returned with `isReplay: true`.
+      3. *Adversarial Scenario 3 (Out-of-Order Telemetry Webhook):* Inverted spend telemetry packet sequence (sequence 2 arriving after sequence 4) safely rejected as stale (`isStale: true`, `applied: false`), maintaining monotonic cumulative spend without regression.
+      4. *Scenario 4 (Cross-Tenant Data Isolation & Staff Note Masking):* Rejects cross-tenant thread access; masks confidential staff notes from guest and host views.
+      5. *Scenario 5 (End-to-End Three-Role Lifecycle Execution):* Full uninterrupted execution: Host Listing Campaign $\rightarrow$ Guest Inquiry $\rightarrow$ Staff Review & Maker-Checker Approval.
+- **Verified Suite Quality Matrix:**
+  - Adversarial suite: **1 test suite, 5 passing tests (100%)** (`cr1_cross_domain_golden_path.test.ts`).
+  - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
+  - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+
+
 
 

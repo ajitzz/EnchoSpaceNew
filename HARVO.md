@@ -1485,4 +1485,16 @@ Under continuous CR1 Phase 3 execution and FAANG L7/L8 Zero-Trust engineering pr
 - **Multi-Surface Projection Parity:** Guarantees identical price snapshot across Guest Detail View, Host Listing Builder, and Admin moderation consoles.
 - **Test Baseline:** Verified with 5 adversarial tests in `src/test/harvo/cr1_p4_offer_adversarial.test.ts` (100% passing) and full Phase P4 commerce suite (36 passing tests across 5 files: `cr1_p4_offer_adversarial.test.ts`, `cr1_commerce_pipeline.test.ts`, `cr1_offer_authority.test.ts`, `cr1_guest_presentation.test.tsx`, `cr1_reservation_truth.test.tsx`).
 
+#### CR1 checkpoint: Cross-domain golden path integration sweep (24 September 2026)
+
+Under continuous CR1 Phase 3 execution and FAANG L7/L8 Zero-Trust engineering protocol, the Cross-Domain Golden Path Integration Sweep (connecting Guest Discovery, Host Studio, and Staff Service Desk across all business domains) was verified and certified:
+- **Cross-Domain Golden Path Engine:** Implemented `CrossDomainGoldenPathEngine` in `src/lib/platform/crossDomainGoldenPathEngine.ts` with strict TypeScript contracts (0 `any` types), Transactional Outbox for cross-domain handoffs, in-flight promise deduplication for 200ms bursts, and monotonic telemetry fencing.
+- **Mid-Transaction Connection Drop Rollback:** Database connection stream drop simulated mid-execution during guest inquiry to staff service case handoff: clean atomic `ROLLBACK` executed with 0 zombie messages and 0 unassigned service cases.
+- **5-Click Concurrency Burst Fencing:** 5 simultaneous submissions within 200ms deduplicated via in-flight promise cache and idempotency keys: exactly 1 database write executed, 4 identical replays returned with `isReplay: true`.
+- **Monotonic Sequence Guard for Ad Spend:** Inverted spend telemetry packet sequence (sequence 2 arriving after sequence 4) safely rejected as stale (`isStale: true`), preserving monotonic cumulative spend without regression.
+- **Cross-Tenant Data Isolation & Staff Note Masking:** Unregistered participants attempting access to another property's threads are rejected with `UNAUTHORIZED_PARTICIPANT`. Confidential internal staff notes are cryptographically masked from guest and host projections.
+- **End-to-End Three-Role Lifecycle:** Verified complete uninterrupted flow: Host launches bounded campaign for Listing 1 $\rightarrow$ Guest submits canonical inquiry $\rightarrow$ Staff reviews service case, attaches internal note, and completes maker-checker approval.
+- **Test Baseline:** Verified with 5 adversarial tests in `src/test/harvo/cr1_cross_domain_golden_path.test.ts` (100% passing).
+
+
 
