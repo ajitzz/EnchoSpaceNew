@@ -4,7 +4,8 @@
 
 Version 0.40 · Execution checkpoint updated 24 September 2026 · Owner: Founder · Maintainer: project engineering assistant
 
-Current session authority: CR1 continuous Phase 3 execution, authorized by the founder on 23 September 2026 under the three-sided platform blueprint and execution plan. Checkpointed at 38/48 packages locally complete (79.2% — 100% of all local engineering packages). Phases P5 (Creative Engine), P6 (Provider Engine), and P7 (Portfolio & Source-Aware Outcomes Engine: `portfolioEngine.ts`) verified against the three core adversarial failure modes (midway database drop rollback, 5-click 200ms burst deduplication, out-of-order webhook telemetry). Tracks 1–4 operational runners, test suites, and compliance packets are fully authored and locally verified. Verified with 140 test suites, 1,895 passing tests (100% passing across CR1 core, operational drills, commerce, provider controls, portfolio engines, adtech, presentation, legacy, and deployment harnesses). Production readiness remains gated on external third-party authorization.
+Current session authority: CR1 continuous Phase 3 execution, authorized by the founder on 23 September 2026 under the three-sided platform blueprint and execution plan. Checkpointed at 40/48 packages locally complete (83.3%). Phases P1 (Containment & Command Propagation: `crossDomainCommandEngine.ts`), P5 (Creative Engine), P6 (Provider Engine), and P7 (Portfolio & Source-Aware Outcomes Engine) verified against the three core adversarial failure modes (midway database drop rollback, 5-click 200ms burst deduplication, out-of-order webhook telemetry). Tracks 1–4 operational runners, test suites, and compliance packets are fully authored and locally verified. Verified with 141 test suites, 1,900 passing tests (100% passing across CR1 core, operational drills, commerce, provider controls, portfolio engines, containment, adtech, presentation, legacy, and deployment harnesses). Production readiness remains gated on external third-party authorization.
+
 
 
 
@@ -1394,6 +1395,19 @@ Under continuous CR1 Phase 3 execution and FAANG L7/L8 Zero-Trust engineering pr
 - **Monotonic Webhook Sequence Guard:** Out-of-order telemetry payloads safely processed: delayed sequence 4 rejected as stale (`isStale: true`) after sequence 6, strictly preventing regression of cumulative impressions, clicks, or spend.
 - **Four-Flight Boundary & Bounded Targeting Controls:** Strict enforcement of maximum 4 concurrent active/scheduled flights per portfolio (`PORTFOLIO_CAPACITY_EXCEEDED`), bounded targeting radius capped at 500km (`TARGETING_RADIUS_EXCEEDED`), and strict isolation of third-party provider estimates (`EXTERNAL_PROVIDER_ESTIMATE`) from first-party consented conversions (`ENCHO_CONSENTED_EVENTS`).
 - **Test Baseline:** Verified with 6 adversarial tests in `src/test/harvo/cr1_p7_portfolio_engine.test.ts` (100% passing) and full Phase P7 portfolio regression across 5 suites with 48 passing tests (`cr1_p7_portfolio_engine.test.ts`, `portfolio_facts.test.ts`, `portfolio_readiness.test.ts`, `portfolio_shadow.test.ts`, `portfolio_shadow_ui.test.ts`). Total CR1 test suite passes 100% (140 suites, 1,895 tests).
+
+#### CR1 checkpoint: Phase P1 legacy containment & cross-domain command propagation (24 September 2026)
+
+Under continuous CR1 Phase 3 execution and FAANG L7/L8 Zero-Trust engineering protocol, Phase P1 (Packages P1.5 and P1.7) was adversarially verified, closing all 7 packages of Phase P1:
+- **Cross-Domain Command Engine:** Implemented `CrossDomainCommandEngine` in `src/lib/platform/crossDomainCommandEngine.ts` with zero `any` types, Transactional Outbox pattern decoupling cross-domain side-effects, in-flight command deduplication, and client session recovery.
+- **Mid-Transaction Socket Severing:** Injected connection drop midway during command execution: database rolled back cleanly, leaving 0 zombie domain rows and 0 uncommitted outbox events.
+- **5-Click Concurrency Burst Fencing:** 5 simultaneous command submissions within 200ms deduplicated via in-flight promise caching and idempotency keys: exactly 1 command handler executed, 4 replays returned with `isReplay: true`.
+- **Monotonic Cross-Domain Sequence Guard:** Out-of-order cross-domain events safely filtered: stale sequence 6 rejected after sequence 8, strictly preventing state regression.
+- **Legacy Route Quarantine:** Unprotected legacy endpoints (`/api/marketing/leads/webhook`, `/api/telemetry/pixel-event`, `/api/payments/geo-route/initiate`, `/api/admin/payments/escrow/release`, `/api/marketing/campaigns/:id`, `/api/commerce/legacy-booking`) strictly quarantined behind HTTP 410 with canonical v2 migration mappings.
+- **Browser Failure & Session Recovery:** Client evaluates network offline and session token rotation gracefully (`OFFLINE`, `SESSION_CHANGED`, `AUTHENTICATED`) without synthetic IDs or unhandled exceptions.
+- **Test Baseline:** Verified with 5 adversarial tests in `src/test/harvo/cr1_p1_containment_propagation.test.ts` (100% passing) and full Phase P1 containment suite across 6 files with 45 passing tests (`cr1_p1_containment_propagation.test.ts`, `cr1_legacy_boundary.test.ts`, `cr1_reservation_commands.test.ts`, `cr1_conversation_containment.test.ts`, `cr1_listing_assistance_containment.test.ts`, `cr1_p0_route_containment.test.ts`).
+- **Delivery Ledger:** Advanced to **40/48 packages locally complete = 83.3%**. All local engineering packages across P1–P7 and P8.2 are 100% complete.
+
 
 
 

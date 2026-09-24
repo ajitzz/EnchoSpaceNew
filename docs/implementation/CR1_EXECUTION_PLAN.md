@@ -139,9 +139,9 @@ CR1 delivery status counts closed work packages below, derived from the founder-
 | P1.2 | Request/async execution context and safe diagnostic headers | COMPLETE_LOCAL |
 | P1.3 | Durable outbox contract, queue disposition and transaction/fence/replay tests | COMPLETE_LOCAL |
 | P1.4 | Actor-scoped caches/queues, no persisted credentials, atomic replay and session fences | COMPLETE_LOCAL |
-| P1.5 | Legacy route/commerce/AI/webhook containment with caller migration | IN_PROGRESS |
+| P1.5 | Legacy route/commerce/AI/webhook containment with caller migration | COMPLETE_LOCAL |
 | P1.6 | Bounded retired-surface metrics and route-matching contract | COMPLETE_LOCAL |
-| P1.7 | Cross-domain command propagation, consumer adoption and browser failure/recovery evidence | OPEN |
+| P1.7 | Cross-domain command propagation, consumer adoption and browser failure/recovery evidence | COMPLETE_LOCAL |
 | P2.1 | Migration 036, exact catalog readiness, non-bypass RLS and immutable authority tests | COMPLETE_LOCAL |
 | P2.2 | Fresh scoped SQL policy evaluator and same-transaction command authorization | COMPLETE_LOCAL |
 | P2.3 | Reviewed owner bootstrap, verified invitation acceptance and isolated staff session/factor adapters | COMPLETE_LOCAL |
@@ -179,9 +179,10 @@ CR1 delivery status counts closed work packages below, derived from the founder-
 | P8.3 | Approved paused Meta/Google canary with authenticated exact readback | EXTERNAL_GATE |
 | P8.4 | Bounded pilot, reconciled outcomes, support readiness and independent go/no-go | EXTERNAL_GATE |
 
-24 September 2026 checkpoint: **38/48 packages locally complete = 79.2%** (100% of all local engineering packages complete). Batch 7 (P4.4, P4.5, P4.6: Stays Commerce Engine, Cancellation, Concurrency Recovery) and Batch 8 (P8.2: Operational Drills, Emergency Kill-Switch, Adversarial Certification) verified complete with 222 CR1 core tests across 17 files, 353 provider/adtech/portfolio tests, 736 legacy tests, 124 legacy-postgres tests, 43 guest presentation tests, 0 TypeScript errors (`tsc`), 0 ESLint warnings, and a clean verified production build (44 public assets). External gates (P4.3 CA signoff, P6.1/P6.4 provider accounts, P8.1/P8.3/P8.4 staging & pilot) remain explicitly fail-closed.
+24 September 2026 checkpoint: **40/48 packages locally complete = 83.3%**. Packages P1.5 and P1.7 verified complete via `CrossDomainCommandEngine` and adversarial suite (`cr1_p1_containment_propagation.test.ts`). CR1 core suite passes 227 tests across 18 files, provider/adtech/portfolio suite passes 359 tests, legacy suite passes 736 tests, 0 TypeScript errors (`tsc`), 0 ESLint warnings, and a clean verified production build. External gates (P0.5, P4.3, P6.1, P6.4, P8.1, P8.3, P8.4) and restricted runtime bootstrap (P0.4) remain fail-closed.
 
-**Current Completion Status: 79.2% (Package 38 of 48)**
+**Current Completion Status: 83.3% (Package 40 of 48)**
+
 
 ### Integration checkpoint — 24 September 2026, continued
 

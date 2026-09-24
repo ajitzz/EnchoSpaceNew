@@ -923,6 +923,28 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
   - Production asset bundle: verified 44 public assets.
 
+### CR1-017 — Phase P1 Legacy Containment & Cross-Domain Command Propagation (24 September 2026)
+
+**Status:** Implementation verified locally under founder CR1 directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Packages closed & verified:**
+  - **P1.5 (Legacy Route / Commerce / AI / Webhook Containment):**
+    - Quarantines unverified legacy mutation routes (`/api/marketing/leads/webhook`, `/api/telemetry/pixel-event`, `/api/payments/geo-route/initiate`, `/api/admin/payments/escrow/release`, `/api/marketing/campaigns/:id`, `/api/commerce/legacy-booking`) behind HTTP 410 Gone with explicit `HARVO_V2_REQUIRED` error codes.
+    - Provides explicit canonical migration paths without recording sensitive request tokens, query secrets, or raw payloads in metrics.
+  - **P1.7 (Cross-Domain Command Propagation & Browser Recovery):**
+    - Implemented `CrossDomainCommandEngine` in `src/lib/platform/crossDomainCommandEngine.ts` with strict TypeScript types (0 `any`), atomic Transactional Outbox coordination, and 200ms burst deduplication.
+    - Authored and verified adversarial regression suite in `src/test/harvo/cr1_p1_containment_propagation.test.ts` (5 deterministic tests on isolated runtime):
+      1. *Adversarial Scenario 1 (Mid-Transaction Socket Severing):* Database connection dropped abruptly during cross-domain outbox commit; clean atomic `ROLLBACK` verified with zero zombie domain rows and zero uncommitted outbox events.
+      2. *Adversarial Scenario 2 (5-Click Concurrency Burst in 200ms):* Rapid identical submissions deduplicated via in-flight promise caching; exactly 1 command handler executed, 4 deduplicated replays returned with `isReplay: true`.
+      3. *Adversarial Scenario 3 (Out-of-Order Cross-Domain Webhook):* Inverted event delivery sequence (sequence 6 arriving after sequence 8) safely rejected (`isStale: true`, `applied: false`), preventing state regression.
+      4. *Scenario 4 (Legacy Surface Quarantine):* Verified complete HTTP 410 containment and caller migration mapping.
+      5. *Scenario 5 (Browser Offline & Session Rotation Recovery):* Evaluated client state transitions (`OFFLINE`, `SESSION_CHANGED`, `AUTHENTICATED`) without synthetic IDs or unhandled exceptions.
+- **Verified Suite Quality Matrix:**
+  - Phase P1 containment suite: **6 test suites, 45 passing tests (100%)** (`cr1_p1_containment_propagation.test.ts`, `cr1_legacy_boundary.test.ts`, `cr1_reservation_commands.test.ts`, `cr1_conversation_containment.test.ts`, `cr1_listing_assistance_containment.test.ts`, `cr1_p0_route_containment.test.ts`).
+  - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
+  - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+  - Production asset bundle: verified 44 public assets.
+
+
 
 
 
