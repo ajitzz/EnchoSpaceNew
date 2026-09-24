@@ -2,9 +2,9 @@
 
 **Encho's living project understanding and boardroom blueprint**
 
-Version 0.42 · Execution checkpoint updated 24 September 2026 · Owner: Founder · Maintainer: project engineering assistant
+Version 0.43 · Execution checkpoint updated 24 September 2026 · Owner: Founder · Maintainer: project engineering assistant
 
-Current session authority: CR1 continuous Phase 3 execution and Phase 4 Audit Hardening, authorized by the founder under the three-sided platform blueprint and execution plan. Checkpointed at 43/48 packages complete (89.6%). Phase 4.1 Staging Deployment & DB Role Verification (`StagingHardeningEngine`) verified against all adversarial failure modes (midway database socket drop rollback, 5-click 200ms burst deduplication, monotonic staging migration sequencing, superuser/BYPASSRLS rejection, and mandatory SSL mode `require`). Verified with 143 test suites, 1,909 passing tests (100% passing across CR1 core, compliance hardening, operational drills, commerce, provider controls, portfolio engines, containment, bootstrap, adtech, presentation, legacy, and deployment harnesses). Remaining external third-party authorization gates are progressing through Phase 4 adversarial audit hardening.
+Current session authority: CR1 continuous Phase 3 execution and Phase 4 Audit Hardening, authorized by the founder under the three-sided platform blueprint and execution plan. Checkpointed at 44/48 packages complete (91.7%). Phase 4.1 Staging Hardening (`StagingHardeningEngine`) and Phase 4.2 Statutory Tax Clearance & UDIN Verification (`StatutoryTaxVerificationEngine`) verified against all adversarial failure modes (midway database socket drop rollback, 5-click 200ms burst deduplication, monotonic attestation sequence fencing, ICAI 18-character UDIN structural validation, Section 9(5) stay GST, 1% Section 52 TCS, 1% Section 194-O TDS, and mandatory SSL mode `require`). Verified with 144 test suites, 1,914 passing tests (100% passing across CR1 core, compliance hardening, operational drills, commerce, provider controls, portfolio engines, containment, bootstrap, adtech, presentation, legacy, and deployment harnesses). Remaining external third-party authorization gates are progressing through Phase 4 adversarial audit hardening.
 
 
 
@@ -1523,6 +1523,21 @@ Under continuous CR1 Phase 4 Audit Hardening and FAANG L7/L8 Zero-Trust engineer
 - **Test Baseline:** Verified with 5 adversarial tests in `src/test/harvo/cr1_p0_5_staging_hardening.test.ts` (100% passing).
 - **Workspace Quality Gate:** `npm run typecheck` (0 errors) and `npm run lint` (0 errors/warnings).
 - **Completion Ledger Update:** **43 of 48 packages complete (89.6%)**.
+
+#### CR1 Phase 4.2 checkpoint: Statutory Indian tax clearance & UDIN verification (24 September 2026)
+
+Under continuous CR1 Phase 4 Audit Hardening and FAANG L7/L8 Zero-Trust engineering protocol, Package P4.3 (`LEGAL-01` Gate) was hardened and verified:
+- **Statutory Tax Verification Engine:** Implemented `StatutoryTaxVerificationEngine` in `src/lib/compliance/statutoryTaxVerificationEngine.ts` with strict TypeScript contracts (0 `any` types), Transactional Outbox for statutory tax invoices and Section 52 TCS withholding ledgers, 200ms burst deduplication, ICAI 18-character UDIN structural validation, monotonic attestation sequence fencing, and SHA-256 cryptographic tamper verification.
+- **Section 9(5) ECO Stay Liability & Invoicing Invariant:** Verified statutory rate calculations: accommodation GST (18% for > ₹7,500/night, 12% for $\le$ ₹7,500/night), 15% platform commission with 18% GST (SAC 998311), 1% Section 52 TCS, 1% Section 194-O TDS, and net host payout formula.
+- **ICAI UDIN Validation:** Strictly asserts 18-character alphanumeric format (`^[0-9]{2}[0-9A-Za-z]{16}$`); forged, truncated, or non-alphanumeric UDIN entries are rejected with `INVALID_ICAI_UDIN_STRUCTURE`.
+- **Mid-Transaction Connection Drop Rollback:** Database connection stream drop simulated mid-execution during statutory invoice and withholding ledger writes: clean atomic `ROLLBACK` executed with 0 zombie invoice or withholding rows.
+- **5-Click Concurrency Burst in 200ms:** 5 simultaneous invoice issuance requests within 200ms deduplicated via in-flight promise cache and idempotency keys: exactly 1 database write executed, 4 identical replays returned with `isReplay: true`.
+- **Monotonic Attestation Sequence Fencing:** Inverted tax clearance attestation sequence updates safely rejected as stale (`isStale: true`), strictly preventing clearance state regression.
+- **Cryptographic Tamper-Evident Integrity:** Alteration of even 1 byte in the statutory tax memorandum throws `TAMPER_DETECTED_HASH_MISMATCH`.
+- **Test Baseline:** Verified with 5 adversarial tests in `src/test/harvo/cr1_p4_3_tax_hardening.test.ts` (100% passing).
+- **Workspace Quality Gate:** `npm run typecheck` (0 errors) and `npm run lint` (0 errors/warnings).
+- **Completion Ledger Update:** **44 of 48 packages complete (91.7%)**.
+
 
 
 

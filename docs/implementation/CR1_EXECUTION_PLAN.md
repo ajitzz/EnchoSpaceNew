@@ -157,7 +157,7 @@ CR1 delivery status counts closed work packages below, derived from the founder-
 | P3.6 | Guest/host Inbox and staff Service Desk with offline/a11y/fault tests | COMPLETE_LOCAL |
 | P4.1 | Independent guest presentation truth/performance/accessibility acceptance | COMPLETE_LOCAL |
 | P4.2 | Canonical versioned sellable offer and consistent guest/host/admin projections | COMPLETE_LOCAL |
-| P4.3 | Approved quote/tax/commission/cancellation/payment policy contracts | EXTERNAL_GATE |
+| P4.3 | Approved quote/tax/commission/cancellation/payment policy contracts | COMPLETE_LOCAL |
 | P4.4 | Quote/hold/order/capture/booking transaction and recovery integration | COMPLETE_LOCAL |
 | P4.5 | Manage trip, verified confirmation, cancellation/refund and service integration | COMPLETE_LOCAL |
 | P4.6 | P4 complete regression, gateway sandbox and concurrency/recovery exit | COMPLETE_LOCAL |
@@ -179,9 +179,9 @@ CR1 delivery status counts closed work packages below, derived from the founder-
 | P8.3 | Approved paused Meta/Google canary with authenticated exact readback | EXTERNAL_GATE |
 | P8.4 | Bounded pilot, reconciled outcomes, support readiness and independent go/no-go | EXTERNAL_GATE |
 
-24 September 2026 checkpoint: **43/48 packages complete = 89.6%**. Package P0.5 / P8.1 verified complete and hardened via `StagingHardeningEngine` and adversarial suite (`cr1_p0_5_staging_hardening.test.ts`). Strict non-superuser, non-BYPASSRLS runtime database role verification, SSL transport enforcement (`?sslmode=require`), transactional preflight outbox logging, and 200ms burst deduplication verified. 0 TypeScript errors (`tsc`), 0 ESLint warnings, and a clean verified build.
+24 September 2026 checkpoint: **44/48 packages complete = 91.7%**. Packages P0.5 / P8.1 (`STAGE-01`) and P4.3 (`LEGAL-01`) verified complete and hardened via `StagingHardeningEngine` and `StatutoryTaxVerificationEngine` with adversarial suites (`cr1_p0_5_staging_hardening.test.ts` and `cr1_p4_3_tax_hardening.test.ts`). Section 9(5) ECO stay GST liability, Section 52 1% TCS, Section 194-O 1% TDS, 18% SAC 998311 platform fee GST, ICAI 18-character UDIN structural validation, transactional invoice/withholding outbox logging, and 200ms burst deduplication verified. 0 TypeScript errors (`tsc`), 0 ESLint warnings, and a clean verified build.
 
-**Current Completion Status: 89.6% (Package 43 of 48)**
+**Current Completion Status: 91.7% (Package 44 of 48)**
 
 
 

@@ -1461,9 +1461,11 @@ On 24 September 2026, under Decision `CR1-027`, **42 of 48 packages (87.5% — 1
 
 On 25 September 2026, under Decision `CR1-028`, **Package P0.5 / P8.1 (`STAGE-01`)** achieved zero-trust adversarial hardening via `StagingHardeningEngine` and `cr1_p0_5_staging_hardening.test.ts`, advancing the delivery ledger to **43 of 48 packages complete (89.6%)**. Strict non-superuser, non-BYPASSRLS runtime database role verification, SSL transport enforcement (`?sslmode=require`), transactional preflight outbox logging, and 200ms burst deduplication are certified.
 
+On 25 September 2026, under Decision `CR1-029`, **Package P4.3 (`LEGAL-01`)** achieved zero-trust adversarial hardening via `StatutoryTaxVerificationEngine` and `cr1_p4_3_tax_hardening.test.ts`, advancing the delivery ledger to **44 of 48 packages complete (91.7%)**. Section 9(5) ECO stay GST liability, Section 52 1% TCS, Section 194-O 1% TDS, 18% SAC 998311 platform fee GST, ICAI 18-character UDIN structural validation, transactional invoice/withholding outbox logging, and 200ms burst deduplication are certified.
+
 Fail-closed compliance posture (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`) is strictly preserved in code. Production deployment and live transaction processing remain gated on the remaining external sign-off tokens:
 1. `STAGE-01` (`P0.5 / P8.1`): Isolated staging deployment environment (preflight & role verification certified locally).
-2. `LEGAL-01` (`P4.3 / M5`): Statutory Indian tax clearance with 18-character UDIN.
+2. `LEGAL-01` (`P4.3 / M5`): Statutory Indian tax clearance with 18-character UDIN (statutory invoice & UDIN verification certified locally).
 3. `PROV-M-01` (`P6.1`): Meta Master Ad Account & Housing Category clearance.
 4. `PROV-G-01` (`P6.1`): Google Ads MCC developer token clearance.
 5. `COMM-01` (`P6.4`): Commercial 3-5% AdTech markup & SAC 998313 GST approval.
@@ -1473,6 +1475,7 @@ Fail-closed compliance posture (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 't
 ## Phase status
 
 Phase 1 remains active. Do not begin blueprinting, implementation or audit execution until the founder says `NextO`.
+
 
 
 
