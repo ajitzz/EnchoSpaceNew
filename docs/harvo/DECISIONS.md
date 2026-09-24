@@ -1300,4 +1300,21 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
   - Total CR1 program completion: **48 of 48 packages complete (100.0% — Complete Release 1 fully verified and certified locally)**.
 
+### CR1-035 — Boardroom Operational Handover & External Gate Sign-Off Protocol Activation (25 September 2026)
+
+**Status:** Boardroom Operational Handover and External Gate Sign-Off Protocol formally established and adopted under founder directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Protocol & Governance Established:**
+  - Authored comprehensive executive manual: `docs/harvo/BOARDROOM_OPERATIONAL_HANDOVER_AND_GATE_SIGN_OFF_PROTOCOL.md` establishing the operational procedures, RACI responsibility matrix, and verification engines for all 7 external release gates.
+  - Formally transitioned project from local engineering execution (Phase 3 / Phase 4 Audit Hardening, 100.0% complete across 48 packages) into executive boardroom operational sign-off (Phase 1).
+  - Defined clear real-world clearance actions, executive owners, and pre-built verification engines for all 7 gates:
+    1. `STAGE-01`: Isolated staging Neon DB with non-owner/non-BYPASSRLS role and SSL requirement (`StagingHardeningEngine`).
+    2. `LEGAL-01`: Statutory Indian tax opinion with valid 18-character ICAI UDIN (`StatutoryTaxVerificationEngine`).
+    3. `PROV-M-01`: Meta Master Ad Account & Housing Special Ad Category (HEC) compliance (`ProviderSecurityHardeningEngine`).
+    4. `PROV-G-01`: Google Ads MCC standard access developer token clearance (`ProviderSecurityHardeningEngine`).
+    5. `COMM-01`: Formal board approval of 3-5% AdTech markup and SAC 998313 18% GST invoice template (`AdTechSettlementHardeningEngine`).
+    6. `CANARY-01`: Paused zero-spend canary execution on Listing 1 with remote provider readback proof (`PausedCanaryHardeningEngine`).
+    7. `PILOT-01`: Bounded commercial pilot live commencement on Listing 1 (Wayanad Sanctuary) with ₹50,000 INR stop-loss charter and unanimous board Go/No-Go vote (`BoundedPilotHardeningEngine`).
+  - Strict fail-closed posture (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`) maintained in code until external physical/digital authorization tokens are supplied and verified.
+
+
 
