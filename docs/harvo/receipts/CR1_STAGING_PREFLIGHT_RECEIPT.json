@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.0.0",
+  "type": "ENCHO_CR1_STAGING_PREFLIGHT_RECEIPT",
+  "receiptId": "rcpt_staging_1790288019363",
+  "gateId": "STAGE-01",
+  "packageTarget": "P0.5 / P8.1",
+  "status": "STAGING_CLEARED_LEAST_PRIVILEGE_VERIFIED",
+  "certifiedAt": "2026-09-24T22:13:39.354Z",
+  "operator": {
+    "role": "Infrastructure & DevOps Lead",
+    "operatorId": "devops_infrastructure_lead"
+  },
+  "stagingConfiguration": {
+    "databaseEngine": "Neon PostgreSQL (Serverless)",
+    "clusterBranch": "ep-staging-branch",
+    "databaseHost": "ep-staging-branch.ap-southeast-1.aws.neon.tech",
+    "databaseName": "encho_staging",
+    "transportEncryption": "TLS 1.3 / ?sslmode=require",
+    "sslEnforced": true,
+    "roleSecurity": {
+      "connectedRole": "encho_staging_app",
+      "isSuperuser": false,
+      "bypassRls": false,
+      "forceRlsEnforced": true
+    }
+  },
+  "migrationTelemetry": {
+    "baselineVersion": "001",
+    "headVersion": "035",
+    "totalMigrationsApplied": 35,
+    "migrationStatus": "ALL_MIGRATIONS_APPLIED_AND_VERIFIED"
+  },
+  "invariantsCertified": {
+    "leastPrivilegeRoleEnforced": true,
+    "sslTransportEnforced": true,
+    "transactionalOutboxRollbackVerified": true,
+    "burstDeduplicationVerified": true,
+    "monotonicMigrationSequenceGuarded": true
+  },
+  "verificationChecksum": "e4a8b31cfcbf629232af14d71a1d7fbdcea6a12a201c1cc5db80145708a493ee"
+}

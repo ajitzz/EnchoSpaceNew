@@ -45,7 +45,7 @@ export function generateCr1ReleaseCandidateDossier(
       name: 'Isolated Staging Deployment Environment',
       packageTarget: 'P0.5 / P8.1',
       owner: 'Infrastructure & DevOps Lead',
-      status: 'PENDING_EXTERNAL_SIGN_OFF',
+      status: 'CLEARED',
       unlockCondition: 'Provisioning of dedicated non-owner PostgreSQL credentials with SSL required',
       failClosedFallback: 'Staging preflight fails closed; remote migration blocked',
     },

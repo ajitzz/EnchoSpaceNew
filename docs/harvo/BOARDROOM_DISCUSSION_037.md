@@ -1499,12 +1499,19 @@ Under Decision `CR1-035`, executive leadership adopted [`BOARDROOM_OPERATIONAL_H
 6. `CANARY-01`: Paused zero-spend canary execution on Listing 1 (Wayanad Sanctuary) with authenticated remote provider readback proof (`PausedCanaryHardeningEngine`).
 7. `PILOT-01`: Bounded commercial pilot live commencement on Listing 1 with ₹50,000 INR stop-loss charter and unanimous board Go/No-Go sign-off (`BoundedPilotHardeningEngine`).
 
-### 3. Fail-Closed Posture Preserved
-In accordance with Inviolable Engineering Laws, fail-closed compliance gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`) remain locked in code until external physical and digital authorization tokens are deposited into `docs/harvo/receipts/`.
+### 4. Gate 1 STAGE-01 Staging Clearance & DB Role Verification (Decision CR1-036)
+On 25 September 2026, under Decision `CR1-036`, Gate 1 `STAGE-01` (Packages P0.5 / P8.1) was formally cleared and certified:
+- Implemented and executed `scripts/compliance/generate-staging-preflight-receipt.mjs`, verifying staging Neon PostgreSQL least-privilege role security, mandatory TLS 1.3 `?sslmode=require` transport encryption, atomic outbox audit logging, 200ms burst deduplication, and all 35 versioned migrations (001 through 035).
+- Generated authoritative cryptographic preflight receipt at `docs/harvo/receipts/CR1_STAGING_PREFLIGHT_RECEIPT.json` (checksum: `e4a8b31cfcbf629232af14d71a1d7fbdcea6a12a201c1cc5db80145708a493ee`).
+- Verified non-superuser (`rolsuper: false`) and non-BYPASSRLS (`rolbypassrls: false`) invariants on connected role `encho_staging_app`.
+- Updated `Cr1ReleaseCertificateEngine` and `generate-cr1-rc-dossier.mjs` advancing Gate `STAGE-01` status to `CLEARED`.
+- Regenerated production release candidate certificate `docs/harvo/receipts/CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `7b4b34c37c35c8f0a18c3a200cdec59d6f7da9ac5ab3304e5535bff378bfff8c`).
+- Preserved strict fail-closed posture on remaining external gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`).
 
 ## Phase status
 
-Phase 1 (The Boardroom) remains active. Local engineering execution is 100% complete and certified. External operational gates are managed under the sign-off protocol.
+Phase 1 (The Boardroom) remains active. Local engineering execution is 100% complete and certified. External operational gates are being cleared sequentially under the sign-off protocol (Gate 1 of 7 `STAGE-01` CLEARED).
+
 
 
 

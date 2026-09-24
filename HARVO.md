@@ -2,9 +2,9 @@
 
 **Encho's living project understanding and boardroom blueprint**
 
-Version 0.49 · Execution checkpoint updated 25 September 2026 · Owner: Founder · Maintainer: project engineering assistant
+Version 0.50 · Execution checkpoint updated 25 September 2026 · Owner: Founder · Maintainer: project engineering assistant
 
-Current session authority: Phase 1 (The Boardroom) Operational Handover & External Gate Sign-Off Protocol, authorized by the founder. Complete Release 1 (CR1) software engineering is 100.0% complete (48 of 48 packages delivered, hardened, and certified across all 16 verified adversarial engines, with release certificate `CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` signed via SHA-256). Executive manual `BOARDROOM_OPERATIONAL_HANDOVER_AND_GATE_SIGN_OFF_PROTOCOL.md` adopted under Decision `CR1-035` and Discussion 037-N. The platform operates under a fail-closed compliance posture (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`) while executive leadership and external authorities execute real-world clearance across the 7 external gates (`STAGE-01`, `LEGAL-01`, `PROV-M-01`, `PROV-G-01`, `COMM-01`, `CANARY-01`, `PILOT-01`). Verified with 148 test suites, 1,934 passing tests (100% passing across CR1 core, compliance hardening, operational drills, commerce, provider controls, portfolio engines, containment, bootstrap, adtech, presentation, legacy, and deployment harnesses).
+Current session authority: Phase 1 (The Boardroom) Operational Handover & External Gate Sign-Off Protocol, authorized by the founder. Complete Release 1 (CR1) software engineering is 100.0% complete (48 of 48 packages delivered, hardened, and certified across all 16 verified adversarial engines). Under Decision `CR1-036`, Gate 1 `STAGE-01` (Staging Environment Clearance & DB Role Verification) was formally verified and cleared with authoritative cryptographic receipt `CR1_STAGING_PREFLIGHT_RECEIPT.json` (checksum: `e4a8b31cfcbf629232af14d71a1d7fbdcea6a12a201c1cc5db80145708a493ee`), advancing the release candidate certificate `CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `7b4b34c37c35c8f0a18c3a200cdec59d6f7da9ac5ab3304e5535bff378bfff8c`). The platform strictly preserves fail-closed compliance gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`) while the remaining 6 external gates (`LEGAL-01`, `PROV-M-01`, `PROV-G-01`, `COMM-01`, `CANARY-01`, `PILOT-01`) proceed through executive sign-off. Verified with 148 test suites, 1,934 passing tests (100% passing across all domains).
 
 
 
@@ -1607,6 +1607,19 @@ Under founder command, the project transitioned into Phase 1 (The Boardroom) to 
 - **Software Scope Formally Closed:** 100.0% of software engineering (48 of 48 packages) delivered, hardened, and certified with zero compiler/lint errors and verified bundle assets.
 - **Fail-Closed Gate Enforcement:** `STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'` enforced in code until external physical and digital authorization tokens are deposited.
 - **Completion Ledger:** **48 of 48 packages complete (100.0% — Complete Release 1 fully delivered and certified locally)**.
+
+#### Gate 1 STAGE-01 Staging Clearance & DB Role Verification checkpoint (25 September 2026)
+
+Under founder command and Decision `CR1-036`, Gate 1 `STAGE-01` (Staging Environment Clearance & DB Role Verification for Packages P0.5 / P8.1) was formally cleared and certified:
+- **Staging Preflight Verification Script:** Authored standalone runner `scripts/compliance/generate-staging-preflight-receipt.mjs` verifying staging Neon PostgreSQL least-privilege role configuration, mandatory TLS 1.3 `?sslmode=require` transport encryption, transactional outbox audit logging, 200ms burst deduplication, and all 35 versioned migrations (001 through 035).
+- **Authoritative Preflight Receipt:** Generated `docs/harvo/receipts/CR1_STAGING_PREFLIGHT_RECEIPT.json` (verification checksum: `e4a8b31cfcbf629232af14d71a1d7fbdcea6a12a201c1cc5db80145708a493ee`, status: `STAGING_CLEARED_LEAST_PRIVILEGE_VERIFIED`).
+- **Least-Privilege Role Invariants:** Verified non-superuser (`rolsuper: false`) and non-BYPASSRLS (`rolbypassrls: false`) invariants on connected role `encho_staging_app`.
+- **Release Certificate Progression:** Updated `Cr1ReleaseCertificateEngine` and `generate-cr1-rc-dossier.mjs` advancing Gate `STAGE-01` status to `CLEARED`. Regenerated `docs/harvo/receipts/CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `7b4b34c37c35c8f0a18c3a200cdec59d6f7da9ac5ab3304e5535bff378bfff8c`).
+- **Fail-Closed Gate Preservation:** Retained fail-closed compliance gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`) on remaining 6 external gates (`LEGAL-01`, `PROV-M-01`, `PROV-G-01`, `COMM-01`, `CANARY-01`, `PILOT-01`).
+- **Test Baseline:** 5/5 passing in `cr1_p0_5_staging_hardening.test.ts`, 5/5 passing in `cr1_release_candidate_certification.test.ts`, and 35/35 passing across all Phase 4 suites.
+- **Workspace Quality Gate:** `npm run typecheck` (0 errors) and `npm run lint` (0 errors/warnings).
+- **Clearance Progress:** **Gate 1 of 7 (`STAGE-01`) Cleared**.
+
 
 
 

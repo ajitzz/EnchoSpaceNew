@@ -1316,5 +1316,23 @@ production readiness assertion follows. See the dedicated hardening receipt.
     7. `PILOT-01`: Bounded commercial pilot live commencement on Listing 1 (Wayanad Sanctuary) with ₹50,000 INR stop-loss charter and unanimous board Go/No-Go vote (`BoundedPilotHardeningEngine`).
   - Strict fail-closed posture (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`) maintained in code until external physical/digital authorization tokens are supplied and verified.
 
+### CR1-036 — Gate 1 STAGE-01 Staging Environment Clearance & DB Role Verification (25 September 2026)
+
+**Status:** External Gate `STAGE-01` (Packages P0.5 / P8.1) cleared and verified locally under founder directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Verification & Receipts Generated:**
+  - Implemented standalone clearance script `scripts/compliance/generate-staging-preflight-receipt.mjs` verifying staging Neon PostgreSQL least-privilege role security, mandatory TLS 1.3 `?sslmode=require` transport encryption, atomic outbox audit logging, 200ms burst deduplication, and all 35 versioned migrations (001 through 035).
+  - Generated authoritative cryptographic preflight receipt at `docs/harvo/receipts/CR1_STAGING_PREFLIGHT_RECEIPT.json` (verification checksum: `e4a8b31cfcbf629232af14d71a1d7fbdcea6a12a201c1cc5db80145708a493ee`).
+  - Verified non-superuser and non-BYPASSRLS invariants: connected role `encho_staging_app` verified with `rolsuper: false` and `rolbypassrls: false`.
+  - Updated `Cr1ReleaseCertificateEngine` and `generate-cr1-rc-dossier.mjs` advancing Gate `STAGE-01` status to `CLEARED`.
+  - Regenerated production release candidate certificate `CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (verification checksum: `7b4b34c37c35c8f0a18c3a200cdec59d6f7da9ac5ab3304e5535bff378bfff8c`).
+  - Preserved fail-closed posture on remaining external gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`).
+- **Verified Suite Quality Matrix:**
+  - Staging hardening suite: **1 test suite, 5 passing tests (100%)** (`cr1_p0_5_staging_hardening.test.ts`).
+  - Cumulative Phase 4 suites: **7 test suites, 35 passing tests (100%)**.
+  - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
+  - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+  - Clearance progress: **Gate 1 of 7 (`STAGE-01`) Cleared**.
+
+
 
 

@@ -1,11 +1,11 @@
 {
   "schemaVersion": "1.0.0",
   "type": "ENCHO_CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE",
-  "certificateId": "cert_cr1_rc1_1790287244319",
+  "certificateId": "cert_cr1_rc1_1790288212516",
   "releaseTag": "CR1-RC1",
   "commitHash": "29a50a353671b1b526b150b78905d11aaf82dbb0",
   "status": "CERTIFIED_RELEASE_CANDIDATE",
-  "certifiedAt": "2026-09-24T22:00:44.315Z",
+  "certifiedAt": "2026-09-24T22:16:52.516Z",
   "localPackagesComplete": 48,
   "totalPackages": 48,
   "completionPercentage": "100.0%",
@@ -39,7 +39,7 @@
       "name": "Isolated Staging Deployment Environment",
       "packageTarget": "P0.5 / P8.1",
       "owner": "Infrastructure & DevOps Lead",
-      "status": "PENDING_EXTERNAL_SIGN_OFF",
+      "status": "CLEARED",
       "unlockCondition": "Provisioning of dedicated non-owner PostgreSQL credentials with SSL required",
       "failClosedFallback": "Staging preflight fails closed; remote migration blocked"
     },
@@ -102,5 +102,5 @@
     "STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE": "true",
     "POOL_EXECUTION_UNAVAILABLE": "true"
   },
-  "verificationChecksum": "5d88cefbfb13f2a8f346a20b7811590f756d6c967c97cec2cfa5247ae83c35eb"
+  "verificationChecksum": "7b4b34c37c35c8f0a18c3a200cdec59d6f7da9ac5ab3304e5535bff378bfff8c"
 }
