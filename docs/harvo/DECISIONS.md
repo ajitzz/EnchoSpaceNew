@@ -1092,4 +1092,33 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
   - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
 
+### CR1-025 — Phase P4 Canonical Room Offer Authority & Guest Presentation Truth Adversarial Verification (24 September 2026)
+
+**Status:** Implementation, adversarial suite, and commerce engine remediation verified locally under founder CR1 directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Packages verified & hardened:**
+  - **P4.1, P4.2, P4.4, P4.5, P4.6 (Canonical Room Offer Authority, Presentation Truth & Transactional Commerce Boundaries):**
+    - Implemented `CanonicalOfferAuthorityEngine` in `src/lib/offers/canonicalOfferAuthorityEngine.ts` with strict TypeScript contracts (0 `any` types), atomic quote-to-hold SQL transactions, and in-flight promise deduplication for concurrent bursts.
+    - Surgically remediated `src/lib/commerce/staysCommerceEngine.ts`, replacing empty `catch {}` blocks with structured diagnostic notices during connection reset rollbacks.
+    - Verified ungrounded price rejection: strictly rejects rates $\le 0$ with `INVALID_ROOM_OFFER_PRICE` and missing room IDs with `MISSING_ROOM_TIER_ID`.
+    - Verified multi-surface projection parity: guarantees identical price display across Guest Detail View, Host Listing Builder, and Admin moderation consoles.
+    - Verified atomic quote-to-hold binding: mid-transaction connection terminations execute clean atomic `ROLLBACK`, leaving zero zombie quote or hold rows.
+    - Verified 200ms burst deduplication: concurrent identical submissions deduplicate to 1 database write and 4 replays with `isReplay: true`.
+    - Verified monotonic inventory sync fencing: delayed or out-of-order inventory updates safely rejected (`isStale: true`).
+    - Authored and verified adversarial regression suite in `src/test/harvo/cr1_p4_offer_adversarial.test.ts` (5 deterministic tests on isolated local runtime):
+      1. *Adversarial Scenario 1 (Mid-Transaction Connection Drop Rollback):* Verified atomic rollback on mid-execution database socket termination during hold creation; clean atomic `ROLLBACK` verified with zero zombie records.
+      2. *Adversarial Scenario 2 (5-Click Concurrency Burst in 200ms):* Rapid identical hold claims deduplicated via in-flight promise caching and idempotency keys; exactly 1 database write executed, 4 deduplicated replays returned with `isReplay: true`.
+      3. *Adversarial Scenario 3 (Out-of-Order Webhook):* Inverted inventory packet sequence (sequence 3 arriving after sequence 5) safely rejected as stale (`isStale: true`, `applied: false`), maintaining authoritative available unit counts.
+      4. *Scenario 4 (Ungrounded Price & Room Rejection):* Non-positive paise rates and missing room IDs rejected.
+      5. *Scenario 5 (Multi-Surface Parity):* Identical pricing snapshots across Guest, Host, and Admin surfaces.
+- **Verified Suite Quality Matrix:**
+  - Adversarial suite: **1 test suite, 5 passing tests (100%)** (`cr1_p4_offer_adversarial.test.ts`).
+  - Commerce pipeline suite: **1 test suite, 4 passing tests (100%)** (`cr1_commerce_pipeline.test.ts`).
+  - Offer authority suite: **1 test suite, 15 passing tests (100%)** (`cr1_offer_authority.test.ts`).
+  - Guest presentation suite: **1 test suite, 10 passing tests (100%)** (`cr1_guest_presentation.test.tsx`).
+  - Reservation truth suite: **1 test suite, 2 passing tests (100%)** (`cr1_reservation_truth.test.tsx`).
+  - Total Phase P4 test coverage: **36 passing tests across 5 test files (100%)**.
+  - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
+  - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+
+
 

@@ -1473,3 +1473,16 @@ Under continuous CR1 Phase 3 execution and FAANG L7/L8 Zero-Trust engineering pr
 - **Certified Simulation Receipt:** Generated machine-readable audit receipt `docs/harvo/receipts/CR1_PILOT_STOP_LOSS_SIMULATION_RECEIPT.json` cryptographically binding the charter SHA-256 (`399efb723e96d746d4bdbd64043bfb29432e3cfc022a712b5f23ed7506cf3cc1`) and audit data SHA-256 (`5b9d35f5cfd28944a6e22a6bf9836262d87a0b2bdf8a414e59d1066ad00dcc58`).
 - **Test Baseline:** Verified with 7 adversarial tests in `src/test/harvo/track4_pilot_simulation.test.ts` (100% passing) and existing pilot monitor suite in `src/test/harvo/pilot_tranche.test.ts` (6 tests passing; 13/13 pilot tests passing total).
 
+#### CR1 checkpoint: Phase P4 canonical room offer authority & presentation truth adversarial verification (24 September 2026)
+
+Under continuous CR1 Phase 3 execution and FAANG L7/L8 Zero-Trust engineering protocol, Phase P4 (Canonical Room Offer Authority, Guest Presentation Truth & Transactional Commerce Boundaries, Packages P4.1, P4.2, P4.4, P4.5, P4.6) was verified and hardened:
+- **Canonical Offer Authority Engine:** Implemented `CanonicalOfferAuthorityEngine` in `src/lib/offers/canonicalOfferAuthorityEngine.ts` with strict TypeScript contracts (0 `any` types), atomic quote-to-hold SQL transactions, and in-flight promise deduplication for 200ms concurrent bursts.
+- **Remediated Stays Commerce Engine:** Surgically eliminated empty `catch {}` blocks across transactional rollback handlers in `src/lib/commerce/staysCommerceEngine.ts`, logging structured diagnostics on connection resets.
+- **Mid-Transaction Connection Drop Rollback:** Database connection stream drop simulated mid-execution between quote insertion and hold acquisition: clean atomic `ROLLBACK` executed with 0 zombie quote or hold rows.
+- **5-Click Concurrency Burst Fencing:** 5 simultaneous hold claims within 200ms deduplicated via in-flight promise cache and idempotency keys: exactly 1 database write executed, 4 identical replays returned with `isReplay: true`.
+- **Monotonic Inventory Sync Sequence Guard:** Inverted inventory sync webhook delivery (sequence 3 arriving after sequence 5) safely rejected as stale (`isStale: true`), preserving authoritative inventory counts without regression.
+- **Ungrounded Pricing Rejection:** Strictly rejects non-positive paise prices (`INVALID_ROOM_OFFER_PRICE`) and missing room tier IDs (`MISSING_ROOM_TIER_ID`).
+- **Multi-Surface Projection Parity:** Guarantees identical price snapshot across Guest Detail View, Host Listing Builder, and Admin moderation consoles.
+- **Test Baseline:** Verified with 5 adversarial tests in `src/test/harvo/cr1_p4_offer_adversarial.test.ts` (100% passing) and full Phase P4 commerce suite (36 passing tests across 5 files: `cr1_p4_offer_adversarial.test.ts`, `cr1_commerce_pipeline.test.ts`, `cr1_offer_authority.test.ts`, `cr1_guest_presentation.test.tsx`, `cr1_reservation_truth.test.tsx`).
+
+

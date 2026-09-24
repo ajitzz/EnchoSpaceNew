@@ -191,8 +191,9 @@ export class StaysCommerceEngine {
     } catch (err) {
       try {
         await client.query('ROLLBACK');
-      } catch {
-        // Socket may already be closed
+      } catch (rollbackErr: unknown) {
+        // Socket may already be severed; log structured diagnostic notice
+        console.warn('Transaction rollback notice in createOrder:', rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr));
       }
       throw err;
     } finally {
@@ -237,8 +238,9 @@ export class StaysCommerceEngine {
     } catch (err) {
       try {
         await client.query('ROLLBACK');
-      } catch {
-        // Postmaster handles rollback on connection reset
+      } catch (rollbackErr: unknown) {
+        // Postmaster handles rollback on connection reset; log structured diagnostic notice
+        console.warn('Transaction rollback notice in executeOrderCreationWithFault:', rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr));
       }
       throw err;
     }
@@ -319,8 +321,9 @@ export class StaysCommerceEngine {
     } catch (err) {
       try {
         await client.query('ROLLBACK');
-      } catch {
-        // Socket closed
+      } catch (rollbackErr: unknown) {
+        // Socket closed; log structured diagnostic notice
+        console.warn('Transaction rollback notice in processWebhook:', rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr));
       }
       throw err;
     } finally {
@@ -364,8 +367,9 @@ export class StaysCommerceEngine {
     } catch (err) {
       try {
         await client.query('ROLLBACK');
-      } catch {
-        // Socket closed
+      } catch (rollbackErr: unknown) {
+        // Socket closed; log structured diagnostic notice
+        console.warn('Transaction rollback notice in cancelBooking:', rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr));
       }
       throw err;
     } finally {
