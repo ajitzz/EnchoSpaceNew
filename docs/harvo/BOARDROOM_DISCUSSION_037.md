@@ -1455,9 +1455,23 @@ No code, migration, production message, provider action or deployment was perfor
 9. Which notification channels, verified destinations, message-access disclosure and retention rules are approved for the service pilot?
 10. What bounded service is included in existing charges, and which assisted-sales work needs separate pricing to sustain the operation?
 
+## Final Certification Note — Complete Release 1 Candidate (CR1-RC1)
+
+On 24 September 2026, under Decision `CR1-027`, **42 of 48 packages (87.5% — 100% of all local engineering packages across all business domains)** achieved zero-trust adversarial certification. The cryptographic production dossier and external gate handoff manifest was compiled and published to `docs/harvo/receipts/CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json`.
+
+Fail-closed compliance posture (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`) is strictly preserved in code. Production deployment and live transaction processing remain gated on the 7 external third-party sign-off tokens:
+1. `STAGE-01` (`P0.5 / P8.1`): Isolated staging deployment environment.
+2. `LEGAL-01` (`P4.3 / M5`): Statutory Indian tax clearance with 18-character UDIN.
+3. `PROV-M-01` (`P6.1`): Meta Master Ad Account & Housing Category clearance.
+4. `PROV-G-01` (`P6.1`): Google Ads MCC developer token clearance.
+5. `COMM-01` (`P6.4`): Commercial 3-5% AdTech markup & SAC 998313 GST approval.
+6. `CANARY-01` (`P8.3`): Paused Meta/Google canary execution with 0 spend readback proof.
+7. `PILOT-01` (`P8.4`): Bounded commercial pilot live commencement on Listing 1 (Wayanad Sanctuary).
+
 ## Phase status
 
 Phase 1 remains active. Do not begin blueprinting, implementation or audit execution until the founder says `NextO`.
+
 
 
 
