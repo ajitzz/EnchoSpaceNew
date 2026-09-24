@@ -1469,6 +1469,8 @@ On 25 September 2026, under Decision `CR1-031`, **Package P6.4 (`COMM-01`)** ach
 
 On 25 September 2026, under Decision `CR1-032`, **Package P8.3 (`CANARY-01`)** achieved zero-trust adversarial hardening via `PausedCanaryHardeningEngine` and `cr1_p8_3_canary_hardening.test.ts`, advancing the delivery ledger to **47 of 48 packages complete (97.9%)**. Strict paused zero-spend canary invariant (`dailyBudgetPaise === 0`), authenticated provider exact readback verification, transactional outbox canary logging, monotonic canary sequence fencing, and 200ms burst deduplication are certified.
 
+On 25 September 2026, under Decision `CR1-033`, **Package P8.4 (`PILOT-01`)** achieved zero-trust adversarial hardening via `BoundedPilotHardeningEngine` and `cr1_p8_4_pilot_hardening.test.ts`, advancing the delivery ledger to **48 of 48 packages complete (100.0% — 100% of all packages in CR1 Execution Plan completed)**. Strict ₹100k budget cap bounding, 30-day duration bounding, 3.0x ROAS stop-loss circuit breaker, 100% CRM lead containment (zero off-platform lead leakage), transactional outbox pilot registration logging, monotonic milestone sequence fencing, and 200ms burst deduplication are certified.
+
 Fail-closed compliance posture (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`) is strictly preserved in code. Production deployment and live transaction processing remain gated on the remaining external sign-off tokens:
 1. `STAGE-01` (`P0.5 / P8.1`): Isolated staging deployment environment (preflight & role verification certified locally).
 2. `LEGAL-01` (`P4.3 / M5`): Statutory Indian tax clearance with 18-character UDIN (statutory invoice & UDIN verification certified locally).
@@ -1476,7 +1478,7 @@ Fail-closed compliance posture (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 't
 4. `PROV-G-01` (`P6.1`): Google Ads MCC developer token clearance (credential validation certified locally).
 5. `COMM-01` (`P6.4`): Commercial 3-5% AdTech markup & SAC 998313 GST approval (settlement engine & variance limits certified locally).
 6. `CANARY-01` (`P8.3`): Paused Meta/Google canary execution with 0 spend readback proof (canary engine & exact readback certified locally).
-7. `PILOT-01` (`P8.4`): Bounded commercial pilot live commencement on Listing 1 (Wayanad Sanctuary).
+7. `PILOT-01` (`P8.4`): Bounded commercial pilot live commencement on Listing 1 (Wayanad Sanctuary) (pilot charter bounds & stop-loss engine certified locally).
 
 ## Phase status
 

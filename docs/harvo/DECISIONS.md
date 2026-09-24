@@ -1259,3 +1259,22 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
   - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
   - Delivery ledger progress: **47 of 48 packages complete (97.9%)**.
+
+### CR1-033 — Bounded Commercial Pilot Hardening Invariants (25 September 2026)
+
+**Status:** Implementation and adversarial test suite verified locally under founder CR1 directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Packages verified & hardened:**
+  - **Bounded Commercial Pilot Hardening (P8.4 / PILOT-01 Gate):**
+    - Implemented `BoundedPilotHardeningEngine` in `src/lib/compliance/boundedPilotHardeningEngine.ts` with strict TypeScript contracts (0 `any` types), Transactional Outbox for pilot charter registry and audit logging, 200ms burst deduplication via in-flight promise caching, budget cap bounding ($\le ₹100,000$ minor units paise $10,000,000$), maximum duration bounding ($\le 30$ days), minimum ROAS stop-loss threshold ($\ge 3.0\times$), 100% CRM lead containment enforcement (strict prohibition of off-platform lead leakage), and monotonic pilot milestone sequence fencing.
+    - Verified atomic outbox rollback: mid-transaction connection drop during audit logging executes clean atomic `ROLLBACK`, leaving zero zombie pilot charter registry rows or uncommitted audit entries.
+    - Verified 200ms burst deduplication: 5 simultaneous pilot charter registration submissions within 200ms deduplicate via in-flight promise caching to exactly 1 database write and 4 cached replays (`isReplay: true`).
+    - Verified charter boundary invariant: budget cap exceeding ₹100k cap (`budgetCapPaise > 10000000`) strictly fails closed with `PILOT_BUDGET_CAP_EXCEEDED_EXCEPTION`; duration exceeding 30 days (`durationDays > 30`) strictly fails closed with `PILOT_DURATION_EXCEEDED_EXCEPTION`; minimum ROAS configured below $3.0\times$ strictly fails closed with `PILOT_ROAS_THRESHOLD_VIOLATION`.
+    - Verified stop-loss circuit breaker & CRM lead containment: ROAS below $3.0\times$ triggers automated campaign emergency stop-loss (`PILOT_STOP_LOSS_TRIGGERED`); detected off-platform lead leakage (`hasOffPlatformLeadLeakage === true`) immediately quarantines the campaign and fails closed with `PILOT_LEAD_LEAKAGE_SECURITY_VIOLATION`.
+    - Verified monotonic pilot sequencing: out-of-order pilot milestone sequence updates safely rejected as stale (`isStale: true`, `reason: 'STALE_PILOT_SEQUENCE_REJECTED'`), strictly preventing pilot milestone state regression.
+    - Authored and verified adversarial regression suite in `src/test/harvo/cr1_p8_4_pilot_hardening.test.ts` (5 deterministic tests on isolated local runtime).
+- **Verified Suite Quality Matrix:**
+  - Adversarial pilot hardening suite: **1 test suite, 5 passing tests (100%)** (`cr1_p8_4_pilot_hardening.test.ts`).
+  - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
+  - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+  - Delivery ledger progress: **48 of 48 packages complete (100.0% — 100% of all packages in CR1 Execution Plan completed)**.
+
