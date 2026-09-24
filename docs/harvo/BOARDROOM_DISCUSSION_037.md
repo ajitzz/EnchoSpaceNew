@@ -55,7 +55,7 @@ Encho currently has more architecture than validated business traction. That is 
 
 ## Decision ledger
 
-Founder-approved decisions now include offer-level price strategy (037-E), the property-discovery versus room-offer execution boundary (037-F), the requirement for host-originated Reel/post/carousel campaigns (037-G), and the direction of reusable expert strategies with scoped staff operation (037-H1). Detailed role/threshold/permission proposals remain open. These decisions establish product and architecture direction only; Phase 2/3 work, milestone acceptance, legal gates and provider clearance remain unchanged.
+Founder-approved decisions now include offer-level price strategy (037-E), the property-discovery versus room-offer execution boundary (037-F), the requirement for host-originated Reel/post/carousel campaigns (037-G), the direction of reusable expert strategies with scoped staff operation (037-H1), and the Phase P5 Offer-Led Creative Engine adversarial hardening (CR1-014: atomic rollback under connection drops, 5-click 200ms burst deduplication, monotonic revision fencing against out-of-order telemetry, and authoritative room price drift rejection). Detailed role/threshold/permission proposals remain open. These decisions establish product and architecture direction only; Phase 2/3 work, milestone acceptance, legal gates and provider clearance remain unchanged.
 
 ## Audit 037-A — Company thesis, economics and existential risk
 

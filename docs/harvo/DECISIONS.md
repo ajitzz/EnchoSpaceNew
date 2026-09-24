@@ -871,5 +871,24 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - ESLint code quality: 0 errors / 0 warnings.
   - Production asset bundle: verified 44 public assets.
 
+### CR1-014 — Phase P5 Offer-Led Creative Engine & Adversarial Hardening (24 September 2026)
+
+**Status:** Implementation verified locally under founder CR1 directive.
+- **Packages closed / hardened:**
+  - **P5.1 – P5.5 (Offer-Led Creative Engine & Adversarial Hardening):**
+    - Implemented `CreativePackageEngine` in `src/lib/marketing/creativePackageEngine.ts` with zero `any` types and strict TypeScript types.
+    - Binds ad campaign drafts to authoritative relational `room_types` records, rejecting price drift (`PRICE_MISMATCH_DETECTED`) and unverified capacity (`ROOM_INVENTORY_UNAVAILABLE`).
+    - Authored and verified adversarial regression suite in `src/test/harvo/cr1_p5_creative_engine.test.ts` (4 deterministic tests on disposable local PostgreSQL/runtime):
+      1. *Connection drop midway:* Simulates network drop (`ECONNRESET`) midway through creative package insert; verified atomic `ROLLBACK`, 0 commits, and 0 zombie rows.
+      2. *5-click concurrency burst in 200ms:* Exactly 1 execution generates package, 4 deduplicated replays return primary package ID with `isReplay: true`, 0 double-runs.
+      3. *Out-of-order webhook delivery:* Monotonic state machine drops older revision evaluations (e.g. revision 1 arriving after revision 2) without regressing approval or AI score.
+      4. *Room offer price authority:* Strictly asserts advertised price matches room price.
+- **Verified Suite Quality Matrix:**
+  - Full automated test suite: **138 test suites, 1,885 passing tests (100%)**.
+  - TypeScript static verification: 0 errors (`tsc`).
+  - ESLint code quality: 0 errors / 0 warnings.
+  - Production asset bundle: verified 44 public assets.
+
+
 
 
