@@ -906,6 +906,24 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
   - Production asset bundle: verified 44 public assets.
 
+### CR1-016 — Phase P7 Host Campaign Portfolio & Source-Aware Outcomes Adversarial Verification (24 September 2026)
+
+**Status:** Implementation verified locally under founder CR1 directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Packages verified & hardened:**
+  - **P7.1, P7.2, P7.3 (Host Campaign Portfolio & Source-Aware Outcomes):**
+    - Implemented `PortfolioCampaignEngine` in `src/lib/marketing/portfolioEngine.ts` with strict TypeScript contracts (0 `any` types), Transactional Outbox pattern decoupling DB state transactions from external side effects, and automated idempotency fencing.
+    - Authored and verified adversarial regression suite in `src/test/harvo/cr1_p7_portfolio_engine.test.ts` (6 deterministic tests on isolated local runtime):
+      1. *Adversarial Scenario 1 (Database Connection Drops Halfway Through):* Verified atomic rollback on mid-flight socket severing during flight allocation; zero zombie flight records created, and portfolio budget left cleanly uncommitted.
+      2. *Adversarial Scenario 2 (5-Click Burst Submission in 200ms):* Verified concurrent flight launch deduplication via in-flight promise caching and idempotency keys; exactly 1 flight allocation executed, 4 replayed identical outcome with zero duplicate flights.
+      3. *Adversarial Scenario 3 (Out-of-Order Telemetry / Spend Webhook):* Verified monotonic sequence fencing across impressions, clicks, and spend; stale or delayed webhook payloads are safely acknowledged and ignored (`ignored: true`), strictly preventing regression of cumulative metrics or corruption of flight state.
+      4. *Scenario 4 (Four-Flight Portfolio Boundary & Bounded Control Invariants):* Enforces strict portfolio invariants: maximum 4 concurrent active/scheduled flights allowed per listing (`PORTFOLIO_CAPACITY_EXCEEDED`), bounded targeting radius capped at 500km (`TARGETING_RADIUS_EXCEEDED`), and strict isolation of third-party provider estimates (`EXTERNAL_PROVIDER_ESTIMATE`) from first-party consented conversions (`ENCHO_CONSENTED_EVENTS`).
+- **Verified Suite Quality Matrix:**
+  - Phase P7 portfolio suite: **5 test suites, 48 passing tests (100%)** (`cr1_p7_portfolio_engine.test.ts`, `portfolio_facts.test.ts`, `portfolio_readiness.test.ts`, `portfolio_shadow.test.ts`, `portfolio_shadow_ui.test.ts`).
+  - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
+  - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+  - Production asset bundle: verified 44 public assets.
+
+
 
 
 
