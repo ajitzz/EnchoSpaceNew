@@ -25,4 +25,6 @@ An `OPEN` gate does not stop unrelated local implementation. It blocks only the 
 3. Run the gate-specific readiness check and adversarial negative case.
 4. Update this register, HARVO and the decision register with the exact evidence and limitation.
 5. Advance only the phase/release action that the evidence actually unlocks.
+6. Follow the comprehensive release protocols and sign-off matrices established in `docs/releases/CR1_PRODUCTION_RELEASE_MANIFEST_AND_EXTERNAL_GATE_DOSSIER.md`.
+
 
