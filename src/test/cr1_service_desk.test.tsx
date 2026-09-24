@@ -7,7 +7,7 @@ import {serviceContent,serviceWorkspace,serviceCaseId} from '../../scripts/testi
 
 const {JSDOM}=createRequire(import.meta.url)('jsdom') as {JSDOM:new(html:string,options:{url:string})=>{window:Window&typeof globalThis}};
 const dom=new JSDOM('<!doctype html><html><body></body></html>',{url:'https://encho.test/operations/service'});
-vi.stubGlobal('window',dom.window);vi.stubGlobal('document',dom.window.document);vi.stubGlobal('HTMLElement',dom.window.HTMLElement);vi.stubGlobal('MutationObserver',dom.window.MutationObserver);vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true);
+vi.stubGlobal('window',dom.window);vi.stubGlobal('document',dom.window.document);vi.stubGlobal('navigator',dom.window.navigator);vi.stubGlobal('HTMLElement',dom.window.HTMLElement);vi.stubGlobal('MutationObserver',dom.window.MutationObserver);vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true);
 const {cleanup,fireEvent,render,screen,waitFor,act}=await import('@testing-library/react');
 const time=Date.parse('2026-09-24T10:00:00Z');
 const response=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json'}});

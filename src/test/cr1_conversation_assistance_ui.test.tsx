@@ -3,7 +3,7 @@ import {createRequire} from 'node:module';
 import {beforeEach,afterEach,afterAll,describe,it,expect,vi} from 'vitest';
 const{JSDOM}=createRequire(import.meta.url)('jsdom') as{JSDOM:new(html:string,options:{url:string})=>{window:Window&typeof globalThis}};
 const dom=new JSDOM('<!doctype html><html><body></body></html>',{url:'https://encho.test/messages'});
-vi.stubGlobal('window',dom.window);vi.stubGlobal('document',dom.window.document);vi.stubGlobal('HTMLElement',dom.window.HTMLElement);vi.stubGlobal('MutationObserver',dom.window.MutationObserver);vi.stubGlobal('localStorage',dom.window.localStorage);vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true);
+vi.stubGlobal('window',dom.window);vi.stubGlobal('document',dom.window.document);vi.stubGlobal('navigator',dom.window.navigator);vi.stubGlobal('HTMLElement',dom.window.HTMLElement);vi.stubGlobal('MutationObserver',dom.window.MutationObserver);vi.stubGlobal('localStorage',dom.window.localStorage);vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true);
 const{render,screen,fireEvent,cleanup,waitFor,act}=await import('@testing-library/react');
 const{default:ConversationAssistance}=await import('../../components/operations/ConversationAssistance');
 const caseId='11111111-1111-4111-8111-111111111111';

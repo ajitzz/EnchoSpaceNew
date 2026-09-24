@@ -6,7 +6,7 @@ vi.mock('@react-oauth/google',()=>({GoogleOAuthProvider:({clientId,children}:{cl
  GoogleLogin:({nonce,onSuccess}:{nonce:string;onSuccess:(value:{credential:string})=>void})=>{google.nonce=nonce;google.success=onSuccess;return React.createElement('button',{onClick:()=>onSuccess({credential:'fixture-google-credential'.repeat(10)})},'Google fixture sign-in');}}));
 const {JSDOM}=createRequire(import.meta.url)('jsdom') as {JSDOM:new(html:string,options:{url:string})=>{window:Window&typeof globalThis}};
 const dom=new JSDOM('<!doctype html><html><body></body></html>',{url:'https://ops.encho.test/operations'});
-vi.stubGlobal('window',dom.window);vi.stubGlobal('document',dom.window.document);vi.stubGlobal('HTMLElement',dom.window.HTMLElement);vi.stubGlobal('MutationObserver',dom.window.MutationObserver);vi.stubGlobal('localStorage',dom.window.localStorage);vi.stubGlobal('sessionStorage',dom.window.sessionStorage);vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true);
+vi.stubGlobal('window',dom.window);vi.stubGlobal('document',dom.window.document);vi.stubGlobal('navigator',dom.window.navigator);vi.stubGlobal('HTMLElement',dom.window.HTMLElement);vi.stubGlobal('MutationObserver',dom.window.MutationObserver);vi.stubGlobal('localStorage',dom.window.localStorage);vi.stubGlobal('sessionStorage',dom.window.sessionStorage);vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true);
 const{render,screen,fireEvent,cleanup,waitFor}=await import('@testing-library/react');
 const{default:WorkforceSignIn}=await import('../../components/operations/WorkforceSignIn');
 let fetcher:ReturnType<typeof vi.fn>;

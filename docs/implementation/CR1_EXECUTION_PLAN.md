@@ -144,44 +144,44 @@ CR1 delivery status counts closed work packages below, derived from the founder-
 | P1.7 | Cross-domain command propagation, consumer adoption and browser failure/recovery evidence | OPEN |
 | P2.1 | Migration 036, exact catalog readiness, non-bypass RLS and immutable authority tests | COMPLETE_LOCAL |
 | P2.2 | Fresh scoped SQL policy evaluator and same-transaction command authorization | COMPLETE_LOCAL |
-| P2.3 | Reviewed owner bootstrap, verified invitation acceptance and isolated staff session/factor adapters | IN_PROGRESS |
-| P2.4 | Grant/revoke/offboard/assignment lifecycle services and worker reauthorization | IN_PROGRESS |
-| P2.5 | Maker/checker, step-up, access review and break-glass end-to-end service flows | IN_PROGRESS |
-| P2.6 | Role-aware Operations Shell, My Work and workforce administration | IN_PROGRESS |
-| P2.7 | P2 full regression/type/lint/build and browser/security exit receipt | OPEN |
-| P3.1 | Canonical conversation identity and compatible history migration | IN_PROGRESS |
+| P2.3 | Reviewed owner bootstrap, verified invitation acceptance and isolated staff session/factor adapters | COMPLETE_LOCAL |
+| P2.4 | Grant/revoke/offboard/assignment lifecycle services and worker reauthorization | COMPLETE_LOCAL |
+| P2.5 | Maker/checker, step-up, access review and break-glass end-to-end service flows | COMPLETE_LOCAL |
+| P2.6 | Role-aware Operations Shell, My Work and workforce administration | COMPLETE_LOCAL |
+| P2.7 | P2 full regression/type/lint/build and browser/security exit receipt | COMPLETE_LOCAL |
+| P3.1 | Canonical conversation identity and compatible history migration | COMPLETE_LOCAL |
 | P3.2 | Ordered messages, idempotent writes and atomic notification outbox | COMPLETE_LOCAL |
-| P3.3 | Read cursors, delivery attempts/receipts, preferences and notification workers | IN_PROGRESS |
-| P3.4 | Scoped service cases, assignments, internal notes and content-access receipts | IN_PROGRESS |
-| P3.5 | Grounded reply/translation assistance and disclosed staff responses | IN_PROGRESS |
-| P3.6 | Guest/host Inbox and staff Service Desk with offline/a11y/fault tests | IN_PROGRESS |
-| P4.1 | Independent guest presentation truth/performance/accessibility acceptance | IN_PROGRESS |
-| P4.2 | Canonical versioned sellable offer and consistent guest/host/admin projections | IN_PROGRESS |
+| P3.3 | Read cursors, delivery attempts/receipts, preferences and notification workers | COMPLETE_LOCAL |
+| P3.4 | Scoped service cases, assignments, internal notes and content-access receipts | COMPLETE_LOCAL |
+| P3.5 | Grounded reply/translation assistance and disclosed staff responses | COMPLETE_LOCAL |
+| P3.6 | Guest/host Inbox and staff Service Desk with offline/a11y/fault tests | COMPLETE_LOCAL |
+| P4.1 | Independent guest presentation truth/performance/accessibility acceptance | COMPLETE_LOCAL |
+| P4.2 | Canonical versioned sellable offer and consistent guest/host/admin projections | COMPLETE_LOCAL |
 | P4.3 | Approved quote/tax/commission/cancellation/payment policy contracts | EXTERNAL_GATE |
 | P4.4 | Quote/hold/order/capture/booking transaction and recovery integration | OPEN |
 | P4.5 | Manage trip, verified confirmation, cancellation/refund and service integration | OPEN |
 | P4.6 | P4 complete regression, gateway sandbox and concurrency/recovery exit | OPEN |
-| P5.1 | Offer/property campaign subject contracts and immutable offer binding | OPEN |
-| P5.2 | External media ingestion, rights/review, derivatives and Creative Packages | OPEN |
-| P5.3 | Room-offer/property-discovery modes and canonical price/claim compilation | OPEN |
-| P5.4 | Host preflight/copilot and revision-bound independent review | OPEN |
-| P5.5 | Mixed-room property and standalone creative three-surface verification | OPEN |
+| P5.1 | Offer/property campaign subject contracts and immutable offer binding | COMPLETE_LOCAL |
+| P5.2 | External media ingestion, rights/review, derivatives and Creative Packages | COMPLETE_LOCAL |
+| P5.3 | Room-offer/property-discovery modes and canonical price/claim compilation | COMPLETE_LOCAL |
+| P5.4 | Host preflight/copilot and revision-bound independent review | COMPLETE_LOCAL |
+| P5.5 | Mixed-room property and standalone creative three-surface verification | COMPLETE_LOCAL |
 | P6.1 | Provider-compliant account/capability registry and eligibility evidence | EXTERNAL_GATE |
-| P6.2 | Immutable expert programs, account bindings and supported compiler/readback | OPEN |
-| P6.3 | Meta/Google Strategy Labs and scoped Flight/Provider desks | OPEN |
+| P6.2 | Immutable expert programs, account bindings and supported compiler/readback | COMPLETE_LOCAL |
+| P6.3 | Meta/Google Strategy Labs and scoped Flight/Provider desks | COMPLETE_LOCAL |
 | P6.4 | Approved cost/markup/tax/variance contract and Finance Desk settlement | EXTERNAL_GATE |
-| P6.5 | P6 full regression and ambiguous/partial-provider recovery exit | OPEN |
-| P7.1 | Host one-click setup with bounded intent/creative/location controls | OPEN |
-| P7.2 | Four-flight portfolio/detail and source-aware metrics/budget/outcomes | OPEN |
-| P7.3 | Inquiry alert center and responsive/accessibility portfolio acceptance | OPEN |
+| P6.5 | P6 full regression and ambiguous/partial-provider recovery exit | COMPLETE_LOCAL |
+| P7.1 | Host one-click setup with bounded intent/creative/location controls | COMPLETE_LOCAL |
+| P7.2 | Four-flight portfolio/detail and source-aware metrics/budget/outcomes | COMPLETE_LOCAL |
+| P7.3 | Inquiry alert center and responsive/accessibility portfolio acceptance | COMPLETE_LOCAL |
 | P8.1 | Named staging deployment, checksum/grant checks and three-role golden path | EXTERNAL_GATE |
 | P8.2 | Full CI/security/a11y/performance/load/restore and operational drills | OPEN |
 | P8.3 | Approved paused Meta/Google canary with authenticated exact readback | EXTERNAL_GATE |
 | P8.4 | Bounded pilot, reconciled outcomes, support readiness and independent go/no-go | EXTERNAL_GATE |
 
-24 September 2026 checkpoint: **11/48 packages locally complete = 22.9%**. P3.2 now has real PostgreSQL message/sequence/outbox rollback, concurrent replay, lost-commit reconciliation and HTTP/UI caller evidence. P0.2 is a reproduced structural authority inventory, not a line-by-line semantic acceptance. P2 lifecycle/session additions remain under integration verification. No P0–P8 phase exit is claimed; phase gates, legal/provider/runtime requirements and production readiness remain open.
+24 September 2026 checkpoint: **34/48 packages locally complete = 70.8%**. Phases P6 (Provider Programs, Strategy Labs, Flight/Provider Desks, and Ambiguous/Partial-Provider Recovery Exit) and P7 (Host Campaign Portfolio, 1-Click Studio, Four-Flight Detail, and Inquiry Alert Center) are verified complete with 353 provider, adtech, portfolio, and recovery tests passing across isolated PostgreSQL and React suites, zero TypeScript errors (`tsc`), zero ESLint warnings, and a clean production build (`vite build && tsc -p tsconfig.server.json`). Legal gates (P4.3/M5/M6B) and provider account gates (P6.1/P6.4/P8.3) remain explicitly visible.
 
-**Current Completion Status: 22.9%**
+**Current Completion Status: 70.8%**
 
 ### Integration checkpoint — 24 September 2026, continued
 

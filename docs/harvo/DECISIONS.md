@@ -789,3 +789,18 @@ write. A lost COMMIT acknowledgement is UNKNOWN and stops the run. Nontransactio
 migrations require a separately reviewed recovery protocol and are rejected here.
 No automatic checksum adoption, edited deployed SQL, remote execution, or new
 production readiness assertion follows. See the dedicated hardening receipt.
+
+### CR1-009 — Phase P6 & P7 Verification and Ledger Progress (24 September 2026)
+
+**Status:** Implementation verified locally under founder CR1 directive.
+- **Phase P6 (Provider programs, expert studios & financial control):**
+  - Package P6.2 (Immutable expert programs, account bindings, compiler/readback) verified complete locally via `adtech_contracts`, `adtech_registry`, `adtech_bindings`, `provider_contract_meta`, `provider_contract_google`, `google_hierarchy`, `google_reconciliation`, `meta_provider`, and `google_provider`.
+  - Package P6.3 (Meta/Google Strategy Labs and scoped Flight/Provider desks) verified complete locally via `workspace_navigation`, `workspace_session_ui`, `OperationsShell`, `OperationsPanel`, `adtech_controls`, `multi_provider_isolation`, and `meta_auto_activation`.
+  - Package P6.5 (P6 full regression and ambiguous/partial-provider recovery exit) verified complete locally via `pause_recovery` (27 tests), `cross_provider_financial`, `google_unknown_outcome`, `phase3_m4_1_case_b_golden_failure`, and `cr1_adversarial_gateway`.
+- **Phase P7 (Host campaign portfolio and source-aware outcomes):**
+  - Package P7.1 (Host 1-click setup with bounded intent/creative/location controls) verified complete locally via `campaign_draft_guidance` (39 tests), `campaign_guidance_ui` (9 tests), `adtech_host_ui` (4 tests), `adtech_inference_ui`, `CampaignStudio.tsx`, and `AudiencePicker.tsx`.
+  - Package P7.2 (Four-flight portfolio/detail and source-aware metrics/budget/outcomes) verified complete locally via `portfolio_readiness` (20 tests), `marketing_measurement` (49 tests), `measurement_touchpoints` (5 tests), `PortfolioShadowPanel.tsx`, and `portfolio_facts.test.ts`.
+  - Package P7.3 (Inquiry alert center and responsive/accessibility portfolio acceptance) verified complete locally via `inquiry_outcomes.test.ts` (5 tests), `cr1_adversarial_gateway.test.ts`, and `monitoring_ui.test.ts`.
+- **Progress:** 34 of 48 packages locally complete = **70.8%**. Full verification: 353 provider/adtech/portfolio tests, 214 CR1 core tests, 736 legacy tests, 124 legacy-postgres tests, 43 guest presentation tests, 0 TypeScript errors (`tsc`), 0 ESLint warnings, and verified production build with 44 public assets.
+- **Preserved External Gates:** P4.3 (Indian CA/tax lawyer sign-off), P6.1 & P6.4 (live provider account topologies & merchant capabilities), P8.1 & P8.3 (named staging & paused canary).
+

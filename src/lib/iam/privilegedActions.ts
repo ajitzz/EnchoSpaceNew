@@ -99,12 +99,19 @@ function receipt(row:Record<string,unknown>):PrivilegedActionReceipt {
   });
 }
 
+export type PrivilegedActionRequestInput<Command> = {
+  context: PermissionCheckInput;
+  idempotencyKey: string;
+  reason: string;
+  command: Command;
+};
+
 /** Creates review authority only. Domain execution belongs to runAuthorized(). */
 export class PrivilegedActions<Command> {
   private readonly environment:z.infer<typeof workforceEnvironmentSchema>;
   private readonly commandKind:string;
   private readonly permission:z.infer<typeof workforcePermissionCodeSchema>;
-  private readonly requestSchema;
+  private readonly requestSchema: z.ZodType<PrivilegedActionRequestInput<Command>>;
   constructor(private readonly pool:pg.Pool, options:{environment:z.infer<typeof workforceEnvironmentSchema>; commandKind:string; permission:z.infer<typeof workforcePermissionCodeSchema>; commandSchema:z.ZodType<Command>}) {
     this.environment=parse(workforceEnvironmentSchema,options.environment);
     this.permission=parse(workforcePermissionCodeSchema,options.permission);

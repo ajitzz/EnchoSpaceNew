@@ -6,7 +6,7 @@ import {workforceReviewSchema,type WorkforceReview} from '../shared/iam/workforc
 
 const {JSDOM}=createRequire(import.meta.url)('jsdom') as {JSDOM:new(html:string,options:{url:string})=>{window:Window&typeof globalThis}};
 const dom=new JSDOM('<!doctype html><html><body></body></html>',{url:'https://encho.test/operations/workforce'});
-vi.stubGlobal('window',dom.window);vi.stubGlobal('document',dom.window.document);vi.stubGlobal('HTMLElement',dom.window.HTMLElement);
+vi.stubGlobal('window',dom.window);vi.stubGlobal('document',dom.window.document);vi.stubGlobal('navigator',dom.window.navigator);vi.stubGlobal('HTMLElement',dom.window.HTMLElement);
 vi.stubGlobal('MutationObserver',dom.window.MutationObserver);vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true);
 const{cleanup,fireEvent,render,screen}=await import('@testing-library/react');
 afterEach(()=>{cleanup();vi.restoreAllMocks();});

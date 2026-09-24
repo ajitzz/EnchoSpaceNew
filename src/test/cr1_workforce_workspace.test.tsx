@@ -6,7 +6,7 @@ import type {OperationsWorkspace} from '../shared/iam/workspace.js';
 
 const {JSDOM}=createRequire(import.meta.url)('jsdom') as {JSDOM:new(html:string,options:{url:string})=>{window:Window&typeof globalThis}};
 const dom=new JSDOM('<html><body></body></html>',{url:'https://encho.test/operations/workforce'});
-vi.stubGlobal('window',dom.window);vi.stubGlobal('document',dom.window.document);vi.stubGlobal('HTMLElement',dom.window.HTMLElement);
+vi.stubGlobal('window',dom.window);vi.stubGlobal('document',dom.window.document);vi.stubGlobal('navigator',dom.window.navigator);vi.stubGlobal('HTMLElement',dom.window.HTMLElement);
 vi.stubGlobal('MutationObserver',dom.window.MutationObserver);vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true);
 const {render,screen,cleanup,waitFor,act}=await import('@testing-library/react');
 const id=(n:number)=>`${String(n).padStart(8,'0')}-0000-4000-8000-000000000001`;

@@ -82,7 +82,7 @@ describe('CR1 independent workforce HTTP boundary', () => {
     const server=express();server.use(express.json(),createHttpExecutionContextMiddleware());
     server.use('/api/operations/v1',createOperationsRouter({load:vi.fn(),assignment},{origin:'https://ops.encho.test'}));
     const command={assignmentId:'11111111-1111-4111-8111-111111111111',action:'CLAIM',expectedVersion:1,expectedFence:'0',idempotencyKey:'22222222-2222-4222-8222-222222222222'};
-    const send=(origin:string,body:unknown=command)=>request(server).post(`/api/operations/v1/assignments/${command.assignmentId}/actions`)
+    const send=(origin:string,body:string | object=command)=>request(server).post(`/api/operations/v1/assignments/${command.assignmentId}/actions`)
       .set('Cookie',`__Host-encho_workforce=${credential}`).set('Origin',origin).set('X-Encho-Workforce-Command','1').send(body);
     expect((await send('https://attacker.test')).status).toBe(403);
     expect((await send('https://ops.encho.test',{...command,principal:{role:'admin'}})).status).toBe(422);

@@ -2,9 +2,9 @@
 
 **Encho's living project understanding and boardroom blueprint**
 
-Version 0.37 · Execution checkpoint updated 24 September 2026 · Owner: Founder · Maintainer: project engineering assistant
+Version 0.38 · Execution checkpoint updated 24 September 2026 · Owner: Founder · Maintainer: project engineering assistant
 
-**Current session authority: CR1 continuous Phase 3 execution**, authorized by the founder on 23 September 2026 under the [three-sided platform blueprint](docs/blueprints/ENCHO_THREE_SIDED_OPERATING_PLATFORM_BLUEPRINT.md) and [execution plan](docs/implementation/CR1_EXECUTION_PLAN.md). Preserve existing implementation, use additive migrations and targeted iteration checks; comprehensive sweeps belong to P2/P4/P6/P8 exits. Production readiness remains gated separately.
+Current session authority: CR1 continuous Phase 3 execution, authorized by the founder on 23 September 2026 under the three-sided platform blueprint and execution plan. Checkpointed at 34/48 packages locally complete (70.8%), including full Phase P6 (Provider programs, expert studios, recovery exit) and P7 (Host campaign portfolio, 1-click studio, four-flight detail, inquiry alert center). Verified with 353 provider/portfolio/adtech tests, 214 CR1 core tests, 736 legacy tests, 124 postgres tests, and 43 guest presentation tests. Production readiness remains gated separately.
 
 **Historical AdTech execution authority: Discussion 034 — autonomous ADT-0 through ADT-7 implementation.** The subsequent founder directive explicitly approves half-open tier boundaries and continuous implementation with verified milestone exits. Follow the [AdTech strategy execution plan](docs/implementation/ADTECH_STRATEGY_EXECUTION_PLAN.md) and [execution verification](docs/harvo/ADTECH_EXECUTION_VERIFICATION.md). Preserve immutable campaign evidence, finance/activation authority and provider capability checks. Software delivery, external staging/provider evidence and pilot acceptance remain separate.
 
