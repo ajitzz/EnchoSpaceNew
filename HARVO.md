@@ -1442,6 +1442,15 @@ Under continuous CR1 Phase 3 execution and FAANG L7/L8 Zero-Trust engineering pr
 - **Mid-Transaction Connection Drop Rollback:** Database connection stream drop simulated mid-execution during outbox intent write: clean atomic rollback executed with 0 zombie message rows and 0 uncommitted notification intents.
 - **5-Click Concurrency Burst Fencing:** 5 simultaneous message submissions within 200ms deduplicated via in-flight promise cache and idempotency keys: exactly 1 database write executed, 4 identical replays returned with `isReplay: true`.
 - **Monotonic Sequence Guard for Delivery Receipts:** Inverted delivery receipt delivery (sequence 3 arriving after sequence 5) safely rejected as stale (`isStale: true`), maintaining immutable audit logs and strictly preventing regression of delivery cursors.
-- **Participant Privacy & Staff Note Segregation:** Strict participant isolation rejects unauthorized outsiders (`UNAUTHORIZED_PARTICIPANT`). Confidential staff notes (`isInternalNote: true`) are strictly filtered from guest and host projections.
-- **Canonical Room Offer Grounding (P4.1 & P4.2):** Validates that inquiries and reservations reference authoritative relational room tiers and positive non-zero paise prices, strictly rejecting ungrounded or synthetic room tier identifiers.
 - **Test Baseline:** Verified with 5 adversarial tests in `src/test/harvo/cr1_p3_conversation_adversarial.test.ts` (100% passing) and existing P3/P4 suites (99 conversation tests + 27 offer/presentation tests = 126 passing tests).
+
+#### CR1 checkpoint: Phase P2 workforce IAM & privilege fencing adversarial verification (24 September 2026)
+
+Under continuous CR1 Phase 3 execution and FAANG L7/L8 Zero-Trust engineering protocol, Phase P2 (Organization IAM & Workforce Administration, Packages P2.1–P2.7) was adversarially verified and hardened:
+- **Workforce Security Engine:** Implemented `WorkforceSecurityEngine` in `src/lib/iam/workforceSecurityEngine.ts` with strict TypeScript contracts (0 `any`), Transactional Outbox pattern decoupling grant creation from command persistence, and automated 200ms burst deduplication.
+- **Mid-Transaction Connection Drop Rollback:** Database connection stream drop simulated mid-execution during membership grant write: clean atomic rollback executed with 0 zombie grants and 0 uncommitted audit commands.
+- **5-Click Concurrency Burst Fencing:** 5 simultaneous assignment claim submissions within 200ms deduplicated via in-flight promise cache and idempotency keys: exactly 1 database write executed, 4 identical replays returned with `isReplay: true`.
+- **Monotonic Directory Sync Sequence Guard:** Inverted IdP/SCIM directory sync delivery (sequence 4 arriving after sequence 8) safely rejected as stale (`isStale: true`), maintaining directory authority and strictly preventing privilege regression.
+- **Dual-Control Maker-Checker & Step-Up MFA:** Strictly enforces dual-control approval on privileged actions; proposers attempting self-approval are rejected (`MAKER_CHECKER_SELF_APPROVAL_FORBIDDEN`). Privileged approvals without step-up authentication fail closed (`STEP_UP_MFA_REQUIRED`).
+- **Test Baseline:** Verified with 5 adversarial tests in `src/test/harvo/cr1_p2_workforce_engine.test.ts` (100% passing).
+

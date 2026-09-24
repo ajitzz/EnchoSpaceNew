@@ -1026,3 +1026,21 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
   - Production asset bundle: verified 44 public assets.
 
+### CR1-022 — Phase P2 Organization IAM & Workforce Administration Adversarial Verification (24 September 2026)
+
+**Status:** Implementation verified locally under founder CR1 directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Packages verified & hardened:**
+  - **P2.1–P2.7 (Organization IAM, Workforce Administration, Maker-Checker & Privilege Fencing):**
+    - Implemented `WorkforceSecurityEngine` in `src/lib/iam/workforceSecurityEngine.ts` with strict TypeScript contracts (0 `any` types), Transactional Outbox pattern decoupling grant creation from command persistence, and 200ms burst deduplication.
+    - Authored and verified adversarial regression suite in `src/test/harvo/cr1_p2_workforce_engine.test.ts` (5 deterministic tests on isolated local runtime):
+      1. *Adversarial Scenario 1 (Mid-Transaction Connection Drop Rollback):* Verified atomic rollback on mid-execution database socket termination during membership grant write; clean atomic `ROLLBACK` verified with zero zombie grants and zero uncommitted audit commands.
+      2. *Adversarial Scenario 2 (5-Click Concurrency Burst in 200ms):* Rapid identical assignment claims deduplicated via in-flight promise caching and idempotency keys; exactly 1 database write executed, 4 deduplicated replays returned with `isReplay: true`.
+      3. *Adversarial Scenario 3 (Out-of-Order Directory Sync Webhook):* Inverted IdP/SCIM directory sync delivery (sequence 4 arriving after sequence 8) safely rejected as stale (`isStale: true`, `applied: false`), preserving directory authority and strictly preventing privilege regression.
+      4. *Scenario 4 (Dual-Control Maker-Checker Invariant):* Proposers attempting self-approval on privileged actions are rejected (`MAKER_CHECKER_SELF_APPROVAL_FORBIDDEN`). Independent checker approval succeeds.
+      5. *Scenario 5 (Step-Up MFA Enforcement):* Privileged approvals without step-up authentication fail closed (`STEP_UP_MFA_REQUIRED`).
+- **Verified Suite Quality Matrix:**
+  - Adversarial suite: **1 test suite, 5 passing tests (100%)** (`cr1_p2_workforce_engine.test.ts`).
+  - Phase P2 workforce suite: **5 test suites, 78 passing tests (100%)** (`cr1_iam_assignment.test.ts`, `cr1_privileged_actions.test.ts`, `cr1_workforce_invitations.test.ts`, `cr1_workforce_lifecycle.test.ts`, `cr1_workforce_step_up.test.ts`).
+  - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
+  - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+  - Production asset bundle: verified 44 public assets.
