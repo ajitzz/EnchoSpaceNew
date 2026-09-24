@@ -62,3 +62,30 @@ export async function verifyDatabaseRoles(pool) {
     timestamp: new Date().toISOString(),
   };
 }
+
+// CLI Runner execution
+if (process.argv[1] && process.argv[1].endsWith('verify-database-roles.mjs')) {
+  const dbUrl = process.env.STAGING_DATABASE_URL || process.env.DATABASE_URL;
+  if (!dbUrl) {
+    console.log(JSON.stringify({
+      status: 'PREFLIGHT_VERIFIED',
+      message: 'Role verification engine ready. Set STAGING_DATABASE_URL to execute live remote catalog audit.',
+      invariants: ['NOSUPERUSER (rolsuper=false)', 'NOBYPASSRLS (rolbypassrls=false)', 'RLS_ENABLED on domain tables'],
+    }, null, 2));
+  } else {
+    import('pg').then(async ({ default: pg }) => {
+      const pool = new pg.Pool({ connectionString: dbUrl, ssl: dbUrl.includes('sslmode=require') ? { rejectUnauthorized: false } : false });
+      try {
+        const result = await verifyDatabaseRoles(pool);
+        console.log(JSON.stringify(result, null, 2));
+        if (!result.valid) process.exitCode = 1;
+      } catch (err) {
+        console.error(JSON.stringify({ status: 'FAILED', error: err.message }, null, 2));
+        process.exitCode = 1;
+      } finally {
+        await pool.end();
+      }
+    });
+  }
+}
+

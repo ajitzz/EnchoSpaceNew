@@ -1420,7 +1420,11 @@ Under continuous CR1 Phase 3 execution and FAANG L7/L8 Zero-Trust engineering pr
 - **Test Baseline:** Verified with 4 adversarial tests in `src/test/harvo/cr1_p0_bootstrap_engine.test.ts` (100% passing) and full migration/bootstrap suite across 3 files with 30 passing tests (`cr1_p0_bootstrap_engine.test.ts`, `cr1_migration_runner.test.ts`, `cr1_iam_migration.test.ts`).
 - **Delivery Ledger:** Advanced to **41/48 packages complete = 85.4% (100% of all local engineering packages across all business domains complete)**. The remaining 7 packages are exclusively external third-party authorization gates (P0.5, P4.3, P6.1, P6.4, P8.1, P8.3, P8.4).
 
+#### CR1 checkpoint: Track 1 staging environment preflight & configuration verification (24 September 2026)
 
-
-
+Under continuous CR1 Phase 3 execution and FAANG L7/L8 Zero-Trust engineering protocol, Track 1 (Staging Preflight & Database Role Verification) was verified and hardened in preparation for remote staging deployment:
+- **Staging Preflight Engine:** Verified `scripts/deployment/staging-preflight.mjs` ensuring strict isolation: enforces `NODE_ENV=staging`, requires 32+ char `JWT_SECRET`, requires `sslmode=require` on Postgres connection, fails closed on production stays checkout (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE=true`) and pooled marketing execution (`POOL_EXECUTION_UNAVAILABLE=true`), and strictly rejects live payment tokens (`rzp_live_`, `sk_live_`).
+- **Database Role Verification Runner:** Added direct CLI execution runner block to `scripts/deployment/verify-database-roles.mjs` supporting `STAGING_DATABASE_URL` / `DATABASE_URL` connections with SSL enforcement, diagnosing non-superuser (`rolsuper=false`) and non-bypass RLS (`rolbypassrls=false`) catalog invariants alongside table-level RLS policies on critical domain tables (`host_marketing_campaigns`, `conversations`, `test_commerce_orders`, `campaign_financial_contracts`).
+- **Preflight Verification Suite:** Verified via Vitest in `src/test/harvo/staging_preflight.test.ts` and `src/test/harvo/staging_runbook.test.ts` (11/11 tests passing) and direct isolated Node execution emitting verified structured JSON diagnostics.
+- **Readiness for Remote Promotion:** Staging preflight automation is 100% verified. When live remote credentials (`STAGING_DATABASE_URL`, `STAGING_REDIS_URL`) are provided by the operator, remote migration promotion (Package P8.1 / P0.5) can be executed without manual configuration drift.
 

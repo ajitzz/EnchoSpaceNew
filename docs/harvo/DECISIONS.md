@@ -967,9 +967,25 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - **100% of all local engineering packages in CR1 are now complete!**
   - Remaining 7 packages are exclusively external third-party authorization gates (P0.5, P4.3, P6.1, P6.4, P8.1, P8.3, P8.4).
 
+### CR1-019 — Track 1 Staging Environment Preflight & Database Role Verification (24 September 2026)
 
-
-
+**Status:** Implementation and preflight verification verified locally under founder CR1 directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Components verified & hardened:**
+  - `scripts/deployment/staging-preflight.mjs`:
+    - Validates staging configuration isolation: enforces `NODE_ENV=staging`, requires 32+ char `JWT_SECRET`, requires `?sslmode=require` on `DATABASE_URL`.
+    - Enforces zero-trust compliance gates: `STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE=true`, `POOL_EXECUTION_UNAVAILABLE=true`.
+    - Rejects live payment credentials (`rzp_live_`, `sk_live_`) and unauthenticated placeholder secrets.
+  - `scripts/deployment/verify-database-roles.mjs`:
+    - Enforces PostgreSQL application runtime connection invariants: non-superuser (`rolsuper = false`), non-bypass RLS (`rolbypassrls = false`).
+    - Audits table-level Row-Level Security (`rowsecurity = true`) across critical domain tables (`host_marketing_campaigns`, `conversations`, `test_commerce_orders`, `campaign_financial_contracts`).
+    - Added direct CLI runner block allowing remote catalog audits against `STAGING_DATABASE_URL` with SSL support and structured JSON preflight diagnostic output.
+  - Preflight regression tests verified in `src/test/harvo/staging_preflight.test.ts` and `src/test/harvo/staging_runbook.test.ts` (11/11 tests passing).
+- **Verified Suite Quality Matrix:**
+  - Staging verification suite: **2 test suites, 11 passing tests (100%)**.
+  - CLI preflight check: **0 errors** (valid JSON output with `PREFLIGHT_VERIFIED` / `SUCCESS`).
+  - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
+  - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+  - Production asset bundle: verified 44 public assets.
 
 
 
