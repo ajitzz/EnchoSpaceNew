@@ -804,3 +804,23 @@ production readiness assertion follows. See the dedicated hardening receipt.
 - **Progress:** 34 of 48 packages locally complete = **70.8%**. Full verification: 353 provider/adtech/portfolio tests, 214 CR1 core tests, 736 legacy tests, 124 legacy-postgres tests, 43 guest presentation tests, 0 TypeScript errors (`tsc`), 0 ESLint warnings, and verified production build with 44 public assets.
 - **Preserved External Gates:** P4.3 (Indian CA/tax lawyer sign-off), P6.1 & P6.4 (live provider account topologies & merchant capabilities), P8.1 & P8.3 (named staging & paused canary).
 
+### CR1-010 — Batch 7 Commerce Integration, Adversarial Pipeline & Trip Lifecycle (24 September 2026)
+
+**Status:** Implementation verified locally under founder CR1 directive.
+- **Packages closed:**
+  - **P4.4 (Quote/hold/order/capture/booking transaction and recovery integration):**
+    - Implemented server-authoritative quoting in `StaysCommerceEngine`, strictly enforcing immutable pricing and 18% statutory GST baseline while discarding client-supplied fee amounts.
+    - Implemented atomic hold reservation with expiring TTL (15 minutes).
+    - Verified complete transactional rollback when database connection drops midway through multi-step order capture; zero zombie records or uncommitted state.
+  - **P4.5 (Manage trip, verified confirmation, cancellation/refund and service integration):**
+    - Implemented user-scoped cancellation with atomic inventory hold release (`status: RELEASED`).
+    - Integrated with monotonic sequence versioning and immutable webhook replay protection.
+  - **P4.6 (P4 complete regression, gateway sandbox and concurrency/recovery exit):**
+    - Authored and verified adversarial regression suite in `src/test/harvo/cr1_commerce_pipeline.test.ts` (4 deterministic tests on disposable local PostgreSQL):
+      1. *Connection drop midway:* Stream destruction triggers full PostgreSQL rollback; 0 zombie orders and hold remains active.
+      2. *5-click concurrency burst in 200ms:* Exactly 1 execution creates an order, 4 deduplicated replays return primary order ID, 0 double-spend anomalies.
+      3. *Out-of-order webhook delivery:* Monotonic state machine drops older sequence payloads (e.g. sequence 2 arriving after sequence 3) without regressing confirmed state.
+      4. *Cancellation inventory restoration:* Confirmed booking cancellation atomically releases held inventory.
+- **Progress:** 37 of 48 packages complete = **77.1%**.
+- **Preserved External Gates:** P4.3 (Indian CA/tax lawyer sign-off), P6.1 & P6.4 (live provider account topologies & merchant capabilities), P8.1 & P8.3 (named staging & paused canary).
+

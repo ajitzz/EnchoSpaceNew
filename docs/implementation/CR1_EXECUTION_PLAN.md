@@ -158,9 +158,9 @@ CR1 delivery status counts closed work packages below, derived from the founder-
 | P4.1 | Independent guest presentation truth/performance/accessibility acceptance | COMPLETE_LOCAL |
 | P4.2 | Canonical versioned sellable offer and consistent guest/host/admin projections | COMPLETE_LOCAL |
 | P4.3 | Approved quote/tax/commission/cancellation/payment policy contracts | EXTERNAL_GATE |
-| P4.4 | Quote/hold/order/capture/booking transaction and recovery integration | OPEN |
-| P4.5 | Manage trip, verified confirmation, cancellation/refund and service integration | OPEN |
-| P4.6 | P4 complete regression, gateway sandbox and concurrency/recovery exit | OPEN |
+| P4.4 | Quote/hold/order/capture/booking transaction and recovery integration | COMPLETE_LOCAL |
+| P4.5 | Manage trip, verified confirmation, cancellation/refund and service integration | COMPLETE_LOCAL |
+| P4.6 | P4 complete regression, gateway sandbox and concurrency/recovery exit | COMPLETE_LOCAL |
 | P5.1 | Offer/property campaign subject contracts and immutable offer binding | COMPLETE_LOCAL |
 | P5.2 | External media ingestion, rights/review, derivatives and Creative Packages | COMPLETE_LOCAL |
 | P5.3 | Room-offer/property-discovery modes and canonical price/claim compilation | COMPLETE_LOCAL |

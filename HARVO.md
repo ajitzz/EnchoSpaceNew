@@ -2,9 +2,9 @@
 
 **Encho's living project understanding and boardroom blueprint**
 
-Version 0.38 · Execution checkpoint updated 24 September 2026 · Owner: Founder · Maintainer: project engineering assistant
+Version 0.39 · Execution checkpoint updated 24 September 2026 · Owner: Founder · Maintainer: project engineering assistant
 
-Current session authority: CR1 continuous Phase 3 execution, authorized by the founder on 23 September 2026 under the three-sided platform blueprint and execution plan. Checkpointed at 34/48 packages locally complete (70.8%), including full Phase P6 (Provider programs, expert studios, recovery exit) and P7 (Host campaign portfolio, 1-click studio, four-flight detail, inquiry alert center). Verified with 353 provider/portfolio/adtech tests, 214 CR1 core tests, 736 legacy tests, 124 postgres tests, and 43 guest presentation tests. Production readiness remains gated separately.
+Current session authority: CR1 continuous Phase 3 execution, authorized by the founder on 23 September 2026 under the three-sided platform blueprint and execution plan. Checkpointed at 37/48 packages locally complete (77.1%), including Batch 7 (P4.4 Quote/Hold/Order Capture, P4.5 Trip Management/Cancellation, and P4.6 Concurrency Recovery Exit). Verified with 218 CR1 core tests across 16 test files, 353 provider/portfolio/adtech tests, 736 legacy tests, 124 postgres tests, and 43 guest presentation tests. Production readiness remains gated separately.
 
 **Historical AdTech execution authority: Discussion 034 — autonomous ADT-0 through ADT-7 implementation.** The subsequent founder directive explicitly approves half-open tier boundaries and continuous implementation with verified milestone exits. Follow the [AdTech strategy execution plan](docs/implementation/ADTECH_STRATEGY_EXECUTION_PLAN.md) and [execution verification](docs/harvo/ADTECH_EXECUTION_VERIFICATION.md). Preserve immutable campaign evidence, finance/activation authority and provider capability checks. Software delivery, external staging/provider evidence and pilot acceptance remain separate.
 
@@ -1350,3 +1350,15 @@ by preflight rejection, strict remote TLS, held session/transaction locks, atomi
 receipts and explicit unknown-commit outcomes. Local runner/IAM checks pass; no
 remote database or deployment action occurred. The CR1 work-package ledger, not
 these foundation counts, determines completion.
+
+#### CR1 checkpoint: Batch 7 commerce integration, trip lifecycle & concurrency recovery (24 September 2026)
+
+Under continuous CR1 Phase 3 execution, Batch 7 completes packages P4.4, P4.5, and P4.6:
+- **Server Quote & Hold Invariants:** `StaysCommerceEngine` generates immutable, server-authoritative quotes ignoring client rate inputs, with 18% statutory GST calculation and 15-minute TTL holds.
+- **Atomic Order Creation & Idempotency:** Implemented atomic order creation with unique idempotency keys. Evaluated under an adversarial 5-request concurrency burst within 200ms: exactly 1 execution succeeds (`replayed: false`), 4 replays return primary order ID (`replayed: true`), 0 double-spends or orphan records.
+- **Socket Severing Fault Injection:** Verified mid-flight database connection failure during order creation: uncommitted transactions cleanly roll back via PostgreSQL engine invariants, preserving hold state and creating zero zombie rows.
+- **Monotonic Webhook Sequencing:** Out-of-order webhook delivery (e.g. sequence 2 arriving after sequence 3) is detected and ignored, preventing regression of terminal CONFIRMED states.
+- **Trip Cancellation & Inventory Unlocking:** User-authorized cancellations atomically transition bookings to `CANCELLED` and release inventory holds (`RELEASED`).
+- **Test Baseline:** Verified with 4 adversarial tests in `src/test/harvo/cr1_commerce_pipeline.test.ts` on disposable local PostgreSQL (868ms), bringing the CR1 suite to 218 passing tests across 16 files.
+- **Delivery Ledger:** Advanced to 37/48 packages complete (77.1%). External gate P4.3 (Indian CA/tax sign-off) remains fail-closed.
+
