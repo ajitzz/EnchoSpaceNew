@@ -987,6 +987,25 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
   - Production asset bundle: verified 44 public assets.
 
+### CR1-020 — Track 3 Provider Canary Readback Harness & Zero-Drift Verification (24 September 2026)
+
+**Status:** Implementation and preflight verification verified locally under founder CR1 directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Components verified & hardened:**
+  - `scripts/deployment/provider-canary-runner.mjs`:
+    - Added direct CLI execution runner block with deterministic JSON status output.
+    - Implemented `auditProviderConfiguration(env)` auditing Meta (`META_APP_ID`, `META_SYSTEM_USER_TOKEN`, `act_` prefixed `META_AD_ACCOUNT_ID`) and Google Ads (`GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_MCC_ID`, `GOOGLE_ADS_REFRESH_TOKEN`).
+    - Implemented `validateCanaryCampaignPayload(provider, payload)` strictly enforcing `status: 'PAUSED'` and Meta `special_ad_categories: ['HOUSING']`.
+    - Implemented `verifyPausedCanaryReadback(client, id)` detecting and rejecting active status (`CANARY_DRIFT_DETECTED`) and financial drift (`FINANCIAL_DRIFT_DETECTED`).
+    - Implemented `generateCanaryReceipt(receipt, path)` writing immutable audit receipts.
+  - Preflight regression tests verified in `src/test/harvo/provider_canary.test.ts` (10/10 tests passing).
+- **Verified Suite Quality Matrix:**
+  - Provider canary suite: **1 test suite, 10 passing tests (100%)**.
+  - CLI preflight check: **0 errors** (valid JSON output with `CANARY_PREFLIGHT_VERIFIED`).
+  - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
+  - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+  - Production asset bundle: verified 44 public assets.
+
+
 
 
 

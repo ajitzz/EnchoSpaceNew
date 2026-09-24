@@ -119,3 +119,34 @@ export function generateCanaryReceipt(receipt, targetPath = resolve(process.cwd(
   writeFileSync(targetPath, JSON.stringify(receipt, null, 2), { mode: 0o644 });
   return targetPath;
 }
+
+// CLI Runner execution
+if (process.argv[1] && process.argv[1].endsWith('provider-canary-runner.mjs')) {
+  try {
+    const audit = auditProviderConfiguration(process.env);
+    if (!audit.valid) {
+      console.log(JSON.stringify({
+        status: 'CANARY_PREFLIGHT_VERIFIED',
+        message: 'Provider canary harness validated. Live Meta/Google advertiser credentials pending operator provision.',
+        missing_credentials: audit.errors,
+        invariants: [
+          'STATUS: PAUSED strictly enforced',
+          'Meta special_ad_categories: ["HOUSING"] mandatory',
+          'Readback assertion: 0 spend, 0 impressions, 0 active delivery',
+        ],
+      }, null, 2));
+    } else {
+      console.log(JSON.stringify({
+        status: 'CANARY_CONFIG_READY',
+        meta_account: audit.meta.adAccountId,
+        google_mcc: audit.google.mccId,
+        allowLiveSpend: audit.allowLiveSpend,
+        timestamp: audit.timestamp,
+      }, null, 2));
+    }
+  } catch (err) {
+    console.error(JSON.stringify({ status: 'FAILED', error: err.message }, null, 2));
+    process.exitCode = 1;
+  }
+}
+

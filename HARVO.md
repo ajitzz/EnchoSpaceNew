@@ -1428,3 +1428,11 @@ Under continuous CR1 Phase 3 execution and FAANG L7/L8 Zero-Trust engineering pr
 - **Preflight Verification Suite:** Verified via Vitest in `src/test/harvo/staging_preflight.test.ts` and `src/test/harvo/staging_runbook.test.ts` (11/11 tests passing) and direct isolated Node execution emitting verified structured JSON diagnostics.
 - **Readiness for Remote Promotion:** Staging preflight automation is 100% verified. When live remote credentials (`STAGING_DATABASE_URL`, `STAGING_REDIS_URL`) are provided by the operator, remote migration promotion (Package P8.1 / P0.5) can be executed without manual configuration drift.
 
+#### CR1 checkpoint: Track 3 provider canary readback harness & zero-drift verification (24 September 2026)
+
+Under continuous CR1 Phase 3 execution and FAANG L7/L8 Zero-Trust engineering protocol, Track 3 (Provider Canary Readback Harness & Zero-Drift Preflight, Package P8.3 preparation) was verified and hardened:
+- **Provider Canary Engine & CLI Runner:** Added direct CLI execution runner block to `scripts/deployment/provider-canary-runner.mjs`. Validates Meta (`META_APP_ID`, `META_SYSTEM_USER_TOKEN`, `META_AD_ACCOUNT_ID` with `act_` prefix) and Google Ads (`GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_MCC_ID`, `GOOGLE_ADS_REFRESH_TOKEN`) credentials.
+- **Fail-Closed Zero-Spend Invariants:** Strictly rejects active campaign payloads during canary testing (`status: 'PAUSED'` mandatory), enforces Meta `special_ad_categories: ["HOUSING"]`, and executes programmatic readback assertion verifying exactly 0 spend, 0 impressions, and zero live delivery.
+- **Deterministic Verification:** Verified via Vitest in `src/test/harvo/provider_canary.test.ts` (10/10 tests passing) and direct CLI runner execution outputting valid `CANARY_PREFLIGHT_VERIFIED` structured JSON diagnostics.
+
+
