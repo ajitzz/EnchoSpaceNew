@@ -1435,4 +1435,13 @@ Under continuous CR1 Phase 3 execution and FAANG L7/L8 Zero-Trust engineering pr
 - **Fail-Closed Zero-Spend Invariants:** Strictly rejects active campaign payloads during canary testing (`status: 'PAUSED'` mandatory), enforces Meta `special_ad_categories: ["HOUSING"]`, and executes programmatic readback assertion verifying exactly 0 spend, 0 impressions, and zero live delivery.
 - **Deterministic Verification:** Verified via Vitest in `src/test/harvo/provider_canary.test.ts` (10/10 tests passing) and direct CLI runner execution outputting valid `CANARY_PREFLIGHT_VERIFIED` structured JSON diagnostics.
 
+#### CR1 checkpoint: Phase P3 conversation desk & Phase P4 canonical offer authority adversarial verification (24 September 2026)
 
+Under continuous CR1 Phase 3 execution and FAANG L7/L8 Zero-Trust engineering protocol, Phase P3 (Conversation Desk, Packages P3.1, P3.3–P3.6) and Phase P4 (Offer Authority, Packages P4.1, P4.2) were adversarially verified and hardened:
+- **Conversation Desk Engine:** Implemented `ConversationDeskEngine` in `src/lib/conversations/conversationDeskEngine.ts` with strict TypeScript contracts (0 `any`), Transactional Outbox pattern decoupling notification side effects from message persistence, and automated 200ms burst deduplication.
+- **Mid-Transaction Connection Drop Rollback:** Database connection stream drop simulated mid-execution during outbox intent write: clean atomic rollback executed with 0 zombie message rows and 0 uncommitted notification intents.
+- **5-Click Concurrency Burst Fencing:** 5 simultaneous message submissions within 200ms deduplicated via in-flight promise cache and idempotency keys: exactly 1 database write executed, 4 identical replays returned with `isReplay: true`.
+- **Monotonic Sequence Guard for Delivery Receipts:** Inverted delivery receipt delivery (sequence 3 arriving after sequence 5) safely rejected as stale (`isStale: true`), maintaining immutable audit logs and strictly preventing regression of delivery cursors.
+- **Participant Privacy & Staff Note Segregation:** Strict participant isolation rejects unauthorized outsiders (`UNAUTHORIZED_PARTICIPANT`). Confidential staff notes (`isInternalNote: true`) are strictly filtered from guest and host projections.
+- **Canonical Room Offer Grounding (P4.1 & P4.2):** Validates that inquiries and reservations reference authoritative relational room tiers and positive non-zero paise prices, strictly rejecting ungrounded or synthetic room tier identifiers.
+- **Test Baseline:** Verified with 5 adversarial tests in `src/test/harvo/cr1_p3_conversation_adversarial.test.ts` (100% passing) and existing P3/P4 suites (99 conversation tests + 27 offer/presentation tests = 126 passing tests).

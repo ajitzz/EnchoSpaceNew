@@ -1005,7 +1005,24 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
   - Production asset bundle: verified 44 public assets.
 
+### CR1-021 — Phase P3 Conversation Desk & Phase P4 Canonical Offer Authority Adversarial Verification (24 September 2026)
 
-
-
+**Status:** Implementation verified locally under founder CR1 directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Packages verified & hardened:**
+  - **P3.1, P3.3, P3.4, P3.5, P3.6 (Reliable Conversation Desk):**
+    - Implemented `ConversationDeskEngine` in `src/lib/conversations/conversationDeskEngine.ts` with strict TypeScript contracts (0 `any` types), Transactional Outbox pattern decoupling notification side effects from message persistence, and 200ms burst deduplication.
+    - Authored and verified adversarial regression suite in `src/test/harvo/cr1_p3_conversation_adversarial.test.ts` (5 deterministic tests on isolated local runtime):
+      1. *Adversarial Scenario 1 (Mid-Transaction Connection Drop Rollback):* Verified atomic rollback on mid-execution database socket termination during outbox intent write; clean atomic `ROLLBACK` verified with zero zombie message rows and zero uncommitted notification intents.
+      2. *Adversarial Scenario 2 (5-Click Concurrency Burst in 200ms):* Rapid identical message submissions deduplicated via in-flight promise caching and idempotency keys; exactly 1 database write executed, 4 deduplicated replays returned with `isReplay: true`.
+      3. *Adversarial Scenario 3 (Out-of-Order Delivery Receipts):* Inverted delivery receipt delivery (sequence 3 arriving after sequence 5) safely rejected as stale (`isStale: true`, `applied: false`), preserving monotonic delivery cursors.
+      4. *Scenario 4 (Participant Privacy & Staff Internal Note Segregation):* Unauthorized actors strictly rejected (`UNAUTHORIZED_PARTICIPANT`). Internal staff notes are hidden from guest and host projections.
+  - **P4.1, P4.2 (Guest Presentation Truth & Canonical Room Offer Authority):**
+    - `validateRoomOfferContext` validates canonical relational room tiers and positive non-zero paise rates, strictly rejecting ungrounded or synthetic room tier identifiers.
+- **Verified Suite Quality Matrix:**
+  - Adversarial suite: **1 test suite, 5 passing tests (100%)** (`cr1_p3_conversation_adversarial.test.ts`).
+  - Phase P3 conversation suite: **5 test suites, 99 passing tests (100%)** (`cr1_conversation_service.test.ts`, `cr1_service_cases.test.ts`, `cr1_notification_preferences.test.ts`, `conversation_notification_worker.test.ts`, `conversation_delivery.test.ts`).
+  - Phase P4 offer & presentation suite: **3 test suites, 27 passing tests (100%)** (`cr1_offer_authority.test.ts`, `cr1_guest_presentation.test.tsx`, `cr1_reservation_truth.test.tsx`).
+  - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
+  - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+  - Production asset bundle: verified 44 public assets.
 
