@@ -1241,3 +1241,21 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
   - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
   - Delivery ledger progress: **46 of 48 packages complete (95.8%)**.
+
+### CR1-032 — Paused Canary Execution & Zero-Spend Readback Hardening (25 September 2026)
+
+**Status:** Implementation and adversarial test suite verified locally under founder CR1 directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Packages verified & hardened:**
+  - **Paused Canary Execution & Zero-Spend Readback Hardening (P8.3 / CANARY-01 Gate):**
+    - Implemented `PausedCanaryHardeningEngine` in `src/lib/compliance/pausedCanaryHardeningEngine.ts` with strict TypeScript contracts (0 `any` types), Transactional Outbox for canary execution bindings and audit logging, 200ms burst deduplication via in-flight promise caching, strict zero-spend invariant enforcement (`campaignStatus === 'PAUSED'` and `dailyBudgetPaise === 0`), authenticated provider exact readback verification, and monotonic canary sequence fencing.
+    - Verified atomic outbox rollback: mid-transaction connection drop during audit logging executes clean atomic `ROLLBACK`, leaving zero zombie canary execution rows or uncommitted audit entries.
+    - Verified 200ms burst deduplication: 5 simultaneous canary execution submissions within 200ms deduplicate via in-flight promise caching to exactly 1 database write and 4 cached replays (`isReplay: true`).
+    - Verified zero-spend invariant: non-PAUSED status (`ACTIVE`) or non-zero daily budget strictly fails closed with `CANARY_ZERO_SPEND_VIOLATION`. Valid PAUSED zero-spend configurations pass cleanly.
+    - Verified provider exact readback verification: remote status divergence (`ACTIVE`) or non-zero provider spend detected during readback strictly fails closed with `PROVIDER_READBACK_MISMATCH_EXCEPTION`.
+    - Verified monotonic canary sequencing: out-of-order canary attestation sequence updates safely rejected as stale (`isStale: true`, `reason: 'STALE_CANARY_SEQUENCE_REJECTED'`), strictly preventing canary state regression.
+    - Authored and verified adversarial regression suite in `src/test/harvo/cr1_p8_3_canary_hardening.test.ts` (5 deterministic tests on isolated local runtime).
+- **Verified Suite Quality Matrix:**
+  - Adversarial canary hardening suite: **1 test suite, 5 passing tests (100%)** (`cr1_p8_3_canary_hardening.test.ts`).
+  - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
+  - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+  - Delivery ledger progress: **47 of 48 packages complete (97.9%)**.
