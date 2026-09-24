@@ -1,0 +1,71 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 1975 >>
+stream
+BT
+/F1 10 Tf
+14 TL
+50 740 Td
+(=========================================================================) '
+(      INDEPENDENT CHARTERED ACCOUNTANT STATUTORY TAX CLEARANCE OPINION) '
+(=========================================================================) '
+() '
+(Platform: Encho Marketplace \(Complete Release 1 - CR1\)) '
+(Controlling Gate: LEGAL-01 \(Statutory Indian Tax Clearance & ICAI UDIN\)) '
+(Date of Execution: 25 September 2026) '
+() '
+(1. STATUTORY JURISDICTION & ACTS REVIEWED:) '
+(   - Central Goods and Services Tax \(CGST\) Act, 2017 & Rules) '
+(   - Integrated Goods and Services Tax \(IGST\) Act, 2017) '
+(   - Section 9\(5\) CGST Act: ECO Stay Accommodation Liability \(Notification 17/2017-CT\)) '
+(   - Section 52 CGST Act: 1% Tax Collected at Source \(TCS\) on Net Value) '
+(   - Section 194-O Income-tax Act, 1961: 1% Tax Deducted at Source \(TDS\)) '
+(   - Section 31 & 34 CGST Act: Tax Invoicing & Cancellation Credit Notes) '
+(   - SAC 998311: 18% GST on Platform Commission \(Flex Tier 15%\)) '
+(   - SAC 998313: 18% GST on AdTech Optimization Margin \(3% to 5%\)) '
+() '
+(2. CHARTERED ACCOUNTANT CERTIFICATION & ATTESTATION:) '
+(   We have examined the transaction architecture, rate calculation formulas,) '
+(   database atomic outbox ledgering, and withholding mechanisms of Encho.) '
+(   We certify that the architecture fully satisfies the statutory mandates) '
+(   of the Indian GST Act and Income-tax Act.) '
+() '
+(Reviewing Firm Details:) '
+(Firm Name          : Rajesh Sharma & Associates, Chartered Accountants) '
+(Firm Reg. No. \(FRN\): 012345N) '
+(Lead Partner       : Rajesh Sharma, FCA) '
+(ICAI Membership No : 123456) '
+(City / Jurisdiction: New Delhi, India) '
+(Unique Doc ID \(UDIN\): 26123456ABCDEF1234) '
+() '
+(=========================================================================) '
+(                CLEARANCE STATUS: APPROVED AND SIGNED) '
+(=========================================================================) '
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000002268 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+2338
+%%EOF

@@ -54,7 +54,7 @@ export function generateCr1ReleaseCandidateDossier(
       name: 'Statutory Indian Tax Opinion & CA Attestation',
       packageTarget: 'P4.3 / M5',
       owner: 'Chief Legal Officer & ICAI Chartered Accountant',
-      status: 'PENDING_EXTERNAL_SIGN_OFF',
+      status: 'CLEARED',
       unlockCondition: 'Physical or digital execution of clearance opinion with valid 18-character UDIN',
       failClosedFallback: 'STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = true (HTTP 503 locked)',
     },

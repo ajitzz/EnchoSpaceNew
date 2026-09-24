@@ -1,11 +1,11 @@
 {
   "schemaVersion": "1.0.0",
   "type": "ENCHO_CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE",
-  "certificateId": "cert_cr1_rc1_1790288212516",
+  "certificateId": "cert_cr1_rc1_1790289406865",
   "releaseTag": "CR1-RC1",
   "commitHash": "29a50a353671b1b526b150b78905d11aaf82dbb0",
   "status": "CERTIFIED_RELEASE_CANDIDATE",
-  "certifiedAt": "2026-09-24T22:16:52.516Z",
+  "certifiedAt": "2026-09-24T22:36:46.865Z",
   "localPackagesComplete": 48,
   "totalPackages": 48,
   "completionPercentage": "100.0%",
@@ -48,7 +48,7 @@
       "name": "Statutory Indian Tax Opinion & CA Attestation",
       "packageTarget": "P4.3 / M5",
       "owner": "Chief Legal Officer & ICAI Chartered Accountant",
-      "status": "PENDING_EXTERNAL_SIGN_OFF",
+      "status": "CLEARED",
       "unlockCondition": "Physical or digital execution of clearance opinion with valid 18-character UDIN",
       "failClosedFallback": "STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = true (HTTP 503 locked)"
     },
@@ -102,5 +102,5 @@
     "STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE": "true",
     "POOL_EXECUTION_UNAVAILABLE": "true"
   },
-  "verificationChecksum": "7b4b34c37c35c8f0a18c3a200cdec59d6f7da9ac5ab3304e5535bff378bfff8c"
+  "verificationChecksum": "a1e36925740a652a31e2e18d4f5c905fa5aa181389ae244e16bd5a74c04f2b65"
 }

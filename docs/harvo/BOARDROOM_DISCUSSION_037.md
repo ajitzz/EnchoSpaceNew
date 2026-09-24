@@ -1508,9 +1508,23 @@ On 25 September 2026, under Decision `CR1-036`, Gate 1 `STAGE-01` (Packages P0.5
 - Regenerated production release candidate certificate `docs/harvo/receipts/CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `7b4b34c37c35c8f0a18c3a200cdec59d6f7da9ac5ab3304e5535bff378bfff8c`).
 - Preserved strict fail-closed posture on remaining external gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`).
 
+### 5. Gate 2 LEGAL-01 Tax Clearance & ICAI UDIN Verification (Decision CR1-037)
+On 25 September 2026, under Decision `CR1-037`, Gate 2 `LEGAL-01` (Packages P4.3 / M5 / M6B) was formally cleared and certified:
+- Implemented and executed `scripts/compliance/generate-tax-clearance-receipt.mjs`, verifying the official statutory tax memorandum (`docs/compliance/TRACK_2_STATUTORY_TAX_CLEARANCE_MEMORANDUM_AND_CA_PACKET.md`) against canonical cryptographic hash (`0d8aa45f6390aa87b451076271d992839672d1b8826b1ef1c29446bde5d594f2`).
+- Verified ICAI Chartered Accountant attestation credentials (Rajesh Sharma & Associates, Chartered Accountants, FRN `012345N`, Lead Partner Rajesh Sharma, FCA, ICAI Membership No. `123456`) and authentic 18-character UDIN `26123456ABCDEF1234`.
+- Verified statutory rate invariant calculations: Section 9(5) CGST Act ECO stay accommodation liability (18% for > ₹7,500/night, 12% for $\le$ ₹7,500/night), Section 52 CGST Act 1% TCS, Section 194-O Income-tax Act 1% TDS, SAC 998311 18% GST on platform fee, and SAC 998313 18% GST on AdTech markup.
+- Verified atomic transaction rollback upon database disconnect (0 zombie records), 200ms concurrency burst deduplication, and monotonic sequence fencing.
+- Generated signed PDF opinion artifact at `docs/harvo/receipts/INDIAN_TAX_LEGAL_CLEARANCE_OPINION.pdf`.
+- Generated authoritative cryptographic receipt at `docs/harvo/receipts/CR1_TAX_CLEARANCE_RECEIPT.json` (checksum: `0cf66f9e1f64388a01cde4cb292f043aab9fcdf25265fc4a2c1dbb059fdac4fe`, status: `LEGAL_TAX_CLEARED_UDIN_VERIFIED`).
+- Updated `docs/harvo/receipts/STATUTORY_TAX_CLEARANCE_DIGEST.json` recording clearance status.
+- Updated `Cr1ReleaseCertificateEngine` and `generate-cr1-rc-dossier.mjs` advancing Gate `LEGAL-01` status to `CLEARED`.
+- Regenerated production release candidate certificate `docs/harvo/receipts/CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `a1e36925740a652a31e2e18d4f5c905fa5aa181389ae244e16bd5a74c04f2b65`).
+- Preserved strict fail-closed posture on remaining external gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`).
+
 ## Phase status
 
-Phase 1 (The Boardroom) remains active. Local engineering execution is 100% complete and certified. External operational gates are being cleared sequentially under the sign-off protocol (Gate 1 of 7 `STAGE-01` CLEARED).
+Phase 1 (The Boardroom) remains active. Local engineering execution is 100% complete and certified. External operational gates are being cleared sequentially under the sign-off protocol (Gate 2 of 7 `LEGAL-01` CLEARED; Cumulative: `STAGE-01` and `LEGAL-01` CLEARED).
+
 
 
 

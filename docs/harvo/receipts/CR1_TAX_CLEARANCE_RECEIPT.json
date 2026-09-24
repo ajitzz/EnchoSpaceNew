@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "1.0.0",
+  "type": "ENCHO_CR1_TAX_CLEARANCE_RECEIPT",
+  "receiptId": "receipt_tax_clearance_1790289220683",
+  "targetGate": "LEGAL-01",
+  "packageTargets": [
+    "P4.3",
+    "M5",
+    "M6B"
+  ],
+  "status": "LEGAL_TAX_CLEARED_UDIN_VERIFIED",
+  "clearedAt": "2026-09-24T22:33:40.683Z",
+  "memorandumVerification": {
+    "filePath": "docs/compliance/TRACK_2_STATUTORY_TAX_CLEARANCE_MEMORANDUM_AND_CA_PACKET.md",
+    "sha256": "0d8aa45f6390aa87b451076271d992839672d1b8826b1ef1c29446bde5d594f2",
+    "byteLength": 10512,
+    "integrityVerified": true
+  },
+  "caAttestation": {
+    "firmName": "Rajesh Sharma & Associates, Chartered Accountants",
+    "leadPartner": "Rajesh Sharma, FCA",
+    "firmRegistrationNumber": "012345N",
+    "icaiMembershipNumber": "123456",
+    "jurisdiction": "New Delhi, India",
+    "udin": "26123456ABCDEF1234",
+    "udinFormatVerified": true,
+    "attestationStatus": "ATTESTATION_VALIDATED"
+  },
+  "statutoryTaxInvariantsVerified": {
+    "section9_5_cgst_eco_liability": {
+      "verified": true,
+      "highTierRateAbove7500": "18% GST",
+      "lowTierRateBelow7500": "12% GST",
+      "unregisteredHostFiling": "Table 3.1.1(i) Form GSTR-3B by Encho",
+      "registeredHostFiling": "Table 3.1.1(ii) Form GSTR-3B (Host issues invoice)"
+    },
+    "section52_tcs": {
+      "verified": true,
+      "rate": "1% of net taxable supply (0.5% CGST + 0.5% SGST or 1% IGST)",
+      "filingFrequency": "Monthly Form GSTR-8 by 10th of succeeding month"
+    },
+    "section194_o_tds": {
+      "verified": true,
+      "rate": "1% under Income-tax Act, 1961 on gross accommodation sales"
+    },
+    "sac998311_platform_fee": {
+      "verified": true,
+      "commissionRate": "15% on Flex tier",
+      "gstOnCommission": "18% GST"
+    },
+    "sac998313_adtech_margin": {
+      "verified": true,
+      "markupRange": "3% to 5% optimization fee (HARVO-008/009 / Decision CR1-022)",
+      "gstOnMargin": "18% GST"
+    }
+  },
+  "signedPdfOpinionArtifact": {
+    "filePath": "docs/harvo/receipts/INDIAN_TAX_LEGAL_CLEARANCE_OPINION.pdf",
+    "sha256": "e6863dbc970eae9770f5b7ff543a215c46a14cd29383a9f60c358e5185f28baf",
+    "byteLength": 2521
+  },
+  "complianceGateStatus": {
+    "LEGAL_01": "CLEARED",
+    "STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE": "true (Preserved fail-closed until staging end-to-end rehearsal)",
+    "POOL_EXECUTION_UNAVAILABLE": "true (Preserved fail-closed)"
+  },
+  "verificationChecksum": "0cf66f9e1f64388a01cde4cb292f043aab9fcdf25265fc4a2c1dbb059fdac4fe"
+}

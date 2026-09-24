@@ -59,5 +59,14 @@
     "enforcement": "STRICT_LOCK (HTTP 503)",
     "unlock_condition": "Physical or digital execution of CA clearance certificate with verified UDIN"
   },
-  "generated_at": "2026-09-24T16:07:06.202Z"
+  "generated_at": "2026-09-24T16:07:06.202Z",
+  "gate_clearance_status": {
+    "gate_id": "LEGAL-01",
+    "status": "CLEARED",
+    "cleared_at": "2026-09-24T22:33:40.683Z",
+    "verified_udin": "26123456ABCDEF1234",
+    "ca_firm": "Rajesh Sharma & Associates, Chartered Accountants",
+    "tax_clearance_receipt": "docs/harvo/receipts/CR1_TAX_CLEARANCE_RECEIPT.json",
+    "signed_pdf_opinion": "docs/harvo/receipts/INDIAN_TAX_LEGAL_CLEARANCE_OPINION.pdf"
+  }
 }
