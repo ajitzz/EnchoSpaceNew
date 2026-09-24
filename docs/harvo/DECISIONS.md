@@ -1065,3 +1065,31 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
   - Production asset bundle: verified 44 public assets.
 
+### CR1-024 — Track 4 Bounded Commercial Pilot Charter & Stop-Loss Simulation Runner Verification (24 September 2026)
+
+**Status:** Implementation, adversarial suite, and simulation receipt generation verified locally under founder CR1 directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Packages verified & hardened:**
+  - **P8.4, PILOT-01 (Bounded Commercial Pilot Charter, Financial Stop-Loss & Simulation Runner):**
+    - Implemented `PilotStopLossEngine` in `src/lib/compliance/pilotStopLossEngine.ts` and CLI runner `scripts/compliance/simulate-pilot-stop-loss.mjs` with strict TypeScript contracts (0 `any` types), Transactional Outbox for marketing top-ups, and in-flight promise deduplication for concurrent bursts.
+    - Verified single-property isolation boundary: restricts ad spend strictly to `listing_1` ("Wayanad Sanctuary") and throws `UNAUTHORIZED_PILOT_PROPERTY` on any external listing attempt.
+    - Verified hard stop-loss caps: enforces ₹50,000 INR (5,000,000 paise) aggregate cap and ₹2,000 INR (200,000 paise) daily cap, rejecting overages with `PILOT_BUDGET_CAP_EXCEEDED` and `PILOT_DAILY_CAP_EXCEEDED`.
+    - Verified 95% circuit breaker: automatically halts campaigns and transitions state to `CIRCUIT_BREAKER_PAUSED` when cumulative spend reaches or crosses ₹47,500 INR (4,750,000 paise).
+    - Verified trapped cash escrow: unspent funds lock into the internal platform wallet ledger; external card refunds are prevented.
+    - Generated certified simulation receipt `docs/harvo/receipts/CR1_PILOT_STOP_LOSS_SIMULATION_RECEIPT.json` cryptographically binding charter SHA-256 (`399efb723e96d746d4bdbd64043bfb29432e3cfc022a712b5f23ed7506cf3cc1`) and receipt SHA-256 (`5b9d35f5cfd28944a6e22a6bf9836262d87a0b2bdf8a414e59d1066ad00dcc58`).
+    - Authored and verified adversarial regression suite in `src/test/harvo/track4_pilot_simulation.test.ts` (7 deterministic tests on isolated local runtime):
+      1. *Adversarial Scenario 1 (Mid-Transaction Connection Drop Rollback):* Verified atomic rollback on mid-execution database socket termination during wallet debit; clean atomic `ROLLBACK` verified with zero zombie records.
+      2. *Adversarial Scenario 2 (5-Click Concurrency Burst in 200ms):* Rapid identical top-ups deduplicated via in-flight promise caching and idempotency keys; exactly 1 database write executed, 4 deduplicated replays returned with `isReplay: true`.
+      3. *Adversarial Scenario 3 (Out-of-Order Telemetry Webhook):* Inverted telemetry packet sequence (packet 2 arriving after packet 3) safely rejected as stale (`isStale: true`, `applied: false`), maintaining monotonic cumulative spend without regression.
+      4. *Scenario 4 (95% Circuit Breaker Automatic Trip):* Transitions to `CIRCUIT_BREAKER_PAUSED` at ₹47,500 spend threshold.
+      5. *Scenario 5 (Property Exclusivity):* Strictly rejects non-pilot properties with `UNAUTHORIZED_PILOT_PROPERTY`.
+      6. *Scenario 6 (Budget Overrun Rejection):* Rejects allocations exceeding aggregate cap or daily cap.
+      7. *Scenario 7 (Receipt Artifact Generation):* Generates certified simulation receipt with valid SHA-256 hashes.
+- **Verified Suite Quality Matrix:**
+  - Adversarial suite: **1 test suite, 7 passing tests (100%)** (`track4_pilot_simulation.test.ts`).
+  - Existing pilot harness: **1 test suite, 6 passing tests (100%)** (`pilot_tranche.test.ts`).
+  - Total pilot test coverage: **13 passing tests (100%)**.
+  - CLI simulation runner: **0 errors** (`SIMULATION_CERTIFIED`, Charter SHA-256 `399efb723e96d746d4bdbd64043bfb29432e3cfc022a712b5f23ed7506cf3cc1`).
+  - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
+  - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+
+

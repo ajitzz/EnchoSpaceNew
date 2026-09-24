@@ -1443,9 +1443,11 @@ No code, migration, production message, provider action or deployment was perfor
 1. **Who is the first narrowly defined host customer Encho will win, and what measurable outcome will make that host pay Encho repeatedly?**
 2. For Google, is each independent host/property business the end advertiser, or is Encho contractually and operationally the advertiser of record? Provider clearance is required before preserving a single serving-account model.
 3. Which direct campaign costs are recoverable in `C`, and which costs must Encho absorb from the 3–5% contribution?
-4. What maximum cash loss, provider spend and manual support time is permitted for the first bounded pilot?
+4. **[RESOLVED BY TRACK 4 / CR1-024]** What maximum cash loss, provider spend and manual support time is permitted for the first bounded pilot?
+   - *Resolution:* Strictly bounded by `TRACK_4_BOUNDED_PILOT_AGREEMENT_AND_STOP_LOSS_CHARTER.md` and enforced by `PilotStopLossEngine`: ₹50,000 INR aggregate cap, ₹2,000 INR daily burn cap, and automated 95% spend circuit breaker (₹47,500 INR) triggering immediate pause across Meta/Google.
 5. Is organic publication on Encho's social channels included with listing/plan fees, separately paid, or allocated editorially?
-6. What objective definition and loss limit applies before a ₹50,000 campaign may scale beyond its initial test tranche?
+6. **[RESOLVED BY TRACK 4 / CR1-024]** What objective definition and loss limit applies before a ₹50,000 campaign may scale beyond its initial test tranche?
+   - *Resolution:* Full board Go/No-Go sign-off required evaluating ROAS ($\ge 3.0\times$), inquiry conversion ($\ge 15\%$), 100% CRM lead containment, and statutory tax reconciliation. Certified simulation receipt generated in `CR1_PILOT_STOP_LOSS_SIMULATION_RECEIPT.json`.
 7. Which property-page presence signal is useful enough to show, and what exact truth/privacy contract will govern it?
 8. What support hours, languages and staffing capacity can Encho actually provide, and may assigned staff answer as Encho or only draft for hosts?
 9. Which notification channels, verified destinations, message-access disclosure and retention rules are approved for the service pilot?
@@ -1454,3 +1456,4 @@ No code, migration, production message, provider action or deployment was perfor
 ## Phase status
 
 Phase 1 remains active. Do not begin blueprinting, implementation or audit execution until the founder says `NextO`.
+

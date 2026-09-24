@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.0.0",
+  "type": "ENCHO_CR1_PILOT_STOP_LOSS_SIMULATION_RECEIPT",
+  "status": "SIMULATION_CERTIFIED",
+  "receiptId": "rcpt_pilot_sim_1790266598646",
+  "generatedAt": "2026-09-24T16:16:38.646Z",
+  "charterFilePath": "docs/compliance/TRACK_4_BOUNDED_PILOT_AGREEMENT_AND_STOP_LOSS_CHARTER.md",
+  "charterSha256": "399efb723e96d746d4bdbd64043bfb29432e3cfc022a712b5f23ed7506cf3cc1",
+  "receiptSha256": "5b9d35f5cfd28944a6e22a6bf9836262d87a0b2bdf8a414e59d1066ad00dcc58",
+  "propertyScope": {
+    "listingId": "listing_1",
+    "propertyName": "Wayanad Sanctuary",
+    "hostId": "pilot_host_wayanad"
+  },
+  "financialStopLoss": {
+    "maxAggregateCapPaise": 5000000,
+    "maxDailyCapPaise": 200000,
+    "finalSimulatedSpendPaise": 4760000,
+    "finalSimulatedSpendInr": 47600,
+    "circuitBreakerThresholdPaise": 4750000
+  },
+  "circuitBreakerTriggered": true,
+  "commercialKpis": {
+    "roasAchieved": 3.42,
+    "inquiriesGenerated": 24,
+    "bookingsCaptured": 6,
+    "grossBookingValuePaise": 16279200,
+    "grossBookingValueInr": 162792,
+    "conversionRatePercent": 25
+  },
+  "complianceAudits": {
+    "zeroDataLeakageVerified": true,
+    "trappedCashEscrowEnforced": true,
+    "taxWithholdingReconciled": true
+  },
+  "boardVerdict": "GO_FOR_EXPANDED_STAGE"
+}

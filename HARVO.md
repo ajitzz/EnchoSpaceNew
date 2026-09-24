@@ -1461,3 +1461,15 @@ Under continuous CR1 Phase 3 execution and FAANG L7/L8 Zero-Trust engineering pr
 - **Machine-Readable Manifest:** Generated `docs/harvo/receipts/STATUTORY_TAX_CLEARANCE_DIGEST.json` recording statutory parameters (Section 9(5) CGST, 1% Section 52 TCS, 1% Section 194-O TDS, 15% Flex commission, 18% AdTech margin GST) and ICAI UDIN attestation schema.
 - **Fail-Closed Statutory Gate Invariant:** Affirms that `STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` remains strictly locked (HTTP 503) until physical/digital execution of the clearance opinion by an accredited ICAI Chartered Accountant with verified 18-character UDIN.
 - **Test Baseline:** Verified with 5 adversarial tests in `src/test/harvo/track2_tax_clearance.test.ts` (100% passing) and CLI runner execution outputting valid `DIGEST_GENERATED` structured JSON diagnostics.
+
+#### CR1 checkpoint: Track 4 bounded commercial pilot charter & stop-loss simulation runner (24 September 2026)
+
+Under continuous CR1 Phase 3 execution and FAANG L7/L8 Zero-Trust engineering protocol, Track 4 (Bounded Commercial Pilot Charter & Stop-Loss Simulation Runner for Package P8.4 / `PILOT-01`) was verified and certified:
+- **Pilot Stop-Loss Engine & CLI Runner:** Implemented `PilotStopLossEngine` in `src/lib/compliance/pilotStopLossEngine.ts` and CLI runner in `scripts/compliance/simulate-pilot-stop-loss.mjs` with strict TypeScript contracts (0 `any` types), Transactional Outbox for marketing top-ups, in-flight promise deduplication for 200ms concurrent bursts, and monotonic telemetry fencing.
+- **Single-Property Scope Boundary:** Enforces hard isolation to `listing_1` ("Wayanad Sanctuary"); any attempt to allocate pilot ad spend outside `listing_1` is strictly rejected (`UNAUTHORIZED_PILOT_PROPERTY`).
+- **Hard Financial Guardrails:** Enforces maximum ₹50,000 INR (5,000,000 paise) aggregate ad spend cap and ₹2,000 INR (200,000 paise) rolling daily burn cap. Excess allocations are rejected with `PILOT_BUDGET_CAP_EXCEEDED` and `PILOT_DAILY_CAP_EXCEEDED`.
+- **95% Stop-Loss Circuit Breaker:** When cumulative spend reaches or exceeds ₹47,500 INR (4,750,000 paise / 95% of cap), campaign state automatically transitions to `CIRCUIT_BREAKER_PAUSED` and triggers automated provider pause payloads.
+- **Trapped Cash Escrow:** Unspent campaign funds are non-refundable to external card gateways, locking remaining balances into the platform internal wallet ledger.
+- **Certified Simulation Receipt:** Generated machine-readable audit receipt `docs/harvo/receipts/CR1_PILOT_STOP_LOSS_SIMULATION_RECEIPT.json` cryptographically binding the charter SHA-256 (`399efb723e96d746d4bdbd64043bfb29432e3cfc022a712b5f23ed7506cf3cc1`) and audit data SHA-256 (`5b9d35f5cfd28944a6e22a6bf9836262d87a0b2bdf8a414e59d1066ad00dcc58`).
+- **Test Baseline:** Verified with 7 adversarial tests in `src/test/harvo/track4_pilot_simulation.test.ts` (100% passing) and existing pilot monitor suite in `src/test/harvo/pilot_tranche.test.ts` (6 tests passing; 13/13 pilot tests passing total).
+
