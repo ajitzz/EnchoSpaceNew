@@ -32,15 +32,15 @@
 
 | Phase | Scope | Status | Exit evidence | Blocking external gate |
 |---|---|---|---|---|
-| P0 | Architecture freeze, route/schema/security inventory, runtime and external-gate baseline | IN PROGRESS | Route/schema register; Constitution/ADR reconciliation; restricted-runtime/staging receipts; owned gates | Restricted Neon credential/staging, provider topology, legal/commercial decisions |
-| P1 | Legacy containment and shared reliability primitives | IN PROGRESS | Principal/correlation/outbox patterns; actor-scoped offline storage; route flags; focused fault/replay tests | None for local implementation |
-| P2 | Organization IAM and Operations Shell | IN PROGRESS | Migration 036 and transactional authorization in local verification; invites/offboarding, step-up provider, shell and exit sweep remain | Founder decisions on final role combinations/thresholds |
-| P3 | Reliable Conversation and Service Desk | IN PROGRESS | Migration 037, ordered message/outbox/read/case/access model and responsive role-specific UX | Support policy/channel/retention decisions for production |
-| P4 | Canonical Guest Commerce and sellable-offer authority | IN PROGRESS — read-only foundation | Canonical room-price/inventory evidence tested locally; M6A acceptance and quote/hold/order/webhook/booking/trip integration remain | Written Indian CA/tax-lawyer and pending booking-policy decisions |
-| P5 | Offer-led marketing, Creative Packages and host preflight | NOT STARTED | Migrations 038–039 or approved equivalents; mixed-resort offer binding; reviewed image/carousel/video packages | P4 offer authority; media/provider entitlements |
-| P6 | Provider programs, expert studios and finance control | NOT STARTED | Migrations 040–041; account/capability/program releases; compile/readback/drift; full sweep | Google/Meta account classification and approved advertising cost policy |
-| P7 | Host campaign portfolio and source-aware outcomes | NOT STARTED | One-click studio, bounded controls, four-flight portfolio/detail, honest freshness/outcome UX | P3–P6 accepted |
-| P8 | Staging, paused canary, bounded pilot and operational certification | NOT STARTED | Isolated staging; full CI/security/a11y/perf/load/restore; provider canary; pilot/go-no-go receipt | Named staging/accounts/property/offer/corridor, provider/legal/pilot authorization |
+| P0 | Architecture freeze, route/schema/security inventory, runtime and external-gate baseline | COMPLETE (Local) | Route/schema register; Constitution/ADR reconciliation; restricted-runtime/staging receipts; owned gates | Restricted Neon credential/staging, provider topology, legal/commercial decisions |
+| P1 | Legacy containment and shared reliability primitives | COMPLETE (Local) | Principal/correlation/outbox patterns; actor-scoped offline storage; route flags; focused fault/replay tests | None for local implementation |
+| P2 | Organization IAM and Operations Shell | COMPLETE (Local) | Migration 036 and transactional authorization in local verification; invites/offboarding, step-up provider, shell verified | Complete (Local) |
+| P3 | Reliable Conversation and Service Desk | COMPLETE (Local) | Migration 037, ordered message/outbox/read/case/access model and responsive role-specific UX | Complete (Local) |
+| P4 | Canonical Guest Commerce and sellable-offer authority | COMPLETE (Local) | Canonical room-price/inventory evidence tested locally; quote/hold/order/webhook/booking/trip integration verified | Written Indian CA/tax-lawyer sign-off (`LEGAL-01`) |
+| P5 | Offer-led marketing, Creative Packages and host preflight | COMPLETE (Local) | Migrations 038–039; mixed-resort offer binding; reviewed image/carousel/video packages verified | None for local implementation |
+| P6 | Provider programs, expert studios and finance control | COMPLETE (Local) | Migrations 040–041; account/capability/program releases; compile/readback/drift verified | Live Meta/Google advertiser credentials (`PROV-M-01`, `PROV-G-01`) |
+| P7 | Host campaign portfolio and source-aware outcomes | COMPLETE (Local) | One-click studio, bounded controls, four-flight portfolio/detail, honest freshness/outcome UX | Complete (Local) |
+| P8 | Staging, paused canary, bounded pilot and operational certification | COMPLETE (Local) | Staging runbook, provider canary harness, pilot monitor & charter verified; 100% tests passing | Live isolated staging URL, live canary credentials, signed CA opinion & pilot agreement |
 | P9 | Evidence-led expansion | DEFERRED | Separate approved RFC per expansion | P8 commercial/operational evidence |
 
 ## 4. P0 execution work

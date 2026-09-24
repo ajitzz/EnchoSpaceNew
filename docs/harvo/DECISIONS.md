@@ -839,4 +839,37 @@ production readiness assertion follows. See the dedicated hardening receipt.
 - **Progress:** 38 of 48 packages complete = **79.2%** (100% of all local engineering packages complete).
 - **Preserved External Gates:** P4.3 (Indian CA/tax sign-off), P6.1 & P6.4 (provider accounts), P8.1 & P8.3 (staging & paused canary), P8.4 (bounded commercial pilot).
 
+### CR1-012 — Track 1, 2, 3 External Gate Deliverables & Canary Harness (24 September 2026)
+
+**Status:** Implementation verified locally under founder CR1 directive.
+- **Deliverables closed:**
+  - **Track 1 (Staging Preflight & Roles Verifier):**
+    - Authored `.env.staging.template` enforcing least privilege and fail-closed compliance gates.
+    - Authored `scripts/deployment/staging-preflight.mjs` validating JWT length >= 32, database SSL `?sslmode=require`, compliance gates `STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'`, and sandbox payment keys.
+    - Authored `scripts/deployment/verify-database-roles.mjs` verifying `rolsuper=false`, `rolbypassrls=false`, and table-level RLS.
+    - Verified with 7/7 tests passing in `src/test/harvo/staging_preflight.test.ts`.
+  - **Track 2 (Statutory Tax Clearance Memorandum):**
+    - Authored `docs/compliance/TRACK_2_STATUTORY_TAX_CLEARANCE_MEMORANDUM_AND_CA_PACKET.md` providing complete statutory guidance under Section 9(5) CGST Act, Section 52 1% TCS, Section 34 cancellation credit notes, SAC 998313 advertising margin markup, and CA execution register.
+  - **Track 3 (Provider Canary Readback Harness):**
+    - Authored `scripts/deployment/provider-canary-runner.mjs` auditing Meta/Google advertiser credentials, validating zero-spend `PAUSED` status with Housing category enforcement, and generating immutable receipts.
+    - Verified with 10/10 tests passing in `src/test/harvo/provider_canary.test.ts`.
+
+### CR1-013 — Track 4 Bounded Commercial Pilot Tranche & Staging Orchestrator (24 September 2026)
+
+**Status:** Implementation verified locally under founder CR1 directive.
+- **Deliverables closed:**
+  - **Track 4 (Bounded Commercial Pilot Charter & Stop-Loss Harness):**
+    - Authored `docs/compliance/TRACK_4_BOUNDED_PILOT_AGREEMENT_AND_STOP_LOSS_CHARTER.md` formalizing ₹50,000 INR hard aggregate cap, ₹2,000 INR daily burn rate, 95% automated circuit breaker pause, Listing 1 ("Wayanad Sanctuary") property quarantine, Walled Garden CRM lead masking, and non-refundable internal wallet escrow.
+    - Authored `scripts/deployment/pilot-tranche-monitor.mjs` implementing runtime stop-loss monitoring, monotonic spend handling, idempotency deduplication under 200ms bursts, transaction rollback under network disconnects, and `CR1_PILOT_GO_NOGO_RECEIPT.json` generation.
+    - Verified with 6/6 tests passing in `src/test/harvo/pilot_tranche.test.ts`.
+  - **Track 1 Orchestration (Staging Deployment Runbook):**
+    - Authored `scripts/deployment/run-staging-deployment.mjs` orchestrating preflight checks, database role verification, and generating `CR1_STAGING_DEPLOYMENT_RECEIPT.json`.
+    - Verified with 4/4 tests passing in `src/test/harvo/staging_runbook.test.ts`.
+- **Verified Suite Quality Matrix:**
+  - Full automated test suite: **137 test suites, 1,881 passing tests (100%)**.
+  - TypeScript static verification: 0 errors (`tsc`).
+  - ESLint code quality: 0 errors / 0 warnings.
+  - Production asset bundle: verified 44 public assets.
+
+
 

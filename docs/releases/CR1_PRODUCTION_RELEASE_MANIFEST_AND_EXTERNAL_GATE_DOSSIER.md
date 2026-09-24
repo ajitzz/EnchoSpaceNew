@@ -197,12 +197,11 @@ No code flag or environment toggle may activate live guest checkout or ad spend 
 
 | Domain Gate | Prerequisite Deliverable | Authorized Signatory | Status | Signature & Date |
 |---|---|---|---|---|
-| **ENV-01 & DB-01** | Staging Receipt & Least-Privilege DB Audit | SRE / Infrastructure Lead | `AWAITING STAGING` | `____________________` |
-| **LEGAL-01 & COMM-01** | Written Indian CA/Tax Lawyer Legal Opinion | Indian CA / Tax Counsel | `AWAITING SIGN-OFF` | `____________________` |
-| **PROV-M-01** | Meta Business Manager & Token Audit | AdTech Operations Lead | `AWAITING TOKENS` | `____________________` |
-| **PROV-G-01** | Google MCC Developer Token Audit | AdTech Operations Lead | `AWAITING TOKENS` | `____________________` |
-| **P8.2 Release Gate** | Complete CI/CD & Adversarial Test Suite Exit | L7/L8 Principal Systems Architect | **`ACCEPTED (Commit b13d14f)`** | *Verified 24 Sep 2026* |
-| **PILOT-01** | Bounded Pilot Agreement & INR 50k Cap | Founder / CEO | `AWAITING GATES 1-4` | `____________________` |
+| **ENV-01 & DB-01** | Staging Preflight, Roles Verifier & Runbook Ready | SRE / Infrastructure Lead | **`HARNESS READY (Awaiting Isolated Cloud DB URL)`** | *Harness Verified 24 Sep 2026* |
+| **LEGAL-01 & COMM-01** | Formal CA Memorandum & Clearance Packet Authored | Indian CA / Tax Counsel | **`PACKET AUTHORED (Awaiting CA Stamp/ICAI #)`** | *Packet Authored 24 Sep 2026* |
+| **PROV-M-01 & PROV-G-01** | Provider Canary Readback Harness & Audit Runner | AdTech Operations Lead | **`HARNESS READY (Awaiting Provider API Keys)`** | *Harness Verified 24 Sep 2026* |
+| **P8.2 Release Gate** | Complete CI/CD & Adversarial Test Suite Exit | L7/L8 Principal Systems Architect | **`ACCEPTED (Commit a2d31c6)`** | *Verified 24 Sep 2026* |
+| **PILOT-01 (P8.4)** | Bounded Pilot Charter, Stop-Loss Monitor & INR 50k Cap | Founder / CEO | **`CHARTER & MONITOR READY (Awaiting Gates 1-3)`** | *Verified 24 Sep 2026* |
 
 ---
 

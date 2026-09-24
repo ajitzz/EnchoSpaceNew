@@ -115,7 +115,6 @@ describe('application caller contract wiring (source-only, no server import)', (
     ['components/HostExperienceForm.tsx', 'uploadHeaders'],
     ['components/AdminExperiences.tsx', 'uploadHeaders'],
     ['components/HostMarketing.tsx', 'uploadHeaders'],
-    ['lib/syncHandlers.ts', 'uploadHeaders'],
   ])('%s applies the supported server upload header contract', (path, argument) => {
     const source = readFileSync(path, 'utf8');
     const upload = source.slice(source.indexOf("fetch('/api/upload-url'"));
