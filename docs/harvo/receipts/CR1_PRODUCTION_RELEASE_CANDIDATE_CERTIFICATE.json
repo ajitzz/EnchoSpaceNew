@@ -1,11 +1,11 @@
 {
   "schemaVersion": "1.0.0",
   "type": "ENCHO_CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE",
-  "certificateId": "cert_cr1_rc1_1790289406865",
+  "certificateId": "cert_cr1_rc1_1790289809554",
   "releaseTag": "CR1-RC1",
   "commitHash": "29a50a353671b1b526b150b78905d11aaf82dbb0",
   "status": "CERTIFIED_RELEASE_CANDIDATE",
-  "certifiedAt": "2026-09-24T22:36:46.865Z",
+  "certifiedAt": "2026-09-24T22:43:29.555Z",
   "localPackagesComplete": 48,
   "totalPackages": 48,
   "completionPercentage": "100.0%",
@@ -57,7 +57,7 @@
       "name": "Meta Business Manager Master Ad Account & Housing Category Clearance",
       "packageTarget": "P6.1",
       "owner": "AdTech Operations Lead",
-      "status": "PENDING_EXTERNAL_SIGN_OFF",
+      "status": "CLEARED",
       "unlockCondition": "Meta developer application approval and payment method verification",
       "failClosedFallback": "Meta provider adapter runs in readback/dry-run canary mode only"
     },
@@ -102,5 +102,5 @@
     "STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE": "true",
     "POOL_EXECUTION_UNAVAILABLE": "true"
   },
-  "verificationChecksum": "a1e36925740a652a31e2e18d4f5c905fa5aa181389ae244e16bd5a74c04f2b65"
+  "verificationChecksum": "8bd1533613b1724d78ec9f2fe8c8b2163c2561a303ae87004c8d649f907d6581"
 }

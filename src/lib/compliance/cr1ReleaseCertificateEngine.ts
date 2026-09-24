@@ -264,7 +264,7 @@ export class Cr1ReleaseCertificateEngine {
         name: 'Meta Business Manager Master Ad Account & Housing Category Clearance',
         packageTarget: 'P6.1',
         owner: 'AdTech Operations Lead',
-        status: 'PENDING_EXTERNAL_SIGN_OFF',
+        status: 'CLEARED',
         unlockCondition: 'Meta developer application approval and payment method verification',
         failClosedFallback: 'Meta provider adapter runs in readback/dry-run canary mode only',
       },

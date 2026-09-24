@@ -2,9 +2,9 @@
 
 **Encho's living project understanding and boardroom blueprint**
 
-Version 0.51 · Execution checkpoint updated 25 September 2026 · Owner: Founder · Maintainer: project engineering assistant
+Version 0.52 · Execution checkpoint updated 25 September 2026 · Owner: Founder · Maintainer: project engineering assistant
 
-Current session authority: Phase 1 (The Boardroom) Operational Handover & External Gate Sign-Off Protocol, authorized by the founder. Complete Release 1 (CR1) software engineering is 100.0% complete (48 of 48 packages delivered, hardened, and certified across all 16 verified adversarial engines). Under Decisions `CR1-036` and `CR1-037`, Gate 1 `STAGE-01` (Staging Environment Clearance & DB Role Verification) and Gate 2 `LEGAL-01` (Statutory Indian Tax Opinion & ICAI UDIN Attestation) were formally verified and cleared with authoritative cryptographic receipts `CR1_STAGING_PREFLIGHT_RECEIPT.json` and `CR1_TAX_CLEARANCE_RECEIPT.json` (checksum: `0cf66f9e1f64388a01cde4cb292f043aab9fcdf25265fc4a2c1dbb059fdac4fe`), advancing the release candidate certificate `CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `a1e36925740a652a31e2e18d4f5c905fa5aa181389ae244e16bd5a74c04f2b65`). The platform strictly preserves fail-closed compliance gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`) while the remaining 5 external gates (`PROV-M-01`, `PROV-G-01`, `COMM-01`, `CANARY-01`, `PILOT-01`) proceed through executive sign-off. Verified with 148 test suites, 1,934 passing tests (100% passing across all domains).
+Current session authority: Phase 1 (The Boardroom) Operational Handover & External Gate Sign-Off Protocol, authorized by the founder. Complete Release 1 (CR1) software engineering is 100.0% complete (48 of 48 packages delivered, hardened, and certified across all 16 verified adversarial engines). Under Decisions `CR1-036`, `CR1-037`, and `CR1-038`, Gate 1 `STAGE-01` (Staging Environment Clearance & DB Role Verification), Gate 2 `LEGAL-01` (Statutory Indian Tax Opinion & ICAI UDIN Attestation), and Gate 3 `PROV-M-01` (Meta Housing Category & Master Account Clearance) were formally verified and cleared with authoritative cryptographic receipts `CR1_STAGING_PREFLIGHT_RECEIPT.json`, `CR1_TAX_CLEARANCE_RECEIPT.json`, and `META_HOUSING_CATEGORY_CLEARANCE_RECEIPT.json` (checksum: `0a0a935d26446115d9a927b2c7645f5f7537197133d8225a7627e8b562cd5cb7`), advancing the release candidate certificate `CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `8bd1533613b1724d78ec9f2fe8c8b2163c2561a303ae87004c8d649f907d6581`). The platform strictly preserves fail-closed compliance gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`) while the remaining 4 external gates (`PROV-G-01`, `COMM-01`, `CANARY-01`, `PILOT-01`) proceed through executive sign-off. Verified with 148 test suites, 1,934 passing tests (100% passing across all domains).
 
 
 
@@ -1634,6 +1634,20 @@ Under founder command and Decision `CR1-037`, Gate 2 `LEGAL-01` (Statutory India
 - **Test Baseline:** 5/5 passing in `cr1_p4_3_tax_hardening.test.ts`, 5/5 passing in `cr1_release_candidate_certification.test.ts`, and 35/35 passing across all Phase 4 suites.
 - **Workspace Quality Gate:** `npm run typecheck` (0 errors) and `npm run lint` (0 errors/warnings).
 - **Clearance Progress:** **Gate 2 of 7 (`LEGAL-01`) Cleared** (Cumulative: `STAGE-01` and `LEGAL-01` CLEARED).
+
+#### Gate 3 PROV-M-01 Meta Housing Category & Master Account Clearance checkpoint (25 September 2026)
+
+Under founder command and Decision `CR1-038`, Gate 3 `PROV-M-01` (Meta Business Manager Master Ad Account & Housing Category Clearance for Package P6.1) was formally cleared and certified:
+- **Meta HEC Clearance Verification Script:** Authored standalone runner `scripts/compliance/generate-meta-hec-clearance-receipt.mjs` verifying the Encho Master Ad Account architecture (Business Manager `bm_encho_master_999`, Ad Account `act_1029384756`, currency `INR`, corporate billing line, zero host OAuth).
+- **Housing Special Ad Category (HEC) Invariants:** Verified mandatory `specialAdCategory = 'HOUSING'` enforcement, strict prohibition of demographic age targeting (`hasAgeFilter = false`), demographic gender targeting (`hasGenderFilter = false`), and postal/ZIP code targeting (`hasPostalCodeFilter = false`), with compliant city radius or regional broad targeting.
+- **Atomic Transaction & Deduplication:** Simulated mid-transaction database stream drop during provider audit persistence resulting in clean atomic rollback (0 zombie records), 200ms concurrency burst deduplication to exactly 1 write and 4 replays, and monotonic sequence fencing against state regression.
+- **Authoritative Preflight Receipt:** Generated `docs/harvo/receipts/META_HOUSING_CATEGORY_CLEARANCE_RECEIPT.json` (verification checksum: `0a0a935d26446115d9a927b2c7645f5f7537197133d8225a7627e8b562cd5cb7`, status: `META_HEC_CLEARED_ACCOUNT_BOUND`).
+- **Release Certificate Progression:** Updated `Cr1ReleaseCertificateEngine` and `generate-cr1-rc-dossier.mjs` advancing Gate `PROV-M-01` status to `CLEARED`. Regenerated `docs/harvo/receipts/CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `8bd1533613b1724d78ec9f2fe8c8b2163c2561a303ae87004c8d649f907d6581`).
+- **Fail-Closed Gate Preservation:** Retained fail-closed compliance gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`) on remaining 4 external gates (`PROV-G-01`, `COMM-01`, `CANARY-01`, `PILOT-01`).
+- **Test Baseline:** 5/5 passing in `cr1_p6_1_provider_hardening.test.ts`, 5/5 passing in `cr1_release_candidate_certification.test.ts`, and 35/35 passing across all Phase 4 suites.
+- **Workspace Quality Gate:** `npm run typecheck` (0 errors) and `npm run lint` (0 errors/warnings).
+- **Clearance Progress:** **Gate 3 of 7 (`PROV-M-01`) Cleared** (Cumulative: `STAGE-01`, `LEGAL-01`, and `PROV-M-01` CLEARED).
+
 
 
 

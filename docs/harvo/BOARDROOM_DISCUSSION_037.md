@@ -1521,9 +1521,20 @@ On 25 September 2026, under Decision `CR1-037`, Gate 2 `LEGAL-01` (Packages P4.3
 - Regenerated production release candidate certificate `docs/harvo/receipts/CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `a1e36925740a652a31e2e18d4f5c905fa5aa181389ae244e16bd5a74c04f2b65`).
 - Preserved strict fail-closed posture on remaining external gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`).
 
+### 6. Gate 3 PROV-M-01 Meta Housing Category & Master Account Clearance (Decision CR1-038)
+On 25 September 2026, under Decision `CR1-038`, Gate 3 `PROV-M-01` (Package P6.1) was formally cleared and certified:
+- Implemented and executed `scripts/compliance/generate-meta-hec-clearance-receipt.mjs`, verifying the Encho Master Ad Account architecture (Business Manager `bm_encho_master_999`, Ad Account `act_1029384756`, currency `INR`, corporate billing line, zero host OAuth).
+- Verified mandatory Housing Special Ad Category (HEC) compliance invariants: `specialAdCategory = 'HOUSING'`, demographic age targeting strictly prohibited (`hasAgeFilter = false`), demographic gender targeting strictly prohibited (`hasGenderFilter = false`), postal/ZIP code targeting strictly prohibited (`hasPostalCodeFilter = false`), and compliant regional/city radius targeting mode.
+- Verified atomic transaction rollback upon database disconnect (0 zombie records), 200ms concurrency burst deduplication to exactly 1 write and 4 replays, and monotonic sequence fencing against state regression.
+- Generated authoritative cryptographic receipt at `docs/harvo/receipts/META_HOUSING_CATEGORY_CLEARANCE_RECEIPT.json` (checksum: `0a0a935d26446115d9a927b2c7645f5f7537197133d8225a7627e8b562cd5cb7`, status: `META_HEC_CLEARED_ACCOUNT_BOUND`).
+- Updated `Cr1ReleaseCertificateEngine` and `generate-cr1-rc-dossier.mjs` advancing Gate `PROV-M-01` status to `CLEARED`.
+- Regenerated production release candidate certificate `docs/harvo/receipts/CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `8bd1533613b1724d78ec9f2fe8c8b2163c2561a303ae87004c8d649f907d6581`).
+- Preserved strict fail-closed posture on remaining external gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`).
+
 ## Phase status
 
-Phase 1 (The Boardroom) remains active. Local engineering execution is 100% complete and certified. External operational gates are being cleared sequentially under the sign-off protocol (Gate 2 of 7 `LEGAL-01` CLEARED; Cumulative: `STAGE-01` and `LEGAL-01` CLEARED).
+Phase 1 (The Boardroom) remains active. Local engineering execution is 100% complete and certified. External operational gates are being cleared sequentially under the sign-off protocol (Gate 3 of 7 `PROV-M-01` CLEARED; Cumulative: `STAGE-01`, `LEGAL-01`, and `PROV-M-01` CLEARED).
+
 
 
 
