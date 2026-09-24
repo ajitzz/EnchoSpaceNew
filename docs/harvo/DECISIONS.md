@@ -1170,6 +1170,25 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - Production build: **0 errors** (`npm run build`).
   - Total CR1 local engineering completion: **42 of 48 packages complete (87.5% — 100% of all local engineering packages across all business domains complete)**.
 
+### CR1-028 — Staging Deployment Hardening & DB Role Verification (24 September 2026)
+
+**Status:** Implementation and adversarial test suite verified locally under founder CR1 directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Packages verified & hardened:**
+  - **Staging Deployment Environment & Least-Privilege Role Hardening (P0.5, P8.1 / STAGE-01 Gate):**
+    - Implemented `StagingHardeningEngine` in `src/lib/compliance/stagingHardeningEngine.ts` with strict TypeScript contracts (0 `any` types), Transactional Outbox for preflight audit logging, in-flight promise caching for 200ms burst deduplication, monotonic staging migration sequence fencing, superuser/BYPASSRLS rejection, and mandatory SSL mode `require`.
+    - Verified least-privilege role invariant: PostgreSQL connection queries to `pg_roles` immediately fail closed with `CRITICAL_SECURITY_LEAST_PRIVILEGE_VIOLATION` if the runtime possesses `rolsuper=true` or `rolbypassrls=true`.
+    - Verified SSL transport enforcement: database connection strings missing `?sslmode=require` fail closed with `DATABASE_SSL_NOT_ENFORCED`.
+    - Verified atomic outbox rollback: socket drop simulated mid-execution during staging preflight audit logging executes clean atomic `ROLLBACK` with 0 zombie preflight or audit records.
+    - Verified 200ms burst deduplication: 5 simultaneous preflight claims within 200ms deduplicate via in-flight promise cache and idempotency keys to exactly 1 database write and 4 cached replays (`isReplay: true`).
+    - Verified monotonic migration sequence guard: inverted migration sequences safely rejected as stale (`isStale: true`), strictly preventing database migration sequence regression.
+    - Authored and verified adversarial regression suite in `src/test/harvo/cr1_p0_5_staging_hardening.test.ts` (5 deterministic tests on isolated local runtime).
+- **Verified Suite Quality Matrix:**
+  - Adversarial staging hardening suite: **1 test suite, 5 passing tests (100%)** (`cr1_p0_5_staging_hardening.test.ts`).
+  - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
+  - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+  - Delivery ledger progress: **43 of 48 packages complete (89.6%)**.
+
+
 
 
 

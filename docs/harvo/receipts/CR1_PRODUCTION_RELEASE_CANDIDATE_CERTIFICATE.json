@@ -1,11 +1,11 @@
 {
   "schemaVersion": "1.0.0",
   "type": "ENCHO_CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE",
-  "certificateId": "cert_cr1_rc1_1790267931139",
+  "certificateId": "cert_cr1_rc1_1790280645457",
   "releaseTag": "CR1-RC1",
   "commitHash": "41c51b1a9a79df513dc71b1b0e7ccf119286e1d7",
   "status": "CERTIFIED_RELEASE_CANDIDATE",
-  "certifiedAt": "2026-09-24T16:38:51.137Z",
+  "certifiedAt": "2026-09-24T20:10:45.457Z",
   "localPackagesComplete": 42,
   "totalPackages": 48,
   "completionPercentage": "87.5%",
@@ -96,5 +96,5 @@
     "STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE": "true",
     "POOL_EXECUTION_UNAVAILABLE": "true"
   },
-  "verificationChecksum": "9ddb520cbccded0d1e7c30b785f2e4b36d69dbc2fbf4d3a35c563e90a2f9e1db"
+  "verificationChecksum": "96143b94f3b6ac249f1164226de6531721767d673ed3b3aae5ad2b4f00d93906"
 }

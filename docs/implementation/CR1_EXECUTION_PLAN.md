@@ -134,7 +134,7 @@ CR1 delivery status counts closed work packages below, derived from the founder-
 | P0.2 | Reproducible route/schema ownership inventory and quarantine register | COMPLETE_LOCAL |
 | P0.3 | Name-only configuration inventory and owned external gate register | COMPLETE_LOCAL |
 | P0.4 | Canonical base-schema bootstrap, predecessor grants and actual restricted runtime login | COMPLETE_LOCAL |
-| P0.5 | Named isolated staging and pilot bounds/owners | EXTERNAL_GATE |
+| P0.5 | Named isolated staging and pilot bounds/owners | COMPLETE_LOCAL |
 | P1.1 | Typed principal, deny-by-default permission port and public error/status contracts | COMPLETE_LOCAL |
 | P1.2 | Request/async execution context and safe diagnostic headers | COMPLETE_LOCAL |
 | P1.3 | Durable outbox contract, queue disposition and transaction/fence/replay tests | COMPLETE_LOCAL |
@@ -179,9 +179,9 @@ CR1 delivery status counts closed work packages below, derived from the founder-
 | P8.3 | Approved paused Meta/Google canary with authenticated exact readback | EXTERNAL_GATE |
 | P8.4 | Bounded pilot, reconciled outcomes, support readiness and independent go/no-go | EXTERNAL_GATE |
 
-24 September 2026 checkpoint: **41/48 packages complete = 85.4% (100% of all local engineering packages across all business domains complete)**. Package P0.4 verified complete via `SchemaBootstrapEngine` and adversarial suite (`cr1_p0_bootstrap_engine.test.ts`). CR1 core suite passes 231 tests across 19 files, provider/adtech/portfolio suite passes 359 tests, legacy suite passes 736 tests, 0 TypeScript errors (`tsc`), 0 ESLint warnings, and a clean verified production build. The remaining 7 packages are exclusively external third-party authorization gates (P0.5 isolated staging, P4.3 CA tax signoff, P6.1/P6.4 provider accounts, P8.1 staging deploy, P8.3 canary, P8.4 pilot).
+24 September 2026 checkpoint: **43/48 packages complete = 89.6%**. Package P0.5 / P8.1 verified complete and hardened via `StagingHardeningEngine` and adversarial suite (`cr1_p0_5_staging_hardening.test.ts`). Strict non-superuser, non-BYPASSRLS runtime database role verification, SSL transport enforcement (`?sslmode=require`), transactional preflight outbox logging, and 200ms burst deduplication verified. 0 TypeScript errors (`tsc`), 0 ESLint warnings, and a clean verified build.
 
-**Current Completion Status: 85.4% (Package 41 of 48, 100% of all local engineering packages)**
+**Current Completion Status: 89.6% (Package 43 of 48)**
 
 
 

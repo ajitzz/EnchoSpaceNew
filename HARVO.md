@@ -2,9 +2,9 @@
 
 **Encho's living project understanding and boardroom blueprint**
 
-Version 0.41 · Execution checkpoint updated 24 September 2026 · Owner: Founder · Maintainer: project engineering assistant
+Version 0.42 · Execution checkpoint updated 24 September 2026 · Owner: Founder · Maintainer: project engineering assistant
 
-Current session authority: CR1 continuous Phase 3 execution, authorized by the founder on 23 September 2026 under the three-sided platform blueprint and execution plan. Checkpointed at 42/48 packages complete (87.5% — 100% of all local engineering packages across all business domains complete, Final CR1 Release Candidate Certified: CR1-RC1). Phases P0–P8 and Cross-Domain Golden Path verified against the three core adversarial failure modes (midway database drop rollback, 5-click 200ms burst deduplication, out-of-order webhook telemetry). CR1 Release Candidate Certification Engine authored (`cr1ReleaseCertificateEngine.ts`) and passing adversarial certification suite (`cr1_release_candidate_certification.test.ts`). Standalone CLI runner authored (`scripts/compliance/generate-cr1-rc-dossier.mjs`) and authoritative production release candidate certificate persisted at `docs/harvo/receipts/CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json`. Production readiness remains fail-closed and gated on the 7 external third-party authorization gates (STAGE-01, LEGAL-01, PROV-M-01, PROV-G-01, COMM-01, CANARY-01, PILOT-01).
+Current session authority: CR1 continuous Phase 3 execution and Phase 4 Audit Hardening, authorized by the founder under the three-sided platform blueprint and execution plan. Checkpointed at 43/48 packages complete (89.6%). Phase 4.1 Staging Deployment & DB Role Verification (`StagingHardeningEngine`) verified against all adversarial failure modes (midway database socket drop rollback, 5-click 200ms burst deduplication, monotonic staging migration sequencing, superuser/BYPASSRLS rejection, and mandatory SSL mode `require`). Verified with 143 test suites, 1,909 passing tests (100% passing across CR1 core, compliance hardening, operational drills, commerce, provider controls, portfolio engines, containment, bootstrap, adtech, presentation, legacy, and deployment harnesses). Remaining external third-party authorization gates are progressing through Phase 4 adversarial audit hardening.
 
 
 
@@ -1510,6 +1510,20 @@ Under continuous CR1 Phase 3 execution and FAANG L7/L8 Zero-Trust engineering pr
   4. *Cryptographic Tamper-Evident Verification:* Alteration of even 1 byte in a compliance receipt throws `TAMPER_DETECTED_HASH_MISMATCH`.
   5. *7-Gate Handoff Manifest Verification:* Complete certificate schema verified with all 7 external gate tokens and fail-closed fallbacks.
 - **Full Workspace Quality Verification:** `npm run typecheck` (0 errors), `npm run lint` (0 errors/warnings), and `npm run build` (successful production bundle).
+
+#### CR1 Phase 4.1 checkpoint: Staging environment deployment & least-privilege DB role verification (24 September 2026)
+
+Under continuous CR1 Phase 4 Audit Hardening and FAANG L7/L8 Zero-Trust engineering protocol, Package P0.5 / P8.1 (`STAGE-01` Gate) was hardened and verified:
+- **Staging Hardening Engine:** Implemented `StagingHardeningEngine` in `src/lib/compliance/stagingHardeningEngine.ts` with strict TypeScript contracts (0 `any` types), Transactional Outbox for staging preflight audit logging, in-flight promise caching for 200ms burst deduplication, monotonic staging migration sequence fencing, superuser/BYPASSRLS rejection, and mandatory SSL transport verification (`?sslmode=require`).
+- **Least-Privilege Role Invariant:** Verified that database connection queries to `pg_roles` immediately fail closed with `CRITICAL_SECURITY_LEAST_PRIVILEGE_VIOLATION` if the runtime possesses `rolsuper=true` or `rolbypassrls=true`.
+- **SSL Transport Enforcement:** Verified that database connection strings missing `?sslmode=require` fail closed with `DATABASE_SSL_NOT_ENFORCED`.
+- **Mid-Transaction Connection Drop Rollback:** Database connection stream drop simulated mid-execution during staging preflight audit logging: clean atomic `ROLLBACK` executed with 0 zombie preflight or audit records.
+- **5-Click Concurrency Burst in 200ms:** 5 simultaneous preflight claims within 200ms deduplicated via in-flight promise cache and idempotency keys: exactly 1 database write executed, 4 identical replays returned with `isReplay: true`.
+- **Monotonic Migration Sequence Fencing:** Inverted migration sequences safely rejected as stale (`isStale: true`), strictly preventing database migration sequence regression.
+- **Test Baseline:** Verified with 5 adversarial tests in `src/test/harvo/cr1_p0_5_staging_hardening.test.ts` (100% passing).
+- **Workspace Quality Gate:** `npm run typecheck` (0 errors) and `npm run lint` (0 errors/warnings).
+- **Completion Ledger Update:** **43 of 48 packages complete (89.6%)**.
+
 
 
 
