@@ -1471,6 +1471,8 @@ On 25 September 2026, under Decision `CR1-032`, **Package P8.3 (`CANARY-01`)** a
 
 On 25 September 2026, under Decision `CR1-033`, **Package P8.4 (`PILOT-01`)** achieved zero-trust adversarial hardening via `BoundedPilotHardeningEngine` and `cr1_p8_4_pilot_hardening.test.ts`, advancing the delivery ledger to **48 of 48 packages complete (100.0% — 100% of all packages in CR1 Execution Plan completed)**. Strict ₹100k budget cap bounding, 30-day duration bounding, 3.0x ROAS stop-loss circuit breaker, 100% CRM lead containment (zero off-platform lead leakage), transactional outbox pilot registration logging, monotonic milestone sequence fencing, and 200ms burst deduplication are certified.
 
+On 25 September 2026, under Decision `CR1-034`, **Complete Release 1 (CR1) Re-Certification** was executed and certified locally, advancing the official release dossier (`CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json`) to certify **48 of 48 packages complete (100.0%)**, binding the authoritative commit hash (`29a50a3`), 16 verified adversarial engines, 4 operational track receipts, and 7 external gate handoff tokens with SHA-256 verification checksum.
+
 Fail-closed compliance posture (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`) is strictly preserved in code. Production deployment and live transaction processing remain gated on the remaining external sign-off tokens:
 1. `STAGE-01` (`P0.5 / P8.1`): Isolated staging deployment environment (preflight & role verification certified locally).
 2. `LEGAL-01` (`P4.3 / M5`): Statutory Indian tax clearance with 18-character UDIN (statutory invoice & UDIN verification certified locally).

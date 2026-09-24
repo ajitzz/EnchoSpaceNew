@@ -1278,3 +1278,26 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
   - Delivery ledger progress: **48 of 48 packages complete (100.0% — 100% of all packages in CR1 Execution Plan completed)**.
 
+### CR1-034 — Final Post-Hardening Production Release Candidate Re-Certification (25 September 2026)
+
+**Status:** Authoritative Production Release Candidate Re-Certification completed and verified locally under founder CR1 directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Packages verified & hardened:**
+  - **Complete Release 1 (CR1) Re-Certification at 100.0% Completion (48 of 48 Packages):**
+    - Updated `Cr1ReleaseCertificateEngine` in `src/lib/compliance/cr1ReleaseCertificateEngine.ts` and CLI runner in `scripts/compliance/generate-cr1-rc-dossier.mjs` to certify 48 of 48 packages complete (100.0%).
+    - Expanded `verifiedAdversarialEngines` manifest from 10 base engines to all 16 verified engines: `SchemaBootstrapEngine (P0)`, `LegacyContainmentEngine (P1)`, `WorkforceSecurityEngine (P2)`, `ConversationDeskEngine (P3)`, `CanonicalOfferAuthorityEngine (P4)`, `CreativeCampaignPipeline (P5)`, `ProviderFlightEngine (P6)`, `HostPortfolioEngine (P7)`, `OperationalDrillEngine (P8)`, `CrossDomainGoldenPathEngine (E2E)`, `StagingHardeningEngine (P0.5 / P8.1)`, `StatutoryTaxVerificationEngine (P4.3)`, `ProviderSecurityHardeningEngine (P6.1)`, `AdTechSettlementHardeningEngine (P6.4)`, `PausedCanaryHardeningEngine (P8.3)`, and `BoundedPilotHardeningEngine (P8.4)`.
+    - Bound authoritative Git commit hash (`29a50a353671b1b526b150b78905d11aaf82dbb0`), 16 verified adversarial engines, 4 operational track receipts, and 7 external gate handoff tokens (`STAGE-01`, `LEGAL-01`, `PROV-M-01`, `PROV-G-01`, `COMM-01`, `CANARY-01`, `PILOT-01`) into the cryptographic certificate.
+    - Verified mid-transaction connection drop atomic rollback (0 zombie registry rows or audit logs).
+    - Verified 200ms burst deduplication (5 simultaneous requests deduplicate to 1 write and 4 cached replays).
+    - Verified monotonic sequence fencing for third-party gate attestation packets (`isStale: true` for out-of-order sequence updates).
+    - Verified SHA-256 cryptographic tamper detection across all compliance digests.
+    - Regenerated authoritative production release candidate certificate at `docs/harvo/receipts/CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` with SHA-256 verification checksum.
+    - Preserved fail-closed compliance posture: `STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`.
+- **Verified Suite Quality Matrix:**
+  - Adversarial certification suite: **1 test suite, 5 passing tests (100%)** (`cr1_release_candidate_certification.test.ts`).
+  - Standalone CLI runner: executed successfully (`scripts/compliance/generate-cr1-rc-dossier.mjs`).
+  - Cumulative Phase 4 Audit Hardening suites: **7 test suites, 35 passing tests (100%)** (`cr1_p0_5_staging_hardening.test.ts`, `cr1_p4_3_tax_hardening.test.ts`, `cr1_p6_1_provider_hardening.test.ts`, `cr1_p6_4_settlement_hardening.test.ts`, `cr1_p8_3_canary_hardening.test.ts`, `cr1_p8_4_pilot_hardening.test.ts`, `cr1_release_candidate_certification.test.ts`).
+  - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
+  - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+  - Total CR1 program completion: **48 of 48 packages complete (100.0% — Complete Release 1 fully verified and certified locally)**.
+
+

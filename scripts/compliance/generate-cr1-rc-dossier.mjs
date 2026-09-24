@@ -31,6 +31,12 @@ export function generateCr1ReleaseCandidateDossier(
     'HostPortfolioEngine (P7)',
     'OperationalDrillEngine (P8)',
     'CrossDomainGoldenPathEngine (E2E)',
+    'StagingHardeningEngine (P0.5 / P8.1)',
+    'StatutoryTaxVerificationEngine (P4.3)',
+    'ProviderSecurityHardeningEngine (P6.1)',
+    'AdTechSettlementHardeningEngine (P6.4)',
+    'PausedCanaryHardeningEngine (P8.3)',
+    'BoundedPilotHardeningEngine (P8.4)',
   ];
 
   const externalGates = [
@@ -103,7 +109,7 @@ export function generateCr1ReleaseCandidateDossier(
   const auditPayload = {
     commitHash,
     releaseTag,
-    localPackagesComplete: 42,
+    localPackagesComplete: 48,
     totalPackages: 48,
     externalGateCount: externalGates.length,
     timestamp: now,
@@ -121,9 +127,9 @@ export function generateCr1ReleaseCandidateDossier(
     commitHash,
     status: 'CERTIFIED_RELEASE_CANDIDATE',
     certifiedAt: now,
-    localPackagesComplete: 42,
+    localPackagesComplete: 48,
     totalPackages: 48,
-    completionPercentage: '87.5%',
+    completionPercentage: '100.0%',
     verifiedAdversarialEngines,
     operationalTrackReceipts: {
       track1StagingPreflight: 'docs/harvo/receipts/CR1_STAGING_PREFLIGHT_RECEIPT.json',

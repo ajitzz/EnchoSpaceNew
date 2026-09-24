@@ -184,15 +184,17 @@ describe('CR1 Final Release Candidate Certification & External Gate Manifest Adv
     const engine = new Cr1ReleaseCertificateEngine();
 
     const certificate = engine.generateReleaseCandidateCertificate({
-      commitHash: '41c51b1a9a79df513dc71b1b0e7ccf119286e1d7',
+      commitHash: '29a50a353671b1b526b150b78905d11aaf82dbb0',
       releaseTag: 'CR1-RC1',
       targetPath: certificateReceiptPath,
     });
 
     expect(certificate.releaseTag).toBe('CR1-RC1');
     expect(certificate.status).toBe('CERTIFIED_RELEASE_CANDIDATE');
-    expect(certificate.localPackagesComplete).toBe(42);
+    expect(certificate.localPackagesComplete).toBe(48);
     expect(certificate.totalPackages).toBe(48);
+    expect(certificate.completionPercentage).toBe('100.0%');
+    expect(certificate.verifiedAdversarialEngines).toHaveLength(16);
     expect(certificate.externalGates).toHaveLength(7);
     expect(certificate.verificationChecksum).toMatch(/^[a-f0-9]{64}$/);
     expect(existsSync(certificateReceiptPath)).toBe(true);

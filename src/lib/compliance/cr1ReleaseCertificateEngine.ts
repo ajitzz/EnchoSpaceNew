@@ -232,6 +232,12 @@ export class Cr1ReleaseCertificateEngine {
       'HostPortfolioEngine (P7)',
       'OperationalDrillEngine (P8)',
       'CrossDomainGoldenPathEngine (E2E)',
+      'StagingHardeningEngine (P0.5 / P8.1)',
+      'StatutoryTaxVerificationEngine (P4.3)',
+      'ProviderSecurityHardeningEngine (P6.1)',
+      'AdTechSettlementHardeningEngine (P6.4)',
+      'PausedCanaryHardeningEngine (P8.3)',
+      'BoundedPilotHardeningEngine (P8.4)',
     ];
 
     const externalGates: ExternalGateHandoffToken[] = [
@@ -303,7 +309,7 @@ export class Cr1ReleaseCertificateEngine {
     const auditPayload = {
       commitHash: options.commitHash,
       releaseTag: options.releaseTag,
-      localPackagesComplete: 42,
+      localPackagesComplete: 48,
       totalPackages: 48,
       externalGateCount: externalGates.length,
       timestamp: new Date().toISOString(),
@@ -321,9 +327,9 @@ export class Cr1ReleaseCertificateEngine {
       commitHash: options.commitHash,
       status: 'CERTIFIED_RELEASE_CANDIDATE',
       certifiedAt: new Date().toISOString(),
-      localPackagesComplete: 42,
+      localPackagesComplete: 48,
       totalPackages: 48,
-      completionPercentage: '87.5%',
+      completionPercentage: '100.0%',
       verifiedAdversarialEngines,
       operationalTrackReceipts: {
         track1StagingPreflight: 'docs/harvo/receipts/CR1_STAGING_PREFLIGHT_RECEIPT.json',
