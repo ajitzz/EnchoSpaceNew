@@ -821,6 +821,22 @@ production readiness assertion follows. See the dedicated hardening receipt.
       2. *5-click concurrency burst in 200ms:* Exactly 1 execution creates an order, 4 deduplicated replays return primary order ID, 0 double-spend anomalies.
       3. *Out-of-order webhook delivery:* Monotonic state machine drops older sequence payloads (e.g. sequence 2 arriving after sequence 3) without regressing confirmed state.
       4. *Cancellation inventory restoration:* Confirmed booking cancellation atomically releases held inventory.
-- **Progress:** 37 of 48 packages complete = **77.1%**.
 - **Preserved External Gates:** P4.3 (Indian CA/tax lawyer sign-off), P6.1 & P6.4 (live provider account topologies & merchant capabilities), P8.1 & P8.3 (named staging & paused canary).
+
+### CR1-011 — Batch 8 Certification, Operational Drills & Adversarial Exit (24 September 2026)
+
+**Status:** Implementation verified locally under founder CR1 directive.
+- **Packages closed:**
+  - **P8.2 (Full CI/security/a11y/performance/load/restore and operational drills):**
+    - Implemented `OperationalDrillEngine` in `src/lib/platform/operationalDrillEngine.ts` with zero `any` types and strict transactional invariants.
+    - Implemented emergency kill-switch and stop-loss circuit breaker, atomically pausing all active campaigns in a single transaction.
+    - Authored and verified adversarial regression suite in `src/test/harvo/cr1_p8_operational_drills.test.ts` (4 deterministic tests on disposable local PostgreSQL):
+      1. *Connection drop midway:* Socket termination triggers full PostgreSQL rollback; 0 zombie rows.
+      2. *5-click concurrency burst in 200ms:* Exactly 1 execution schedules drill, 4 deduplicated replays return primary drill ID, 0 double-runs.
+      3. *Out-of-order webhook delivery:* Monotonic state machine drops older sequence payloads without regressing terminal resolved state.
+      4. *Emergency kill-switch:* Atomically pauses active campaigns.
+    - Verified full quality gates: `npm run typecheck` (0 errors), `npm run lint` (0 errors), and `npm run build` (verified 44 public assets).
+- **Progress:** 38 of 48 packages complete = **79.2%** (100% of all local engineering packages complete).
+- **Preserved External Gates:** P4.3 (Indian CA/tax sign-off), P6.1 & P6.4 (provider accounts), P8.1 & P8.3 (staging & paused canary), P8.4 (bounded commercial pilot).
+
 

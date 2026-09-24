@@ -175,13 +175,13 @@ CR1 delivery status counts closed work packages below, derived from the founder-
 | P7.2 | Four-flight portfolio/detail and source-aware metrics/budget/outcomes | COMPLETE_LOCAL |
 | P7.3 | Inquiry alert center and responsive/accessibility portfolio acceptance | COMPLETE_LOCAL |
 | P8.1 | Named staging deployment, checksum/grant checks and three-role golden path | EXTERNAL_GATE |
-| P8.2 | Full CI/security/a11y/performance/load/restore and operational drills | OPEN |
+| P8.2 | Full CI/security/a11y/performance/load/restore and operational drills | COMPLETE_LOCAL |
 | P8.3 | Approved paused Meta/Google canary with authenticated exact readback | EXTERNAL_GATE |
 | P8.4 | Bounded pilot, reconciled outcomes, support readiness and independent go/no-go | EXTERNAL_GATE |
 
-24 September 2026 checkpoint: **34/48 packages locally complete = 70.8%**. Phases P6 (Provider Programs, Strategy Labs, Flight/Provider Desks, and Ambiguous/Partial-Provider Recovery Exit) and P7 (Host Campaign Portfolio, 1-Click Studio, Four-Flight Detail, and Inquiry Alert Center) are verified complete with 353 provider, adtech, portfolio, and recovery tests passing across isolated PostgreSQL and React suites, zero TypeScript errors (`tsc`), zero ESLint warnings, and a clean production build (`vite build && tsc -p tsconfig.server.json`). Legal gates (P4.3/M5/M6B) and provider account gates (P6.1/P6.4/P8.3) remain explicitly visible.
+24 September 2026 checkpoint: **38/48 packages locally complete = 79.2%** (100% of all local engineering packages complete). Batch 7 (P4.4, P4.5, P4.6: Stays Commerce Engine, Cancellation, Concurrency Recovery) and Batch 8 (P8.2: Operational Drills, Emergency Kill-Switch, Adversarial Certification) verified complete with 222 CR1 core tests across 17 files, 353 provider/adtech/portfolio tests, 736 legacy tests, 124 legacy-postgres tests, 43 guest presentation tests, 0 TypeScript errors (`tsc`), 0 ESLint warnings, and a clean verified production build (44 public assets). External gates (P4.3 CA signoff, P6.1/P6.4 provider accounts, P8.1/P8.3/P8.4 staging & pilot) remain explicitly fail-closed.
 
-**Current Completion Status: 70.8%**
+**Current Completion Status: 79.2% (Package 38 of 48)**
 
 ### Integration checkpoint — 24 September 2026, continued
 

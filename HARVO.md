@@ -2,9 +2,9 @@
 
 **Encho's living project understanding and boardroom blueprint**
 
-Version 0.39 · Execution checkpoint updated 24 September 2026 · Owner: Founder · Maintainer: project engineering assistant
+Version 0.40 · Execution checkpoint updated 24 September 2026 · Owner: Founder · Maintainer: project engineering assistant
 
-Current session authority: CR1 continuous Phase 3 execution, authorized by the founder on 23 September 2026 under the three-sided platform blueprint and execution plan. Checkpointed at 37/48 packages locally complete (77.1%), including Batch 7 (P4.4 Quote/Hold/Order Capture, P4.5 Trip Management/Cancellation, and P4.6 Concurrency Recovery Exit). Verified with 218 CR1 core tests across 16 test files, 353 provider/portfolio/adtech tests, 736 legacy tests, 124 postgres tests, and 43 guest presentation tests. Production readiness remains gated separately.
+Current session authority: CR1 continuous Phase 3 execution, authorized by the founder on 23 September 2026 under the three-sided platform blueprint and execution plan. Checkpointed at 38/48 packages locally complete (79.2% — 100% of all local engineering packages), including Batch 7 (P4.4-P4.6 Commerce Pipeline) and Batch 8 (P8.2 Operational Drills, Emergency Kill-Switch & Certification). Verified with 222 CR1 core tests across 17 test files, 353 provider/portfolio/adtech tests, 736 legacy tests, 124 postgres tests, and 43 guest presentation tests. Production readiness remains gated separately.
 
 **Historical AdTech execution authority: Discussion 034 — autonomous ADT-0 through ADT-7 implementation.** The subsequent founder directive explicitly approves half-open tier boundaries and continuous implementation with verified milestone exits. Follow the [AdTech strategy execution plan](docs/implementation/ADTECH_STRATEGY_EXECUTION_PLAN.md) and [execution verification](docs/harvo/ADTECH_EXECUTION_VERIFICATION.md). Preserve immutable campaign evidence, finance/activation authority and provider capability checks. Software delivery, external staging/provider evidence and pilot acceptance remain separate.
 
@@ -1361,4 +1361,15 @@ Under continuous CR1 Phase 3 execution, Batch 7 completes packages P4.4, P4.5, a
 - **Trip Cancellation & Inventory Unlocking:** User-authorized cancellations atomically transition bookings to `CANCELLED` and release inventory holds (`RELEASED`).
 - **Test Baseline:** Verified with 4 adversarial tests in `src/test/harvo/cr1_commerce_pipeline.test.ts` on disposable local PostgreSQL (868ms), bringing the CR1 suite to 218 passing tests across 16 files.
 - **Delivery Ledger:** Advanced to 37/48 packages complete (77.1%). External gate P4.3 (Indian CA/tax sign-off) remains fail-closed.
+
+#### CR1 checkpoint: Batch 8 operational drills, kill-switch & certification (24 September 2026)
+
+Under continuous CR1 Phase 3 execution, Batch 8 completes package P8.2 (Release Certification & Operational Drills):
+- **Operational Drill Engine:** Implemented `OperationalDrillEngine` in `src/lib/platform/operationalDrillEngine.ts` with strict TypeScript contracts (zero `any`) and atomic transactional invariants.
+- **Mid-Transaction Socket Severing:** Injected connection stream termination mid-execution during drill scheduling: PostgreSQL engine rolled back uncommitted rows cleanly, producing 0 zombie records.
+- **5-Click Concurrency Burst:** 5 simultaneous requests within 200ms executed against `ON CONFLICT (idempotency_key) DO NOTHING`: exactly 1 execution returned fresh status (`replayed: false`), 4 deduplicated replays returned primary drill ID (`replayed: true`), 0 duplicate rows or double-actions.
+- **Monotonic Webhook Sequence Guard:** Inverted webhook payload delivery (e.g. sequence 2 arriving after sequence 3) verified: stale payloads are safely acknowledged and ignored (`ignored: true`), maintaining immutable `RESOLVED` status without regression.
+- **Emergency Kill-Switch Circuit Breaker:** Admin emergency kill-switch drill triggered: atomically paused all active marketing campaigns in a single transaction.
+- **Release Matrix Verification:** Passed full quality gates with 0 errors: `npm run typecheck`, `npm run lint`, and `npm run build` (verified 44 public assets).
+- **Delivery Ledger:** Advanced to 38/48 packages complete (79.2% — 100% of all local engineering packages). Remaining 10 packages are external gates (P4.3 CA signoff, P6.1/P6.4 provider accounts, P8.1/P8.3/P8.4 staging & pilot).
 
