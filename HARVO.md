@@ -2,9 +2,9 @@
 
 **Encho's living project understanding and boardroom blueprint**
 
-Version 0.43 · Execution checkpoint updated 24 September 2026 · Owner: Founder · Maintainer: project engineering assistant
+Version 0.44 · Execution checkpoint updated 25 September 2026 · Owner: Founder · Maintainer: project engineering assistant
 
-Current session authority: CR1 continuous Phase 3 execution and Phase 4 Audit Hardening, authorized by the founder under the three-sided platform blueprint and execution plan. Checkpointed at 44/48 packages complete (91.7%). Phase 4.1 Staging Hardening (`StagingHardeningEngine`) and Phase 4.2 Statutory Tax Clearance & UDIN Verification (`StatutoryTaxVerificationEngine`) verified against all adversarial failure modes (midway database socket drop rollback, 5-click 200ms burst deduplication, monotonic attestation sequence fencing, ICAI 18-character UDIN structural validation, Section 9(5) stay GST, 1% Section 52 TCS, 1% Section 194-O TDS, and mandatory SSL mode `require`). Verified with 144 test suites, 1,914 passing tests (100% passing across CR1 core, compliance hardening, operational drills, commerce, provider controls, portfolio engines, containment, bootstrap, adtech, presentation, legacy, and deployment harnesses). Remaining external third-party authorization gates are progressing through Phase 4 adversarial audit hardening.
+Current session authority: CR1 continuous Phase 3 execution and Phase 4 Audit Hardening, authorized by the founder under the three-sided platform blueprint and execution plan. Checkpointed at 45/48 packages complete (93.8%). Phase 4.1 Staging Hardening (`StagingHardeningEngine`), Phase 4.2 Statutory Tax Clearance & UDIN Verification (`StatutoryTaxVerificationEngine`), and Phase 4.3 Provider Accounts & Capability Hardening (`ProviderSecurityHardeningEngine`) verified against all adversarial failure modes (midway database socket drop rollback, 5-click 200ms burst deduplication, monotonic sequence fencing, Meta Housing Special Ad Category HEC demographic/postal filtering prohibition, Google Ads MCC developer token and customer ID formatting validation, ICAI 18-character UDIN structural validation, Section 9(5) stay GST, 1% Section 52 TCS, 1% Section 194-O TDS, and mandatory SSL mode require). Verified with 145 test suites, 1,919 passing tests (100% passing across CR1 core, compliance hardening, operational drills, commerce, provider controls, portfolio engines, containment, bootstrap, adtech, presentation, legacy, and deployment harnesses). Remaining external third-party authorization gates are progressing through Phase 4 adversarial audit hardening.
 
 
 
@@ -1537,9 +1537,15 @@ Under continuous CR1 Phase 4 Audit Hardening and FAANG L7/L8 Zero-Trust engineer
 - **Test Baseline:** Verified with 5 adversarial tests in `src/test/harvo/cr1_p4_3_tax_hardening.test.ts` (100% passing).
 - **Workspace Quality Gate:** `npm run typecheck` (0 errors) and `npm run lint` (0 errors/warnings).
 - **Completion Ledger Update:** **44 of 48 packages complete (91.7%)**.
+#### CR1 Phase 4.3 checkpoint: Provider accounts & capability hardening (25 September 2026)
 
-
-
-
-
-
+Under continuous CR1 Phase 4 Audit Hardening and FAANG L7/L8 Zero-Trust engineering protocol, Package P6.1 (`PROV-M-01` & `PROV-G-01` Gates) was hardened and verified:
+- **Provider Security Hardening Engine:** Implemented `ProviderSecurityHardeningEngine` in `src/lib/compliance/providerSecurityHardeningEngine.ts` with strict TypeScript contracts (0 `any` types), Transactional Outbox for provider account bindings and audit logging, in-flight promise caching for 200ms burst deduplication, strict Meta Housing Special Ad Category (HEC) compliance validation, Google Ads MCC developer token and customer ID formatting validation, and monotonic provider capability sequence fencing.
+- **Mid-Transaction Connection Drop Rollback:** Database connection stream drop simulated mid-execution during provider audit logging: clean atomic `ROLLBACK` executed with 0 zombie provider registry or audit rows.
+- **5-Click Concurrency Burst in 200ms:** 5 simultaneous provider account binding submissions within 200ms deduplicated via in-flight promise cache and idempotency keys: exactly 1 database write executed, 4 identical replays returned with `isReplay: true`.
+- **Meta Housing Special Ad Category (HEC) Invariant:** Evaluated and strictly enforced prohibition of discriminatory demographic targeting (age, gender, postal code/ZIP code) and omission of HOUSING category (`META_HOUSING_CATEGORY_POLICY_VIOLATION`).
+- **Google Ads MCC Credential Integrity:** Evaluated and strictly validated Manager Customer ID structure (10 digits) and developer token length ($\ge 22$ chars) (`INVALID_GOOGLE_MCC_CREDENTIALS`).
+- **Monotonic Provider Sequence Fencing:** Out-of-order provider capability updates safely rejected as stale (`isStale: true`, `reason: 'STALE_PROVIDER_SEQUENCE_REJECTED'`), strictly preventing capability state regression.
+- **Test Baseline:** Verified with 5 adversarial tests in `src/test/harvo/cr1_p6_1_provider_hardening.test.ts` (100% passing).
+- **Workspace Quality Gate:** `npm run typecheck` (0 errors) and `npm run lint` (0 errors/warnings).
+- **Completion Ledger Update:** **45 of 48 packages complete (93.8%)**.

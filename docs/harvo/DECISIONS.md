@@ -1206,9 +1206,20 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
   - Delivery ledger progress: **44 of 48 packages complete (91.7%)**.
 
+### CR1-030 — Provider Accounts & Capability Hardening (24 September 2026)
 
-
-
-
-
-
+**Status:** Implementation and adversarial test suite verified locally under founder CR1 directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Packages verified & hardened:**
+  - **Provider Accounts & Capability Hardening (P6.1 / PROV-M-01 & PROV-G-01 Gates):**
+    - Implemented `ProviderSecurityHardeningEngine` in `src/lib/compliance/providerSecurityHardeningEngine.ts` with strict TypeScript contracts (0 `any` types), Transactional Outbox for provider account bindings and audit logging, 200ms burst deduplication via in-flight promise caching, strict Meta Housing Special Ad Category (HEC) compliance validation, Google Ads MCC developer token and customer ID formatting validation, and monotonic provider capability sequence fencing.
+    - Verified atomic outbox rollback: mid-transaction connection drop during audit logging executes clean atomic `ROLLBACK`, leaving zero zombie provider account registry rows or uncommitted audit entries.
+    - Verified 200ms burst deduplication: 5 simultaneous provider account binding submissions within 200ms deduplicate via in-flight promise caching to exactly 1 database write and 4 cached replays (`isReplay: true`).
+    - Verified Meta Housing Special Ad Category (HEC) compliance: non-housing categorization or discriminatory demographic targeting (age, gender, postal code/ZIP code) fails closed immediately with `META_HOUSING_CATEGORY_POLICY_VIOLATION`.
+    - Verified Google Ads MCC credential formatting: malformed customer IDs or truncated developer tokens (< 22 characters) strictly fail closed with `INVALID_GOOGLE_MCC_CREDENTIALS`.
+    - Verified monotonic provider capability sequencing: out-of-order capability updates safely rejected as stale (`isStale: true`, `reason: 'STALE_PROVIDER_SEQUENCE_REJECTED'`), strictly preventing capability state regression.
+    - Authored and verified adversarial regression suite in `src/test/harvo/cr1_p6_1_provider_hardening.test.ts` (5 deterministic tests on isolated local runtime).
+- **Verified Suite Quality Matrix:**
+  - Adversarial provider hardening suite: **1 test suite, 5 passing tests (100%)** (`cr1_p6_1_provider_hardening.test.ts`).
+  - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
+  - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+  - Delivery ledger progress: **45 of 48 packages complete (93.8%)**.
