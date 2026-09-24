@@ -49,19 +49,26 @@ const renderApp = (
   </HelmetProvider>
 );
 
+/** Workforce bootstrap must not mount consumer cache/auth effects or reuse its
+ * Google client. Crossing this boundary replaces providers, not credentials. */
+function RootRuntime() {
+  const [path,setPath]=React.useState(()=>window.location.pathname);
+  React.useEffect(()=>{
+    const changed=()=>setPath(window.location.pathname);
+    window.addEventListener('popstate',changed);window.addEventListener('encho:navigation',changed);
+    return()=>{window.removeEventListener('popstate',changed);window.removeEventListener('encho:navigation',changed);};
+  },[]);
+  if(/^\/operations(?:\/|$)/.test(path))return <HelmetProvider><App/></HelmetProvider>;
+  return <GoogleOAuthProvider clientId={clientId}>
+    {isMapsKeyConfigured?<APIProvider apiKey={API_KEY} version="weekly">{renderApp}</APIProvider>:renderApp}
+  </GoogleOAuthProvider>;
+}
+
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <ErrorBoundary>
-      <GoogleOAuthProvider clientId={clientId}>
-        {isMapsKeyConfigured ? (
-          <APIProvider apiKey={API_KEY} version="weekly">
-            {renderApp}
-          </APIProvider>
-        ) : (
-          renderApp
-        )}
-      </GoogleOAuthProvider>
+      <RootRuntime/>
     </ErrorBoundary>
   </React.StrictMode>
 );

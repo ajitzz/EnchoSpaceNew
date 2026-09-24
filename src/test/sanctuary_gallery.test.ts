@@ -6,9 +6,9 @@ describe('Sanctuary Spatial Gallery Architecture & Taxonomy Tests', () => {
   it('keeps room-only photo identity and order while excluding common media from the room', () => {
     const listing = {id:'room-photo-fixture', imageUrl:'/grounds.jpg', rooms:[{id:'r1',name:'Garden room',photos:[{id:'room-photo',url:'/room.jpg'}]}]} as unknown as Listing;
     const photos=classifyListingPhotos(listing);
-    expect(photos.filter(photo=>photo.tier==='r1').map(photo=>photo.url)).toEqual(['/room.jpg']);
+    expect(photos.filter(photo=>photo.tier==='room-id:r1').map(photo=>photo.url)).toEqual(['/room.jpg']);
     expect(photos.find(photo=>photo.url==='/grounds.jpg')?.tier).toBe('common');
-    expect(buildGalleryCategories(listing).map(category=>category.key)).toContain('r1');
+    expect(buildGalleryCategories(listing).map(category=>category.key)).toContain('room-id:r1');
   });
   it('builds canonical default gallery categories with all and common spaces only', () => {
     const defaultCategories = buildGalleryCategories({ rooms: [] } as any);
@@ -37,9 +37,9 @@ describe('Sanctuary Spatial Gallery Architecture & Taxonomy Tests', () => {
 
     const categories = buildGalleryCategories(listingWithRooms);
     const keys = categories.map(c => c.key);
-    expect(keys).toEqual(['all', 'common', 'forest_villa', 'cliff_cottage']);
-    expect(categories.find(c => c.key === 'forest_villa')?.label).toBe('Forest Villa');
-    expect(categories.find(c => c.key === 'cliff_cottage')?.label).toBe('Cliff Cottage');
+    expect(keys).toEqual(['all', 'common', 'room-id:r1', 'room-id:r2']);
+    expect(categories.find(c => c.key === 'room-id:r1')?.label).toBe('Forest Villa');
+    expect(categories.find(c => c.key === 'room-id:r2')?.label).toBe('Cliff Cottage');
   });
 
   it('truthfully classifies listing photos into spatial photos without fabricated titles or room tiers', () => {

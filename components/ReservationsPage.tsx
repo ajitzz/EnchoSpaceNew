@@ -2,9 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { SEO } from './SEO';
 import { Listing } from '../types';
 import { ChevronLeft, CalendarIcon, PhoneIcon, MessageCircleIcon } from './Icons';
-import { useToast } from './ToastContext';
 import { useCurrency } from './CurrencyContext';
-import { Download, Compass, Home, MapPin, Calendar, Smartphone, MessageSquare } from 'lucide-react';
+import { Compass, Home, MapPin, Calendar, Smartphone, MessageSquare } from 'lucide-react';
 
 interface Reservation {
   id: string;
@@ -24,8 +23,8 @@ interface ReservationsPageProps {
   isOnline?: boolean;
   onBack: () => void;
   onListingClick: (listing: Listing) => void;
-  onCancelBooking?: (id: string) => void;
-  onCancelExperienceBooking?: (id: string | number) => void;
+  onCancelBooking?: (id: string) => Promise<void>;
+  onCancelExperienceBooking?: (id: string | number) => Promise<void>;
   onExperienceClick?: (id: number | string) => void;
   onContactHost?: (listing: Listing) => void;
 }
@@ -46,26 +45,12 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
   const [callConfig, setCallConfig] = useState<{ enabled: boolean, number: string } | null>(null);
   const [isCaching, setIsCaching] = useState(false);
   const [cacheComplete, setCacheComplete] = useState(false);
-  const { addToast } = useToast();
   const { formatPrice } = useCurrency();
 
-  const handleCancelClick = (id: string) => {
-      if (onCancelBooking) {
-          if (window.confirm("Are you sure you want to cancel this booking?")) {
-              onCancelBooking(id);
-              addToast("Booking Cancelled", "Your booking has been successfully cancelled.", "info");
-          }
-      }
-  };
-
-  const handleCancelExperienceBookingClick = (id: string | number) => {
-      if (onCancelExperienceBooking) {
-          if (window.confirm("Are you sure you want to cancel this experience booking?")) {
-              onCancelExperienceBooking(id);
-              addToast("Booking Cancelled", "Your experience booking has been cancelled.", "info");
-          }
-      }
-  };
+  // The command owner confirms intent and presents only the server-verified
+  // outcome. Calling an async callback does not establish cancellation.
+  const handleCancelClick = async (id: string) => { await onCancelBooking?.(id); };
+  const handleCancelExperienceBookingClick = async (id: string | number) => { await onCancelExperienceBooking?.(id); };
 
   useEffect(() => {
     fetch('/api/settings/whatsapp')
@@ -122,239 +107,8 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
     window.open(`tel:${callConfig.number}`, '_self');
   };
 
-  const downloadTicket = (booking: any, type: 'stay' | 'experience') => {
-    const isStay = type === 'stay';
-    const bookingId = booking.id;
-    const title = isStay ? (booking.listing.displayTitle || booking.listing.title) : booking.title;
-    const subtitle = isStay ? booking.listing.address : booking.destination;
-    const dateLabel = isStay ? "Move-In Date" : "Start Date";
-    const dateValue = isStay 
-      ? new Date(booking.moveInDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-      : new Date(booking.start_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-    const detailLabel = isStay ? "Unit Type" : "Tickets Bought";
-    const detailValue = isStay ? booking.configuration : `${booking.num_tickets} Tickets`;
-    const guestName = booking.name;
-    const guestPhone = booking.phone;
-    const totalPaid = isStay ? booking.totalRent : booking.total_price;
-    const status = booking.status || 'Confirmed';
-
-    const htmlContent = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Booking Confirmation - ${bookingId}</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: #f3f4f6;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 100vh;
-      margin: 0;
-      padding: 20px;
-    }
-    .ticket {
-      background: white;
-      border-radius: 24px;
-      box-shadow: 0 20px 40px -15px rgba(0,0,0,0.1);
-      width: 100%;
-      max-width: 500px;
-      overflow: hidden;
-      border: 1px solid #e5e7eb;
-    }
-    .header {
-      background: #000;
-      color: white;
-      padding: 32px 24px;
-      text-align: center;
-      position: relative;
-    }
-    .header h1 {
-      margin: 0;
-      font-size: 24px;
-      font-weight: 800;
-      letter-spacing: -0.5px;
-    }
-    .header p {
-      margin: 8px 0 0 0;
-      color: #9ca3af;
-      font-size: 14px;
-      font-weight: 500;
-    }
-    .type-badge {
-      display: inline-block;
-      background: #2563eb;
-      color: white;
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      padding: 4px 12px;
-      border-radius: 9999px;
-      margin-bottom: 12px;
-    }
-    .content {
-      padding: 32px 24px;
-    }
-    .title-section {
-      text-align: center;
-      margin-bottom: 24px;
-    }
-    .title-section h2 {
-      margin: 0;
-      font-size: 20px;
-      font-weight: 700;
-      color: #111827;
-    }
-    .title-section p {
-      margin: 4px 0 0 0;
-      color: #6b7280;
-      font-size: 14px;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      margin-bottom: 24px;
-      border-top: 1px dashed #e5e7eb;
-      border-bottom: 1px dashed #e5e7eb;
-      padding: 24px 0;
-    }
-    .grid-item {
-      display: flex;
-      flex-direction: column;
-    }
-    .label {
-      font-size: 10px;
-      font-weight: 700;
-      color: #9ca3af;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 4px;
-    }
-    .value {
-      font-size: 14px;
-      font-weight: 600;
-      color: #1f2937;
-    }
-    .footer {
-      background: #f9fafb;
-      padding: 24px;
-      text-align: center;
-      border-top: 1px solid #e5e7eb;
-    }
-    .barcode {
-      font-family: monospace;
-      font-size: 12px;
-      color: #4b5563;
-      letter-spacing: 4px;
-      margin-top: 8px;
-    }
-    .print-btn {
-      margin-top: 16px;
-      background: #000;
-      color: white;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 8px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    @media print {
-      body { background: white; }
-      .ticket { box-shadow: none; border: none; }
-      .print-btn { display: none; }
-    }
-  </style>
-</head>
-<body>
-  <div class="ticket">
-    <div class="header">
-      <div class="type-badge">${type} Ticket</div>
-      <h1>Encho Space</h1>
-      <p>Booking ID: ${bookingId}</p>
-    </div>
-    <div class="content">
-      <div class="title-section">
-        <h2>${title}</h2>
-        <p>${subtitle}</p>
-      </div>
-      <div class="grid">
-        <div class="grid-item">
-          <span class="label">Guest Name</span>
-          <span class="value">${guestName}</span>
-        </div>
-        <div class="grid-item">
-          <span class="label">Phone</span>
-          <span class="value">${guestPhone}</span>
-        </div>
-        <div class="grid-item">
-          <span class="label">${dateLabel}</span>
-          <span class="value">${dateValue}</span>
-        </div>
-        <div class="grid-item">
-          <span class="label">${detailLabel}</span>
-          <span class="value">${detailValue}</span>
-        </div>
-        <div class="grid-item">
-          <span class="label">Total Paid</span>
-          <span class="value">${formatPrice(Number(totalPaid), 'INR')}</span>
-        </div>
-        <div class="grid-item">
-          <span class="label">Status</span>
-          <span class="value" style="color: ${status.toLowerCase() === 'confirmed' || status.toLowerCase() === 'active' ? '#10b981' : '#f59e0b'}">${status}</span>
-        </div>
-      </div>
-      <div style="text-align: center;">
-        <svg style="width: 120px; height: 120px; margin: 0 auto;" viewBox="0 0 100 100">
-          <rect x="10" y="10" width="20" height="20" fill="black" />
-          <rect x="14" y="14" width="12" height="12" fill="white" />
-          <rect x="17" y="17" width="6" height="6" fill="black" />
-          
-          <rect x="70" y="10" width="20" height="20" fill="black" />
-          <rect x="74" y="14" width="12" height="12" fill="white" />
-          <rect x="77" y="17" width="6" height="6" fill="black" />
-          
-          <rect x="10" y="70" width="20" height="20" fill="black" />
-          <rect x="14" y="74" width="12" height="12" fill="white" />
-          <rect x="17" y="77" width="6" height="6" fill="black" />
-          
-          <rect x="40" y="10" width="8" height="8" fill="black" />
-          <rect x="55" y="15" width="6" height="12" fill="black" />
-          <rect x="45" y="30" width="12" height="6" fill="black" />
-          <rect x="15" y="45" width="8" height="12" fill="black" />
-          <rect x="30" y="40" width="16" height="16" fill="black" />
-          <rect x="50" y="50" width="12" height="12" fill="black" />
-          <rect x="70" y="45" width="15" height="8" fill="black" />
-          <rect x="80" y="60" width="8" height="16" fill="black" />
-          <rect x="45" y="70" width="14" height="14" fill="black" />
-          <rect x="75" y="80" width="12" height="8" fill="black" />
-        </svg>
-        <div class="barcode">||||| | |||| ||| ||| | |||</div>
-      </div>
-    </div>
-    <div class="footer">
-      <p style="margin: 0; font-size: 12px; color: #6b7280; font-weight: 500;">Thank you for booking with Encho Space!</p>
-      <button class="print-btn" onclick="window.print()">Print Ticket</button>
-    </div>
-  </div>
-</body>
-</html>
-    `;
-
-    const blob = new Blob([htmlContent], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `Ticket_${type}_${bookingId}.html`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    addToast("Download Started", "Your ticket has been downloaded successfully.", "success");
-  };
+  // Canonical reservation/payment documents are not released. Legacy HTML
+  // exports fabricated payment/QR evidence and are intentionally unavailable.
 
   return (
     <>
@@ -485,10 +239,9 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
                               <div className="absolute top-3 left-3 md:hidden">
                                   <div className="flex items-center gap-1.5 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full shadow-sm">
                                       <span className="relative flex h-1.5 w-1.5">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#10B981]"></span>
+                                        <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${reservation.status === 'confirmed' ? 'bg-[#10B981]' : 'bg-amber-500'}`}></span>
                                       </span>
-                                      <span className="text-[10px] font-bold text-gray-900 uppercase tracking-wide">Confirmed</span>
+                                      <span className="text-[10px] font-bold text-gray-900 uppercase tracking-wide">{reservation.status || 'Unconfirmed'}</span>
                                   </div>
                               </div>
                           </div>
@@ -580,21 +333,12 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
                                       ) : (
                                           <>
                                               <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse flex-shrink-0"></div>
-                                              <span className="text-xs font-medium text-gray-600 leading-tight">Our team will reach out to you shortly for assistance.</span>
+                                              <span className="text-xs font-medium text-gray-600 leading-tight">{reservation.status === 'confirmed' ? 'Your reservation is recorded. Message the host for assistance.' : 'Your request is pending and does not confirm a stay.'}</span>
                                           </>
                                       )}
                                   </div>
                                   
                                   <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
-                                      {reservation.status !== 'cancelled' && reservation.status !== 'declined' && (
-                                          <button
-                                              onClick={() => downloadTicket(reservation, 'stay')}
-                                              className="flex items-center gap-1.5 bg-black hover:bg-gray-800 text-white px-3.5 py-2 rounded-xl transition-all font-bold text-xs shadow-md"
-                                          >
-                                              <Download className="w-3.5 h-3.5" />
-                                              <span>Download Ticket</span>
-                                          </button>
-                                      )}
                                       {reservation.status?.toLowerCase() === 'completed' && (
                                            <button 
                                               onClick={(e) => { e.stopPropagation(); onListingClick(reservation.listing); }}
@@ -777,21 +521,12 @@ const ReservationsPage: React.FC<ReservationsPageProps> = ({
                                           ) : (
                                               <>
                                                   <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse flex-shrink-0"></div>
-                                                  <span className="text-xs font-medium text-gray-600 leading-tight">Your spot is secured. Enjoy your adventure!</span>
+                                                  <span className="text-xs font-medium text-gray-600 leading-tight">{booking.status === 'confirmed' || booking.status === 'Confirmed' ? 'Your reservation is recorded.' : 'Your request is pending and does not confirm a spot.'}</span>
                                               </>
                                           )}
                                       </div>
                                       
                                       <div className="flex items-center gap-2 w-full sm:w-auto justify-end font-sans">
-                                          {booking.status !== 'cancelled' && booking.status !== 'declined' && (
-                                              <button
-                                                  onClick={() => downloadTicket(booking, 'experience')}
-                                                  className="flex items-center gap-1.5 bg-black hover:bg-gray-800 text-white px-3.5 py-2 rounded-xl transition-all font-bold text-xs shadow-md"
-                                              >
-                                                  <Download className="w-3.5 h-3.5" />
-                                                  <span>Download Ticket</span>
-                                              </button>
-                                          )}
                                           {(booking.status === 'pending' || booking.status === 'confirmed' || booking.status === 'Confirmed') && onCancelExperienceBooking && (
                                                <button 
                                                   onClick={(e) => { e.stopPropagation(); handleCancelExperienceBookingClick(booking.id); }}

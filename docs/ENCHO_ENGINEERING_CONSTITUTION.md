@@ -1,5 +1,5 @@
 # ENCHO ENGINEERING CONSTITUTION
-**Status:** Active | **Last Updated:** 2026-09-22
+**Status:** Active | **Last Updated:** 2026-09-24
 
 ## 1. Executive Summary
 
@@ -40,93 +40,84 @@ Property listing creation, amenity configuration, pricing management, availabili
 Centralized command center for platform administrators to moderate properties, approve/reject marketing campaigns, manage users, and monitor financial transactions.
 
 ### Marketing Engine (The Core Differentiator)
-A sophisticated pipeline allowing hosts to fund campaigns, which are then pre-vetted by an AI Gatekeeper, approved by Admins, and dispatched via a Master Encho Ad Account to Meta (and Google Ads).
+A managed-distribution pipeline in which hosts select bounded commercial intent while Encho's scoped staff, versioned programs and server-side provider adapters perform the dangerous configuration. Zero Host OAuth is the user experience; it is not permission to place unrelated end advertisers in one serving account. Google campaigns require provider-compliant MCC/client-account mapping unless Encho obtains explicit advertiser-of-record approval. Meta account topology remains capability- and contract-bound.
 
 ### Walled Garden CRM
-An integrated inbox that captures leads from marketing campaigns. It aggressively masks external contact info (phone/email) to prevent platform circumvention. Includes AI Intent Scoring.
+An integrated guest-host conversation and service system that keeps inquiry, trip and booking context on-platform. Message delivery, staff access and AI assistance must be durable, disclosed and truth-bound. Contact-detail handling, retention and assisted-sales policy require explicit legal/product approval; the application must not silently alter guest meaning under an unapproved anti-circumvention rule.
 
 ### Payments & Wallet
-A hybrid Geo-Router (Stripe for international, Razorpay for India) with strict idempotency, 3D Secure verification, and an internal ledger ("Trapped Cash" Wallet) for unspent funds and refunds.
+Razorpay is the current India-oriented payment adapter; Stripe/international routing remains a future provider/legal decision. Every accepted payment or advertising amount uses immutable quotes, strict idempotency and double-entry accounting. Unused advertising funds may not be automatically trapped, transferred between offers or converted to platform credit without an explicit host-accepted financial contract and approved refund/tax policy.
 
 ---
 
 ## 3. System Architecture
 
-- **Frontend:** Modern SPA/SSR framework (React/Vite). Responsive, mobile-first design.
-- **Backend:** Node.js (TypeScript) server (`server.ts`). Handles API routes, WebSockets, and background tasks.
+- **Frontend:** React/Vite SPA with route-level performance and accessibility budgets. Server rendering is not a current production fact.
+- **Backend:** Node.js/TypeScript modular monolith. `server.ts` remains the legacy composition root while canonical domain routers/services are extracted additively. Dedicated workers execute durable asynchronous jobs.
 - **Database:** Neon Postgres (Relational). Enforces strict Row-Level Security (RLS) to isolate host data.
-- **AI Integration:** Google Gemini API (via `@google/genai`) for Gatekeeper compliance, copywriting, and intent scoring.
+- **AI Integration:** Google Gemini API (via `@google/genai`) through bounded structured ports for evidence and drafts. AI has no approval, publication, provider-ID, financial or activation authority.
 - **External Services:**
-  - Meta Marketing API (Graph API v19.0)
-  - Stripe / Razorpay (Payments)
-- **Real-time:** WebSockets (`socket.io`) for instant notifications (e.g., campaign approvals, new leads).
-- **Asynchronous Processing:** Background cron jobs for Escrow release, Dynamic Creative Optimization (DCO), and analytics rollups.
+  - Meta Marketing API through versioned capability releases rather than a Constitution-hardcoded Graph version.
+  - Google Ads API through versioned capability releases and provider-compliant advertiser-account bindings.
+  - Razorpay for the current approved India scope; other rails remain gated.
+- **Real-time:** WebSockets (`socket.io`) are a delivery optimization. PostgreSQL state and transactional outbox evidence remain canonical.
+- **Asynchronous Processing:** Fenced, leased worker lanes with bounded retries, jitter, DLQ/reconciliation and safety-priority operations.
 
 ---
 
-## 4. Meta Marketing Engine (Definitive Specification)
+## 4. Managed Marketing Engine (Current Definitive Boundary)
 
-This pipeline ensures that only high-quality, compliant ads are published to Meta, protecting the Master Ad Account from bans.
+This pipeline supports exact released Meta and Google workflows while protecting provider identities, host funds and canonical guest truth. AI/human review reduces risk but cannot guarantee provider approval or prevent an account restriction.
 
 **Pipeline Flow:**
-1. **Host Draft:** Host configures budget and targeting in the dashboard.
-2. **AI Compliance (Gatekeeper):** Gemini AI grades the listing copy, media, and targeting. If score < 8/10, auto-rejected with feedback.
-3. **Pending Admin:** Campaign enters the Admin queue.
-4. **Admin Approval:** Human admin reviews the AI-approved campaign.
-5. **Backend Publish Engine:** Kicked off post-approval.
-6. **Meta Campaign Creation:** (`/campaigns`) Objective: OUTCOME_LEADS, HOUSING category.
-7. **Meta Ad Set Creation:** (`/adsets`) Enforces HOUSING rules (Age 18-65, strict geo-radius).
-8. **Meta Creative Creation:** (`/adcreatives`) Uploads 1:1, 9:16, 16:9 images. Assembles Asset Feed Spec for DCO. Attaches Lead Gen Form.
-9. **Meta Ad Creation:** (`/ads`) Links Ad Set and Creative. Starts in PAUSED state.
-10. **Publish / Active:** Ad status updated to ACTIVE (based on payment/escrow clearance).
-11. **Webhook Sync:** Asynchronous updates from Meta regarding campaign performance.
-12. **Insights Synchronization:** Cron jobs aggregate clicks/impressions.
-13. **Dashboard Update:** Host UI reflects real-time metrics ("Fuel Gauge").
-14. **CRM Integration:** Meta Lead Webhooks inject leads directly into the ENCHO Inbox.
+1. **Host draft:** the host selects an owned canonical offer or property-discovery subject, approved/future-reviewed creative, plain-language outcome, dates, accepted budget and bounded released feeder preferences.
+2. **Immutable evidence:** the server resolves offer price/inventory/facts/media, strategy/program release, provider account capability and finance scope into a revision-bound snapshot.
+3. **Deterministic and AI preflight:** deterministic checks are authoritative. AI returns structured evidence, assumptions, confidence and recommended corrections; a failed/uncertain AI call routes to human review rather than approval.
+4. **Independent human review:** scoped staff review exact creative bytes/claims/rights, targeting, finance, provider capability and revision hash. An actor cannot approve their own protected work where maker/checker applies.
+5. **Funding and risk:** verified captured/reserved funds, exposure caps and risk release are required before spend activation.
+6. **Paused provider creation:** an idempotent command compiles the exact bound revision and creates only supported Meta or Google resources in a non-spending state.
+7. **Authenticated readback:** requested, compiled and observed provider configuration are compared; drift or an ambiguous remote write enters reconciliation.
+8. **Guarded activation:** a separately authorized operation activates the exact read-back revision. Safety pause remains available even if optional strategy evidence later fails.
+9. **Observation:** provider status and metrics are observed on their actual delayed cadence; first-party visits, inquiries and bookings remain separate canonical evidence.
+10. **Host projection:** every campaign displays desired/observed state, source, reporting window, freshness, spend and consented outcomes. No generic `LIVE` badge proves delivery.
+11. **Inventory/finance protection:** unavailable inventory queues a verified provider pause; invoices, corrections, refunds and overrun settle through the journal.
+12. **CRM integration:** consented provider or first-party inquiries enter the canonical Encho conversation service and durable notification outbox.
 
 **Failure & Recovery:**
-- If any Meta API call fails, the pipeline aborts. The error is logged with a specific `correlationId` and `fbtrace_id`.
-- The system must support rollback of partially created objects to prevent orphan resources.
+- External failures retain correlation and provider trace identifiers with secrets/PII redacted.
+- A possibly successful remote write is never blindly retried or represented as failure. It enters `RECONCILIATION_REQUIRED` until readback establishes the outcome.
+- Partially created resources are paused/quarantined and reconciled. Deletion is not assumed to be a safe rollback.
 
 ### Automatic Activation Policy (Policy B Specification)
 ENCHO strictly enforces **Policy B**:
 1. **Safe Creation**: Campaign and AdSet objects are created on Meta in the `PAUSED` state to prevent accidental live-firing before escrow clearance, preflight verification, and admin approval.
 2. **Explicit Activation Operation (`activateMetaCampaign`)**: Once approved and escrow-released, an explicit, idempotent, audited, read-after-write verified activation operation is executed.
-3. **Hierarchy Verification**: The activation engine issues `POST status=ACTIVE` to both Campaign and AdSet, and verifies via read-after-write GET that `effective_status === 'ACTIVE'` before marking the campaign as `LIVE`.
+3. **Hierarchy Verification**: The activation engine issues only capability-supported status mutations and verifies them by read-after-write. Encho records desired state separately from observed provider state and does not translate an enabled configuration into proof of delivery.
 4. **Financial Safety**: Activation controls delivery status only and never alters financial parameters (`gross_host_charge`, `encho_fee_amount`, `escrow`, `meta_authorized_spend`).
 
 ---
 
 
-## 4.5 AI Campaign Copilot & Live Compliance Engine
-To proactively prevent Meta rejections, the AI Campaign Copilot evaluates host campaigns in real-time.
-- Continuous Validation: As the host edits, Gemini evaluates the draft against Meta Housing Policies and ENCHO standards.
-- Live Scoring: Returns an overall score (0-100) and breakdown (Copy, Media, Compliance, Targeting, Landing Page).
-- Auto-Fix: Generates one-click improvements for non-compliant fields.
-- Admin Reporting: Submits the AI Risk Report directly to the Admin Moderation Dashboard.
-- Learning Engine: Inject recent Meta API failures into the AI's context window to prevent repeated errors.
+## 4.5 AI Campaign Copilot and evidence boundary
+The AI Copilot may evaluate canonical copy, media, targeting and landing evidence against the active provider/program policy and propose corrections.
+- Scores and thresholds are versioned program hypotheses, not universal constitutional truth. A low score may block automatic progression under that released program; a missing/failed AI result never grants approval.
+- AI output shows source hashes, assumptions, confidence, model/prompt/schema version and reviewer disposition.
+- “Apply” creates a new host-visible draft revision; it never silently modifies an accepted revision.
+- Provider failure evidence may inform future recommendations only after sanitization and evaluation. Runtime prompt injection is not an autonomous policy-learning mechanism.
+- AI cannot approve itself, publish a strategy, activate spend, alter money, manufacture provider constants or guarantee conversion.
 
 
 ## 5. State Machines
 
-### Marketing Campaign State Flow
+### Canonical marketing workflow state
 
-* `DRAFT`: Initial creation by host.
-* `PENDING_AI`: Awaiting Gemini evaluation.
-* `AI_REJECTED`: Failed Gatekeeper check.
-* `PENDING_ADMIN`: Passed AI, awaiting human review.
-* `ADMIN_REJECTED`: Rejected by human admin.
-* `ASSET_PREP`: Gathering and resizing media.
-* `CAMPAIGN_CREATED`: Meta Campaign ID generated.
-* `ADSET_CREATED`: Meta Ad Set ID generated.
-* `CREATIVE_CREATED`: Meta Creative ID generated.
-* `AD_CREATED`: Meta Ad ID generated.
-* `PUBLISHED`: Successfully transmitted to Meta.
-* `ACTIVE`: Ad is live and spending.
-* `PAUSED`: Paused manually or via Smart Auto-Pause (occupancy full).
-* `FAILED`: Critical failure during dispatch.
-* `ROLLED_BACK`: Partial creation cleaned up safely.
-* `CANCELLED`: Terminated by Host/Admin, funds refunded to Wallet.
+The revision-bound v2 workflow uses the persisted states below. Provider entity-creation steps and effective delivery remain separate evidence; they are not encoded as synthetic workflow success states.
+
+* `DRAFT`, `EVALUATING`, `AI_REJECTED`, `PENDING_ADMIN`, `ADMIN_REJECTED`, `APPROVED`
+* `PUBLISH_QUEUED`, `PROVIDER_PAUSED`, `ACTIVATION_QUEUED`, `PROVIDER_REVIEW`
+* `LIVE`, `PAUSE_QUEUED`, `PAUSED`, `FAILED`, `RECONCILIATION_REQUIRED`, `CANCELLED`
+
+`LIVE` is a workflow label retained for compatibility. User-facing projections must qualify it with requested/observed provider state, reporting source and freshness; it cannot by itself claim current impressions or spend.
 
 ---
 
@@ -173,7 +164,7 @@ To proactively prevent Meta rejections, the AI Campaign Copilot evaluates host c
 
 - **Row Level Security (RLS):** Enforced in Postgres to ensure a compromised host account cannot query another host's data.
 - **Secret Management:** API keys (Gemini, Meta, Stripe) reside strictly in server environment variables. Never exposed to the client.
-- **Walled Garden Enforcement:** The CRM must aggressively parse and redact external phone numbers, emails, and URLs to prevent off-platform booking.
+- **Walled Garden Integrity:** CRM keeps canonical inquiry/booking context on-platform, but message transformation or contact-detail masking requires an approved, disclosed legal/product policy. Never fabricate, reverse or silently rewrite guest meaning.
 - **Fraud Escrow:** New campaign funds are held in a 24-hour escrow before Meta dispatch to mitigate stolen credit card chargebacks.
 
 ---
@@ -189,7 +180,7 @@ To proactively prevent Meta rejections, the AI Campaign Copilot evaluates host c
 
 ## 12. Testing Standards
 
-- **Validation Testing:** Ensure payload builders generate strict HOUSING compliant JSON.
+- **Validation Testing:** Ensure payload builders match the exact versioned provider capability, account eligibility and approved program. No universal `HOUSING` classification is assumed.
 - **Failure Simulation:** Test handling of Meta 400 (Bad Request), 429 (Rate Limit), and 500 errors.
 - **Idempotency Testing:** Simulate double-clicks on the "Approve & Launch" button.
 
@@ -211,30 +202,30 @@ To proactively prevent Meta rejections, the AI Campaign Copilot evaluates host c
 | Decision # | Date | Problem | Chosen Solution | Reason | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | ADR-001 | 2026-08-07 | Unclear Meta API failures | Implemented strict Correlation ID tracing | Need exact forensic evidence of API failure | Active |
-| ADR-002 | 2026-08-07 | Master Ad Account Risk | Single Encho Ad Account with AI Gatekeeper | Host API keys are too volatile; protects ENCHO platform | Active |
+| ADR-002 | 2026-08-07 | Master Ad Account Risk | Historical single Encho serving-account assumption | Zero Host OAuth remains, but provider-compliant advertiser/account partitioning and explicit advertiser-of-record evidence now control | Superseded by ADR-CR1-001 |
+| ADR-CR1-001 | 2026-09-23 | Complete three-sided release and provider concentration | Modular-monolith CR1 with canonical offer truth, scoped workforce IAM, durable CRM/outbox, immutable provider programs/account bindings and paused readback | Completes one Guest–Host–Staff truth loop without promising native-console parity or bypassing provider rules | Active |
 
 ---
 
-## 15. Definition of Done (Meta Publishing Engine)
+## 15. Definition of Done (Managed Provider Publishing)
 
-The Meta Publishing Engine is NOT complete until:
-- [ ] Campaign creation verified.
-- [ ] Ad Set creation verified.
-- [ ] Creative creation verified.
-- [ ] Ad creation verified.
-- [ ] Publish verified.
-- [ ] Insights synchronized.
-- [ ] Dashboard synchronized.
-- [ ] CRM synchronized.
-- [ ] No orphan Meta objects (Rollback engine active).
-- [ ] Idempotent publishing verified.
-- [ ] Correlation IDs verified in logs.
+The supported Meta or Google publishing path is not complete until:
+- [ ] Exact campaign revision, offer snapshot, creative package, program release, provider account binding and finance contract are immutable and accepted.
+- [ ] Every exposed control is supported by provider schema, account eligibility, Encho compilation and readback evidence.
+- [ ] Provider resources are created paused with stable idempotency and authenticated identity.
+- [ ] Requested, compiled and observed configuration are compared; drift and unknown outcomes reconcile explicitly.
+- [ ] Guarded activation and verified safety pause work without altering accepted finance scope.
+- [ ] Telemetry models calibration, delay, correction, reporting window and stale state honestly.
+- [ ] Host, staff and CRM projections consume the same canonical campaign/outcome identities.
+- [ ] Partial/ambiguous resources are paused or quarantined; no deletion-based rollback is assumed.
+- [ ] Correlation/causation, provider trace and actor evidence are present with secrets/PII redacted.
+- [ ] The exact provider/account path passes a paused zero-spend canary and its operating runbook.
 
 ---
 
 ## 16. Development Phases
 
-**Current authorized marketing execution, 13 September 2026:** Founder instruction HARVO-012 advances the paid-marketing track to Phase 3. Follow `docs/implementation/HARVO_MARKETING_EXECUTION_PLAN.md`, continuously through the remaining milestones under founder instruction HARVO-013, which supersedes the earlier one-milestone-per-response restriction. The versioned HARVO workflow, cost-plus finance, real provider adapters, AI/human review, host/admin studios and operational hardening are implemented to the extent recorded in the continuous verification report. Milestone acceptance remains evidence-based; see the plan and current verification, not the historical M1-only progress statement. The legacy phase labels/certifications below are historical and must be read with the current HARVO audit; they do not override current findings or accept the guest track.
+**Current authorized CR1 execution, 23 September 2026:** The founder advanced `docs/blueprints/ENCHO_THREE_SIDED_OPERATING_PLATFORM_BLUEPRINT.md` into continuous Phase 3 execution through `docs/implementation/CR1_EXECUTION_PLAN.md`. Earlier paid-marketing authorizations remain historical foundations within CR1. The versioned HARVO workflow, cost-plus finance, provider adapters, AI/human review, host/admin studios and operational hardening are implemented only to the extent recorded in current verification. Legal/provider/runtime/pilot gates remain evidence-based and fail closed. The legacy phase labels/certifications below are historical; they do not override the CR1 plan or accept the guest track.
 
 **Phase 1: Architecture & Tracing (Current)**
 - Objectives: Establish visibility into the Meta API pipeline. Stop blind failures.
@@ -297,21 +288,13 @@ M1 definition of done (local scope): explicit configuration and negative-path te
 
 
 
-## 4.6 Meta Campaign Engineering Brain
-The AI Campaign Copilot has been upgraded to a full Campaign Engineering Brain.
-Capabilities include:
-- **Meta Policy Intelligence Engine**: Real-time evaluation against HOUSING and CREATIVE policies defined in the `/docs/meta` knowledge layer.
-- **Media Intelligence**: Pre-submission analysis of image resolution, blur, text overlay %, and aspect ratios.
-- **Landing Page Inspector**: Validates the destination URL for 200 HTTP status and broken link prevention.
-- **Audience & Budget Engineering**: Provides concrete estimates for Audience Size, Expected CPM, Recommended Daily Budget, Expected Leads, and CPL.
-- **Confidence Engine**: Calculates expected Approval Confidence, CTR, CPC, and Lead Quality before submission.
-- **Learning Engine 2.0**: Automatically injects recent Meta API successes (200 OK) and failures (400+ errors) into the AI's prompt context so it learns dynamically over time.
-- **AI Rewrite Engine**: Offers 1-click apply fixes for Headings, Primary Text, Descriptions, and CTA that violate Meta policies or underperform.
+## 4.6 Campaign engineering assistance
+The Campaign Copilot may provide bounded media, landing-page, audience, budget, keyword, geography, policy and copy evidence for both supported providers. Estimates are hypotheses with source, cohort, window and confidence—not concrete performance promises. Provider failures may enter a sanitized evaluation corpus only through reviewed, versioned policy updates. A rewrite is a proposed new draft and receives the same fact, rights, AI and human review as host-authored text.
 
 ## Architecture Decision Record (ADR) Additions
 | Decision # | Date | Problem | Chosen Solution | Reason | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| ADR-003 | 2026-08-07 | Meta API Policy Rejections | Live Preflight & AI Engineering Brain | Waiting for Meta to reject a payload hurts Master Ad Account standing. Preventing it client-side is safer. | Active |
+| ADR-003 | 2026-08-07 | Meta API Policy Rejections | Deterministic preflight plus evidence-bound AI and independent review | Prevent unsupported payloads before provider submission without granting AI approval or autonomous policy authority | Active, refined by CR1 |
 | ADR-004 | 2026-08-11 | High-frequency analytics DB degradation | Raw Event Logging + Daily Upsert Rollup | Isolates write deltas into `campaign_raw_event_logs` and aggregates into `campaign_daily_rollups` to protect query performance. | Active |
 | ADR-005 | 2026-08-14 | Split UI Divergence & State Drift | Dual-Projection Canonical Truth Engine | Serves single source of truth to both Host Transparency View and Admin Ops Command Center with role-scoped projections. | Active |
 | ADR-006 | 2026-08-15 | Financial Risk & External Budget Over-spend | `campaign_financial_contracts` with DB Invariant Constraints | Enforces hard DB and runtime boundary: `gross_host_charge = encho_fee + meta_authorized_spend` & `configured_max <= authorized_spend`. Blocks external Meta over-spend. | Active |
@@ -461,3 +444,12 @@ The subsequent founder directive expressly authorizes primary Neon from `.env`, 
 **Observed production findings:** all four migrations committed in one held-connection transaction with exact checksum verification and minimum new-table grants to `encho_app_prod`. New-table named-role catalog inspection passes; actual runtime login is not proven. Production readiness remains 503 because the deployed owner role bypasses RLS; the alternative role also lacks predecessor application grants. A correct production VARCHAR publication-status policy was rejected by the earlier TEXT-only catalog spelling. The checker now derives that exact cast spelling from the catalog type; it still rejects changed grouping or policy authority. Neither schema types nor security policies are changed by this repair.
 
 **DoD / status:** preserve all additive evidence tables and do not switch database credentials until complete grants and real-login application behavior pass. Live provider lookups found no exact district target accepted by the current adapter; maintain `EXCLUSION_UNRESOLVED`. No synthetic stay, provider mutation or spend was performed. Listing 1's canonical INR 48,000 nightly price takes precedence over the instruction's INR 8,000 description. Baseline regression passed 1,947 tests, with 47 targeted checks after the narrow readiness correction. ADT-7 remains partial; [production rollout](implementation/ADTECH_PRODUCTION_ROLLOUT.md) is the current receipt, not a production certificate.
+
+
+### 23.8 CR1 local workforce and conversation authority
+
+Current CR1 development adds isolated workforce identity/permissions, exact command approval, durable work claims and atomic conversation delivery. Consumer account roles cannot manufacture staff authority. New migration 037 enforces canonical participant/thread identity, ordered immutable messages, content-free notification intents and explicit monotonic read acknowledgements under restricted non-bypass roles. Historical booking-only content remains participant-readable without inventing a new context. Legacy broad staff access and direct message deletion remain contained pending assigned Service Desk authority.
+
+**Reliability and privacy rules:** history GET/prefetch is not a read receipt; viewport-visible content can request a committed acknowledgement. Socket dispatch is not recipient delivery. Lost commit acknowledgement is an unknown outcome reconciled with the same event identity. Unavailable counts must not be presented as zero. Queue workers receive no guest-message body access; notification previews contain routing identifiers and intentional generic copy only. Staff content access needs a previously committed bounded access receipt plus fresh scoped authority before content is returned.
+
+**Source findings / development status:** experience image storage is JSONB, not a PostgreSQL array; canonical ownership/publication checks are required on both service and database paths. These are local source findings, not claims of a production incident. Follow the CR1 execution plan and slice evidence for acceptance. The new schemas have not been applied remotely; actual production logins, legal/provider policy, staged rollout, channel consent, retention and pilot evidence remain independent release gates. No P2 phase exit or production certification follows from local scoped tests.

@@ -27,9 +27,6 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
   const [listingType, setListingType] = useState<'stays' | 'experiences'>('stays');
   const [reservations, setReservations] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(!!user);
-  const [selectedResId, setSelectedResId] = useState<string | number | null>(null);
-  const [messages, setMessages] = useState<any[]>([]);
-  const [msgInput, setMsgInput] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -53,9 +50,6 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
 
       const resData = Array.isArray(reservationsData) ? reservationsData : [];
       setReservations(resData);
-      if (resData.length > 0 && view === 'messages' && !selectedResId) {
-        setSelectedResId(resData[0].id);
-      }
     })
     .catch(console.error)
     .finally(() => {
@@ -64,17 +58,6 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
 
     return () => { active = false; };
   }, [user, view, refreshTrigger]);
-
-  useEffect(() => {
-    if (selectedResId && view === 'messages') {
-      fetch(`/api/messages/${selectedResId}`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } })
-        .then(res => res.json())
-        .then(data => {
-            if (Array.isArray(data)) setMessages(data);
-        })
-        .catch(console.error);
-    }
-  }, [selectedResId, view]);
 
   const updateReservationStatus = async (id: string | number, status: string) => {
      try {
@@ -89,28 +72,6 @@ export default function HostDashboard({ view, user, onNavigateToHostForm, onEdit
      } catch (e) {
        console.error("Failed to update status");
      }
-  };
-
-  const sendMessage = async () => {
-    if (!msgInput.trim() || !selectedResId) return;
-    try {
-      const res = await fetch('/api/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-        body: JSON.stringify({
-           bookingId: selectedResId,
-           senderId: user.id,
-           content: msgInput.trim()
-        })
-      });
-      if (res.ok) {
-        const newMsg = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
-        setMessages(prev => [...prev, newMsg]);
-        setMsgInput('');
-      }
-    } catch (e) {
-      console.error("Failed to send message", e);
-    }
   };
 
   const renderView = () => {

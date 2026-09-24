@@ -9,7 +9,6 @@ import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
 import { useCurrency } from './CurrencyContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { queueCustomMutation } from '../lib/syncService';
 import { mediaUploadHeaders } from '../lib/mediaUploadHeaders';
 import { 
   Building2, Home, Trees, Tractor, Coffee, Ship, Tent, Caravan, Castle, Mountain, Box, Circle, Leaf,
@@ -828,8 +827,6 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         published_listing_id: existingListing?.id
       };
 
-      let responseListingId: number | string | undefined = existingListing?.id;
-
       if (existingListing?.id) {
         // Update existing listing live
         const res = await fetch(`/api/listings/${existingListing.id}`, {
@@ -859,7 +856,6 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
           throw new Error(errJson.error || `Listing publication failed (status ${res.status})`);
         }
         const createdListing = await res.json();
-        responseListingId = createdListing.id;
         // Background sync to drafts table
         fetch('/api/listings/draft', {
           method: 'POST',
@@ -868,7 +864,6 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         }).catch(() => {});
       }
 
-      queueCustomMutation('CREATE_OR_UPDATE_LISTING', { ...payload, id: responseListingId });
       setSubmitted(true);
       addToast('Listing saved', 'Your changes have been saved. Publication remains subject to the listing review process.', 'success');
       setTimeout(() => onSuccess(), 1600);
@@ -1217,6 +1212,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
               listingDescription={formData.description}
               listingType={formData.type}
               listingLocation={formData.city}
+              authHeaders={getAuthHeaders()}
             />
           </div>
         );

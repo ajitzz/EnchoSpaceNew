@@ -1,3 +1,4 @@
+import {parseInquiryAlert,inquiryAlertPreview} from './src/shared/platform/inquiryAlert';
 import DestinationCollection from './components/marketing/DestinationCollection';
 
 import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
@@ -18,7 +19,11 @@ import { useAppBadge, useNativeNotification } from './components/usePWA';
 import { io } from 'socket.io-client';
 import { motion, AnimatePresence, useScroll, useMotionValueEvent } from 'framer-motion';
 import { fetchWithCache, queueMutation } from './lib/syncService';
-import { initSyncHandlers } from './lib/syncHandlers';
+import {
+  cancellationReceiptSchema, experienceBookingReceiptSchema, readReservationSession,
+  reservationCommandNotice, sameReservationSession, sendReservationCommand, stayBookingReceiptSchema,
+  type ReservationSession,
+} from './lib/reservationCommands';
 
 import { ListingCardSkeleton, ListingDetailsSkeleton } from './components/Skeletons';
 
@@ -33,7 +38,6 @@ function getListingSlug(listing: Listing): string {
     return `${cleanTitle || 'stay'}-${listing.id}`;
   }
 
-initSyncHandlers();
 
 function lazyWithRetry<T extends React.ComponentType<any>>(
   componentImport: () => Promise<any>
@@ -61,7 +65,6 @@ const MapSidebar = lazyWithRetry(() => import('./components/MapSidebar'));
 const ListingDetails = lazyWithRetry(() => import('./components/ListingDetails'));
 const ListingDetailsNew = lazyWithRetry(() => import('./components/ListingDetailsNew').then(module => ({ default: module.ListingDetailsNew })));
 const WishlistPage = lazyWithRetry(() => import('./components/WishlistPage'));
-const BookingPage = lazyWithRetry(() => import('./components/BookingPage'));
 const CheckoutPage = lazyWithRetry(() => import('./components/CheckoutPage').then(module => ({ default: module.CheckoutPage })));
 const ReservationsPage = lazyWithRetry(() => import('./components/ReservationsPage'));
 const HostForm = lazyWithRetry(() => import('./components/HostForm'));
@@ -105,7 +108,7 @@ function useNetworkState() {
   return isOnline;
 }
 
-type ViewState = 'EXPLORE' | 'SEARCH' | 'DETAILS' | 'DETAILS_BETA' | 'WISHLIST' | 'BOOKING' | 'CHECKOUT' | 'RESERVATIONS' | 'HOSTING' | 'HOSTING_EXPERIENCE' | 'ADMIN' | 'MESSAGES' | 'EXPERIENCES' | 'EXPERIENCE_DETAILS';
+type ViewState = 'EXPLORE' | 'SEARCH' | 'DETAILS' | 'DETAILS_BETA' | 'WISHLIST' | 'CHECKOUT' | 'RESERVATIONS' | 'HOSTING' | 'HOSTING_EXPERIENCE' | 'ADMIN' | 'MESSAGES' | 'EXPERIENCES' | 'EXPERIENCE_DETAILS';
 
 let socket: any = null;
 
@@ -128,6 +131,7 @@ interface Reservation extends BookingData {
     id: string;
     listing: Listing;
     bookingDate: string;
+    status: string;
 }
 
 interface FlyAnimationState {
@@ -211,6 +215,16 @@ function App() {
   
   // Auth state
   const { user, token: sessionToken } = useAuth();
+  const actorSessionRef = useRef<ReservationSession | null>(null);
+  useEffect(() => {
+    actorSessionRef.current = user && sessionToken ? {actorId: String(user.id), token: sessionToken} : null;
+  }, [user, sessionToken]);
+  const pendingReservationCommands = useRef(new Set<string>());
+  const [checkoutSession, setCheckoutSession] = useState<ReservationSession | null>(null);
+  const currentReservationSession = React.useCallback(() => {
+    const stored = readReservationSession();
+    return sameReservationSession(actorSessionRef.current, stored) ? stored : null;
+  }, []);
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   // Animation & Data States
@@ -428,11 +442,14 @@ function App() {
   useEffect(() => {
     if (user) {
         const token = localStorage.getItem('token');
+        let active = true;
+        const requestSession = token ? {actorId: String(user.id), token} : null;
+        const belongsToCurrentSession = () => active && sameReservationSession(requestSession, currentReservationSession());
         fetchWithCache('/api/wishlists', `wishlists_${user.id}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         })
         .then(data => {
-            if (Array.isArray(data)) setFavorites(data);
+            if (belongsToCurrentSession() && Array.isArray(data)) setFavorites(data);
         })
         .catch(console.error);
 
@@ -440,7 +457,7 @@ function App() {
             headers: { 'Authorization': `Bearer ${token}` }
         })
         .then(data => {
-            if (Array.isArray(data)) setFavoriteExperiences(data);
+            if (belongsToCurrentSession() && Array.isArray(data)) setFavoriteExperiences(data);
         })
         .catch(console.error);
 
@@ -448,7 +465,7 @@ function App() {
             headers: { 'Authorization': `Bearer ${token}` }
         })
         .then(data => {
-            if (Array.isArray(data)) {
+            if (belongsToCurrentSession() && Array.isArray(data)) {
                 setReservations(data);
             }
         })
@@ -458,26 +475,28 @@ function App() {
             headers: { 'Authorization': `Bearer ${token}` }
         })
         .then(data => {
-            if (Array.isArray(data)) {
+            if (belongsToCurrentSession() && Array.isArray(data)) {
                 setExperienceBookings(data);
             }
         })
         .catch(console.error);
 
         // Fetch initial unread count
+        let countPending=false;
+        const seenInquiryAlerts=new Set<string>();
         const fetchInitialCounts = () => {
+             if(countPending||!belongsToCurrentSession()||document.visibilityState!=='visible')return;
+             countPending=true;
              const roleQuery = appMode === 'host' ? '?role=host' : '?role=guest';
-             fetch('/api/threads' + roleQuery, {
+             fetch('/api/unread-counts' + roleQuery, {
+                signal:AbortSignal.timeout(12000),cache:'no-store',
                 headers: { 'Authorization': `Bearer ${token}` }
              })
-             .then(r => r.json())
-             .then(data => {
-                 if (Array.isArray(data)) {
-                     let totalUnread = 0;
-                     data.forEach((th: any) => {
-                         const isGuest = user.id === th.guest_id;
-                         totalUnread += isGuest ? th.unread_count_guest : th.unread_count_host;
-                     });
+             .then(r => {if(!r.ok)throw new Error('Unread status unavailable.');return r.json();})
+             .then((data:unknown) => {
+                 if (belongsToCurrentSession() && data && typeof data==='object' && 'unread' in data
+                     && typeof data.unread==='number' && Number.isSafeInteger(data.unread) && data.unread>=0) {
+                     const totalUnread=data.unread;
 
                      if (totalUnread > 0) {
                          setBadge(totalUnread);
@@ -487,9 +506,12 @@ function App() {
                      prevUnreadCount.current = totalUnread;
                  }
              })
-             .catch(console.error);
+             .catch(()=>{if(belongsToCurrentSession())console.warn('[INQUIRY_UNREAD_UNAVAILABLE]');})
+             .finally(()=>{countPending=false;});
         };
         fetchInitialCounts();
+        const unreadTimer=window.setInterval(fetchInitialCounts,30000);
+        document.addEventListener('visibilitychange',fetchInitialCounts);window.addEventListener('online',fetchInitialCounts);
 
         if (!socket) {
           socket = io({
@@ -499,20 +521,26 @@ function App() {
         }
         
         const notificationSocket = socket;
-        const joinRooms = () => { notificationSocket.emit('join_user', user.id); if (user.role === 'admin') notificationSocket.emit('join_admin'); };
+        const joinRooms = () => { fetchInitialCounts(); notificationSocket.emit('join_user', user.id); if (user.role === 'admin') notificationSocket.emit('join_admin'); };
         notificationSocket.on('connect', joinRooms);
         if (notificationSocket.connected) joinRooms();
         
         const handleNotification = (notif: any) => {
+          if (!belongsToCurrentSession()) return;
           if (notif.type === 'new_message') {
-             const newCount = prevUnreadCount.current + 1;
-             prevUnreadCount.current = newCount;
-             setBadge(newCount);
-             uiAudio.playSuccess();
-             addToast('New message', notif.message.content, 'info');
+             const alert=parseInquiryAlert(notif);
+             if(!alert)return;
+             // Socket events may replay and do not prove unread/read state.
+             fetchInitialCounts();
+             if(alert.notificationId){
+               if(seenInquiryAlerts.has(alert.notificationId))return;
+               seenInquiryAlerts.add(alert.notificationId);
+               if(seenInquiryAlerts.size>500)seenInquiryAlerts.delete(seenInquiryAlerts.values().next().value!);
+             }
+             addToast('New message', inquiryAlertPreview, 'info');
              showNotification('New message received', {
-               body: notif.message.content,
-               tag: 'new-message',
+               body: inquiryAlertPreview,
+               tag: `encho-thread-${alert.threadId}`,
              });
           } else if (notif.type === 'booking_update' || notif.type === 'new_booking') {
              uiAudio.playSuccess();
@@ -529,9 +557,8 @@ function App() {
                  })
                  .then(res => res.json())
                  .then(data => {
-                     if (Array.isArray(data)) {
+                     if (belongsToCurrentSession() && Array.isArray(data)) {
                          setReservations(data);
-                         localStorage.setItem('cached_reservations', JSON.stringify(data));
                      }
                  })
                  .catch(console.error);
@@ -542,6 +569,9 @@ function App() {
         notificationSocket.on('notification', handleNotification);
 
         return () => {
+           active = false;
+           window.clearInterval(unreadTimer);
+           document.removeEventListener('visibilitychange',fetchInitialCounts);window.removeEventListener('online',fetchInitialCounts);
            notificationSocket.off('notification', handleNotification);
            notificationSocket.off('connect', joinRooms);
            notificationSocket.disconnect(); if (socket === notificationSocket) socket = null;
@@ -553,7 +583,7 @@ function App() {
         setExperienceBookings([]);
         clearBadge();
     }
-  }, [user, sessionToken, appMode, setBadge, clearBadge, showNotification]);
+  }, [user, sessionToken, appMode, setBadge, clearBadge, showNotification, currentReservationSession]);
 
   // Global db_changed listener
   useEffect(() => {
@@ -644,37 +674,44 @@ function App() {
   }, [user, isFavoriteExperience]);
 
   const handleCancelBooking = React.useCallback(async (id: string) => {
-      if (!user) return;
-      if (!confirm('Are you sure you want to cancel this booking?')) return;
-      try {
-          // Optimistically update
-          setReservations(prev => prev.map(r => r.id === id ? { ...r, status: 'cancelled' } : r));
-          
-          await queueMutation(`/api/user/bookings/${id}/cancel`, 'PUT', { userId: user.id });
-      } catch (e) {
-          console.error(e);
-      }
-  }, [user]);
+      const session = currentReservationSession();
+      if (!session || !confirm('Request cancellation of this booking?')) return;
+      const key = `${session.actorId}:cancel-stay:${id}`;
+      if (pendingReservationCommands.current.has(key)) return;
+      pendingReservationCommands.current.add(key);
+      const result = await sendReservationCommand({
+        url: `/api/user/bookings/${id}/cancel`, method: 'PUT', session,
+        currentSession: currentReservationSession, online: navigator.onLine,
+        receiptSchema: cancellationReceiptSchema,
+        matches: receipt => receipt.booking.id === String(id) && receipt.booking.user_id === session.actorId,
+      });
+      if (result.status !== 'UNKNOWN') pendingReservationCommands.current.delete(key);
+      if (result.status === 'SESSION_CHANGED' || !sameReservationSession(session, currentReservationSession())) return;
+      if (result.status === 'COMMITTED') {
+        setReservations(prev => prev.map(r => String(r.id) === String(id) ? {...r, status: result.receipt.booking.status} : r));
+        addToast('Cancellation recorded', 'The reservation is cancelled. Any refund is a separate process.', 'info');
+      } else addToast('Cancellation not confirmed', reservationCommandNotice(result.status), 'warning');
+  }, [currentReservationSession, addToast]);
 
   const handleCancelExperienceBooking = React.useCallback(async (id: string | number) => {
-      if (!user) return;
-      if (!confirm('Are you sure you want to cancel this experience booking?')) return;
-      try {
-          // Optimistically update
-          setExperienceBookings(prev => prev.map(b => String(b.id) === String(id) ? { ...b, status: 'cancelled' } : b));
-          
-          const token = localStorage.getItem('token');
-          await fetch(`/api/user/experience-bookings/${id}/cancel`, {
-              method: 'PUT',
-              headers: { 
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`
-              }
-          });
-      } catch (e) {
-          console.error(e);
-      }
-  }, [user]);
+      const session = currentReservationSession();
+      if (!session || !confirm('Request cancellation of this experience booking?')) return;
+      const key = `${session.actorId}:cancel-experience:${id}`;
+      if (pendingReservationCommands.current.has(key)) return;
+      pendingReservationCommands.current.add(key);
+      const result = await sendReservationCommand({
+        url: `/api/user/experience-bookings/${id}/cancel`, method: 'PUT', session,
+        currentSession: currentReservationSession, online: navigator.onLine,
+        receiptSchema: cancellationReceiptSchema,
+        matches: receipt => receipt.booking.id === String(id) && receipt.booking.user_id === session.actorId,
+      });
+      if (result.status !== 'UNKNOWN') pendingReservationCommands.current.delete(key);
+      if (result.status === 'SESSION_CHANGED' || !sameReservationSession(session, currentReservationSession())) return;
+      if (result.status === 'COMMITTED') {
+        setExperienceBookings(prev => prev.map(b => String(b.id) === String(id) ? {...b, status: result.receipt.booking.status} : b));
+        addToast('Cancellation recorded', 'The reservation is cancelled. Any refund is a separate process.', 'info');
+      } else addToast('Cancellation not confirmed', reservationCommandNotice(result.status), 'warning');
+  }, [currentReservationSession, addToast]);
 
   const handleListingClick = React.useCallback(async (listing: Listing) => {
     const sourceListing = listing.originalId ? listings.find(l => l.id === listing.originalId) || listing : listing;
@@ -715,111 +752,109 @@ function App() {
 
   const handleBooking = React.useCallback(async (data: BookingData) => {
       if (!selectedListing) return;
-      
+      const session = currentReservationSession();
+      if (!session) { setShowAuthModal(true); return; }
       if (data.isStartCheckout) {
+          setCheckoutSession(session);
           setLastBooking(data);
           setCurrentView('CHECKOUT');
           window.scrollTo(0, 0);
           return;
       }
-      
-      try {
-        const payload = {
-            listingId: selectedListing.originalId || selectedListing.id,
-            roomId: data.roomIds ? data.roomIds.join(',') : (selectedListing.selectedConfigId || (selectedListing.originalId ? selectedListing.id : undefined)),
-            moveInDate: data.moveInDate,
-            checkOutDate: data.checkOutDate,
-            configuration: data.configuration,
-            name: data.name,
-            phone: data.phone,
-            totalRent: data.totalRent,
-            userId: user?.id,
-            offlineId: crypto.randomUUID?.() || Math.random().toString(),
-        };
-        
-        // Optimistically update
-        const newReservation: Reservation = {
-            id: payload.offlineId,
-            listing: selectedListing,
-            bookingDate: new Date().toISOString(),
-            ...data
-        };
-        setReservations(prev => [...prev, newReservation]);
-        setLastBooking(data);
-        setCurrentView('BOOKING');
-        window.scrollTo(0, 0);
-
-        const token = localStorage.getItem('token');
-        const success = await queueMutation('/api/bookings', 'POST', payload, { 'Authorization': `Bearer ${token}` });
-        if (!success && !navigator.onLine) {
-            addToast('Offline mode', 'Booking queued and will be synced when you are back online.', 'info');
-        }
-      } catch (err) {
-        console.error('Failed to save booking to db', err);
-        alert("Failed to confirm booking. Please check your connection.");
+      const listingId = String(selectedListing.originalId || selectedListing.id);
+      const key = `${session.actorId}:create-stay:${listingId}:${data.moveInDate}:${data.checkOutDate || ''}`;
+      if (pendingReservationCommands.current.has(key)) {
+        addToast('Request already submitted', 'Check your reservations before submitting again.', 'info');
+        return;
       }
-  }, [selectedListing, user]);
+      pendingReservationCommands.current.add(key);
+      const result = await sendReservationCommand({
+        url: '/api/bookings', method: 'POST', session, currentSession: currentReservationSession,
+        online: navigator.onLine,
+        body: {
+          listingId,
+          roomId: data.roomIds?.join(',') || selectedListing.selectedConfigId,
+          moveInDate: data.moveInDate, checkOutDate: data.checkOutDate,
+          configuration: data.configuration, name: data.name, phone: data.phone,
+          totalRent: data.totalRent, userId: session.actorId,
+        },
+        receiptSchema: stayBookingReceiptSchema,
+        matches: receipt => receipt.user_id === session.actorId && receipt.listing_id === listingId
+          && receipt.move_in_date.slice(0, 10) === data.moveInDate.slice(0, 10)
+          && (!data.checkOutDate || receipt.check_out_date?.slice(0, 10) === data.checkOutDate.slice(0, 10))
+          && (receipt.status === 'pending' || receipt.status === 'confirmed'),
+      });
+      if (result.status !== 'UNKNOWN') pendingReservationCommands.current.delete(key);
+      if (result.status === 'SESSION_CHANGED' || !sameReservationSession(session, currentReservationSession())) return;
+      if (result.status !== 'COMMITTED') {
+        addToast('Reservation not confirmed', reservationCommandNotice(result.status), 'warning');
+        return;
+      }
+      const receipt = result.receipt;
+      const reservation: Reservation = {
+        id: receipt.id, listing: selectedListing, bookingDate: receipt.created_at,
+        moveInDate: receipt.move_in_date, checkOutDate: receipt.check_out_date || undefined,
+        configuration: receipt.configuration, name: receipt.name, phone: receipt.phone,
+        totalRent: receipt.total_rent, status: receipt.status,
+      };
+      setReservations(prev => [reservation, ...prev.filter(row => row.id !== receipt.id)]);
+      setCurrentView('RESERVATIONS');
+      addToast(receipt.status === 'confirmed' ? 'Reservation recorded' : 'Request received',
+        receipt.status === 'confirmed' ? 'Your reservation status is available in Reservations.' : 'Your request is pending. It is not a confirmed stay.', 'info');
+      window.scrollTo(0, 0);
+  }, [selectedListing, currentReservationSession, addToast]);
 
-  const handleExperienceBooking = React.useCallback(async (data: any) => {
+  const handleExperienceBooking = React.useCallback(async (data: BookingData & {numTickets?: number}) => {
       if (!selectedExperience) return;
-      
+      const session = currentReservationSession();
+      if (!session) { setShowAuthModal(true); return; }
       if (data.isStartCheckout) {
-          setLastExperienceBooking({
-              experience: selectedExperience,
-              numTickets: data.numTickets,
-              name: data.name,
-              phone: data.phone,
-          });
+          setCheckoutSession(session);
+          setLastExperienceBooking({experience: selectedExperience, numTickets: data.numTickets || 1, name: data.name, phone: data.phone});
           setCurrentView('CHECKOUT');
           window.scrollTo(0, 0);
           return;
       }
-      
-      try {
-        const token = localStorage.getItem('token');
-        const res = await fetch('/api/experience-bookings', {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json', 
-                'Authorization': `Bearer ${token}` 
-            },
-            body: JSON.stringify({
-                experience_id: selectedExperience.id,
-                num_tickets: lastExperienceBooking?.numTickets || data.numTickets || 1,
-                total_price: data.totalRent,
-                name: data.name,
-                phone: data.phone,
-                user_id: user?.id,
-            })
-        });
-        
-        if (!res.ok) {
-            throw new Error('Booking failed');
-        }
-
-        // Fetch updated experience bookings list
-        fetch(`/api/experience-bookings`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (Array.isArray(data)) {
-                setExperienceBookings(data);
-            }
-        })
-        .catch(console.error);
-        
-        addToast("Booking Confirmed", "Your experience is booked successfully!", "success");
-        // Clear active experience booking state
-        setLastExperienceBooking(null);
-        // Redirect to reservations tab or home
-        setCurrentView('RESERVATIONS');
-        window.scrollTo(0, 0);
-      } catch (err) {
-        console.error('Failed to book experience', err);
-        addToast("Error", "Failed to book experience. Please try again.", "error");
+      const experienceId = String(selectedExperience.id);
+      const key = `${session.actorId}:create-experience:${experienceId}`;
+      if (pendingReservationCommands.current.has(key)) return;
+      pendingReservationCommands.current.add(key);
+      const result = await sendReservationCommand({
+        url: '/api/experience-bookings', method: 'POST', session, currentSession: currentReservationSession,
+        online: navigator.onLine,
+        body: {experience_id: selectedExperience.id, num_tickets: lastExperienceBooking?.numTickets || data.numTickets || 1,
+          total_price: data.totalRent, name: data.name, phone: data.phone, user_id: session.actorId},
+        receiptSchema: experienceBookingReceiptSchema,
+        matches: receipt => receipt.user_id === session.actorId && receipt.experience_id === experienceId
+          && (receipt.status === 'pending' || receipt.status === 'confirmed'),
+      });
+      if (result.status !== 'UNKNOWN') pendingReservationCommands.current.delete(key);
+      if (result.status === 'SESSION_CHANGED' || !sameReservationSession(session, currentReservationSession())) return;
+      if (result.status !== 'COMMITTED') {
+        addToast('Reservation not confirmed', reservationCommandNotice(result.status), 'warning');
+        return;
       }
-  }, [selectedExperience, lastExperienceBooking, user]);
+      const receipt = result.receipt;
+      setExperienceBookings(prev => [{...receipt, title: selectedExperience.title,
+        start_date: selectedExperience.start_date, destination: selectedExperience.destination,
+        image_urls: selectedExperience.image_urls}, ...prev.filter(row => String(row.id) !== receipt.id)]);
+      setLastExperienceBooking(null);
+      setCurrentView('RESERVATIONS');
+      addToast(receipt.status === 'confirmed' ? 'Reservation recorded' : 'Request received',
+        receipt.status === 'confirmed' ? 'Your reservation status is available in Reservations.' : 'Your request is pending. It is not a confirmed booking.', 'info');
+      window.scrollTo(0, 0);
+  }, [selectedExperience, lastExperienceBooking, currentReservationSession, addToast]);
+
+  // A checkout callback is not a signed payment/booking receipt. The legacy
+  // callback has no canonical booking identity, so it must never create a local
+  // reservation, issue a second booking, or render the fabricated BookingPage pass.
+  const handleCheckoutReturn = React.useCallback((checkoutSession: ReservationSession | null) => {
+      if (!sameReservationSession(checkoutSession, currentReservationSession())) return;
+      setCurrentView('RESERVATIONS');
+      setLastExperienceBooking(null);
+      addToast('Check reservation status', 'The payment screen has returned. A confirmed reservation requires server verification; contact support if it does not appear.', 'info');
+      window.scrollTo(0, 0);
+  }, [currentReservationSession, addToast]);
 
   const handleAnimationComplete = React.useCallback(() => {
       const target = flyAnimation?.target;
@@ -950,8 +985,11 @@ function App() {
             } else {
                 setCurrentView('SEARCH');
             }
+        } else if (hash === 'BOOKING') {
+          setCurrentView('RESERVATIONS');
+          window.history.replaceState(null, '', '/#RESERVATIONS');
         } else if (validViews.includes(hash)) {
-          if ((hash === 'DETAILS' || hash === 'BOOKING' || hash === 'CHECKOUT') && !selectedListing) {
+          if ((hash === 'DETAILS' || hash === 'CHECKOUT') && !selectedListing) {
               setCurrentView('SEARCH');
               window.history.replaceState(null, '', '/');
           } else if (hash === 'EXPERIENCE_DETAILS' && !selectedExperience) {
@@ -1405,9 +1443,7 @@ function App() {
                       name: lastExperienceBooking.name || user?.name || '',
                       phone: lastExperienceBooking.phone || '',
                     }}
-                    onSuccess={(finalData) => {
-                      handleExperienceBooking(finalData);
-                    }}
+                    onSuccess={() => handleCheckoutReturn(checkoutSession)}
                     onCancel={() => {
                       setCurrentView('EXPERIENCE_DETAILS');
                     }}
@@ -1440,21 +1476,7 @@ function App() {
                       infantsCount: (lastBooking as any)?.infantsCount,
                       currency: (lastBooking as any)?.currency
                     }}
-                    onSuccess={(finalData) => {
-                      const newReservation: Reservation = {
-                        id: (finalData as any).bookingId || crypto.randomUUID?.() || Math.random().toString(),
-                        listing: selectedListing,
-                        bookingDate: new Date().toISOString(),
-                        ...finalData
-                      };
-                      setReservations(prev => [newReservation, ...prev]);
-                      setLastBooking({
-                        ...finalData,
-                        listing: selectedListing,
-                      });
-                      setCurrentView('BOOKING');
-                      window.scrollTo(0, 0);
-                    }}
+                    onSuccess={() => handleCheckoutReturn(checkoutSession)}
                     onCancel={() => {
                       setCurrentView('DETAILS');
                     }}
@@ -1462,22 +1484,6 @@ function App() {
                 </motion.div>
             );
         }
-    }
-
-    if (currentView === 'BOOKING' && selectedListing && lastBooking) {
-        return (
-            <motion.div key="booking" initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition}>
-            <BookingPage 
-              listing={selectedListing}
-              bookingDetails={lastBooking}
-              onBackToHome={() => {
-                  setCurrentView('SEARCH');
-                  // Trigger fly-to-cart animation for the reservation
-                  setFlyAnimation({ listing: selectedListing, target: 'RESERVES' });
-              }}
-            />
-            </motion.div>
-        );
     }
 
     return (
@@ -1669,4 +1675,20 @@ function App() {
   );
 }
 
-export default App;
+const OperationsPage = React.lazy(() => import('./components/operations/OperationsPage'));
+
+/** Keep consumer bootstrap/cache effects outside the independently authenticated workforce surface. */
+function ApplicationEntry() {
+  const [path, setPath] = useState(() => window.location.pathname);
+  useEffect(() => {
+    const syncPath = () => setPath(window.location.pathname);
+    window.addEventListener('popstate', syncPath);
+    window.addEventListener('encho:navigation', syncPath);
+    return () => { window.removeEventListener('popstate', syncPath); window.removeEventListener('encho:navigation', syncPath); };
+  }, []);
+  return /^\/operations(?:\/|$)/.test(path)
+    ? <Suspense fallback={<main aria-busy="true"><p role="status">Opening Encho Operations…</p></main>}><OperationsPage/></Suspense>
+    : <App/>;
+}
+
+export default ApplicationEntry;

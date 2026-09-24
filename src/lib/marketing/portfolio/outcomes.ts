@@ -10,6 +10,9 @@ export class CampaignOutcomes {
   return inTransaction(this.pool,this.operator,async c=>{
    const principals=(await c.query('SELECT id,role FROM users WHERE id=ANY($1::int[])',[[actor.id,this.operator!.id]])).rows;
    if(!principals.some(u=>u.id===this.operator!.id&&u.role==='admin')||!principals.some(u=>u.id===actor.id&&(actor.role!=='admin'||u.role==='admin'))||actor.role==='system')throw new MarketingError('OUTCOMES_ACCESS_DENIED','Current account authority is required.',403);
+   // Conversation RLS does not inherit marketing's operator bypass. Only a
+   // participant receives unread evidence; staff need a separate assigned case.
+   await c.query("SELECT set_config('app.current_user_id',$1,true)",[String(actor.id)]);
    const ids=workspace.campaigns.map(v=>Number(v.id));if(ids.length>30||ids.some(id=>!Number.isSafeInteger(id)||id<=0))throw new MarketingError('OUTCOMES_SCOPE_INVALID','Use a bounded campaign page.');
    const rows=(await c.query(`SELECT w.campaign_id,
     (SELECT count(*)::text FROM marketing_attribution_touchpoints t JOIN marketing_attribution_links l ON l.nonce=t.link_nonce WHERE l.campaign_id=w.campaign_id AND l.host_id=w.host_id) AS visits,
@@ -21,7 +24,7 @@ export class CampaignOutcomes {
     FROM marketing_campaign_workflows w WHERE w.campaign_id=ANY($1::int[]) AND ($2 OR w.host_id=$3)`,[ids,actor.role==='admin',actor.id])).rows;
    if(rows.length!==ids.length)throw new MarketingError('CAMPAIGN_NOT_FOUND','Campaign not found.',404);
    const observedAt=new Date().toISOString();
-   return {...workspace,campaigns:workspace.campaigns.map(campaign=>{const row=rows.find(r=>r.campaign_id===Number(campaign.id));return {...campaign,destinationMembership:row.membership??null,firstPartyOutcomes:{source:'ENCHO_CONSENTED_EVENTS',scope:'CAMPAIGN_ALL_REVISIONS',completeness:'RECORDED_EVENTS_ONLY',observedAt,propertyVisits:this.measurementConfigured?row.visits:null,inquiries:this.measurementConfigured?row.inquiries:null,unreadMessages:this.measurementConfigured?row.unread:null,lastInquiryAt:row.last_inquiry?.toISOString()??null,bookings:this.canonicalBookingsConfigured?row.bookings:null}};})};
+   return {...workspace,campaigns:workspace.campaigns.map(campaign=>{const row=rows.find(r=>r.campaign_id===Number(campaign.id));return {...campaign,destinationMembership:row.membership??null,firstPartyOutcomes:{source:'ENCHO_CONSENTED_EVENTS',scope:'CAMPAIGN_ALL_REVISIONS',completeness:'RECORDED_EVENTS_ONLY',observedAt,propertyVisits:this.measurementConfigured?row.visits:null,inquiries:this.measurementConfigured?row.inquiries:null,unreadMessages:this.measurementConfigured&&actor.role==='host'?row.unread:null,lastInquiryAt:row.last_inquiry?.toISOString()??null,bookings:this.canonicalBookingsConfigured?row.bookings:null}};})};
   });
  }
 }

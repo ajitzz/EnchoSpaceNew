@@ -65,6 +65,11 @@ export class MetricsRegistry {
   private static unresolvedConflictCount: number = 0;
 
   private static maxHistogramSamples = 1000;
+  private static deprecatedSurfaces = new Map<string, number>();
+
+  public static recordDeprecatedSurface(surface: 'CAMPAIGN_MUTATION' | 'MARKETING_AUTOMATION' | 'CLIENT_TELEMETRY' | 'FINANCIAL_MUTATION') {
+    this.deprecatedSurfaces.set(surface, (this.deprecatedSurfaces.get(surface) || 0) + 1);
+  }
 
   /**
    * Records an API HTTP request outcome & latency
@@ -241,6 +246,7 @@ export class MetricsRegistry {
 
     return {
       timestamp: new Date().toISOString(),
+      deprecatedSurfaces: Object.fromEntries(this.deprecatedSurfaces),
       api: {
         totalRequests: Array.from(this.apiRequests.values()).reduce((a, b) => a + b, 0),
         totalErrors: Array.from(this.apiErrors.values()).reduce((a, b) => a + b, 0),
@@ -279,6 +285,7 @@ export class MetricsRegistry {
    */
   public static reset() {
     this.apiRequests.clear();
+    this.deprecatedSurfaces.clear();
     this.apiErrors.clear();
     this.apiLatencies = [];
     this.webhookIngestions = 0;

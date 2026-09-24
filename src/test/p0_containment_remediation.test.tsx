@@ -32,12 +32,12 @@ describe('P0 Emergency Containment Regression Suite', () => {
         });
 
       expect(res.status).toBe(503);
-      expect(res.body.code).toBe('STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE');
-      expect(res.body.error).toContain('statutory compliance review');
+      expect(res.body.code).toBe('CANONICAL_CHECKOUT_REQUIRED');
+      expect(res.body.error).toContain('canonical quote');
       expect(res.body.order_id).toBeUndefined();
     });
 
-    it('returns HTTP 503 and refuses client payment verification for stays in production', async () => {
+    it('requires authentication before any client payment verification path', async () => {
       process.env.NODE_ENV = 'production';
 
       const res = await request(app)
@@ -49,9 +49,8 @@ describe('P0 Emergency Containment Regression Suite', () => {
           razorpay_signature: 'sim_sig_fake_signature'
         });
 
-      expect(res.status).toBe(503);
-      expect(res.body.code).toBe('STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE');
-      expect(res.body.error).toContain('disabled in production');
+      expect(res.status).toBe(401);
+      expect(res.body.error).toContain('Authentication required');
       expect(res.body.success).toBeUndefined();
     });
   });

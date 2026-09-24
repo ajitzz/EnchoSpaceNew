@@ -1,4 +1,8 @@
+import {legacyStaffConversationBoundary,legacyBookingMessageBoundary} from './src/server/assistance/legacyConversationBoundary.js';
 import {InquiryInbox} from './src/lib/marketing/inquiryInbox.js';
+import {createConversationRouter} from './src/server/conversations/router.js';
+import {conversationReadiness} from './src/server/conversations/readiness.js';
+import {startConversationNotifications} from './src/server/conversation/notificationRuntime.js';
 import {measurementVisitor} from './src/server/marketing/measurementRouter.js';
 import {createMeasurementRouter} from './src/server/marketing/measurementRouter.js';
 import {registerSecureRealtime} from './src/server/realtime.js';
@@ -147,7 +151,17 @@ import express, { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
+import {resolvePublicStayAuthority, PublicStayAuthorityError} from './src/server/guest/publicStayAuthority.js';
 import { toPublicStayProjection, toPublicListingCardProjection, generateListingSlug, escapeHtml, STAY_PUBLIC_SQL_COLUMNS, coarsenCoordinate } from './src/lib/stayProjection.js';
+import { assertPublicImageOrigin, isAllowedImageSource, parseImageTransformQuery, readBoundedImageResponse, REMOTE_IMAGE_LIMITS } from './src/server/media/remoteImageProxy.js';
+import { createLegacyListingAssistanceBoundary } from './src/server/assistance/legacyListingAiBoundary.js';
+import { createOperationsRouter } from './src/server/operations/router.js';
+import { createOperationsRuntime, workforceOrigin } from './src/server/operations/runtime.js';
+import { createWorkforceSessionRouter } from './src/server/operations/sessionRouter.js';
+import { createWorkforceSessionRuntime } from './src/server/operations/sessionRuntime.js';
+import { createServiceCaseRuntime } from './src/server/conversations/serviceRuntime.js';
+import { createParticipantServiceRouter,createStaffServiceRouter } from './src/server/conversations/serviceRouter.js';
+import { conversationAssistanceBoundary } from './src/server/assistance/conversationAssistanceBoundary.js';
 
 // These routes use named scalar parameters; persisted sessions normalize numeric IDs.
 export interface AuthRequest extends Request<Record<string, string>> {
@@ -245,6 +259,7 @@ if (!process.env.META_INSTAGRAM_ACCOUNT_ID && process.env.PHONE_NUMBER_ID) {
 
 let globalIoInstance: any = null;
 let managedHttpServer: http.Server | undefined;
+let conversationNotifications:ReturnType<typeof startConversationNotifications>=null;
 let serverDraining = false;
 
 export function broadcastDbEvent(req: any, type: string, targetUserIds?: (string | number | null | undefined)[]) {
@@ -568,6 +583,7 @@ import { StructuredLogger } from './src/lib/observability/structuredLogger.js';
 import { MetricsRegistry } from './src/lib/observability/metricsRegistry.js';
 import { AlertService } from './src/lib/observability/alertService.js';
 import { ProviderDriftDetector } from './src/lib/providers/schemas.js';
+import { createHttpExecutionContextMiddleware } from './src/server/observability/httpExecutionContext.js';
 
 export { maskContactInfo, StructuredLogger, MetricsRegistry, AlertService, ProviderDriftDetector };
 
@@ -672,10 +688,13 @@ async function sendWhatsAppMessage(toPhone: string, messageText: string): Promis
 // Optional Auth Middleware for Seamless Guest Checkouts
 export const optionalAuthenticateToken = (req: Request & Pick<AuthRequest, 'user'>, res: Response, next: NextFunction) => {
   const token = req.headers.authorization?.split(' ')[1];
-  const guest = () => { req.user = { id: 1, role: 'guest', email: 'guest@encho.space' }; next(); };
+  const guest = () => {
+    req.user = undefined;
+    rlsStorage.run({ userId: undefined, isRequest: true, bypassRls: false }, () => next());
+  };
   if (!token) return guest();
   jwt.verify(token, JWT_SECRET, {algorithms:['HS256']}, async (err: any, claims: any) => {
-    if (err) return guest();
+    if (err) return res.status(401).json({ error: 'Invalid or expired authentication token.' });
     try {
       const user = await resolvePersistedSession(pool, claims);
       req.user = user;
@@ -697,6 +716,26 @@ export const authenticateToken = (req: Request & Pick<AuthRequest, 'user'>, res:
       return res.status(error?.status === 401 ? 401 : 503).json({ error: 'Account session verification is unavailable.' });
     }
   });
+};
+
+/**
+ * Authorization is intentionally separate from authentication.  A syntactically
+ * valid bearer token is never sufficient for an administrative operation: the
+ * persisted account resolved above must still hold the admin role.
+ */
+export const requireAdmin = (req: Request & Pick<AuthRequest, 'user'>, res: Response, next: NextFunction) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required.' });
+  }
+  next();
+};
+
+const requireExplicitDevelopmentFixture = (_req: Request, res: Response, next: NextFunction) => {
+  const productionRuntime = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
+  if (productionRuntime || process.env.ENCHO_ALLOW_DEVELOPMENT_FIXTURES !== 'true') {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  next();
 };
 
 app.use(cors({origin:(origin,callback)=>callback(originAllowed(origin)?null:new Error('Blocked by CORS policy: origin is not permitted'),originAllowed(origin)),credentials:true}));
@@ -805,31 +844,22 @@ app.use(morgan('combined', {
 }));
 
 // End-to-End Correlation & Production Observability Middleware
-app.use((req: any, res: any, next: any) => {
-  const correlationId = req.headers['x-correlation-id'] || `corr_req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-  const requestId = req.headers['x-request-id'] || `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-  req.correlationId = correlationId;
-  req.requestId = requestId;
-  res.setHeader('X-Correlation-ID', correlationId);
-  res.setHeader('X-Request-ID', requestId);
-
-  const start = Date.now();
-  res.on('finish', () => {
-    const durationMs = Date.now() - start;
-    MetricsRegistry.recordApiRequest(req.method, req.route?.path || req.path, res.statusCode, durationMs);
-    if (res.statusCode >= 500) {
-      StructuredLogger.error(`[API 5XX] ${req.method} ${req.path} -> ${res.statusCode} in ${durationMs}ms`, {
-        correlationId,
-        requestId,
+app.use(createHttpExecutionContextMiddleware({
+  onFinish: ({request, response, context, durationMs}) => {
+    MetricsRegistry.recordApiRequest(request.method, request.route?.path || request.path, response.statusCode, durationMs);
+    if (response.statusCode >= 500) {
+      StructuredLogger.error(`[API 5XX] ${request.method} ${request.path} -> ${response.statusCode} in ${durationMs}ms`, {
+        correlationId: context.correlationId,
+        requestId: context.operationId,
+        ...(context.causationId ? {causationId: context.causationId} : {}),
         durationMs,
         outcome: 'FAILED',
-        errorCode: `HTTP_${res.statusCode}`,
-        tenantId: req.user?.id || null
+        errorCode: `HTTP_${response.statusCode}`,
+        tenantId: request.user?.id || null
       });
     }
-  });
-  next();
-});
+  },
+}));
 
 // Real-time Integration Inspection Monitoring Middleware
 app.use(integrationInspectionMiddleware);
@@ -851,7 +881,7 @@ function sendPublicLegalPage(fileName: string, res: Response) {
 app.get('/privacy', (_req, res) => sendPublicLegalPage('privacy.html', res));
 app.get('/terms-of-service', (_req, res) => sendPublicLegalPage('terms-of-service.html', res));
 
-app.get('/api/admin/integration-inspection', (req: Request, res: Response) => {
+app.get('/api/admin/integration-inspection', authenticateToken, requireAdmin, (_req: Request, res: Response) => {
   const auditReport = runFullIntegrationAudit();
   res.json({
     status: 'ok',
@@ -1004,6 +1034,9 @@ const cacheControl = (maxAgeSeconds: number) => {
   };
 };
 
+app.use('/api/operations/v1/session',createWorkforceSessionRouter(createWorkforceSessionRuntime(process.env,()=>{
+  StructuredLogger.error('[WORKFORCE] Isolated identity runtime unavailable',{errorCode:'IDENTITY_UNAVAILABLE'});
+}),workforceOrigin(process.env)));
 app.use(express.json({
   limit: '20mb',
   verify: (req: any, _res, buf) => {
@@ -1012,8 +1045,16 @@ app.use(express.json({
 }));
 
 const harvoMarketing = createDeployedMarketingRuntime(pool);
+const serviceCasesRuntime=createServiceCaseRuntime(process.env,pool,()=>{
+  StructuredLogger.error('[SERVICE_CASE] Scoped runtime unavailable',{errorCode:'SERVICE_CASE_UNAVAILABLE'});
+});
+app.use('/api/conversations/v1',createParticipantServiceRouter(serviceCasesRuntime?.participant??null,{authenticate:authenticateToken,accountId:req=>Number((req as AuthRequest).user?.id)}));
+app.use('/api/operations/v1/service',createStaffServiceRouter(serviceCasesRuntime?.staff??null,workforceOrigin(process.env)));
 app.get('/api/stays/:slug/spatial-story',rateLimit({windowMs:60000,limit:60,standardHeaders:'draft-8',legacyHeaders:false}),async(req:Request,res:Response,next:NextFunction)=>{try{res.setHeader('Cache-Control','no-store');res.json(await harvoMarketing.stories.publicStory(String(req.params.slug)));}catch(error){next(error);}},marketingErrorHandler);
 app.get('/api/explore/:destination', rateLimit({windowMs:60000,limit:30,standardHeaders:'draft-8',legacyHeaders:false}),async(req:Request,res:Response,next:NextFunction)=>{try{res.setHeader('Cache-Control','no-store');res.json(await harvoMarketing.pools.collection(String(req.params.destination)));}catch(error){next(error);}},marketingErrorHandler);
+app.use('/api/operations/v1', createOperationsRouter(createOperationsRuntime(process.env, () => {
+  StructuredLogger.error('[WORKFORCE] Restricted operations runtime unavailable', {errorCode: 'WORKFORCE_UNAVAILABLE'});
+}),{origin:workforceOrigin(process.env)}));
 app.use('/api/marketing/measurement',createMeasurementRouter(harvoMarketing.config.origin,harvoMarketing.touchpoints),marketingErrorHandler);
 app.use('/api/marketing/v2', createMarketingRouter(pool, harvoMarketing.workflow, harvoMarketing.finance, authenticateToken, harvoMarketing.targeting, {corridorInference:harvoMarketing.corridorInference,outcomes:harvoMarketing.outcomes,stories:harvoMarketing.stories,pools:harvoMarketing.pools,preflight:harvoMarketing.preflight,settlement:harvoMarketing.settlement,conversions:harvoMarketing.conversions,guidance:harvoMarketing.guidance,creative:harvoMarketing.creative,pauseRecovery:harvoMarketing.pauseRecovery,facts:harvoMarketing.facts,keywordResearch:harvoMarketing.keywordResearch,portfolio:harvoMarketing.portfolio}));
 app.get('/api/webhooks/marketing/v2/meta', (req: Request,res: Response,next: NextFunction) => { try { res.type('text/plain').send(harvoMarketing.metaEvents.challenge(req.query['hub.mode'],req.query['hub.verify_token'],req.query['hub.challenge'])); } catch(error) { next(error); } }, marketingErrorHandler);
@@ -1031,15 +1072,10 @@ app.post('/api/webhooks/marketing/v2/:provider', async (req: any, res: Response,
   } catch (error) { next(error); }
 }, marketingErrorHandler);
 app.use(legacyMarketingBoundary);
-
-app.use((req, res, next) => {
-  if (req.path.startsWith('/api/') && !req.path.startsWith('/api/health')) {
-    if (!marketingSchemaInitialized && isDbConfigured) {
-      ensureDbInitialized().catch(err => console.warn('Background DB Init notice:', err?.message));
-    }
-  }
-  next();
-});
+app.all(['/api/webhooks/meta', '/api/webhooks/ad-network'], (_req, res) => res.status(410).json({
+  code: 'HARVO_V2_REQUIRED',
+  error: 'This legacy provider webhook is retired. Use the provider-specific marketing v2 ingress.',
+}));
 
 app.use(hpp()); // Protect against HTTP Parameter Pollution attacks
 
@@ -1070,18 +1106,19 @@ app.get('/api/config', (req, res) => {
 
 // WhatsApp Webhook Registration
 app.get('/api/webhook/whatsapp', (req, res) => {
-  const verify_token = process.env.WHATSAPP_VERIFY_TOKEN || 'encho_verify_123';
+  const verify_token = process.env.WHATSAPP_VERIFY_TOKEN;
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
+  if (!verify_token) return res.status(503).send('Webhook verification is not configured');
   if (mode && token) {
     if (mode === "subscribe" && token === verify_token) {
       res.status(200).send(challenge);
     } else {
       res.sendStatus(403);
     }
-  }
+  } else res.status(400).send('Missing mode or token');
 });
 
 export const processWhatsAppWebhookPayload = async (body: any) => {
@@ -1141,7 +1178,7 @@ Answer the user's question accurately. If they ask about something not listed, p
   }
 };
 
-app.post('/api/webhook/whatsapp', async (req, res) => {
+app.post('/api/webhook/whatsapp', verifyMetaWebhook, async (req, res) => {
   try {
     const body = req.body;
     if (body.object) {
@@ -2840,18 +2877,6 @@ const ensureDbInitialized = async () => {
   }
 };
 
-// Top-level middleware to guarantee DB schema readiness on incoming Serverless/Vercel API requests
-app.use(async (req, _res, next) => {
-  if (req.path.startsWith('/api') && isDbConfigured && (!marketingSchemaInitialized || !usersTableInitialized || !listingsTableInitialized)) {
-    try {
-      await ensureDbInitialized();
-    } catch (_err) {
-      // Non-blocking fallback
-    }
-  }
-  next();
-});
-
 // API Root Status Probe
 app.get('/api', (_req, res) => {
   res.json({
@@ -3422,18 +3447,17 @@ app.get('/api/health/db', async (req, res) => {
     await pool.query('SELECT 1');
     res.json({ status: 'ok' });
   } catch (error) {
-    const errorMessage = error instanceof Error ? (error as Error).message : String(error);
-    if (errorMessage.includes('Tenant or user not found')) {
-      console.warn('Neon DB Warning: Tenant or user not found. Check your DATABASE_URL.');
-      return res.status(503).json({ status: 'error', message: 'Neon Database: Tenant or user not found. Please check your DATABASE_URL in settings.' });
-    }
-    console.error('DB Health Check Failed:', error);
-    res.status(500).json({ status: 'error', message: 'DB connection failed', detail: errorMessage });
+    console.error('DB Health Check Failed');
+    res.status(500).json({ status: 'error', message: 'DB connection failed' });
   }
 });
 
-// Init DB schema
-app.post('/api/init-db', async (req, res) => {
+// Legacy development-only schema initializer. Production schema authority is the
+// ordered migration runner; this route is disabled unless a developer opts in.
+app.post('/api/init-db', authenticateToken, requireAdmin, async (_req, res) => {
+  if (process.env.NODE_ENV === 'production' || process.env.VERCEL || process.env.ENCHO_ALLOW_RUNTIME_DDL !== 'true') {
+    return res.status(404).json({ error: 'Not found' });
+  }
   if (!isDbConfigured) {
     return res.status(503).json({ status: 'error', message: 'DB not configured' });
   }
@@ -3452,38 +3476,32 @@ app.post('/api/init-db', async (req, res) => {
 });
 
 // Dynamic Server-Side Image Resizing Proxy Route & Multi-Channel Edge Crop Pipeline
-app.get('/api/image', async (req, res) => {
+app.get('/api/image', rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: 'draft-8', legacyHeaders: false }), async (req, res) => {
   try {
-    const url = req.query.url as string;
-    let width = parseInt(req.query.w as string) || undefined;
-    let height = parseInt(req.query.h as string) || undefined;
-    const quality = parseInt(req.query.q as string) || 80;
-    const aspect = req.query.aspect as string; // '1:1', '9:16', '16:9'
+    const parsed = parseImageTransformQuery(req.query);
+    const source = new URL(parsed.url);
+    if (!isAllowedImageSource(source)) return res.status(403).send('Domain not allowed');
+    await assertPublicImageOrigin(source);
 
-    if (!url) {
-      return res.status(400).send('URL is required');
-    }
-
-    // Security: Only allow proxying from allowed domains to prevent SSRF
-    const allowedDomains = ['s3.amazonaws.com', process.env.AWS_S3_BUCKET_NAME, 'images.unsplash.com'].filter(Boolean) as string[];
-    try {
-      const urlObj = new URL(url);
-      if (!allowedDomains.some(d => urlObj.hostname.includes(d))) {
-        return res.status(403).send('Domain not allowed');
-      }
-    } catch {
-      return res.status(400).send('Invalid URL');
-    }
-
-    const imageRes = await fetch(url);
-    if (!imageRes.ok) throw new Error('Failed to fetch image from origin');
-
-    const imageBuffer = await imageRes.arrayBuffer();
+    let width = parsed.w;
+    let height = parsed.h;
+    const quality = parsed.q;
+    const aspect = parsed.aspect;
+    const imageRes = await fetch(source, {
+      redirect: 'error',
+      signal: AbortSignal.timeout(REMOTE_IMAGE_LIMITS.timeoutMs),
+      headers: { Accept: 'image/avif,image/webp,image/*' },
+    });
+    const imageBuffer = await readBoundedImageResponse(imageRes);
 
     const accept = req.headers.accept || '';
     const format = accept.includes('image/avif') ? 'avif' : 'webp';
 
-    let sharpInstance = sharp(Buffer.from(imageBuffer));
+    let sharpInstance = sharp(imageBuffer, {
+      failOn: 'warning',
+      limitInputPixels: REMOTE_IMAGE_LIMITS.maxInputPixels,
+      sequentialRead: true,
+    });
 
     // Handle Meta & Google multi-channel aspect ratios (Gap 8)
     if (aspect) {
@@ -3507,8 +3525,8 @@ app.get('/api/image', async (req, res) => {
         fit: 'cover',
         position: 'center'
       });
-    } else if (width) {
-      sharpInstance = sharpInstance.resize({ width, withoutEnlargement: true });
+    } else if (width || height) {
+      sharpInstance = sharpInstance.resize({ width, height, withoutEnlargement: true });
     }
 
     let optimizedBuffer;
@@ -3524,8 +3542,9 @@ app.get('/api/image', async (req, res) => {
     res.set('Vary', 'Accept');
     res.send(optimizedBuffer);
   } catch (error) {
-    console.error('Image Proxy Error:', error);
-    res.status(500).send('Error processing image');
+    if (error instanceof z.ZodError) return res.status(400).send('Invalid image request');
+    console.error('Image Proxy Error');
+    res.status(502).send('Error processing image');
   }
 });
 
@@ -3537,9 +3556,9 @@ app.post('/api/marketing/assets/resize', authenticateToken, async (req: AuthRequ
       return res.status(400).json({ error: 'image_urls array is required' });
     }
 
-    const hostHeader = req.headers.host || 'localhost:3000';
-    const protocol = req.headers['x-forwarded-proto'] || 'http';
-    const baseUrl = `${protocol}://${hostHeader}`;
+    const configuredOrigin = harvoMarketing.config.origin;
+    if (!configuredOrigin) return res.status(503).json({ error: 'Canonical media origin is not configured.' });
+    const baseUrl = new URL(configuredOrigin).origin;
 
     const processed = image_urls.map((url: string) => ({
       original: url,
@@ -3564,8 +3583,9 @@ app.post('/api/marketing/assets/resize', authenticateToken, async (req: AuthRequ
 
 // Get presigned URL for S3 upload
 
-app.put('/api/mock-upload', (req, res) => {
-  res.status(200).send('Mock upload successful');
+app.put('/api/mock-upload', (_req, res) => {
+  // Signed local-upload tickets are the supported development transport.
+  return res.status(404).json({ error: 'Not found' });
 });
 
 app.put('/api/upload-local', express.raw({ type: '*/*', limit: '50mb' }), async (req, res) => {
@@ -10853,12 +10873,13 @@ export async function handleVerifiedPayment(txId: any, campaignId: any, paymentI
 
 // --- Milestone 5: Meta Webhook Verification & Real-Time Leads ---
 app.get('/api/webhooks/meta', (req, res) => {
-  const verify_token = 'encho_meta_secure_2026'; // The token from the Meta Developer Dashboard
+  const verify_token = process.env.META_WEBHOOK_VERIFY_TOKEN || process.env.META_MARKETING_WEBHOOK_VERIFY_TOKEN;
 
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
 
+  if (!verify_token) return res.status(503).send('Webhook verification is not configured');
   if (mode && token) {
     if (mode === 'subscribe' && token === verify_token) {
       console.log('[META WEBHOOK] Verified successfully!');
@@ -13304,64 +13325,16 @@ app.get('/api/v2/stays/:propertySlug', async (req, res) => {
       return res.status(404).json({ error: 'Stay not found' });
     }
 
-    const rawListing = result.rows[0];
-
-    // M3: Canonical Relational Authority
-    // Query relational room_types first. If relational rows exist, they unconditionally supersede legacy JSON.
-    // Fall back to legacy JSON only if 0 relational room rows exist.
-    try {
-      const rtResult = await pool.query(
-        'SELECT name, type, icon, tag, base_price, max_occupancy, features, amenities, description, specs FROM room_types WHERE listing_id = $1 ORDER BY id ASC',
-        [rawListing.id]
-      );
-      if (rtResult.rows.length > 0) {
-        rawListing.rooms = rtResult.rows.map((rt: any) => ({
-          name: rt.name,
-          type: rt.type || rt.name.toLowerCase().replace(/\s+/g, '_'),
-          icon: rt.icon || '🛏️',
-          tag: rt.tag || '',
-          price: parseFloat(rt.base_price),
-          capacity: rt.max_occupancy,
-          description: rt.description || '',
-          specs: rt.specs || '',
-          features: typeof rt.features === 'string' ? JSON.parse(rt.features || '[]') : (rt.features || []),
-          amenities: typeof rt.amenities === 'string' ? JSON.parse(rt.amenities || '[]') : (rt.amenities || [])
-        }));
-      }
-    } catch (_e) { /* non-blocking relational authority read */ }
-
-    // Query relational media_assets first. If relational rows exist, they unconditionally supersede legacy JSON.
-    // Only approved assets are returned (moderation_status = 'approved').
-    // Fall back to legacy JSON only if 0 relational media rows exist.
-    try {
-      const mediaResult = await pool.query(
-        `SELECT url, tier, category, title, description, is_hero, is_sleeping_area, moderation_status
-         FROM media_assets
-         WHERE entity_id = $1 AND entity_type = $2 AND moderation_status = 'approved'
-         ORDER BY order_index ASC`,
-        [rawListing.id, 'listing']
-      );
-      if (mediaResult.rows.length > 0) {
-        rawListing.photos = mediaResult.rows.map((m: any) => ({
-          url: m.url,
-          tier: m.tier || 'common',
-          category: m.category || 'other',
-          title: m.title || '',
-          description: m.description || '',
-          isHero: Boolean(m.is_hero),
-          is_sleeping_area: Boolean(m.is_sleeping_area),
-          moderation_status: m.moderation_status
-        }));
-      }
-    } catch (_e) { /* non-blocking relational authority read */ }
+    const rawListing = await resolvePublicStayAuthority(pool, result.rows[0]);
 
     // Apply strict privacy transformation and nested safe mappers
     const publicProjection = toPublicStayProjection(rawListing);
     res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=120');
     return res.json(publicProjection);
   } catch (error) {
-    console.error('[STAY PROJECTION ERROR]', error);
-    return res.status(500).json({ error: 'Failed to fetch stay projection' });
+    res.setHeader('Cache-Control', 'no-store');
+    console.error('[STAY PROJECTION ERROR]', {code: error instanceof PublicStayAuthorityError ? error.code : 'STAY_READ_UNAVAILABLE'});
+    return res.status(503).json({ error: 'Verified stay information is temporarily unavailable.', code: 'STAY_AUTHORITY_UNAVAILABLE' });
   }
 });
 
@@ -13647,9 +13620,10 @@ app.get('/api/listings/:id', async (req: Request, res: Response) => {
     }
 
     // Return sanitized public stay projection — address, user_id, raw coords stripped
-    const safeProjection = toPublicStayProjection(listing);
+    const safeProjection = toPublicStayProjection(await resolvePublicStayAuthority(pool, listing));
     return res.json(safeProjection);
   } catch (error) {
+    if (error instanceof PublicStayAuthorityError) return res.status(503).set('Cache-Control', 'no-store').json({error: error.message, code: error.code});
     res.status(500).json({ error: 'Failed to fetch listing' });
   }
 });
@@ -14128,149 +14102,27 @@ app.put('/api/host/reservations/:id/status', authenticateToken, async (req: Auth
   }
 });
 
-// Threads Endpoints
-app.get('/api/threads', authenticateToken, async (req: AuthRequest, res) => {
-  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  try {
-    const userId = req.user?.id;
-    const role = req.query.role; // 'guest' or 'host'
-
-    let query = `
-      SELECT t.*,
-             COALESCE(l.title, e.title) as listing_title,
-             COALESCE(l.image_url, (SELECT image_urls[1] FROM experiences WHERE id = e.id)) as listing_image,
-             u_guest.name as guest_name,
-             u_host.name as host_name
-      FROM threads t
-      LEFT JOIN listings l ON t.listing_id = l.id
-      LEFT JOIN experiences e ON t.experience_id = e.id
-      LEFT JOIN users u_guest ON t.guest_id = u_guest.id
-      LEFT JOIN users u_host ON t.host_id = u_host.id
-      WHERE (t.guest_id = $1 OR t.host_id = $1)
-    `;
-
-    if (role === 'guest') {
-      query = `
-        SELECT t.*,
-               l.title as listing_title, l.image_url as listing_image,
-               e.title as experience_title,
-               (SELECT image_urls[1] FROM experiences WHERE id = e.id) as experience_image,
-               u_guest.name as guest_name,
-               u_host.name as host_name
-        FROM threads t
-        LEFT JOIN listings l ON t.listing_id = l.id
-        LEFT JOIN experiences e ON t.experience_id = e.id
-        LEFT JOIN users u_guest ON t.guest_id = u_guest.id
-        LEFT JOIN users u_host ON t.host_id = u_host.id
-        WHERE t.guest_id = $1
-      `;
-    } else if (role === 'host') {
-      query = `
-        SELECT t.*,
-               l.title as listing_title, l.image_url as listing_image,
-               e.title as experience_title,
-               (SELECT image_urls[1] FROM experiences WHERE id = e.id) as experience_image,
-               u_guest.name as guest_name,
-               u_host.name as host_name
-        FROM threads t
-        LEFT JOIN listings l ON t.listing_id = l.id
-        LEFT JOIN experiences e ON t.experience_id = e.id
-        LEFT JOIN users u_guest ON t.guest_id = u_guest.id
-        LEFT JOIN users u_host ON t.host_id = u_host.id
-        WHERE t.host_id = $1
-      `;
-    }
-
-    query += ` ORDER BY t.updated_at DESC`;
-
-    const result = await pool.query(query, [userId]);
-
-    // Process rows
-    const processed = result.rows.map(row => ({
-       ...row,
-       listing_title: row.listing_title || row.experience_title,
-       listing_image: row.listing_image || row.experience_image
-    }));
-
-    res.json(processed);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch threads' });
-  }
-});
-
-const inquiryInbox=new InquiryInbox(pool,maskContactInfo,harvoMarketing.touchpoints);
-app.post('/api/threads',authenticateToken,messageLimiter,async(req:AuthRequest,res:Response,next:NextFunction)=>{
-  if(!isDbConfigured)return res.status(503).json({error:'DB not configured'});
-  try{res.json(await inquiryInbox.create({id:Number(req.user!.id),role:'host'},req.body));}catch(error){next(error);}
-},marketingErrorHandler);
-app.get('/api/threads/:id/messages',authenticateToken,async(req:AuthRequest,res:Response,next:NextFunction)=>{
-  if(!isDbConfigured)return res.status(503).json({error:'DB not configured'});
-  try{res.json(await inquiryInbox.messages({id:Number(req.user!.id),role:'host'},Number(req.params.id),req.query.before));}catch(error){next(error);}
-},marketingErrorHandler);
-app.post('/api/threads/:id/messages',authenticateToken,messageLimiter,async(req:AuthRequest,res:Response,next:NextFunction)=>{
-  if(!isDbConfigured)return res.status(503).json({error:'DB not configured'});
-  try{
-    const actor={id:Number(req.user!.id),role:'host' as const};
-    const result=await inquiryInbox.send(actor,Number(req.params.id),req.body,measurementVisitor(req));
-    const sockets=result.duplicate?null:req.app.get('io');
-    sockets?.to(`thread_${result.thread.id}`).emit('new_message',result.message);
-    sockets?.to(`user_${result.message.receiver_id}`).emit('notification',{type:'new_message',threadId:result.thread.id,message:'You have a new inquiry reply in Encho.'});
+// Canonical participant conversations: 037 + restricted-role catalog evidence.
+const inquiryInbox=new InquiryInbox(pool,maskContactInfo,harvoMarketing.touchpoints,{deliveryRequired:true});
+const conversationReady=conversationReadiness(pool,()=>console.warn('[CR1_CONVERSATION_CATALOG_UNAVAILABLE]'));
+app.use('/api',createConversationRouter({
+  inbox:inquiryInbox,authenticate:authenticateToken,mutationLimiter:messageLimiter,
+  accountId:req=>Number((req as AuthRequest).user?.id),visitor:req=>measurementVisitor(req as AuthRequest),
+  ready:async()=>isDbConfigured&&await conversationReady(),
+  onFailure:event=>console.warn('[CR1_CONVERSATION_REQUEST_FAILED]',event),
+  afterCommit:result=>{
+    const sockets=app.get('io') as SocketIOServer|undefined;
+    sockets?.to(`thread_${result.thread.id}`).emit('conversation_changed',{
+      type:'new_message',threadId:result.thread.id,messageId:result.message.id,notificationId:result.message.notification_intent_id,
+    });
+    sockets?.to(`user_${result.message.receiver_id}`).emit('notification',{
+      type:'new_message',threadId:result.thread.id,messageId:result.message.id,notificationId:result.message.notification_intent_id,
+    });
     sockets?.to(`user_${result.message.receiver_id}`).emit('db_changed',{type:'inquiries'});
-    res.json(result.message);
-  }catch(error){next(error);}
-},marketingErrorHandler);
+  },
+}));
 
-app.get('/api/unread-counts', authenticateToken, async (req: AuthRequest, res) => {
-  if (!isDbConfigured) return res.json({ unread: 0 });
-  try {
-    const userId = req.user?.id;
-    const result = await pool.query(`
-      SELECT SUM(
-        CASE WHEN guest_id = $1 THEN unread_count_guest
-             WHEN host_id = $1 THEN unread_count_host
-             ELSE 0 END
-      ) as total_unread
-      FROM threads
-      WHERE guest_id = $1 OR host_id = $1
-    `, [userId]);
-    const total = result.rows.length > 0 && result.rows[0].total_unread != null ? parseInt(result.rows[0].total_unread) : 0;
-    res.json({ unread: isNaN(total) ? 0 : total });
-  } catch (error) {
-    console.warn('[UNREAD COUNTS FALLBACK] Error fetching unread counts, returning 0:', error);
-    res.json({ unread: 0 });
-  }
-});
-
-app.get('/api/messages/:bookingId', authenticateToken, async (req: AuthRequest, res) => {
-  if (!isDbConfigured) return res.json([]);
-  try {
-    const { bookingId } = req.params;
-    const userId = req.user?.id;
-
-    // Check if the user is authorized to view these messages
-    if (req.user?.role !== 'admin') {
-      const checkAuth = await pool.query('SELECT b.user_id as guest_id, l.user_id as host_id FROM bookings b JOIN listings l ON b.listing_id = l.id WHERE b.id = $1', [bookingId]);
-      if (checkAuth.rows.length === 0 || (checkAuth.rows[0].guest_id !== userId && checkAuth.rows[0].host_id !== userId)) {
-        return res.status(403).json({ error: 'Not authorized to view these messages' });
-      }
-    }
-
-    const result = await pool.query(`
-      SELECT m.*, u.name as sender_name
-      FROM messages m
-      JOIN users u ON m.sender_id = u.id
-      WHERE m.booking_id = $1
-      ORDER BY m.created_at ASC
-    `, [bookingId]);
-
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Fetch Messages Error:', error);
-    res.status(500).json({ error: 'Failed to fetch messages' });
-  }
-});
-
-app.post('/api/messages', authenticateToken, messageLimiter, async (req: AuthRequest, res) => {
+app.post('/api/messages', authenticateToken, messageLimiter, legacyBookingMessageBoundary, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
     const { bookingId, receiverId, content } = req.body;
@@ -14463,7 +14315,7 @@ app.get('/api/admin/metrics', authenticateToken, async (req: AuthRequest, res) =
   }
 });
 
-app.get('/api/admin/threads', authenticateToken, async (req: AuthRequest, res) => {
+app.get('/api/admin/threads', authenticateToken, legacyStaffConversationBoundary, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
   try {
@@ -14501,7 +14353,7 @@ app.get('/api/admin/threads', authenticateToken, async (req: AuthRequest, res) =
   }
 });
 
-app.delete('/api/admin/messages/:id', authenticateToken, async (req: AuthRequest, res) => {
+app.delete('/api/admin/messages/:id', authenticateToken, legacyStaffConversationBoundary, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
   try {
@@ -14512,7 +14364,7 @@ app.delete('/api/admin/messages/:id', authenticateToken, async (req: AuthRequest
   }
 });
 
-app.get('/api/admin/threads/:id/messages', authenticateToken, async (req: AuthRequest, res) => {
+app.get('/api/admin/threads/:id/messages', authenticateToken, legacyStaffConversationBoundary, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
   try {
@@ -14581,7 +14433,7 @@ Do NOT wrap it in markdown block.`;
   }
 });
 
-app.post('/api/ai/suggest-reply', authenticateToken, async (req: AuthRequest, res) => {
+app.post('/api/ai/suggest-reply', authenticateToken, conversationAssistanceBoundary, async (req: AuthRequest, res) => {
   try {
     const { history, propertyTitle, isHost } = req.body;
     let reply = 'Hello! How can I help you regarding your booking today?';
@@ -14672,7 +14524,7 @@ Do NOT include any empty placeholders, brackets like [Insert City], or generic t
 });
 
 // AI Rule Abstraction (God-Level Luxury Hospitality Rule Polishing)
-app.post('/api/ai/curate-rules', async (req, res) => {
+app.post('/api/ai/curate-rules', authenticateToken, createLegacyListingAssistanceBoundary('CURATE_RULES'), async (req: AuthRequest, res) => {
   try {
     const { rawRules } = req.body;
     if (!rawRules || typeof rawRules !== 'string' || !rawRules.trim()) {
@@ -14720,7 +14572,7 @@ app.post('/api/ai/curate-rules', async (req, res) => {
 // ADR-SENSORY-001: AI Sensory Atmosphere Tag Suggester
 
 // ADR-NEIGHBORHOOD-001: Dual-Pillar AI Radar Scan (Destinations & Gastronomy)
-app.post('/api/ai/radar-scan', async (req, res) => {
+app.post('/api/ai/radar-scan', authenticateToken, createLegacyListingAssistanceBoundary('NEARBY_RADAR'), async (req: AuthRequest, res) => {
   try {
     const { lat, lng, city, address } = req.body;
     
@@ -14890,7 +14742,7 @@ Respond ONLY with the raw JSON. No markdown codeblocks, no explanations.`;
   }
 });
 
-app.post('/api/ai/suggest-sensory-tags', async (req, res) => {
+app.post('/api/ai/suggest-sensory-tags', authenticateToken, createLegacyListingAssistanceBoundary('SENSORY_TAGS'), async (req: AuthRequest, res) => {
   try {
     const { title, description, propertyType, location } = req.body;
     if (!title && !description) {
@@ -15262,8 +15114,6 @@ app.put('/api/user/bookings/:id/cancel', authenticateToken, async (req: AuthRequ
 
     // Security: Use authenticated user ID
     const userId = req.user?.id;
-    const effectiveUserId = userId || 1;
-
     const checkRes = await pool.query('SELECT status FROM bookings WHERE id = $1 AND user_id = $2', [id, userId]);
     if (checkRes.rows.length === 0) return res.status(404).json({ error: 'Booking not found' });
 
@@ -15306,6 +15156,12 @@ app.put('/api/user/bookings/:id/cancel', authenticateToken, async (req: AuthRequ
 app.post('/api/bookings', authenticateToken, bookingLimiter, async (req: AuthRequest, res) => {
   if (!isDbConfigured) {
     return res.status(503).json({ error: 'DB not configured' });
+  }
+  if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
+    return res.status(503).json({
+      code: 'STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE',
+      error: 'Online stay reservations remain unavailable until the canonical quote, tax and booking authority is accepted.',
+    });
   }
   try {
     const { listingId, roomId, moveInDate, checkOutDate, configuration, name, phone, totalRent, userId, gclid, gbraid } = req.body;
@@ -15848,8 +15704,7 @@ const demoExperiences = [
   }
 ];
 
-app.get('/api/seed-ajith', authenticateToken, async (req: AuthRequest, res) => {
-  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+app.get('/api/seed-ajith', authenticateToken, requireAdmin, requireExplicitDevelopmentFixture, async (req: AuthRequest, res) => {
   try {
     console.log("DB connection configured for seed-ajith");
     const userRes = await pool.query("SELECT id FROM users WHERE id=$1 AND role='admin'", [req.user!.id]);
@@ -15957,9 +15812,8 @@ app.get('/api/experiences', async (req, res) => {
   }
 });
 
-app.get('/api/experiences/seed', authenticateToken, async (req: AuthRequest, res) => {
+app.post('/api/experiences/seed', authenticateToken, requireAdmin, requireExplicitDevelopmentFixture, async (_req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
   try {
     // 1. Student Only Trek
     await pool.query(`
@@ -16429,6 +16283,12 @@ app.post('/api/experiences/:id/lobby/messages', authenticateToken, async (req: A
 
 app.post('/api/experience-bookings', authenticateToken, bookingLimiter, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
+    return res.status(503).json({
+      code: 'EXPERIENCE_COMMERCE_NOT_RELEASED',
+      error: 'Experience booking is not part of the accepted CR1 commerce authority.',
+    });
+  }
   try {
     const { experience_id, num_tickets, total_price, name, phone, user_id } = req.body;
 
@@ -16588,24 +16448,11 @@ app.post('/api/settings/payment_rates', authenticateToken, async (req: AuthReque
 
 
 // Stripe integration
-app.post('/api/create-payment-intent', authenticateToken, async (req: AuthRequest, res) => {
-  if (!stripe) {
-    return res.status(503).json({ error: 'Stripe is not configured' });
-  }
-  try {
-    const { amount, currency } = req.body;
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(amount * 100), // Stripe expects amounts in cents/paise
-      currency: currency || 'inr',
-      automatic_payment_methods: {
-        enabled: true,
-      },
-    });
-    res.json({ clientSecret: paymentIntent.client_secret });
-  } catch (error: unknown) {
-    console.error('Stripe error:', error);
-    res.status(500).json({ error: (error as Error).message });
-  }
+app.post('/api/create-payment-intent', authenticateToken, (_req: AuthRequest, res) => {
+  return res.status(410).json({
+    code: 'SERVER_QUOTE_REQUIRED',
+    error: 'Client-priced payment intents are retired. Begin checkout from a server-issued quote.',
+  });
 });
 
 // ==========================================
@@ -17096,16 +16943,18 @@ app.post('/api/checkout/razorpay/order', optionalAuthenticateToken, async (req: 
     const { listingId, experienceId, roomId, moveInDate, configuration, numTickets, name, phone } = req.body;
     const userId = req.user?.id;
 
-    // Production containment: online checkout for stays is legally blocked pending M5 quotes and tax sign-off
     const isProductionRuntime = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
-    if (listingId && isProductionRuntime) {
+    // This legacy path also creates draft booking rows and has no canonical quote
+    // authority. Keep every product branch fail-closed in production.
+    if (isProductionRuntime) {
       return res.status(503).json({
-        error: 'Online stay reservations are temporarily unavailable while undergoing statutory compliance review. Direct reservations will open upon milestone clearance.',
-        code: 'STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE'
+        error: 'Online checkout is unavailable until the canonical quote and payment-event workflow is released.',
+        code: 'CANONICAL_CHECKOUT_REQUIRED'
       });
     }
 
-    const effectiveUserId = userId || 1;
+    if (!userId) return res.status(401).json({ error: 'A verified account session is required before creating an order.' });
+    const effectiveUserId = userId;
 
     let finalAmount = 0;
     let title = 'Booking';
@@ -17254,7 +17103,7 @@ app.post('/api/checkout/razorpay/order', optionalAuthenticateToken, async (req: 
 });
 
 // Razorpay Client Payment Verification Endpoint (Cryptographic HMAC SHA-256 + Anti-Replay + Idempotency)
-app.post('/api/payments/razorpay/verify', async (req, res) => {
+app.post('/api/payments/razorpay/verify', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, transaction_type, transaction_id, campaign_id, booking_id, experience_booking_id } = req.body;
 
@@ -17262,12 +17111,11 @@ app.post('/api/payments/razorpay/verify', async (req, res) => {
       return res.status(400).json({ error: 'Missing required Razorpay verification parameters' });
     }
 
-    // Production containment: stay bookings cannot be verified via client RPC in production
     const isProductionRuntime = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
-    if (booking_id && isProductionRuntime) {
-      return res.status(503).json({
-        error: 'Stay checkout verification is disabled in production pending Milestone 5, 8, and 9 implementation.',
-        code: 'STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE'
+    if (isProductionRuntime) {
+      return res.status(410).json({
+        error: 'Client payment verification is retired. Signed provider webhooks are authoritative.',
+        code: 'SIGNED_PAYMENT_WEBHOOK_REQUIRED'
       });
     }
 
@@ -17779,13 +17627,8 @@ app.post('/api/payments/geo-route/initiate', async (req: Request, res: Response)
 });
 
 // 3. Admin Payment Geo-Router Overview Endpoint
-app.get('/api/admin/payments/overview', async (req: Request, res: Response) => {
+app.get('/api/admin/payments/overview', authenticateToken, requireAdmin, async (_req: Request, res: Response) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
     const totalVolumeRes = await pool.query(`
       SELECT
         COALESCE(SUM(amount), 0) as total_volume,
@@ -18008,6 +17851,11 @@ async function startServer() {
   // Make io available to routes
   app.set('io', io);
   globalIoInstance = io;
+  conversationNotifications=startConversationNotifications(process.env,{async dispatch({recipientId,payload},signal){
+    if(signal.aborted)throw new Error('NOTIFICATION_DISPATCH_ABORTED');
+    io.to(`user_${recipientId}`).emit('notification',payload);
+    return {outcome:'SOCKET_HINT_DISPATCHED'};
+  }},event=>console.info('[CR1_NOTIFICATION_RUNTIME]',event));
 
   // Check if we have built assets
   const distPath = path.join(process.cwd(), 'dist');
@@ -19336,7 +19184,7 @@ export default app;
 // Only the owned long-running web process installs lifecycle handlers. Imported functions do not.
 const shutdown = createShutdown({
   markDraining: () => { serverDraining = true; },
-  drain: async () => { globalIoInstance?.disconnectSockets(true); await drainHttpServer(managedHttpServer); globalIoInstance?.close(); },
+  drain: async () => { await conversationNotifications?.stop(); globalIoInstance?.disconnectSockets(true); await drainHttpServer(managedHttpServer); globalIoInstance?.close(); },
   closeResources: async () => { await Promise.all([pool.end(), ...(readPool !== pool ? [readPool.end()] : [])]); },
   exit: code => process.exit(code),
   log: event => console.log(JSON.stringify({event})),

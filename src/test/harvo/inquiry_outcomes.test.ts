@@ -57,7 +57,10 @@ describe('SP7 first-party inquiry authority and tenant rollups',()=>{
   await expect(outcomes.decorate(guest,{campaigns:[{id:v.campaignId}]})).rejects.toMatchObject({code:'CAMPAIGN_NOT_FOUND'});
   expect((await inTransaction(runtime,guest,c=>c.query('SELECT * FROM marketing_inquiry_attributions'))).rowCount).toBe(0);
   await expect(fixture.pool.query('DELETE FROM marketing_inquiry_attributions')).rejects.toThrow(/append-only/);
-  await inbox.messages(host,thread.id);expect((await outcomes.decorate(host,{campaigns:[{id:v.campaignId}]})).campaigns[0].firstPartyOutcomes?.unreadMessages).toBe('0');
+  const history=await inbox.messages(host,thread.id);
+  expect((await outcomes.decorate(host,{campaigns:[{id:v.campaignId}]})).campaigns[0].firstPartyOutcomes?.unreadMessages).toBe('1');
+  await inbox.acknowledgeRead(host,thread.id,{throughMessageId:history.at(-1).id});
+  expect((await outcomes.decorate(host,{campaigns:[{id:v.campaignId}]})).campaigns[0].firstPartyOutcomes?.unreadMessages).toBe('0');
  });
  it('does not attribute a revoked or other-visitor touchpoint and still permits legitimate messaging',async()=>{
   const v=await visit(),thread=await inbox.create(guest,{listingId:20});
@@ -72,5 +75,20 @@ describe('SP7 first-party inquiry authority and tenant rollups',()=>{
   await fixture.pool.query("INSERT INTO messages(thread_id,sender_id,receiver_id,content) SELECT $1,11,10,'History '||g FROM generate_series(1,205) g",[thread.id]);
   const recent=await inbox.messages(host,thread.id),older=await inbox.messages(host,thread.id,recent[0].id);
   expect(recent).toHaveLength(200);expect(older).toHaveLength(5);expect(older.at(-1).id).toBeLessThan(recent[0].id);
+ });
+ it('acknowledges only observed participant history and keeps later incoming messages unread',async()=>{
+  const thread=await inbox.create(guest,{listingId:20});
+  const first=await inbox.send(guest,thread.id,{content:'First question',clientEventId:randomUUID()});
+  const second=await inbox.send(guest,thread.id,{content:'Second question',clientEventId:randomUUID()});
+  await inbox.messages(host,thread.id);
+  expect((await fixture.pool.query('SELECT count(*)::int AS unread FROM messages WHERE NOT is_read')).rows[0].unread).toBe(2);
+  await expect(inbox.acknowledgeRead({id:90,role:'host'},thread.id,{throughMessageId:first.message.id})).rejects.toMatchObject({code:'THREAD_NOT_FOUND'});
+  await expect(inbox.acknowledgeRead(host,thread.id,{throughMessageId:99999})).rejects.toMatchObject({code:'THREAD_NOT_FOUND'});
+  const other=await inbox.create({id:90,role:'host'},{listingId:20});
+  const foreign=await inbox.send({id:90,role:'host'},other.id,{content:'A different conversation',clientEventId:randomUUID()});
+  await expect(inbox.acknowledgeRead(host,thread.id,{throughMessageId:foreign.message.id})).rejects.toMatchObject({code:'THREAD_NOT_FOUND'});
+  expect(await inbox.acknowledgeRead(host,thread.id,{throughMessageId:first.message.id})).toMatchObject({unread:1});
+  expect(await inbox.acknowledgeRead(host,thread.id,{throughMessageId:second.message.id})).toMatchObject({unread:0});
+  expect(await inbox.acknowledgeRead(host,thread.id,{throughMessageId:first.message.id})).toMatchObject({unread:0});
  });
 });

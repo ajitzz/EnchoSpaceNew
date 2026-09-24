@@ -4,51 +4,34 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import pkg from 'pg';
 import dotenv from 'dotenv';
-
-dotenv.config();
+import {executeMigrations,MigrationExecutionError,type MigrationResult} from './execution.js';
+export type {MigrationResult} from './execution.js';
 
 const { Pool } = pkg;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export interface MigrationResult {
-  file: string;
-  status: 'applied' | 'skipped' | 'failed';
-  error?: string;
-}
-
 /**
  * Validates database connection string safety.
  * Rejects missing or dummy configurations and warns against running in unsafe conditions.
  */
-export function validateDatabaseUrl(rawUrl?: string): { isValid: boolean; error?: string; url?: string } {
-  if (!rawUrl || typeof rawUrl !== 'string' || rawUrl.trim() === '') {
-    return { isValid: false, error: 'DATABASE_URL is missing or empty' };
-  }
+export function validateDatabaseUrl(rawUrl?:string):{isValid:boolean;error?:string;url?:string}{
+  try{
+    if(!rawUrl||/dummy|placeholder|example\.com/i.test(rawUrl))throw new Error();
+    const parsed=new URL(rawUrl.trim());
+    const local=['localhost','127.0.0.1','[::1]'].includes(parsed.hostname);
+    if(!['postgres:','postgresql:'].includes(parsed.protocol)||!parsed.hostname||!parsed.username||parsed.pathname.length<2||parsed.hash||(!local&&!parsed.password))throw new Error();
+    for(const name of parsed.searchParams.keys())if(!['sslmode','channel_binding'].includes(name))throw new Error();
+    parsed.searchParams.delete('sslmode');parsed.searchParams.delete('channel_binding');
+    return {isValid:true,url:parsed.toString()};
+  }catch{return {isValid:false,error:'DATABASE_URL is missing or invalid for migration execution'};}
+}
 
-  const trimmed = rawUrl.trim();
-  const lower = trimmed.toLowerCase();
-
-  if (
-    lower.includes('dummy') ||
-    lower.includes('example.com') ||
-    lower.includes('placeholder') ||
-    lower === 'postgresql://' ||
-    lower === 'postgres://'
-  ) {
-    return { isValid: false, error: 'DATABASE_URL contains placeholder or dummy credentials' };
-  }
-
-  try {
-    const parsed = new URL(trimmed);
-    if (parsed.protocol !== 'postgres:' && parsed.protocol !== 'postgresql:') {
-      return { isValid: false, error: `Invalid protocol: ${parsed.protocol}` };
-    }
-  } catch (err: any) {
-    return { isValid: false, error: `Malformed connection URL: ${err.message}` };
-  }
-
-  return { isValid: true, url: trimmed };
+export function migrationConnectionConfig(rawUrl?:string):pkg.PoolConfig{
+  const validated=validateDatabaseUrl(rawUrl);
+  if(!validated.isValid||!validated.url)throw new MigrationExecutionError('MIGRATION_CONFIGURATION_INVALID');
+  const local=['localhost','127.0.0.1','[::1]'].includes(new URL(validated.url).hostname);
+  return {connectionString:validated.url,ssl:local?false:{rejectUnauthorized:true},max:1,connectionTimeoutMillis:10000,application_name:'encho_schema_migrations'};
 }
 
 /**
@@ -65,120 +48,20 @@ export function computeChecksum(content: string): string {
  * - Transactional execution for transactional migrations
  * - Non-destructive rollback notes
  */
-export async function runMigrations(customPool?: any): Promise<MigrationResult[]> {
-  const dbCheck = validateDatabaseUrl(process.env.DATABASE_URL);
-  if (!customPool && !dbCheck.isValid) {
-    throw new Error(`[MIGRATION_ABORTED] ${dbCheck.error}`);
-  }
-
-  // Safe SSL resolution preserving SSL parameters without leaking credentials to logs
-  const isLocal = process.env.DATABASE_URL?.includes('localhost') || process.env.DATABASE_URL?.includes('127.0.0.1');
-  const pool = customPool || new Pool({
-    connectionString: dbCheck.url,
-    ssl: isLocal ? false : { rejectUnauthorized: false }
-  });
-
-  const client = await pool.connect();
-  const results: MigrationResult[] = [];
-
-  // Encho advisory lock key (hash of 'encho_schema_migrations')
-  const ADVISORY_LOCK_ID = 82749102;
-
-  try {
-    // 1. Acquire transactional advisory lock to prevent concurrent runner collisions
-    await client.query('SELECT pg_advisory_lock($1)', [ADVISORY_LOCK_ID]);
-
-    // 2. Create or upgrade schema_migrations audit table with checksum support
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS schema_migrations (
-        version VARCHAR(255) PRIMARY KEY,
-        applied_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        checksum VARCHAR(64)
-      );
-    `);
-
-    // Ensure checksum column exists if table was previously created
-    await client.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'schema_migrations' AND column_name = 'checksum'
-        ) THEN
-          ALTER TABLE schema_migrations ADD COLUMN checksum VARCHAR(64);
-        END IF;
-      END $$;
-    `);
-
-    // 3. Discover .sql migration files in src/migrations
-    const migrationsDir = __dirname;
-    const files = fs.readdirSync(migrationsDir)
-      .filter(f => f.endsWith('.sql'))
-      .sort();
-
-    for (const file of files) {
-      const version = file;
-      const filePath = path.join(migrationsDir, file);
-      const sql = fs.readFileSync(filePath, 'utf8');
-      const currentChecksum = computeChecksum(sql);
-
-      const checkResult = await client.query(
-        'SELECT version, checksum FROM schema_migrations WHERE version = $1',
-        [version]
-      );
-
-      if (checkResult.rows.length > 0) {
-        const recorded = checkResult.rows[0];
-        if (recorded.checksum && recorded.checksum !== currentChecksum) {
-          console.warn(`[MIGRATION CHECKSUM DRIFT WARNING] File ${file} has changed since being applied! Recorded: ${recorded.checksum}, Current: ${currentChecksum}`);
-        }
-        results.push({ file, status: 'skipped' });
-        continue;
-      }
-
-      // Check if migration declares non-transactional execution (e.g., CREATE INDEX CONCURRENTLY)
-      const isNonTransactional = sql.includes('-- NON-TRANSACTIONAL') || sql.includes('CONCURRENTLY');
-
-      try {
-        if (isNonTransactional) {
-          await client.query(sql);
-          await client.query(
-            'INSERT INTO schema_migrations (version, applied_at, checksum) VALUES ($1, NOW(), $2)',
-            [version, currentChecksum]
-          );
-        } else {
-          await client.query('BEGIN');
-          await client.query(sql);
-          await client.query(
-            'INSERT INTO schema_migrations (version, applied_at, checksum) VALUES ($1, NOW(), $2)',
-            [version, currentChecksum]
-          );
-          await client.query('COMMIT');
-        }
-        results.push({ file, status: 'applied' });
-      } catch (err: any) {
-        if (!isNonTransactional) {
-          await client.query('ROLLBACK');
-        }
-        results.push({ file, status: 'failed', error: err?.message || String(err) });
-        break; // Stop running further migrations on failure
-      }
-    }
-  } finally {
-    try {
-      await client.query('SELECT pg_advisory_unlock($1)', [ADVISORY_LOCK_ID]);
-    } catch (_e) { /* non-blocking unlock */ }
-    client.release();
-    if (!customPool) {
-      await pool.end();
-    }
-  }
-
-  return results;
+export async function runMigrations(customPool?:pkg.Pool):Promise<MigrationResult[]>{
+  const pool=customPool??new Pool(migrationConnectionConfig(process.env.DATABASE_URL));
+  try{
+    const entries=fs.readdirSync(__dirname).filter(file=>file.endsWith('.sql')).sort().map(file=>{
+      const sql=fs.readFileSync(path.join(__dirname,file),'utf8');
+      return {file,sql,checksum:computeChecksum(sql)};
+    });
+    return await executeMigrations(pool,entries);
+  }finally{if(!customPool)await pool.end();}
 }
 
 // CLI entry point
-if (process.argv[1] && (process.argv[1].endsWith('runner.ts') || process.argv[1].endsWith('runner.js'))) {
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+  dotenv.config({quiet:true});
   console.log('--- ENCHO HARDENED VERSIONED MIGRATION RUNNER ---');
   runMigrations()
     .then(results => {
@@ -186,11 +69,11 @@ if (process.argv[1] && (process.argv[1].endsWith('runner.ts') || process.argv[1]
       results.forEach(r => {
         console.log(` - ${r.file}: [${r.status.toUpperCase()}] ${r.error ? `Error: ${r.error}` : ''}`);
       });
-      const hasFailure = results.some(r => r.status === 'failed');
+      const hasFailure = results.some(r => r.status === 'failed' || r.status === 'unknown');
       process.exit(hasFailure ? 1 : 0);
     })
     .catch(err => {
-      console.error('[FATAL MIGRATION ERROR]:', err.message);
+      console.error('[FATAL MIGRATION ERROR]:', err instanceof MigrationExecutionError ? err.message : 'MIGRATION_EXECUTION_FAILED');
       process.exit(1);
     });
 }

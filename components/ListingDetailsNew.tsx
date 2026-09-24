@@ -1,3 +1,5 @@
+import {presentRooms} from '../src/shared/guest/roomPresentation';
+import {usePublicAvailability} from '../hooks/usePublicAvailability';
 import {PublicSpatialStory} from './marketing/PublicSpatialStory';
 import { useAuth } from './AuthContext';
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
@@ -227,15 +229,15 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
   const images = uniqueMediaPool;
 
-  // MIG-001: Dual-read — live room data takes precedence over LEGACY_ROOM_TIER_CONFIG
+  // Room classification labels may repeat; only the supplied room identity binds price and inventory.
+  const presentedRooms = useMemo(() => presentRooms(listing), [listing.rooms, listing.photos]);
   const liveRoomConfigs = useMemo(() => {
     if (!listing.rooms || listing.rooms.length === 0) return null;
     const configs: Record<string, { name: string; price: number; capacity: number; specs: string; tag: string; icon: string; description: string; features: string[]; }> = {};
-    (listing.rooms as any[]).forEach(room => {
-      const key = room.type || room.id || `room_${room.name}`;
+    presentedRooms.forEach(({room, key}) => {
       configs[key] = {
-        name: room.name || key,
-        price: Number(room.price) || 0,
+        name: room.name || 'Room details are being prepared.',
+        price: Number.isFinite(room.price) && room.price > 0 ? room.price : 0,
         capacity: room.capacity || 0,
         specs: room.specs || (Array.isArray(room.features) ? room.features.join(' · ') : ''),
         tag: room.tag || '',
@@ -245,7 +247,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
       };
     });
     return Object.keys(configs).length > 0 ? configs : null;
-  }, [listing.rooms]);
+  }, [listing.rooms, presentedRooms]);
 
   const availableRoomTiers = useMemo(() => {
     if (liveRoomConfigs) return Object.keys(liveRoomConfigs);
@@ -337,15 +339,8 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
     setOpenAccordion(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  // Selected Room Tier: Defaults to 'deluxe' (Psychological Revenue Anchor)
-  // If listing has rooms, default to first room's type key; else 'suites'
-  const [selectedRoomTier, setSelectedRoomTier] = useState<string>(() => {
-    if (listing.rooms && listing.rooms.length > 0) {
-      const firstRoom = (listing.rooms as any[])[0];
-      return String(firstRoom.type || firstRoom.id);
-    }
-    return '';
-  });
+  const [requestedRoomKey, setSelectedRoomTier] = useState<string>(() => presentedRooms[0]?.key || '');
+  const selectedRoomTier = presentedRooms.some(entry => entry.key === requestedRoomKey) ? requestedRoomKey : presentedRooms[0]?.key || '';
 
   // Booking Form State
   const [checkIn, setCheckIn] = useState<string>(() => {
@@ -366,32 +361,14 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   const [showOccupancyPicker, setShowOccupancyPicker] = useState<boolean>(false);
   const guests = adultsCount + childrenCount;
 
-  // Public aggregate availability is separate from the host's private calendar.
-  const availabilityKey = `${listing.id}:${checkIn}:${checkOut}`;
-  const [availability, setAvailability] = useState<{key: string; rooms: {id: number; available: number | null}[]} | null>(null);
-  useEffect(() => {
-    const controller = new AbortController(); let disposed = false;
-    setAvailability(null);
-    if (!/^[1-9]\d*$/.test(String(listing.id)) || !checkIn || checkOut <= checkIn) return;
-    const load = async () => {
-      if (document.visibilityState === 'hidden') return;
-      try {
-        const response = await fetch(`/api/listings/${listing.id}/availability?from=${encodeURIComponent(checkIn)}&to=${encodeURIComponent(checkOut)}`, { cache: 'no-store', signal: controller.signal });
-        if (!response.ok) throw new Error('Availability unavailable');
-        const payload = await response.json();
-        if (!disposed) setAvailability({ key: availabilityKey, rooms: payload.rooms });
-      } catch { if (!disposed) setAvailability(null); }
-    };
-    void load(); const timer = setInterval(() => { void load(); }, 30000);
-    return () => { disposed = true; controller.abort(); clearInterval(timer); };
-  }, [listing.id, checkIn, checkOut, availabilityKey]);
-  const selectedCanonicalRoom = (listing.rooms || []).find(room => String(room.type || room.id) === String(selectedRoomTier));
-  const remainingRooms = availability?.key === availabilityKey
-    ? availability.rooms.find(room => room.id === Number(selectedCanonicalRoom?.id))?.available ?? null : null;
+  const availability = usePublicAvailability(String(listing.id), checkIn, checkOut);
+  const selectedCanonicalRoom = presentedRooms.find(entry => entry.key === selectedRoomTier);
+  const remainingRooms = selectedCanonicalRoom?.canonicalId === null ? null
+    : availability?.rooms.find(room => room.id === selectedCanonicalRoom?.canonicalId)?.available ?? null;
   const availabilityUnknown = remainingRooms === null;
   const isDateRangeBlocked = remainingRooms === null || remainingRooms === 0;
 
-  // Double-Entry Ledger Calculation per Selected Room Tier
+  // Display the selected supplied base rate; this is not a quote or ledger calculation.
   const activeTierObj = getRoomConfig(selectedRoomTier);
 // ADR-003: Price authority is listing.rooms[].price, not hardcoded multipliers
   const activeNightlyRate = useMemo(() => {
@@ -423,7 +400,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   return (
     <>
       <SEO 
-        title={`${listing.title} | Luxury Sanctuary in ${listing.city} - Encho`}
+        title={`${listing.title}${listing.city ? ` | Stay in ${listing.city}` : ''} - Encho`}
         description={listing.description ? listing.description.substring(0, 155) : `View ${listing.title} and its supplied stay information on Encho.`}
         image={images[0]}
       />
@@ -596,7 +573,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                             <span className="bg-amber-100 text-amber-800 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md border border-amber-200">Modular</span>
                         </div>
                         <p className="text-zinc-500 font-medium leading-relaxed max-w-2xl">
-                            Customize your stay by reserving individual suites. Each modular unit maintains complete privacy while sharing central sanctuary access.
+                            Explore the room options supplied by the host. Compare each room’s details, photography and nightly base rate.
                         </p>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
@@ -873,6 +850,8 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                             <button
                               key={tierKey}
                               type="button"
+                              aria-label={t.name}
+                              aria-pressed={isSelected}
                               onClick={() => {
                                 uiAudio.playClick();
                                 setSelectedRoomTier(tierKey);
@@ -887,7 +866,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                               <span className="text-xs">{t.icon}</span>
                               <span className="text-[11px] font-bold tracking-tight mt-0.5">{(t as any).shortName || t.name.substring(0, 10)}</span>
                               <span className="text-[9px] font-mono text-zinc-400">
-                                {listing.currency === 'USD' ? `$${tRate}` : `₹${Math.round(tRate / 1000)}k`}
+                                {tRate > 0 ? `${listing.currency === 'USD' ? '$' : '₹'}${tRate.toLocaleString('en-IN', {maximumFractionDigits: 2})}` : 'Price pending'}
                               </span>
                             </button>
                           );
@@ -902,9 +881,10 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     <div className="bg-zinc-50 border border-zinc-200/80 rounded-2xl overflow-hidden mb-6">
                         <div className="grid grid-cols-2 divide-x divide-zinc-200/80 border-b border-zinc-200/80">
                             <div className="p-3">
-                                <label className="block text-[10px] font-bold uppercase tracking-widest text-zinc-900 mb-1 font-display">Check-in</label>
+                                <label htmlFor="stay-check-in" className="block text-[10px] font-bold uppercase tracking-widest text-zinc-900 mb-1 font-display">Check-in</label>
                                 <input 
-                                    type="date" 
+                                    type="date"
+                                    id="stay-check-in"
                                     min={new Date().toISOString().split('T')[0]}
                                     value={checkIn}
                                     onChange={(e) => {
@@ -915,9 +895,10 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                                 />
                             </div>
                             <div className="p-3">
-                                <label className="block text-[10px] font-bold uppercase tracking-widest text-zinc-900 mb-1 font-display">Check-out</label>
+                                <label htmlFor="stay-check-out" className="block text-[10px] font-bold uppercase tracking-widest text-zinc-900 mb-1 font-display">Check-out</label>
                                 <input 
-                                    type="date" 
+                                    type="date"
+                                    id="stay-check-out"
                                     min={checkIn}
                                     value={checkOut}
                                     onChange={(e) => {
@@ -1046,7 +1027,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     <p className={`mb-4 p-3 rounded-xl text-sm ${isDateRangeBlocked ? 'bg-amber-50 text-amber-900' : 'bg-emerald-50 text-emerald-900'}`} role="status">
                       {availabilityUnknown ? 'Availability is not confirmed for these dates. Please check again shortly.'
                         : remainingRooms === 0 ? 'No rooms are available for these dates.'
-                        : `${remainingRooms} rooms available for the selected stay. Availability is confirmed again when you reserve.`}
+                        : `${remainingRooms} room${remainingRooms === 1 ? '' : 's'} reported available for these dates. This observation does not hold a room or confirm a booking.`}
                     </p>
 
                     <button 
@@ -1164,10 +1145,13 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
               <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-zinc-900 font-display">Similar Sanctuaries</h2>
               <div className="flex overflow-x-auto snap-x snap-mandatory gap-4 pb-4 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                 {similarListings.map(sim => (
-                  <div 
-                    key={sim.id} 
+                  <button
+                    type="button"
+                    key={sim.id}
+                    disabled={!onListingClick}
+                    aria-label={`View ${sim.title}`}
                     onClick={() => { uiAudio.playClick(); if (onListingClick) onListingClick(sim); }}
-                    className="snap-start shrink-0 w-[280px] md:w-[320px] cursor-pointer group"
+                    className="snap-start shrink-0 w-[280px] md:w-[320px] text-left cursor-pointer group focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-zinc-900"
                   >
                     <div className="relative w-full aspect-[4/3] rounded-3xl overflow-hidden bg-zinc-100 mb-3 border border-zinc-200/50">
                       <OptimizedImage 
@@ -1176,17 +1160,13 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" 
                         alt={sim.title} 
                       />
-                      <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/40 shadow-xs flex items-center gap-1">
-                        <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
-                        <span className="text-[10px] font-bold text-zinc-900 tabular-nums">{sim.rating != null && sim.rating > 0 ? sim.rating.toFixed(1) : '—'}</span>
-                      </div>
                     </div>
                     <h4 className="text-sm font-bold text-zinc-900 truncate font-display">{sim.title}</h4>
                     <p className="text-xs font-medium text-zinc-500 truncate">{sim.type} · {sim.city}</p>
                     <p className="text-sm font-extrabold text-zinc-900 mt-1 font-display tabular-nums">
-                      {sim.currency === 'USD' ? '$' : '₹'}{sim.price.toLocaleString()} <span className="font-medium text-xs text-zinc-500">/ night</span>
+                      {Number.isFinite(sim.price) && sim.price > 0 ? <>From {sim.currency === 'USD' ? '$' : '₹'}{sim.price.toLocaleString('en-IN', {maximumFractionDigits: 2})} <span className="font-medium text-xs text-zinc-500">/ night</span></> : 'Price is being prepared'}
                     </p>
-                  </div>
+                  </button>
                 ))}
               </div>
             </section>
@@ -1236,8 +1216,8 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                       : 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-zinc-950 shadow-amber-500/20 cursor-pointer'
                   }`}
                 >
-                  <span>{isDateRangeBlocked ? 'UNAVAILABLE' : 'RESERVE'}</span>
-                  {!isDateRangeBlocked && <ArrowRight className="w-4 h-4 stroke-[2.5]" />}
+                  <span>{!checkoutAvailable ? 'Booking being prepared' : isDateRangeBlocked ? 'Dates unavailable' : 'Reserve'}</span>
+                  {checkoutAvailable && !isDateRangeBlocked && <ArrowRight className="w-4 h-4 stroke-[2.5]" />}
                 </button>
               </div>
             </motion.div>
@@ -1277,8 +1257,8 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   </span>
                 ) : (
                   <span className="text-[9px] font-medium text-emerald-400 tracking-wider uppercase flex items-center gap-1 mt-0.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Instant Confirmation
+                    <span className="w-1.5 h-1.5 rounded-full bg-zinc-400" />
+                    Booking being prepared
                   </span>
                 )}
               </div>
@@ -1297,8 +1277,10 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                       : "bg-white text-zinc-950 hover:bg-zinc-100 shadow-white/20 cursor-pointer"
                 }`}
               >
-                {isDateRangeBlocked ? (
-                  <span>UNAVAILABLE</span>
+                {!checkoutAvailable ? (
+                  <span>Booking being prepared</span>
+                ) : isDateRangeBlocked ? (
+                  <span>Dates unavailable</span>
                 ) : showMobileStickyBar ? (
                   <>
                     <Sparkles className="w-3.5 h-3.5 text-amber-400" />

@@ -301,4 +301,11 @@ const AdminInbox = ({ adminMode }: AdminInboxProps) => {
     );
 };
 
-export default AdminInbox;
+/** Legacy content browsing is retired; assignment-scoped service UI is separate. */
+export default function AdminConversationBoundary(_props:AdminInboxProps){
+    return <section className="p-6 max-w-2xl" aria-labelledby="service-access-title">
+        <h2 id="service-access-title" className="text-2xl font-semibold">Conversation support</h2>
+        <p className="mt-3 text-gray-600">Private conversations require a workforce session and an assigned service case. Unrestricted message browsing and deletion are unavailable.</p>
+        <a href="/operations/service" className="inline-flex mt-5 min-h-11 items-center rounded-lg bg-gray-900 text-white px-4">Open Operations</a>
+    </section>;
+}

@@ -149,7 +149,7 @@ export const AdminExperiences: React.FC<AdminExperiencesProps> = ({ token }) => 
               <div className="flex justify-between items-center">
                 <h3 className="text-xl font-bold text-gray-900">All Experiences</h3>
                 <div className="flex items-center gap-3">
-                  <button
+                  {import.meta.env.DEV && <button
                     onClick={async () => {
                       if (!confirm('This will insert demo data. Continue?')) return;
                       const session = JSON.parse(localStorage.getItem('auth_session') || '{}');
@@ -172,7 +172,7 @@ export const AdminExperiences: React.FC<AdminExperiencesProps> = ({ token }) => 
                     className="px-4 py-2 bg-emerald-100 text-emerald-700 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-emerald-200"
                   >
                     <Sparkles className="w-4 h-4" /> Seed Demo
-                  </button>
+                  </button>}
                   <button
                     onClick={() => {
                       setEditingExperience(null);

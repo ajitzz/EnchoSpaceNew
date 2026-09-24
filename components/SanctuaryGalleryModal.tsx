@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, 
   Sparkles, Share2, Compass, Sun, Info, Check, Eye, Grid, Film
 } from 'lucide-react';
+import {presentRooms} from '../src/shared/guest/roomPresentation';
 import { Listing, SpatialPhoto } from '../types';
 import { OptimizedImage } from './OptimizedImage';
 import { uiAudio } from './audio';
@@ -45,14 +46,13 @@ export function buildGalleryCategories(listing: Listing): CategoryConfig[] {
       shortLabel: 'Amenities',
       icon: '🏗️',
       headline: 'Sanctuary Grounds & Shared Spaces',
-      description: 'Pool, gardens, restaurant, lobby, and property-wide amenities.'
+      description: 'Property photography supplied by the host.'
     }
   ];
   
   // Add a tab per host-defined room type
-  if (listing.rooms && (listing.rooms as any[]).length > 0) {
-    (listing.rooms as any[]).forEach((room: any) => {
-      const tierKey = String(room.type || room.id);
+  if (listing.rooms?.length) {
+    presentRooms(listing).forEach(({room, key: tierKey}) => {
       categories.push({
         key: tierKey,
         label: room.name || tierKey,
@@ -73,24 +73,24 @@ export const GALLERY_CATEGORIES = buildGalleryCategories({ rooms: [] } as any);
 /** Preserve supplied room identity and source order; raw media has no inferred room. */
 export function classifyListingPhotos(listing: Listing): SpatialPhoto[] {
   const result: SpatialPhoto[] = [];
+  const rooms = presentRooms(listing);
   
   if (listing.photos && listing.photos.length > 0) {
-    listing.photos.filter(photo => !!photo.url).forEach(photo => {
+    listing.photos.filter(photo => !!photo.url && (!photo.moderation_status || photo.moderation_status === 'approved')).forEach(photo => {
+       const associated = rooms.find(entry => entry.photos.includes(photo));
        result.push({
          ...photo,
-         tier: photo.tier || 'common',
+         tier: associated?.key || (rooms.some(entry => entry.key === photo.tier) ? 'unassigned' : photo.tier || 'common'),
          category: photo.category || 'other',
        });
     });
   }
 
-  for (const room of listing.rooms || []) {
-    const tier = String(room.type || room.id);
-    // A supplied listing-level set for this room is authoritative. Otherwise use
-    // the room's own photos, with the same order used by its inline gallery.
-    if (result.some(photo => photo.tier === tier)) continue;
-    for (const photo of room.photos || []) {
-      if (photo.url) result.push({...photo, tier, category: photo.category || 'other'});
+  for (const entry of rooms) {
+    for (const photo of entry.photos) {
+      if (!result.some(existing => existing.tier === entry.key && existing.url === photo.url)) {
+        result.push({...photo, tier: entry.key, category: photo.category || 'other'});
+      }
     }
   }
 
@@ -118,6 +118,7 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
   initialCategory = 'all',
   onReserve
 }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
   const galleryCategories = useMemo(() => buildGalleryCategories(listing), [listing]);
   const [selectedCategory, setSelectedCategory] = useState<GalleryCategoryKey>(initialCategory as GalleryCategoryKey);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -186,18 +187,33 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
     setZoomScale(1);
   }, []);
 
+  // Preserve keyboard ownership and return focus to the gallery opener.
+  useEffect(() => {
+    if (!isOpen) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialogRef.current?.focus();
+    return () => { if (opener?.isConnected) opener.focus(); };
+  }, [isOpen]);
+
   // Keyboard navigation & lock scroll
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Tab') {
+        const surface = dialogRef.current?.querySelector('[data-gallery-lightbox]') || dialogRef.current;
+        const controls = surface?.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], [tabindex="0"]');
+        const first = controls?.[0], last = controls?.[controls.length - 1];
+        if (!first || !last) { e.preventDefault(); dialogRef.current?.focus(); }
+        else if (e.shiftKey && (document.activeElement === first || !surface?.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && (document.activeElement === last || !surface?.contains(document.activeElement) || document.activeElement === surface)) { e.preventDefault(); first.focus(); }
+      } else if (e.key === 'Escape') {
         if (lightboxIndex !== null) {
           setLightboxIndex(null);
         } else {
           onClose();
         }
-      } else if (lightboxIndex !== null) {
+      } else if (lightboxIndex !== null && filteredPhotos.length > 0) {
         if (e.key === 'ArrowRight') {
           uiAudio.playClick();
           setLightboxIndex((lightboxIndex + 1) % filteredPhotos.length);
@@ -216,11 +232,12 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
     };
 
     window.addEventListener('keydown', handleKeyDown);
+    const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = previousOverflow;
     };
   }, [isOpen, lightboxIndex, filteredPhotos.length, onClose]);
 
@@ -238,6 +255,11 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
   return (
     <AnimatePresence>
       <motion.div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${listing.title} photo gallery`}
+        tabIndex={-1}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -257,6 +279,7 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
                 onClose();
               }}
               className="p-2.5 rounded-full bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition-all active:scale-90 cursor-pointer flex items-center gap-2 text-xs font-mono uppercase tracking-wider"
+              aria-label="Close gallery"
               title="Close Gallery (ESC)"
             >
               <X className="w-4 h-4" />
@@ -521,8 +544,10 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
                                if (total > 3 && (idx === 1 || idx === 2)) spanClass = "col-span-6 sm:col-span-6";
 
                                return (
-                                 <motion.div 
-                                   key={photo.id}
+                                 <motion.button
+                                   type="button"
+                                   aria-label={`View ${photo.title || 'property photo'}`}
+                                   key={photo.id || photo.url}
                                    initial={{ opacity: 0, y: 50, scale: 0.95 }}
                                    whileInView={{ opacity: 1, y: 0, scale: 1 }}
                                    viewport={{ once: true, margin: "-15%" }}
@@ -543,11 +568,11 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
                                        <div className="absolute bottom-6 left-6 right-6 text-white translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-700 ease-out">
                                          <div className="flex items-center gap-3 mb-2">
                                             <div className="h-[1px] w-8 bg-amber-400"></div>
-                                            <span className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-amber-400">Inspect 4K</span>
+                                            <span className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-amber-400">View photo</span>
                                          </div>
                                        </div>
                                     </div>
-                                 </motion.div>
+                                 </motion.button>
                                );
                              })}
                           </div>
@@ -565,6 +590,7 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
         {/* ========================================================================= */}
         {lightboxIndex !== null && currentPhoto && (
           <div
+            data-gallery-lightbox
             className="fixed inset-0 z-[120] bg-zinc-950/98 backdrop-blur-3xl flex flex-col justify-between overflow-hidden animate-fade-in"
             onClick={() => setLightboxIndex(null)}
           >

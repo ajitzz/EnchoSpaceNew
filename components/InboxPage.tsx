@@ -1,45 +1,29 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { SEO } from './SEO';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useAuth } from './AuthContext';
-import { Send, ArrowLeft, Languages, Globe, Sparkles } from 'lucide-react';
-import { io } from 'socket.io-client';
+import { Send, ArrowLeft, Languages, Sparkles, House } from 'lucide-react';
+import { io,type Socket } from 'socket.io-client';
 import { uiAudio } from './audio';
-import { fetchWithCache, queueMutation } from '../lib/syncService';
+import { OFFLINE_MUTATION_COMMITTED_EVENT, fetchWithCache, queueMutationWithReceipt } from '../lib/syncService';
 import { InboxSkeleton } from './Skeletons';
+import {acknowledgeInquiryRead} from '../lib/inquiryReadReceipts';
+import {canonicalInquiryMessageSchema,parseInquiryHistory,mergeInquiryMessages,inquiryMessageRenderKey,type InboxMessage as Message,parseInquiryThreads,mergeInquiryThreads,type InquiryThread as Thread} from '../lib/inquiryMessages';
+import {conversationNotificationPayloadSchema} from '../src/shared/conversation/delivery';
+import ConversationAssistance from './operations/ConversationAssistance';
 
-let socket: any = null;
+let socket: Socket | null = null;
 
-interface Thread {
-    id: number;
-    listing_id: number;
-    guest_id: number;
-    host_id: number;
-    last_message: string;
-    unread_count_guest: number;
-    unread_count_host: number;
-    updated_at: string;
-    listing_title: string;
-    listing_image: string;
-    guest_name: string;
-    guest_avatar: string;
-    host_name: string;
-    host_avatar: string;
-}
-
-interface Message {
-    id: number;
-    thread_id: number;
-    sender_id: number;
-    receiver_id: number;
-    content: string;
-    is_read: boolean;
-    created_at: string;
-    sender_name?: string;
+function isCanonicalMessage(value: unknown): value is Message {
+    return canonicalInquiryMessageSchema.safeParse(value).success;
 }
 
 const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'host' }) => {
     const { user, token } = useAuth();
+    const reduceMotion=useReducedMotion();
+    const nextOptimisticId=useRef(-1);
+    const messageViewport=useRef<HTMLDivElement|null>(null);
+    const [observedMessage,setObservedMessage]=useState<{threadId:number;messageId:number}|null>(null);
     const [threads, setThreads] = useState<Thread[]>([]);
     const [activeThread, setActiveThread] = useState<Thread | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
@@ -48,116 +32,143 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
     const [olderError,setOlderError]=useState('');
     const activeThreadId=useRef<number|undefined>(undefined);useEffect(()=>{activeThreadId.current=activeThread?.id;return()=>{activeThreadId.current=undefined;};},[activeThread?.id]);
     async function loadOlder(){
-      if(!activeThread||!messages.length)return;const threadId=activeThread.id;setOlderBusy(true);setOlderError('');
-      try{const response=await fetch(`/api/threads/${threadId}/messages?before=${messages[0].id}`,{headers:{Authorization:`Bearer ${token}`}});if(!response.ok)throw new Error('Earlier messages could not be loaded.');const data=await response.json();if(activeThreadId.current!==threadId)return;setMessages(previous=>[...data,...previous]);setOlderAvailable(data.length===200);}
-      catch(e){if(activeThreadId.current===threadId)setOlderError(e instanceof Error?e.message:'Earlier messages could not be loaded.');}
-      finally{if(activeThreadId.current===threadId)setOlderBusy(false);}
+      const first=messages.find(message=>message.id>0);
+      if(!activeThread||!first||!token||olderBusy)return;
+      const threadId=activeThread.id,sessionToken=token;setOlderBusy(true);setOlderError('');
+      const current=()=>activeThreadId.current===threadId&&localStorage.getItem('token')===sessionToken;
+      try{
+        const response=await fetch(`/api/threads/${threadId}/messages?before=${first.id}`,{headers:{Authorization:`Bearer ${sessionToken}`},signal:AbortSignal.timeout(12000)});
+        if(!response.ok)throw new Error('Earlier messages could not be loaded.');
+        const data=parseInquiryHistory(await response.json(),threadId);
+        if(!current())return;
+        setMessages(previous=>mergeInquiryMessages(previous,data,threadId));setOlderAvailable(data.length===200);
+      }catch{if(current())setOlderError('Earlier messages could not be loaded.');}
+      finally{if(current())setOlderBusy(false);}
     }
     const [newMessage, setNewMessage] = useState('');
     const [loading, setLoading] = useState(true);
+    const [historyError,setHistoryError]=useState('');
+    const [threadsError,setThreadsError]=useState('');
+    const [threadCursor,setThreadCursor]=useState<string|null>(null);
+    const [threadsBusy,setThreadsBusy]=useState(false);
+    const roleRef=useRef(role);useEffect(()=>{roleRef.current=role;},[role]);
+    async function loadEarlierThreads(){
+      if(!threadCursor||threadsBusy||!user||!token)return;
+      const actorId=user.id,sessionToken=token,requestedRole=role;setThreadsBusy(true);
+      const current=()=>localStorage.getItem('token')===sessionToken&&roleRef.current===requestedRole;
+      try{
+        const query=new URLSearchParams({before:threadCursor,...(role?{role}:{})});
+        const response=await fetch(`/api/threads?${query}`,{headers:{Authorization:`Bearer ${sessionToken}`},cache:'no-store',signal:AbortSignal.timeout(12000)});
+        if(!response.ok)throw new Error('Conversation page unavailable.');
+        const rows=parseInquiryThreads(await response.json(),actorId,requestedRole);
+        if(!current())return;
+        setThreads(previous=>mergeInquiryThreads(previous,rows));setThreadCursor(rows.length===100?rows.at(-1)!.list_cursor:null);setThreadsError('');
+      }catch{if(current())setThreadsError('Earlier conversations could not be loaded. Please try again.');}
+      finally{if(current())setThreadsBusy(false);}
+    }
     const [isTyping, setIsTyping] = useState(false);
     const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const [readStatusError,setReadStatusError]=useState('');
+    const acknowledgedReads=useRef(new Map<string,number>());
 
-    // Dynamic Translation & Suggestion states
-    const [targetLang, setTargetLang] = useState<'en' | 'es' | 'hi' | 'fr' | 'de'>('en');
-    const [translatedMessages, setTranslatedMessages] = useState<Record<number, string>>({});
-    const [translatingIds, setTranslatingIds] = useState<Record<number, boolean>>({});
+    useEffect(()=>{
+      setObservedMessage(null);setThreads([]);setThreadCursor(null);setThreadsBusy(false);setMessages([]);setActiveThread(null);setNewMessage('');
+      acknowledgedReads.current.clear();setReadStatusError('');setHistoryError('');setThreadsError('');
+    },[user?.id,token]);
 
-    const getSuggestionChips = () => {
-        const isHost = user?.id === activeThread?.host_id;
-        if (isHost) {
-            return [
-                "Yes, the space is fully available!",
-                "Our noise protection index is 92+ (elite).",
-                "Yes, dedicated workspace is included.",
-                "Let me know if you need check-in instructions!"
-            ];
-        } else {
-            return [
-                "Hi, is this stay available for my dates?",
-                "How is the noise level & privacy rating?",
-                "Are there any coworking desks in the room?",
-                "What's the high-speed WiFi setup?"
-            ];
+    useEffect(()=>{
+      const viewport=messageViewport.current;
+      if(!viewport||!activeThread||!token)return;
+      if(typeof IntersectionObserver==='undefined'){setReadStatusError('Read acknowledgements are unavailable in this browser.');return;}
+      const threadId=activeThread.id;
+      const observer=new IntersectionObserver(entries=>{
+        if(document.visibilityState!=='visible'||localStorage.getItem('token')!==token||activeThreadId.current!==threadId)return;
+        for(const entry of entries){
+          if(!entry.isIntersecting||entry.intersectionRect.height<Math.min(40,entry.boundingClientRect.height))continue;
+          const messageId=Number((entry.target as HTMLElement).dataset.inquiryReadId);
+          if(Number.isSafeInteger(messageId)&&messageId>0)setObservedMessage(previous=>({threadId,messageId:previous?.threadId===threadId?Math.max(previous.messageId,messageId):messageId}));
         }
-    };
+      },{root:viewport,threshold:[0,0.25,0.5,1]});
+      const observe=()=>{observer.disconnect();if(document.visibilityState==='visible')viewport.querySelectorAll('[data-inquiry-read-id]').forEach(node=>observer.observe(node));};
+      observe();document.addEventListener('visibilitychange',observe);
+      return()=>{observer.disconnect();document.removeEventListener('visibilitychange',observe);};
+    },[activeThread?.id,messages,token]);
 
-    const handleTranslateMessage = (msgId: number, content: string) => {
-        if (translatedMessages[msgId]) {
-            setTranslatedMessages(prev => {
-                const copy = { ...prev };
-                delete copy[msgId];
-                return copy;
-            });
-            return;
-        }
+    useEffect(()=>{
+      if(!activeThread||!user||!token)return;
+      const through=observedMessage?.threadId===activeThread.id?observedMessage.messageId:0;
+      if(!through)return;
+      const controller=new AbortController();
+      const key=`${user.id}:${activeThread.id}`;
+      const current=()=>!controller.signal.aborted&&activeThreadId.current===activeThread.id
+        &&document.visibilityState==='visible'&&localStorage.getItem('token')===token;
+      let pending=false;
+      const acknowledge=async()=>{
+        if(pending||!current()||through<=(acknowledgedReads.current.get(key)??0))return;
+        pending=true;
+        try{
+          const receipt=await acknowledgeInquiryRead({threadId:activeThread.id,throughMessageId:through,token,signal:controller.signal,current});
+          if(!receipt)return;
+          acknowledgedReads.current.set(key,Math.max(through,acknowledgedReads.current.get(key)??0));
+          setReadStatusError('');
+          setThreads(previous=>previous.map(thread=>thread.id!==receipt.threadId?thread:{...thread,
+            ...(thread.guest_id===user.id?{unread_count_guest:receipt.unread}:{unread_count_host:receipt.unread})}));
+        }catch{if(current())setReadStatusError('Read status has not synced. It will retry when you reconnect.');}
+        finally{pending=false;}
+      };
+      void acknowledge();
+      const retry=()=>{void acknowledge();};
+      window.addEventListener('online',retry);document.addEventListener('visibilitychange',retry);
+      return()=>{controller.abort();window.removeEventListener('online',retry);document.removeEventListener('visibilitychange',retry);};
+    },[activeThread,observedMessage,user,token]);
 
-        setTranslatingIds(prev => ({ ...prev, [msgId]: true }));
-        uiAudio.playClick();
-
-        setTimeout(() => {
-            let translation = "";
-            const lower = content.toLowerCase();
-            if (targetLang === 'es') {
-                if (lower.includes("available")) translation = "¡Sí, el espacio está totalmente disponible!";
-                else if (lower.includes("noise") || lower.includes("privacy")) translation = "Nuestro índice de protección contra el ruido es 92+ (élite).";
-                else if (lower.includes("wifi") || lower.includes("speed")) translation = "¿Cómo es la configuración de WiFi de alta velocidad?";
-                else if (lower.includes("desk") || lower.includes("workspace")) translation = "Sí, se incluye espacio de trabajo dedicado.";
-                else translation = `[Traducido] ${content} (Traducido al español)`;
-            } else if (targetLang === 'hi') {
-                if (lower.includes("available")) translation = "हाँ, स्थान पूरी तरह से उपलब्ध है!";
-                else if (lower.includes("noise") || lower.includes("privacy")) translation = "हमारा शोर सुरक्षा सूचकांक 92+ (अभिजात वर्ग) है।";
-                else if (lower.includes("wifi") || lower.includes("speed")) translation = "हाई-स्पीड वाईफाई सेटअप कैसा है?";
-                else if (lower.includes("desk") || lower.includes("workspace")) translation = "हाँ, समर्पित कार्यक्षेत्र शामिल है।";
-                else translation = `[अनुवादित] ${content} (हिंदी अनुवाद)`;
-            } else if (targetLang === 'fr') {
-                if (lower.includes("available")) translation = "Oui, l'espace est entièrement disponible !";
-                else if (lower.includes("noise") || lower.includes("privacy")) translation = "Notre indice de protection acoustique est de 92+ (élite).";
-                else if (lower.includes("wifi") || lower.includes("speed")) translation = "Comment se présente la configuration du WiFi haut débit ?";
-                else if (lower.includes("desk") || lower.includes("workspace")) translation = "Oui, un espace de travail dédié est inclus.";
-                else translation = `[Traduit] ${content} (Traduit en français)`;
-            } else if (targetLang === 'de') {
-                if (lower.includes("available")) translation = "Ja, die Unterkunft ist voll verfügbar!";
-                else if (lower.includes("noise") || lower.includes("privacy")) translation = "Unser Schallschutzindex liegt bei über 92 (Elite).";
-                else if (lower.includes("wifi") || lower.includes("speed")) translation = "Wie sieht die Highspeed-WLAN-Einrichtung aus?";
-                else if (lower.includes("desk") || lower.includes("workspace")) translation = "Ja, ein eigener Arbeitsbereich ist vorhanden.";
-                else translation = `[Übersetzt] ${content} (Ins Deutsche übersetzt)`;
-            } else {
-                if (lower.includes("disponible")) translation = "Yes, the space is fully available!";
-                else if (lower.includes("ruido") || lower.includes("bruit")) translation = "Our noise protection index is 92+ (elite).";
-                else if (lower.includes("trabajo") || lower.includes("travail") || lower.includes("workspace")) translation = "Yes, dedicated workspace is included.";
-                else translation = `[Translated] ${content}`;
-            }
-
-            setTranslatedMessages(prev => ({ ...prev, [msgId]: translation }));
-            setTranslatingIds(prev => ({ ...prev, [msgId]: false }));
-            uiAudio.playPop();
-        }, 600);
-    };
-
-    // Fetch Threads
     useEffect(() => {
-        if (!user) return;
-        const url = role ? `/api/threads?role=${role}` : '/api/threads';
-        fetchWithCache(url, `threads_${role}_${user.id}`, {
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        })
-        .then(data => {
-            if (Array.isArray(data)) {
-                setThreads(data);
-            }
-            setLoading(false);
-        })
-        .catch(err => {
-            console.error(err);
-            setLoading(false);
-        });
+      const reconcileCommittedMutation = (event: Event) => {
+        const detail = (event as CustomEvent<{ actorId?: string; url?: string; data?: unknown }>).detail;
+        if (!user || detail?.actorId !== String(user.id) || !detail.url?.includes('/messages')) return;
+        if (!isCanonicalMessage(detail.data) || !detail.data.client_event_id) return;
+        const canonicalMessage = detail.data;
+        if (canonicalMessage.thread_id !== activeThreadId.current) return;
+        if(canonicalMessage.sender_id!==user.id)return;
+        setMessages(previous=>mergeInquiryMessages(previous,[canonicalInquiryMessageSchema.parse(canonicalMessage)],canonicalMessage.thread_id));
+      };
+      window.addEventListener(OFFLINE_MUTATION_COMMITTED_EVENT, reconcileCommittedMutation);
+      return () => window.removeEventListener(OFFLINE_MUTATION_COMMITTED_EVENT, reconcileCommittedMutation);
     }, [user]);
+
+    // Neutral drafts never assert availability, prices or property amenities.
+    const getSuggestionChips = () => user?.id === activeThread?.host_id
+      ? ["Thanks for your message. Which dates are you considering?", "How many guests will be joining you?", "What would you like to know about the stay?"]
+      : ["Is this stay available for my dates?", "Could you explain the cancellation policy?", "Which room would suit our group?"];
+
+    // Every result is fenced to the current session, including role switches.
+    useEffect(() => {
+        if (!user||!token){setLoading(false);return;}
+        let active=true;
+        const current=()=>active&&localStorage.getItem('token')===token;
+        const url = role ? `/api/threads?role=${role}` : '/api/threads';
+        let pending=false,firstPage=true;
+        const refresh=async()=>{
+          if(pending||!current()||document.visibilityState!=='visible')return;
+          pending=true;
+          try{
+            const data=await fetchWithCache(url, `threads_${role}_${user.id}`, {headers:{Authorization:`Bearer ${token}`}});
+            const rows=parseInquiryThreads(data,user.id,role);
+            if(current()){setThreads(previous=>mergeInquiryThreads(previous,rows));if(firstPage){setThreadCursor(rows.length===100?rows.at(-1)!.list_cursor:null);firstPage=false;}setThreadsError('');}
+          }catch{if(current())setThreadsError('Conversations could not be refreshed. Your saved history may be out of date.');}
+          finally{pending=false;if(current())setLoading(false);}
+        };
+        setThreads([]);setThreadCursor(null);setThreadsBusy(false);setLoading(true);void refresh();
+        const interval=window.setInterval(()=>void refresh(),30000);
+        const visible=()=>void refresh();
+        window.addEventListener('online',visible);document.addEventListener('visibilitychange',visible);
+        return()=>{active=false;window.clearInterval(interval);window.removeEventListener('online',visible);document.removeEventListener('visibilitychange',visible);};
+    }, [user?.id,token,role]);
 
     const scrollToBottom = () => {
         setTimeout(() => {
-            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            messagesEndRef.current?.scrollIntoView({ behavior: reduceMotion?'instant':'smooth' });
         }, 100);
     };
 
@@ -165,43 +176,54 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
     useEffect(() => {
         if (!activeThread) return;
 
-        const fetchMessages = () => {
-            fetchWithCache(`/api/threads/${activeThread.id}/messages`, `messages_${activeThread.id}`, {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-            })
-            .then(data => {
-                if (Array.isArray(data)) {
-                    if(activeThreadId.current!==activeThread.id)return;
-                    setMessages(data);setOlderAvailable(data.length===200);
-                    scrollToBottom();
-                }
-            })
-            .catch(console.error);
+        let active=true,pending=false;
+        const current=()=>active&&activeThreadId.current===activeThread.id&&localStorage.getItem('token')===token;
+        const fetchMessages = async () => {
+            if(pending||!current()||document.visibilityState!=='visible')return;
+            pending=true;
+            try{
+              const data=await fetchWithCache(`/api/threads/${activeThread.id}/messages`, `messages_${activeThread.id}`, {
+                headers: {Authorization:`Bearer ${token}`}
+              });
+              const canonical=parseInquiryHistory(data,activeThread.id);
+              if(!current())return;
+              setMessages(previous=>mergeInquiryMessages(previous,canonical,activeThread.id));
+              setOlderAvailable(canonical.length===200);setHistoryError('');
+            }catch{if(current())setHistoryError('Message history could not be refreshed. Reconnect to check for new replies.');}
+            finally{pending=false;}
         };
 
-        setTranslatedMessages({});
-        setTranslatingIds({});
-        setMessages([]);setOlderAvailable(false);setOlderBusy(false);setOlderError('');
-        fetchMessages();
-        
+        setMessages([]);setOlderAvailable(false);setOlderBusy(false);setOlderError('');setReadStatusError('');setHistoryError('');
+        void fetchMessages();
+        const interval=window.setInterval(()=>void fetchMessages(),30000);
+        const visible=()=>{void fetchMessages();};
+        window.addEventListener('online',visible);document.addEventListener('visibilitychange',visible);
+
         if (!socket) {
           socket = io({ auth: { token } });
         }
-        
+
         const threadSocket = socket;
-        const joinThread = () => threadSocket.emit('join_thread', activeThread.id);
+        const seenHints=new Set<string>();
+        const handleHint=(value:unknown)=>{
+          const hint=conversationNotificationPayloadSchema.safeParse(value);
+          if(!current()||!hint.success||hint.data.threadId!==activeThread.id||seenHints.has(hint.data.notificationId))return;
+          seenHints.add(hint.data.notificationId);
+          if(seenHints.size>200)seenHints.delete(seenHints.values().next().value!);
+          // Socket membership can age between checks. Hints carry no content;
+          // the HTTP read revalidates current participation under RLS.
+          void fetchMessages();
+        };
+        const joinThread = () => {threadSocket.emit('join_thread', activeThread.id);void fetchMessages();};
         threadSocket.on('connect', joinThread);
         if (threadSocket.connected) joinThread();
-        
+
         const handleNewMessage = (message: Message) => {
+          if (!current()||!isCanonicalMessage(message) || message.thread_id !== activeThreadId.current) return;
           if (message.sender_id !== user?.id) {
               uiAudio.playPop();
           }
-          setMessages(prev => {
-            // Avoid adding optimistic duplicate
-            if (prev.find(m => m.id === message.id)) return prev;
-            return [...prev, message];
-          });
+          setMessages(previous=>mergeInquiryMessages(previous,[canonicalInquiryMessageSchema.parse(message)],activeThread.id));
           scrollToBottom();
         };
 
@@ -218,11 +240,17 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
         };
 
         threadSocket.on('new_message', handleNewMessage);
+        threadSocket.on('conversation_changed',handleHint);
+        threadSocket.on('notification',handleHint);
         threadSocket.on('user_typing', handleUserTyping);
         threadSocket.on('user_stopped_typing', handleUserStoppedTyping);
 
         return () => {
+            active=false;window.clearInterval(interval);window.removeEventListener('online',visible);document.removeEventListener('visibilitychange',visible);
+            if(typingTimeoutRef.current)clearTimeout(typingTimeoutRef.current);setIsTyping(false);
             threadSocket.off('new_message', handleNewMessage);
+            threadSocket.off('conversation_changed',handleHint);
+            threadSocket.off('notification',handleHint);
             threadSocket.off('user_typing', handleUserTyping);
             threadSocket.off('user_stopped_typing', handleUserStoppedTyping);
             threadSocket.emit('leave_thread', activeThread.id);
@@ -233,7 +261,9 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newMessage.trim() || !activeThread || !user) return;
+        if (!newMessage.trim() || !activeThread || !user||!token) return;
+        const threadId=activeThread.id,sessionToken=token;
+        const current=()=>activeThreadId.current===threadId&&localStorage.getItem('token')===sessionToken;
 
         const receiverId = user.id === activeThread.guest_id ? activeThread.host_id : activeThread.guest_id;
         const msgStr = newMessage;
@@ -246,23 +276,28 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
         }
 
         // Optimistic UI
+        const clientEventId = crypto.randomUUID();
         const tempMsg: Message = {
-            id: Date.now(),
+            id: nextOptimisticId.current--,
             thread_id: activeThread.id,
             sender_id: user.id,
             receiver_id: receiverId,
             content: msgStr,
             is_read: false,
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            client_event_id: clientEventId,
+            sync_state: 'PENDING',
         };
         setMessages(prev => [...prev, tempMsg]);
         scrollToBottom();
 
         try {
-            const success = await queueMutation(`/api/threads/${activeThread.id}/messages`, 'POST', { receiverId, content: msgStr, clientEventId: crypto.randomUUID(), ...(()=>{try{const id=sessionStorage.getItem('encho-measurement-visit');return id?{measurementVisitId:id}:{};}catch{return {};}})() }, { 'Authorization': `Bearer ${localStorage.getItem('token')}` });
-            if (!success && !navigator.onLine) {
-                 // Nothing special, it was queued.
-            } else if (success) {
+            const result = await queueMutationWithReceipt<Message>(`/api/threads/${activeThread.id}/messages`, 'POST', { receiverId, content: msgStr, clientEventId, ...(()=>{try{const id=sessionStorage.getItem('encho-measurement-visit');return id?{measurementVisitId:id}:{};}catch{return {};}})() }, { 'Authorization': `Bearer ${localStorage.getItem('token')}` });
+            if(!current())return;
+            if (result.status === 'COMMITTED' && result.data) {
+                const canonical=canonicalInquiryMessageSchema.parse(result.data);
+                if(canonical.thread_id!==threadId||canonical.client_event_id!==clientEventId||canonical.sender_id!==user.id||canonical.receiver_id!==receiverId)throw new Error('Message receipt did not match this conversation command.');
+                setMessages(previous=>mergeInquiryMessages(previous,[canonical],threadId));
                 // Background update of threads list
                 const url = role ? `/api/threads?role=${role}` : '/api/threads';
                 fetch(url, {
@@ -270,11 +305,19 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
                 })
                 .then(r => r.json())
                 .then(d => {
-                    if (Array.isArray(d)) setThreads(d);
-                });
+                    if(current())setThreads(previous=>mergeInquiryThreads(previous,parseInquiryThreads(d,user.id,role)));
+                }).catch(()=>{if(current())setThreadsError('Your message was confirmed, but the conversation list could not be refreshed.');});
+            } else if (result.status === 'QUEUED') {
+                setMessages(previous => previous.map(message => message.id<0&&message.sender_id===user.id&&message.client_event_id === clientEventId
+                    ? { ...message, sync_state: 'QUEUED' }
+                    : message));
+            } else {
+                setMessages(previous => previous.map(message => message.id<0&&message.sender_id===user.id&&message.client_event_id === clientEventId
+                    ? { ...message, sync_state: 'FAILED' }
+                    : message));
             }
         } catch (err) {
-            console.error('Failed to send message', err);
+            if(current()){setMessages(previous=>previous.map(message=>message.id<0&&message.sender_id===user.id&&message.client_event_id===clientEventId?{...message,sync_state:'FAILED'}:message));setHistoryError('Your send response could not be verified. Refresh the conversation to check its recorded status.');}
         }
     };
 
@@ -285,18 +328,18 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
         //const targetAvatar = isGuest ? thread.host_avatar : thread.guest_avatar;
 
         return (
-            <div 
-                key={thread.id} 
+            <button type="button"
+                key={thread.id}
                 onClick={() => setActiveThread(thread)}
-                className={`p-4 cursor-pointer border-b border-gray-100 hover:bg-gray-50 transition-colors flex items-center gap-4 ${activeThread?.id === thread.id ? 'bg-gray-50' : ''}`}
+                className={`w-full text-left p-4 cursor-pointer border-b border-gray-100 hover:bg-gray-50 transition-colors flex items-center gap-4 ${activeThread?.id === thread.id ? 'bg-gray-50' : ''}`}
             >
                 <div className="relative w-12 h-12 rounded-full overflow-hidden flex-shrink-0 bg-gray-200">
-                    <img src={thread.listing_image || 'https://images.unsplash.com/photo-1560518883-ce09059eeffa'} alt="listing" className="w-full h-full object-cover" />
+                    {thread.listing_image?<img src={thread.listing_image} alt="" className="w-full h-full object-cover"/>:<div className="w-full h-full grid place-items-center bg-gray-100"><House aria-hidden="true" className="w-6 h-6 text-gray-400"/></div>}
                 </div>
                 <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start">
                         <h4 className="font-semibold text-gray-900 truncate">{otherPartyName || 'Unknown'}</h4>
-                        <span className="text-xs text-gray-400 whitespace-nowrap">{new Date(thread.updated_at).toLocaleDateString()}</span>
+                        <span className="text-xs text-gray-600 whitespace-nowrap">{new Date(thread.updated_at).toLocaleDateString()}</span>
                     </div>
                     <p className="text-sm text-gray-500 truncate">{thread.listing_title}</p>
                     <p className={`text-sm mt-1 truncate ${unreadCount > 0 ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
@@ -304,11 +347,11 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
                     </p>
                 </div>
                 {unreadCount > 0 && (
-                    <div className="w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-bold">
+                    <div className="w-5 h-5 rounded-full bg-red-700 text-white flex items-center justify-center text-xs font-bold">
                         {unreadCount}
                     </div>
                 )}
-            </div>
+            </button>
         );
     };
 
@@ -319,37 +362,39 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
     return (
         <>
             <SEO title="Messages" description="Your conversations on Encho Space" />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 h-[calc(100vh-80px)]">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 h-[calc(100dvh-80px)] min-h-[420px] flex flex-col">
             <div className="flex items-center gap-4 mb-6">
-                <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors xl:hidden">
+                <button aria-label="Back" onClick={onBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors xl:hidden">
                     <ArrowLeft className="w-6 h-6" />
                 </button>
                 <h1 className="text-3xl font-bold tracking-tight">Messages</h1>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 h-[calc(100%-4rem)] flex overflow-hidden">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 flex-1 min-h-0 flex overflow-hidden">
                 {/* Threads List Sidebar */}
-                <div className={`${activeThread ? 'hidden md:flex' : 'flex'} w-full md:w-1/3 border-r border-gray-200 flex-col`}>
+                <div className={`${activeThread ? 'hidden md:flex' : 'flex'} w-full min-w-0 md:w-1/3 border-r border-gray-200 flex-col`}>
                     <div className="p-4 border-b border-gray-100 bg-gray-50">
                         <h2 className="font-semibold text-gray-700">All Conversations</h2>
                     </div>
+                    {threadsError&&<p className="p-4 text-sm text-amber-800" role="status">{threadsError}</p>}
                     <div className="flex-1 overflow-y-auto">
                         {threads.length === 0 ? (
                             <div className="p-8 text-center text-gray-500">No conversations found.</div>
                         ) : (
                             threads.map(renderThreadItem)
                         )}
+                        {threadCursor&&<button type="button" disabled={threadsBusy} onClick={()=>void loadEarlierThreads()} className="w-full p-4 text-sm underline disabled:opacity-50">{threadsBusy?'Loading conversations…':'Load earlier conversations'}</button>}
                     </div>
                 </div>
 
                 {/* Chat Area */}
-                <div className={`${!activeThread ? 'hidden md:flex' : 'flex'} w-full md:w-2/3 flex-col bg-gray-50/30`}>
+                <div className={`${!activeThread ? 'hidden md:flex' : 'flex'} w-full min-w-0 md:w-2/3 flex-col bg-gray-50/30`}>
                     {activeThread ? (
                         <>
                             {/* Chat Header */}
                             <div className="p-4 bg-white border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                                 <div className="flex items-center gap-3">
-                                    <button className="md:hidden p-2 hover:bg-gray-100 rounded-full" onClick={() => setActiveThread(null)}>
+                                    <button aria-label="Back to conversations" className="md:hidden p-2 hover:bg-gray-100 rounded-full" onClick={() => setActiveThread(null)}>
                                         <ArrowLeft className="w-5 h-5" />
                                     </button>
                                     <div>
@@ -361,74 +406,44 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
                                         </div>
                                     </div>
                                 </div>
-                                
+
                                 {/* Inline Translation Tool */}
                                 <div className="flex items-center gap-1.5 self-end sm:self-auto bg-zinc-50 border border-zinc-200 px-2.5 py-1 rounded-xl shadow-xs">
                                     <Languages className="w-3.5 h-3.5 text-zinc-400" />
-                                    <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Translate:</span>
-                                    <select
-                                        value={targetLang}
-                                        onChange={(e) => {
-                                            setTargetLang(e.target.value as any);
-                                            setTranslatedMessages({}); // clear stale translations
-                                            uiAudio.playClick();
-                                        }}
-                                        className="bg-transparent border-none text-[11px] font-bold text-zinc-850 focus:ring-0 focus:outline-none py-0.5 pr-6 cursor-pointer"
-                                    >
-                                        <option value="en">English 🇬🇧</option>
-                                        <option value="es">Español 🇪🇸</option>
-                                        <option value="hi">हिंदी 🇮🇳</option>
-                                        <option value="fr">Français 🇫🇷</option>
-                                        <option value="de">Deutsch 🇩🇪</option>
-                                    </select>
+                                    <span className="text-xs text-zinc-600">Original messages · verified translation unavailable</span>
                                 </div>
                             </div>
 
                             {/* Chat Messages */}
-                            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                            {historyError&&<p className="px-6 py-2 text-xs text-amber-800" role="status">{historyError}</p>}
+                            {readStatusError&&<p className="px-6 py-2 text-xs text-amber-800" role="status">{readStatusError}</p>}
+                            <div ref={messageViewport} role="log" aria-label="Conversation messages" aria-live="polite" className="flex-1 overflow-y-auto p-6 space-y-6">
                                 <AnimatePresence initial={false}>
                                 {olderAvailable&&<button disabled={olderBusy} onClick={()=>void loadOlder()} className="text-sm underline">{olderBusy?'Loading earlier messages…':'Load earlier messages'}</button>}
                                 {olderError&&<p role="alert">{olderError}</p>}
                                 {messages.map(msg => {
                                     const isMe = msg.sender_id === user?.id;
-                                    const isTranslated = !!translatedMessages[msg.id];
-                                    const isTranslating = !!translatingIds[msg.id];
-                                    const displayedContent = translatedMessages[msg.id] || msg.content;
                                     return (
-                                        <motion.div 
-                                            key={msg.id} 
-                                            initial={{ opacity: 0, scale: 0.9, y: 10, originX: isMe ? 1 : 0 }}
+                                        <motion.div
+                                            key={inquiryMessageRenderKey(msg)}
+                                            data-inquiry-read-id={!isMe&&msg.id>0?msg.id:undefined}
+                                            initial={reduceMotion?false:{ opacity: 0, scale: 0.9, y: 10, originX: isMe ? 1 : 0 }}
                                             animate={{ opacity: 1, scale: 1, y: 0 }}
                                             transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                                             className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
                                         >
-                                            <div className={`max-w-[70%] xl:max-w-[60%] rounded-2xl px-5 py-3 shadow-sm relative group ${isMe ? 'bg-[#0284C7] text-white rounded-tr-sm' : 'bg-white border border-gray-100 text-gray-900 rounded-tl-sm'}`}>
-                                                {isTranslating ? (
-                                                    <div className="flex items-center gap-1.5 py-1">
-                                                        <div className="w-3 h-3 rounded-full border-2 border-zinc-200 border-t-zinc-600 animate-spin" />
-                                                        <span className="text-xs italic text-zinc-400">Translating...</span>
-                                                    </div>
-                                                ) : (
-                                                    <p className="text-sm leading-relaxed">{displayedContent}</p>
-                                                )}
-                                                
+                                            <div className={`max-w-[70%] xl:max-w-[60%] rounded-2xl px-5 py-3 shadow-sm relative group ${isMe ? 'bg-[#0369A1] text-white rounded-tr-sm' : 'bg-white border border-gray-100 text-gray-900 rounded-tl-sm'}`}>
+                                                <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.content}</p>
+
                                                 <div className="flex items-center justify-between gap-4 mt-2">
-                                                    <span className={`text-[10px] block opacity-70 ${isMe ? 'text-zinc-200' : 'text-gray-400'}`}>
+                                                    <span className={`text-xs block ${isMe ? 'text-white' : 'text-gray-600'}`}>
                                                         {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                        {isTranslated && " • Translated"}
+                                                        {msg.sync_state === 'PENDING' && ' • Sending'}
+                                                        {msg.sync_state === 'QUEUED' && ' • Awaiting confirmation'}
+                                                        {msg.sync_state === 'FAILED' && ' • Not confirmed'}
                                                     </span>
 
-                                                    {/* Translation Action Link */}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleTranslateMessage(msg.id, msg.content)}
-                                                        className={`text-[9px] font-bold uppercase tracking-wider flex items-center gap-0.5 hover:underline opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-200 cursor-pointer ${
-                                                            isMe ? 'text-amber-300 hover:text-amber-200' : 'text-blue-600 hover:text-blue-500'
-                                                        }`}
-                                                    >
-                                                        <Globe className="w-2.5 h-2.5" />
-                                                        {isTranslated ? "Original" : "Translate"}
-                                                    </button>
+
                                                 </div>
                                             </div>
                                         </motion.div>
@@ -436,27 +451,28 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
                                 })}
                                 </AnimatePresence>
                                 {isTyping && (
-                                    <motion.div 
+                                    <motion.div
                                         initial={{ opacity: 0, scale: 0.9, originX: 0 }}
                                         animate={{ opacity: 1, scale: 1 }}
                                         className="flex justify-start"
                                     >
                                         <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1.5">
-                                            <motion.div animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0 }} className="w-1.5 h-1.5 bg-gray-400 rounded-full" />
-                                            <motion.div animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.2 }} className="w-1.5 h-1.5 bg-gray-400 rounded-full" />
-                                            <motion.div animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.4 }} className="w-1.5 h-1.5 bg-gray-400 rounded-full" />
+                                            <motion.div animate={reduceMotion?undefined:{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0 }} className="w-1.5 h-1.5 bg-gray-400 rounded-full" />
+                                            <motion.div animate={reduceMotion?undefined:{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.2 }} className="w-1.5 h-1.5 bg-gray-400 rounded-full" />
+                                            <motion.div animate={reduceMotion?undefined:{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.4 }} className="w-1.5 h-1.5 bg-gray-400 rounded-full" />
                                         </div>
                                     </motion.div>
                                 )}
                                 <div ref={messagesEndRef} />
                             </div>
 
+                            {token&&<ConversationAssistance key={`${user?.id}:${token}:${activeThread.id}`} threadId={activeThread.id} token={token}/>}
                             {/* Input Area */}
                             <div className="p-4 bg-white border-t border-gray-200">
                                 {/* Suggestion Chips */}
                                 <div className="pb-3 overflow-x-auto flex gap-2 no-scrollbar scroll-smooth">
-                                    <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider self-center mr-1 flex items-center gap-1 shrink-0 select-none">
-                                        <Sparkles className="w-3.5 h-3.5 text-amber-500 animate-pulse" /> Suggest:
+                                    <span className="text-xs text-zinc-600 font-bold uppercase tracking-wider self-center mr-1 flex items-center gap-1 shrink-0 select-none">
+                                        <Sparkles aria-hidden="true" className="w-3.5 h-3.5 text-amber-700" /> Drafts:
                                     </span>
                                     {getSuggestionChips().map((chip, idx) => (
                                         <button
@@ -466,50 +482,20 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
                                                 setNewMessage(chip);
                                                 uiAudio.playPop();
                                             }}
-                                            className="text-xs bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-700 px-3.5 py-1.5 rounded-full hover:border-zinc-900 transition-all whitespace-nowrap active:scale-95 cursor-pointer"
+                                            className="text-xs min-h-11 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-700 px-3.5 py-1.5 rounded-full hover:border-zinc-900 transition-all whitespace-nowrap active:scale-95 cursor-pointer"
                                         >
                                             {chip}
                                         </button>
                                     ))}
-                                    <button
-                                        type="button"
-                                        onClick={async () => {
-                                            uiAudio.playClick();
-                                            try {
-                                                const token = localStorage.getItem('token');
-                                                const history = messages.slice(-5).map(m => `${m.sender_id === user?.id ? 'Me' : 'Them'}: ${m.content}`).join('\n');
-                                                
-                                                const res = await fetch('/api/ai/suggest-reply', {
-                                                    method: 'POST',
-                                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                                    body: JSON.stringify({
-                                                        threadId: activeThread?.id,
-                                                        history,
-                                                        propertyTitle: activeThread?.listing_title,
-                                                        isHost: user?.id === activeThread?.host_id
-                                                    })
-                                                });
-                                                if (res.ok) {
-                                                    const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
-                                                    if (data.reply) {
-                                                        setNewMessage(data.reply);
-                                                        uiAudio.playPop();
-                                                    }
-                                                }
-                                            } catch (e) {
-                                                console.error("AI Reply generation failed:", e);
-                                            }
-                                        }}
-                                        className="text-xs bg-gradient-to-r from-amber-500 to-orange-500 text-white px-3.5 py-1.5 rounded-full font-bold transition-all shadow-sm hover:opacity-90 active:scale-95 flex items-center gap-1 cursor-pointer shrink-0"
-                                    >
-                                        ✨ Draft via AI
-                                    </button>
+                                    <span className="text-xs text-zinc-500 self-center shrink-0">AI reply drafts unavailable</span>
                                 </div>
 
                                 <form onSubmit={handleSendMessage} className="flex items-end gap-3 relative">
                                     <div className="flex-1 relative group">
-                                        <input 
+                                        <input
                                             type="text"
+                                            aria-label="Message"
+                                            maxLength={10000}
                                             placeholder="Type a message..."
                                             className="w-full pl-4 pr-12 py-3 rounded-2xl border border-gray-300 focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition-all"
                                             value={newMessage}
@@ -524,40 +510,11 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
                                                 }
                                             }}
                                         />
-                                        <button 
-                                            type="button"
-                                            title="AI Co-pilot: Draft a reply based on conversation"
-                                            onClick={async () => {
-                                                try {
-                                                    const token = localStorage.getItem('token');
-                                                    // Prepare history
-                                                    const history = messages.slice(-5).map(m => `${m.sender_id === user?.id ? 'Me' : 'Them'}: ${m.content}`).join('\n');
-                                                    
-                                                    const res = await fetch('/api/ai/suggest-reply', {
-                                                        method: 'POST',
-                                                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                                        body: JSON.stringify({
-                                                            threadId: activeThread?.id,
-                                                            history,
-                                                            propertyTitle: activeThread?.listing_title,
-                                                            isHost: user?.id === activeThread?.host_id
-                                                        })
-                                                    });
-                                                    if (res.ok) {
-                                                        const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
-                                                        if (data.reply) setNewMessage(data.reply);
-                                                    }
-                                                } catch (e) {
-                                                    console.error("AI Reply failed:", e);
-                                                }
-                                            }}
-                                            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-indigo-500 hover:bg-indigo-50 hover:text-indigo-600 rounded-full transition-colors z-10"
-                                        >
-                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                                        </button>
+
                                     </div>
-                                    <button 
+                                    <button
                                         type="submit"
+                                        aria-label="Send message"
                                         disabled={!newMessage.trim()}
                                         className="p-3 mb-0.5 bg-black text-white rounded-full hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
                                     >

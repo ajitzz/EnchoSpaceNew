@@ -36,6 +36,7 @@
     "@mux/mux-node": "^15.1.0",
     "@mux/mux-player-react": "^3.13.2",
     "@react-oauth/google": "^0.13.5",
+    "@simplewebauthn/server": "14.0.2",
     "@stripe/react-stripe-js": "^6.6.0",
     "@stripe/stripe-js": "^9.8.0",
     "@tailwindcss/vite": "^4.2.2",

@@ -199,6 +199,7 @@ interface SensoryTagPickerProps {
   listingDescription?: string;
   listingType?: string;
   listingLocation?: string;
+  authHeaders?: Record<string, string>;
 }
 
 export const SensoryTagPicker: React.FC<SensoryTagPickerProps> = ({
@@ -208,6 +209,7 @@ export const SensoryTagPicker: React.FC<SensoryTagPickerProps> = ({
   listingDescription,
   listingType,
   listingLocation,
+  authHeaders,
 }) => {
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
@@ -259,7 +261,7 @@ export const SensoryTagPicker: React.FC<SensoryTagPickerProps> = ({
     try {
       const res = await fetch('/api/ai/suggest-sensory-tags', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           title: listingTitle,
           description: listingDescription,
@@ -283,7 +285,7 @@ export const SensoryTagPicker: React.FC<SensoryTagPickerProps> = ({
     } finally {
       setIsSuggesting(false);
     }
-  }, [listingTitle, listingDescription, listingType, listingLocation, selectedTags, onChange]);
+  }, [listingTitle, listingDescription, listingType, listingLocation, selectedTags, onChange, authHeaders]);
 
   const activeCategoryData = SENSORY_CATEGORIES.find(c => c.id === activeCategory);
 

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { safeParseResponse } from '../src/lib/apiClient';
+import { clearActorScopedOfflineData } from '../lib/syncService';
 
 export interface User {
   id: number;
@@ -23,6 +24,21 @@ const AuthContext = createContext<AuthContextType>({
   login: () => {},
   logout: () => {},
 });
+
+const PRIVATE_LOCAL_STORAGE_KEYS = [
+  'auth_session',
+  'cached_campaigns',
+  'cached_reservations',
+  'hostPreviewListing',
+] as const;
+
+function clearPrivateBrowserState(actorId?: string | number | null): void {
+  void clearActorScopedOfflineData(actorId).catch(error => {
+    console.error('Failed to clear actor-scoped offline data:', error);
+  });
+  if (typeof localStorage === 'undefined') return;
+  for (const key of PRIVATE_LOCAL_STORAGE_KEYS) localStorage.removeItem(key);
+}
 
 export const useAuth = () => useContext(AuthContext);
 
@@ -56,9 +72,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
           const parsed = await safeParseResponse<{ user: User }>(res);
           if (parsed.ok && parsed.data?.user) {
+            if (user && user.id !== parsed.data.user.id) clearPrivateBrowserState(user.id);
             setUser(parsed.data.user);
             localStorage.setItem('user', JSON.stringify(parsed.data.user));
           } else if (parsed.status === 401 || parsed.status === 403) {
+            clearPrivateBrowserState(user?.id);
             setToken(null);
             setUser(null);
             localStorage.removeItem('token');
@@ -76,6 +94,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [token]);
 
   const login = (newUser: User, newToken: string) => {
+    if (user && user.id !== newUser.id) clearPrivateBrowserState(user.id);
     setUser(newUser);
     setToken(newToken);
     localStorage.setItem('token', newToken);
@@ -83,10 +102,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
+    clearPrivateBrowserState(user?.id);
     setUser(null);
     setToken(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('auth_session');
   };
 
   return (

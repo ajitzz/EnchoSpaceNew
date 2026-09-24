@@ -68,11 +68,9 @@ const CheckoutForm = ({ amount, onPaymentSuccess, onCancel }: { amount: number, 
        } catch (e) {
            // ignore
        }
-       if (isStripeNotConfigured) {
-           onPaymentSuccess();
-           return;
-       }
-       setError("Failed to initialize payment. Stripe API key might be missing.");
+       setError(isStripeNotConfigured
+         ? 'Online payment is not configured. No booking or charge was created.'
+         : 'Payment could not be initialized. No booking or charge was created.');
        setProcessing(false);
        return;
     }
