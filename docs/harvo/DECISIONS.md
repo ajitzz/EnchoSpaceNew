@@ -1223,3 +1223,21 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
   - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
   - Delivery ledger progress: **45 of 48 packages complete (93.8%)**.
+
+### CR1-031 — AdTech SAC 998313 Markup Settlement & Variance Hardening (25 September 2026)
+
+**Status:** Implementation and adversarial test suite verified locally under founder CR1 directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Packages verified & hardened:**
+  - **AdTech SAC 998313 Markup Settlement & Variance Hardening (P6.4 / COMM-01 Gate):**
+    - Implemented `AdTechSettlementHardeningEngine` in `src/lib/compliance/adTechSettlementHardeningEngine.ts` with strict TypeScript contracts (0 `any` types), Transactional Outbox for ad spend settlements and audit logging, 200ms burst deduplication via in-flight promise caching, strict 3% to 5% markup bounding per founder directive HARVO-008/009 and Decision CR1-022, statutory 18% GST calculation under SAC 998313 (Advertising Services), provider spend variance circuit breaker, and monotonic settlement sequence fencing.
+    - Verified atomic outbox rollback: mid-transaction connection drop during audit logging executes clean atomic `ROLLBACK`, leaving zero zombie settlement rows or uncommitted audit entries.
+    - Verified 200ms burst deduplication: 5 simultaneous settlement submissions within 200ms deduplicate via in-flight promise caching to exactly 1 database write and 4 cached replays (`isReplay: true`).
+    - Verified 3% to 5% markup bounding: rates below 3% (e.g. 1%) or above 5% (e.g. historical 15% fixed fee) strictly fail closed with `INVALID_ADTECH_MARKUP_RATE_EXCEPTION`. Valid rates compute exact SAC 998313 18% GST and total host charge ($C + M + \text{GST}$).
+    - Verified provider variance circuit breaker: actual provider spend exceeding budget by $> 5\%$ strictly fails closed with `EXCESSIVE_PROVIDER_VARIANCE_EXCEPTION`, protecting host escrow from unapproved ad network overspend.
+    - Verified monotonic settlement sequencing: out-of-order settlement attestation sequence updates safely rejected as stale (`isStale: true`, `reason: 'STALE_SETTLEMENT_SEQUENCE_REJECTED'`), strictly preventing ledger state regression.
+    - Authored and verified adversarial regression suite in `src/test/harvo/cr1_p6_4_settlement_hardening.test.ts` (5 deterministic tests on isolated local runtime).
+- **Verified Suite Quality Matrix:**
+  - Adversarial settlement hardening suite: **1 test suite, 5 passing tests (100%)** (`cr1_p6_4_settlement_hardening.test.ts`).
+  - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
+  - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+  - Delivery ledger progress: **46 of 48 packages complete (95.8%)**.

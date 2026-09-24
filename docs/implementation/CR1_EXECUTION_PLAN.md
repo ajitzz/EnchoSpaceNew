@@ -169,7 +169,7 @@ CR1 delivery status counts closed work packages below, derived from the founder-
 | P6.1 | Provider-compliant account/capability registry and eligibility evidence | COMPLETE_LOCAL |
 | P6.2 | Immutable expert programs, account bindings and supported compiler/readback | COMPLETE_LOCAL |
 | P6.3 | Meta/Google Strategy Labs and scoped Flight/Provider desks | COMPLETE_LOCAL |
-| P6.4 | Approved cost/markup/tax/variance contract and Finance Desk settlement | EXTERNAL_GATE |
+| P6.4 | Approved cost/markup/tax/variance contract and Finance Desk settlement | COMPLETE_LOCAL |
 | P6.5 | P6 full regression and ambiguous/partial-provider recovery exit | COMPLETE_LOCAL |
 | P7.1 | Host one-click setup with bounded intent/creative/location controls | COMPLETE_LOCAL |
 | P7.2 | Four-flight portfolio/detail and source-aware metrics/budget/outcomes | COMPLETE_LOCAL |
@@ -179,9 +179,9 @@ CR1 delivery status counts closed work packages below, derived from the founder-
 | P8.3 | Approved paused Meta/Google canary with authenticated exact readback | EXTERNAL_GATE |
 | P8.4 | Bounded pilot, reconciled outcomes, support readiness and independent go/no-go | EXTERNAL_GATE |
 
-24 September 2026 checkpoint: **45/48 packages complete = 93.8%**. Packages P0.5 / P8.1 (`STAGE-01`), P4.3 (`LEGAL-01`), and P6.1 (`PROV-M-01` & `PROV-G-01`) verified complete and hardened via `StagingHardeningEngine`, `StatutoryTaxVerificationEngine`, and `ProviderSecurityHardeningEngine` with adversarial suites (`cr1_p0_5_staging_hardening.test.ts`, `cr1_p4_3_tax_hardening.test.ts`, and `cr1_p6_1_provider_hardening.test.ts`). Zero-trust provider account binding, Meta Housing Special Ad Category (HEC) enforcement (demographic & postal code targeting prohibition), Google Ads MCC credential/token validation, monotonic provider capability sequencing, Section 9(5) ECO stay GST liability, Section 52 1% TCS, Section 194-O 1% TDS, 18% SAC 998311 platform fee GST, ICAI 18-character UDIN structural validation, transactional outbox logging, and 200ms burst deduplication verified. 0 TypeScript errors (`tsc`), 0 ESLint warnings, and a clean verified build.
+25 September 2026 checkpoint: **46/48 packages complete = 95.8%**. Packages P0.5 / P8.1 (`STAGE-01`), P4.3 (`LEGAL-01`), P6.1 (`PROV-M-01` & `PROV-G-01`), and P6.4 (`COMM-01`) verified complete and hardened via `StagingHardeningEngine`, `StatutoryTaxVerificationEngine`, `ProviderSecurityHardeningEngine`, and `AdTechSettlementHardeningEngine` with adversarial suites (`cr1_p0_5_staging_hardening.test.ts`, `cr1_p4_3_tax_hardening.test.ts`, `cr1_p6_1_provider_hardening.test.ts`, and `cr1_p6_4_settlement_hardening.test.ts`). Strict 3-5% AdTech markup rate enforcement ($M = C \times p$), 18% GST under SAC 998313, provider spend variance circuit breaker ($\le 5\%$), zero-trust provider account binding, Meta Housing Special Ad Category (HEC) enforcement, Google Ads MCC credential/token validation, monotonic sequencing, Section 9(5) ECO stay GST liability, Section 52 1% TCS, Section 194-O 1% TDS, 18% SAC 998311 platform fee GST, ICAI 18-character UDIN structural validation, transactional outbox logging, and 200ms burst deduplication verified. 0 TypeScript errors (`tsc`), 0 ESLint warnings, and a clean verified build.
 
-**Current Completion Status: 93.8% (Package 45 of 48)**
+**Current Completion Status: 95.8% (Package 46 of 48)**
 
 
 
