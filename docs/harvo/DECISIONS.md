@@ -889,6 +889,24 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - ESLint code quality: 0 errors / 0 warnings.
   - Production asset bundle: verified 44 public assets.
 
+### CR1-015 — Phase P6 Provider Programs, Expert Studios & Finance Control Adversarial Verification (24 September 2026)
+
+**Status:** Implementation verified locally under founder CR1 directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Packages verified & hardened:**
+  - **P6.1, P6.2, P6.3, P6.4, P6.5 (Provider Programs, Expert Studios & Finance Control):**
+    - Implemented `ProviderPackageEngine` in `src/lib/marketing/providerPackageEngine.ts` with strict TypeScript contracts (0 `any` types), Transactional Outbox pattern decoupling DB state transactions from external side effects, and automated idempotency fencing.
+    - Authored and verified adversarial regression suite in `src/test/harvo/cr1_p6_provider_engine.test.ts` (4 deterministic tests on isolated local runtime):
+      1. *Adversarial Scenario 1 (Database Connection Drops Halfway Through):* Verified atomic rollback on mid-flight socket severing; zero zombie publishing records created, and host wallet balance left cleanly uncommitted.
+      2. *Adversarial Scenario 2 (5-Click Burst Submission in 200ms):* Verified concurrent request deduplication via in-flight promise caching and idempotency keys; exactly 1 external provider call dispatched, 4 replayed identical outcome with zero duplicate charges.
+      3. *Adversarial Scenario 3 (Out-of-Order Telemetry / Spend Webhook):* Verified monotonic sequence fencing; stale or delayed webhook payloads are safely acknowledged and ignored (`ignored: true`), strictly preventing regression of cumulative spend or corruption of audit logs.
+      4. *Scenario 4 (Provider Zero-Spend PAUSED Invariant, HOUSING Category & Stop-Loss Lock):* Enforces strict provider invariants requiring campaigns to be created in `PAUSED` state with Meta `HOUSING` special ad category compliance, and immediate circuit breaker lock at 95% spend threshold (₹47,500 on ₹50,000 budget).
+- **Verified Suite Quality Matrix:**
+  - Phase P6 provider suite: **4 test suites, 70 passing tests (100%)** (`cr1_p6_provider_engine.test.ts`, `provider_controls.test.ts`, `meta_provider.test.ts`, `google_provider.test.ts`).
+  - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
+  - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+  - Production asset bundle: verified 44 public assets.
+
+
 
 
 
