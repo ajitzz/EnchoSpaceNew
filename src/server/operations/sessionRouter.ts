@@ -26,7 +26,7 @@ export function createWorkforceSessionRouter(port:WorkforceLoginPort|null,origin
     handler:(_req,res)=>res.status(429).json({code:'LOGIN_RATE_LIMITED',error:'Too many sign-in attempts. Try again shortly.'})}));
   router.use((req,res,next)=>{
     if(!origin||!port)return res.status(503).json({code:'LOGIN_NOT_CONFIGURED',error:'Workforce sign-in is unavailable in this deployment.'});
-    const originMatches = req.headers.origin === origin || (Boolean(req.headers.origin) && originAllowed(req.headers.origin) && Boolean(origin) && originAllowed(origin));
+    const originMatches = req.headers.origin === origin || (Boolean(req.headers.origin) && originAllowed(req.headers.origin));
     if(req.method!=='POST'||!originMatches||req.headers['x-encho-workforce-command']!=='1'||!req.is('application/json')){
       return res.status(403).json({code:'COMMAND_ORIGIN_DENIED',error:'Use the Encho Operations sign-in page.'});
     }
