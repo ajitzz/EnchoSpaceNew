@@ -38,6 +38,14 @@ export function createOperationsRouter(workspace: OperationsWorkspacePort | null
       res.json(await workspace.load(authorization));
     } catch (error) {
       const invalidSession = error instanceof WorkforceSessionError && error.code === 'STAFF_SESSION_REQUIRED';
+      if (!invalidSession) {
+        console.error('[WORKFORCE_WORKSPACE_ERROR]', {
+          correlationId: trace.correlationId,
+          operationId: trace.operationId,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      }
       res.status(invalidSession ? 401 : 503).json({
         code: invalidSession ? 'STAFF_SESSION_REQUIRED' : 'WORKFORCE_UNAVAILABLE',
         error: invalidSession ? 'A current workforce session is required.' : 'The workforce workspace is not available in this deployment.',
