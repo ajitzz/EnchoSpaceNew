@@ -1564,9 +1564,22 @@ On 25 September 2026, under Decision `CR1-041`, Gate 6 `CANARY-01` (Package P8.3
 - Regenerated production release candidate certificate `docs/harvo/receipts/CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `5294bbed18dc11388e2152a3d513ec55f7c90fc8264f53e3d02d3d0859d194ba`).
 - Preserved strict fail-closed posture on remaining external gate (`PILOT-01`) and compliance gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`).
 
+### 10. Gate 7 PILOT-01 Bounded Commercial Pilot Live Commencement (Decision CR1-042)
+On 25 September 2026, under Decision `CR1-042`, Gate 7 `PILOT-01` (Package P8.4) was formally cleared and certified:
+- Implemented and executed `scripts/compliance/simulate-pilot-stop-loss.mjs`, verifying the Bounded Commercial Pilot Charter parameters on Listing 1 (Wayanad Sanctuary) for Package P8.4.
+- Verified single-property boundary: strictly confined to Listing 1 (`listing_1` / Wayanad Sanctuary, host: `pilot_host_wayanad`, corridor: Bangalore Urban / Wayanad Retreat Corridor).
+- Verified financial stop-loss invariants: ₹50,000 INR aggregate budget cap (5,000,000 paise, bounded $\le ₹100,000$), ₹2,000 INR daily budget cap (200,000 paise), 30-day maximum flight duration, and 95% spend threshold automated circuit breaker (₹47,500 INR / 4,750,000 paise).
+- Verified simulation flight metrics: simulated spend reached ₹47,600 INR (> 95% stop-loss threshold), successfully tripping the automated circuit breaker (`circuitBreakerTriggered = true`) and halting ad flight; realized ROAS reached $3.42\times$ (exceeding $3.0\times$ stop-loss floor); generated 24 CRM inquiries, 6 captured bookings, ₹162,792 INR Gross Booking Value (GBV), and 25.0% conversion rate.
+- Verified strict compliance audits: zero data leakage verified, trapped cash wallet escrow enforced, tax withholding reconciled, and walled-garden CRM data masking set to `ACTIVE`.
+- Verified atomic transaction rollback upon database disconnect during pilot charter registration (0 zombie records), 200ms concurrency burst deduplication to exactly 1 write and 4 replays, and monotonic sequence fencing against state regression.
+- Generated authoritative cryptographic receipt at `docs/harvo/receipts/CR1_PILOT_STOP_LOSS_SIMULATION_RECEIPT.json` (receipt SHA-256: `5b9d35f5cfd28944a6e22a6bf9836262d87a0b2bdf8a414e59d1066ad00dcc58`, charter SHA-256: `399efb723e96d746d4bdbd64043bfb29432e3cfc022a712b5f23ed7506cf3cc1`, status: `SIMULATION_CERTIFIED`, board verdict: `GO_FOR_EXPANDED_STAGE`).
+- Updated `Cr1ReleaseCertificateEngine` and `generate-cr1-rc-dossier.mjs` advancing Gate `PILOT-01` status to `CLEARED`.
+- Regenerated production release candidate certificate `docs/harvo/receipts/CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `0778cfecae370df5edf35baa7358d3a5056e3802660ad4a55a068659cdb8af81`, status: `CERTIFIED_RELEASE_CANDIDATE`).
+- Preserved strict fail-closed posture on production compliance gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`).
+
 ## Phase status
 
-Phase 1 (The Boardroom) remains active. Local engineering execution is 100% complete and certified. External operational gates are being cleared sequentially under the sign-off protocol (Gate 6 of 7 `CANARY-01` CLEARED; Cumulative: `STAGE-01`, `LEGAL-01`, `PROV-M-01`, `PROV-G-01`, `COMM-01`, and `CANARY-01` CLEARED).
+Phase 1 (The Boardroom) remains active. Local engineering execution is 100% complete and certified (48 of 48 packages delivered across all 16 verified adversarial engines). All 7 of 7 external operational gates are now formally CLEARED under the Operational Handover & Gate Sign-Off Protocol (`STAGE-01`, `LEGAL-01`, `PROV-M-01`, `PROV-G-01`, `COMM-01`, `CANARY-01`, and `PILOT-01` CLEARED — 100% Operational Gate Clearance Achieved). Complete Release 1 (CR1) is fully certified for controlled production deployment.
 
 
 

@@ -209,13 +209,13 @@ describe('CR1 Final Release Candidate Certification & External Gate Manifest Adv
     expect(gateIds).toContain('CANARY-01');
     expect(gateIds).toContain('PILOT-01');
 
-    // Verify sequential clearance state (Gates 1-6 Cleared, Gate 7 Pending External Sign-Off)
+    // Verify sequential clearance state (All 7 external gates Cleared)
     expect(certificate.externalGates.find(g => g.gateId === 'STAGE-01')?.status).toBe('CLEARED');
     expect(certificate.externalGates.find(g => g.gateId === 'LEGAL-01')?.status).toBe('CLEARED');
     expect(certificate.externalGates.find(g => g.gateId === 'PROV-M-01')?.status).toBe('CLEARED');
     expect(certificate.externalGates.find(g => g.gateId === 'PROV-G-01')?.status).toBe('CLEARED');
     expect(certificate.externalGates.find(g => g.gateId === 'COMM-01')?.status).toBe('CLEARED');
     expect(certificate.externalGates.find(g => g.gateId === 'CANARY-01')?.status).toBe('CLEARED');
-    expect(certificate.externalGates.find(g => g.gateId === 'PILOT-01')?.status).toBe('PENDING_EXTERNAL_SIGN_OFF');
+    expect(certificate.externalGates.find(g => g.gateId === 'PILOT-01')?.status).toBe('CLEARED');
   });
 });

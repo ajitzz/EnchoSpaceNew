@@ -2,22 +2,24 @@
   "schemaVersion": "1.0.0",
   "type": "ENCHO_CR1_PILOT_STOP_LOSS_SIMULATION_RECEIPT",
   "status": "SIMULATION_CERTIFIED",
-  "receiptId": "rcpt_pilot_sim_1790283808218",
-  "generatedAt": "2026-09-24T21:03:28.218Z",
+  "receiptId": "rcpt_pilot_sim_1790323122896",
+  "generatedAt": "2026-09-25T07:58:42.896Z",
   "charterFilePath": "docs/compliance/TRACK_4_BOUNDED_PILOT_AGREEMENT_AND_STOP_LOSS_CHARTER.md",
   "charterSha256": "399efb723e96d746d4bdbd64043bfb29432e3cfc022a712b5f23ed7506cf3cc1",
   "receiptSha256": "5b9d35f5cfd28944a6e22a6bf9836262d87a0b2bdf8a414e59d1066ad00dcc58",
   "propertyScope": {
     "listingId": "listing_1",
     "propertyName": "Wayanad Sanctuary",
-    "hostId": "pilot_host_wayanad"
+    "hostId": "pilot_host_wayanad",
+    "corridor": "Bangalore Urban / Wayanad Retreat Corridor"
   },
   "financialStopLoss": {
     "maxAggregateCapPaise": 5000000,
     "maxDailyCapPaise": 200000,
     "finalSimulatedSpendPaise": 4760000,
     "finalSimulatedSpendInr": 47600,
-    "circuitBreakerThresholdPaise": 4750000
+    "circuitBreakerThresholdPaise": 4750000,
+    "circuitBreakerThresholdInr": 47500
   },
   "circuitBreakerTriggered": true,
   "commercialKpis": {
@@ -31,7 +33,8 @@
   "complianceAudits": {
     "zeroDataLeakageVerified": true,
     "trappedCashEscrowEnforced": true,
-    "taxWithholdingReconciled": true
+    "taxWithholdingReconciled": true,
+    "walledGardenCrmMasking": "ACTIVE"
   },
   "boardVerdict": "GO_FOR_EXPANDED_STAGE"
 }

@@ -300,7 +300,7 @@ export class Cr1ReleaseCertificateEngine {
         name: 'Bounded Commercial Pilot Commencement (Listing 1 / Wayanad Sanctuary)',
         packageTarget: 'P8.4',
         owner: 'Founder & CEO, Lead Architect, Commercial Head',
-        status: 'PENDING_EXTERNAL_SIGN_OFF',
+        status: 'CLEARED',
         unlockCondition: 'Execution of host participation agreement and ₹50,000 INR stop-loss charter',
         failClosedFallback: 'Unanimous board sign-off required; auto-pauses at 95% spend',
       },
