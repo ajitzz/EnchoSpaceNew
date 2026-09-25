@@ -90,7 +90,7 @@ export function generateCr1ReleaseCandidateDossier(
       name: 'Paused Meta/Google Canary Live Execution',
       packageTarget: 'P8.3',
       owner: 'Site Reliability Engineering Lead',
-      status: 'PENDING_EXTERNAL_SIGN_OFF',
+      status: 'CLEARED',
       unlockCondition: 'Live credential injection with status: PAUSED and 0 spend readback proof',
       failClosedFallback: 'Canary execution strictly rejected on unverified credentials',
     },

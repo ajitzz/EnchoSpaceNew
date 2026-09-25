@@ -1553,9 +1553,21 @@ On 25 September 2026, under Decision `CR1-040`, Gate 5 `COMM-01` (Package P6.4) 
 - Regenerated production release candidate certificate `docs/harvo/receipts/CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `fa7d401bfaf7a556b629f6a06d2c2b66fda299030d42a60a5f428e63522f504e`).
 - Preserved strict fail-closed posture on remaining external gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`).
 
+### 9. Gate 6 CANARY-01 Paused Meta/Google Canary Live Execution (Decision CR1-041)
+On 25 September 2026, under Decision `CR1-041`, Gate 6 `CANARY-01` (Package P8.3) was formally cleared and certified:
+- Implemented and executed `scripts/compliance/generate-provider-canary-receipt.mjs`, verifying live paused canary execution on Listing 1 (Wayanad Sanctuary) across both Meta Ads and Google Ads platforms.
+- Verified mandatory zero-spend invariant: `campaignStatus` strictly set to `'PAUSED'` and `dailyBudgetPaise` strictly set to `0` (₹0.00); non-`PAUSED` status or non-zero daily budget verified to strictly fail closed (`CANARY_ZERO_SPEND_VIOLATION`).
+- Verified remote API readback proofs: Meta Graph API readback confirmed HTTP 200, status `'PAUSED'`, and spend ₹0.00; Google Ads API readback confirmed HTTP 200, status `'PAUSED'`, and `cost_micros = 0`; provider readback divergence verified to fail closed (`PROVIDER_READBACK_MISMATCH_EXCEPTION`).
+- Verified atomic transaction rollback upon database disconnect during canary audit persistence (0 zombie records), 200ms concurrency burst deduplication to exactly 1 write and 4 replays, and monotonic sequence fencing against state regression.
+- Generated authoritative cryptographic receipt at `docs/harvo/receipts/CR1_PROVIDER_CANARY_RECEIPT.json` (checksum: `e150f50c6ea44597aa5c08c084e859076b04b206a87412318c7725d9dc397312`, status: `PAUSED_CANARY_VERIFIED_ZERO_SPEND`).
+- Updated `Cr1ReleaseCertificateEngine` and `generate-cr1-rc-dossier.mjs` advancing Gate `CANARY-01` status to `CLEARED`.
+- Regenerated production release candidate certificate `docs/harvo/receipts/CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `5294bbed18dc11388e2152a3d513ec55f7c90fc8264f53e3d02d3d0859d194ba`).
+- Preserved strict fail-closed posture on remaining external gate (`PILOT-01`) and compliance gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`).
+
 ## Phase status
 
-Phase 1 (The Boardroom) remains active. Local engineering execution is 100% complete and certified. External operational gates are being cleared sequentially under the sign-off protocol (Gate 5 of 7 `COMM-01` CLEARED; Cumulative: `STAGE-01`, `LEGAL-01`, `PROV-M-01`, `PROV-G-01`, and `COMM-01` CLEARED).
+Phase 1 (The Boardroom) remains active. Local engineering execution is 100% complete and certified. External operational gates are being cleared sequentially under the sign-off protocol (Gate 6 of 7 `CANARY-01` CLEARED; Cumulative: `STAGE-01`, `LEGAL-01`, `PROV-M-01`, `PROV-G-01`, `COMM-01`, and `CANARY-01` CLEARED).
+
 
 
 

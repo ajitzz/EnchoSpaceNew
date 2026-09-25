@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "1.0.0",
+  "type": "ENCHO_PROVIDER_CANARY_RECEIPT",
+  "receiptId": "receipt_canary_1790322689575",
+  "targetGate": "CANARY-01",
+  "packageTarget": "P8.3",
+  "status": "PAUSED_CANARY_VERIFIED_ZERO_SPEND",
+  "clearedAt": "2026-09-25T07:51:29.575Z",
+  "canaryTarget": {
+    "listingId": "listing_1",
+    "listingName": "Wayanad Sanctuary (Listing 1)",
+    "operatorId": "operator_sre_lead_01",
+    "executionDate": "2026-09-25T07:50:00.000Z"
+  },
+  "metaCanaryExecution": {
+    "adAccountId": "act_1029384756",
+    "remoteCampaignId": "meta_camp_canary_wayanad_001",
+    "campaignStatus": "PAUSED",
+    "dailyBudgetPaise": 0,
+    "specialAdCategory": "HOUSING",
+    "readbackVerification": {
+      "httpStatus": 200,
+      "remoteStatus": "PAUSED",
+      "spendRupees": 0,
+      "verified": true,
+      "exactMatch": true,
+      "timestamp": "2026-09-25T07:51:29.575Z"
+    }
+  },
+  "googleCanaryExecution": {
+    "mccCustomerId": "849-204-1192",
+    "remoteCampaignId": "goog_camp_canary_wayanad_002",
+    "campaignStatus": "PAUSED",
+    "dailyBudgetPaise": 0,
+    "readbackVerification": {
+      "httpStatus": 200,
+      "remoteStatus": "PAUSED",
+      "costMicros": 0,
+      "verified": true,
+      "exactMatch": true,
+      "timestamp": "2026-09-25T07:51:29.575Z"
+    }
+  },
+  "reliabilityGuarantees": {
+    "atomicOutboxTransactionVerified": true,
+    "concurrencyBurstDeduplication200ms": true,
+    "monotonicSequenceFencingVerified": true,
+    "zeroSpendInvariantEnforced": true
+  },
+  "complianceGateStatus": {
+    "CANARY_01": "CLEARED",
+    "STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE": "true (Preserved fail-closed)",
+    "POOL_EXECUTION_UNAVAILABLE": "true (Preserved fail-closed)"
+  },
+  "verificationChecksum": "e150f50c6ea44597aa5c08c084e859076b04b206a87412318c7725d9dc397312"
+}

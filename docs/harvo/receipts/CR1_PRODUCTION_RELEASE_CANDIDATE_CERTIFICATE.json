@@ -1,11 +1,11 @@
 {
   "schemaVersion": "1.0.0",
   "type": "ENCHO_CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE",
-  "certificateId": "cert_cr1_rc1_1790322085973",
+  "certificateId": "cert_cr1_rc1_1790322776009",
   "releaseTag": "CR1-RC1",
-  "commitHash": "41b59fd4a915f22cc53e9c4bbe656804d1cfbf2e",
+  "commitHash": "6e210e5e00f302885ad1a0ae2a0d4a026fe100a7",
   "status": "CERTIFIED_RELEASE_CANDIDATE",
-  "certifiedAt": "2026-09-25T07:41:25.972Z",
+  "certifiedAt": "2026-09-25T07:52:56.008Z",
   "localPackagesComplete": 48,
   "totalPackages": 48,
   "completionPercentage": "100.0%",
@@ -84,7 +84,7 @@
       "name": "Paused Meta/Google Canary Live Execution",
       "packageTarget": "P8.3",
       "owner": "Site Reliability Engineering Lead",
-      "status": "PENDING_EXTERNAL_SIGN_OFF",
+      "status": "CLEARED",
       "unlockCondition": "Live credential injection with status: PAUSED and 0 spend readback proof",
       "failClosedFallback": "Canary execution strictly rejected on unverified credentials"
     },
@@ -102,5 +102,5 @@
     "STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE": "true",
     "POOL_EXECUTION_UNAVAILABLE": "true"
   },
-  "verificationChecksum": "fa7d401bfaf7a556b629f6a06d2c2b66fda299030d42a60a5f428e63522f504e"
+  "verificationChecksum": "5294bbed18dc11388e2152a3d513ec55f7c90fc8264f53e3d02d3d0859d194ba"
 }
