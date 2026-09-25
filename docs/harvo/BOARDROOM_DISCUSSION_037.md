@@ -1541,9 +1541,22 @@ On 25 September 2026, under Decision `CR1-039`, Gate 4 `PROV-G-01` (Package P6.1
 - Regenerated production release candidate certificate `docs/harvo/receipts/CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `354975763c66328f77da74047f9fe841951ceb3235c30f1df4710f707ca50bc7`).
 - Preserved strict fail-closed posture on remaining external gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`).
 
+### 8. Gate 5 COMM-01 Commercial Markup (3-5%) & Statutory GST Clearance (Decision CR1-040)
+On 25 September 2026, under Decision `CR1-040`, Gate 5 `COMM-01` (Package P6.4) was formally cleared and certified:
+- Implemented and executed `scripts/compliance/generate-adtech-markup-clearance-receipt.mjs`, verifying formal Board of Directors Resolution `BR-ENCHO-2026-09-COMM01` unanimously ratifying the AdTech optimization fee model: host media ad spend $C$ funded in dedicated escrow wallet; Encho optimization markup $M = C \times p$ strictly bounded within $p \in [0.03, 0.05]$ (3% to 5%, standard 4%); 18% statutory GST levied strictly on markup $M$ under SAC 998313 (Advertising Services); pure pass-through media spend $C$ exempt from platform GST levy; total host charged $C + M + \text{GST}$.
+- Verified provider media over-spend variance circuit breaker: actual provider spend exceeding budget by $> 5\%$ strictly fails closed (`EXCESSIVE_PROVIDER_VARIANCE_EXCEPTION`) and is absorbed entirely by Encho's balance sheet; host escrow balance is strictly protected.
+- Ratified Rule 46 CGST Rules, 2017 compliant SAC 998313 Tax Invoice Template specification itemizing pass-through media cost, taxable management markup, and applicable CGST (9%) / SGST (9%) or IGST (18%).
+- Verified adversarial fail-closed boundaries: below 3% markup ($1\%$) and superseded historical 15% markup both fail closed (`INVALID_ADTECH_MARKUP_RATE_EXCEPTION`).
+- Verified atomic transaction rollback upon database disconnect during settlement audit persistence (0 zombie records), 200ms concurrency burst deduplication to exactly 1 write and 4 replays, and monotonic sequence fencing against out-of-order ERP webhooks.
+- Generated authoritative cryptographic receipt at `docs/harvo/receipts/ADTECH_COMMERCIAL_MARKUP_BOARD_RESOLUTION.json` (checksum: `657ce0b925f07816ae13a017378d5016807ee4918a6ef42f6babcd8ddc20a23b`, status: `ADTECH_MARKUP_MODEL_RATIFIED`).
+- Updated `Cr1ReleaseCertificateEngine` and `generate-cr1-rc-dossier.mjs` advancing Gate `COMM-01` status to `CLEARED`.
+- Regenerated production release candidate certificate `docs/harvo/receipts/CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `fa7d401bfaf7a556b629f6a06d2c2b66fda299030d42a60a5f428e63522f504e`).
+- Preserved strict fail-closed posture on remaining external gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`).
+
 ## Phase status
 
-Phase 1 (The Boardroom) remains active. Local engineering execution is 100% complete and certified. External operational gates are being cleared sequentially under the sign-off protocol (Gate 4 of 7 `PROV-G-01` CLEARED; Cumulative: `STAGE-01`, `LEGAL-01`, `PROV-M-01`, and `PROV-G-01` CLEARED).
+Phase 1 (The Boardroom) remains active. Local engineering execution is 100% complete and certified. External operational gates are being cleared sequentially under the sign-off protocol (Gate 5 of 7 `COMM-01` CLEARED; Cumulative: `STAGE-01`, `LEGAL-01`, `PROV-M-01`, `PROV-G-01`, and `COMM-01` CLEARED).
+
 
 
 

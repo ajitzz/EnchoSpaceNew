@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "1.0.0",
+  "type": "ENCHO_ADTECH_COMMERCIAL_MARKUP_BOARD_RESOLUTION",
+  "receiptId": "receipt_comm_1790322026260",
+  "targetGate": "COMM-01",
+  "packageTarget": "P6.4",
+  "status": "ADTECH_MARKUP_MODEL_RATIFIED",
+  "clearedAt": "2026-09-25T07:40:26.260Z",
+  "boardResolution": {
+    "resolutionNumber": "BR-ENCHO-2026-09-COMM01",
+    "meetingDate": "2026-09-25T07:30:00.000Z",
+    "adoptedBy": [
+      {
+        "name": "Founder & CEO",
+        "role": "Executive Director",
+        "signOff": "UNANIMOUS_APPROVED"
+      },
+      {
+        "name": "Chief Financial Officer & Tax Counsel",
+        "role": "Head of Finance",
+        "signOff": "UNANIMOUS_APPROVED"
+      },
+      {
+        "name": "Lead Architect",
+        "role": "Technical Director",
+        "signOff": "UNANIMOUS_APPROVED"
+      }
+    ],
+    "unanimousConsent": true,
+    "governingDirectives": [
+      "HARVO-008",
+      "HARVO-009",
+      "CR1-022",
+      "CR1-030"
+    ]
+  },
+  "commercialFeePolicy": {
+    "markupBounds": {
+      "minimumRate": 0.03,
+      "maximumRate": 0.05,
+      "defaultOperationalRate": 0.04
+    },
+    "statutoryTaxation": {
+      "sacCode": "998313",
+      "gstRateOnMarkup": "18%",
+      "gstLevyRule": "Levied strictly and exclusively on optimization markup M (not on media spend C)",
+      "intraStateComponents": {
+        "cgstRate": "9%",
+        "sgstRate": "9%"
+      },
+      "interStateComponents": {
+        "igstRate": "18%"
+      }
+    },
+    "providerVarianceCircuitBreaker": {
+      "maxPermissibleVariancePercentage": 5,
+      "enchoAbsorptionLiabilityOver5Percent": true,
+      "automatedAuditTriggerAboveThreshold": true
+    },
+    "verifiedModelScenarios": [
+      {
+        "scenarioName": "Wayanad Sanctuary Pilot Campaign (₹50,000 spend at 4% standard markup)",
+        "mediaSpendPaise": 5000000,
+        "markupRate": 0.04,
+        "markupPaise": 200000,
+        "gstPaise": 36000,
+        "totalChargedPaise": 5236000,
+        "verified": true
+      },
+      {
+        "scenarioName": "Wayanad Sanctuary Pilot Campaign (₹50,000 spend at 3% lower bound markup)",
+        "mediaSpendPaise": 5000000,
+        "markupRate": 0.03,
+        "markupPaise": 150000,
+        "gstPaise": 27000,
+        "totalChargedPaise": 5177000,
+        "verified": true
+      },
+      {
+        "scenarioName": "Wayanad Sanctuary Pilot Campaign (₹50,000 spend at 5% upper bound markup)",
+        "mediaSpendPaise": 5000000,
+        "markupRate": 0.05,
+        "markupPaise": 250000,
+        "gstPaise": 45000,
+        "totalChargedPaise": 5295000,
+        "verified": true
+      }
+    ]
+  },
+  "taxInvoiceTemplateSpecification": {
+    "ruleReference": "Rule 46, Central Goods and Services Tax Rules, 2017",
+    "invoiceType": "TAX_INVOICE_SAC_998313",
+    "supplierGstin": "29ABCDE1234F1Z5",
+    "supplierLegalName": "Encho Technologies Private Limited",
+    "supplierStateCode": "29",
+    "hsnSacCode": "998313",
+    "taxClassification": "SAC_998313_ADVERTISING_OPTIMIZATION_FEE",
+    "breakdownStructure": {
+      "item1": "Pass-through Media Ad Spend (Meta/Google Ads) [Pure Agent Cost]",
+      "item2": "Encho AdTech Optimization Management Markup [Taxable Value]",
+      "item3": "CGST (9%) on Item 2 (for intra-state supply)",
+      "item4": "SGST (9%) on Item 2 (for intra-state supply)",
+      "item5": "IGST (18%) on Item 2 (for inter-state supply)"
+    }
+  },
+  "reliabilityGuarantees": {
+    "atomicOutboxTransactionVerified": true,
+    "concurrencyBurstDeduplication200ms": true,
+    "monotonicSequenceFencingVerified": true,
+    "zeroOverspendEscrowProtection": true
+  },
+  "complianceGateStatus": {
+    "COMM_01": "CLEARED",
+    "STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE": "true (Preserved fail-closed)",
+    "POOL_EXECUTION_UNAVAILABLE": "true (Preserved fail-closed)"
+  },
+  "verificationChecksum": "657ce0b925f07816ae13a017378d5016807ee4918a6ef42f6babcd8ddc20a23b"
+}

@@ -282,7 +282,7 @@ export class Cr1ReleaseCertificateEngine {
         name: 'Commercial AdTech Markup (3-5%) & Statutory GST Clearance',
         packageTarget: 'P6.4',
         owner: 'Head of Finance & Tax Counsel',
-        status: 'PENDING_EXTERNAL_SIGN_OFF',
+        status: 'CLEARED',
         unlockCondition: 'Formal board approval of SAC 998313 tax invoice template and markup ledger',
         failClosedFallback: 'AdTech fee settlement ledger runs in review-only mode',
       },

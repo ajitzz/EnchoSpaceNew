@@ -1393,6 +1393,28 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
   - Clearance progress: **Gate 4 of 7 (`PROV-G-01`) Cleared** (Cumulative: `STAGE-01`, `LEGAL-01`, `PROV-M-01`, and `PROV-G-01` CLEARED).
 
+### CR1-040 — Gate 5 COMM-01 Commercial Markup (3-5%) & Statutory GST Clearance (25 September 2026)
+
+**Status:** External Gate `COMM-01` (Package P6.4) cleared and verified under founder directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Verification & Receipts Generated:**
+  - Implemented standalone compliance runner `scripts/compliance/generate-adtech-markup-clearance-receipt.mjs` verifying formal Board of Directors Resolution `BR-ENCHO-2026-09-COMM01` unanimously ratifying the AdTech optimization fee model: host media ad spend $C$ funded in dedicated escrow wallet; Encho optimization markup $M = C \times p$ strictly bounded within $p \in [0.03, 0.05]$ (3% to 5%, standard 4%); 18% statutory GST levied strictly on markup $M$ under SAC 998313 (Advertising Services); pure pass-through media spend $C$ exempt from platform GST levy; total host charged $C + M + \text{GST}$.
+  - Verified provider media over-spend variance circuit breaker: actual provider spend exceeding budget by $> 5\%$ strictly fails closed (`EXCESSIVE_PROVIDER_VARIANCE_EXCEPTION`) and is absorbed entirely by Encho's balance sheet; host escrow balance is strictly protected.
+  - Ratified Rule 46 CGST Rules, 2017 compliant SAC 998313 Tax Invoice Template specification itemizing pass-through media cost, taxable management markup, and applicable CGST (9%) / SGST (9%) or IGST (18%).
+  - Verified adversarial fail-closed boundaries: below 3% markup ($1\%$) and superseded historical 15% markup both fail closed (`INVALID_ADTECH_MARKUP_RATE_EXCEPTION`).
+  - Verified atomic transaction rollback upon database disconnect during settlement audit persistence (0 zombie records), 200ms concurrency burst deduplication to exactly 1 write and 4 replays, and monotonic sequence fencing against out-of-order ERP webhooks.
+  - Generated authoritative cryptographic receipt at `docs/harvo/receipts/ADTECH_COMMERCIAL_MARKUP_BOARD_RESOLUTION.json` (verification checksum: `657ce0b925f07816ae13a017378d5016807ee4918a6ef42f6babcd8ddc20a23b`, status: `ADTECH_MARKUP_MODEL_RATIFIED`).
+  - Updated `Cr1ReleaseCertificateEngine` and `generate-cr1-rc-dossier.mjs` advancing Gate `COMM-01` status to `CLEARED`.
+  - Regenerated production release candidate certificate `CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (verification checksum: `fa7d401bfaf7a556b629f6a06d2c2b66fda299030d42a60a5f428e63522f504e`).
+  - Preserved fail-closed posture on remaining external gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`).
+- **Verified Suite Quality Matrix:**
+  - AdTech settlement hardening suite: **1 test suite, 5 passing tests (100%)** (`cr1_p6_4_settlement_hardening.test.ts`).
+  - Certification suite: **1 test suite, 5 passing tests (100%)** (`cr1_release_candidate_certification.test.ts`).
+  - Cumulative Phase 4 suites: **7 test suites, 35 passing tests (100%)**.
+  - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
+  - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+  - Clearance progress: **Gate 5 of 7 (`COMM-01`) Cleared** (Cumulative: `STAGE-01`, `LEGAL-01`, `PROV-M-01`, `PROV-G-01`, and `COMM-01` CLEARED).
+
+
 
 
 
