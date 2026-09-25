@@ -162,6 +162,7 @@ import { createWorkforceSessionRuntime } from './src/server/operations/sessionRu
 import { createServiceCaseRuntime } from './src/server/conversations/serviceRuntime.js';
 import { createParticipantServiceRouter,createStaffServiceRouter } from './src/server/conversations/serviceRouter.js';
 import { conversationAssistanceBoundary } from './src/server/assistance/conversationAssistanceBoundary.js';
+import { createAdminWorkforceRouter } from './src/server/admin/workforceRouter.js';
 
 // These routes use named scalar parameters; persisted sessions normalize numeric IDs.
 export interface AuthRequest extends Request<Record<string, string>> {
@@ -1056,6 +1057,7 @@ app.use('/api/operations/v1', createOperationsRouter(createOperationsRuntime(pro
   StructuredLogger.error('[WORKFORCE] Restricted operations runtime unavailable', {errorCode: 'WORKFORCE_UNAVAILABLE'});
 }),{origin:workforceOrigin(process.env)}));
 app.use('/api/marketing/measurement',createMeasurementRouter(harvoMarketing.config.origin,harvoMarketing.touchpoints),marketingErrorHandler);
+app.use('/api/admin/workforce', authenticateToken, requireAdmin, createAdminWorkforceRouter(pool));
 app.use('/api/marketing/v2', createMarketingRouter(pool, harvoMarketing.workflow, harvoMarketing.finance, authenticateToken, harvoMarketing.targeting, {corridorInference:harvoMarketing.corridorInference,outcomes:harvoMarketing.outcomes,stories:harvoMarketing.stories,pools:harvoMarketing.pools,preflight:harvoMarketing.preflight,settlement:harvoMarketing.settlement,conversions:harvoMarketing.conversions,guidance:harvoMarketing.guidance,creative:harvoMarketing.creative,pauseRecovery:harvoMarketing.pauseRecovery,facts:harvoMarketing.facts,keywordResearch:harvoMarketing.keywordResearch,portfolio:harvoMarketing.portfolio}));
 app.get('/api/webhooks/marketing/v2/meta', (req: Request,res: Response,next: NextFunction) => { try { res.type('text/plain').send(harvoMarketing.metaEvents.challenge(req.query['hub.mode'],req.query['hub.verify_token'],req.query['hub.challenge'])); } catch(error) { next(error); } }, marketingErrorHandler);
 app.post('/api/webhooks/marketing/v2/:provider', async (req: any, res: Response, next: NextFunction) => {

@@ -1577,19 +1577,16 @@ On 25 September 2026, under Decision `CR1-042`, Gate 7 `PILOT-01` (Package P8.4)
 - Regenerated production release candidate certificate `docs/harvo/receipts/CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `0778cfecae370df5edf35baa7358d3a5056e3802660ad4a55a068659cdb8af81`, status: `CERTIFIED_RELEASE_CANDIDATE`).
 - Preserved strict fail-closed posture on production compliance gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`).
 
+### 11. Admin God-Mode Workforce Command Center & Segregation of Duties (SoD) Engine (Decision CR1-043)
+On 25 September 2026, under Decision `CR1-043`, the Admin God-Mode Workforce Command Center was delivered, superseding manual direct-to-database SQL operations with a 10/10 FAANG L7/L8 operational interface:
+- **WorkforceAdminService Architecture:** Full transactional backend (`src/lib/iam/workforceAdminService.ts`) enforcing atomic employee provisioning, dynamic role assignment, daily spend ceilings (`maxDailySpendPaise`), and immutable ledger grant rotations.
+- **Segregation of Duties (SoD) Engine:** Automated mathematical rule engine blocking 4 critical toxic role pairs: Maker vs Checker (`campaign_operator` vs `campaign_approver`), Strategy Author vs Publisher (`strategy_architect` vs `strategy_publisher`), Finance Controller vs Spend Operator (`finance_risk_reviewer` vs `provider_operator`), and Auditor Neutrality (`auditor` restricted to read-only lanes).
+- **Admin God-Mode Operational Actions:** 1-click execution for `SUSPEND` (instant session kill, work lease releases, step-up challenge expiration), `RESUME`, `REVOKE_SESSIONS`, `OFFBOARD`, and 3-Tier Emergency Freezes (Tier 1 Individual, Tier 2 Department, Tier 3 Global).
+- **Dual-Control Maker-Checker Ratification:** High-risk actions (> ₹50,000 spend quotas, global corridor changes, sensitive grants) require independent checker review and admin ratification desk verification.
+- **Cryptographic Merkle Hash Chain:** SHA-256 tamper-evident log linking all workforce events, with 1-click administrative verification and automatic detection of single-byte database row tampering.
+- **Zero-Bypass Security Boundary:** Workforce staff accounts authenticate via Google Corporate OAuth (`__Host-encho_workforce` cookie) and are strictly prevented from acquiring `users.role = 'admin'`. Unprivileged staff attempting to access `/api/admin/*` fail closed with HTTP 403 Forbidden.
+- **Adversarial Verification:** 11 deterministic tests in `src/test/harvo/cr1_admin_workforce_command.test.ts` verifying atomic rollback, SoD rejections, quota limits, emergency suspensions, Merkle chain tampering detection, and security boundary closure.
+
 ## Phase status
 
-Phase 1 (The Boardroom) remains active. Local engineering execution is 100% complete and certified (48 of 48 packages delivered across all 16 verified adversarial engines). All 7 of 7 external operational gates are now formally CLEARED under the Operational Handover & Gate Sign-Off Protocol (`STAGE-01`, `LEGAL-01`, `PROV-M-01`, `PROV-G-01`, `COMM-01`, `CANARY-01`, and `PILOT-01` CLEARED — 100% Operational Gate Clearance Achieved). Complete Release 1 (CR1) is fully certified for controlled production deployment.
-
-
-
-
-
-
-
-
-
-
-
-
-
+Phase 1 (The Boardroom) remains active. Local engineering execution is 100% complete and certified (48 of 48 packages delivered across all 16 verified adversarial engines). All 7 of 7 external operational gates are now formally CLEARED under the Operational Handover & Gate Sign-Off Protocol (`STAGE-01`, `LEGAL-01`, `PROV-M-01`, `PROV-G-01`, `COMM-01`, `CANARY-01`, and `PILOT-01` CLEARED — 100% Operational Gate Clearance Achieved). Admin Workforce Command Center and SoD Engine verified and live in Admin Portal.

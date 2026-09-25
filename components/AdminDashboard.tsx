@@ -16,6 +16,7 @@ import HostCalendar from './HostCalendar';
 import { useToast } from './ToastContext';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { io } from 'socket.io-client';
+import { AdminStaffCommandCenter } from './admin/AdminStaffCommandCenter';
 
 interface AdminDashboardProps {
   onBack: () => void;
@@ -25,7 +26,7 @@ interface AdminDashboardProps {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }) => {
   const { formatPrice } = useCurrency();
   const [adminMode, setAdminMode] = useState<'stays' | 'experiences'>('stays');
-  const [activeTab, setActiveTab] = useState<'analytics' | 'listings' | 'users' | 'settings' | 'offers' | 'reviews' | 'messages' | 'seo' | 'marketing'>(window.location.pathname==='/admin/marketing/adtech'?'marketing':'analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'listings' | 'users' | 'staff' | 'settings' | 'offers' | 'reviews' | 'messages' | 'seo' | 'marketing'>(window.location.pathname==='/admin/marketing/adtech'?'marketing':'analytics');
   const [editingRoomsListing, setEditingRoomsListing] = useState<Listing | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
   // ADR-001: Rooms now have free-form name + tier key + icon + tag + description + specs
@@ -1385,6 +1386,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
           <button onClick={() => setActiveTab('users')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'users' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
              <UserIcon className="w-4 h-4" /> Users
           </button>
+          <button onClick={() => setActiveTab('staff')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'staff' ? 'bg-indigo-50 text-indigo-900 font-semibold' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
+             <ShieldCheck className="w-4 h-4 text-indigo-600" /> Staff &amp; Workforce
+          </button>
           <button onClick={() => setActiveTab('offers')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-sm transition-colors ${activeTab === 'offers' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'}`}>
              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" /></svg> Offers
           </button>
@@ -1437,10 +1441,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
 
         <div className="mb-8">
            <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight mb-2">
-             {activeTab === 'analytics' ? 'Analytics Overview' : activeTab === 'listings' ? (adminMode === 'stays' ? 'Properties' : 'Experiences') : activeTab === 'users' ? 'Users' : activeTab === 'offers' ? 'Offers' : activeTab === 'reviews' ? 'Reviews' : activeTab === 'messages' ? 'Messages' : 'Settings'}
+             {activeTab === 'analytics' ? 'Analytics Overview' : activeTab === 'listings' ? (adminMode === 'stays' ? 'Properties' : 'Experiences') : activeTab === 'users' ? 'Users' : activeTab === 'staff' ? 'Staff & Workforce' : activeTab === 'offers' ? 'Offers' : activeTab === 'reviews' ? 'Reviews' : activeTab === 'messages' ? 'Messages' : 'Settings'}
            </h1>
            <p className="text-gray-500 text-sm">
-             {activeTab === 'analytics' ? 'Platform insights and revenue metrics' : activeTab === 'listings' ? (adminMode === 'stays' ? 'Manage all spaces across the platform' : 'Manage platform experiences') : activeTab === 'users' ? 'Manage customers and hosts' : activeTab === 'offers' ? 'Manage platform offers' : activeTab === 'reviews' ? 'Manage property reviews' : activeTab === 'messages' ? 'Manage platform messages' : 'Manage global settings'}
+             {activeTab === 'analytics' ? 'Platform insights and revenue metrics' : activeTab === 'listings' ? (adminMode === 'stays' ? 'Manage all spaces across the platform' : 'Manage platform experiences') : activeTab === 'users' ? 'Manage customers and hosts' : activeTab === 'staff' ? 'Enterprise workforce IAM authority, departmental staffing, blast-radius quotas & kill-switches' : activeTab === 'offers' ? 'Manage platform offers' : activeTab === 'reviews' ? 'Manage property reviews' : activeTab === 'messages' ? 'Manage platform messages' : 'Manage global settings'}
            </p>
         </div>
 
@@ -4593,7 +4597,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                        </div>
                     )}
                  </div>
-              </div>)) : null}
+              </div>)) : activeTab === 'staff' ? (
+                <div className="p-4 md:p-8">
+                  <AdminStaffCommandCenter token={token || undefined} />
+                </div>
+              ) : null}
             </div>
         </div>
         
