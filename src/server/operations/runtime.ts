@@ -15,7 +15,14 @@ export function workforceEnvironment(env:NodeJS.ProcessEnv){
 }
 
 export function workforceOrigin(env:NodeJS.ProcessEnv):string|null{
-  const raw = env.CR1_WORKFORCE_ORIGIN || env.APP_URL || (env.VERCEL_URL ? `https://${env.VERCEL_URL}` : null) || (env.NODE_ENV !== 'production' ? 'http://localhost:3000' : null);
+  const configured = (env.ALLOWED_ORIGINS ?? '').split(',').map(v => v.trim()).filter(Boolean);
+  const preferredOrigin = configured.find(v => v.startsWith('https://')) || configured.find(v => v.startsWith('http://'));
+  const raw = env.CR1_WORKFORCE_ORIGIN
+    || env.APP_URL
+    || (env.VERCEL_URL ? (env.VERCEL_URL.startsWith('http') ? env.VERCEL_URL : `https://${env.VERCEL_URL}`) : null)
+    || (env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${env.VERCEL_PROJECT_PRODUCTION_URL}` : null)
+    || preferredOrigin
+    || (env.NODE_ENV !== 'production' ? 'http://localhost:3000' : 'https://encho.co.in');
   if(!raw)return null;
   try{
     const url=new URL(raw);

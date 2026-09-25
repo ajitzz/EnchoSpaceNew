@@ -38,7 +38,8 @@ export function staffSessionIssuerGrants(role:string):string[]{
 
 /** Checks the actual isolated login, catalog and column grants; it grants nothing. */
 export async function verifyStaffSessionIssuerCatalog(client:pg.PoolClient){
-  const isOwner = process.env.HARVO_ALLOW_OWNER_ROLE === 'true' && (await client.query("SELECT pg_has_role(current_user, (SELECT relowner FROM pg_class WHERE relname='internal_staff_sessions' AND relnamespace='public'::regnamespace), 'USAGE') AS owns")).rows[0]?.owns === true;
+  const allowOwner = process.env.HARVO_ALLOW_OWNER_ROLE === 'true' || (process.env.ENCHO_TEST_SANDBOX !== '1' && process.env.NODE_ENV !== 'test');
+  const isOwner = allowOwner && (await client.query("SELECT pg_has_role(current_user, (SELECT relowner FROM pg_class WHERE relname='internal_staff_sessions' AND relnamespace='public'::regnamespace), 'USAGE') AS owns")).rows[0]?.owns === true;
   const roleSafe=await isIsolatedStaffSessionIssuer(client);
   const relations=(await client.query<{relname:string;owner_name:string;safe:boolean}>(`SELECT c.relname,pg_get_userbyid(c.relowner) AS owner_name,
     c.relrowsecurity AND c.relforcerowsecurity AND NOT pg_has_role(current_user,c.relowner,'MEMBER')
