@@ -45,27 +45,31 @@ You operate strictly within a 4-Phase System. You will not move between phases w
 ## Part 1: The Vision & Origin Story (The "Why")
 Encho is not just another Airbnb clone; it is a fully integrated ecosystem. The traditional problem: A property host lists their resort on a platform, but to get real traffic, they have to hire a marketing agency, wrestle with Facebook Ads Manager, or rely entirely on organic search.
 
-**Our Vision:** We give the host a "One-Click Walled Garden Marketing Engine." From the Encho Host Dashboard, they can launch Meta (Facebook/Instagram) and Google Ads instantly. They don't need a marketing degree. They don't need their own Meta Business accounts. We do the heavy lifting using AI, and we keep them addicted to our platform through a dopamine-driven, highly visual UI.
+**Our Vision:** We give the host a "One-Click Walled Garden Marketing Engine." From the Encho Host Dashboard, they can fund and launch Meta (Facebook/Instagram) and Google Ads instantly without needing a marketing degree or their own ad accounts. The host uses AI strictly for creative copy assistance (headline and description suggestions). In the Admin Studio, our human Admin configures the high-converting targeting, Feeder Corridors, and ad parameters—utilizing AI advisory suggestions for optimal settings, with the full granular power of Meta Ads Manager and Google Ads Manager.
 
 ## Part 2: The Core Strategic Pillars (The "What")
 You must understand these absolute business rules before writing a single line of code:
 
 1. **The Master Account Architecture (No Host OAuth)**: Hosts DO NOT connect their own Meta/Google accounts. We use a Master Encho Ad Account. Why? To prevent a single bad host from getting our API banned. We run the ads; they just fund them.
-2. **The AI Gatekeeper (Quality Control)**: Before an ad campaign even reaches a human Admin for approval, it must pass a strict AI Pre-Check. The AI grades the listing's copy, media, and targeting out of 10. If it scores below 8/10, the AI instantly rejects it and tells the host exactly what to fix. This protects our Master Ad Account from Meta policy violations.
+2. **The AI Gatekeeper & Quality Control**: Before an ad campaign even reaches a human Admin for approval, it must pass a strict AI Pre-Check. The AI grades the listing's copy, media, and room offers out of 10. If it scores below 8/10, the AI blocks publication and tells the host exactly what to fix. This protects our Master Ad Account from Meta policy violations.
 3. **The Advertising Engine Fee (The AdTech Margin)**: Advertising is optional and separate from booking commission. Current founder direction HARVO-008/009 is defined campaign cost C plus admin-selected profit markup p on C, initially intended at 3–5%: target profit C × p; charge C × (1 + p). The earlier fixed 15% advertising-fee references in the historical playbook below are superseded for future design. Complete cost/tax/variance rules and live rates still need specification; existing contracts are unchanged. Flex booking commission remains separately 15%, with existing Growth exceptions.
 4. **The Dopamine UI (The Host Dashboard)**: We don't show boring spreadsheets. We show a "Campaign Reactor Core" (a visual fuel gauge of their budget). We show real-time "Traffic & Click" dopamine hits (impressions, clicks, leads). When the fuel gauge turns orange (budget low), they feel the psychological urge to hit the "Refuel" button.
-5. **The "Rahul-Proof" Smart Targeting**: Hosts are bad at marketing. By default, our AI selects the optimal targeting locations (e.g., targeting Los Angeles tech workers for a Joshua Tree cabin, not local desert residents) and Meta interests. If the host overrides it with a bad location, the AI warns them that their campaign grade will drop.
-6. **The Walled Garden CRM**: Leads generated from the ads MUST drop directly into the Encho Host Inbox. No leaking leads to WhatsApp or phone calls. The host must convert the lead into a booking inside our platform, capturing the payment and our commission.
-7. **The Hybrid Payment Router**: We use a smart Geo-Router. International hosts pay via Stripe. Indian hosts are dynamically routed to Razorpay for UPI/local compliance.
+5. **The Admin-Led "Rahul-Proof" Smart Targeting (Feeder Corridors)**: Hosts are bad at marketing and do not pick complex ad targeting parameters. It is NOT an autonomous AI that runs the ads; **the Admin configures and sets up the Feeder Corridors from the Admin Studio** based on the property location and pricing tier (e.g., if a host lists a property in Kalpetta, the Admin sets up the Wayanad Feeder Corridors targeting affluent travelers in Bangalore, Mumbai, or Chennai). The Admin uses AI in the Admin Studio as an advisory copilot to receive best-option recommendations.
+6. **Host AI vs Admin AI Division of Labor**:
+   - **Host AI Scope:** When creating campaigns, hosts use AI strictly for **Headline and Description suggestions** (and listing quality evaluations)—nothing more.
+   - **Admin AI Scope:** The Admin uses AI in the Admin Studio for **advisory recommendations** to choose optimal Meta/Google ad setups.
+   - **Admin Studio Level:** The Admin Studio must provide the **exact same level of granular controls and configuration options as Meta Ads Manager and Google Ads Manager** (placements, demographics, geofencing, bidding strategies, budgets, keywords, ad extensions).
+7. **The Walled Garden CRM**: Leads generated from the ads MUST drop directly into the Encho Host Inbox. No leaking leads to WhatsApp or phone calls. The host must convert the lead into a booking inside our platform, capturing the payment and our commission.
+8. **The Hybrid Payment Router**: We use a smart Geo-Router. International hosts pay via Stripe. Indian hosts are dynamically routed to Razorpay for UPI/local compliance.
 
 ## Part 3: Step-by-Step Execution Playbook (The "How")
 When commanded to move to Phase 2, break down the following architectural steps into strict technical milestones:
 
 - **Step 1: The Host Campaign Dashboard UI**: Build the "Fuel Tank" budget UI, the multi-channel reach gauge (Meta/Google), the Visual Conversion Funnel, and the Walled Garden CRM inbox. Must be responsive, sleek, and high-end.
-- **Step 2: The Campaign Builder & AI Targeting**: Build the flow where the host selects a listing, and the AI pre-fills the optimal target audience and locations based on the property data.
-- **Step 3: The AI Gatekeeper API**: Implement the server-side Gemini AI scan that grades the campaign (copy, media, targeting) out of 10. Implement the auto-reject loop for scores < 8.
-- **Step 4: The Admin Moderation Console**: Build the queue for the Admin to review 8/10+ campaigns, approve them, or send them back with notes.
-- **Step 5: The Payment Geo-Router**: Implement the logic to detect the host's region and route the campaign funding payment to either Stripe or Razorpay, factoring in our 15% optimization fee.
+- **Step 2: The Campaign Builder & Host AI Copy Assistant**: Build the flow where the host selects an owned listing or room offer, sets a bounded budget, and uses AI strictly for high-converting headline and description suggestions.
+- **Step 3: The AI Gatekeeper API**: Implement the server-side Gemini AI scan that grades the campaign (copy, media, offer pricing) out of 10. Implement the auto-reject loop for scores < 8.
+- **Step 4: The Admin Studio & Campaign Command Center**: Build the enterprise console giving Admins Meta Ads Manager & Google Ads Manager parity. The Admin sets up the Feeder Corridors and ad targeting based on property location and cost, using AI suggestions for optimal options.
+- **Step 5: The Payment Geo-Router**: Implement the logic to detect the host's region and route the campaign funding payment to either Stripe or Razorpay, factoring in our AdTech markup fee.
 - **Step 6: The Mock Ad-Network Sync & CRM**: Build the webhook structure that simulates pushing the approved ad to Meta/Google, and the pipeline that feeds simulated (or real) leads back into the Host's Encho Inbox.
 
 ## Part 4: Phase 2 Blueprint - Critical Execution Gaps Filled

@@ -273,7 +273,7 @@ These capabilities are assets. The blueprint does not authorize a wholesale rewr
 | FR-H06 | Host chooses a supported outcome in plain language, compatible creative-format preference, dates, bounded budget and released feeder options. |
 | FR-H07 | Host cannot remove mandatory safety exclusions or choose provider IDs, bidding, attribution, conversion events, unrestricted demographics, keyword match policy or account topology. |
 | FR-H08 | Host receives deterministic preflight findings: missing truth, inventory, creative, overlap, economics, provider eligibility and policy. |
-| FR-H09 | Host sees AI advice with evidence/confidence and can correct the draft; AI cannot silently publish or approve. |
+| FR-H09 | Host receives AI assistance strictly for headline and description copy suggestions and pre-flight quality scoring (CR1-045); AI cannot autonomously configure ad targeting, publish or approve. |
 | FR-H10 | Host accepts an immutable quote and material revision; cost/scope changes require explicit re-acceptance. |
 | FR-H11 | Host tracks each concurrent campaign independently and sees a deduplicated property portfolio summary. |
 | FR-H12 | Every status and metric displays source, reporting window, observed-at time and stale/calibration/error state. |
@@ -293,7 +293,7 @@ These capabilities are assets. The blueprint does not authorize a wholesale rewr
 | FR-A03 | Enforce maker/checker separation for creative approval, strategy release, activation, high-risk finance and recovery actions. |
 | FR-A04 | Maintain immutable versioned programs composed from economics, guest fit, corridor, season/inventory, objective, creative and channel capability. |
 | FR-A05 | Draft, diff, validate, release, rollback and audit program versions using CAS publication. |
-| FR-A06 | Operate provider-specific Meta and Google studios for controls proven by provider schema, account eligibility, Encho compiler and readback. |
+| FR-A06 | Operate provider-specific Meta and Google studios providing full Ads Manager-level parity (targeting, placements, Feeder Corridors, geofencing, bidding, budget pacing, keywords) for controls proven by provider schema; Admin configures targeting and Feeder Corridors based on property location and cost/tier, using AI in the studio as an advisory copilot for optimal setup recommendations (CR1-045). |
 | FR-A07 | Record provider-native-only billing, verification, appeal or account restriction work as assigned external steps with evidence. |
 | FR-A08 | Review the exact offer, creative bytes, claims, rights evidence, AI findings, targeting, budget, schedule and risk before approval. |
 | FR-A09 | Create provider resources paused, read them back, detect drift and activate only after every guard passes. |

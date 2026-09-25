@@ -1520,3 +1520,25 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
   - Build & Schema Synchronicity: **`SCHEMA_SYNCHRONICITY_VERIFIED`** (39/39 applied, 44 public bundle files verified).
 
+### CR1-045 — Separation of Marketing Authority: Admin-Driven Meta/Google Ads Configuration with AI Advisory Copilot & Host Copy Assistance (26 September 2026)
+
+**Status:** APPROVED under explicit founder directive. Supersedes all earlier assumptions regarding autonomous AI ad targeting.
+- **Foundational Architectural & Operational Decisions:**
+  1. **Clarification of Ad Campaign Ownership (Admin vs AI):**
+     - Encho's AI is **NOT** the autonomous entity that chooses audiences, tests creatives, or runs ads.
+     - **The Admin (from the Admin Studio)** is the authoritative campaign operator who sets up, chooses, and tunes the optimal ad options in Meta Ads and Google Ads for reaching high-conversion audiences based on **property location and pricing tier/cost**.
+  2. **Feeder Corridors Configuration Authority:**
+     - Feeder Corridors are **NOT defaulted autonomously by AI**.
+     - **The Admin configures and binds Feeder Corridors** based on geographic and economic demand.
+     - *Concrete Example:* If a host lists a property in Kalpetta, the Admin sets up and binds the Wayanad Feeder Corridors (targeting Bangalore tech corridors, Mumbai, and Chennai affluent weekend travelers).
+  3. **Division of AI Labor (Host AI vs Admin AI):**
+     - **Host AI Scope:** When creating campaigns, hosts use AI strictly for **Headline and Description suggestions** (and listing pre-flight quality checks)—nothing more. Hosts do NOT touch ad targeting, placements, bidding, or audience definitions.
+     - **Admin AI Scope:** The Admin uses AI in the Admin Studio as an **expert advisory copilot** to receive the best suggestions and recommendations for audience segments, keywords, and campaign optimization options.
+  4. **Admin Studio Ads Manager Parity:**
+     - The software's Admin Studio must provide the **exact same level of granular controls and configuration options as Meta Ads Manager and Google Ads Manager**.
+     - Controls include: ad set creation, placement selection (Feeds, Stories, Reels, Google Search, Hotel Ads), detailed demographic/interest targeting, geofencing radii, bidding strategies (ROAS, cost-per-acquisition), budget pacing, keywords, and ad extensions.
+  5. **Preservation of the Walled Garden Model:**
+     - Hosts fund campaigns via a simple 1-click bounded budget in their Host Dashboard.
+     - Master Account architecture (no host OAuth) remains strictly preserved.
+     - All ad-generated leads drop directly into the Encho Host Inbox without leaking to external channels.
+

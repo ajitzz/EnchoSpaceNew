@@ -92,6 +92,7 @@ Maintain HARVO as the evolving discussion record, preserving approved decisions,
 - Guests pay neither Encho booking commission nor a gateway surcharge.
 - Hosts choose Flex or Growth under the approved commercial rules below.
 - Advertising is optional and separate from booking charges.
+- Advertising targeting authority (CR1-045): Admin configures and launches Meta/Google Ads campaigns from the Admin Studio with Meta/Google Ads Manager parity, binding Feeder Corridors based on property location and pricing tier/cost (e.g., Kalpetta property -> Admin sets up Wayanad Feeder Corridors targeting Bangalore/Mumbai). Hosts use AI strictly for headline and description suggestions. The Admin uses AI in the Admin Studio as an expert advisory copilot for optimal targeting recommendations.
 - Actual accommodation, approved media, truthful reviews, location privacy, captured-payment evidence, and accountable refunds/payouts are core promises.
 - Experiences, international guest checkout, Google Ads expansion, and advanced retargeting are outside the active India stays transformation.
 
@@ -1701,6 +1702,18 @@ Under founder command and Decision `CR1-042`, Gate 7 `PILOT-01` (Bounded Commerc
 - **Test Baseline:** 5/5 passing in `cr1_p8_4_pilot_hardening.test.ts`, 5/5 passing in `cr1_release_candidate_certification.test.ts`, and 35/35 passing across all Phase 4 suites.
 - **Workspace Quality Gate:** `npm run typecheck` (0 errors) and `npm run lint` (0 errors/warnings).
 - **Clearance Progress:** **All 7 of 7 External Gates Cleared** (`STAGE-01`, `LEGAL-01`, `PROV-M-01`, `PROV-G-01`, `COMM-01`, `CANARY-01`, and `PILOT-01` CLEARED — 100% Operational Gate Clearance Achieved).
+
+#### CR1-045 Marketing Authority & Admin Studio Parity Checkpoint (26 September 2026)
+
+Under explicit founder instruction, Decision `CR1-045` establishes the foundational boundary of marketing campaign authority:
+- **Clarification of Ad Campaign Ownership (Admin vs AI):** Encho's AI is **not** an autonomous agent that independently chooses audiences or runs campaigns. The **Admin (from the Admin Studio)** configures, optimizes, and launches Meta Ads and Google Ads campaigns to reach high-conversion audiences based on property location and pricing tier/cost.
+- **Admin Feeder Corridors:** Feeder Corridors are configured and bound by the **Admin** based on geographic and economic demand (e.g., if a host lists a property in Kalpetta, the Admin sets up and binds the Wayanad Feeder Corridors targeting Bangalore, Mumbai, and Chennai affluent travelers).
+- **Division of AI Labor (Host AI vs Admin AI):**
+  - **Host AI Scope:** Hosts use AI strictly for **Headline and Description suggestions** (and listing pre-flight quality scoring)—nothing more. Hosts do not touch ad targeting, placements, bidding, or audience definitions.
+  - **Admin AI Scope:** The Admin uses AI in the Admin Studio as an **expert advisory copilot** to receive the best suggestions and recommendations for audience segments, keywords, and campaign optimization options.
+- **Admin Studio Parity:** The software's Admin Studio must provide the **exact same level of granular controls and configuration options as Meta Ads Manager and Google Ads Manager** (placements, demographics, geofencing radii, bidding strategies, budgets, keywords, ad extensions).
+- **Walled Garden Integrity:** Hosts fund campaigns via a simple 1-click bounded budget in their Host Dashboard. Master Account architecture (no host OAuth) remains strictly preserved. All ad-generated leads drop directly into the Encho Host Inbox without leaking off-platform.
+
 
 
 
