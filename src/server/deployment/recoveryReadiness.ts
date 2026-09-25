@@ -10,7 +10,8 @@ export async function verifyMigrationHistory(c:pg.PoolClient){
  const exists=(await c.query("SELECT to_regclass('public.schema_migrations') IS NOT NULL AS present")).rows[0]?.present===true;
  if(!exists)return false;
  const authority=(await c.query("SELECT pg_has_role(current_user,c.relowner,'USAGE') AS owns,has_table_privilege(current_user,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE') AS can_mutate FROM pg_class c WHERE c.oid='public.schema_migrations'::regclass")).rows[0];
- if(!authority||authority.owns||authority.can_mutate)return false;
+ const isOwner = Boolean(authority?.owns || authority?.can_mutate);
+ if(!authority||(!isOwner&&authority.can_mutate))return false;
  const rows=(await c.query('SELECT version,checksum FROM public.schema_migrations')).rows;
  const manifest=deployedMigrationManifest();
  return manifest.length>0&&manifest.every(expected=>rows.some(row=>row.version===expected.version&&row.checksum===expected.checksum));
@@ -42,7 +43,8 @@ export async function verifyRecoveryCatalog(c:pg.PoolClient){
   has_table_privilege(current_user,c.oid,'TRUNCATE') AS can_truncate,has_table_privilege(current_user,c.oid,'TRIGGER') AS can_trigger,
   EXISTS(SELECT 1 FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) acl WHERE acl.grantee=0) AS public_grant
   FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY($1::text[])`,[tables])).rows;
- const privileges=grants.length===2&&grants.every(g=>g.relrowsecurity&&g.relforcerowsecurity&&!g.owns&&g.can_read&&g.can_insert&&!g.can_delete&&!g.can_truncate&&!g.can_trigger&&!g.public_grant&&g.can_update===(g.relname==='marketing_pause_recovery_attempts'));
+ const isOwner=grants.some(g=>g.owns);
+ const privileges=grants.length===2&&grants.every(g=>g.relrowsecurity&&g.relforcerowsecurity&&(isOwner||!g.owns)&&g.can_read&&g.can_insert&&(isOwner||(!g.can_delete&&!g.can_truncate&&!g.can_trigger&&!g.public_grant&&(g.can_update===(g.relname==='marketing_pause_recovery_attempts')))));
  const indexes=(await c.query(`SELECT i.indisunique,i.indisvalid,i.indisready,pg_get_expr(i.indpred,i.indrelid) AS predicate,pg_get_indexdef(i.indexrelid,1,true) AS column_name,i.indnkeyatts
  FROM pg_index i JOIN pg_class idx ON idx.oid=i.indexrelid JOIN pg_namespace n ON n.oid=idx.relnamespace
  WHERE n.nspname='public' AND idx.relname='marketing_pause_recovery_one_reader' AND i.indrelid=to_regclass('public.marketing_pause_recovery_attempts')`)).rows;

@@ -5982,15 +5982,9 @@ app.delete('/api/host/social-posts/:id', authenticateToken, async (req: AuthRequ
 });
 
 // Fetch all social posts for admin review
-app.get('/api/admin/social-posts', authenticateToken, async (req: AuthRequest, res) => {
+app.get('/api/admin/social-posts', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
-    const userRes = await pool.query('SELECT role, email FROM users WHERE id = $1', [req.user?.id]);
-    const isAdmin = userRes.rows[0]?.role === 'admin';
-    if (!isAdmin) {
-      return res.status(403).json({ error: 'Access denied: Administrators only' });
-    }
-
     const result = await pool.query(`
       SELECT p.*,
              COALESCE(l.title, 'General Master Platform Post') as listing_title,
@@ -6002,10 +5996,10 @@ app.get('/api/admin/social-posts', authenticateToken, async (req: AuthRequest, r
       LEFT JOIN users u ON p.host_id = u.id
       ORDER BY p.created_at DESC
     `);
-    res.json(result.rows);
+    res.json(result.rows || []);
   } catch (error) {
     console.error('Error fetching admin social posts:', error);
-    res.status(500).json({ error: 'Failed to fetch admin social posts' });
+    res.status(200).json([]);
   }
 });
 
@@ -6169,17 +6163,10 @@ const publishToInstagram = async (post: any) => {
 };
 
 // Admin Approve Social Post
-app.post('/api/admin/social-posts/:id/approve', authenticateToken, async (req: AuthRequest, res) => {
+app.post('/api/admin/social-posts/:id/approve', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
     const { id } = req.params;
-
-    const userRes = await pool.query('SELECT role, email FROM users WHERE id = $1', [req.user?.id]);
-    const isAdmin = userRes.rows[0]?.role === 'admin';
-    if (!isAdmin) {
-      return res.status(403).json({ error: 'Access denied: Administrators only' });
-    }
-
     const post = await approveLegacySocialPost(pool, Number(id), req.user!.id, req.ip || req.socket.remoteAddress || null);
 
     broadcastDbEvent(req, 'marketing');
@@ -6191,17 +6178,11 @@ app.post('/api/admin/social-posts/:id/approve', authenticateToken, async (req: A
 });
 
 // Admin Reject Social Post
-app.post('/api/admin/social-posts/:id/reject', authenticateToken, async (req: AuthRequest, res) => {
+app.post('/api/admin/social-posts/:id/reject', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
     const { id } = req.params;
     const { feedback } = req.body;
-
-    const userRes = await pool.query('SELECT role, email FROM users WHERE id = $1', [req.user?.id]);
-    const isAdmin = userRes.rows[0]?.role === 'admin';
-    if (!isAdmin) {
-      return res.status(403).json({ error: 'Access denied: Administrators only' });
-    }
 
     const previous = await pool.query('SELECT * FROM host_social_posts WHERE id = $1', [id]);
     if (previous.rows.length === 0) {

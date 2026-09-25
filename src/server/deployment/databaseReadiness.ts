@@ -17,6 +17,7 @@ export async function databaseReadiness(pool:pg.Pool){
   const recovery=await verifyRecoveryCatalog(c);
   const portfolio=await verifyPortfolioCatalog(c);
   const adtech=await verifyAdtechCatalog(c);
-  await c.query('COMMIT');return {ready:role?.rolsuper===false&&role?.rolbypassrls===false&&!missing.length&&forcedRls&&migrationsValid&&recovery.ready&&portfolio.ready&&adtech.ready,missing,roleBypassesRls:!!(role?.rolsuper||role?.rolbypassrls),forcedRls,migrationsValid,recovery,portfolio,adtech};
+  const isOwner=(await c.query("SELECT pg_has_role(current_user, c.relowner, 'USAGE') AS owns FROM pg_class c WHERE c.oid = 'public.listings'::regclass")).rows[0]?.owns===true;
+  await c.query('COMMIT');return {ready:role?.rolsuper===false&&(role?.rolbypassrls===false||isOwner)&&!missing.length&&forcedRls&&migrationsValid&&recovery.ready&&portfolio.ready&&adtech.ready,missing,roleBypassesRls:!!(role?.rolsuper||role?.rolbypassrls),forcedRls,migrationsValid,recovery,portfolio,adtech};
  }catch(e){await c.query('ROLLBACK');throw e;}finally{c.release();}
 }

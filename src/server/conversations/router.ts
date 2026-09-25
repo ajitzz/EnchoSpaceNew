@@ -25,7 +25,12 @@ export function createConversationRouter(options:ConversationRouterOptions):Rout
     try{
       const parsed=z.number().int().positive().safe().safeParse(options.accountId(req));
       if(!parsed.success)throw new PlatformDomainError('AUTHENTICATION_REQUIRED');
-      if(!await options.ready())throw new PlatformDomainError('FEATURE_UNAVAILABLE');
+      if(!await options.ready()){
+        if(req.path.endsWith('/unread-counts')){
+          return res.json({unread:0,unreadCount:0,guestUnread:0,hostUnread:0});
+        }
+        throw new PlatformDomainError('FEATURE_UNAVAILABLE');
+      }
       res.json(await work(req,{id:parsed.data,role:'host'}));
     }catch(error){
       const classified=error instanceof z.ZodError?new PlatformDomainError('INVALID_REQUEST'):

@@ -7,9 +7,10 @@ type State={status:'IDLE'|'STARTING'|'COMPLETING'|'ERROR';message?:string}|{stat
 const commandHeaders={'Content-Type':'application/json','X-Encho-Workforce-Command':'1'};
 /** Only challenge metadata reaches React. Session and browser-binding secrets
  * remain in same-origin HttpOnly cookies; no consumer storage/cache is used. */
-export default function WorkforceSignIn({onComplete,onCancel}:{onComplete:()=>void;onCancel:()=>void}){
+export default function WorkforceSignIn({onComplete,onCancel,autoStart=false}:{onComplete:()=>void;onCancel:()=>void;autoStart?:boolean}){
   const[state,setState]=useState<State>({status:'IDLE'}),busy=useRef(false),request=useRef<AbortController|null>(null),mounted=useRef(true);
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;request.current?.abort();};},[]);
+  useEffect(()=>{if(autoStart)void begin();},[autoStart]);
   useEffect(()=>{
     if(state.status!=='READY')return;
     const timer=window.setTimeout(()=>setState({status:'ERROR',message:'This sign-in challenge expired. Start a new sign-in.'}),Math.max(0,Date.parse(state.challenge.expiresAt)-Date.now()));

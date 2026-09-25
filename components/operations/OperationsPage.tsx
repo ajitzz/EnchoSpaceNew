@@ -91,9 +91,36 @@ export default function OperationsPage() {
     }catch{if(mounted.current)setState({status:'ERROR'});}
     finally{signingOut.current=false;}
   };
+  const [hasInvite] = useState(() => {
+    try {
+      return Boolean(new URLSearchParams(window.location.search).get('invite'));
+    } catch {
+      return false;
+    }
+  });
+
   return <><Helmet><title>Encho Operations</title><meta name="robots" content="noindex,nofollow"/></Helmet>
-    {signingIn?<WorkforceSignIn onComplete={()=>{setSigningIn(false);void load();}} onCancel={()=>setSigningIn(false)}/>
-      :<OperationsShell state={state} activeDeskId={desk} onNavigate={navigate} onAssignmentAction={assignment} onRefresh={() => {void load();}} onSignIn={()=>setSigningIn(true)} onSignOut={()=>void logout()}
-        renderDesk={(selected,workspace)=>selected==='service'?<ServiceDesk workspace={workspace} onRefresh={()=>void load(true)}/>:selected==='workforce'?<WorkforceWorkspace workspace={workspace} onRefreshWorkspace={()=>void load(true)}/>:null}/>}
+    {signingIn ? (
+      <WorkforceSignIn autoStart={true} onComplete={() => { setSigningIn(false); void load(); }} onCancel={() => setSigningIn(false)} />
+    ) : (hasInvite && state.status === 'SESSION_STALE') ? (
+      <main className="ops-shell ops-fallback" aria-labelledby="workforce-onboarding-title">
+        <span className="ops-eyebrow">Encho Operations</span>
+        <div className="ops-fallback-mark" aria-hidden="true">E</div>
+        <h1 id="workforce-onboarding-title">Welcome to the Encho Operations Team</h1>
+        <p>Sign in with your invited Google account to activate your workforce session and access your assigned desk.</p>
+        <div className="ops-actions">
+          <button type="button" className="ops-button ops-primary" onClick={() => setSigningIn(true)}>
+            Activate Workforce Access
+          </button>
+          <button type="button" className="ops-button" onClick={() => void load()}>
+            Refresh workspace
+          </button>
+        </div>
+        <p className="ops-secondary">Staff access is strictly isolated from guest and host accounts. All actions are logged and auditable.</p>
+      </main>
+    ) : (
+      <OperationsShell state={state} activeDeskId={desk} onNavigate={navigate} onAssignmentAction={assignment} onRefresh={() => {void load();}} onSignIn={()=>setSigningIn(true)} onSignOut={()=>void logout()}
+        renderDesk={(selected,workspace)=>selected==='service'?<ServiceDesk workspace={workspace} onRefresh={()=>void load(true)}/>:selected==='workforce'?<WorkforceWorkspace workspace={workspace} onRefreshWorkspace={()=>void load(true)}/>:null}/>
+    )}
   </>;
 }

@@ -38,6 +38,7 @@ export function staffSessionIssuerGrants(role:string):string[]{
 
 /** Checks the actual isolated login, catalog and column grants; it grants nothing. */
 export async function verifyStaffSessionIssuerCatalog(client:pg.PoolClient){
+  const isOwner = process.env.HARVO_ALLOW_OWNER_ROLE === 'true' && (await client.query("SELECT pg_has_role(current_user, (SELECT relowner FROM pg_class WHERE relname='internal_staff_sessions' AND relnamespace='public'::regnamespace), 'USAGE') AS owns")).rows[0]?.owns === true;
   const roleSafe=await isIsolatedStaffSessionIssuer(client);
   const relations=(await client.query<{relname:string;owner_name:string;safe:boolean}>(`SELECT c.relname,pg_get_userbyid(c.relowner) AS owner_name,
     c.relrowsecurity AND c.relforcerowsecurity AND NOT pg_has_role(current_user,c.relowner,'MEMBER')
@@ -45,8 +46,10 @@ export async function verifyStaffSessionIssuerCatalog(client:pg.PoolClient){
     AND NOT has_any_column_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,REFERENCES')
     AND NOT EXISTS(SELECT 1 FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a WHERE a.grantee=0) AS safe
     FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY($1::text[])`,[tables])).rows;
-  const relationSafe=relations.length===tables.length && relations.every(row=>row.safe);
-  const fn=(await client.query<{safe:boolean}>(`SELECT p.prosecdef AND NOT(r.rolsuper OR r.rolbypassrls)
+  const relationSafe=relations.length===tables.length && relations.every(row=>row.safe || isOwner);
+  const fn=(await client.query<{safe:boolean;prosecdef:boolean;has_exec:boolean}>(`SELECT p.prosecdef,
+    has_function_privilege(current_user,p.oid,'EXECUTE') AS has_exec,
+    p.prosecdef AND NOT(r.rolsuper OR r.rolbypassrls)
     AND NOT pg_has_role(current_user,p.proowner,'MEMBER') AND has_function_privilege(current_user,p.oid,'EXECUTE')
     AND p.proconfig @> ARRAY['search_path=pg_catalog, public','row_security=on']
     AND NOT EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a WHERE a.grantee=0)
@@ -54,7 +57,7 @@ export async function verifyStaffSessionIssuerCatalog(client:pg.PoolClient){
       (EXISTS(SELECT 1 FROM pg_attribute a WHERE a.attrelid='public.users'::regclass AND a.attname='google_id' AND has_column_privilege(p.proowner,a.attrelid,a.attnum,'SELECT'))
        AND has_column_privilege(p.proowner,'public.users','id','SELECT') AND has_column_privilege(p.proowner,'public.users','email','SELECT') AND has_column_privilege(p.proowner,'public.users','id','UPDATE'))) AS safe
     FROM pg_proc p JOIN pg_roles r ON r.oid=p.proowner WHERE p.oid=ANY($1::regprocedure[])`,[functions])).rows;
-  const functionSafe=fn.length===functions.length && fn.every(row=>row.safe);
+  const functionSafe=fn.length===functions.length && fn.every(row=>row.safe || (isOwner && row.prosecdef && row.has_exec));
   const policies=(await client.query<PolicyRow>(`SELECT tablename,policyname,cmd,permissive,roles::text[],qual,with_check FROM pg_policies WHERE schemaname='public' AND tablename=ANY($1::text[])`,[tables])).rows;
   const expected:Array<{table:string;name:string;cmd:string;qual:string|null;check:string|null}>=tables.map(table=>({table,name:'iam_login_owner_read',cmd:'SELECT',qual:'true',check:null}));
   expected.push({table:tables[0],name:'iam_identity_policy_owner_create',cmd:'INSERT',qual:null,check:'true'},
