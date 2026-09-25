@@ -70,6 +70,13 @@ export function createWorkforceSessionRouter(port:WorkforceLoginPort|null,origin
       res.clearCookie(sessionCookie,cookieOptions);res.clearCookie(loginCookie,cookieOptions);
       return res.json({status:'LOGGED_OUT'});
     }catch(error){
+      console.error('[WORKFORCE_SESSION_ERROR]', {
+        action,
+        code: error instanceof StaffSessionIssuerError ? error.code : 'UNKNOWN',
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        correlationId: context.correlationId,
+      });
       if(error instanceof z.ZodError)return fail(422,'INPUT_INVALID','Review the sign-in request.');
       if(error instanceof StaffSessionIssuerError){
         if(error.code==='OUTCOME_UNKNOWN'){

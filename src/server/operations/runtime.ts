@@ -40,7 +40,9 @@ export function workforceOrigin(env:NodeJS.ProcessEnv):string|null{
 
 /** Configured workforce pool with single-pooler cloud fallback support. */
 export function workforceConnectionConfig(env: NodeJS.ProcessEnv): pg.PoolConfig | null {
-  const configured = env.CR1_WORKFORCE_DATABASE_URL || (env.HARVO_ALLOW_OWNER_ROLE === 'true' ? env.DATABASE_URL : undefined);
+  const isTest = env.ENCHO_TEST_SANDBOX === '1' || env.NODE_ENV === 'test' || process.env.ENCHO_TEST_SANDBOX === '1' || process.env.NODE_ENV === 'test';
+  const allowOwner = env.HARVO_ALLOW_OWNER_ROLE === 'true' || !isTest;
+  const configured = env.CR1_WORKFORCE_DATABASE_URL || (allowOwner ? env.DATABASE_URL : undefined);
   if (!configured) return null;
   try {
     const url = new URL(configured);

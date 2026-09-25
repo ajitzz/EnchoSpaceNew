@@ -31,7 +31,12 @@ export default function WorkforceSignIn({onComplete,onCancel,autoStart=false}:{o
     try{
       const response=await post('complete',{challengeId:challenge.challengeId,credential});
       if(!mounted.current)return;
-      if(!response.ok){setState({status:'ERROR',message:response.status===401?'Sign-in was not accepted. Use the invited Google account with current workforce access.':'The session result could not be confirmed. Start a new sign-in.'});return;}
+      if(!response.ok){
+        const body=await response.json().catch(()=>null);
+        const serverError=body&&typeof body.error==='string'?body.error:null;
+        setState({status:'ERROR',message:serverError||(response.status===401?'Sign-in was not accepted. Use the invited Google account with current workforce access.':'The session result could not be confirmed. Start a new sign-in.')});
+        return;
+      }
       workforceLoginReceiptSchema.parse(await response.json());
       if(mounted.current)onComplete();
     }catch{if(mounted.current)setState({status:'ERROR',message:'The session result could not be confirmed. Start a new sign-in.'});}

@@ -24,6 +24,15 @@ export class StaffSessionIssuerError extends Error {constructor(readonly code:ty
 function parse<T>(schema:z.ZodType<T>,input:unknown):T{const result=schema.safeParse(input);if(!result.success)throw new StaffSessionIssuerError('INPUT_INVALID');return result.data;}
 const mappedSqlErrors:Record<string,typeof errors[number]>={IAM_LOGIN_NOT_CONFIGURED:'LOGIN_NOT_CONFIGURED',IAM_LOGIN_RATE_LIMITED:'LOGIN_RATE_LIMITED',
   IAM_LOGIN_CHALLENGE_INVALID:'LOGIN_CHALLENGE_INVALID',IAM_LOGIN_IDENTITY_INVALID:'IDENTITY_INVALID',IAM_LOGIN_MEMBERSHIP_UNAVAILABLE:'MEMBERSHIP_UNAVAILABLE',IAM_LOGIN_SESSION_LIMIT:'SESSION_LIMIT_REACHED'};
+function mapSqlError(raw: unknown): typeof errors[number] | null {
+  if (!(raw instanceof Error)) return null;
+  const msg = raw.message.trim().replace(/^error:\s*/i, '');
+  if (msg in mappedSqlErrors) return mappedSqlErrors[msg];
+  for (const [key, code] of Object.entries(mappedSqlErrors)) {
+    if (msg.includes(key)) return code;
+  }
+  return null;
+}
 
 /** No raw-table rights or inherited administration are allowed on this connection. */
 export async function isIsolatedStaffSessionIssuer(client:pg.PoolClient):Promise<boolean>{
@@ -86,9 +95,11 @@ export class StaffSessionIssuer {
       if (proof.email && proof.subject) {
         const canUpdate = (await client.query("SELECT has_table_privilege(current_user, 'public.users', 'UPDATE') AS ok")).rows[0]?.ok === true;
         if (canUpdate) {
+          const colCheck = await client.query("SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name='email_verified'");
+          const hasEmailVerified = colCheck.rows.length > 0;
           await client.query(`
             UPDATE users
-            SET google_id = $1, email_verified = true
+            SET google_id = $1${hasEmailVerified ? ', email_verified = true' : ''}
             WHERE lower(btrim(email)) = lower(btrim($2))
               AND (google_id IS NULL OR google_id = $1)
               AND EXISTS (
@@ -123,7 +134,16 @@ export class StaffSessionIssuer {
       try{await client.query('ROLLBACK');}catch{discard=true;}
       if(committing)throw new StaffSessionIssuerError('OUTCOME_UNKNOWN');
       if(error instanceof StaffSessionIssuerError)throw error;
-      throw new StaffSessionIssuerError(error instanceof Error && mappedSqlErrors[error.message] || 'ISSUER_UNAVAILABLE');
+      const mapped = mapSqlError(error);
+      if (!mapped) {
+        console.error('[STAFF_SESSION_ISSUER_UNAVAILABLE]', {
+          message: error instanceof Error ? error.message : String(error),
+          code: (error as any)?.code,
+          detail: (error as any)?.detail,
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      }
+      throw new StaffSessionIssuerError(mapped || 'ISSUER_UNAVAILABLE');
     } finally {client.release(discard);}
   }
 }
