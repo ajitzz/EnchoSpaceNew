@@ -7,6 +7,11 @@ import WorkforceSignIn from './WorkforceSignIn.js';
 import ServiceDesk from './ServiceDesk.js';
 import WorkforceWorkspace from './WorkforceWorkspace.js';
 
+const CampaignStudio = React.lazy(() => import('../marketing/CampaignStudio.js'));
+const AdtechWorkspace = React.lazy(() => import('../marketing/AdtechWorkspace.js'));
+const AdminCreativeWorkspace = React.lazy(() => import('../marketing/CreativeWorkspace.js').then(m => ({ default: m.AdminCreativeWorkspace })));
+const AdminSettlementWorkspace = React.lazy(() => import('../marketing/SettlementWorkspace.js').then(m => ({ default: m.AdminSettlementWorkspace })));
+
 /** Staff identity uses a separate HttpOnly cookie; consumer tokens/caches are never read. */
 export default function OperationsPage() {
   const [state, setState] = useState<OperationsShellState>({status:'LOADING'});
@@ -120,7 +125,40 @@ export default function OperationsPage() {
       </main>
     ) : (
       <OperationsShell state={state} activeDeskId={desk} onNavigate={navigate} onAssignmentAction={assignment} onRefresh={() => {void load();}} onSignIn={()=>setSigningIn(true)} onSignOut={()=>void logout()}
-        renderDesk={(selected,workspace)=>selected==='service'?<ServiceDesk workspace={workspace} onRefresh={()=>void load(true)}/>:selected==='workforce'?<WorkforceWorkspace workspace={workspace} onRefreshWorkspace={()=>void load(true)}/>:null}/>
+        renderDesk={(selected, workspace) => {
+          switch (selected) {
+            case 'service':
+              return <ServiceDesk workspace={workspace} onRefresh={() => void load(true)}/>;
+            case 'workforce':
+              return <WorkforceWorkspace workspace={workspace} onRefreshWorkspace={() => void load(true)}/>;
+            case 'flight':
+              return (
+                <React.Suspense fallback={<div className="ops-loading-panel" style={{ padding: '2.5rem', textAlign: 'center', color: '#64748b' }}>Loading campaign flights workspace…</div>}>
+                  <CampaignStudio />
+                </React.Suspense>
+              );
+            case 'strategy':
+              return (
+                <React.Suspense fallback={<div className="ops-loading-panel" style={{ padding: '2.5rem', textAlign: 'center', color: '#64748b' }}>Loading strategy control center…</div>}>
+                  <AdtechWorkspace />
+                </React.Suspense>
+              );
+            case 'creative':
+              return (
+                <React.Suspense fallback={<div className="ops-loading-panel" style={{ padding: '2.5rem', textAlign: 'center', color: '#64748b' }}>Loading creative review workspace…</div>}>
+                  <AdminCreativeWorkspace />
+                </React.Suspense>
+              );
+            case 'finance':
+              return (
+                <React.Suspense fallback={<div className="ops-loading-panel" style={{ padding: '2.5rem', textAlign: 'center', color: '#64748b' }}>Loading financial settlement workspace…</div>}>
+                  <AdminSettlementWorkspace />
+                </React.Suspense>
+              );
+            default:
+              return null;
+          }
+        }}/>
     )}
   </>;
 }

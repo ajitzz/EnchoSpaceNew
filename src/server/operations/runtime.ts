@@ -15,36 +15,43 @@ export function workforceEnvironment(env:NodeJS.ProcessEnv){
 }
 
 export function workforceOrigin(env:NodeJS.ProcessEnv):string|null{
-  const configured = (env.ALLOWED_ORIGINS ?? '').split(',').map(v => v.trim()).filter(Boolean);
-  const preferredOrigin = configured.find(v => v.startsWith('https://')) || configured.find(v => v.startsWith('http://'));
   const raw = env.CR1_WORKFORCE_ORIGIN
-    || env.APP_URL
-    || (env.VERCEL_URL ? (env.VERCEL_URL.startsWith('http') ? env.VERCEL_URL : `https://${env.VERCEL_URL}`) : null)
-    || (env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${env.VERCEL_PROJECT_PRODUCTION_URL}` : null)
-    || preferredOrigin
-    || (env.NODE_ENV !== 'production' ? 'http://localhost:3000' : 'https://encho.co.in');
+    || (env.NODE_ENV !== 'production' && !env.CR1_WORKFORCE_ENVIRONMENT ? (
+        env.APP_URL
+        || (env.VERCEL_URL ? (env.VERCEL_URL.startsWith('http') ? env.VERCEL_URL : `https://${env.VERCEL_URL}`) : null)
+        || (env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${env.VERCEL_PROJECT_PRODUCTION_URL}` : null)
+        || (env.ALLOWED_ORIGINS ?? '').split(',').map(v => v.trim()).find(v => v.startsWith('http'))
+        || 'http://localhost:3000'
+       ) : (
+        env.APP_URL
+        || (env.VERCEL_URL ? (env.VERCEL_URL.startsWith('http') ? env.VERCEL_URL : `https://${env.VERCEL_URL}`) : null)
+        || (env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${env.VERCEL_PROJECT_PRODUCTION_URL}` : null)
+        || (env.ALLOWED_ORIGINS ?? '').split(',').map(v => v.trim()).find(v => v.startsWith('https://'))
+        || (env.NODE_ENV === 'production' ? 'https://encho.co.in' : null)
+       ));
   if(!raw)return null;
   try{
     const url=new URL(raw);
     const local=['localhost','127.0.0.1','[::1]'].includes(url.hostname);
-    if(url.username||url.password||url.search||url.hash||!(url.protocol==='https:'||(local&&url.protocol==='http:')))return null;
+    if(url.username||url.password||url.pathname!=='/'||url.search||url.hash||!(url.protocol==='https:'||(local&&workforceEnvironment(env)==='LOCAL'&&url.protocol==='http:')))return null;
     return url.origin;
   }catch{return null;}
 }
 
 /** Configured workforce pool with single-pooler cloud fallback support. */
 export function workforceConnectionConfig(env: NodeJS.ProcessEnv): pg.PoolConfig | null {
-  const configured = env.CR1_WORKFORCE_DATABASE_URL || env.DATABASE_URL;
+  const configured = env.CR1_WORKFORCE_DATABASE_URL || (env.HARVO_ALLOW_OWNER_ROLE === 'true' ? env.DATABASE_URL : undefined);
   if (!configured) return null;
   try {
     const url = new URL(configured);
     if (!['postgres:', 'postgresql:'].includes(url.protocol) || !url.username || url.pathname.length < 2 || url.hash) throw new Error();
     const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
     if (!local && !url.password) throw new Error();
-    for (const name of Array.from(url.searchParams.keys())) if (!['sslmode', 'channel_binding'].includes(name)) url.searchParams.delete(name);
+    for (const name of url.searchParams.keys()) if (!['sslmode', 'channel_binding'].includes(name)) throw new Error();
     // Prevent URL options replacing strict TLS certificate/hostname validation.
     url.searchParams.delete('sslmode'); url.searchParams.delete('channel_binding');
-    return {connectionString: url.toString(), ssl: local ? false : {rejectUnauthorized: false},
+    const rejectUnauthorized = env.HARVO_ALLOW_OWNER_ROLE !== 'true';
+    return {connectionString: url.toString(), ssl: local ? false : {rejectUnauthorized},
       max: 2, connectionTimeoutMillis: 8_000, idleTimeoutMillis: 10_000, statement_timeout: 10_000,
       allowExitOnIdle: true, application_name: 'encho_cr1_workforce'};
   } catch { throw new WorkforceSessionError('WORKFORCE_UNAVAILABLE'); }
