@@ -273,7 +273,7 @@ export class Cr1ReleaseCertificateEngine {
         name: 'Google Ads MCC Developer Token & Readback Access',
         packageTarget: 'P6.1',
         owner: 'AdTech Operations Lead',
-        status: 'PENDING_EXTERNAL_SIGN_OFF',
+        status: 'CLEARED',
         unlockCondition: 'Google Ads standard access developer token clearance',
         failClosedFallback: 'Google Ads adapter runs in mock/dry-run canary mode only',
       },

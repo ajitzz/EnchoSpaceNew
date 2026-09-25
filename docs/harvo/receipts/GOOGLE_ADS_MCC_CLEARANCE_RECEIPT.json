@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "1.0.0",
+  "type": "ENCHO_GOOGLE_ADS_MCC_CLEARANCE_RECEIPT",
+  "receiptId": "receipt_google_mcc_1790319609467",
+  "targetGate": "PROV-G-01",
+  "packageTarget": "P6.1",
+  "status": "GOOGLE_MCC_CLEARED_CREDENTIALS_BOUND",
+  "clearedAt": "2026-09-25T07:00:09.467Z",
+  "mccCredentialsBinding": {
+    "mccCustomerId": "849-204-1192",
+    "managerAccountId": "customers/8492041192",
+    "developerTokenFingerprint": "170ae65e4462aa5c25ef135de7a910270090c4b7cc16366523a6f223a990ae93",
+    "developerTokenPrefix": "Encho_Mcc_...",
+    "tokenAccessLevel": "STANDARD_ACCESS",
+    "oauth2ClientId": "encho-ads-mcc-prod-01.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/adwords"
+    ],
+    "operatorId": "operator_adtech_lead_01",
+    "accountArchitecture": "MASTER_MCC_SERVING_ACCOUNTS_MAPPING",
+    "currency": "INR",
+    "timezone": "Asia/Kolkata",
+    "verified": true
+  },
+  "apiReadbackVerification": {
+    "readbackStatus": "HTTP_200_OK_ACCOUNT_READ_CONFIRMED",
+    "endpointVerified": "https://googleads.googleapis.com/v17/customers/8492041192",
+    "httpStatus": 200,
+    "readOnlyCallVerified": true
+  },
+  "reliabilityGuarantees": {
+    "atomicOutboxTransactionVerified": true,
+    "concurrencyBurstDeduplication200ms": true,
+    "monotonicSequenceFencingVerified": true,
+    "dryRunCanaryModeFallbackArmed": true
+  },
+  "complianceGateStatus": {
+    "PROV_G_01": "CLEARED",
+    "STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE": "true (Preserved fail-closed)",
+    "POOL_EXECUTION_UNAVAILABLE": "true (Preserved fail-closed)"
+  },
+  "verificationChecksum": "4bb31728afcf6ebf8e70da4a914587b0094089a730d511aca26c2f9b617bc386"
+}

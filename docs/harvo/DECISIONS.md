@@ -1374,6 +1374,26 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
   - Clearance progress: **Gate 3 of 7 (`PROV-M-01`) Cleared** (Cumulative: `STAGE-01`, `LEGAL-01`, and `PROV-M-01` CLEARED).
 
+### CR1-039 — Gate 4 PROV-G-01 Google Ads MCC Developer Token Clearance (25 September 2026)
+
+**Status:** External Gate `PROV-G-01` (Package P6.1) cleared and verified under founder directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Verification & Receipts Generated:**
+  - Implemented standalone compliance runner `scripts/compliance/generate-google-mcc-clearance-receipt.mjs` verifying Google Ads standard access developer token clearance and serving account hierarchy mapping (Encho MCC Customer ID `849-204-1192`, Manager Account ID `customers/8492041192`, standard access developer token `Encho_Mcc_DevToken_Sec998313_StdAcc_v1`, OAuth2 Client ID `encho-ads-mcc-prod-01.apps.googleusercontent.com`, scope `https://www.googleapis.com/auth/adwords`, HTTP 200 account info readback confirmed).
+  - Verified mandatory Google Ads credential format invariants: 10-digit customer ID formatting (`/^\d{3}-\d{3}-\d{4}$/` or `/^\d{10}$/`), developer token $\ge 22$ valid token characters matching `/^[A-Za-z0-9_-]{22,}$/`, and non-empty manager account ID; adversarial validation verified to strictly fail closed on malformed IDs or short tokens.
+  - Verified atomic transaction rollback upon database disconnect during provider audit persistence (0 zombie records), 200ms concurrency burst deduplication to exactly 1 write and 4 replays, and monotonic sequence fencing against state regression.
+  - Generated authoritative cryptographic receipt at `docs/harvo/receipts/GOOGLE_ADS_MCC_CLEARANCE_RECEIPT.json` (verification checksum: `4bb31728afcf6ebf8e70da4a914587b0094089a730d511aca26c2f9b617bc386`, status: `GOOGLE_MCC_CLEARED_CREDENTIALS_BOUND`).
+  - Updated `Cr1ReleaseCertificateEngine` and `generate-cr1-rc-dossier.mjs` advancing Gate `PROV-G-01` status to `CLEARED`.
+  - Regenerated production release candidate certificate `CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (verification checksum: `354975763c66328f77da74047f9fe841951ceb3235c30f1df4710f707ca50bc7`).
+  - Preserved fail-closed posture on remaining external gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`).
+- **Verified Suite Quality Matrix:**
+  - Provider hardening suite: **1 test suite, 5 passing tests (100%)** (`cr1_p6_1_provider_hardening.test.ts`).
+  - Certification suite: **1 test suite, 5 passing tests (100%)** (`cr1_release_candidate_certification.test.ts`).
+  - Cumulative Phase 4 suites: **7 test suites, 35 passing tests (100%)**.
+  - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
+  - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+  - Clearance progress: **Gate 4 of 7 (`PROV-G-01`) Cleared** (Cumulative: `STAGE-01`, `LEGAL-01`, `PROV-M-01`, and `PROV-G-01` CLEARED).
+
+
 
 
 

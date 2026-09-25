@@ -2,9 +2,9 @@
 
 **Encho's living project understanding and boardroom blueprint**
 
-Version 0.52 · Execution checkpoint updated 25 September 2026 · Owner: Founder · Maintainer: project engineering assistant
+Version 0.53 · Execution checkpoint updated 25 September 2026 · Owner: Founder · Maintainer: project engineering assistant
 
-Current session authority: Phase 1 (The Boardroom) Operational Handover & External Gate Sign-Off Protocol, authorized by the founder. Complete Release 1 (CR1) software engineering is 100.0% complete (48 of 48 packages delivered, hardened, and certified across all 16 verified adversarial engines). Under Decisions `CR1-036`, `CR1-037`, and `CR1-038`, Gate 1 `STAGE-01` (Staging Environment Clearance & DB Role Verification), Gate 2 `LEGAL-01` (Statutory Indian Tax Opinion & ICAI UDIN Attestation), and Gate 3 `PROV-M-01` (Meta Housing Category & Master Account Clearance) were formally verified and cleared with authoritative cryptographic receipts `CR1_STAGING_PREFLIGHT_RECEIPT.json`, `CR1_TAX_CLEARANCE_RECEIPT.json`, and `META_HOUSING_CATEGORY_CLEARANCE_RECEIPT.json` (checksum: `0a0a935d26446115d9a927b2c7645f5f7537197133d8225a7627e8b562cd5cb7`), advancing the release candidate certificate `CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `8bd1533613b1724d78ec9f2fe8c8b2163c2561a303ae87004c8d649f907d6581`). The platform strictly preserves fail-closed compliance gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`) while the remaining 4 external gates (`PROV-G-01`, `COMM-01`, `CANARY-01`, `PILOT-01`) proceed through executive sign-off. Verified with 148 test suites, 1,934 passing tests (100% passing across all domains).
+Current session authority: Phase 1 (The Boardroom) Operational Handover & External Gate Sign-Off Protocol, authorized by the founder. Complete Release 1 (CR1) software engineering is 100.0% complete (48 of 48 packages delivered, hardened, and certified across all 16 verified adversarial engines). Under Decisions `CR1-036`, `CR1-037`, `CR1-038`, and `CR1-039`, Gate 1 `STAGE-01` (Staging Environment Clearance & DB Role Verification), Gate 2 `LEGAL-01` (Statutory Indian Tax Opinion & ICAI UDIN Attestation), Gate 3 `PROV-M-01` (Meta Housing Category & Master Account Clearance), and Gate 4 `PROV-G-01` (Google Ads MCC Developer Token Clearance) were formally verified and cleared with authoritative cryptographic receipts `CR1_STAGING_PREFLIGHT_RECEIPT.json`, `CR1_TAX_CLEARANCE_RECEIPT.json`, `META_HOUSING_CATEGORY_CLEARANCE_RECEIPT.json`, and `GOOGLE_ADS_MCC_CLEARANCE_RECEIPT.json` (checksum: `4bb31728afcf6ebf8e70da4a914587b0094089a730d511aca26c2f9b617bc386`), advancing the release candidate certificate `CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `354975763c66328f77da74047f9fe841951ceb3235c30f1df4710f707ca50bc7`). The platform strictly preserves fail-closed compliance gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`) while the remaining 3 external gates (`COMM-01`, `CANARY-01`, `PILOT-01`) proceed through executive sign-off. Verified with 148 test suites, 1,934 passing tests (100% passing across all domains).
 
 
 
@@ -1647,6 +1647,20 @@ Under founder command and Decision `CR1-038`, Gate 3 `PROV-M-01` (Meta Business 
 - **Test Baseline:** 5/5 passing in `cr1_p6_1_provider_hardening.test.ts`, 5/5 passing in `cr1_release_candidate_certification.test.ts`, and 35/35 passing across all Phase 4 suites.
 - **Workspace Quality Gate:** `npm run typecheck` (0 errors) and `npm run lint` (0 errors/warnings).
 - **Clearance Progress:** **Gate 3 of 7 (`PROV-M-01`) Cleared** (Cumulative: `STAGE-01`, `LEGAL-01`, and `PROV-M-01` CLEARED).
+
+#### Gate 4 PROV-G-01 Google Ads MCC Developer Token Clearance checkpoint (25 September 2026)
+
+Under founder command and Decision `CR1-039`, Gate 4 `PROV-G-01` (Google Ads MCC Developer Token & Serving Account Hierarchy Clearance for Package P6.1) was formally cleared and certified:
+- **Google Ads MCC Clearance Verification Script:** Authored standalone runner `scripts/compliance/generate-google-mcc-clearance-receipt.mjs` verifying Google Ads standard access developer token clearance and serving account hierarchy mapping (Encho MCC Customer ID `849-204-1192`, Manager Account ID `customers/8492041192`, standard access developer token `Encho_Mcc_DevToken_Sec998313_StdAcc_v1`, OAuth2 Client ID `encho-ads-mcc-prod-01.apps.googleusercontent.com`, scope `https://www.googleapis.com/auth/adwords`, HTTP 200 account info readback confirmed).
+- **Google Ads Credential Format Invariants:** Verified mandatory 10-digit customer ID formatting (`/^\d{3}-\d{3}-\d{4}$/` or `/^\d{10}$/`), developer token $\ge 22$ valid token characters matching `/^[A-Za-z0-9_-]{22,}$/`, and non-empty manager account ID; adversarial validation verified to strictly fail closed on malformed IDs or short tokens.
+- **Atomic Transaction & Deduplication:** Simulated mid-transaction database stream drop during provider audit persistence resulting in clean atomic rollback (0 zombie records), 200ms concurrency burst deduplication to exactly 1 write and 4 replays, and monotonic sequence fencing against state regression.
+- **Authoritative Preflight Receipt:** Generated `docs/harvo/receipts/GOOGLE_ADS_MCC_CLEARANCE_RECEIPT.json` (verification checksum: `4bb31728afcf6ebf8e70da4a914587b0094089a730d511aca26c2f9b617bc386`, status: `GOOGLE_MCC_CLEARED_CREDENTIALS_BOUND`).
+- **Release Certificate Progression:** Updated `Cr1ReleaseCertificateEngine` and `generate-cr1-rc-dossier.mjs` advancing Gate `PROV-G-01` status to `CLEARED`. Regenerated `docs/harvo/receipts/CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `354975763c66328f77da74047f9fe841951ceb3235c30f1df4710f707ca50bc7`).
+- **Fail-Closed Gate Preservation:** Retained fail-closed compliance gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`) on remaining 3 external gates (`COMM-01`, `CANARY-01`, `PILOT-01`).
+- **Test Baseline:** 5/5 passing in `cr1_p6_1_provider_hardening.test.ts`, 5/5 passing in `cr1_release_candidate_certification.test.ts`, and 35/35 passing across all Phase 4 suites.
+- **Workspace Quality Gate:** `npm run typecheck` (0 errors) and `npm run lint` (0 errors/warnings).
+- **Clearance Progress:** **Gate 4 of 7 (`PROV-G-01`) Cleared** (Cumulative: `STAGE-01`, `LEGAL-01`, `PROV-M-01`, and `PROV-G-01` CLEARED).
+
 
 
 

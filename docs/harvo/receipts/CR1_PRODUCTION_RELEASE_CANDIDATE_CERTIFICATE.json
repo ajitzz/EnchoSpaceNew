@@ -1,11 +1,11 @@
 {
   "schemaVersion": "1.0.0",
   "type": "ENCHO_CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE",
-  "certificateId": "cert_cr1_rc1_1790289809554",
+  "certificateId": "cert_cr1_rc1_1790319918056",
   "releaseTag": "CR1-RC1",
-  "commitHash": "29a50a353671b1b526b150b78905d11aaf82dbb0",
+  "commitHash": "b5297bf9febd7f1dc366cc53426b63ca2a447f22",
   "status": "CERTIFIED_RELEASE_CANDIDATE",
-  "certifiedAt": "2026-09-24T22:43:29.555Z",
+  "certifiedAt": "2026-09-25T07:05:18.048Z",
   "localPackagesComplete": 48,
   "totalPackages": 48,
   "completionPercentage": "100.0%",
@@ -66,7 +66,7 @@
       "name": "Google Ads MCC Developer Token & Readback Access",
       "packageTarget": "P6.1",
       "owner": "AdTech Operations Lead",
-      "status": "PENDING_EXTERNAL_SIGN_OFF",
+      "status": "CLEARED",
       "unlockCondition": "Google Ads standard access developer token clearance",
       "failClosedFallback": "Google Ads adapter runs in mock/dry-run canary mode only"
     },
@@ -102,5 +102,5 @@
     "STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE": "true",
     "POOL_EXECUTION_UNAVAILABLE": "true"
   },
-  "verificationChecksum": "8bd1533613b1724d78ec9f2fe8c8b2163c2561a303ae87004c8d649f907d6581"
+  "verificationChecksum": "354975763c66328f77da74047f9fe841951ceb3235c30f1df4710f707ca50bc7"
 }

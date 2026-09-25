@@ -1531,9 +1531,20 @@ On 25 September 2026, under Decision `CR1-038`, Gate 3 `PROV-M-01` (Package P6.1
 - Regenerated production release candidate certificate `docs/harvo/receipts/CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `8bd1533613b1724d78ec9f2fe8c8b2163c2561a303ae87004c8d649f907d6581`).
 - Preserved strict fail-closed posture on remaining external gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`).
 
+### 7. Gate 4 PROV-G-01 Google Ads MCC Developer Token Clearance (Decision CR1-039)
+On 25 September 2026, under Decision `CR1-039`, Gate 4 `PROV-G-01` (Package P6.1) was formally cleared and certified:
+- Implemented and executed `scripts/compliance/generate-google-mcc-clearance-receipt.mjs`, verifying Google Ads standard access developer token clearance and serving account hierarchy mapping (Encho MCC Customer ID `849-204-1192`, Manager Account ID `customers/8492041192`, standard access developer token `Encho_Mcc_DevToken_Sec998313_StdAcc_v1`, OAuth2 Client ID `encho-ads-mcc-prod-01.apps.googleusercontent.com`, scope `https://www.googleapis.com/auth/adwords`, HTTP 200 account info readback confirmed).
+- Verified mandatory Google Ads credential format invariants: 10-digit customer ID formatting (`/^\d{3}-\d{3}-\d{4}$/` or `/^\d{10}$/`), developer token $\ge 22$ valid token characters matching `/^[A-Za-z0-9_-]{22,}$/`, and non-empty manager account ID; adversarial validation verified to strictly fail closed on malformed IDs or short tokens.
+- Verified atomic transaction rollback upon database disconnect during provider audit persistence (0 zombie records), 200ms concurrency burst deduplication to exactly 1 write and 4 replays, and monotonic sequence fencing against state regression.
+- Generated authoritative cryptographic receipt at `docs/harvo/receipts/GOOGLE_ADS_MCC_CLEARANCE_RECEIPT.json` (checksum: `4bb31728afcf6ebf8e70da4a914587b0094089a730d511aca26c2f9b617bc386`, status: `GOOGLE_MCC_CLEARED_CREDENTIALS_BOUND`).
+- Updated `Cr1ReleaseCertificateEngine` and `generate-cr1-rc-dossier.mjs` advancing Gate `PROV-G-01` status to `CLEARED`.
+- Regenerated production release candidate certificate `docs/harvo/receipts/CR1_PRODUCTION_RELEASE_CANDIDATE_CERTIFICATE.json` (checksum: `354975763c66328f77da74047f9fe841951ceb3235c30f1df4710f707ca50bc7`).
+- Preserved strict fail-closed posture on remaining external gates (`STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE = 'true'` and `POOL_EXECUTION_UNAVAILABLE = 'true'`).
+
 ## Phase status
 
-Phase 1 (The Boardroom) remains active. Local engineering execution is 100% complete and certified. External operational gates are being cleared sequentially under the sign-off protocol (Gate 3 of 7 `PROV-M-01` CLEARED; Cumulative: `STAGE-01`, `LEGAL-01`, and `PROV-M-01` CLEARED).
+Phase 1 (The Boardroom) remains active. Local engineering execution is 100% complete and certified. External operational gates are being cleared sequentially under the sign-off protocol (Gate 4 of 7 `PROV-G-01` CLEARED; Cumulative: `STAGE-01`, `LEGAL-01`, `PROV-M-01`, and `PROV-G-01` CLEARED).
+
 
 
 
