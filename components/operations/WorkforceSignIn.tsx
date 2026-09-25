@@ -1,4 +1,4 @@
-import React,{useEffect,useRef,useState} from 'react';
+import React,{useCallback,useEffect,useRef,useState} from 'react';
 import {GoogleLogin,GoogleOAuthProvider} from '@react-oauth/google';
 import {workforceLoginChallengeSchema,workforceLoginReceiptSchema,type WorkforceLoginChallenge} from '../../src/shared/iam/sessionTransport.js';
 import './operations.css';
@@ -9,18 +9,11 @@ const commandHeaders={'Content-Type':'application/json','X-Encho-Workforce-Comma
  * remain in same-origin HttpOnly cookies; no consumer storage/cache is used. */
 export default function WorkforceSignIn({onComplete,onCancel,autoStart=false}:{onComplete:()=>void;onCancel:()=>void;autoStart?:boolean}){
   const[state,setState]=useState<State>({status:'IDLE'}),busy=useRef(false),request=useRef<AbortController|null>(null),mounted=useRef(true);
-  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;request.current?.abort();};},[]);
-  useEffect(()=>{if(autoStart)void begin();},[autoStart]);
-  useEffect(()=>{
-    if(state.status!=='READY')return;
-    const timer=window.setTimeout(()=>setState({status:'ERROR',message:'This sign-in challenge expired. Start a new sign-in.'}),Math.max(0,Date.parse(state.challenge.expiresAt)-Date.now()));
-    return()=>window.clearTimeout(timer);
-  },[state]);
-  const post=async(action:string,body:unknown)=>{
+  const post=useCallback(async(action:string,body:unknown)=>{
     request.current?.abort();const abort=new AbortController();request.current=abort;
     return fetch(`/api/operations/v1/session/${action}`,{method:'POST',headers:commandHeaders,body:JSON.stringify(body),credentials:'same-origin',cache:'no-store',signal:AbortSignal.any([abort.signal,AbortSignal.timeout(15000)])});
-  };
-  const begin=async()=>{
+  },[]);
+  const begin=useCallback(async()=>{
     if(busy.current)return;busy.current=true;setState({status:'STARTING'});
     try{
       const response=await post('begin',{});
@@ -31,8 +24,8 @@ export default function WorkforceSignIn({onComplete,onCancel,autoStart=false}:{o
       if(mounted.current)setState({status:'READY',challenge});
     }catch{if(mounted.current)setState({status:'ERROR',message:'The sign-in service could not be reached. Start again when connected.'});}
     finally{busy.current=false;}
-  };
-  const complete=async(challenge:WorkforceLoginChallenge,credential:string|undefined)=>{
+  },[post]);
+  const complete=useCallback(async(challenge:WorkforceLoginChallenge,credential:string|undefined)=>{
     if(!mounted.current||busy.current||!credential||Date.parse(challenge.expiresAt)<=Date.now())return;
     busy.current=true;setState({status:'COMPLETING'});
     try{
@@ -43,7 +36,14 @@ export default function WorkforceSignIn({onComplete,onCancel,autoStart=false}:{o
       if(mounted.current)onComplete();
     }catch{if(mounted.current)setState({status:'ERROR',message:'The session result could not be confirmed. Start a new sign-in.'});}
     finally{busy.current=false;}
-  };
+  },[post,onComplete]);
+  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;request.current?.abort();};},[]);
+  useEffect(()=>{if(autoStart)void begin();},[autoStart,begin]);
+  useEffect(()=>{
+    if(state.status!=='READY')return;
+    const timer=window.setTimeout(()=>setState({status:'ERROR',message:'This sign-in challenge expired. Start a new sign-in.'}),Math.max(0,Date.parse(state.challenge.expiresAt)-Date.now()));
+    return()=>window.clearTimeout(timer);
+  },[state]);
   return <main className="ops-shell ops-fallback" aria-labelledby="workforce-signin-title">
     <span className="ops-eyebrow">Encho Operations</span><h1 id="workforce-signin-title">Your work, within your access.</h1>
     <p>Use the Google account invited to your Encho team. Your guest and host account stays separate from this workforce session.</p>
