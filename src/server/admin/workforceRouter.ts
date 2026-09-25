@@ -28,6 +28,32 @@ export function createAdminWorkforceRouter(pool: pg.Pool): Router {
     return id;
   };
 
+  // FAANG L7/L8 Schema Generation Preflight Circuit Breaker
+  let isWorkforceSchemaReady = false;
+  router.use(async (_req: Request, res: Response, next) => {
+    try {
+      if (isWorkforceSchemaReady) {
+        return next();
+      }
+      const check = await pool.query(
+        "SELECT to_regclass('public.internal_organization_memberships') IS NOT NULL AS ready"
+      );
+      if (!check.rows[0]?.ready) {
+        return res.status(503).json({
+          error: 'WORKFORCE_SCHEMA_UNAPPLIED',
+          message: 'Workforce IAM schema generation (Migration 036) is not applied on this database instance. Run npm run migrate to synchronize schema.',
+        });
+      }
+      isWorkforceSchemaReady = true;
+      return next();
+    } catch (err: any) {
+      return res.status(503).json({
+        error: 'DATABASE_PROBE_FAILED',
+        message: err.message || 'Unable to verify workforce database schema readiness.',
+      });
+    }
+  });
+
   /**
    * GET /api/admin/workforce/overview
    * Telemetry, department headcount, active sessions, and emergency quarantine status.

@@ -1492,3 +1492,31 @@ production readiness assertion follows. See the dedicated hardening receipt.
   - Certification suite: **1 test suite, 5 passing tests (100%)** (`cr1_release_candidate_certification.test.ts`).
   - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
   - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+
+### CR1-044 — Production Target Migration Execution (036–040) & Release Schema Synchronicity Gatekeeper (25 September 2026)
+
+**Status:** Target database schema synchronized, runtime schema preflight circuit breaker installed, frontend alert anti-patterns eradicated, and deployment gatekeeper enforced under founder directive and FAANG L7/L8 Zero-Trust engineering protocol.
+- **Incident Forensic Findings & Root Cause:**
+  - In response to production outage on `encho-space-chi.vercel.app` (`relation "internal_organization_memberships" does not exist`), forensic auditing identified that migration `036_internal_organization_iam.sql` through `040_service_assignment_dispatch.sql` existed in the working tree and passed isolated local test fixtures, but had never been applied to the live remote Neon PostgreSQL database due to decoupled Vercel serverless deployments without a DDL pre-deploy hook.
+  - All 34 previously applied migrations in the remote database matched exact canonical SHA-256 checksums with zero drift.
+- **Architectural Deliverables & Hardening Measures:**
+  - **Live Target Database Migration Execution:**
+    - Executed `runMigrations()` (`src/migrations/runner.ts`) with advisory locking (`pg_advisory_lock(82749102)`), applying `036_internal_organization_iam.sql`, `037_conversation_delivery.sql`, `038_service_cases.sql`, `039_conversation_notification_preferences.sql`, and `040_service_assignment_dispatch.sql`.
+    - Verified all 35 `internal_%` tables (`internal_organizations`, `internal_organization_memberships`, `internal_membership_grants`, `internal_iam_events`, etc.) are now fully provisioned in the live database with RLS policies and immutable triggers.
+    - Verified `schema_migrations` contains all 39 migration entries with 100% checksum alignment.
+  - **Workforce Router Preflight Circuit Breaker (`src/server/admin/workforceRouter.ts`):**
+    - Installed cached schema generation preflight middleware verifying `to_regclass('public.internal_organization_memberships')`.
+    - Prevents raw SQL relation crashes by returning a structured `HTTP 503` with code `WORKFORCE_SCHEMA_UNAPPLIED` and diagnostic instructions if schema generation is ever unapplied.
+  - **Frontend Diagnostic Notification Engine (`components/admin/AdminStaffCommandCenter.tsx`):**
+    - Permanently eradicated 14 instances of crude native browser `alert()` popups.
+    - Replaced with an accessible, high-density, auto-dismissing Diagnostic Notification toast banner rendering structured error codes, recovery instructions, and success acknowledgments.
+  - **Deployment Schema Synchronicity Gatekeeper (`scripts/deployment/verify-schema-sync.mjs`):**
+    - Created deployment pre-flight gate script and bound it to `npm run build` in `package.json`.
+    - Automatically audits `schema_migrations` against `deployedMigrationManifest()` on any build where `DATABASE_URL` is configured, failing closed (`exit(1)`) if any unapplied migrations exist.
+- **Verified Suite Quality Matrix:**
+  - Workforce command suite: **1 test suite, 11 passing tests (100%)** (`cr1_admin_workforce_command.test.ts`).
+  - IAM migration suite: **1 test suite, 16 passing tests (100%)** (`cr1_iam_migration.test.ts`).
+  - TypeScript static verification: **0 errors** (`tsc --noEmit && tsc -p tsconfig.server.json --noEmit`).
+  - ESLint code quality: **0 errors / 0 warnings** (`eslint .`).
+  - Build & Schema Synchronicity: **`SCHEMA_SYNCHRONICITY_VERIFIED`** (39/39 applied, 44 public bundle files verified).
+

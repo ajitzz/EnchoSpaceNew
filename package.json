@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && tsc -p tsconfig.server.json && node scripts/deployment/package-server-assets.mjs && node scripts/deployment/verify-public-artifacts.mjs",
+    "build": "vite build && tsc -p tsconfig.server.json && node scripts/deployment/package-server-assets.mjs && node scripts/deployment/verify-public-artifacts.mjs && node scripts/deployment/verify-schema-sync.mjs",
     "start": "node build/server/server.js",
     "preview": "vite preview",
     "lint": "eslint .",

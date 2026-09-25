@@ -211,6 +211,23 @@ export const AdminStaffCommandCenter: React.FC<Props> = ({ token }) => {
   const [freezeDepartment, setFreezeDepartment] = useState('marketing');
   const [freezeReason, setFreezeReason] = useState('Emergency platform security intervention and blast-radius containment.');
 
+  interface DiagnosticNotification {
+    type: 'error' | 'success' | 'warning' | 'info';
+    title: string;
+    message: string;
+    code?: string;
+  }
+  const [notification, setNotification] = useState<DiagnosticNotification | null>(null);
+
+  const notify = (notif: DiagnosticNotification) => {
+    setNotification(notif);
+    if (notif.type === 'success' || notif.type === 'info') {
+      setTimeout(() => {
+        setNotification(prev => (prev === notif ? null : prev));
+      }, 7000);
+    }
+  };
+
   const getAuthHeader = useCallback(() => {
     const t = token || localStorage.getItem('token');
     return t ? { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
@@ -329,7 +346,12 @@ export const AdminStaffCommandCenter: React.FC<Props> = ({ token }) => {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(`Hiring Failed: ${data.error}`);
+        notify({
+          type: 'error',
+          title: 'Hiring Provisioning Blocked',
+          message: data.message || data.error || 'Server rejected workforce hiring transaction.',
+          code: data.error,
+        });
         return;
       }
       setHiredResult({
@@ -338,11 +360,20 @@ export const AdminStaffCommandCenter: React.FC<Props> = ({ token }) => {
         email: data.email,
         roleKey: data.roleKey,
       });
+      notify({
+        type: 'success',
+        title: 'Staff Member Provisioned',
+        message: `Credentials issued for ${data.email} (${data.roleKey}). Onboarding link and QR code generated.`,
+      });
       loadOverview();
       loadRoster();
       loadAuditTrail();
     } catch (err: any) {
-      alert(`Hiring Error: ${err.message}`);
+      notify({
+        type: 'error',
+        title: 'Network / Transport Failure',
+        message: err.message || 'Unable to communicate with workforce admin endpoint.',
+      });
     }
   };
 
@@ -350,7 +381,11 @@ export const AdminStaffCommandCenter: React.FC<Props> = ({ token }) => {
   const handleLifecycle = async (membershipId: string, action: 'SUSPEND' | 'RESUME' | 'REVOKE_SESSIONS' | 'OFFBOARD') => {
     const reasonPrompt = prompt(`Enter mandatory justification for ${action}:`, `Administrative ${action.toLowerCase()} action executed via God-Mode portal.`);
     if (!reasonPrompt || reasonPrompt.trim().length < 10) {
-      alert('Justification must be at least 10 characters.');
+      notify({
+        type: 'warning',
+        title: 'Justification Required',
+        message: 'A minimum 10-character justification is mandatory for workforce lifecycle operations.',
+      });
       return;
     }
     try {
@@ -361,14 +396,28 @@ export const AdminStaffCommandCenter: React.FC<Props> = ({ token }) => {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(`Lifecycle Action Failed: ${data.error}`);
+        notify({
+          type: 'error',
+          title: 'Lifecycle Mutation Rejected',
+          message: data.message || data.error || 'Failed to execute lifecycle transition.',
+          code: data.error,
+        });
         return;
       }
+      notify({
+        type: 'success',
+        title: `Lifecycle ${action} Executed`,
+        message: `Membership ${membershipId.slice(0, 8)}... successfully transitioned.`,
+      });
       loadOverview();
       loadRoster();
       loadAuditTrail();
     } catch (err: any) {
-      alert(`Error executing lifecycle: ${err.message}`);
+      notify({
+        type: 'error',
+        title: 'Lifecycle Error',
+        message: err.message || 'Error executing lifecycle command.',
+      });
     }
   };
 
@@ -377,7 +426,11 @@ export const AdminStaffCommandCenter: React.FC<Props> = ({ token }) => {
     if (!selectedStaffForQuota) return;
     const reasonPrompt = prompt('Enter justification for quota modification:', 'Operational spend quota adjustment approved by Admin.');
     if (!reasonPrompt || reasonPrompt.trim().length < 10) {
-      alert('Justification must be at least 10 characters.');
+      notify({
+        type: 'warning',
+        title: 'Justification Required',
+        message: 'A minimum 10-character justification is mandatory for spend quota modifications.',
+      });
       return;
     }
     try {
@@ -388,11 +441,28 @@ export const AdminStaffCommandCenter: React.FC<Props> = ({ token }) => {
       });
       if (res.ok) {
         setIsQuotaModalOpen(false);
+        notify({
+          type: 'success',
+          title: 'Daily Spend Quota Rotated',
+          message: `Daily blast-radius quota updated to ₹${(newQuotaPaise / 100).toLocaleString('en-IN')}.`,
+        });
         loadRoster();
         loadAuditTrail();
+      } else {
+        const data = await res.json();
+        notify({
+          type: 'error',
+          title: 'Quota Update Rejected',
+          message: data.message || data.error,
+          code: data.error,
+        });
       }
     } catch (err: any) {
-      alert(`Error updating quota: ${err.message}`);
+      notify({
+        type: 'error',
+        title: 'Quota Update Error',
+        message: err.message,
+      });
     }
   };
 
@@ -400,7 +470,11 @@ export const AdminStaffCommandCenter: React.FC<Props> = ({ token }) => {
   const handleRatify = async (authorizationId: string, decision: 'APPROVE' | 'REJECT') => {
     const reasonPrompt = prompt(`Enter justification for ${decision}:`, `Dual-control ${decision.toLowerCase()} by Platform Admin.`);
     if (!reasonPrompt || reasonPrompt.trim().length < 10) {
-      alert('Justification must be at least 10 characters.');
+      notify({
+        type: 'warning',
+        title: 'Justification Required',
+        message: 'A minimum 10-character justification is mandatory for dual-control ratification.',
+      });
       return;
     }
     try {
@@ -411,14 +485,28 @@ export const AdminStaffCommandCenter: React.FC<Props> = ({ token }) => {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(`Ratification failed: ${data.error}`);
+        notify({
+          type: 'error',
+          title: 'Ratification Rejected',
+          message: data.message || data.error,
+          code: data.error,
+        });
         return;
       }
+      notify({
+        type: 'success',
+        title: `Authorization ${decision}d`,
+        message: `Dual-control ratification recorded in cryptographic Merkle chain.`,
+      });
       loadAuthorizations();
       loadOverview();
       loadAuditTrail();
     } catch (err: any) {
-      alert(`Ratification error: ${err.message}`);
+      notify({
+        type: 'error',
+        title: 'Ratification Error',
+        message: err.message,
+      });
     }
   };
 
@@ -431,8 +519,26 @@ export const AdminStaffCommandCenter: React.FC<Props> = ({ token }) => {
       });
       const data = await res.json();
       setMerkleStatus(data);
+      if (data.verified) {
+        notify({
+          type: 'success',
+          title: 'Merkle Audit Chain Verified',
+          message: `Traversed ${data.eventCount} IAM event nodes from genesis to head with 0 integrity violations.`,
+        });
+      } else {
+        notify({
+          type: 'error',
+          title: 'Merkle Chain Violation Detected',
+          message: `Tamper detected at event node: ${data.tamperedAt || 'UNKNOWN'}`,
+          code: 'HASH_CHAIN_MISMATCH',
+        });
+      }
     } catch (err: any) {
-      alert(`Verification error: ${err.message}`);
+      notify({
+        type: 'error',
+        title: 'Chain Verification Failure',
+        message: err.message,
+      });
     }
   };
 
@@ -455,21 +561,77 @@ export const AdminStaffCommandCenter: React.FC<Props> = ({ token }) => {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(`Freeze failed: ${data.error}`);
+        notify({
+          type: 'error',
+          title: 'Emergency Freeze Rejected',
+          message: data.message || data.error,
+          code: data.error,
+        });
         return;
       }
-      alert(`Emergency Freeze Executed: ${data.frozenCount} members suspended, ${data.sessionsRevoked} sessions terminated.`);
+      notify({
+        type: 'success',
+        title: 'Emergency Freeze Executed',
+        message: `${data.frozenCount} member(s) suspended, ${data.sessionsRevoked} active session(s) severed immediately.`,
+      });
       setIsFreezeModalOpen(false);
       loadOverview();
       loadRoster();
       loadAuditTrail();
     } catch (err: any) {
-      alert(`Freeze error: ${err.message}`);
+      notify({
+        type: 'error',
+        title: 'Emergency Freeze Error',
+        message: err.message,
+      });
     }
   };
 
   return (
     <div className="space-y-6">
+      {/* High-Density Diagnostic Notification Toast */}
+      {notification && (
+        <div
+          role="alert"
+          className={`p-4 rounded-xl border flex items-start justify-between gap-4 transition-all shadow-xl animate-in fade-in slide-in-from-top-2 duration-200 ${
+            notification.type === 'error'
+              ? 'bg-rose-950/90 border-rose-500/50 text-rose-200'
+              : notification.type === 'warning'
+              ? 'bg-amber-950/90 border-amber-500/50 text-amber-200'
+              : notification.type === 'success'
+              ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-200'
+              : 'bg-indigo-950/90 border-indigo-500/50 text-indigo-200'
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 shrink-0">
+              {notification.type === 'error' && <AlertOctagon className="w-5 h-5 text-rose-400" />}
+              {notification.type === 'warning' && <AlertTriangle className="w-5 h-5 text-amber-400" />}
+              {notification.type === 'success' && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
+              {notification.type === 'info' && <Activity className="w-5 h-5 text-indigo-400" />}
+            </div>
+            <div>
+              <div className="font-bold text-sm flex items-center gap-2">
+                <span>{notification.title}</span>
+                {notification.code && (
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/40 border border-white/10 uppercase">
+                    {notification.code}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs mt-0.5 opacity-90 leading-relaxed font-sans">{notification.message}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setNotification(null)}
+            className="text-xs opacity-60 hover:opacity-100 p-1.5 rounded hover:bg-white/10 shrink-0 font-mono transition-colors"
+            aria-label="Dismiss notification"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Top Banner & Title */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden">
         <div className="absolute right-0 top-0 bottom-0 w-96 bg-gradient-to-l from-indigo-950/40 to-transparent pointer-events-none" />
