@@ -1,16 +1,16 @@
 {
   "schemaVersion": "1.0.0",
   "type": "ENCHO_PROVIDER_CANARY_RECEIPT",
-  "receiptId": "receipt_canary_test_999",
+  "receiptId": "receipt_canary_drill_production_1790448859105",
   "targetGate": "CANARY-01",
   "packageTarget": "P8.3",
   "status": "PAUSED_CANARY_VERIFIED_ZERO_SPEND",
-  "clearedAt": "2026-09-26T18:00:00.000Z",
+  "clearedAt": "2026-09-26T18:54:19.105Z",
   "canaryTarget": {
     "listingId": "1",
     "listingName": "Wayanad Sanctuary (Listing 1)",
     "operatorId": "operator_sre_lead_01",
-    "executionDate": "2026-09-26T18:00:00.000Z"
+    "executionDate": "2026-09-26T18:54:19.105Z"
   },
   "metaCanaryExecution": {
     "adAccountId": "act_1029384756",
@@ -24,7 +24,7 @@
       "spendRupees": 0,
       "verified": true,
       "exactMatch": true,
-      "timestamp": "2026-09-26T18:00:00.000Z"
+      "timestamp": "2026-09-26T18:54:19.105Z"
     }
   },
   "googleCanaryExecution": {
@@ -38,7 +38,7 @@
       "costMicros": 0,
       "verified": true,
       "exactMatch": true,
-      "timestamp": "2026-09-26T18:00:00.000Z"
+      "timestamp": "2026-09-26T18:54:19.105Z"
     }
   },
   "reliabilityGuarantees": {
@@ -53,5 +53,5 @@
     "STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE": "true (Preserved fail-closed)",
     "POOL_EXECUTION_UNAVAILABLE": "true (Preserved fail-closed)"
   },
-  "verificationChecksum": "f0908a5ccba4a6d8ed642cc2754b85c2960613967038fa57a61c4fc76f76cc91"
+  "verificationChecksum": "d26752f756bf23115656a41398034d85a50b0ef1e95296591ccc1110ef17bf0b"
 }
