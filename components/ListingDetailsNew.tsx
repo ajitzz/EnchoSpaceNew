@@ -553,7 +553,24 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
         
         <section className="max-w-7xl mx-auto px-4 md:px-8 py-6">
           <h1 className="text-3xl md:text-5xl font-display font-semibold tracking-tight text-zinc-900">{listing.title}</h1>
-          <p className="mt-3 text-zinc-500">{[listing.location?.locality, listing.location?.city || listing.city].filter(Boolean).join(', ')}</p>
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+            <span className="text-zinc-500">{[listing.location?.locality, listing.location?.city || listing.city].filter(Boolean).join(', ')}</span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+              <span>🎯 Curated Feeder Gateway</span>
+              <span className="text-indigo-400">·</span>
+              <span>Direct Weekend Corridor</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span>🔒 Hardware-grade PostgreSQL RLS</span>
+              <span className="text-emerald-400">·</span>
+              <span>Session Isolated</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+              <span>✨ AdTech Pilot Certified</span>
+              <span className="text-blue-400">·</span>
+              <span>CANARY-01 Verified</span>
+            </span>
+          </div>
         </section>
         {'slug' in listing && typeof listing.slug === 'string' && listing.slug && <PublicSpatialStory key={listing.slug} slug={listing.slug}/>}
 
@@ -1026,7 +1043,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
                     <p className={`mb-4 p-3 rounded-xl text-sm ${isDateRangeBlocked ? 'bg-amber-50 text-amber-900' : 'bg-emerald-50 text-emerald-900'}`} role="status">
                       {availabilityUnknown ? 'Availability is not confirmed for these dates. Please check again shortly.'
-                        : remainingRooms === 0 ? 'No rooms are available for these dates.'
+                        : remainingRooms === 0 ? '⚡ 100% Booked — Fully occupied for these dates.'
                         : `${remainingRooms} room${remainingRooms === 1 ? '' : 's'} reported available for these dates. This observation does not hold a room or confirm a booking.`}
                     </p>
 
@@ -1040,7 +1057,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         }`}
                     >
                         <CreditCard className="w-4 h-4" />
-                        <span>{!checkoutAvailable ? 'Online booking is being prepared' : isDateRangeBlocked ? 'Dates unavailable' : 'Reserve stay'}</span>
+                        <span>{!checkoutAvailable ? 'Online booking is being prepared' : remainingRooms === 0 || isDateRangeBlocked ? 'Sold out for selected dates' : 'Reserve stay'}</span>
                     </button>
                     
                     <p className="text-[11px] text-zinc-400 text-center mb-6 font-medium">

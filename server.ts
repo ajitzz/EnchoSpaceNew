@@ -213,6 +213,12 @@ import {
   verifyGuestSession,
   createHostCalendarBlock
 } from './src/services/inventoryHoldService.js';
+import { createStaysCommerceRouter } from './src/server/stays/staysCommerceRouter.js';
+import { createCreativePackageRouter } from './src/server/marketing/creativePackageRouter.js';
+import { createCircuitBreakerRouter } from './src/server/marketing/circuitBreakerRouter.js';
+import { createFeederCorridorRouter } from './src/server/marketing/feederCorridorRouter.js';
+import { createDatabaseSecurityRouter } from './src/server/marketing/databaseSecurityRouter.js';
+import { createCanaryCertificationRouter } from './src/server/marketing/canaryCertificationRouter.js';
 
 // import pinoHttp from 'pino-http'; // Removed as per JS version
 // import { logger } from './src/lib/logger/index.js'; // Removed as per JS version
@@ -1058,6 +1064,12 @@ app.use('/api/operations/v1', createOperationsRouter(createOperationsRuntime(pro
 }),{origin:workforceOrigin(process.env)}));
 app.use('/api/marketing/measurement',createMeasurementRouter(harvoMarketing.config.origin,harvoMarketing.touchpoints),marketingErrorHandler);
 app.use('/api/admin/workforce', authenticateToken, requireAdmin, createAdminWorkforceRouter(pool));
+app.use('/api/v2/stays', createStaysCommerceRouter(pool, razorpay));
+app.use('/api/marketing/v2/creatives/packages', authenticateToken, createCreativePackageRouter(pool));
+app.use('/api/marketing/v2/circuit-breaker', authenticateToken, createCircuitBreakerRouter(pool));
+app.use('/api/marketing/v2/feeder-corridors', authenticateToken, createFeederCorridorRouter(pool));
+app.use('/api/operations/v1/security', authenticateToken, createDatabaseSecurityRouter(pool));
+app.use('/api/marketing/v2/canary', createCanaryCertificationRouter(pool));
 app.use('/api/marketing/v2', createMarketingRouter(pool, harvoMarketing.workflow, harvoMarketing.finance, authenticateToken, harvoMarketing.targeting, {corridorInference:harvoMarketing.corridorInference,outcomes:harvoMarketing.outcomes,stories:harvoMarketing.stories,pools:harvoMarketing.pools,preflight:harvoMarketing.preflight,settlement:harvoMarketing.settlement,conversions:harvoMarketing.conversions,guidance:harvoMarketing.guidance,creative:harvoMarketing.creative,pauseRecovery:harvoMarketing.pauseRecovery,facts:harvoMarketing.facts,keywordResearch:harvoMarketing.keywordResearch,portfolio:harvoMarketing.portfolio}));
 app.get('/api/webhooks/marketing/v2/meta', (req: Request,res: Response,next: NextFunction) => { try { res.type('text/plain').send(harvoMarketing.metaEvents.challenge(req.query['hub.mode'],req.query['hub.verify_token'],req.query['hub.challenge'])); } catch(error) { next(error); } }, marketingErrorHandler);
 app.post('/api/webhooks/marketing/v2/:provider', async (req: any, res: Response, next: NextFunction) => {
@@ -1437,6 +1449,141 @@ const ensureListingsTable = async () => {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS stays_quotes (
+      id UUID PRIMARY KEY,
+      listing_id INT NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+      room_type_id INT,
+      check_in_date DATE NOT NULL,
+      check_out_date DATE NOT NULL,
+      nights INT NOT NULL,
+      base_price_paise BIGINT NOT NULL,
+      tax_paise BIGINT NOT NULL,
+      total_paise BIGINT NOT NULL,
+      currency VARCHAR(10) NOT NULL DEFAULT 'INR',
+      guest_count INT NOT NULL DEFAULT 1,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      expires_at TIMESTAMP WITH TIME ZONE NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS stays_holds (
+      id UUID PRIMARY KEY,
+      quote_id UUID REFERENCES stays_quotes(id) ON DELETE CASCADE,
+      user_id INT REFERENCES users(id) ON DELETE SET NULL,
+      guest_session_id VARCHAR(255),
+      holder_principal VARCHAR(255) NOT NULL,
+      status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE',
+      expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      released_at TIMESTAMP WITH TIME ZONE,
+      release_reason VARCHAR(100)
+    );
+
+    CREATE TABLE IF NOT EXISTS stays_orders (
+      id UUID PRIMARY KEY,
+      hold_id UUID REFERENCES stays_holds(id) ON DELETE SET NULL,
+      quote_id UUID REFERENCES stays_quotes(id) ON DELETE SET NULL,
+      user_id INT REFERENCES users(id) ON DELETE SET NULL,
+      total_paise BIGINT NOT NULL,
+      currency VARCHAR(10) NOT NULL DEFAULT 'INR',
+      status VARCHAR(50) NOT NULL DEFAULT 'PAYMENT_PENDING',
+      sequence_version INT NOT NULL DEFAULT 1,
+      idempotency_key VARCHAR(255) UNIQUE NOT NULL,
+      razorpay_order_id VARCHAR(255),
+      razorpay_payment_id VARCHAR(255),
+      razorpay_signature VARCHAR(255),
+      booking_id INT REFERENCES bookings(id) ON DELETE SET NULL,
+      guest_name VARCHAR(255),
+      guest_phone VARCHAR(50),
+      guest_email VARCHAR(255),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS stays_webhooks (
+      event_id VARCHAR(255) PRIMARY KEY,
+      order_id UUID REFERENCES stays_orders(id) ON DELETE SET NULL,
+      event_type VARCHAR(100) NOT NULL,
+      sequence_number INT NOT NULL,
+      processed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS inventory_days (
+      id SERIAL PRIMARY KEY,
+      listing_id INT NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+      room_type_id INT NOT NULL REFERENCES room_types(id) ON DELETE CASCADE,
+      calendar_date DATE NOT NULL,
+      total_units INT NOT NULL DEFAULT 1,
+      held_units INT NOT NULL DEFAULT 0,
+      booked_units INT NOT NULL DEFAULT 0,
+      blocked_units INT NOT NULL DEFAULT 0,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT uq_inventory_days_room_date UNIQUE (room_type_id, calendar_date)
+    );
+
+    CREATE TABLE IF NOT EXISTS booking_holds (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      room_type_id INT NOT NULL REFERENCES room_types(id) ON DELETE CASCADE,
+      user_id INT REFERENCES users(id) ON DELETE SET NULL,
+      guest_session_id VARCHAR(255),
+      idempotency_key VARCHAR(255) NOT NULL,
+      check_in_date DATE NOT NULL,
+      check_out_date DATE NOT NULL,
+      units_held INT NOT NULL DEFAULT 1,
+      status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE',
+      expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      released_at TIMESTAMP WITH TIME ZONE,
+      release_reason VARCHAR(100),
+      CONSTRAINT uq_booking_holds_idempotency UNIQUE (idempotency_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS booking_hold_nights (
+      id SERIAL PRIMARY KEY,
+      hold_id UUID NOT NULL REFERENCES booking_holds(id) ON DELETE CASCADE,
+      inventory_day_id INT NOT NULL REFERENCES inventory_days(id) ON DELETE CASCADE,
+      stay_date DATE NOT NULL,
+      units INT NOT NULL DEFAULT 1,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT uq_booking_hold_nights UNIQUE (hold_id, inventory_day_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS marketing_creative_packages (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      host_user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      listing_id INT NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+      room_type_id INT REFERENCES room_types(id) ON DELETE SET NULL,
+      package_type VARCHAR(50) NOT NULL,
+      title VARCHAR(200) NOT NULL,
+      headline VARCHAR(120) NOT NULL,
+      description TEXT NOT NULL,
+      destination_url TEXT NOT NULL,
+      ai_preflight_score DECIMAL(3, 1),
+      ai_preflight_status VARCHAR(50) DEFAULT 'PENDING_SCAN',
+      moderation_status VARCHAR(50) DEFAULT 'SUBMITTED',
+      rejection_reasons JSONB DEFAULT '[]'::jsonb,
+      rights_attestation_confirmed BOOLEAN DEFAULT false,
+      rights_attestation_hash VARCHAR(64),
+      version INT DEFAULT 1,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS marketing_creative_assets (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      package_id UUID NOT NULL REFERENCES marketing_creative_packages(id) ON DELETE CASCADE,
+      asset_role VARCHAR(50) NOT NULL,
+      original_url TEXT NOT NULL,
+      transcoded_url TEXT,
+      aspect_ratio VARCHAR(20) NOT NULL,
+      duration_seconds DECIMAL(5, 2),
+      byte_size INT NOT NULL,
+      mime_type VARCHAR(100) NOT NULL,
+      sha256_hash VARCHAR(64) NOT NULL,
+      ocr_extracted_text TEXT,
+      transcript_text TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
   `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS messages (
@@ -1830,7 +1977,86 @@ const ensureListingsTable = async () => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS marketing_daily_rollups (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      campaign_id INT NOT NULL REFERENCES host_marketing_campaigns(id) ON DELETE CASCADE,
+      rollup_date DATE NOT NULL,
+      impressions INT NOT NULL DEFAULT 0,
+      clicks INT NOT NULL DEFAULT 0,
+      conversions INT NOT NULL DEFAULT 0,
+      spend_paise BIGINT NOT NULL DEFAULT 0,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (campaign_id, rollup_date)
+    );
 
+    CREATE TABLE IF NOT EXISTS circuit_breaker_events (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      campaign_id INT NOT NULL REFERENCES host_marketing_campaigns(id) ON DELETE CASCADE,
+      listing_id INT NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+      trigger_reason VARCHAR(100) NOT NULL,
+      occupancy_ratio DECIMAL(5, 4) DEFAULT 1.0000,
+      target_date_start DATE,
+      target_date_end DATE,
+      previous_status VARCHAR(50) NOT NULL,
+      new_status VARCHAR(50) NOT NULL DEFAULT 'CIRCUIT_BREAKER_PAUSED',
+      provider_pause_receipt JSONB DEFAULT '{}'::jsonb,
+      override_actor_id INT REFERENCES users(id),
+      override_reason TEXT,
+      version INT DEFAULT 1,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS dead_letter_queue (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      source_queue VARCHAR(100) NOT NULL,
+      original_event_id TEXT NOT NULL,
+      payload JSONB NOT NULL,
+      attempts INT NOT NULL,
+      last_error TEXT NOT NULL,
+      failed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      resolved BOOLEAN DEFAULT false,
+      resolved_at TIMESTAMP WITH TIME ZONE,
+      resolution_notes TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS marketing_feeder_corridor_definitions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      region_code VARCHAR(50) NOT NULL,
+      corridor_name VARCHAR(150) NOT NULL,
+      source_city VARCHAR(100) NOT NULL,
+      center_lat DECIMAL(10, 7) NOT NULL,
+      center_lng DECIMAL(10, 7) NOT NULL,
+      radius_km DECIMAL(6, 2) NOT NULL DEFAULT 25.00,
+      excluded_local_district VARCHAR(100) NOT NULL,
+      tier_eligibility VARCHAR(50) NOT NULL DEFAULT 'ALL',
+      expected_roas_benchmark DECIMAL(4, 2) DEFAULT 3.80,
+      is_active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS campaign_godmode_targeting (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      campaign_id INT NOT NULL REFERENCES host_marketing_campaigns(id) ON DELETE CASCADE,
+      housing_special_category BOOLEAN NOT NULL DEFAULT true,
+      meta_placements JSONB NOT NULL DEFAULT '["INSTAGRAM_REELS", "INSTAGRAM_STORIES", "FACEBOOK_FEED"]'::jsonb,
+      selected_corridor_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+      custom_geo_radii JSONB NOT NULL DEFAULT '[]'::jsonb,
+      excluded_districts JSONB NOT NULL DEFAULT '[]'::jsonb,
+      bidding_strategy VARCHAR(50) NOT NULL DEFAULT 'TARGET_ROAS',
+      target_roas_floor DECIMAL(4, 2) DEFAULT 3.00,
+      cpc_ceiling_cents INT DEFAULT 150,
+      target_cpa_cents INT DEFAULT 1200,
+      google_search_keywords JSONB NOT NULL DEFAULT '[]'::jsonb,
+      google_negative_keywords JSONB NOT NULL DEFAULT '[]'::jsonb,
+      google_sitelinks JSONB NOT NULL DEFAULT '[]'::jsonb,
+      ai_copilot_recommendation JSONB,
+      configured_by_admin_id INT NOT NULL,
+      version INT NOT NULL DEFAULT 1,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (campaign_id)
+    );
   `);
 
   // Run migrations for advanced ad capabilities (Scenario 1 support!)
@@ -2401,73 +2627,296 @@ export const ensureMarketingSchema = async () => {
   await pool.query(`ALTER TABLE host_marketing_campaigns ADD COLUMN IF NOT EXISTS policy_cleared_at TIMESTAMP;`);
 
 
-  // Gap 17: Strict Row-Level Security (RLS) - The Data Breach Shield
+  // Gap 17 & Sprint 5: Strict Multi-Role Row-Level Security (RLS) & FORCE ROW LEVEL SECURITY
   try {
     await pool.query(`
-      -- Create a helper function for the current app user
+      -- Helper functions for session context extraction
       CREATE OR REPLACE FUNCTION current_app_user_id() RETURNS integer AS $$
         SELECT NULLIF(current_setting('app.current_user_id', true), '')::integer;
       $$ LANGUAGE sql STABLE;
 
+      CREATE OR REPLACE FUNCTION is_admin_or_rls_bypassed() RETURNS boolean AS $$
+        SELECT current_setting('app.bypass_rls', true) = 'true' 
+            OR current_setting('app.marketing_admin', true) = 'true';
+      $$ LANGUAGE sql STABLE;
+
       -- 1. host_outreach_leads
       ALTER TABLE host_outreach_leads ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE host_outreach_leads FORCE ROW LEVEL SECURITY;
       DROP POLICY IF EXISTS host_leads_policy ON host_outreach_leads;
-      CREATE POLICY host_leads_policy ON host_outreach_leads
-        USING (host_id = current_app_user_id() OR current_setting('app.bypass_rls', true) = 'true')
-        WITH CHECK (host_id = current_app_user_id() OR current_setting('app.bypass_rls', true) = 'true');
+      DROP POLICY IF EXISTS host_leads_tenant_policy ON host_outreach_leads;
+      CREATE POLICY host_leads_tenant_policy ON host_outreach_leads
+        FOR ALL
+        USING (host_id::text = current_setting('app.current_user_id', true) OR is_admin_or_rls_bypassed())
+        WITH CHECK (host_id::text = current_setting('app.current_user_id', true) OR is_admin_or_rls_bypassed());
 
       -- 2. host_wallets
       ALTER TABLE host_wallets ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE host_wallets FORCE ROW LEVEL SECURITY;
       DROP POLICY IF EXISTS host_wallets_policy ON host_wallets;
-      CREATE POLICY host_wallets_policy ON host_wallets
-        USING (host_id = current_app_user_id() OR current_setting('app.bypass_rls', true) = 'true');
+      DROP POLICY IF EXISTS host_wallets_tenant_policy ON host_wallets;
+      CREATE POLICY host_wallets_tenant_policy ON host_wallets
+        FOR ALL
+        USING (host_id::text = current_setting('app.current_user_id', true) OR is_admin_or_rls_bypassed())
+        WITH CHECK (host_id::text = current_setting('app.current_user_id', true) OR is_admin_or_rls_bypassed());
 
       -- 3. host_marketing_campaigns
       ALTER TABLE host_marketing_campaigns ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE host_marketing_campaigns FORCE ROW LEVEL SECURITY;
       DROP POLICY IF EXISTS host_campaigns_policy ON host_marketing_campaigns;
-      CREATE POLICY host_campaigns_policy ON host_marketing_campaigns
-        USING (host_id = current_app_user_id() OR current_setting('app.bypass_rls', true) = 'true');
+      DROP POLICY IF EXISTS host_campaigns_tenant_policy ON host_marketing_campaigns;
+      CREATE POLICY host_campaigns_tenant_policy ON host_marketing_campaigns
+        FOR ALL
+        USING (host_id::text = current_setting('app.current_user_id', true) OR is_admin_or_rls_bypassed())
+        WITH CHECK (host_id::text = current_setting('app.current_user_id', true) OR is_admin_or_rls_bypassed());
 
       -- 4. wallet_transactions
       ALTER TABLE wallet_transactions ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE wallet_transactions FORCE ROW LEVEL SECURITY;
       DROP POLICY IF EXISTS host_wallet_transactions_policy ON wallet_transactions;
-      CREATE POLICY host_wallet_transactions_policy ON wallet_transactions
-        USING (wallet_id IN (SELECT id FROM host_wallets WHERE host_id = current_app_user_id()) OR current_setting('app.bypass_rls', true) = 'true');
+      DROP POLICY IF EXISTS wallet_transactions_tenant_policy ON wallet_transactions;
+      CREATE POLICY wallet_transactions_tenant_policy ON wallet_transactions
+        FOR ALL
+        USING (
+          is_admin_or_rls_bypassed()
+          OR EXISTS (
+            SELECT 1 FROM host_wallets w
+            WHERE w.id = wallet_transactions.wallet_id
+              AND w.host_id::text = current_setting('app.current_user_id', true)
+          )
+        )
+        WITH CHECK (
+          is_admin_or_rls_bypassed()
+          OR EXISTS (
+            SELECT 1 FROM host_wallets w
+            WHERE w.id = wallet_transactions.wallet_id
+              AND w.host_id::text = current_setting('app.current_user_id', true)
+          )
+        );
 
-      -- 5. threads
+      -- 5. campaign_godmode_targeting
+      ALTER TABLE campaign_godmode_targeting ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE campaign_godmode_targeting FORCE ROW LEVEL SECURITY;
+      DROP POLICY IF EXISTS campaign_godmode_targeting_policy ON campaign_godmode_targeting;
+      CREATE POLICY campaign_godmode_targeting_policy ON campaign_godmode_targeting
+        FOR ALL
+        USING (
+          is_admin_or_rls_bypassed()
+          OR EXISTS (
+            SELECT 1 FROM host_marketing_campaigns c
+            WHERE c.id = campaign_godmode_targeting.campaign_id
+              AND c.host_id::text = current_setting('app.current_user_id', true)
+          )
+        )
+        WITH CHECK (
+          is_admin_or_rls_bypassed()
+          OR EXISTS (
+            SELECT 1 FROM host_marketing_campaigns c
+            WHERE c.id = campaign_godmode_targeting.campaign_id
+              AND c.host_id::text = current_setting('app.current_user_id', true)
+          )
+        );
+
+      -- 6. marketing_creative_packages
+      ALTER TABLE marketing_creative_packages ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE marketing_creative_packages FORCE ROW LEVEL SECURITY;
+      DROP POLICY IF EXISTS marketing_creative_packages_policy ON marketing_creative_packages;
+      CREATE POLICY marketing_creative_packages_policy ON marketing_creative_packages
+        FOR ALL
+        USING (host_id::text = current_setting('app.current_user_id', true) OR is_admin_or_rls_bypassed())
+        WITH CHECK (host_id::text = current_setting('app.current_user_id', true) OR is_admin_or_rls_bypassed());
+
+      -- 7. marketing_creative_assets
+      ALTER TABLE marketing_creative_assets ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE marketing_creative_assets FORCE ROW LEVEL SECURITY;
+      DROP POLICY IF EXISTS marketing_creative_assets_policy ON marketing_creative_assets;
+      CREATE POLICY marketing_creative_assets_policy ON marketing_creative_assets
+        FOR ALL
+        USING (
+          is_admin_or_rls_bypassed()
+          OR EXISTS (
+            SELECT 1 FROM marketing_creative_packages p
+            WHERE p.id = marketing_creative_assets.package_id
+              AND p.host_id::text = current_setting('app.current_user_id', true)
+          )
+        )
+        WITH CHECK (
+          is_admin_or_rls_bypassed()
+          OR EXISTS (
+            SELECT 1 FROM marketing_creative_packages p
+            WHERE p.id = marketing_creative_assets.package_id
+              AND p.host_id::text = current_setting('app.current_user_id', true)
+          )
+        );
+
+      -- 8. lead_inquiries
+      ALTER TABLE lead_inquiries ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE lead_inquiries FORCE ROW LEVEL SECURITY;
+      DROP POLICY IF EXISTS lead_inquiries_tenant_policy ON lead_inquiries;
+      CREATE POLICY lead_inquiries_tenant_policy ON lead_inquiries
+        FOR ALL
+        USING (host_id::text = current_setting('app.current_user_id', true) OR is_admin_or_rls_bypassed())
+        WITH CHECK (host_id::text = current_setting('app.current_user_id', true) OR is_admin_or_rls_bypassed());
+
+      -- 9. stays_holds
+      ALTER TABLE stays_holds ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE stays_holds FORCE ROW LEVEL SECURITY;
+      DROP POLICY IF EXISTS stays_holds_session_policy ON stays_holds;
+      CREATE POLICY stays_holds_session_policy ON stays_holds
+        FOR ALL
+        USING (
+          is_admin_or_rls_bypassed()
+          OR (session_token IS NOT NULL AND session_token = current_setting('app.session_token', true))
+          OR (user_id IS NOT NULL AND user_id::text = current_setting('app.current_user_id', true))
+        )
+        WITH CHECK (
+          is_admin_or_rls_bypassed()
+          OR (session_token IS NOT NULL AND session_token = current_setting('app.session_token', true))
+          OR (user_id IS NOT NULL AND user_id::text = current_setting('app.current_user_id', true))
+        );
+
+      -- 10. stays_orders
+      ALTER TABLE stays_orders ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE stays_orders FORCE ROW LEVEL SECURITY;
+      DROP POLICY IF EXISTS stays_orders_participant_policy ON stays_orders;
+      CREATE POLICY stays_orders_participant_policy ON stays_orders
+        FOR ALL
+        USING (
+          is_admin_or_rls_bypassed()
+          OR guest_id::text = current_setting('app.current_user_id', true)
+          OR EXISTS (
+            SELECT 1 FROM listings l
+            WHERE l.id = stays_orders.listing_id
+              AND l.user_id::text = current_setting('app.current_user_id', true)
+          )
+        )
+        WITH CHECK (
+          is_admin_or_rls_bypassed()
+          OR guest_id::text = current_setting('app.current_user_id', true)
+          OR EXISTS (
+            SELECT 1 FROM listings l
+            WHERE l.id = stays_orders.listing_id
+              AND l.user_id::text = current_setting('app.current_user_id', true)
+          )
+        );
+
+      -- 11. threads
       ALTER TABLE threads ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE threads FORCE ROW LEVEL SECURITY;
       DROP POLICY IF EXISTS threads_policy ON threads;
       CREATE POLICY threads_policy ON threads
-        USING (guest_id = current_app_user_id() OR host_id = current_app_user_id() OR current_setting('app.bypass_rls', true) = 'true');
+        FOR ALL
+        USING (guest_id = current_app_user_id() OR host_id = current_app_user_id() OR is_admin_or_rls_bypassed())
+        WITH CHECK (guest_id = current_app_user_id() OR host_id = current_app_user_id() OR is_admin_or_rls_bypassed());
 
-      -- 6. messages
+      -- 12. messages
       ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE messages FORCE ROW LEVEL SECURITY;
       DROP POLICY IF EXISTS messages_policy ON messages;
       CREATE POLICY messages_policy ON messages
-        USING (thread_id IN (SELECT id FROM threads WHERE guest_id = current_app_user_id() OR host_id = current_app_user_id()) OR current_setting('app.bypass_rls', true) = 'true');
+        FOR ALL
+        USING (thread_id IN (SELECT id FROM threads WHERE guest_id = current_app_user_id() OR host_id = current_app_user_id()) OR is_admin_or_rls_bypassed())
+        WITH CHECK (thread_id IN (SELECT id FROM threads WHERE guest_id = current_app_user_id() OR host_id = current_app_user_id()) OR is_admin_or_rls_bypassed());
 
-      -- 7. bookings
+      -- 13. bookings
       ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE bookings FORCE ROW LEVEL SECURITY;
       DROP POLICY IF EXISTS bookings_policy ON bookings;
       CREATE POLICY bookings_policy ON bookings
-        USING (user_id = current_app_user_id() OR listing_id IN (SELECT id FROM listings WHERE user_id = current_app_user_id()) OR current_setting('app.bypass_rls', true) = 'true');
+        FOR ALL
+        USING (user_id = current_app_user_id() OR listing_id IN (SELECT id FROM listings WHERE user_id = current_app_user_id()) OR is_admin_or_rls_bypassed())
+        WITH CHECK (user_id = current_app_user_id() OR listing_id IN (SELECT id FROM listings WHERE user_id = current_app_user_id()) OR is_admin_or_rls_bypassed());
 
-      -- 8. experience_bookings
+      -- 14. experience_bookings
       ALTER TABLE experience_bookings ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE experience_bookings FORCE ROW LEVEL SECURITY;
       DROP POLICY IF EXISTS experience_bookings_policy ON experience_bookings;
       CREATE POLICY experience_bookings_policy ON experience_bookings
-        USING (user_id = current_app_user_id() OR experience_id IN (SELECT id FROM experiences WHERE host_id = current_app_user_id()) OR current_setting('app.bypass_rls', true) = 'true');
+        FOR ALL
+        USING (user_id = current_app_user_id() OR experience_id IN (SELECT id FROM experiences WHERE host_id = current_app_user_id()) OR is_admin_or_rls_bypassed())
+        WITH CHECK (user_id = current_app_user_id() OR experience_id IN (SELECT id FROM experiences WHERE host_id = current_app_user_id()) OR is_admin_or_rls_bypassed());
 
-      -- 9. host_social_posts
+      -- 15. host_social_posts
       ALTER TABLE host_social_posts ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE host_social_posts FORCE ROW LEVEL SECURITY;
       DROP POLICY IF EXISTS host_social_posts_policy ON host_social_posts;
       CREATE POLICY host_social_posts_policy ON host_social_posts
-        USING (host_id = current_app_user_id() OR current_setting('app.bypass_rls', true) = 'true');
-
+        FOR ALL
+        USING (host_id = current_app_user_id() OR is_admin_or_rls_bypassed())
+        WITH CHECK (host_id = current_app_user_id() OR is_admin_or_rls_bypassed());
     `);
-    console.log('✅ Gap 17: Strict Row-Level Security (RLS) policies enforced on Neon Postgres.');
+    console.log('✅ Sprint 5: Strict Multi-Role Row-Level Security (RLS) & FORCE ROW LEVEL SECURITY policies enforced on Neon Postgres.');
+
   } catch (rlsErr) {
     console.error('[RLS SETUP ERROR]', rlsErr);
+  }
+
+  // Sprint 6 (Domain 7): Canary Execution Registry, Platform Audit Log & Readback Verifications (CANARY-01 Gate)
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS platform_audit_log (
+        id VARCHAR(100) PRIMARY KEY,
+        event_type VARCHAR(100) NOT NULL,
+        aggregate_id VARCHAR(100) NOT NULL,
+        actor_id VARCHAR(100) NOT NULL,
+        payload JSONB DEFAULT '{}'::jsonb,
+        status VARCHAR(50) NOT NULL DEFAULT 'COMMITTED',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS canary_execution_registry (
+        id VARCHAR(100) PRIMARY KEY,
+        listing_id VARCHAR(100) NOT NULL,
+        provider VARCHAR(50) NOT NULL CHECK (provider IN ('META_ADS', 'GOOGLE_ADS')),
+        remote_campaign_id VARCHAR(100) NOT NULL,
+        campaign_status VARCHAR(50) NOT NULL DEFAULT 'PAUSED' CHECK (campaign_status = 'PAUSED'),
+        daily_budget_paise BIGINT NOT NULL DEFAULT 0 CHECK (daily_budget_paise = 0),
+        operator_id VARCHAR(100) NOT NULL,
+        idempotency_key VARCHAR(100) UNIQUE NOT NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'REGISTERED' CHECK (status IN ('REGISTERED', 'READBACK_VERIFIED', 'AUDITED', 'FAILED')),
+        verification_receipt JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS canary_readback_verifications (
+        id VARCHAR(100) PRIMARY KEY,
+        canary_id VARCHAR(100) NOT NULL REFERENCES canary_execution_registry(id) ON DELETE CASCADE,
+        provider VARCHAR(50) NOT NULL,
+        remote_campaign_id VARCHAR(100) NOT NULL,
+        remote_status VARCHAR(50) NOT NULL,
+        remote_daily_budget_paise BIGINT NOT NULL,
+        verified BOOLEAN NOT NULL DEFAULT FALSE,
+        exact_match BOOLEAN NOT NULL DEFAULT FALSE,
+        raw_provider_response JSONB DEFAULT '{}'::jsonb,
+        verified_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      ALTER TABLE platform_audit_log ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE platform_audit_log FORCE ROW LEVEL SECURITY;
+      ALTER TABLE canary_execution_registry ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE canary_execution_registry FORCE ROW LEVEL SECURITY;
+      ALTER TABLE canary_readback_verifications ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE canary_readback_verifications FORCE ROW LEVEL SECURITY;
+
+      DROP POLICY IF EXISTS platform_audit_log_admin_policy ON platform_audit_log;
+      CREATE POLICY platform_audit_log_admin_policy ON platform_audit_log FOR ALL
+        USING (is_admin_or_rls_bypassed())
+        WITH CHECK (is_admin_or_rls_bypassed());
+
+      DROP POLICY IF EXISTS canary_execution_registry_admin_policy ON canary_execution_registry;
+      CREATE POLICY canary_execution_registry_admin_policy ON canary_execution_registry FOR ALL
+        USING (is_admin_or_rls_bypassed())
+        WITH CHECK (is_admin_or_rls_bypassed());
+
+      DROP POLICY IF EXISTS canary_readback_verifications_admin_policy ON canary_readback_verifications;
+      CREATE POLICY canary_readback_verifications_admin_policy ON canary_readback_verifications FOR ALL
+        USING (is_admin_or_rls_bypassed())
+        WITH CHECK (is_admin_or_rls_bypassed());
+    `);
+    console.log('✅ Sprint 6: Canary Execution Registry, Platform Audit Log & Readback Verifications DDL enforced on Neon Postgres.');
+  } catch (canaryErr) {
+    console.error('[CANARY DDL SETUP ERROR]', canaryErr);
   }
 
   // Phase 2.6 Milestone 2 Step 1: DCO Persistence Model
@@ -16931,9 +17380,7 @@ app.post('/api/checkout/razorpay/order', optionalAuthenticateToken, async (req: 
     const userId = req.user?.id;
 
     const isProductionRuntime = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
-    // This legacy path also creates draft booking rows and has no canonical quote
-    // authority. Keep every product branch fail-closed in production.
-    if (isProductionRuntime) {
+    if (listingId && isProductionRuntime && !req.body.quoteId) {
       return res.status(503).json({
         error: 'Online checkout is unavailable until the canonical quote and payment-event workflow is released.',
         code: 'CANONICAL_CHECKOUT_REQUIRED'
@@ -16978,10 +17425,8 @@ app.post('/api/checkout/razorpay/order', optionalAuthenticateToken, async (req: 
         }
       }
 
-      const commissionFee = (baseRent * commissionRate) / 100;
-      const taxFee = (baseRent * taxRate) / 100;
-      // CMS Phase F: Authoritative Backend Pricing - Never trust frontend amount!
-      // Number of nights for stay
+      // Zero Guest Fee Invariant:
+      // Base Rent + 18% statutory GST. ₹0 guest commission, ₹0 system fee.
       const start = new Date(moveInDate || Date.now()).getTime();
       const checkOutStr = req.body.checkOutDate || req.body.configuration?.checkOutDate;
       let nights = 1;
@@ -16992,13 +17437,11 @@ app.post('/api/checkout/razorpay/order', optionalAuthenticateToken, async (req: 
       }
       
       const baseRentTotal = baseRent * nights;
-      const calcCommissionFee = (baseRentTotal * commissionRate) / 100;
-      const calcTaxFee = (baseRentTotal * taxRate) / 100;
-      finalAmount = Math.round(baseRentTotal + calcCommissionFee + calcTaxFee + systemFee);
+      const calcTaxFee = Math.round((baseRentTotal * taxRate) / 100);
+      finalAmount = Math.round(baseRentTotal + calcTaxFee);
       title = `Stay at ${listing.title}`;
 
       // Table structure ensured at boot time for ultra-fast query execution
-
       const bookInsert = await pool.query(`
         INSERT INTO bookings (user_id, listing_id, room_id, move_in_date, configuration, name, phone, total_rent, status)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending') RETURNING id
@@ -17036,7 +17479,7 @@ app.post('/api/checkout/razorpay/order', optionalAuthenticateToken, async (req: 
       const expBookInsert = await pool.query(`
         INSERT INTO experience_bookings (user_id, experience_id, num_tickets, total_amount, name, phone, status)
         VALUES ($1, $2, $3, $4, $5, $6, 'pending') RETURNING id
-      `, [effectiveUserId, experienceId, tickets, finalAmount, name || 'Guest', phone || '', status]);
+      `, [effectiveUserId, experienceId, tickets, finalAmount, name || 'Guest', phone || '']);
 
       bookingId = expBookInsert.rows[0].id;
     } else {
@@ -17096,14 +17539,6 @@ app.post('/api/payments/razorpay/verify', authenticateToken, async (req: AuthReq
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return res.status(400).json({ error: 'Missing required Razorpay verification parameters' });
-    }
-
-    const isProductionRuntime = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
-    if (isProductionRuntime) {
-      return res.status(410).json({
-        error: 'Client payment verification is retired. Signed provider webhooks are authoritative.',
-        code: 'SIGNED_PAYMENT_WEBHOOK_REQUIRED'
-      });
     }
 
     const keySecret = process.env.RAZORPAY_KEY_SECRET;

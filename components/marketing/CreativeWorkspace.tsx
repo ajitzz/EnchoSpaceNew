@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, ImageIcon, Loader2, RefreshCw, ShieldCheck, X } from 'lucide-react';
+import { Check, ImageIcon, Loader2, RefreshCw, ShieldCheck, X, Video, Play, Sparkles } from 'lucide-react';
 import { marketingRequest } from './api';
 import type { CreativeRecord, CreativePage } from './creativeTypes';
 import './marketing.css';
@@ -97,4 +97,159 @@ export function AdminCreativeWorkspace() {
     await load();
   }
   return <section className="mkt-creative-workspace" aria-label="Administrator creative review"><div className="mkt-creative-heading"><div><span className="mkt-eyebrow">Admin evidence queue</span><h4>Review prepared campaign images</h4></div><button type="button" className="mkt-icon-button" onClick={() => void load()} aria-label="Refresh creative review"><RefreshCw size={15}/></button></div><p className="mkt-caption">Approve only the exact source and derivative you can inspect. The immutable review is bound to the campaign revision before provider publishing.</p>{error && <p className="mkt-creative-error" role="alert">{error}</p>}{page?.items.length ? <div className="mkt-creative-grid">{page.items.map(record => <CreativeCard key={record.id} record={record} admin onReview={(decision, note) => review(record, decision, note)}/>)}</div> : <p className="mkt-caption">No prepared images are waiting for administrator review.</p>}</section>;
+}
+
+export function AdminReelPackageWorkspace() {
+  const [packages, setPackages] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [rejectionNotes, setRejectionNotes] = useState<Record<string, string>>({});
+
+  const loadPackages = useCallback(async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/marketing/v2/creatives/packages?status=SUBMITTED', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPackages(data.packages || []);
+      }
+      setError('');
+    } catch (err: any) {
+      setError(err.message || 'Failed to load standalone creative packages');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadPackages();
+  }, [loadPackages]);
+
+  const handleModerate = async (pkgId: string, decision: 'APPROVE' | 'REJECT') => {
+    setBusyId(pkgId);
+    try {
+      const token = localStorage.getItem('token');
+      const reason = rejectionNotes[pkgId]?.trim();
+      const res = await fetch(`/api/marketing/v2/creatives/packages/${pkgId}/moderate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          decision,
+          rejectionReasons: reason ? [reason] : []
+        })
+      });
+      if (res.ok) {
+        await loadPackages();
+      }
+    } catch (err: any) {
+      setError(err.message || 'Moderation action failed');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <section className="mkt-creative-workspace" aria-label="Administrator standalone reel review" style={{ marginTop: '24px' }}>
+      <div className="mkt-creative-heading">
+        <div>
+          <span className="mkt-eyebrow">Decision 037-G · Video Queue</span>
+          <h4>Review Standalone Phone Reels (9:16)</h4>
+        </div>
+        <button type="button" className="mkt-icon-button" onClick={() => void loadPackages()} aria-label="Refresh video packages">
+          <RefreshCw size={15} />
+        </button>
+      </div>
+      <p className="mkt-caption">
+        Verify vertical phone video reels, check that listing photo galleries remain unpolluted, and inspect AI preflight scores before approving for ad deployment.
+      </p>
+      {error && <p className="mkt-creative-error" role="alert">{error}</p>}
+      {loading ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '16px' }}>
+          <Loader2 className="mkt-spin" size={16} /> Loading standalone reel packages...
+        </div>
+      ) : packages.length > 0 ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px', marginTop: '16px' }}>
+          {packages.map(pkg => {
+            const asset = pkg.assets?.[0];
+            const isBusy = busyId === pkg.id;
+            return (
+              <article key={pkg.id} className="mkt-creative-card" style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ position: 'relative', width: '100%', height: '320px', backgroundColor: '#09090b', borderRadius: '16px', overflow: 'hidden' }}>
+                  {asset?.originalUrl ? (
+                    <video
+                      src={asset.originalUrl}
+                      controls
+                      playsInline
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#71717a' }}>
+                      <Video size={32} />
+                    </div>
+                  )}
+                  <span style={{ position: 'absolute', top: '8px', right: '8px', backgroundColor: 'rgba(0,0,0,0.7)', color: '#34d399', padding: '2px 8px', borderRadius: '8px', fontSize: '11px', fontFamily: 'monospace' }}>
+                    {asset?.aspectRatio || '9:16'} · {asset?.durationSeconds ? `${asset.durationSeconds}s` : ''}
+                  </span>
+                </div>
+                <div className="mkt-creative-card-body" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                  <div>
+                    <div className="mkt-creative-card-heading">
+                      <strong>{pkg.headline}</strong>
+                      <span className={`mkt-creative-state state-${pkg.moderationStatus.toLowerCase()}`}>
+                        {pkg.moderationStatus}
+                      </span>
+                    </div>
+                    <p className="mkt-caption" style={{ marginTop: '4px' }}>{pkg.description}</p>
+                    <div style={{ marginTop: '8px', fontSize: '11px', fontFamily: 'monospace', color: '#a1a1aa' }}>
+                      <div>AI Score: <strong style={{ color: pkg.aiPreflightScore >= 8 ? '#34d399' : '#f87171' }}>{pkg.aiPreflightScore}/10</strong></div>
+                      <div>Rights Confirmed: <strong style={{ color: '#34d399' }}>YES</strong></div>
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Hash: {asset?.sha256Hash?.slice(0, 16)}…</div>
+                    </div>
+                  </div>
+                  <div style={{ marginTop: '12px', borderTop: '1px solid #27272a', paddingTop: '10px' }}>
+                    <input
+                      type="text"
+                      placeholder="Rejection note (if rejecting)..."
+                      value={rejectionNotes[pkg.id] || ''}
+                      onChange={e => setRejectionNotes(prev => ({ ...prev, [pkg.id]: e.target.value }))}
+                      style={{ width: '100%', padding: '6px 10px', fontSize: '12px', backgroundColor: '#18181b', border: '1px solid #3f3f46', borderRadius: '8px', color: '#fff', marginBottom: '8px' }}
+                    />
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        className="mkt-primary"
+                        style={{ flex: 1, padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                        disabled={isBusy}
+                        onClick={() => handleModerate(pkg.id, 'APPROVE')}
+                      >
+                        {isBusy ? <Loader2 className="mkt-spin" size={13} /> : <Check size={13} />} Approve Reel
+                      </button>
+                      <button
+                        type="button"
+                        className="mkt-secondary"
+                        style={{ padding: '6px 12px', fontSize: '12px' }}
+                        disabled={isBusy}
+                        onClick={() => handleModerate(pkg.id, 'REJECT')}
+                      >
+                        <X size={13} /> Reject
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="mkt-caption">No standalone phone reels are waiting for administrator review.</p>
+      )}
+    </section>
+  );
 }

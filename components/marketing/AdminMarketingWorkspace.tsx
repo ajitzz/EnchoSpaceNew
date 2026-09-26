@@ -12,7 +12,11 @@ import {WorkspacePagination} from './WorkspacePagination';
 import {OperationsPanel} from './OperationsPanel';
 import {RecoveryPanel} from './RecoveryPanel';
 import {AdminSettlementWorkspace} from './SettlementWorkspace';
-import {AdminCreativeWorkspace} from './CreativeWorkspace';
+import {AdminCreativeWorkspace, AdminReelPackageWorkspace} from './CreativeWorkspace';
+import {AdminCircuitBreakerWorkspace} from './CircuitBreakerWorkspace';
+import {GodmodeAdsStudio} from './GodmodeAdsStudio';
+import {AdminRlsSecurityWorkspace} from './AdminRlsSecurityWorkspace';
+import {AdminCanaryWorkspace} from './AdminCanaryWorkspace';
 
 export default function AdminMarketingWorkspace() {
   const { workspace, loading, error, reload,search,setSearch,filter,setFilter,campaignPage,previousPage,nextPage } = useMarketingWorkspace(true);
@@ -25,6 +29,7 @@ export default function AdminMarketingWorkspace() {
   const [actionError, setActionError] = useState('');
   const [notice, setNotice] = useState('');
   const [policyOpen, setPolicyOpen] = useState(false);
+  const [godmodeOpen, setGodmodeOpen] = useState(true);
   const [storyListingId,setStoryListingId]=useState('');
   const [financialOpen,setFinancialOpen]=useState(false);
   const [creativesOpen,setCreativesOpen]=useState(false);
@@ -81,8 +86,30 @@ export default function AdminMarketingWorkspace() {
     <div className="mkt-workspace-strip"><span><ShieldCheck size={16}/> Content approval ≠ payment clearance</span><span><FileCheck2 size={16}/> Revision-bound decisions</span><button onClick={() => void reload()} disabled={loading}><RefreshCw size={15}/> Refresh evidence</button></div>
     {(error || actionError) && <Notice error>{actionError || error}</Notice>}{notice && <Notice>{notice}</Notice>}
     {loading && <div className="mkt-loading" role="status"><Loader2 className="mkt-spin"/> Loading the operations workspace</div>}
-    {workspace && <OperationsPanel/>}
-    {workspace&&<><button className="mkt-secondary" aria-expanded={creativesOpen} onClick={()=>setCreativesOpen(value=>!value)}>{creativesOpen?'Close image review':'Review campaign images'}</button>{creativesOpen&&<><AdminCreativeWorkspace/><label>Property spatial stories<select value={storyListingId} onChange={e=>setStoryListingId(e.target.value)}><option value="">Choose a property to review</option>{workspace.listings.map(listing=><option key={listing.id} value={listing.id}>{listing.title}</option>)}</select></label>{storyListingId&&<SpatialStoryWorkspace key={storyListingId} admin listingId={Number(storyListingId)}/>}</>}</>}
+    {workspace && <AdminCircuitBreakerWorkspace/>}
+    {workspace && <AdminRlsSecurityWorkspace/>}
+    {workspace && <AdminCanaryWorkspace/>}
+    {workspace && (
+      <>
+        <button
+          className="mkt-secondary"
+          aria-expanded={godmodeOpen}
+          onClick={() => setGodmodeOpen((value) => !value)}
+        >
+          {godmodeOpen ? 'Close God-Mode Ads Manager & Feeder Corridors' : '🎯 Open God-Mode Ads Manager & Feeder Corridors Studio'}
+        </button>
+        {godmodeOpen && (
+          <GodmodeAdsStudio
+            campaignId={campaign ? Number(campaign.id) : 1}
+            listingId={listing ? Number(listing.id) : 1}
+            listingTitle={listing?.title || campaign?.listingTitle || 'Panoramic Luxury Stay'}
+            listingCity={(listing as any)?.city || 'Wayanad'}
+            listingPrice={(listing as any)?.price ? Number((listing as any).price) : 12000}
+          />
+        )}
+      </>
+    )}
+    {workspace&&<><button className="mkt-secondary" aria-expanded={creativesOpen} onClick={()=>setCreativesOpen(value=>!value)}>{creativesOpen?'Close media & video review':'Review campaign media & Reels'}</button>{creativesOpen&&<><AdminCreativeWorkspace/><AdminReelPackageWorkspace/><label>Property spatial stories<select value={storyListingId} onChange={e=>setStoryListingId(e.target.value)}><option value="">Choose a property to review</option>{workspace.listings.map(listing=><option key={listing.id} value={listing.id}>{listing.title}</option>)}</select></label>{storyListingId&&<SpatialStoryWorkspace key={storyListingId} admin listingId={Number(storyListingId)}/>}</>}</>}
     {workspace && <><button className="mkt-secondary" aria-expanded={financialOpen} onClick={()=>setFinancialOpen(value=>!value)}>{financialOpen?'Close financial workspace':'Open financial close'}</button>{financialOpen&&<AdminSettlementWorkspace/>}</>}
     <AnimatePresence initial={false}>{policyOpen && workspace && <motion.section className="mkt-panel mkt-policy" initial={reduceMotion ? false : { opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}><div className="mkt-section-heading"><div><span className="mkt-eyebrow">Prospective policy · version {workspace.policy.version ?? 'not configured'}</span><h3>Profit markup on campaign costs</h3></div><button className="mkt-text-button" onClick={() => setPolicyOpen(false)}>Close</button></div><div className="mkt-policy-grid"><div className="mkt-fields"><label>Encho profit markup · % of defined costs<input type="number" min="3" max="5" step="0.1" value={markupPercent} onChange={e => setMarkupPercent(e.target.value)}/></label><label>Reason for this policy<textarea value={policyReason} onChange={e => setPolicyReason(e.target.value)} rows={3}/></label></div><div><span className="mkt-eyebrow">Fixed cost components · {workspace.policy.currency}</span><dl className="mkt-review-list">{workspace.policy.costItems?.map((item, i) => <div key={i}><dt>{item.label}</dt><dd>{money(item.amountMinor, workspace.policy.currency)}</dd></div>)}</dl><p className="mkt-caption">Fixed expense rules are read-only here. Variable charges appear in the itemized quote. This control changes the profit markup prospectively; it cannot invent expenses or establish statutory tax treatment.</p></div></div><div className="mkt-form-footer"><p className="mkt-caption">Profit target = C × p. Charge for the cost base = C × (1 + p). Separately payable tax appears in the quote. Existing quotes are not repriced.</p><button className="mkt-primary" disabled={!!busy} onClick={() => void savePolicy()}>{busy === 'policy' ? 'Saving…' : 'Save prospective policy'}</button></div></motion.section>}</AnimatePresence>
     {workspace && <div className="mkt-admin-grid"><aside className="mkt-queue"><div className="mkt-queue-heading"><span className="mkt-eyebrow">Campaign journal · newest created</span><h2>Review queue <span>{workspace.campaigns.length}</span></h2></div><label className="mkt-search"><Search size={17}/><span className="mkt-sr-only">Search campaigns</span><input type="search" value={search} onChange={e => setSearch(e.target.value)} aria-label="Search campaigns" maxLength={100}/></label><div className="mkt-filter" aria-label="Campaign filters">{[['all', 'All'], ['review', 'Review'], ['exceptions', 'Exceptions']].map(([value, label]) => <button key={value} className={filter === value ? 'is-selected' : ''} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>)}</div><div className="mkt-queue-items">{campaigns.map(item => <button key={item.id} className={`mkt-queue-item ${String(item.id) === selected ? 'is-selected' : ''}`} onClick={() => selectCampaign(item)}><span className="mkt-eyebrow">{item.provider} · REV {item.revision}</span><strong>{item.title}</strong><small>{item.hostName || item.listingTitle || 'Host identity available in campaign records'}</small><StatusPill>{humanStatus(item.contentApproval?.status)}</StatusPill>{item.blockers?.length > 0 && <small className="mkt-exception-count">{item.blockers.length} unresolved {item.blockers.length === 1 ? 'item' : 'items'}</small>}</button>)}</div>{!campaigns.length && <p className="mkt-empty-small">No campaigns match this view.</p>}<WorkspacePagination page={campaignPage} hasNext={!!workspace.page?.nextCursor} loading={loading} onPrevious={()=>{setSelected(null);previousPage();}} onNext={()=>{setSelected(null);nextPage();}}/></aside>
