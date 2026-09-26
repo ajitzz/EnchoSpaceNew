@@ -52,6 +52,7 @@ import {
   STAY_PUBLIC_SQL_COLUMNS,
   coarsenCoordinate
 } from '../../lib/stayProjection.js';
+import { maskContactInfo } from '../../lib/maskUtils.js';
 import {
   assertPublicImageOrigin,
   isAllowedImageSource,
@@ -117,9 +118,19 @@ router.post('/api/listings/:id/calendar', authenticateToken, async (req: AuthReq
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   if (isNaN(Number(req.params.id))) return res.json({ success: true, message: "Demo listing updated" });
   try {
-    // Basic auth check: usually check if listing belongs to user or if admin
-    const { dates, price, offer_id, status } = req.body;
     const listingId = req.params.id;
+
+    // IDOR Protection: Verify listing ownership or admin privileges
+    const authCheck = await pool.query('SELECT user_id FROM listings WHERE id = $1', [listingId]);
+    if (authCheck.rows.length === 0) return res.status(404).json({ error: 'Listing not found' });
+    if (authCheck.rows[0].user_id !== req.user?.id && req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: You do not have permission to modify this calendar.' });
+    }
+
+    const { dates, price, offer_id, status } = req.body;
+    if (!Array.isArray(dates) || dates.length === 0) {
+      return res.status(400).json({ error: 'dates array is required' });
+    }
 
     // Process each date
     for (const date_string of dates) {
@@ -1001,8 +1012,9 @@ router.post('/api/listings/draft', authenticateToken, async (req: AuthRequest, r
   }
 });
 
-router.post('/api/admin/listings/draft/:id/approve', authenticateToken, async (req: AuthRequest, res) => {
+router.post('/api/admin/listings/draft/:id/approve', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized: Admin privileges required' });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1583,10 +1595,41 @@ router.post('/api/listings/:id/reviews', authenticateToken, async (req: AuthRequ
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   if (isNaN(Number(req.params.id))) return res.json({ id: Date.now(), listing_id: req.params.id, user_id: req.user?.id, rating: req.body.rating, content: req.body.content, created_at: new Date() });
   try {
+    const listingId = req.params.id;
+    const userId = req.user?.id;
     const { rating, content } = req.body;
+
+    const numRating = Number(rating);
+    if (!numRating || isNaN(numRating) || numRating < 1 || numRating > 5) {
+      return res.status(400).json({ error: 'Rating must be an integer between 1 and 5' });
+    }
+
+    if (!content || typeof content !== 'string' || !content.trim()) {
+      return res.status(400).json({ error: 'Review content is required' });
+    }
+
+    // Phase 4 Audit: Verify booking completion eligibility (prevent fabricated reviews per INHERITED-009)
+    if (req.user?.role !== 'admin') {
+      const eligibilityCheck = await pool.query(`
+        SELECT 1 FROM bookings b
+        LEFT JOIN reviews r ON r.listing_id = b.listing_id AND r.user_id = b.user_id
+        WHERE b.listing_id = $1 AND b.user_id = $2
+        AND b.status ILIKE 'Completed'
+        AND r.id IS NULL
+        LIMIT 1
+      `, [listingId, userId]);
+
+      if (eligibilityCheck.rows.length === 0) {
+        return res.status(403).json({ error: 'Only guests with completed stays may review this property.' });
+      }
+    }
+
+    // Phase 4 Audit: Sanitize review content (strip script tags, HTML, mask contact info)
+    const { sanitized } = maskContactInfo(content.trim().substring(0, 2000));
+
     const result = await pool.query(
       'INSERT INTO reviews (listing_id, user_id, rating, content) VALUES ($1, $2, $3, $4) RETURNING *',
-      [req.params.id, req.user?.id, rating, content]
+      [listingId, userId, Math.round(numRating), sanitized]
     );
 
     // Update the listing's rating and review count
@@ -1596,7 +1639,7 @@ router.post('/api/listings/:id/reviews', authenticateToken, async (req: AuthRequ
         rating = COALESCE((SELECT ROUND(AVG(rating), 1) FROM reviews WHERE listing_id = $1), 0),
         "reviewCount" = (SELECT COUNT(*) FROM reviews WHERE listing_id = $1)
       WHERE id = $1
-    `, [req.params.id]);
+    `, [listingId]);
 
     res.json(result.rows[0]);
   } catch (error) {
@@ -3921,13 +3964,18 @@ router.post('/api/experiences/:id/reviews', authenticateToken, async (req: AuthR
 
   try {
     const { rating, content } = req.body;
-    if (!rating || rating < 1 || rating > 10) {
+    const numRating = Number(rating);
+    if (!numRating || isNaN(numRating) || numRating < 1 || numRating > 10) {
       return res.status(400).json({ error: 'Rating must be between 1 and 10' });
     }
+    if (!content || typeof content !== 'string' || !content.trim()) {
+      return res.status(400).json({ error: 'Review content is required' });
+    }
+    const { sanitized } = maskContactInfo(content.trim().substring(0, 2000));
     const result = await pool.query(`
       INSERT INTO experience_reviews (experience_id, user_id, rating, content)
       VALUES ($1, $2, $3, $4) RETURNING *
-    `, [expId, req.user?.id, rating, content]);
+    `, [expId, req.user?.id, Math.round(numRating), sanitized]);
 
     const fullReviewRes = await pool.query(`
       SELECT er.*, u.name as user_name,
@@ -4123,10 +4171,11 @@ router.post('/api/experiences/:id/lobby/messages', authenticateToken, async (req
       return res.status(403).json({ error: 'Not authorized for this lobby' });
     }
 
+    const { sanitized } = maskContactInfo(content.trim().substring(0, 4000));
     const insertRes = await pool.query(`
       INSERT INTO experience_messages (experience_id, user_id, content)
       VALUES ($1, $2, $3) RETURNING *
-    `, [expId, req.user?.id, content]);
+    `, [expId, req.user?.id, sanitized]);
 
     // Fetch the detailed message to return
     const msgRes = await pool.query(`

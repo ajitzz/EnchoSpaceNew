@@ -80,6 +80,15 @@ const upload = multer({
 export function createLegacyMarketingRouter(): Router {
   const router = Router();
 
+  // Stage 3 Deprecation Middleware: Emits standard RFC 8594 Sunset and Deprecation headers
+  // informing callers of canonical Harvo v2 endpoints
+  router.use((_req, res, next) => {
+    res.setHeader('Deprecation', 'true');
+    res.setHeader('Sunset', 'Tue, 01 Dec 2026 00:00:00 GMT');
+    res.setHeader('Link', '</api/marketing/v2>; rel="successor-version"');
+    next();
+  });
+
 const campaignSchema = z.object({
   listing_id: z.coerce.number().int().positive(),
   title: z.string().min(3).max(100),

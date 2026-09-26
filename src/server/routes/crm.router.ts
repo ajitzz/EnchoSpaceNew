@@ -11,7 +11,8 @@ import {
   authenticateToken,
   requireAdmin,
   AuthRequest,
-  messageLimiter
+  messageLimiter,
+  apiLimiter
 } from '../middleware/auth.js';
 import { maskContactInfo } from '../../lib/maskUtils.js';
 import { LeadAlertingCrmService } from '../../lib/leadAlertingCrmService.js';
@@ -693,10 +694,10 @@ ${msgText.substring(0, 2000)}`;
   }
 });
 
-router.get('/api/admin/outreach-leads', authenticateToken, async (req: AuthRequest, res) => {
+router.get('/api/admin/outreach-leads', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
-    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized: Admin privileges required' });
     const result = await pool.query('SELECT * FROM host_outreach_leads ORDER BY created_at DESC LIMIT 200');
 
     // Phase 4.1: Decrypt PII before sending to client
@@ -713,30 +714,38 @@ router.get('/api/admin/outreach-leads', authenticateToken, async (req: AuthReque
   }
 });
 
-router.post('/api/admin/outreach-leads', authenticateToken, async (req: AuthRequest, res) => {
+router.post('/api/admin/outreach-leads', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
-    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized: Admin privileges required' });
     const { property_name, instagram_username, facebook_url, owner_name, location, estimated_nightly_rate, status, notes, email, phone } = req.body;
+
+    // Phase 4.1: Encrypt PII at rest
+    const encryptedEmail = encryptPII(email || '');
+    const encryptedPhone = encryptPII(phone || '');
+
     const result = await pool.query(`
       INSERT INTO host_outreach_leads
       (property_name, instagram_username, facebook_url, owner_name, location, estimated_nightly_rate, status, notes, email, phone, last_contacted_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, CURRENT_TIMESTAMP)
       RETURNING *
-    `, [property_name, instagram_username || '', facebook_url || '', owner_name || '', location || '', estimated_nightly_rate || 0, status || 'discovered', notes || '', email || '', phone || '']);
+    `, [property_name, instagram_username || '', facebook_url || '', owner_name || '', location || '', estimated_nightly_rate || 0, status || 'discovered', notes || '', encryptedEmail, encryptedPhone]);
 
     broadcastDbEvent(req, 'outreach');
-    res.json(result.rows[0]);
+    const savedRow = result.rows[0];
+    savedRow.email = decryptPII(savedRow.email);
+    savedRow.phone = decryptPII(savedRow.phone);
+    res.json(savedRow);
   } catch (error) {
     console.error('Error creating outreach lead:', error);
     res.status(500).json({ error: 'Failed to create outreach lead' });
   }
 });
 
-router.put('/api/admin/outreach-leads/:id', authenticateToken, async (req: AuthRequest, res) => {
+router.put('/api/admin/outreach-leads/:id', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
-    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized: Admin privileges required' });
     const { id } = req.params;
     const { property_name, instagram_username, facebook_url, owner_name, location, estimated_nightly_rate, status, notes, email, phone, last_contacted_at } = req.body;
 
@@ -772,10 +781,10 @@ router.put('/api/admin/outreach-leads/:id', authenticateToken, async (req: AuthR
   }
 });
 
-router.delete('/api/admin/outreach-leads/:id', authenticateToken, async (req: AuthRequest, res) => {
+router.delete('/api/admin/outreach-leads/:id', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
-    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+    if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized: Admin privileges required' });
     const { id } = req.params;
     await pool.query('DELETE FROM host_outreach_leads WHERE id = $1', [id]);
     broadcastDbEvent(req, 'outreach');
@@ -855,9 +864,9 @@ router.post('/api/messages', authenticateToken, messageLimiter, legacyBookingMes
 
 // Delete a listing
 
-router.get('/api/admin/threads', authenticateToken, legacyStaffConversationBoundary, async (req: AuthRequest, res) => {
+router.get('/api/admin/threads', authenticateToken, requireAdmin, legacyStaffConversationBoundary, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized: Admin access required' });
   try {
     const { type } = req.query;
 
@@ -893,9 +902,9 @@ router.get('/api/admin/threads', authenticateToken, legacyStaffConversationBound
   }
 });
 
-router.delete('/api/admin/messages/:id', authenticateToken, legacyStaffConversationBoundary, async (req: AuthRequest, res) => {
+router.delete('/api/admin/messages/:id', authenticateToken, requireAdmin, legacyStaffConversationBoundary, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized: Admin access required' });
   try {
     await pool.query('DELETE FROM messages WHERE id = $1', [req.params.id]);
     res.json({ success: true });
@@ -904,9 +913,9 @@ router.delete('/api/admin/messages/:id', authenticateToken, legacyStaffConversat
   }
 });
 
-router.get('/api/admin/threads/:id/messages', authenticateToken, legacyStaffConversationBoundary, async (req: AuthRequest, res) => {
+router.get('/api/admin/threads/:id/messages', authenticateToken, requireAdmin, legacyStaffConversationBoundary, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
+  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized: Admin access required' });
   try {
     const result = await pool.query(`
       SELECT m.*, u.name as sender_name
@@ -922,7 +931,7 @@ router.get('/api/admin/threads/:id/messages', authenticateToken, legacyStaffConv
 });
 
 
-router.post('/api/leads/soft-exit', async (req, res) => {
+router.post('/api/leads/soft-exit', apiLimiter, async (req, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
     const { listingId, email, source } = req.body;

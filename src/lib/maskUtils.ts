@@ -5,11 +5,11 @@ export function maskContactInfo(text: string): { sanitized: string; wasSanitized
   if (!text) return { sanitized: '', wasSanitized: false };
   const original = text;
   
-  // Phase 4.1: Stronger regex for complex masking and XSS prevention
-  let sanitized = original.replace(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/gi, '[EMAIL REDACTED]');
-  sanitized = sanitized.replace(/(\+?\d[\d\s\-.()]{7,}\d)/gi, '[PHONE REDACTED]');
-  sanitized = sanitized.replace(/(wa\.me\/\d+|api\.whatsapp\.com\/send\?phone=\d+)/gi, '[WHATSAPP REDACTED]');
+  // 1. WhatsApp links and URLs first to prevent phone regex from corrupting web links
+  let sanitized = original.replace(/(wa\.me\/\S+|api\.whatsapp\.com\/send\?\S+|whatsapp:\/\/\S+)/gi, '[WHATSAPP REDACTED]');
   sanitized = sanitized.replace(/(https?:\/\/[^\s]+)/gi, '[LINK REDACTED]');
+  sanitized = sanitized.replace(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/gi, '[EMAIL REDACTED]');
+  sanitized = sanitized.replace(/(\+?\d[\d\s\-.()]{7,}\d)/gi, '[PHONE REDACTED]');
 
   // Phase 4.2: Prevent XSS execution for injected scripts in CRM messages
   sanitized = xss(sanitized, {
