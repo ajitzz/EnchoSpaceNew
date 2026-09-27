@@ -3803,21 +3803,62 @@ router.post('/api/marketing/campaigns/:id/refuel', authenticateToken, async (req
     const hostId = req.user?.id;
     if (!hostId) return res.status(401).json({ error: 'Unauthorized' });
     const campaignId = req.params.id;
-    const { amount } = req.body;
-    const refuelAmount = Number(amount) || 2500;
+    const { amount, currency = 'INR', paymentMethod = 'wallet' } = req.body;
+    const refuelAmount = Number(amount);
 
-    const campRes = await pool.query('SELECT id, listing_id, budget FROM host_marketing_campaigns WHERE id = $1', [campaignId]);
+    if (!Number.isFinite(refuelAmount) || refuelAmount <= 0) {
+      return res.status(400).json({ error: 'Invalid refuel amount. Must be greater than 0.' });
+    }
+
+    // Tenant Ownership Enforcement (Zero IDOR)
+    const campRes = await pool.query(
+      'SELECT id, host_id, listing_id, budget, status FROM host_marketing_campaigns WHERE id = $1',
+      [campaignId]
+    );
     if (campRes.rows.length === 0) {
       return res.status(404).json({ error: 'Campaign not found' });
     }
 
-    await pool.query('UPDATE host_marketing_campaigns SET budget = budget + $1, updated_at = NOW() WHERE id = $2', [refuelAmount, campaignId]);
+    const campaign = campRes.rows[0];
+    if (campaign.host_id !== hostId && req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden: You do not have permission to refuel this campaign' });
+    }
+
+    // In production with wallet payment, enforce host_wallet balance or payment capture
+    if (process.env.NODE_ENV === 'production' && paymentMethod === 'wallet') {
+      const walletRes = await pool.query(
+        'SELECT id, balance FROM host_wallets WHERE host_id = $1 FOR UPDATE',
+        [hostId]
+      );
+      const currentBalance = Number(walletRes.rows[0]?.balance || 0);
+      if (currentBalance < refuelAmount) {
+        return res.status(402).json({
+          error: `Insufficient wallet balance to refuel. Current balance: ₹${currentBalance.toLocaleString()}, required: ₹${refuelAmount.toLocaleString()}`,
+          code: 'INSUFFICIENT_WALLET_FUNDS',
+          requiredAmount: refuelAmount,
+          availableBalance: currentBalance
+        });
+      }
+
+      // Deduct from wallet atomically
+      await pool.query(
+        'UPDATE host_wallets SET balance = balance - $1, updated_at = NOW() WHERE host_id = $2',
+        [refuelAmount, hostId]
+      );
+    }
+
+    // Increment authorized campaign budget
+    const updated = await pool.query(
+      'UPDATE host_marketing_campaigns SET budget = budget + $1, updated_at = NOW() WHERE id = $2 RETURNING budget',
+      [refuelAmount, campaignId]
+    );
 
     return res.json({
       success: true,
-      message: `Successfully refueled campaign by ₹${refuelAmount.toLocaleString()}`,
+      message: `Successfully refueled campaign by ${currency} ${refuelAmount.toLocaleString()}`,
       campaignId,
-      amount: refuelAmount
+      amount: refuelAmount,
+      newBudget: Number(updated.rows[0]?.budget || 0)
     });
   } catch (err: any) {
     console.error('[CAMPAIGN REFUEL ERROR]', err);
