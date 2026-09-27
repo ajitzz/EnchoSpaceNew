@@ -3798,6 +3798,33 @@ router.post(['/api/marketing/meta/webhooks', '/api/meta-webhooks'], verifyMetaWe
   }
 });
 
+router.post('/api/marketing/campaigns/:id/refuel', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const hostId = req.user?.id;
+    if (!hostId) return res.status(401).json({ error: 'Unauthorized' });
+    const campaignId = req.params.id;
+    const { amount } = req.body;
+    const refuelAmount = Number(amount) || 2500;
+
+    const campRes = await pool.query('SELECT id, listing_id, budget FROM host_marketing_campaigns WHERE id = $1', [campaignId]);
+    if (campRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+
+    await pool.query('UPDATE host_marketing_campaigns SET budget = budget + $1, updated_at = NOW() WHERE id = $2', [refuelAmount, campaignId]);
+
+    return res.json({
+      success: true,
+      message: `Successfully refueled campaign by ₹${refuelAmount.toLocaleString()}`,
+      campaignId,
+      amount: refuelAmount
+    });
+  } catch (err: any) {
+    console.error('[CAMPAIGN REFUEL ERROR]', err);
+    res.status(500).json({ error: err.message || 'Failed to refuel campaign' });
+  }
+});
+
 router.post('/api/marketing/wallet/refuel', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const hostId = req.user?.id;
