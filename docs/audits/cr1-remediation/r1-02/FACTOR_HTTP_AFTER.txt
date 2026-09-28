@@ -1,0 +1,13 @@
+
+ RUN  v4.1.10 /Users/ajit/Documents/EnchoSpaceNew
+
+(node:20510) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:20510) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+························
+
+ Test Files  1 passed (1)
+      Tests  24 passed (24)
+   Start at  18:23:44
+   Duration  28.48s (transform 187ms, setup 31ms, import 566ms, tests 27.79s, environment 0ms)
+

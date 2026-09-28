@@ -62,8 +62,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return null;
     }
   });
+  const [sessionGeneration, setSessionGeneration] = useState(0);
 
   useEffect(() => {
+    const reconcileOtherTab = (event: StorageEvent) => {
+      if (event.key !== 'user' && event.key !== 'token' && event.key !== null) return;
+      // Stop rendering a stale actor immediately. Only accept the new actor after
+      // the usual server identity check; never expose the previous private UI.
+      setUser(null);
+      setToken(localStorage.getItem('token'));
+      setSessionGeneration(generation => generation + 1);
+    };
+    window.addEventListener('storage', reconcileOtherTab);
+    return () => window.removeEventListener('storage', reconcileOtherTab);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
     const checkUser = async () => {
       if (token) {
         try {
@@ -71,6 +86,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             headers: { 'Authorization': `Bearer ${token}` }
           });
           const parsed = await safeParseResponse<{ user: User }>(res);
+          if (!active || localStorage.getItem('token') !== token) return;
           if (parsed.ok && parsed.data?.user) {
             if (user && user.id !== parsed.data.user.id) clearPrivateBrowserState(user.id);
             setUser(parsed.data.user);
@@ -91,7 +107,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
     checkUser();
-  }, [token]);
+    return () => { active = false; };
+  }, [token, sessionGeneration]);
 
   const login = (newUser: User, newToken: string) => {
     if (user && user.id !== newUser.id) clearPrivateBrowserState(user.id);

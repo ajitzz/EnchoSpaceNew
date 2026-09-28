@@ -11,6 +11,7 @@ import { GoogleOAuthProvider } from '@react-oauth/google';
 import { APIProvider } from '@vis.gl/react-google-maps';
 import { HelmetProvider } from 'react-helmet-async';
 import { SpeedInsights } from "@vercel/speed-insights/react";
+import { ensureSafeOfflineWorker } from './lib/legacyOfflineQueue';
 
 // In development / preview, ensure service worker is unregistered to prevent stale cache / navigation interception
 if ('serviceWorker' in navigator && (import.meta as any).env?.DEV) {
@@ -65,13 +66,23 @@ function RootRuntime() {
 }
 
 const root = ReactDOM.createRoot(rootElement);
-root.render(
+const mountApplication = () => root.render(
   <React.StrictMode>
     <ErrorBoundary>
       <RootRuntime/>
     </ErrorBoundary>
   </React.StrictMode>
 );
+
+// An installed old worker can independently persist credential-bearing POSTs.
+// Do not mount privileged application flows until its retirement is confirmed.
+void ensureSafeOfflineWorker().then(mountApplication).catch(() => {
+  root.render(<main role="alert" style={{ padding: '2rem', maxWidth: '42rem', margin: 'auto' }}>
+    <h1>A secure app update is required</h1>
+    <p>Reconnect to the internet and reload Encho before signing in or submitting changes. Your confirmed bookings and messages remain on the server.</p>
+    <button type="button" onClick={() => window.location.reload()}>Reload Encho</button>
+  </main>);
+});
 
 // Dismiss splash screen once mounted
 if (typeof window !== 'undefined') {

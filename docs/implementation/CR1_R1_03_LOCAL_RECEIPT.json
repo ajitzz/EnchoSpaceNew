@@ -1,0 +1,249 @@
+{
+  "schemaVersion": 1,
+  "card": "R1-03",
+  "status": "READY_FOR_REVIEW",
+  "environment": "LOCAL_BROWSER_FIXTURE",
+  "generatedAt": "2026-09-28T17:53:01.152318+00:00",
+  "originalCriteria": [
+    "P1.4",
+    "P1.7",
+    "P3.6"
+  ],
+  "auditFinding": "A05",
+  "head": "0e4c6fec2fe86f1b793760c5f7a3daf08bbf7508",
+  "scope": "Source repair and isolated production-worker build; no deployment or provider/database/customer contact",
+  "sourceFiles": [
+    {
+      "path": "vite.config.ts",
+      "sha256": "bf40b12f16a5356d347330881b0c659af5c6679753c07cdf66c436e3cc883910"
+    },
+    {
+      "path": "src/sw.ts",
+      "sha256": "63deb362fd3499144e70b4c40b51ffbfc617cbfde64f68b5d8a7b9236cc15895"
+    },
+    {
+      "path": "lib/legacyOfflineQueue.ts",
+      "sha256": "b6a7c42fab62eee13e9f3b2e4665c7368fffcb44a2c0324b2760f6675c80303f"
+    },
+    {
+      "path": "lib/syncService.ts",
+      "sha256": "ba151759673fdf89301514150ae181e31751b36d4b80faa616f397722464083a"
+    },
+    {
+      "path": "index.tsx",
+      "sha256": "93e03cb885eee57babc3619d5c40d2ae146f918e8522ac712872457573782f37"
+    },
+    {
+      "path": "components/AuthContext.tsx",
+      "sha256": "bb6dbee2e92077d368ca9437043bf5f8adeffe6d14eb404d35786c342c952fe8"
+    },
+    {
+      "path": "src/test/cr1_actor_scoped_sync.test.ts",
+      "sha256": "4d2659a960f761b1db5924f0a6e058a540eaab5c89f0e8162bb8e4ac2d25affb"
+    },
+    {
+      "path": "src/test/harvo/cr1_offline_worker_lifecycle.test.ts",
+      "sha256": "2977261fafc96edf255ef45444a614bee70e5d467576f41a9098266ea5fb7db5"
+    },
+    {
+      "path": "scripts/testing/cr1-offline-browser/index.html",
+      "sha256": "7f3252c60e6edf91cec80bc7143da07209fa74bf0ab330ee9e77a9c33e9156ce"
+    },
+    {
+      "path": "scripts/testing/cr1-offline-browser/entry.tsx",
+      "sha256": "89492e6ec912a1b1021a6b7d15f8c760f324a518906c09e675310264088f3917"
+    },
+    {
+      "path": "scripts/testing/tsconfig.offline.json",
+      "sha256": "65e4c7e16a63cdd7db0b4d5de9a68b4412ec2c281f0ef0277110d9b669eda30a"
+    }
+  ],
+  "scopedTrackedDiffSha256": "c82a8a13cc0af108171a69c2f7a1e766e897ceb489f37acb1edbec46a360ae45",
+  "commands": [
+    {
+      "command": "/Users/ajit/.npm/_npx/387698761821791d/node_modules/node/bin/node scripts/testing/run.mjs src/test/harvo/cr1_offline_worker_lifecycle.test.ts src/test/cr1_actor_scoped_sync.test.ts --reporter=dot",
+      "exitCode": 0,
+      "testsPassed": 44,
+      "scope": "Final nonce-pair source run by IAM agent; local production-worker fixture and actor unit tests",
+      "receipt": "docs/audits/cr1-remediation/r1-03/NONCE_FINAL.txt"
+    },
+    {
+      "command": "/Users/ajit/.npm/_npx/387698761821791d/node_modules/node/bin/node scripts/testing/run.mjs src/test/cr1_actor_scoped_sync.test.ts --reporter=dot",
+      "exitCode": 0,
+      "testsPassed": 34,
+      "scope": "Independent rerun by original offline agent after reviewing IAM nonce-pair fix"
+    },
+    {
+      "command": "/Users/ajit/.npm/_npx/387698761821791d/node_modules/node/bin/node scripts/testing/run.mjs src/test/harvo/cr1_offline_worker_lifecycle.test.ts src/test/cr1_actor_scoped_sync.test.ts --reporter=dot",
+      "exitCode": 0,
+      "testsPassed": 40,
+      "scope": "Historical reviewed checkpoint, superseded by nonce-pair 44-test run; retained as evidence."
+    },
+    {
+      "command": "/Users/ajit/.npm/_npx/387698761821791d/node_modules/node/bin/node scripts/testing/run.mjs src/test/cr1_actor_scoped_sync.test.ts --reporter=dot",
+      "exitCode": 0,
+      "testsPassed": 28,
+      "scope": "Earlier same-tick logout-fence targeted checkpoint; superseded by final 40-test run"
+    },
+    {
+      "command": "/Users/ajit/.npm/_npx/387698761821791d/node_modules/node/bin/node node_modules/typescript/bin/tsc --project scripts/testing/tsconfig.offline.json --pretty false",
+      "exitCode": 0,
+      "scope": "Strict scoped TypeScript; not repository-wide release check"
+    },
+    {
+      "command": "/Users/ajit/.npm/_npx/387698761821791d/node_modules/node/bin/node node_modules/eslint/bin/eslint.js vite.config.ts src/sw.ts lib/legacyOfflineQueue.ts lib/syncService.ts components/AuthContext.tsx index.tsx scripts/testing/cr1-offline-browser/entry.tsx src/test/harvo/cr1_offline_worker_lifecycle.test.ts src/test/cr1_actor_scoped_sync.test.ts",
+      "exitCode": 0,
+      "scope": "Scoped source/test lint"
+    },
+    {
+      "command": "git diff --check -- vite.config.ts lib/syncService.ts index.tsx components/AuthContext.tsx src/test/cr1_actor_scoped_sync.test.ts",
+      "exitCode": 0,
+      "scope": "Scoped tracked whitespace"
+    }
+  ],
+  "preservedFailureEvidence": [
+    {
+      "type": "TEST_HARNESS_CONFIGURATION",
+      "message": "Waiting-worker fixture initially lacked precache/runtimeCaching; beforeAll failed, 8 tests did not execute. Added a non-mutating GET NetworkOnly route; rerun passed."
+    },
+    {
+      "type": "LINT",
+      "message": "Fixture auth binding initially mutated an external object in render. Moved bridge binding to an effect; scoped lint now passes."
+    },
+    {
+      "type": "TYPECHECK_SCOPE",
+      "message": "An exploratory repository typecheck reported unrelated concurrently edited tax-probe/workforce-test types and an envDir boolean widening. envDir now false as const; strict slice passes. This is not a full-repository passing assertion."
+    }
+  ],
+  "logs": [
+    {
+      "label": "targeted",
+      "path": "docs/implementation/receipts/CR1_R1_03_targeted.txt",
+      "sha256": "7875d39b548b5c89d876197418eb25c9f30b94458f025b48f0f2f5ca8ab217c0"
+    },
+    {
+      "label": "actor_final",
+      "path": "docs/implementation/receipts/CR1_R1_03_actor_final.txt",
+      "sha256": "f16f8df1fb689c9b16db0e7ba9785cf29508818e9fc1d03bba3bdec6704947eb"
+    },
+    {
+      "label": "worker_fixture_failure",
+      "path": "docs/implementation/receipts/CR1_R1_03_worker_fixture_failure.txt",
+      "sha256": "b9605e532034c8bf37d5467abf6a3a3e0f33470f8d5f3de0dc91303b120370ac"
+    },
+    {
+      "label": "worker_fixture_repaired",
+      "path": "docs/implementation/receipts/CR1_R1_03_worker_fixture_repaired.txt",
+      "sha256": "85416830fcc7558fc6a2c95287cf3426e10f11e316efa5f0ed54724d3a926165"
+    },
+    {
+      "label": "lint_final",
+      "path": "docs/implementation/receipts/CR1_R1_03_lint_final.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "strict_types",
+      "path": "docs/implementation/receipts/CR1_R1_03_strict_types.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "reviewed_final",
+      "path": "docs/implementation/receipts/CR1_R1_03_reviewed_final.txt",
+      "sha256": "b7d7ecb3351dccbe4f682d3c33fa5b3f9e46b0663bc308992cebdad9a0029747"
+    },
+    {
+      "label": "reviewed_types",
+      "path": "docs/implementation/receipts/CR1_R1_03_reviewed_types.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "reviewed_lint",
+      "path": "docs/implementation/receipts/CR1_R1_03_reviewed_lint.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "independent_actor_review",
+      "path": "docs/implementation/receipts/CR1_R1_03_independent_actor_review.txt",
+      "sha256": "0db0bb7f96eba1b16310b0406719d00be08782ceee1b280b9d871c6bba9aac8a"
+    },
+    {
+      "label": "nonce_independent",
+      "path": "docs/implementation/receipts/CR1_R1_03_nonce_independent.txt",
+      "sha256": "58642684fd11ef6c2c8c25c6e95d7daf4047a5c7e2b9f73c482a73eb16b295dd"
+    },
+    {
+      "label": "clock_rollback_red",
+      "path": "docs/audits/cr1-remediation/r1-03/CLOCK_ROLLBACK_BEFORE.txt",
+      "sha256": "6e4aedcd8fefe877b6e08719d0def4fb0e8f6b212e8d65b96ae91243c85b0f66"
+    },
+    {
+      "label": "nonce_final",
+      "path": "docs/audits/cr1-remediation/r1-03/NONCE_FINAL.txt",
+      "sha256": "f3c6a54ad819cdb447367b7d93bacf231fd651d45ed9436b47904e60443b66ce"
+    },
+    {
+      "label": "nonce_typecheck",
+      "path": "docs/audits/cr1-remediation/r1-03/NONCE_TYPECHECK.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "nonce_lint",
+      "path": "docs/audits/cr1-remediation/r1-03/NONCE_LINT.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "limitations": [
+    "Production worker compiled through real Vite PWA configuration with envDir:false, but browser page is a local fixture using actual AuthContext/sync modules, not the complete Encho app.",
+    "Synthetic auth, inquiry and legacy bearer values only; no actual customer identity or server mutation performed.",
+    "Legacy fixture background-sync permission denied until replacement; retired sync explicitly dispatched through CDP after upgrade. This does not claim an already-running old worker can be recalled before an upgrade reaches it.",
+    "Already-dispatched network operations require canonical server authorization/revocation/idempotency and cannot be undone by deleting browser state.",
+    "Existing application/worker wholly offline cannot receive a patch; rollout requires update adoption and applicable server session response.",
+    "Bounded peer review complete; no package release acceptance, external gate clearance, commit or push."
+  ],
+  "review": {
+    "status": "BOUNDED_PEER_REVIEW_PASS",
+    "originalSourceReviewer": "/root/remediation_identity_impl",
+    "followUpFixAuthor": "/root/remediation_identity_impl",
+    "followUpFixReviewer": "/root/remediation_offline_impl",
+    "findingsRepaired": [
+      "Preserve same-actor profile refresh intent",
+      "Fence pre-logout in-flight mutations even after same-token re-login",
+      "Global cutoff on unknown-actor cleanup",
+      "Do not share private API/authenticated image cache",
+      "Clock rollback with failed IndexedDB cleanup",
+      "Actor/global revocation masking",
+      "Non-atomic cross-tab counter ABA"
+    ],
+    "independentTests": {
+      "passed": 34,
+      "failed": 0,
+      "exitCode": 0
+    },
+    "acceptance": "Bounded source/local review only. Protected release acceptance remains with independent release review."
+  },
+  "reviewHistory": [
+    {
+      "reviewer": "/root/remediation_identity_impl",
+      "state": "BOUNDED_SOURCE_AND_LOCAL_REVIEW_PASS",
+      "findingsRepaired": [
+        "Preserve same-actor profile refresh intent",
+        "Fence pre-logout in-flight mutations even after same-token re-login",
+        "Global cutoff on unknown-actor cleanup",
+        "Do not share private API/authenticated image cache"
+      ],
+      "acceptance": "Independent reviewer passed bounded source/local criteria; no production acceptance. Browser evidence remains implementation-run 10-case fixture evidence.",
+      "independentTests": {
+        "scope": "actor-scoped sync suite",
+        "passed": 30,
+        "failed": 0,
+        "exitCode": 0
+      },
+      "status": "QUALIFIED_PENDING_CLOCK_ROLLBACK_REPAIR",
+      "qualification": "Follow-up independent review found persisted queue timestamp cutoff can fail under wall-clock rollback plus failed IndexedDB deletion. Narrow generation-equality repair and independent re-review are pending; prior bounded pass is retained as history, not current acceptance."
+    }
+  ],
+  "dependencyHashes": {
+    "package.json": "15a4391fd3cdee90b3a72fe0d5a599e1bf169bd2c7b637da7c36c67eac5faaa3",
+    "package-lock.json": "cadab07c1ab471a6f01c27846c74b0197b5c4f24a2541c58cc56bc69491e7505"
+  }
+}

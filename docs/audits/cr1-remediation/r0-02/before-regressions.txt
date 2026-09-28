@@ -1,0 +1,60 @@
+
+ RUN  v4.1.10 /Users/ajit/Documents/EnchoSpaceNew
+
+xx
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_evidence_quarantine.test.ts > R0-02 reproduced evidence trust defects > does not treat absent provider spend as zero
+AssertionError: promise resolved "{ verified: true, …(6) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "campaignId": "test-campaign",
++   "impressions": 0,
++   "provider": "meta",
++   "spendCents": 0,
++   "status": "PAUSED",
++   "timestamp": "2026-09-28T17:36:06.220Z",
++   "verified": true,
+  }
+
+ ❯ src/test/harvo/cr1_evidence_quarantine.test.ts:12:27
+     10|     await expect(verifyPausedCanaryReadback({ getCampaign: async () =>…
+     11|       provider: 'meta', campaignId: 'test-campaign', status: 'PAUSED',…
+     12|     }) }, 'test-campaign')).rejects.toThrow(/CANARY_OBSERVATION_INCOMP…
+       |                           ^
+     13|   });
+     14|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_evidence_quarantine.test.ts > R0-02 reproduced evidence trust defects > does not manufacture a release certificate from source constants
+AssertionError: expected [Function] to throw an error
+
+- Expected:
+null
+
++ Received:
+undefined
+
+ ❯ src/test/harvo/cr1_evidence_quarantine.test.ts:21:11
+     19|       expect(() => engine.generateReleaseCandidateCertificate({
+     20|         commitHash: '0e4c6fec2fe86f1b793760c5f7a3daf08bbf7508', releas…
+     21|       })).toThrow(/RELEASE_CERTIFICATION_UNAVAILABLE/);
+       |           ^
+     22|     } finally { rmSync(dir, { recursive: true, force: true }); }
+     23|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  17:36:06
+   Duration  157ms (transform 38ms, setup 32ms, import 20ms, tests 9ms, environment 0ms)
+

@@ -1,0 +1,49 @@
+
+ RUN  v4.1.10 /Users/ajit/Documents/EnchoSpaceNew
+
+stdout | src/test/harvo/cr1_offline_worker_lifecycle.test.ts
+vite v6.4.3 building for production...
+
+stdout | src/test/harvo/cr1_offline_worker_lifecycle.test.ts
+transforming...
+
+stdout | src/test/harvo/cr1_offline_worker_lifecycle.test.ts
+✓ 162 modules transformed.
+
+stdout | src/test/harvo/cr1_offline_worker_lifecycle.test.ts
+rendering chunks...
+
+stdout | src/test/harvo/cr1_offline_worker_lifecycle.test.ts
+computing gzip size...
+
+stdout | src/test/harvo/cr1_offline_worker_lifecycle.test.ts
+../../../../var/folders/xz/n8vtdw5x6js6lj7q5y211s3h0000gn/T/encho-offline-worker-CaQkN2/client/sw.mjs  109.86 kB │ gzip: 31.17 kB
+
+stdout | src/test/harvo/cr1_offline_worker_lifecycle.test.ts
+✓ built in 236ms
+
+--------
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_offline_worker_lifecycle.test.ts [ src/test/harvo/cr1_offline_worker_lifecycle.test.ts ]
+Error: Couldn't find configuration for either precaching or runtime caching. Please ensure that the various glob options are set to match one or more files, and/or configure the runtimeCaching option.
+ ❯ populateSWTemplate node_modules/workbox-build/build/lib/populate-sw-template.js:24:15
+ ❯ writeSWUsingDefaultTemplate node_modules/workbox-build/build/lib/write-sw-using-default-template.js:28:73
+ ❯ generateSW node_modules/workbox-build/build/generate-sw.js:95:23
+ ❯ src/test/harvo/cr1_offline_worker_lifecycle.test.ts:102:5
+    100|         } }],
+    101|     });
+    102|     await generateSW({ swDest: join(directory, 'legacy-waiting', 'sw.j…
+       |     ^
+    103|         skipWaiting: false, clientsClaim: true,
+    104|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  8 skipped (8)
+   Start at  17:43:43
+   Duration  2.57s (transform 41ms, setup 32ms, import 708ms, tests 1.74s, environment 0ms)
+

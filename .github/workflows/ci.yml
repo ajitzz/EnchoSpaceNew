@@ -30,12 +30,21 @@ jobs:
     - name: Run Type Checking
       run: npm run typecheck
 
+    - name: Verify corrective architecture boundaries
+      run: |
+        node scripts/testing/run.mjs --node-test scripts/cr1/verify-inventory.test.mjs scripts/cr1/verify-production-boundaries.test.mjs scripts/deployment/migration-assets.test.mjs scripts/testing/run.test.mjs
+        node scripts/cr1/verify-production-boundaries.mjs
+        node scripts/cr1/verify-reacceptance-register.mjs
+
     - name: Configure disposable PostgreSQL fixtures
       run: |
         PG_BIN="$(dirname "$(find /usr/lib/postgresql -name initdb -type f | sort -V | tail -1)")"
         test -x "$PG_BIN/initdb"
         test -x "$PG_BIN/pg_dump"
         echo "HARVO_POSTGRES_BIN=$PG_BIN" >> "$GITHUB_ENV"
+
+    - name: Install Chromium for production-worker boundary tests
+      run: npx playwright install --with-deps chromium
 
     - name: Run Tests
       run: |
@@ -59,7 +68,7 @@ jobs:
         retention-days: 7
 
     - name: Build Application
-      run: npm run build
+      run: npm run build:offline
 
   docker-build-test:
     name: Docker Build Check

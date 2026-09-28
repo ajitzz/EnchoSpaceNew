@@ -21,6 +21,16 @@ describe('CR1 canonical conversation HTTP boundary',()=>{
   const r=await request(f.app).post('/api/threads/1/messages').send({content:'private'});
   expect(r.status).toBe(503);expect(r.headers['cache-control']).toBe('no-store');expect(f.inbox.send).not.toHaveBeenCalled();
  });
+ it('returns explicit unavailable unread evidence with a safe reference instead of a fabricated zero',async()=>{
+  const f=fixture();f.ready.mockResolvedValue(false);
+  const r=await request(f.app).get('/api/unread-counts');
+  expect(r.status).toBe(503);expect(r.headers['cache-control']).toBe('no-store');
+  expect(r.body).toMatchObject({code:'FEATURE_UNAVAILABLE',correlationId:expect.any(String),operationId:expect.any(String)});
+  for(const field of ['unread','unreadCount','guestUnread','hostUnread'])expect(r.body).not.toHaveProperty(field);
+  expect(f.inbox.unread).not.toHaveBeenCalled();expect(f.onFailure).toHaveBeenCalledWith(expect.objectContaining({code:'FEATURE_UNAVAILABLE',correlationId:r.body.correlationId}));
+  f.ready.mockResolvedValue(true);f.inbox.unread.mockResolvedValue({unread:0});
+  const recovered=await request(f.app).get('/api/unread-counts');expect(recovered.status).toBe(200);expect(recovered.body).toEqual({unread:0});
+ });
  it('preserves authentication identity independently of client fields and returns one canonical receipt',async()=>{
   const f=fixture(),message={id:7,thread_id:1};f.inbox.send.mockResolvedValue({message,thread:{id:1},duplicate:false});
   const body={content:'hello',userId:90};const r=await request(f.app).post('/api/threads/1/messages').send(body);

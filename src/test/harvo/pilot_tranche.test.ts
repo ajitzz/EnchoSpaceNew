@@ -1,5 +1,5 @@
-import { afterAll, describe, expect, it, vi } from 'vitest';
-import { existsSync, unlinkSync } from 'node:fs';
+import { describe, expect, it, vi } from 'vitest';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   evaluatePilotBudgetCap,
@@ -17,108 +17,14 @@ describe('CR1 Phase P8.4 & Track 4: Bounded Commercial Pilot Tranche & Stop-Loss
     'docs/harvo/receipts/CR1_PILOT_GO_NOGO_RECEIPT.json'
   );
 
-  afterAll(() => {
-    // Preserve disk hygiene in test environment
-    if (existsSync(receiptPath)) {
-      try {
-        unlinkSync(receiptPath);
-      } catch {
-        // Ignored
-      }
-    }
-  });
-
   // ──────────────────────────────────────────────────────────────────────────
   // TEST SUITE 1: Adversarial Failure Mode — Database Connection Drops Halfway
   // ──────────────────────────────────────────────────────────────────────────
-  describe('Adversarial Scenario 1: Database Connection Drops Halfway Through', () => {
-    it('executes atomic rollback, creates 0 zombie records, and rejects the operation', async () => {
-      let rollbacksCount = 0;
-      let commitsCount = 0;
-      const recordsInserted: string[] = [];
-
-      const mockDbClient = {
-        query: vi.fn(async (sql: string) => {
-          if (sql === 'BEGIN') return {};
-          if (sql === 'ROLLBACK') {
-            rollbacksCount++;
-            recordsInserted.length = 0;
-            return {};
-          }
-          if (sql === 'COMMIT') {
-            commitsCount++;
-            return {};
-          }
-          if (sql.includes('INSERT INTO host_marketing_campaigns')) {
-            recordsInserted.push('campaign_record');
-            // Simulate sudden network termination halfway through
-            throw new Error('ECONNRESET: Connection dropped by peer at step 2 of transaction');
-          }
-          return {};
-        }),
-      };
-
-      await expect(
-        executePilotDbTransactionWithFallback(mockDbClient as any, {
-          hostId: 'pilot_host_wayanad',
-          listingId: 'listing_1',
-          budgetPaise: 200000,
-        })
-      ).rejects.toThrow('ECONNRESET');
-
-      expect(rollbacksCount).toBe(1);
-      expect(commitsCount).toBe(0);
-      expect(recordsInserted.length).toBe(0);
-    });
-  });
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // TEST SUITE 2: Adversarial Failure Mode — Host Clicks Submit 5 Times in 200ms
-  // ──────────────────────────────────────────────────────────────────────────
-  describe('Adversarial Scenario 2: Host Clicks Submit 5 Times in 200 Milliseconds', () => {
-    it('deduplicates rapid burst submissions via idempotency key, allowing exactly 1 execution', async () => {
-      const idempotencyKey = 'idemp_burst_test_' + Date.now();
-      const sharedStore = new Map<string, any>();
-
-      let executions = 0;
-      const executeTopUp = async () => {
-        return processPilotTopUpIdempotent({
-          store: sharedStore,
-          idempotencyKey,
-          hostId: 'pilot_host_wayanad',
-          listingId: 'listing_1',
-          amountPaise: 200000, // ₹2,000 INR
-          handler: async () => {
-            executions++;
-            return {
-              status: 'SUCCESS',
-              transactionId: 'txn_' + executions,
-              creditedPaise: 200000,
-            };
-          },
-        });
-      };
-
-      // Fire 5 identical requests concurrently within 200ms
-      const results = await Promise.all([
-        executeTopUp(),
-        executeTopUp(),
-        executeTopUp(),
-        executeTopUp(),
-        executeTopUp(),
-      ]);
-
-      // Exactly ONE actual execution must have happened
-      expect(executions).toBe(1);
-
-      // All 5 responses must return identical successful output with deduplicated replay flag
-      for (const res of results) {
-        expect(res.status).toBe('SUCCESS');
-        expect(res.creditedPaise).toBe(200000);
-      }
-      const replays = results.filter((r) => r.isReplay === true);
-      expect(replays.length).toBe(4);
-    });
+  it('retires raw SQL mutation and memory-only top-ups without invoking either side effect', async () => {
+    const query = vi.fn(); const handler = vi.fn();
+    await expect(executePilotDbTransactionWithFallback({ query }, { hostId: 'host', listingId: 'listing', budgetPaise: 1 })).rejects.toThrow('PILOT_MUTATION_UNAVAILABLE');
+    await expect(processPilotTopUpIdempotent({ store: new Map(), idempotencyKey: 'key', hostId: 'host', listingId: 'listing', amountPaise: 1, handler })).rejects.toThrow('PILOT_MUTATION_UNAVAILABLE');
+    expect(query).not.toHaveBeenCalled(); expect(handler).not.toHaveBeenCalled();
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -219,7 +125,8 @@ describe('CR1 Phase P8.4 & Track 4: Bounded Commercial Pilot Tranche & Stop-Loss
   // TEST SUITE 6: Receipt Artifact Generation
   // ──────────────────────────────────────────────────────────────────────────
   describe('Pilot Receipt Artifact Generation', () => {
-    it('generates immutable CR1_PILOT_GO_NOGO_RECEIPT.json on disk', () => {
+    it('formats untrusted supplied observations without certification or historical writes', () => {
+      const before = existsSync(receiptPath) ? readFileSync(receiptPath) : null;
       const receipt = generatePilotReceipt({
         auditTimestamp: '2026-09-24T20:00:00.000Z',
         gitCommit: 'a2d31c6',
@@ -238,9 +145,10 @@ describe('CR1 Phase P8.4 & Track 4: Bounded Commercial Pilot Tranche & Stop-Loss
         boardVerdict: 'GO_FOR_EXPANDED_STAGE',
       });
 
-      expect(receipt.status).toBe('CERTIFIED');
+      expect(receipt.status).toBe('REQUIRES_INDEPENDENT_REVIEW');
+      expect(receipt.productionGateEligible).toBe(false);
       expect(receipt.constraints.maxAggregateCapInr).toBe(50000);
-      expect(existsSync(receiptPath)).toBe(true);
+      expect(existsSync(receiptPath) ? readFileSync(receiptPath) : null).toEqual(before);
     });
   });
 });

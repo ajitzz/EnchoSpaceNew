@@ -1,0 +1,1781 @@
+{
+  "kind": "CR1_PREEXISTING_CHANGE_DISPOSITION",
+  "schemaVersion": 1,
+  "capturedAt": "2026-09-28T18:28:17.224098+00:00",
+  "status": "READY_FOR_REVIEW_NOT_ACCEPTED",
+  "scope": "All 43 staged deletions from original 66-change baseline; modifications require separate review",
+  "impact": {
+    "category": "Documentation / source and evidence identity",
+    "sourceOfTruth": "Git HEAD blobs, original staged baseline, current source and authorized sanitized Neon history observation",
+    "affectedFiles": [
+      "docs/implementation/CR1_PREEXISTING_CHANGE_DISPOSITION.md",
+      "docs/implementation/CR1_PREEXISTING_CHANGE_DISPOSITION.json"
+    ],
+    "runtimeSchemaApiUiChanges": false,
+    "security": "No secret inspection, source restoration, migration allocation or remote action in this batch",
+    "validation": "Read-only identity/path/card/reference checks; no application tests rerun",
+    "rollback": "Remove these new documentation files only; preserve source/index and original historical evidence"
+  },
+  "baseline": {
+    "head": "0e4c6fec2fe86f1b793760c5f7a3daf08bbf7508",
+    "indexTree": "05cd902d696bad53d2d63f1f3f054639c0c75ca3",
+    "stagedDiffSha256": "854471966ac51c7fbf44e69095990f5f5eb2892b772cc4aef9adfbb0f502a520",
+    "baselineDocument": "docs/implementation/CR1_REMEDIATION_BASELINE_2026_09_28.json",
+    "currentIndexTree": "05cd902d696bad53d2d63f1f3f054639c0c75ca3",
+    "originalChangeCount": 66,
+    "deletionCount": 43
+  },
+  "independentlyAcceptedRemovalCount": 0,
+  "authorIntent": "UNCONFIRMED_FOR_ALL_ROWS",
+  "reviewLimitations": [
+    "Targeted semantic examination of exports, sensitive effects and retained call sites; not a claim that every deleted line was reviewed.",
+    "Current source is the shared remediation worktree, not a deployed artifact; runtime reachability and all behavior equivalence require integration tests.",
+    "Literal route comparison excludes dynamic, array and nested route declarations; equal paths do not imply equal authorization or effects.",
+    "Retained test references identify source assertions inspected; none was executed again for this documentation-only batch. Prior local receipts are separately scoped.",
+    "Database history is self-reported by a read-only session on an unverified primary candidate and privileged login. Table existence and history checksum do not prove actual DDL, RLS, grants or successful migration execution."
+  ],
+  "routeSurfaceComparisons": [
+    {
+      "path": "src/server/routes/crm.router.ts",
+      "headLiteralRouteCount": 21,
+      "currentLiteralMatches": 21,
+      "missingLiteralRoutes": [],
+      "semanticsAccepted": false
+    },
+    {
+      "path": "src/server/routes/legacyMarketing.router.ts",
+      "headLiteralRouteCount": 63,
+      "currentLiteralMatches": 62,
+      "missingLiteralRoutes": [
+        "POST /api/marketing/campaigns/:id/refuel"
+      ],
+      "semanticsAccepted": false
+    },
+    {
+      "path": "src/server/routes/listings.router.ts",
+      "headLiteralRouteCount": 74,
+      "currentLiteralMatches": 74,
+      "missingLiteralRoutes": [],
+      "semanticsAccepted": false
+    },
+    {
+      "path": "src/server/routes/operations.router.ts",
+      "headLiteralRouteCount": 44,
+      "currentLiteralMatches": 44,
+      "missingLiteralRoutes": [],
+      "semanticsAccepted": false
+    },
+    {
+      "path": "src/server/routes/webhooks.router.ts",
+      "headLiteralRouteCount": 14,
+      "currentLiteralMatches": 14,
+      "missingLiteralRoutes": [],
+      "semanticsAccepted": false
+    }
+  ],
+  "databaseHistoryQualification": {
+    "receipt": "docs/audits/cr1-remediation/r0-01/NEON_HISTORY_OBSERVATION.json",
+    "observedEntries": 46,
+    "currentSourceEntries": 39,
+    "extraHistoryEntries": 7,
+    "deletedHeadMatches": 5,
+    "deletedHeadMismatches": 1,
+    "missing047Source": "Parent reports git --all lookup found no original 047 bytes; not independently restored or inferred here",
+    "version047": "047_campaign_flight_controls_and_drain_requests.sql",
+    "version047Checksum": "a3d4a1b91ea5c3e00c208803b0611354a7fc520050d5a43953696bc44ce7369e",
+    "version045LocalHistoricalSearch": "Parent reports only local historical source commit 191215d5f9dc019ad49d12d4fc703598451caf29 with the same mismatching 129ad347... HEAD hash; exact applied bytes unavailable",
+    "runtimeIdentity": "Observed login has BYPASSRLS, CREATEROLE, CREATEDB and REPLICATION; not runtime certification",
+    "artifactCaveat": "Earlier packaging did not quarantine pre-build artifact SQL. Current 39-file packaged/source parity cannot prove the original artifact history or whether 047 ever existed there.",
+    "prohibitedActions": [
+      "No restore or delete source/index changes as a repair shortcut",
+      "No silent checksum/history repair",
+      "No allocation of 041-047 as free migration slots",
+      "No claim that dropping a source file removed a deployed table"
+    ]
+  },
+  "decisionNamespaceQualification": {
+    "status": "COLLISION_REQUIRES_DATED_REFERENCES",
+    "finding": "Parent verified HEAD DECISIONS already used CR1-045 through CR1-053 for 26-27 September, while the staged document revision reused CR1-045/046 for the 28 September audit. A bare CR1-045/046/047 reference is ambiguous.",
+    "requiredCitation": "Date + document path + section title + Git/blob identity; preserve both historical and current qualified discussion records",
+    "currentRemediationNamespace": "Parent reports new execution discussion will use RMD-001; this document does not rewrite the decision register"
+  },
+  "rows": [
+    {
+      "path": "components/marketing/AdminCanaryWorkspace.tsx",
+      "classification": "CONTAINMENT_CANDIDATE_REPLACEMENT_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "38-97"
+      ],
+      "headBlob": "37aed6463c8e3aeacf44f0ddbf0efb282b1d1c62",
+      "headSha256": "c60c22615b48313654c7564515933c2272b4a9bde235f9b1c571380474cea488",
+      "headLineCount": 327,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Release/SRE + provider operations + staff frontend",
+      "semanticFinding": "UI calls status, execute-drill, verify-readback and generate-receipt endpoints backed by the deleted certification router. Those endpoints could certify caller-provided observations. No current import of this component was found; removing it contains that console but does not deliver an independently observed paused canary.",
+      "currentSourceReferences": [
+        "scripts/deployment/provider-canary-runner.mjs",
+        "src/lib/release/evidence.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/provider_canary.test.ts",
+        "src/test/harvo/cr1_release_evidence.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Retain the prior UI/API contract in the compatibility register; verify the deployed router no longer exposes the unsafe certification path.",
+        "Provide authenticated, target-bound provider collection plus independent review before offering a certification action; UI simulation cannot clear R7-03."
+      ],
+      "correctiveCards": [
+        "R0-02",
+        "R7-03"
+      ]
+    },
+    {
+      "path": "components/marketing/AdminRlsSecurityWorkspace.tsx",
+      "classification": "CONTAINMENT_CANDIDATE_REPLACEMENT_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "29-52"
+      ],
+      "headBlob": "0dbbd71f16fd68edd5e982d6508b6eda49f5f7cc",
+      "headSha256": "1e4981a73c0caa2e2b8ef424c0bb6291aa863c6b3c8566cfa6a8ab3406a934a0",
+      "headLineCount": 223,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Database security + staff frontend",
+      "semanticFinding": "UI consumes coarse RLS health and cross-tenant probe endpoints. The deleted service treated forced RLS as sufficient even for a bypass role. Current readiness guards inspect actual runtime authority; they are not a replacement operations UI or proof of every table policy.",
+      "currentSourceReferences": [
+        "src/server/deployment/runtimeDatabaseAuthority.ts",
+        "src/server/deployment/databaseReadiness.ts",
+        "src/server/deployment/recoveryReadiness.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/cr1_runtime_database_authority.test.ts",
+        "src/test/harvo/recovery_readiness.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Retire false-green health semantics and restrict any replacement diagnostics to workforce capability.",
+        "Add actual restricted LOGIN policy tests for the precise deployed catalog; preserve unknown/incomplete diagnostics."
+      ],
+      "correctiveCards": [
+        "R1-01",
+        "R2-02"
+      ]
+    },
+    {
+      "path": "components/marketing/CircuitBreakerWorkspace.tsx",
+      "classification": "CONTAINMENT_CANDIDATE_REPLACEMENT_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "41-117"
+      ],
+      "headBlob": "956f26c0b22016d2cfc623c94b27cc6e04b941b9",
+      "headSha256": "6668d09b8aab670bc751f2254090615b2cb2201139db278eff4d40e91f4ea8de",
+      "headLineCount": 348,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Provider/worker engineering + operations UX",
+      "semanticFinding": "UI exposes local evaluate/override/DLQ controls from a parallel circuit-breaker service; its local resumed state did not establish provider activation or renewed finance authority. The canonical admin campaign recovery flow remains, but identical legacy control semantics must not be restored.",
+      "currentSourceReferences": [
+        "components/marketing/AdminMarketingWorkspace.tsx",
+        "src/server/marketing/router.ts",
+        "src/lib/marketing/engine.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/pause_recovery.test.ts",
+        "src/test/harvo/durable_outbox.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Prove protected canonical recovery routes cover operational needs with current authority and immutable audit/outbox effects.",
+        "Show requested vs confirmed provider state and retain unknown-outcome reconciliation; test unauthorized override and stale claim."
+      ],
+      "correctiveCards": [
+        "R5-03",
+        "R6-04"
+      ]
+    },
+    {
+      "path": "components/marketing/GodmodeAdsStudio.tsx",
+      "classification": "CONTAINMENT_CANDIDATE_REPLACEMENT_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "104-159",
+        "233-255"
+      ],
+      "headBlob": "e9532bc2cee80ff6480db55b597938142a0646ee",
+      "headSha256": "6ed5504700e80ccd69960ac70f98f26a051b091fa0533ffbb1210f2363e000a1",
+      "headLineCount": 666,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "AdTech backend + staff frontend",
+      "semanticFinding": "UI edits the deleted mutable feeder-targeting API rather than immutable revision-bound strategies. Canonical AdtechWorkspace and versioned registry/bindings remain; a similar screen name does not prove that every approved control or expert user journey is integrated.",
+      "currentSourceReferences": [
+        "components/marketing/AdtechWorkspace.tsx",
+        "src/server/marketing/adtechRoutes.ts",
+        "src/lib/marketing/adtech/registry.ts",
+        "src/lib/marketing/adtech/bindings.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/adtech_bindings.test.ts",
+        "src/test/harvo/adtech_controls.test.ts",
+        "src/test/harvo/adtech_geography.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Map each approved control to version-bound provider capabilities and the canonical studio.",
+        "Verify actual POST, preview, release CAS, worker binding and readback; do not promise native console parity."
+      ],
+      "correctiveCards": [
+        "R5-01",
+        "R5-02"
+      ]
+    },
+    {
+      "path": "components/marketing/StandaloneReelUpload.tsx",
+      "classification": "CONTAINMENT_CANDIDATE_REPLACEMENT_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "110-145"
+      ],
+      "headBlob": "0f510861a359e64e85549b8307c7d6cec81b9b9c",
+      "headSha256": "f1e322e489a6910147bda2d8a1955ef37a78d5d9d516cf3a231460f0d75a2ed3",
+      "headLineCount": 347,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Media pipeline + three-sided creative UX",
+      "semanticFinding": "Host UI posts external creative metadata to the deleted creative-packages endpoint. Removing caller-hash trust is appropriate containment, but the external reel/post/carousel requirement remains open. The retained image preparation path explicitly rejects video and is not a delivered reel replacement.",
+      "currentSourceReferences": [
+        "src/lib/marketing/creativeWorkflow.ts",
+        "src/server/marketing/router.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/creative_pipeline.test.ts",
+        "src/test/harvo/creative_campaign_binding.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Deliver canonical external upload, stored-byte hashing, rights evidence, immutable review and campaign binding.",
+        "Verify Guest presentation, Host editing and Admin moderation for added media; test unavailable video capability truthfully."
+      ],
+      "correctiveCards": [
+        "R4-03",
+        "R4-04"
+      ]
+    },
+    {
+      "path": "docs/blueprints/ENCHO_MASTER_PRODUCTION_EXECUTION_BLUEPRINT.md",
+      "classification": "HISTORICAL_RECORD_QUARANTINE_REQUIRED",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-26",
+        "118-130",
+        "350-397"
+      ],
+      "headBlob": "3cbe5478a565855e5df3522d2dd256f131043cf9",
+      "headSha256": "b745079d3c95d90199feb558d2642e4e29b07e238849fda00f92ac1d5915804a",
+      "headLineCount": 397,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Architecture governance + release reviewer",
+      "semanticFinding": "The removed blueprint declares production authority, directs removal of checkout 503 gates, assumes a fixed listing/canary identity and describes live commerce without supplied legal approval. This conflicts with the current qualified CR1 remit. Its history must remain discoverable; disappearance alone is not a recorded supersession.",
+      "currentSourceReferences": [
+        "docs/blueprints/ENCHO_THREE_SIDED_OPERATING_PLATFORM_BLUEPRINT.md",
+        "docs/blueprints/CR1_ENGINEERING_REMEDIATION_BLUEPRINT.md",
+        "docs/implementation/CR1_REMEDIATION_WORK_PACKAGES.md"
+      ],
+      "retainedTestSourceReferences": [],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Preserve exact HEAD blob/hash with dated supersession rationale; designate current controlling documents.",
+        "Reconcile cited legal/provider authority and do not turn historical execution text into current approval."
+      ],
+      "correctiveCards": [
+        "R0-01",
+        "R0-02"
+      ]
+    },
+    {
+      "path": "docs/harvo/receipts/CR1_LIVE_CANARY_RECEIPT.json",
+      "classification": "HISTORICAL_RECORD_QUARANTINE_REQUIRED",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-57"
+      ],
+      "headBlob": "f92cfcbb578bff395d15f922012634423e658a17",
+      "headSha256": "71496072b72457610314a4613de4e73cdc36c0f981a81dc09c3c823abccca990",
+      "headLineCount": 57,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Release evidence reviewer + provider operations",
+      "semanticFinding": "Receipt contains literal canary-style provider identifiers, fixed positive verification fields and a clearance claim. Matching fake defaults are present in the deleted router. The document itself provides no independently authenticated provider collection or reviewer attestation. Treat it as historical disputed evidence, not a production receipt or proof that no remote action occurred.",
+      "currentSourceReferences": [
+        "src/lib/release/evidence.ts",
+        "docs/audits/cr1-remediation/r0-02/LOCAL_TEST_RECEIPT.json"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/cr1_release_evidence.test.ts",
+        "src/test/harvo/cr1_evidence_quarantine.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Keep immutable historical bytes/blob and mark NOT_RELEASE_EVIDENCE outside any gate-consumed path.",
+        "Require real provider identity, requested and observed status, spend freshness, provenance and independent acceptance for replacement."
+      ],
+      "correctiveCards": [
+        "R0-02",
+        "R7-03"
+      ]
+    },
+    {
+      "path": "src/migrations/041_stays_canonical_commerce.sql",
+      "classification": "APPLIED_HISTORY_RECONCILIATION_REQUIRED",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-86"
+      ],
+      "headBlob": "4bc32c24035d9691e83172140b3baf12cbad3b6c",
+      "headSha256": "c2ca50ab312f406a7b9c460880e0b9703b2e31803df38f7aae276acde2147dff",
+      "headLineCount": 86,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "DBA + commerce/finance architect",
+      "semanticFinding": "Defines separate stays_quotes, stays_holds, stays_orders and webhook tables. Holds use guest_session_id and orders use user_id; this file does not establish tenant RLS or canonical quote/finance invariants. Current SQL deletion is not a database rollback. History reports this exact HEAD hash, subject to the observation limitations below.",
+      "currentSourceReferences": [
+        "src/migrations/runner.ts",
+        "docs/audits/cr1-remediation/r0-01/NEON_HISTORY_OBSERVATION.json",
+        "src/lib/offers/canonicalOfferAuthorityEngine.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/m4_inventory_holds.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Recover trusted applied bytes and migration authority, inspect actual table/policy/constraint definitions, reconcile data and consumers.",
+        "Retain original bytes/history; design only reviewed forward compatibility/retirement after data ownership and legal commerce contracts are resolved."
+      ],
+      "correctiveCards": [
+        "R0-01",
+        "R2-02",
+        "R3-02",
+        "R3-03"
+      ],
+      "databaseHistoryObservation": {
+        "status": "OBSERVED_UNTRUSTED_HISTORY",
+        "recordedChecksum": "c2ca50ab312f406a7b9c460880e0b9703b2e31803df38f7aae276acde2147dff",
+        "deletedHeadChecksum": "c2ca50ab312f406a7b9c460880e0b9703b2e31803df38f7aae276acde2147dff",
+        "byteChecksumMatch": true,
+        "actualDdlEquivalence": "UNVERIFIED",
+        "receipt": "docs/audits/cr1-remediation/r0-01/NEON_HISTORY_OBSERVATION.json",
+        "observedAt": "2026-09-28T18:15:07.873Z",
+        "environment": "UNVERIFIED_PRIMARY_NEON_CANDIDATE",
+        "branchIdentity": "NOT_SUPPLIED",
+        "productionCertification": false
+      }
+    },
+    {
+      "path": "src/migrations/042_marketing_creative_packages.sql",
+      "classification": "APPLIED_HISTORY_RECONCILIATION_REQUIRED",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-54"
+      ],
+      "headBlob": "983d38981a3544dafbb0e71930b74109148c72d3",
+      "headSha256": "012e11eb0777f9c6a5796b295e0c4f7222e1dfe76a62f24633d2cf246a793fa8",
+      "headLineCount": 54,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "DBA + media authority",
+      "semanticFinding": "Creates parallel packages/assets with caller URL/hash metadata, review score and mutable version fields. DDL alone lacks trusted byte provenance and immutable canonical review binding. History reports the exact deleted HEAD hash; running canonical creative code does not remove or reconcile these database tables.",
+      "currentSourceReferences": [
+        "src/lib/marketing/creativeWorkflow.ts",
+        "docs/audits/cr1-remediation/r0-01/NEON_HISTORY_OBSERVATION.json"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/creative_pipeline.test.ts",
+        "src/test/harvo/creative_campaign_binding.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Inventory stored rows and retained references; determine canonical import/quarantine and immutable evidence requirements.",
+        "Preserve applied migration bytes; test reviewed additive compatibility under real restricted roles."
+      ],
+      "correctiveCards": [
+        "R0-01",
+        "R4-03"
+      ],
+      "databaseHistoryObservation": {
+        "status": "OBSERVED_UNTRUSTED_HISTORY",
+        "recordedChecksum": "012e11eb0777f9c6a5796b295e0c4f7222e1dfe76a62f24633d2cf246a793fa8",
+        "deletedHeadChecksum": "012e11eb0777f9c6a5796b295e0c4f7222e1dfe76a62f24633d2cf246a793fa8",
+        "byteChecksumMatch": true,
+        "actualDdlEquivalence": "UNVERIFIED",
+        "receipt": "docs/audits/cr1-remediation/r0-01/NEON_HISTORY_OBSERVATION.json",
+        "observedAt": "2026-09-28T18:15:07.873Z",
+        "environment": "UNVERIFIED_PRIMARY_NEON_CANDIDATE",
+        "branchIdentity": "NOT_SUPPLIED",
+        "productionCertification": false
+      }
+    },
+    {
+      "path": "src/migrations/043_worker_daemon_and_circuit_breaker.sql",
+      "classification": "APPLIED_HISTORY_RECONCILIATION_REQUIRED",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-58"
+      ],
+      "headBlob": "61847f3bdbe7ab689dfa20c3b6da21c8de57edc3",
+      "headSha256": "1a066cdb24bd5f380e637f22ca972793d19338e770f23b67f06f0852afeace49",
+      "headLineCount": 58,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "DBA + worker/analytics engineering",
+      "semanticFinding": "Adds marketing_daily_rollups with zero defaults, local circuit_breaker_events and generic dead_letter_queue. Existing canonical queues/rollups are separate. This file does not provide RLS, worker fencing or remote-pause proof. Observed history matches HEAD, so omission cannot be treated as a no-op deployment cleanup.",
+      "currentSourceReferences": [
+        "src/lib/platform/durableOutbox.ts",
+        "src/lib/marketing/engine.ts",
+        "docs/audits/cr1-remediation/r0-01/NEON_HISTORY_OBSERVATION.json"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/durable_outbox.test.ts",
+        "src/test/harvo/pause_recovery.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Audit rows and worker consumers; quarantine fabricated zero metrics and provider-state claims.",
+        "Plan forward reconciliation into canonical job/observation authority without deleting queued work or audit history."
+      ],
+      "correctiveCards": [
+        "R0-01",
+        "R5-03",
+        "R6-02"
+      ],
+      "databaseHistoryObservation": {
+        "status": "OBSERVED_UNTRUSTED_HISTORY",
+        "recordedChecksum": "1a066cdb24bd5f380e637f22ca972793d19338e770f23b67f06f0852afeace49",
+        "deletedHeadChecksum": "1a066cdb24bd5f380e637f22ca972793d19338e770f23b67f06f0852afeace49",
+        "byteChecksumMatch": true,
+        "actualDdlEquivalence": "UNVERIFIED",
+        "receipt": "docs/audits/cr1-remediation/r0-01/NEON_HISTORY_OBSERVATION.json",
+        "observedAt": "2026-09-28T18:15:07.873Z",
+        "environment": "UNVERIFIED_PRIMARY_NEON_CANDIDATE",
+        "branchIdentity": "NOT_SUPPLIED",
+        "productionCertification": false
+      }
+    },
+    {
+      "path": "src/migrations/044_feeder_corridors_and_godmode_targeting.sql",
+      "classification": "APPLIED_HISTORY_RECONCILIATION_REQUIRED",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-67"
+      ],
+      "headBlob": "08d8d75a38038903e594f10cc2e9dad52031e06a",
+      "headSha256": "befcbe236dbdf96110cfe88c10ab74f11d57b470d36a6130691801f659ab0c18",
+      "headLineCount": 67,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "DBA + AdTech architect",
+      "semanticFinding": "Defines a second feeder catalog and mutable campaign targeting row. Seed ROAS values are unproven, tier names include LUXURY rather than approved COMFORT, and default housing/bidding options are not a provider capability contract. History matches HEAD. Canonical versioned registry does not silently supersede applied table data.",
+      "currentSourceReferences": [
+        "src/lib/marketing/adtech/registry.ts",
+        "src/lib/marketing/adtech/corridors.ts",
+        "src/lib/marketing/adtech/bindings.ts",
+        "docs/audits/cr1-remediation/r0-01/NEON_HISTORY_OBSERVATION.json"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/adtech_geography.test.ts",
+        "src/test/harvo/adtech_bindings.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Resolve applied source provenance and actual rows; do not reuse unsupported estimates as evidence.",
+        "Define migration/quarantine of eligible data into approved provider-resolved immutable corridor versions and preserve old revisions."
+      ],
+      "correctiveCards": [
+        "R0-01",
+        "R5-01",
+        "R5-02"
+      ],
+      "databaseHistoryObservation": {
+        "status": "OBSERVED_UNTRUSTED_HISTORY",
+        "recordedChecksum": "befcbe236dbdf96110cfe88c10ab74f11d57b470d36a6130691801f659ab0c18",
+        "deletedHeadChecksum": "befcbe236dbdf96110cfe88c10ab74f11d57b470d36a6130691801f659ab0c18",
+        "byteChecksumMatch": true,
+        "actualDdlEquivalence": "UNVERIFIED",
+        "receipt": "docs/audits/cr1-remediation/r0-01/NEON_HISTORY_OBSERVATION.json",
+        "observedAt": "2026-09-28T18:15:07.873Z",
+        "environment": "UNVERIFIED_PRIMARY_NEON_CANDIDATE",
+        "branchIdentity": "NOT_SUPPLIED",
+        "productionCertification": false
+      }
+    },
+    {
+      "path": "src/migrations/045_multi_role_security_and_rls.sql",
+      "classification": "APPLIED_HISTORY_RECONCILIATION_REQUIRED",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-32",
+        "170-209"
+      ],
+      "headBlob": "05c464a0671441d83c847156c86e3577cb8a0d78",
+      "headSha256": "129ad347c71f7c6f0fe0aa28f2e9af7f0e75f576942806c4d76462d984f94671",
+      "headLineCount": 257,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Database security + migration owner + independent reviewer",
+      "semanticFinding": "HEAD helper trusts app.bypass_rls/app.marketing_admin GUCs. Its policies refer to stays_holds.session_token and stays_orders.guest_id/listing_id, while HEAD 041 defines guest_session_id and orders.user_id/quote_id. Crucially observed 045 history checksum differs from HEAD. Do not assert these exact policy bytes were deployed; both source-history provenance and real catalog security remain unresolved.",
+      "currentSourceReferences": [
+        "src/server/deployment/runtimeDatabaseAuthority.ts",
+        "src/server/deployment/schemaPreflight.ts",
+        "docs/audits/cr1-remediation/r0-01/NEON_HISTORY_OBSERVATION.json"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/cr1_runtime_database_authority.test.ts",
+        "src/test/harvo/recovery_readiness.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Obtain original checksum-matching applied 045 bytes from authorized historical artifact/source, not reconstructed text.",
+        "Compare actual definitions and role grants; test separate unprivileged LOGIN principals and reject caller-set bypass authority.",
+        "Preserve recorded checksum; no silent history repair, deletion, renumbering or replay of mismatching HEAD source."
+      ],
+      "correctiveCards": [
+        "R0-01",
+        "R1-01",
+        "R2-02"
+      ],
+      "databaseHistoryObservation": {
+        "status": "OBSERVED_UNTRUSTED_HISTORY_SOURCE_MISMATCH",
+        "recordedChecksum": "1674caab502189e9c496c0ff2f93c91c5dfdd1c2ff6e44ea3f256967f0d1e950",
+        "deletedHeadChecksum": "129ad347c71f7c6f0fe0aa28f2e9af7f0e75f576942806c4d76462d984f94671",
+        "byteChecksumMatch": false,
+        "actualDdlEquivalence": "UNVERIFIED",
+        "receipt": "docs/audits/cr1-remediation/r0-01/NEON_HISTORY_OBSERVATION.json",
+        "observedAt": "2026-09-28T18:15:07.873Z",
+        "environment": "UNVERIFIED_PRIMARY_NEON_CANDIDATE",
+        "branchIdentity": "NOT_SUPPLIED",
+        "productionCertification": false
+      }
+    },
+    {
+      "path": "src/migrations/046_canary_execution_and_pilot_certification.sql",
+      "classification": "APPLIED_HISTORY_RECONCILIATION_REQUIRED",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-98"
+      ],
+      "headBlob": "3ed21801df350d87001b5d6bb70d4fcce3ed7231",
+      "headSha256": "b5ea22bab44517cd2406e8c7e31ef42ff84b1fa5ea510ba7f648ae6eb6f0978b",
+      "headLineCount": 98,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "DBA + release evidence authority",
+      "semanticFinding": "Creates audit/canary/readback tables with PAUSED/zero-budget checks but permits caller evidence and mutable status; no independent collector or immutable acceptance boundary follows from these constraints. RLS policies use application GUCs. History matches HEAD; existing rows require provenance classification, not deletion as a source-cleanup side effect.",
+      "currentSourceReferences": [
+        "src/lib/release/evidence.ts",
+        "docs/audits/cr1-remediation/r0-01/NEON_HISTORY_OBSERVATION.json"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/cr1_release_evidence.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Preserve bytes and observed history; inspect actual RLS/immutable constraints and existing records.",
+        "Quarantine synthetic/unauthenticated rows from release gates and introduce reviewed forward evidence authority only after real collector integration."
+      ],
+      "correctiveCards": [
+        "R0-01",
+        "R0-02",
+        "R7-03"
+      ],
+      "databaseHistoryObservation": {
+        "status": "OBSERVED_UNTRUSTED_HISTORY",
+        "recordedChecksum": "b5ea22bab44517cd2406e8c7e31ef42ff84b1fa5ea510ba7f648ae6eb6f0978b",
+        "deletedHeadChecksum": "b5ea22bab44517cd2406e8c7e31ef42ff84b1fa5ea510ba7f648ae6eb6f0978b",
+        "byteChecksumMatch": true,
+        "actualDdlEquivalence": "UNVERIFIED",
+        "receipt": "docs/audits/cr1-remediation/r0-01/NEON_HISTORY_OBSERVATION.json",
+        "observedAt": "2026-09-28T18:15:07.873Z",
+        "environment": "UNVERIFIED_PRIMARY_NEON_CANDIDATE",
+        "branchIdentity": "NOT_SUPPLIED",
+        "productionCertification": false
+      }
+    },
+    {
+      "path": "src/server/config/clients.ts",
+      "classification": "RECOMPOSED_SURFACE_SEMANTIC_PARITY_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-162"
+      ],
+      "headBlob": "d991489260190faa7998fa87313eb3f71653914c",
+      "headSha256": "cc304ce1eac204f9e83588a7ceff2d52cbe0927702484271053b97e55c082d4d",
+      "headLineCount": 162,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Runtime/platform + IAM",
+      "semanticFinding": "Extracted provider/payment/storage/session clients are absent as a module, while current server.ts still initializes the corresponding clients and JWT secret. Global IO getter/setter exports are no longer present; broadcast logic remains inline. Initialization ordering, secret fallback and test-mode behavior require semantic verification; export/name presence is not equivalence.",
+      "currentSourceReferences": [
+        "server.ts",
+        "src/server/operations/runtime.ts",
+        "src/server/operations/sessionRuntime.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/google_auth.test.ts",
+        "src/test/cr1_operations_api.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Check client creation has no unintended network/secret side effects during imports and isolated builds.",
+        "Compare secret/session authority and socket lifecycle against actual callers; preserve hardened workforce issuer boundaries."
+      ],
+      "correctiveCards": [
+        "R1-01",
+        "R2-02",
+        "R2-03"
+      ]
+    },
+    {
+      "path": "src/server/db/bootstrap.ts",
+      "classification": "RECOMPOSED_SURFACE_SEMANTIC_PARITY_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-48",
+        "250-285",
+        "2060-2120"
+      ],
+      "headBlob": "7a021c1e4a7be22c5fd6a8425da4ccc87383c761",
+      "headSha256": "5c43af455699e86797c4b99460195d562fec6bb13aa717a1c8e717ea05b13951",
+      "headLineCount": 2120,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "DBA + runtime platform",
+      "semanticFinding": "Deleted bootstrap contains startup CREATE/ALTER operations. Current server.ts retains ensureUsersTable and other startup DDL (beginning around line1221 at review), so removing the file did not establish a migration-only schema lane. Reconciliation must include applied history and process startup behavior; do not assume the entire 2,120-line module was semantically reaccepted.",
+      "currentSourceReferences": [
+        "server.ts",
+        "src/migrations/runner.ts",
+        "src/server/deployment/schemaPreflight.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/deployment_runtime.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Inventory reachable startup DDL and compare exact current schema contracts under restricted runtime roles.",
+        "Move schema authority through reviewed migration runner without modifying applied history or relying on runtime owner grants."
+      ],
+      "correctiveCards": [
+        "R0-01",
+        "R2-02",
+        "R2-03"
+      ]
+    },
+    {
+      "path": "src/server/db/connection.ts",
+      "classification": "RECOMPOSED_SURFACE_SEMANTIC_PARITY_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-113"
+      ],
+      "headBlob": "aba62d3f163eba6c8ecad91fc02d0ba7c0fcee75",
+      "headSha256": "7ef3e9eae58f7139efac510ff3baecc2beb793ae06563f00292469046759b520",
+      "headLineCount": 113,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Database platform + SRE",
+      "semanticFinding": "Current server.ts retains main/read pools, AsyncLocalStorage tenant isolation and database state variables. The deleted module used environment fallbacks and initialized worker availability. Module removal alone does not prove SSL, role identity, pool context reset or transaction authority remained equivalent.",
+      "currentSourceReferences": [
+        "server.ts",
+        "src/server/deployment/runtimeDatabaseAuthority.ts",
+        "src/server/deployment/databaseReadiness.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/cr1_runtime_database_authority.test.ts",
+        "src/test/harvo/deployment_runtime.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Verify actual web/worker LOGIN identities, verified TLS, connection scope reset and same-client transactions.",
+        "Keep offline builds/tests from inheriting remote credentials; compare read/write pool fallback semantics without weakening failures."
+      ],
+      "correctiveCards": [
+        "R1-01",
+        "R2-02",
+        "R2-03"
+      ]
+    },
+    {
+      "path": "src/server/middleware/auth.ts",
+      "classification": "RECOMPOSED_SURFACE_SEMANTIC_PARITY_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-140"
+      ],
+      "headBlob": "0c3fc06ff28fc548914e2ae84c6045c0f6b4a8f0",
+      "headSha256": "148ca306c9e5d0557e8a845df19b800a80261dbbe82465014e5d2e0918aad9e2",
+      "headLineCount": 140,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "IAM/security backend",
+      "semanticFinding": "Deleted middleware verified HS256 JWT and resolved persisted sessions rather than trusting JWT role claims alone. Current server.ts retains that customer/session boundary and requireAdmin, while dedicated workforce routes are composed separately. Deletion must not erase authentication coverage or merge workforce authority into customer roles.",
+      "currentSourceReferences": [
+        "server.ts",
+        "src/server/operations/sessionRuntime.ts",
+        "src/lib/iam/staffSessionIssuer.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/google_auth.test.ts",
+        "src/test/cr1_workforce_session_api.test.ts",
+        "src/test/cr1_operations_api.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Compare mounted middleware ordering, session revocation, disabled principal behavior and tenant context.",
+        "Reproduce Operations boundary negatives with canonical workforce authority and no fixture bypass in production."
+      ],
+      "correctiveCards": [
+        "R1-01",
+        "R1-02"
+      ]
+    },
+    {
+      "path": "src/server/marketing/canaryCertificationRouter.ts",
+      "classification": "CONTAINMENT_CANDIDATE_REPLACEMENT_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "24-55",
+        "115-140",
+        "153-220"
+      ],
+      "headBlob": "a8694c4b3e8802d3fce6aa4576dc63d84deecb58",
+      "headSha256": "77aff5db958c20196042d2caea24bad4f712becc8d6c07195606fceaf3d2da34",
+      "headLineCount": 232,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Release/security + provider integration",
+      "semanticFinding": "HEAD server mounted this router without outer authenticateToken. Its admin helper accepts x-admin-bypass:true; status responds certified true, readback accepts caller fields and defaults missing budget to zero, and receipt generation supplies fake literal provider/operator values. Retiring these paths contains unsafe authority; no authenticated external proof exists merely because the endpoint is gone.",
+      "currentSourceReferences": [
+        "server.ts",
+        "src/lib/release/evidence.ts",
+        "scripts/deployment/provider-canary-runner.mjs"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/cr1_release_evidence.test.ts",
+        "src/test/harvo/provider_canary.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Verify built/deployed endpoint removal or fail-closed compatibility behavior, including header bypass attempts.",
+        "Replace only with independently collected provider evidence and explicit authorized review; do not accept a raw authenticated flag."
+      ],
+      "correctiveCards": [
+        "R0-02",
+        "R7-03"
+      ]
+    },
+    {
+      "path": "src/server/marketing/circuitBreakerRouter.ts",
+      "classification": "CONTAINMENT_CANDIDATE_REPLACEMENT_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "18-105"
+      ],
+      "headBlob": "39c7438c52bbd25147009e96f601c1253a7b5244",
+      "headSha256": "865d36302d82396fad51f5938709e4298b89123ea4763e264e8519f08a1b3526",
+      "headLineCount": 146,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Provider/worker + IAM",
+      "semanticFinding": "HEAD mount required authentication, but evaluate accepted any authenticated user and could target a campaign; status/DLQ lacked distinct workforce capability checks. Admin override delegated to a local-state service without verified provider activation. Current canonical marketing router remains; no anonymous-access claim is made for the HEAD wrapper-protected routes.",
+      "currentSourceReferences": [
+        "src/server/marketing/router.ts",
+        "src/lib/marketing/engine.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/pause_recovery.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Test actual canonical POST authorization, tenant scope, leased worker authority and audit/outbox effects.",
+        "Keep removed legacy action failure explicit and avoid local activate/refuel shortcuts."
+      ],
+      "correctiveCards": [
+        "R1-02",
+        "R5-03"
+      ]
+    },
+    {
+      "path": "src/server/marketing/creativePackageRouter.ts",
+      "classification": "CONTAINMENT_CANDIDATE_REPLACEMENT_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "16-64",
+        "105-145"
+      ],
+      "headBlob": "f2358bcbcbb05a4a60536b52c42e698d54a72069",
+      "headSha256": "aa78673da099c81ef0e86a5cceb65a81611311c95e05b467af1c4de29ba9369e",
+      "headLineCount": 149,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Creative backend + IAM + Host/Admin UX",
+      "semanticFinding": "HEAD mount required customer authentication; router checked host/admin and offered package creation/list/get/moderation. The service trusted caller asset metadata and did not bind the actual stored bytes or immutable review. Removing it closes that parallel authority but leaves external-media creation/moderation integration work.",
+      "currentSourceReferences": [
+        "src/server/marketing/router.ts",
+        "src/lib/marketing/creativeWorkflow.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/creative_pipeline.test.ts",
+        "src/test/harvo/creative_campaign_binding.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Implement actual upload/review/publication route integration against canonical immutable assets.",
+        "Verify host isolation, workforce moderation capability, immutable accepted facts and external media UX compatibility."
+      ],
+      "correctiveCards": [
+        "R4-03",
+        "R4-04"
+      ]
+    },
+    {
+      "path": "src/server/marketing/databaseSecurityRouter.ts",
+      "classification": "CONTAINMENT_CANDIDATE_REPLACEMENT_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "16-64"
+      ],
+      "headBlob": "1d19fce4cd44d94b56b3412d7c6df4431e698c3d",
+      "headSha256": "592b88b28dcf6d3ba18551e4f0305ed53cd7b0522cc17fa465549a38321e8394",
+      "headLineCount": 64,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Database security + operations IAM",
+      "semanticFinding": "HEAD server authenticated this router, but no admin/workforce capability guard preceded the RLS-health or cross-tenant probe. Arbitrary authenticated callers supplied tenant IDs to a diagnostic that performed UPDATE followed by ROLLBACK and could return false-green authority. It was not an anonymous endpoint; the security issue is privilege scope and invalid proof.",
+      "currentSourceReferences": [
+        "src/server/deployment/runtimeDatabaseAuthority.ts",
+        "src/server/deployment/schemaPreflight.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/cr1_runtime_database_authority.test.ts",
+        "src/test/harvo/recovery_readiness.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Restrict authorized diagnostics and remove tenant-selected mutation probes from general customer routes.",
+        "Use disposable real LOGIN tests and exact catalog contracts; certify neither missing tables nor bypass roles."
+      ],
+      "correctiveCards": [
+        "R1-01",
+        "R2-02"
+      ]
+    },
+    {
+      "path": "src/server/marketing/feederCorridorRouter.ts",
+      "classification": "CONTAINMENT_CANDIDATE_REPLACEMENT_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "15-55",
+        "100-190"
+      ],
+      "headBlob": "b5d4125c279622569e42094dd63de6219d90561e",
+      "headSha256": "8e58b82fe106555aff5f054611afcf307fafa7208a4226b728919275bb656ca0",
+      "headLineCount": 192,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "AdTech + workforce IAM",
+      "semanticFinding": "HEAD mount was authenticated. Router exposed parallel catalog/recommendation/targeting, used campaign host_user_id where canonical host authority is host_id, and let customer-admin write mutable targeting. Static string validation did not prove provider-resolved exclusion or version binding.",
+      "currentSourceReferences": [
+        "src/server/marketing/adtechRoutes.ts",
+        "src/lib/marketing/adtech/bindings.ts",
+        "src/lib/marketing/adtech/geography.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/adtech_bindings.test.ts",
+        "src/test/harvo/adtech_geography.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Map required operations to workforce-scoped canonical commands with CAS releases.",
+        "Test provider capability rejection, geographic resolution, district exclusion and immutable approved revision payloads."
+      ],
+      "correctiveCards": [
+        "R5-01",
+        "R5-02"
+      ]
+    },
+    {
+      "path": "src/server/stays/staysCommerceRouter.ts",
+      "classification": "CONTAINMENT_CANDIDATE_REPLACEMENT_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "42-80",
+        "117-142",
+        "304-386",
+        "414-465"
+      ],
+      "headBlob": "28e58dc180210cde3d850d65a3f0cc6c5b043bb2",
+      "headSha256": "f416b384ecacbee3c79f869497b8dfc0b0479dae3153afe84e3505d66ed64115",
+      "headLineCount": 478,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Commerce/finance + IAM + legal policy owner",
+      "semanticFinding": "HEAD mounted stays commerce without outer authentication. Its principal resolver relied on JWT verification and fell back to guest behavior, quotes could use property/floor fallback prices, create-order could repeat gateway operations and generated simulated orders without Razorpay. These are not approved quote/payment semantics. Current stay projection and inventory holds remain; live checkout is still separately gated. The test_commerce engine is detached and is not a ready replacement.",
+      "currentSourceReferences": [
+        "server.ts",
+        "components/CheckoutPage.tsx",
+        "src/lib/offers/canonicalOfferAuthorityEngine.ts",
+        "src/lib/commerce/staysCommerceEngine.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/m4_inventory_holds.test.ts",
+        "src/test/m3_room_media_authority.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Keep legal/tax checkout gate until approved contracts; remove fabricated gateway success and fallback prices.",
+        "Implement persisted principal, canonical immutable offer/quote, atomic hold/funds/capture/booking, real webhook idempotency and unknown-COMMIT recovery."
+      ],
+      "correctiveCards": [
+        "R3-01",
+        "R3-02",
+        "R3-03"
+      ]
+    },
+    {
+      "path": "src/server/routes/crm.router.ts",
+      "classification": "RECOMPOSED_SURFACE_SEMANTIC_PARITY_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "146-185",
+        "567-610",
+        "802-865"
+      ],
+      "headBlob": "db0bde5739bd93b366ea104ef5ef9803b402540d",
+      "headSha256": "bbcc199a75692edf06fa0d61894e4308eb7e301fb30eb4b85507a817d786cd22",
+      "headLineCount": 990,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "CRM backend + workforce/customer IAM",
+      "semanticFinding": "All 21 directly extracted literal method/path pairs exist in current server.ts, including duplicated legacy message-route shapes. This is a syntactic compatibility observation only. Canonical conversations and legacy thread/message routes coexist; permission, masking, notifications, attachment and read receipt semantics require route-level verification.",
+      "currentSourceReferences": [
+        "server.ts",
+        "src/lib/platform/durableOutbox.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/cr1_inquiry_projection.test.ts",
+        "src/test/cr1_operations_api.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Review actual mounted authority for every legacy CRM writer and its canonical conversation mapping.",
+        "Verify tenant isolation, durable notification/outbox, pagination/read state and no duplicate message delivery across old/new routes."
+      ],
+      "correctiveCards": [
+        "R1-02",
+        "R4-01"
+      ]
+    },
+    {
+      "path": "src/server/routes/legacyMarketing.router.ts",
+      "classification": "RECOMPOSED_SURFACE_SEMANTIC_PARITY_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "70-100",
+        "3790-3845"
+      ],
+      "headBlob": "6cab3821908fd5cb80926574dd18b5e96e2434ee",
+      "headSha256": "815043e2a05873b820f534fd3a6cda26a0110071a2154636862a7bf6ec73df28",
+      "headLineCount": 4065,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Finance/payments + marketing API",
+      "semanticFinding": "62 of 63 directly extracted literal method/path pairs still occur in current server.ts. Missing POST /api/marketing/campaigns/:id/refuel accepted a raw amount. Retired campaign refuel must stay retired; current legacy wallet-refuel code also remains in the monolith and needs separate authority review. Path presence does not prove old API headers, handler ordering or finance correctness.",
+      "currentSourceReferences": [
+        "server.ts",
+        "src/server/marketing/router.ts",
+        "src/lib/marketing/financeQuote.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/runtime_authority.test.ts",
+        "src/test/harvo/pause_recovery.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Verify obsolete funding/dispatch routes fail closed before effects and direct hosts to canonical accepted quote/funds/reservation flow.",
+        "Document explicit compatibility retirement and test actual POST against duplicate payment/reservation and bypass attempts."
+      ],
+      "correctiveCards": [
+        "R2-03",
+        "R5-03",
+        "R5-04"
+      ]
+    },
+    {
+      "path": "src/server/routes/listings.router.ts",
+      "classification": "RECOMPOSED_SURFACE_SEMANTIC_PARITY_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-70",
+        "4240-4326"
+      ],
+      "headBlob": "953d0d67158a5618688b4b83f7af516c89d45a5a",
+      "headSha256": "47c53c51a52fbf313961269184be0281a662d29b132fe47237ed2d3a0ab94395",
+      "headLineCount": 4326,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Stay/room platform + three-sided UI",
+      "semanticFinding": "All 74 directly extracted literal method/path pairs occur in current server.ts. The deleted module spans listing/room/media/calendar/booking/review/SEO/upload endpoints; this finding is not a 4,326-line body equivalence audit. Existing three-sided field and canonical inventory authority must be retained.",
+      "currentSourceReferences": [
+        "server.ts",
+        "components/ListingDetailsNew.tsx"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/m3_room_media_authority.test.ts",
+        "src/test/m4_inventory_holds.test.ts",
+        "src/test/phase2_7_m2_truth_projection.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Compare authorization, projection/privacy, schema mappings and transaction handlers for changed routes.",
+        "Run actual Guest view/Host edits/Admin moderation and canonical room-hold conflict tests before accepting recomposition."
+      ],
+      "correctiveCards": [
+        "R2-03",
+        "R3-01",
+        "R3-03"
+      ]
+    },
+    {
+      "path": "src/server/routes/operations.router.ts",
+      "classification": "RECOMPOSED_SURFACE_SEMANTIC_PARITY_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-85",
+        "1070-1144"
+      ],
+      "headBlob": "33d8e2a7be1d90c506acff878cb802626a314652",
+      "headSha256": "29176e8544800d7d6da46f3a4eddd95d0df06ba71923e34a714b66a3e612dc09",
+      "headLineCount": 1144,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Operations IAM + runtime platform",
+      "semanticFinding": "All 44 directly extracted literal method/path pairs occur in current server.ts, spanning configuration, health, login/OTP and administrative routes. The new dedicated workforce boundary exists separately; retaining legacy paths must not allow customer-admin or developer fixtures to bypass it. No complete behavior equivalence follows from the path count.",
+      "currentSourceReferences": [
+        "server.ts",
+        "src/server/operations/runtime.ts",
+        "src/server/operations/sessionRuntime.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/cr1_operations_api.test.ts",
+        "src/test/cr1_workforce_session_api.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Review route ordering and capability checks, including public health/config data and privileged legacy admin paths.",
+        "Verify persisted sessions, revocation, owner bootstrap and canonical IAM command audit atomicity."
+      ],
+      "correctiveCards": [
+        "R1-01",
+        "R1-02",
+        "R1-04"
+      ]
+    },
+    {
+      "path": "src/server/routes/webhooks.router.ts",
+      "classification": "RECOMPOSED_SURFACE_SEMANTIC_PARITY_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-85",
+        "1080-1142"
+      ],
+      "headBlob": "b3f11c287671317825c20aafabab74ae8171e2ee",
+      "headSha256": "f4da5714496f1d40659628847cb81edd81f02a882bb6ea042550d34daa5c82e1",
+      "headLineCount": 1142,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Payments/webhook platform + security",
+      "semanticFinding": "All 14 directly extracted literal method/path pairs occur in current server.ts. Existing early 410 guards retire some legacy payment paths; route declarations later in the file do not establish reachability. Raw-body parsing, signature checks, replay handling and finance writes still require effective mount-order verification.",
+      "currentSourceReferences": [
+        "server.ts",
+        "src/lib/platform/durableOutbox.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/durable_outbox.test.ts",
+        "src/test/harvo/runtime_authority.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Verify deployed raw-body signature boundary, replay keys, single held transaction and outbox atomicity.",
+        "Prove legacy callbacks cannot create finance authority before canonical verified capture or via client verification."
+      ],
+      "correctiveCards": [
+        "R2-03",
+        "R3-03",
+        "R5-04"
+      ]
+    },
+    {
+      "path": "src/server/services/legacyMarketingEngine.ts",
+      "classification": "RECOMPOSED_SURFACE_SEMANTIC_PARITY_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "297-485",
+        "1-55",
+        "5060-5166"
+      ],
+      "headBlob": "ebe4dec20d5239bd5b3de9f7a3eecbf7b3811747",
+      "headSha256": "0154cbe905011084e02c2ab0eef6b7baa02c5cc3f032070c0d5a1da0dcda5426",
+      "headLineCount": 5166,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Marketing platform + finance",
+      "semanticFinding": "Of 35 scanned exported function names, 33 remain in current server.ts, transitionCampaignState is imported from the canonical module, and background-worker startup is now inline. Legacy dispatch/activate functions currently throw HARVO_V2_REQUIRED. This is recomposition plus containment, not proof the 5,166-line engine vanished or that all remaining wallet/analytics logic is canonical.",
+      "currentSourceReferences": [
+        "server.ts",
+        "src/lib/marketing/engine.ts",
+        "src/server/marketing/worker.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/runtime_authority.test.ts",
+        "src/test/harvo/pause_recovery.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Trace effective runtime callers and remaining legacy finance, pricing and background timers.",
+        "Keep dispatch disabled outside canonical revision/approval/funding authority; port behavior only where verified necessary."
+      ],
+      "correctiveCards": [
+        "R2-03",
+        "R5-03",
+        "R5-04"
+      ]
+    },
+    {
+      "path": "src/services/canaryCertificationService.ts",
+      "classification": "CONTAINMENT_CANDIDATE_REPLACEMENT_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "136-165",
+        "280-360",
+        "370-413"
+      ],
+      "headBlob": "83bc0d015beed62186d14b883d475fa46586a158",
+      "headSha256": "e6e066df03a0c9c8abb0f54496a3bd8666fcaf8fbea36380a8bd2e05442b04d3",
+      "headLineCount": 413,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Release evidence + provider integration",
+      "semanticFinding": "In-memory inFlight/completed maps served as replay protection. Readback trusted caller status/budget, wrote verified=true/exact-match receipts without provider fetch, and a checksum was presented as certification. Passing pg.Pool into transaction query calls did not guarantee a held connection. The evidence validator now fails closed without a configured independent authority; an actual collector is still missing.",
+      "currentSourceReferences": [
+        "src/lib/release/evidence.ts",
+        "scripts/deployment/provider-canary-runner.mjs"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/cr1_release_evidence.test.ts",
+        "src/test/harvo/provider_canary.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Retire unsafe authority and preserve historical receipts as disputed.",
+        "Implement durable target-bound collection, unknown handling, actual zero-spend readback and independent review; restart/concurrent idempotency must be durable."
+      ],
+      "correctiveCards": [
+        "R0-02",
+        "R7-03"
+      ]
+    },
+    {
+      "path": "src/services/circuitBreakerService.ts",
+      "classification": "CONTAINMENT_CANDIDATE_REPLACEMENT_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "94-150",
+        "318-350",
+        "380-425"
+      ],
+      "headBlob": "e2fe6139e7c111e68a967473aeb15df52478562f",
+      "headSha256": "388256e1b4a01d832a49ee479da7057d6e1a66af51b0b9d7159991cb4689f4d8",
+      "headLineCount": 573,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Worker/inventory + provider operations",
+      "semanticFinding": "Occupancy aggregation lacks campaign-flight date authority and expects total_inventory rather than canonical total_units. Local events claim provider PAUSED without a provider call. Admin override updates local campaign ACTIVE; rollups and DLQ duplicate canonical systems. Canonical engine already queues protection and preserves financial reservations, but operational end-to-end coverage still needs reacceptance.",
+      "currentSourceReferences": [
+        "src/lib/marketing/engine.ts",
+        "src/lib/platform/durableOutbox.ts",
+        "src/server/marketing/worker.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/pause_recovery.test.ts",
+        "src/test/harvo/durable_outbox.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Verify inventory-flight authority, transactional pause intent, fenced worker claim and exact provider readback.",
+        "No local ACTIVE shortcut; test unknown spend/metrics, exhausted retries and protected recovery."
+      ],
+      "correctiveCards": [
+        "R5-03",
+        "R6-02",
+        "R6-04"
+      ]
+    },
+    {
+      "path": "src/services/creativePackageService.ts",
+      "classification": "CONTAINMENT_CANDIDATE_REPLACEMENT_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "27-50",
+        "98-145",
+        "174-227",
+        "446-477"
+      ],
+      "headBlob": "79b18be67898332ced033f23646df6b636e7520d",
+      "headSha256": "45a8efe3faa25e0d5aba1780cd4f70a5745ec2e38c9450ec12bc0afad6f36df5",
+      "headLineCount": 480,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Media security + creative workflow",
+      "semanticFinding": "Asset identity is caller sha256Hash or SHA256(URL), not stored bytes; AI preflight is a local text/metadata heuristic. Moderation mutates version without CAS or immutable audit command, and admin identity/reasons are not used to establish canonical approval. Current image byte pipeline preserves useful functionality but external reels remain open.",
+      "currentSourceReferences": [
+        "src/lib/marketing/creativeWorkflow.ts",
+        "src/lib/marketing/creativeImages.ts",
+        "src/lib/marketing/creativeStorage.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/creative_pipeline.test.ts",
+        "src/test/harvo/creative_campaign_binding.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Bind verified storage bytes/derivatives, rights and canonical offer facts to immutable review.",
+        "Implement retry-safe actual route/worker integration with workforce authorization and revision conflict tests."
+      ],
+      "correctiveCards": [
+        "R4-03",
+        "R4-04"
+      ]
+    },
+    {
+      "path": "src/services/databaseSecurityService.ts",
+      "classification": "CONTAINMENT_CANDIDATE_REPLACEMENT_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "90-150",
+        "155-215"
+      ],
+      "headBlob": "28f967689467d54d1b027a88c6d7758c0535caf2",
+      "headSha256": "8bf5fdc8ae12d80deeb59301128ce0764ff9a70a9d4df55421c078b0c2c24817",
+      "headLineCount": 215,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Database security + independent reviewer",
+      "semanticFinding": "Health calculation accepted tables with flags/policies even when caller could bypass RLS; multiRoleEnforced used !bypass OR no-missing-FORCE. Cross-tenant probe conditionally SET ROLE only if a named role existed, risking privileged execution, and updated rows before rollback. Actual LOGIN and reachable-role readiness guards now exist, but they do not certify every former table policy.",
+      "currentSourceReferences": [
+        "src/server/deployment/runtimeDatabaseAuthority.ts",
+        "src/server/deployment/databaseReadiness.ts",
+        "src/server/deployment/recoveryReadiness.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/cr1_runtime_database_authority.test.ts",
+        "src/test/harvo/recovery_readiness.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Deny bypass/owner/unsafe reachable grants and distinguish unknown from false.",
+        "Test exact domain RLS with independent LOGIN principals and data; no empty-table or conditional SET ROLE false success."
+      ],
+      "correctiveCards": [
+        "R1-01",
+        "R2-02"
+      ]
+    },
+    {
+      "path": "src/services/feederCorridorService.ts",
+      "classification": "CONTAINMENT_CANDIDATE_REPLACEMENT_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "15-90",
+        "130-220",
+        "300-345",
+        "400-475"
+      ],
+      "headBlob": "b79484b275fe888fb1b09ecf79a60a611dbd366f",
+      "headSha256": "93165ecbb32cd1c4ab95861dc796f0b108b15681f8dd8744a4882e6ce05d4b53",
+      "headLineCount": 475,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "AdTech strategy + provider integration",
+      "semanticFinding": "Parallel strategy code allowed unsupported broad options and housing defaults, string-only district checks, fabricated city-count reach, fallback Wayanad for unknown locations and incorrect 5k/12k tier boundaries. Mutable campaign settings were not pinned to approved revisions. Canonical registry/geography/bindings remain and must be used rather than porting these defaults.",
+      "currentSourceReferences": [
+        "src/lib/marketing/adtech/registry.ts",
+        "src/lib/marketing/adtech/geography.ts",
+        "src/lib/marketing/adtech/bindings.ts",
+        "src/lib/marketing/adtech/capabilities.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/adtech_geography.test.ts",
+        "src/test/harvo/adtech_bindings.test.ts",
+        "src/test/harvo/adtech_controls.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Preserve canonical price intervals and verified provider geo evidence; unresolved exclusions fail closed.",
+        "Test admin release CAS, permitted host overrides and immutable worker compilation; forecasts must be labeled hypotheses with evidence."
+      ],
+      "correctiveCards": [
+        "R5-01",
+        "R5-02"
+      ]
+    },
+    {
+      "path": "src/test/harvo/cr1_department_security_isolation.test.ts",
+      "classification": "TEST_PORT_OR_RETIRE_REVIEW_REQUIRED",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-149"
+      ],
+      "headBlob": "c9f07e32811e41d952c79a3234f83ce32849a456",
+      "headSha256": "29e02882b774df31c518d640a106a62384f518a8e7e26f2f39cc4cc457ac0349",
+      "headLineCount": 149,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "IAM + workforce UX test owner",
+      "semanticFinding": "Uses real PostgreSQL and StaffSessionReader but expects rigid ROLE_AUTHORIZED_DESKS aliases. Current workspaceProjection derives desks from capabilities and removed that alias. Department isolation remains required; obsolete role-to-desk assumptions should be replaced with actual grant/scope tests, not used to justify dropping coverage.",
+      "currentSourceReferences": [
+        "src/lib/iam/workspaceProjection.ts",
+        "src/test/cr1_workforce_session_api.test.ts",
+        "src/test/cr1_workforce_workspace.test.tsx"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/cr1_workforce_session_api.test.ts",
+        "src/test/cr1_workforce_workspace.test.tsx"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Map each old unauthorized desk expectation to approved capability semantics and actual POST permission.",
+        "Test separate departments, revocation, scope limits and insufficient grants under restricted LOGIN; retain failures before correction."
+      ],
+      "correctiveCards": [
+        "R1-01",
+        "R1-02"
+      ]
+    },
+    {
+      "path": "src/test/harvo/cr1_stays_canonical_commerce.test.ts",
+      "classification": "TEST_PORT_OR_RETIRE_REVIEW_REQUIRED",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-85",
+        "190-240",
+        "440-498"
+      ],
+      "headBlob": "02029aa4b4aac8fdc0a1bfbf369b46be916f1767",
+      "headSha256": "812030b2763f5386056cf02cbd19a2cadf1dc3966a84d8d2ce7eb877ee4c4ac1",
+      "headLineCount": 498,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Commerce QA + finance + legal policy owner",
+      "semanticFinding": "Builds bespoke parallel stays tables and mounts the retired commerce router. Fixed 18% tax and simulated gateway order assertions cannot certify lawful canonical checkout. Ownership, replay and booking conflict scenarios remain valuable and must be retained as requirements while unsafe expected-success contracts are retired.",
+      "currentSourceReferences": [
+        "components/CheckoutPage.tsx",
+        "src/test/m4_inventory_holds.test.ts",
+        "src/lib/offers/canonicalOfferAuthorityEngine.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/m4_inventory_holds.test.ts",
+        "src/test/m3_room_media_authority.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Port authorization/replay/conflict scenarios to approved policy and actual quote/hold/payment/booking contracts.",
+        "Do not claim legal or provider integration from custom fixtures; unresolved tax/capture remains a blocked external predicate."
+      ],
+      "correctiveCards": [
+        "R3-02",
+        "R3-03"
+      ]
+    },
+    {
+      "path": "src/test/harvo/sprint2_creative_pipeline.test.ts",
+      "classification": "TEST_PORT_OR_RETIRE_REVIEW_REQUIRED",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-85",
+        "500-563"
+      ],
+      "headBlob": "19c83a0bcffc8dc1a25432f6096f657f7d4af7a9",
+      "headSha256": "50290060ecee00929134e30e45f2d1abc685c136c52e210d7f3206494dbc2af2",
+      "headLineCount": 563,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Media/security test engineering",
+      "semanticFinding": "Custom schema/middleware directly tests the removed creative router/service; validates useful formats/rights/tenant separation but accepts caller metadata and local heuristic AI. Version increment assertions do not prove concurrent CAS or stored-byte approval. Current byte-pipeline tests preserve a stricter image subset, not reel journey completion.",
+      "currentSourceReferences": [
+        "src/test/harvo/creative_pipeline.test.ts",
+        "src/test/harvo/creative_campaign_binding.test.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/creative_pipeline.test.ts",
+        "src/test/harvo/creative_campaign_binding.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Port rights, media rejection, cross-tenant and immutable review cases to actual upload/route/worker integration.",
+        "Add exact-byte tamper, stale approval, conflicting revisions and absent video support tests."
+      ],
+      "correctiveCards": [
+        "R4-03",
+        "R4-04"
+      ]
+    },
+    {
+      "path": "src/test/harvo/sprint3_worker_daemon.test.ts",
+      "classification": "TEST_PORT_OR_RETIRE_REVIEW_REQUIRED",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-90",
+        "180-240",
+        "390-454"
+      ],
+      "headBlob": "527f3901a542f9ac6513743e1e328876e75cf554",
+      "headSha256": "30c00ae1af03daa0fa0ff608ff12c136a8df377136dcb1fdb7d724e68b4e41c8",
+      "headLineCount": 454,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Worker reliability QA",
+      "semanticFinding": "Custom total_inventory fixtures and simulated notification payloads test the deleted daemon/circuit service. Local override-to-ACTIVE and fabricated telemetry are invalid production success conditions. Useful retries, DLQ and atomicity scenarios should move to canonical outbox/worker contracts with restart and multi-connection evidence.",
+      "currentSourceReferences": [
+        "src/lib/platform/durableOutbox.ts",
+        "src/server/marketing/worker.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/durable_outbox.test.ts",
+        "src/test/harvo/pause_recovery.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Retain failure/lease/fencing assertions under actual PostgreSQL separate connections and process restart.",
+        "Verify notifications/provider effects and readback rather than state updates pretending delivery; unknown cannot become zero."
+      ],
+      "correctiveCards": [
+        "R4-01",
+        "R5-03",
+        "R6-02"
+      ]
+    },
+    {
+      "path": "src/test/harvo/sprint4_feeder_corridors.test.ts",
+      "classification": "TEST_PORT_OR_RETIRE_REVIEW_REQUIRED",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-80",
+        "180-245",
+        "340-409"
+      ],
+      "headBlob": "209aaadd4973c555de52b07f47426ba4b8bca995",
+      "headSha256": "2c953d8a3f9c52d242a02f0dd439b504029f8cd2223470f580a7e13271e41d65",
+      "headLineCount": 409,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "AdTech/provider QA",
+      "semanticFinding": "Fixtures validate static reach/AI confidence, universal housing and seeded ROAS assumptions from the retired service. Those are not real provider or performance evidence. Tenant/admin isolation and district conflict cases remain required in canonical resolved geography and strategy release tests.",
+      "currentSourceReferences": [
+        "src/lib/marketing/adtech/geography.ts",
+        "src/lib/marketing/adtech/registry.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/adtech_geography.test.ts",
+        "src/test/harvo/adtech_bindings.test.ts",
+        "src/test/harvo/adtech_controls.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Port legitimate isolation/radius/exclusion cases; reject invented estimates and unsupported category controls.",
+        "Exercise actual router commands and immutable campaign binding; verify provider fixture versions are labeled simulations."
+      ],
+      "correctiveCards": [
+        "R5-01",
+        "R5-02"
+      ]
+    },
+    {
+      "path": "src/test/harvo/sprint5_database_rls.test.ts",
+      "classification": "TEST_PORT_OR_RETIRE_REVIEW_REQUIRED",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-100",
+        "180-260",
+        "720-803"
+      ],
+      "headBlob": "55c0bc866920057365be8c64641a4251d2b4fe6b",
+      "headSha256": "e2f92fcfdf8d31ee1195496f5bd2fbd9ffdef2a781c0051655775c7e6a473322",
+      "headLineCount": 803,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Database security QA",
+      "semanticFinding": "Tests create custom tables and copied policies, grant broad rights and use SET ROLE from fixture authority instead of independent LOGIN roles. Negative isolation intent is useful, but schema/role drift means this suite cannot establish deployment RLS. Current restricted LOGIN guards cover selected canonical domains, not all deleted candidate tables.",
+      "currentSourceReferences": [
+        "src/server/deployment/runtimeDatabaseAuthority.ts",
+        "src/server/deployment/schemaPreflight.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/cr1_runtime_database_authority.test.ts",
+        "src/test/harvo/recovery_readiness.test.ts",
+        "src/test/harvo/cr1_service_case_readiness_authority.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Reconcile exact applied migration bytes/catalog before substituting RLS fixtures.",
+        "Test separate LOGIN principals, NOINHERIT reachable privileges, column grants, definer authority and revocation for each in-scope domain."
+      ],
+      "correctiveCards": [
+        "R0-01",
+        "R1-01",
+        "R2-02"
+      ]
+    },
+    {
+      "path": "src/test/harvo/sprint6_canary_certification.test.ts",
+      "classification": "TEST_PORT_OR_RETIRE_REVIEW_REQUIRED",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "1-85",
+        "180-260",
+        "310-360"
+      ],
+      "headBlob": "1339f06f9ca80313cb80facdbf5aa3913cc7628b",
+      "headSha256": "43965a84e8afe4171f5a658e6e7bb305267aea06c36cadf422ed90710ad81e09",
+      "headLineCount": 360,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Release/provider QA",
+      "semanticFinding": "Tests use mocked query clients, Promise.all on one Map-owning instance and caller observations to certify canaries. A SHA checksum cannot authenticate provider collection. Replacement tests fail closed for missing/fixture/stale/wrong-target evidence, but local passing tests are not an actual provider canary.",
+      "currentSourceReferences": [
+        "src/lib/release/evidence.ts",
+        "scripts/deployment/provider-canary-runner.mjs"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/cr1_release_evidence.test.ts",
+        "src/test/harvo/cr1_evidence_quarantine.test.ts",
+        "src/test/harvo/provider_canary.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Retain negative paused/unknown-spend and identity tests against canonical evidence boundary.",
+        "Add durable restart/concurrent collector tests when independently configured collector exists; require real authorized observations separately."
+      ],
+      "correctiveCards": [
+        "R0-02",
+        "R7-03"
+      ]
+    },
+    {
+      "path": "src/test/security/phase4_adversarial_security.test.ts",
+      "classification": "TEST_PORT_OR_RETIRE_REVIEW_REQUIRED",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "21-90",
+        "121-220"
+      ],
+      "headBlob": "44353101efa75559193e9cf9d656e95efde2ee69",
+      "headSha256": "42b554981a3343855d54b38e2adc1f04b7f2e1bd8793d3cdb3cfe5594f7801f3",
+      "headLineCount": 220,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Application security QA",
+      "semanticFinding": "Mixed suite contains genuine HTTP 401 tests for seven actual endpoints, public-text privacy and soft-exit validation, alongside invalid caller-canary certification tests and locally duplicated predicates. Blanket deletion would discard useful boundary regression coverage. The retained similarly named phase4 suite mostly tests helpers and is not equivalent to those mounted-route cases.",
+      "currentSourceReferences": [
+        "src/test/phase4_adversarial_security_audit.test.ts",
+        "src/test/cr1_operations_api.test.ts",
+        "src/test/google_auth.test.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/phase4_adversarial_security_audit.test.ts",
+        "src/test/cr1_operations_api.test.ts",
+        "src/test/google_auth.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Port each of the seven unauthenticated route tests and actual soft-exit validation unless a separately verified replacement covers it.",
+        "Preserve masking/projection negatives; retire false certification assertions with documented replacement negatives."
+      ],
+      "correctiveCards": [
+        "R1-01",
+        "R1-02",
+        "R2-03",
+        "R0-02"
+      ]
+    },
+    {
+      "path": "src/workers/platformWorker.ts",
+      "classification": "CONTAINMENT_CANDIDATE_REPLACEMENT_OPEN",
+      "reviewScope": "TARGETED_SEMANTIC_PATH_REVIEW_NOT_ALL_LINES",
+      "headLineRanges": [
+        "75-155",
+        "175-220",
+        "225-264"
+      ],
+      "headBlob": "3d98bc683e86e5c94c24e10b18bc0582170eefc4",
+      "headSha256": "f2802e81f0b3c9d9125f156ddd20c1836ee6aa85e994aaff0a5c616b4e87f085",
+      "headLineCount": 264,
+      "indexState": "DELETED",
+      "worktreeState": "ABSENT",
+      "authorIntent": "UNCONFIRMED",
+      "actualAccountableHuman": "UNASSIGNED",
+      "recommendedAccountableDiscipline": "Worker/SRE + CRM/provider engineering",
+      "semanticFinding": "Worker claims notification rows, treats payload.simulateFailure as its dispatch check and otherwise marks SUCCEEDED without a provider send. Calculated backoff is not a scheduled retry authority; telemetry creates zero rows for selected active campaigns rather than fetching provider metrics. The canonical marketing worker/outbox remain; removing this worker does not certify notification delivery or observation freshness.",
+      "currentSourceReferences": [
+        "src/server/marketing/worker.ts",
+        "src/lib/platform/durableOutbox.ts",
+        "src/lib/marketing/engine.ts"
+      ],
+      "retainedTestSourceReferences": [
+        "src/test/harvo/durable_outbox.test.ts",
+        "src/test/harvo/pause_recovery.test.ts"
+      ],
+      "testEvidenceState": "SOURCE_INSPECTED_NOT_EXECUTED_FOR_THIS_DOCUMENTATION_BATCH",
+      "removalAcceptance": "OPEN_NOT_INDEPENDENTLY_ACCEPTED",
+      "acceptanceRequired": [
+        "Verify deployed worker entrypoint and current role, fencing, reauthorization, retry scheduling and reconciliation.",
+        "Integrate actual notification/provider adapters with redacted logs; test lost acknowledgement, restart, duplicates and unknown telemetry."
+      ],
+      "correctiveCards": [
+        "R4-01",
+        "R5-03",
+        "R6-02",
+        "R6-04"
+      ]
+    }
+  ]
+}

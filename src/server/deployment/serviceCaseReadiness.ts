@@ -3,6 +3,7 @@ import type pg from 'pg';
 import {z} from 'zod';
 import {serviceCaseColumnContract,serviceCaseConstraintContract,serviceCaseIndexContract,serviceCaseTriggerContract} from './serviceCaseCatalogContract.js';
 import {conversationConstraintContract} from './conversationCatalogContract.js';
+import {reachableRuntimeRolesSql,verifyRuntimeDatabaseAuthority} from './runtimeDatabaseAuthority.js';
 
 export const serviceCaseTables=['service_case_runtime_bindings','service_cases','service_case_requests','service_case_events','service_case_internal_notes','service_case_content_access_receipts'] as const;
 export const serviceCaseFunctions=[
@@ -52,23 +53,23 @@ export function serviceCaseRolloutGrants(raw:unknown):string[]{
 }
 
 /** Metadata only. Does not disclose case rows, notes or workforce identities. */
- export async function verifyServiceCaseBoundaryCatalog(client:pg.PoolClient){
- const isOwner = (await client.query("SELECT pg_has_role(current_user, (SELECT relowner FROM pg_class WHERE relname='threads' AND relnamespace='public'::regnamespace), 'USAGE') AS owns")).rows[0]?.owns === true;
+export async function verifyServiceCaseBoundaryCatalog(client:pg.PoolClient){
+ const authority=await verifyRuntimeDatabaseAuthority(client);
  const sql=readFileSync(new URL('../../migrations/038_service_cases.sql',import.meta.url),'utf8');
  const funcs=(await client.query<{name:string;identity:string;body:string;definer:boolean;config:string[];owner:string;login:boolean;bypass:boolean;superuser:boolean;public_execute:boolean}>(`SELECT p.proname AS name,p.oid::regprocedure::text AS identity,p.prosrc AS body,p.prosecdef AS definer,p.proconfig AS config,r.rolname AS owner,r.rolcanlogin AS login,r.rolbypassrls AS bypass,r.rolsuper AS superuser,EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE') AS public_execute FROM pg_proc p JOIN pg_roles r ON r.oid=p.proowner JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname=ANY($1::text[])`,[serviceCaseFunctions.map(fn=>fn.split('(')[0])])).rows;
  const owner=funcs.find(fn=>fn.name==='service_case_read_content')?.owner;
- const ownerSafe=isOwner||(owner!==undefined&&(await client.query<{safe:boolean}>(`SELECT NOT(r.rolcanlogin OR r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR r.rolcreatedb OR has_schema_privilege(r.oid,'public','CREATE') OR EXISTS(SELECT 1 FROM pg_roles inherited WHERE inherited.oid<>r.oid AND pg_has_role(r.oid,inherited.oid,'MEMBER'))) AS safe FROM pg_roles r WHERE r.rolname=$1`,[owner])).rows[0]?.safe===true);
+ const ownerSafe=owner!==undefined&&(await client.query<{safe:boolean}>(`SELECT NOT(r.rolcanlogin OR r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication OR has_schema_privilege(r.oid,'public','CREATE') OR has_database_privilege(r.oid,current_database(),'CREATE') OR EXISTS(SELECT 1 FROM pg_database d WHERE d.datname=current_database() AND d.datdba=r.oid) OR EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relowner=r.oid) OR EXISTS(SELECT 1 FROM pg_namespace n WHERE n.nspname='public' AND n.nspowner=r.oid) OR EXISTS(SELECT 1 FROM pg_roles inherited WHERE inherited.oid<>r.oid AND pg_has_role(r.oid,inherited.oid,'MEMBER'))) AS safe FROM pg_roles r WHERE r.rolname=$1`,[owner])).rows[0]?.safe===true;
  const functionsValid=funcs.length===serviceCaseFunctions.length&&serviceCaseFunctions.every(identity=>funcs.some(fn=>{
   const expected=sql.match(new RegExp(`CREATE FUNCTION ${fn.name}\\([^]*?AS \\$\\$([^]*?)\\$\\$`,'i'))?.[1]?.trim();
-  return fn.identity===identity&&(isOwner||fn.owner===owner)&&(isOwner||(!fn.login&&!fn.bypass&&!fn.superuser))&&!fn.public_execute&&fn.definer===definerFunctions.includes(identity)&&fn.config?.includes('search_path=pg_catalog, public')&&(!fn.definer||fn.config.includes('row_security=on'))&&!!expected&&fn.body.trim()===expected;
+  return fn.identity===identity&&fn.owner===owner&&!fn.login&&!fn.bypass&&!fn.superuser&&!fn.public_execute&&fn.definer===definerFunctions.includes(identity)&&fn.config?.includes('search_path=pg_catalog, public')&&(!fn.definer||fn.config.includes('row_security=on'))&&!!expected&&fn.body.trim()===expected;
  }));
- const tables=(await client.query<{name:string;rls:boolean;force:boolean;owner:string;public_grant:boolean}>(`SELECT c.relname AS name,c.relrowsecurity AS rls,c.relforcerowsecurity AS force,pg_get_userbyid(c.relowner) AS owner,EXISTS(SELECT 1 FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a WHERE a.grantee=0) AS public_grant FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY($1::text[])`,[serviceCaseTables])).rows;
- const tablesValid=tables.length===serviceCaseTables.length&&tables.every(t=>t.rls&&t.force&&(isOwner||(t.owner!==owner&&!t.public_grant)));
+ const tables=(await client.query<{name:string;rls:boolean;force:boolean;owner:string;public_grant:boolean}>(`SELECT c.relname AS name,c.relrowsecurity AS rls,c.relforcerowsecurity AS force,pg_get_userbyid(c.relowner) AS owner,(EXISTS(SELECT 1 FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a WHERE a.grantee=0) OR EXISTS(SELECT 1 FROM pg_attribute att CROSS JOIN LATERAL aclexplode(att.attacl) a WHERE att.attrelid=c.oid AND NOT att.attisdropped AND a.grantee=0)) AS public_grant FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY($1::text[])`,[serviceCaseTables])).rows;
+ const tablesValid=tables.length===serviceCaseTables.length&&tables.every(t=>t.rls&&t.force&&t.owner!==owner&&!t.public_grant);
  const policies=(await client.query<{tablename:string;policyname:string;roles:string[];cmd:string;permissive:string;qual:string|null;with_check:string|null}>(`SELECT tablename,policyname,roles::text[],cmd,permissive,qual,with_check FROM pg_policies WHERE schemaname='public' AND (tablename=ANY($1::text[]) OR policyname IN('service_case_thread_context','service_case_message_content'))`,[serviceCaseTables])).rows;
- const policiesValid=isOwner||(policies.length===serviceCaseTables.length+2&&policies.every(p=>p.roles.length===1&&p.roles[0]===owner&&p.permissive==='PERMISSIVE'&&(
+ const policiesValid=policies.length===serviceCaseTables.length+2&&policies.every(p=>p.roles.length===1&&p.roles[0]===owner&&p.permissive==='PERMISSIVE'&&(
   (serviceCaseTables.includes(p.tablename as typeof serviceCaseTables[number])&&p.policyname==='service_case_helper_access'&&p.cmd==='ALL'&&p.qual==='true'&&p.with_check==='true')||
   (p.tablename==='threads'&&p.policyname==='service_case_thread_context'&&p.cmd==='SELECT'&&p.with_check===null&&normalized(p.qual)===normalized('(service_case_context_allowed(id) OR ((conversation_actor_id() = guest_id) OR (conversation_actor_id() = host_id)))'))||
-  (p.tablename==='messages'&&p.policyname==='service_case_message_content'&&p.cmd==='SELECT'&&p.with_check===null&&normalized(p.qual)===normalized('service_case_message_allowed(thread_id, conversation_sequence)')))));
+  (p.tablename==='messages'&&p.policyname==='service_case_message_content'&&p.cmd==='SELECT'&&p.with_check===null&&normalized(p.qual)===normalized('service_case_message_allowed(thread_id, conversation_sequence)'))));
  // Staff has no participant table grant, so its own readiness cannot call the
  // participant-role verifier. Verify the inherited immutable source boundary
  // explicitly; a correct receipt is useless if history can be rewritten.
@@ -85,7 +86,7 @@ export function serviceCaseRolloutGrants(raw:unknown):string[]{
  const sourceConstraints=(await client.query<{table_name:string;name:string;definition:string;valid:boolean}>(`SELECT c.relname AS table_name,k.conname AS name,pg_get_constraintdef(k.oid) AS definition,k.convalidated AS valid FROM pg_constraint k JOIN pg_class c ON c.oid=k.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname IN('messages','threads')`)).rows;
  const sourceConstraintsValid=conversationConstraintContract.filter(e=>e.table_name==='messages').every(e=>sourceConstraints.some(r=>r.table_name===e.table_name&&r.name===e.name&&r.valid&&normalized(r.definition)===normalized(e.definition)));
  const sourceTables=(await client.query<{rls:boolean;force:boolean;safe:boolean}>(`SELECT c.relrowsecurity AS rls,c.relforcerowsecurity AS force,pg_get_userbyid(c.relowner)<>$1 AS safe FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname IN('threads','messages')`,[owner])).rows;
- const sourceBoundaryValid=sourcePoliciesValid&&sourceFunctionsValid&&sourceTriggersValid&&sourceConstraintsValid&&sourceTables.length===2&&sourceTables.every(t=>t.rls&&t.force&&(isOwner||t.safe));
+ const sourceBoundaryValid=sourcePoliciesValid&&sourceFunctionsValid&&sourceTriggersValid&&sourceConstraintsValid&&sourceTables.length===2&&sourceTables.every(t=>t.rls&&t.force&&t.safe);
  const constraints=(await client.query<{table_name:string;name:string;definition:string;valid:boolean;deferred:boolean}>(`SELECT c.relname AS table_name,k.conname AS name,pg_get_constraintdef(k.oid) AS definition,k.convalidated AS valid,k.condeferrable AS deferred FROM pg_constraint k JOIN pg_class c ON c.oid=k.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY($1::text[])`,[serviceCaseTables])).rows;
  const constraintsValid=serviceCaseConstraintContract.every(e=>constraints.some(r=>r.table_name===e.table_name&&r.name===e.name&&r.valid&&!r.deferred&&normalized(r.definition)===normalized(e.definition)));
  const indexes=(await client.query<{table_name:string;name:string;definition:string;valid:boolean;ready:boolean}>(`SELECT c.relname AS table_name,i.relname AS name,pg_get_indexdef(x.indexrelid) AS definition,x.indisvalid AS valid,x.indisready AS ready FROM pg_index x JOIN pg_class c ON c.oid=x.indrelid JOIN pg_class i ON i.oid=x.indexrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY($1::text[])`,[serviceCaseTables])).rows;
@@ -95,23 +96,33 @@ export function serviceCaseRolloutGrants(raw:unknown):string[]{
  const triggers=(await client.query<{table_name:string;name:string;function_name:string;type:number;enabled:string;unconditional:boolean;schema:string}>(`SELECT c.relname AS table_name,t.tgname AS name,p.proname AS function_name,t.tgtype AS type,t.tgenabled AS enabled,t.tgqual IS NULL AS unconditional,pn.nspname AS schema FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_namespace pn ON pn.oid=p.pronamespace WHERE n.nspname='public' AND c.relname=ANY($1::text[]) AND NOT t.tgisinternal`,[serviceCaseTables])).rows;
  const triggersValid=serviceCaseTriggerContract.every(e=>triggers.some(r=>r.table_name===e.table_name&&r.name===e.name&&r.function_name===e.function_name&&r.type===e.type&&r.enabled==='O'&&r.unconditional&&r.schema==='public'));
  const targetTables=[...serviceCaseTables,'threads','messages','internal_permission_catalog','internal_iam_current_policy','internal_iam_policy_versions','internal_work_assignments'];
- const definerGrants=(await client.query<{table_name:string;column_name:string;can_select:boolean;can_insert:boolean;can_update:boolean;unsafe:boolean}>(`SELECT c.relname AS table_name,a.attname AS column_name,has_column_privilege($2,c.oid,a.attnum,'SELECT') AS can_select,has_column_privilege($2,c.oid,a.attnum,'INSERT') AS can_insert,has_column_privilege($2,c.oid,a.attnum,'UPDATE') AS can_update,(has_table_privilege($2,c.oid,'DELETE,TRUNCATE,TRIGGER') OR pg_has_role($2,c.relowner,'MEMBER')) AS unsafe FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped WHERE n.nspname='public' AND c.relname=ANY($1::text[])`,[targetTables,owner??'public'])).rows;
- const definerGrantsValid=isOwner||(definerGrants.length>0&&definerGrants.every(r=>{
+ const definerGrants=(await client.query<{table_name:string;column_name:string;can_select:boolean;can_insert:boolean;can_update:boolean;unsafe:boolean}>(`SELECT c.relname AS table_name,a.attname AS column_name,has_column_privilege($2,c.oid,a.attnum,'SELECT') AS can_select,has_column_privilege($2,c.oid,a.attnum,'INSERT') AS can_insert,has_column_privilege($2,c.oid,a.attnum,'UPDATE') AS can_update,(has_table_privilege($2,c.oid,'DELETE,TRUNCATE,TRIGGER,REFERENCES') OR has_any_column_privilege($2,c.oid,'REFERENCES') OR pg_has_role($2,c.relowner,'MEMBER')) AS unsafe FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped WHERE n.nspname='public' AND c.relname=ANY($1::text[])`,[targetTables,owner??null])).rows;
+ const definerGrantsValid=definerGrants.length>0&&definerGrants.every(r=>{
   const select=r.table_name==='threads'?['id','guest_id','host_id','listing_id','experience_id','last_message_sequence'].includes(r.column_name):r.table_name==='messages'?['id','thread_id','sender_id','receiver_id','content','conversation_sequence','created_at'].includes(r.column_name):true;
   const insert=['service_cases','service_case_requests','service_case_events','service_case_internal_notes','service_case_content_access_receipts'].includes(r.table_name);
   const update=r.table_name==='service_cases'&&['state','version','withdrawn_at','withdrawn_by'].includes(r.column_name);
   return !r.unsafe&&r.can_select===select&&r.can_insert===insert&&r.can_update===update;
- }));
- return {ready:functionsValid&&tablesValid&&policiesValid&&ownerSafe&&constraintsValid&&indexesValid&&columnsValid&&triggersValid&&definerGrantsValid&&sourceBoundaryValid,functionsValid,tablesValid,policiesValid,ownerSafe,constraintsValid,indexesValid,columnsValid,triggersValid,definerGrantsValid,sourceBoundaryValid};
+ });
+ return {ready:authority.safe&&functionsValid&&tablesValid&&policiesValid&&ownerSafe&&constraintsValid&&indexesValid&&columnsValid&&triggersValid&&definerGrantsValid&&sourceBoundaryValid,functionsValid,tablesValid,policiesValid,ownerSafe,constraintsValid,indexesValid,columnsValid,triggersValid,definerGrantsValid,sourceBoundaryValid,roleSafe:authority.safe,authority};
 }
 
 export async function verifyServiceCaseCatalog(client:pg.PoolClient,kind:'CONSUMER'|'STAFF'){
  const boundary=await verifyServiceCaseBoundaryCatalog(client);
- const r=(await client.query<{safe:boolean}>(`SELECT NOT(r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR r.rolcreatedb OR has_schema_privilege(current_user,'public','CREATE') OR EXISTS(SELECT 1 FROM pg_roles inherited WHERE pg_has_role(current_user,inherited.oid,'MEMBER') AND(inherited.rolsuper OR inherited.rolbypassrls OR inherited.rolcreaterole OR inherited.rolcreatedb OR inherited.rolname IN(SELECT pg_get_userbyid(proowner) FROM pg_proc WHERE proname='service_case_read_content')))) AS safe FROM pg_roles r WHERE r.rolname=current_user`)).rows[0];
- const privileges=(await client.query<{name:string;selectable:boolean;writable:boolean}>(`SELECT c.relname AS name,has_any_column_privilege(current_user,c.oid,'SELECT') AS selectable,(has_any_column_privilege(current_user,c.oid,'INSERT,UPDATE') OR has_table_privilege(current_user,c.oid,'DELETE,TRUNCATE,TRIGGER')) AS writable FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY($1::text[])`,[kind==='STAFF'?[...serviceCaseTables,'threads','messages']:serviceCaseTables])).rows;
- const grantsValid=privileges.length===(kind==='STAFF'?serviceCaseTables.length+2:serviceCaseTables.length)&&privileges.every(p=>!p.selectable&&!p.writable);
+ const privileges=(await client.query<{name:string;unsafe:boolean}>(`${reachableRuntimeRolesSql}
+  SELECT c.relname AS name,EXISTS(SELECT 1 FROM reachable r
+   WHERE has_any_column_privilege(r.oid,c.oid,'SELECT,INSERT,UPDATE,REFERENCES')
+    OR has_table_privilege(r.oid,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER,REFERENCES')) AS unsafe
+  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+  WHERE n.nspname='public' AND c.relname=ANY($1::text[])`,[kind==='STAFF'?[...serviceCaseTables,'threads','messages']:serviceCaseTables])).rows;
+ const grantsValid=privileges.length===(kind==='STAFF'?serviceCaseTables.length+2:serviceCaseTables.length)&&privileges.every(p=>p.unsafe===false);
  const allowed=['service_case_context_allowed(integer)','service_case_message_allowed(integer,bigint)',...(kind==='CONSUMER'?['service_case_request(integer,uuid,text)','service_case_withdraw(uuid,integer)','service_case_status(integer)']:['service_case_prepare_content(uuid,uuid,integer,bigint,bigint,integer,text)','service_case_read_content(uuid)','service_case_add_note(uuid,uuid,integer,bigint,uuid,text)'])];
- const exec=(await client.query<{identity:string;allowed:boolean}>(`SELECT p.oid::regprocedure::text AS identity,has_function_privilege(current_user,p.oid,'EXECUTE') AS allowed FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname=ANY($1::text[])`,[serviceCaseFunctions.map(fn=>fn.split('(')[0])])).rows;
- const executeValid=exec.length===serviceCaseFunctions.length&&exec.every(fn=>fn.allowed===allowed.includes(fn.identity));
- return {...boundary,ready:boundary.ready&&r?.safe===true&&grantsValid&&executeValid,roleSafe:r?.safe===true,grantsValid,executeValid};
+ const exec=(await client.query<{identity:string;allowed:boolean;reachable_allowed:boolean}>(`${reachableRuntimeRolesSql}
+  SELECT p.oid::regprocedure::text AS identity,has_function_privilege(current_user,p.oid,'EXECUTE') AS allowed,
+   EXISTS(SELECT 1 FROM reachable r WHERE has_function_privilege(r.oid,p.oid,'EXECUTE')) AS reachable_allowed
+  FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+  WHERE n.nspname='public' AND p.proname=ANY($1::text[])`,[serviceCaseFunctions.map(fn=>fn.split('(')[0])])).rows;
+ // Current-role rights must support the requested scope; SET ROLE cannot be a
+ // backdoor to the other consumer/staff command surface.
+ const executeValid=exec.length===serviceCaseFunctions.length&&exec.every(fn=>allowed.includes(fn.identity)?fn.allowed===true:fn.reachable_allowed===false);
+ return {...boundary,ready:boundary.ready&&grantsValid&&executeValid,grantsValid,executeValid};
 }

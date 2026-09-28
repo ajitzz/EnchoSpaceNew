@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "reviewer": "independent_identity_agent",
+  "status": "CHANGES_REQUIRED",
+  "card": "R1-03",
+  "environment": "LOCAL_SOURCE_AND_SANITIZED_UNIT_TEST",
+  "sourceSha256": {
+    "lib/syncService.ts": "3ac15d5d15dd1d801e1ef4d7ca5292d455eb5624fc66d8f22257216266ede91f",
+    "lib/legacyOfflineQueue.ts": "b6a7c42fab62eee13e9f3b2e4665c7368fffcb44a2c0324b2760f6675c80303f",
+    "src/sw.ts": "63deb362fd3499144e70b4c40b51ffbfc617cbfde64f68b5d8a7b9236cc15895",
+    "components/AuthContext.tsx": "bb6dbee2e92077d368ca9437043bf5f8adeffe6d14eb404d35786c342c952fe8",
+    "index.tsx": "93e03cb885eee57babc3619d5c40d2ae146f918e8522ac712872457573782f37",
+    "vite.config.ts": "bf40b12f16a5356d347330881b0c659af5c6679753c07cdf66c436e3cc883910"
+  },
+  "reviewedFindings": [
+    "Fixed session fence prevents same-token logout/relogin from resurrecting in-flight intent.",
+    "Same-ID profile storage update preserves canonical pending event identity.",
+    "Unknown-owner cleanup sets global fence before asynchronous deletion.",
+    "Shared runtime image caches reject API/private and Authorization requests; old broad caches removed."
+  ],
+  "independentValidation": {
+    "command": "npx -y node@24 scripts/testing/run.mjs src/test/cr1_actor_scoped_sync.test.ts --reporter=dot",
+    "exitCode": 0,
+    "passed": 30,
+    "failed": 0,
+    "log": "docs/audits/cr1-remediation/r1-03/INDEPENDENT_ACTOR_TESTS.txt",
+    "sha256": "0db0bb7f96eba1b16310b0406719d00be08782ceee1b280b9d871c6bba9aac8a"
+  },
+  "implementerEvidence": "docs/implementation/CR1_R1_03_LOCAL_RECEIPT.json",
+  "limits": [
+    "Independent reviewer ran actor unit suite, not the implementer ten-case Chromium suite.",
+    "Browser fixture exercises actual AuthContext/sync and production worker but is not full application deployment.",
+    "Entirely offline old installations cannot receive new worker; already-dispatched requests require server authorization/idempotency.",
+    "Not RELEASE_ACCEPTED and no production evidence."
+  ],
+  "priorDisposition": "LOCAL_IMPLEMENTATION_REVIEW_PASS",
+  "additionalFinding": "Clock rollback before logout with failed IndexedDB deletion can leave prior timestamp above logout cutoff. Persist per-command session generation and compare equality; timestamp alone is insufficient."
+}

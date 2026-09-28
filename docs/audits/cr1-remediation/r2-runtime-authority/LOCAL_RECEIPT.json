@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "status": "READY_FOR_REVIEW",
+  "environment": "LOCAL_DISPOSABLE_POSTGRESQL",
+  "productionCertification": false,
+  "scope": "R2 runtime login authority and recovery catalog grant guards only",
+  "head": "0e4c6fec2fe86f1b793760c5f7a3daf08bbf7508",
+  "workingTree": "DIRTY; pre-existing staged work preserved; no commit or stage",
+  "sources": [
+    {
+      "path": "src/server/deployment/runtimeDatabaseAuthority.ts",
+      "sha256": "0b510603f38af42fc543c9050473e0f87fe69b930c08b69be7cd9ff4be252470"
+    },
+    {
+      "path": "src/server/deployment/databaseReadiness.ts",
+      "sha256": "bcf78bccddb3bb422de48251ddb9824c58bd75006bfd29de9728fb94242abf7e"
+    },
+    {
+      "path": "src/server/deployment/recoveryReadiness.ts",
+      "sha256": "04811d3ab2cfca8d5bb878b84d0ad39efe981c78531836b5799f411d69f0125f"
+    },
+    {
+      "path": "src/test/harvo/cr1_runtime_database_authority.test.ts",
+      "sha256": "1c732aca7c214760d40c16c76d346fb991e94ed5476820e1f4b6835fda50fd45"
+    },
+    {
+      "path": "src/test/harvo/recovery_readiness.test.ts",
+      "sha256": "a06ffa53c0cf97c31aca63820a0bfd54fab915b112eb9d3f730255fcee04f308"
+    },
+    {
+      "path": "src/test/harvo/deployment_runtime.test.ts",
+      "sha256": "49d978c065b92d462438f3f89ff36b4008859dfb80dbab25c320a7466bd9536b"
+    }
+  ],
+  "evidence": [
+    {
+      "path": "docs/audits/cr1-remediation/r2-runtime-authority/after-final.txt",
+      "sha256": "b58208822163060b0ba441b5aab3aa0abf84cb1ea50f74f21fd702e54c108fae"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r2-runtime-authority/after-first.txt",
+      "sha256": "586731dda17bc66b23b2586e14f8650790daa4ba6b57ccd5ca0794bf3ee8e711"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r2-runtime-authority/after-review.txt",
+      "sha256": "2cdf714077ef5f9026d2be88e956d6e499e1cfb33095bd4ca78efb21f909e9e3"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r2-runtime-authority/before.txt",
+      "sha256": "000f8a14b3a69b2f6ccfe8553ad53fc05e0b4d948b9ae9952d8d1395605215e9"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r2-runtime-authority/deployment-regression.txt",
+      "sha256": "a44e2b4c945b7dbb90bacea74d53f3cd6a5fdeea8dfdadef5a6747b8fa85c020"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r2-runtime-authority/lint.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r2-runtime-authority/runtime-wiring.txt",
+      "sha256": "c3ac77afe6331bdbf00e0d6bd4275479ef2823a5558ba337601b0a30f0047a8f"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r2-runtime-authority/typecheck.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "tests": [
+    {
+      "command": "Node 24 scripts/testing/run.mjs src/test/harvo/recovery_readiness.test.ts --reporter=dot",
+      "phase": "BEFORE",
+      "exitCode": 1,
+      "passed": 9,
+      "failed": 4,
+      "note": "Shell wrapper subsequently failed assigning zsh reserved status; durable Vitest output proves four regressions before fix."
+    },
+    {
+      "command": "Node 24 scripts/testing/run.mjs src/test/harvo/recovery_readiness.test.ts src/test/harvo/cr1_runtime_database_authority.test.ts --reporter=dot",
+      "phase": "FINAL",
+      "exitCode": 0,
+      "passed": 40,
+      "failed": 0
+    },
+    {
+      "command": "Node 24 scripts/testing/run.mjs src/test/harvo/deployment_runtime.test.ts --reporter=dot",
+      "phase": "FINAL",
+      "exitCode": 0,
+      "passed": 26,
+      "failed": 0
+    },
+    {
+      "command": "/Users/ajit/.npm/_npx/387698761821791d/node_modules/node/bin/node scripts/testing/run.mjs src/test/harvo/cr1_runtime_database_authority.test.ts src/test/harvo/recovery_readiness.test.ts --reporter=dot",
+      "phase": "AFTER_REVIEW",
+      "exitCode": 0,
+      "passed": 41,
+      "failed": 0
+    }
+  ],
+  "validation": {
+    "uniqueFinalTests": 67,
+    "scopedLintExitCode": 0,
+    "scopedStrictTypeScriptExitCode": 0,
+    "remoteContacts": false,
+    "migrationBytesChanged": false,
+    "reviewAcceptance": "PENDING"
+  },
+  "limitations": [
+    "Not full database readiness acceptance; portfolio/adtech policies remain separately scoped.",
+    "All PostgreSQL is disposable local, no staging/production role or grant evidence.",
+    "Role traversal conservatively treats all memberships as reachable; SET options are not used to relax the denial.",
+    "No external provider/legal/pilot gates cleared."
+  ],
+  "reviewCorrection": "Malformed catalog authority stays unknown (roleBypassesRls:null), not invented true; safe remains false."
+}

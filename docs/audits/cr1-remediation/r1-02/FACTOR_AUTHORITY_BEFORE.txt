@@ -1,0 +1,47 @@
+
+ RUN  v4.1.10 /Users/ajit/Documents/EnchoSpaceNew
+
+(node:17607) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:17607) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+··xxxxxxxx············
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_workforce_step_up.test.ts > CR1 isolated action-bound passkey proof chain on real PostgreSQL > denies direct replication before any ceremony under an actual LOGIN
+ FAIL  |marketing| src/test/harvo/cr1_workforce_step_up.test.ts > CR1 isolated action-bound passkey proof chain on real PostgreSQL > denies reachable replication before any ceremony under an actual LOGIN
+ FAIL  |marketing| src/test/harvo/cr1_workforce_step_up.test.ts > CR1 isolated action-bound passkey proof chain on real PostgreSQL > denies reachable schema CREATE before any ceremony under an actual LOGIN
+ FAIL  |marketing| src/test/harvo/cr1_workforce_step_up.test.ts > CR1 isolated action-bound passkey proof chain on real PostgreSQL > denies database ownership before any ceremony under an actual LOGIN
+ FAIL  |marketing| src/test/harvo/cr1_workforce_step_up.test.ts > CR1 isolated action-bound passkey proof chain on real PostgreSQL > denies reachable database CREATE before any ceremony under an actual LOGIN
+ FAIL  |marketing| src/test/harvo/cr1_workforce_step_up.test.ts > CR1 isolated action-bound passkey proof chain on real PostgreSQL > denies reachable credential column before any ceremony under an actual LOGIN
+ FAIL  |marketing| src/test/harvo/cr1_workforce_step_up.test.ts > CR1 isolated action-bound passkey proof chain on real PostgreSQL > denies reachable extra definer before any ceremony under an actual LOGIN
+ FAIL  |marketing| src/test/harvo/cr1_workforce_step_up.test.ts > CR1 isolated action-bound passkey proof chain on real PostgreSQL > denies reachable sequence before any ceremony under an actual LOGIN
+AssertionError: expected { ready: true, roleSafe: true, …(4) } to match object { ready: false, roleSafe: false }
+(4 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "ready": false,
+-   "roleSafe": false,
++   "ready": true,
++   "roleSafe": true,
+  }
+
+ ❯ src/test/harvo/cr1_workforce_step_up.test.ts:89:55
+     87|   const client=await factorPool.connect();try{
+     88|    expect((await client.query('SELECT current_user,session_user')).row…
+     89|    expect(await verifyWorkforceFactorCatalog(client)).toMatchObject({r…
+       |                                                       ^
+     90|   }finally{client.release();}
+     91|   await expect(begin()).rejects.toMatchObject({code:'FACTOR_STORE_UNAV…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  8 failed | 14 passed (22)
+   Start at  18:20:47
+   Duration  23.52s (transform 141ms, setup 33ms, import 409ms, tests 22.99s, environment 0ms)
+

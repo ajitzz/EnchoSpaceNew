@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { keys } from 'idb-keyval';
 
 const idb = vi.hoisted(() => ({ store: new Map<IDBValidKey, unknown>() }));
 
@@ -104,6 +105,101 @@ describe('CR1 actor-scoped browser persistence', () => {
 
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(idb.store.get(actorQueueKey(17))).toHaveLength(1);
+  });
+
+  it('fences the prior session even if logout IndexedDB cleanup fails and the same actor signs back in', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
+    setActor(17);
+    await clearActorScopedOfflineData(17);
+    await queueMutation('/api/threads/3/messages', 'POST', { content: 'Unsent prior intent', clientEventId: '11111111-1111-4111-8111-111111111111' });
+    vi.mocked(keys).mockRejectedValueOnce(new Error('fixture storage unavailable'));
+    await expect(clearActorScopedOfflineData(17)).rejects.toThrow('fixture storage unavailable');
+    localStorage.removeItem('token');
+    setActor(17, 'new-session-token');
+    setOnline(true);
+    const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
+    await processOfflineQueue();
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(idb.store.get(actorQueueKey(17))).toEqual([]);
+  });
+
+  it('does not lift an in-flight pre-logout mutation above the new fence on same-token re-login', async () => {
+    setActor(17, 'same-token'); setOnline(true);
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      await clearActorScopedOfflineData(17);
+      localStorage.removeItem('token');
+      setActor(17, 'same-token');
+      throw new Error('fixture lost response after logout');
+    }));
+    expect((await queueMutationWithReceipt('/api/threads/3/messages', 'POST', { content: 'Old intent', clientEventId: '11111111-1111-4111-8111-111111111111' })).status).toBe('REJECTED');
+    expect(idb.store.get(actorQueueKey(17))).toBeUndefined();
+  });
+
+  it('retires persisted commands after logout despite a backward clock and failed IndexedDB cleanup', async () => {
+    const clock=vi.spyOn(Date,'now').mockReturnValue(1_800_000_000_000);
+    setActor(17);
+    await queueMutation('/api/threads/3/messages','POST',{content:'Intent from prior session',clientEventId:'11111111-1111-4111-8111-111111111111'});
+    clock.mockReturnValue(1_799_999_000_000);
+    vi.mocked(keys).mockRejectedValueOnce(new Error('fixture blocked cleanup'));
+    await expect(clearActorScopedOfflineData(17)).rejects.toThrow('fixture blocked cleanup');
+    setActor(17,'new-session-token');setOnline(true);
+    const fetcher=vi.fn().mockResolvedValue(new Response('{}',{status:200}));vi.stubGlobal('fetch',fetcher);
+    await processOfflineQueue();
+    expect(fetcher).not.toHaveBeenCalled();expect(idb.store.get(actorQueueKey(17))).toEqual([]);
+  });
+
+  it('allows legacy records only before the first revocation generation', async () => {
+    setActor(17);
+    await queueMutation('/api/threads/3/messages','POST',{content:'Legacy reviewed inquiry',clientEventId:'11111111-1111-4111-8111-111111111111'});
+    const legacy={...(idb.store.get(actorQueueKey(17)) as Array<Record<string,unknown>>)[0]};
+    delete legacy.replayFence;idb.store.set(actorQueueKey(17),[legacy]);
+    const fetcher=vi.fn().mockResolvedValue(new Response('{}',{status:200}));vi.stubGlobal('fetch',fetcher);setOnline(true);
+    await processOfflineQueue();expect(fetcher).toHaveBeenCalledTimes(1);
+    await clearActorScopedOfflineData(17);
+    idb.store.set(actorQueueKey(17),[{...legacy,timestamp:Number.MAX_SAFE_INTEGER}]);
+    setActor(17,'new-session-token');fetcher.mockClear();
+    await processOfflineQueue();expect(fetcher).not.toHaveBeenCalled();expect(idb.store.get(actorQueueKey(17))).toEqual([]);
+  });
+
+  it('does not hide an unknown-owner global logout behind a newer actor generation', async () => {
+    const clock=vi.spyOn(Date,'now').mockReturnValue(1_800_000_000_000);
+    setActor(17);await clearActorScopedOfflineData(17);
+    await queueMutation('/api/threads/3/messages','POST',{content:'Prior intent',clientEventId:'11111111-1111-4111-8111-111111111111'});
+    clock.mockReturnValue(1_799_999_000_000);localStorage.removeItem('user');
+    vi.mocked(keys).mockRejectedValueOnce(new Error('fixture blocked cleanup'));
+    await expect(clearActorScopedOfflineData(null)).rejects.toThrow('fixture blocked cleanup');
+    setActor(17,'new-session-token');setOnline(true);
+    const fetcher=vi.fn().mockResolvedValue(new Response('{}',{status:200}));vi.stubGlobal('fetch',fetcher);
+    await processOfflineQueue();expect(fetcher).not.toHaveBeenCalled();expect(idb.store.get(actorQueueKey(17))).toEqual([]);
+  });
+
+  it('uses distinct generations when concurrent tabs observe the same stale prior generation', async () => {
+    vi.spyOn(Date,'now').mockReturnValue(1_800_000_000_000);setActor(17);
+    const fenceKey='encho:v3:offline-revoked-before:17';
+    const actualGet=localStorage.getItem.bind(localStorage);let staleSnapshot=true;
+    vi.spyOn(localStorage,'getItem').mockImplementation(key=>key===fenceKey&&staleSnapshot?'0':actualGet(key));
+    await clearActorScopedOfflineData(17);staleSnapshot=false;
+    const first=localStorage.getItem(fenceKey);
+    await queueMutation('/api/threads/3/messages','POST',{content:'Between two revocations',clientEventId:'11111111-1111-4111-8111-111111111111'});
+    staleSnapshot=true;vi.mocked(keys).mockRejectedValueOnce(new Error('fixture failed second-tab cleanup'));
+    await expect(clearActorScopedOfflineData(17)).rejects.toThrow('fixture failed second-tab cleanup');staleSnapshot=false;
+    expect(localStorage.getItem(fenceKey)).not.toBe(first);
+    setActor(17,'new-session-token');setOnline(true);
+    const fetcher=vi.fn().mockResolvedValue(new Response('{}',{status:200}));vi.stubGlobal('fetch',fetcher);
+    await processOfflineQueue();expect(fetcher).not.toHaveBeenCalled();expect(idb.store.get(actorQueueKey(17))).toEqual([]);
+  });
+
+  it('globally fences unknown ownership when IndexedDB cleanup fails', async () => {
+    setActor(17);
+    await queueMutation('/api/threads/3/messages', 'POST', { content: 'Old intent', clientEventId: '11111111-1111-4111-8111-111111111111' });
+    localStorage.removeItem('user');
+    vi.mocked(keys).mockRejectedValueOnce(new Error('fixture blocked storage'));
+    await expect(clearActorScopedOfflineData(null)).rejects.toThrow();
+    setActor(17); setOnline(true);
+    const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
+    await processOfflineQueue();
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(idb.store.get(actorQueueKey(17))).toEqual([]);
   });
 
   it('rehydrates the current token and preserves the original idempotency key on replay', async () => {

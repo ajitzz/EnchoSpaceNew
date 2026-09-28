@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, afterAll } from 'vitest';
-import { existsSync, unlinkSync } from 'node:fs';
+import { describe, it, expect, vi } from 'vitest';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   PilotStopLossEngine,
@@ -12,10 +12,6 @@ describe('CR1 Track 4: Bounded Commercial Pilot Charter & Stop-Loss Simulation H
     process.cwd(),
     'docs/harvo/receipts/CR1_PILOT_STOP_LOSS_SIMULATION_RECEIPT.json'
   );
-
-  afterAll(() => {
-    // Preserve disk hygiene in test sandbox if needed, or leave generated receipt
-  });
 
   // ──────────────────────────────────────────────────────────────────────────
   // ADVERSARIAL TEST 1: Mid-Transaction Connection Drop -> Atomic Rollback
@@ -269,7 +265,8 @@ describe('CR1 Track 4: Bounded Commercial Pilot Charter & Stop-Loss Simulation H
   // TEST SUITE 6: Simulation Runner & Cryptographic Receipt Generation
   // ──────────────────────────────────────────────────────────────────────────
   describe('Stop-Loss Simulation Runner & Digest Generation', () => {
-    it('runs full simulation cycle and writes cryptographic receipt to disk', () => {
+    it('returns only unaccepted simulation data and preserves historical artifact bytes', () => {
+      const before = existsSync(receiptPath) ? readFileSync(receiptPath) : null;
       const engine = new PilotStopLossEngine();
       const charterPath = resolve(
         process.cwd(),
@@ -288,11 +285,14 @@ describe('CR1 Track 4: Bounded Commercial Pilot Charter & Stop-Loss Simulation H
         grossBookingValuePaise: 16279200, // ₹162,792 INR (~3.42x ROAS)
       });
 
-      expect(receipt.status).toBe('SIMULATION_CERTIFIED');
+      expect(receipt.status).toBe('NOT_EVIDENCE');
+      expect(receipt.productionGateEligible).toBe(false);
+      expect(receipt.boardVerdict).toBe('NOT_ASSESSED');
+      expect(receipt.complianceAudits.taxWithholdingReconciled).toBeNull();
       expect(receipt.circuitBreakerTriggered).toBe(true);
       expect(receipt.charterSha256).toMatch(/^[a-f0-9]{64}$/);
       expect(receipt.receiptSha256).toMatch(/^[a-f0-9]{64}$/);
-      expect(existsSync(receiptPath)).toBe(true);
+      expect(existsSync(receiptPath) ? readFileSync(receiptPath) : null).toEqual(before);
     });
   });
 });

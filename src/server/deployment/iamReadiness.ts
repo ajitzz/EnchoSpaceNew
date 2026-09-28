@@ -1,4 +1,5 @@
 import type pg from 'pg';
+import {isRestrictedWorkforceRuntime} from '../../lib/iam/runtimeBoundary.js';
 
 import { workforcePermissionCodes } from '../../shared/iam/contracts.js';
 import {invitationBaseOwnerPolicyNames,verifyInvitationBaseOwnerPolicies} from './iamInvitationReadiness.js';
@@ -153,12 +154,11 @@ export async function verifyIamCatalog(client: pg.PoolClient) {
     WHERE n.nspname='public' AND c.relname=ANY($1::text[])
   `, [iamTables])).rows;
 
-  const isOwner = relations.some(r => r.owns);
   const privilegeValid = relations.length === iamTables.length && relations.every(row => {
     const name = String(row.relname);
     return row.relrowsecurity === true
       && row.relforcerowsecurity === true
-      && (isOwner || (
+      && (
         row.owns === false
         && row.can_select === true
         && row.can_insert === insertTables.includes(name as (typeof insertTables)[number])
@@ -167,7 +167,7 @@ export async function verifyIamCatalog(client: pg.PoolClient) {
         && row.can_truncate === false
         && row.can_trigger === false
         && row.public_grant === false
-      ));
+      );
   });
 
   const policies = (await client.query<{
@@ -281,8 +281,8 @@ export async function verifyIamCatalog(client: pg.PoolClient) {
     WHERE n.nspname='public' AND p.proname=ANY($1::text[])
   `, [securityDefinerFunctions])).rows;
   const functionSafety = functions.length === securityDefinerFunctions.length && functions.every(row =>
-    row.prosecdef && (isOwner || (!row.owns && !row.owner_bypasses)) && !row.public_execute
-      && (isOwner || row.can_execute === helperFunctions.some(signature=>signature.startsWith(`${row.proname}(`)))
+    row.prosecdef && (!row.owns && !row.owner_bypasses) && !row.public_execute
+      && (row.can_execute === helperFunctions.some(signature=>signature.startsWith(`${row.proname}(`)))
       && row.proconfig?.includes('search_path=pg_catalog, public')
       && row.proconfig.includes('row_security=on'));
 
@@ -311,13 +311,9 @@ export async function verifyIamCatalog(client: pg.PoolClient) {
     JOIN pg_namespace n ON n.oid=c.relnamespace
     WHERE n.nspname='public' AND c.relname='internal_iam_events_sequence_seq'
   `)).rows;
-  const sequenceValid = isOwner ? (sequence.length === 1 && sequence[0].usage) : (sequence.length === 1 && sequence[0].usage && !sequence[0].update && !sequence[0].owns);
+  const sequenceValid = sequence.length === 1 && sequence[0].usage && !sequence[0].update && !sequence[0].owns;
 
-  const runtimeRole = (await client.query<{ safe: boolean }>(`
-    SELECT NOT (r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR r.rolcreatedb OR has_schema_privilege(current_user,'public','CREATE') OR EXISTS(SELECT 1 FROM pg_roles inherited WHERE pg_has_role(current_user,inherited.oid,'MEMBER') AND (inherited.rolsuper OR inherited.rolbypassrls OR inherited.rolcreaterole OR inherited.rolcreatedb))) AS safe
-    FROM pg_roles r WHERE r.rolname=current_user
-  `)).rows[0];
-  const runtimeRoleSafe = isOwner || runtimeRole?.safe === true;
+  const runtimeRoleSafe = await isRestrictedWorkforceRuntime(client);
   const ready = runtimeRoleSafe && privilegeValid && policyValid && permissionCatalogValid && safeDefaults
     && immutableEvidence && lifecycleTriggers && functionSafety && criticalConstraints && sequenceValid;
   return {

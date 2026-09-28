@@ -4,6 +4,8 @@ import { SearchIcon, HeartIcon, MessageCircleIcon } from './Icons';
 import { useAuth } from './AuthContext';
 import { uiAudio } from './audio';
 import { useToast } from './ToastContext';
+import {useUnreadCount,unreadCountDescription} from '../lib/useUnreadCount';
+import {UnreadCountBadge} from './UnreadCountBadge';
 
 interface BottomNavProps {
   currentView: string;
@@ -20,35 +22,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   onProfileClick,
   isVisible = true 
 }) => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const { addToast } = useToast();
-  const [unreadCount, setUnreadCount] = React.useState(0);
-
-   React.useEffect(() => {
-      const token = localStorage.getItem('token');
-      if (user && token) {
-          fetch('/api/unread-counts', {
-              headers: { 'Authorization': `Bearer ${token}` }
-          })
-          .then(res => res.ok ? res.json() : null)
-          .then(data => data && setUnreadCount(data.unread || 0))
-          .catch(() => {});
-          
-          const interval = setInterval(() => {
-              const currentToken = localStorage.getItem('token');
-              if (!currentToken) return;
-              fetch('/api/unread-counts', {
-                  headers: { 'Authorization': `Bearer ${currentToken}` }
-              })
-              .then(res => res.ok ? res.json() : null)
-              .then(data => data && setUnreadCount(data.unread || 0))
-              .catch(() => {});
-          }, 30000);
-          return () => clearInterval(interval);
-      } else {
-          setUnreadCount(0);
-      }
-   }, [user]);
+  const unread=useUnreadCount(user?.id,token);
 
   if (appMode === 'host') return null;
 
@@ -56,7 +32,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   const tabs = [
     { id: 'WISHLIST', label: 'Wishlist', icon: HeartIcon },
     { id: 'SEARCH', label: 'Explore', icon: SearchIcon },
-    { id: 'MESSAGES', label: 'Inbox', icon: MessageCircleIcon, badge: unreadCount },
+    { id: 'MESSAGES', label: 'Inbox', icon: MessageCircleIcon },
   ];
 
   const isActive = (id: string) => {
@@ -83,6 +59,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               return (
                 <button
                   key={tab.id}
+                  aria-label={tab.id==='MESSAGES'?`Inbox. ${unreadCountDescription(unread)}`:tab.label}
+                  title={tab.id==='MESSAGES'?unreadCountDescription(unread):undefined}
                   onClick={() => {
                     uiAudio.playClick();
                     if (navigator.vibrate) navigator.vibrate(12);
@@ -120,16 +98,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                   </div>
 
                   {/* Badge */}
-                  {typeof tab.badge === 'number' && tab.badge > 0 && !active && (
-                    <span className="absolute top-1.5 right-3 bg-[#e51d53] text-white text-[8px] font-bold h-3.5 min-w-[14px] px-0.5 rounded-full flex items-center justify-center border border-[#1a1a1a]">
-                       {tab.badge}
-                    </span>
-                  )}
-                  {typeof tab.badge === 'number' && tab.badge > 0 && active && (
-                    <span className="ml-1.5 bg-[#e51d53] text-white text-[8px] font-extrabold h-4 min-w-[16px] px-1 rounded-full flex items-center justify-center">
-                       {tab.badge}
-                    </span>
-                  )}
+                  {tab.id==='MESSAGES'&&<UnreadCountBadge state={unread} className={active?'ml-1.5':'absolute top-1.5 right-3'}/>}
                 </button>
               );
             })}

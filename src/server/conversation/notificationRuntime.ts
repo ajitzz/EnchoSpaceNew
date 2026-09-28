@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import pg from 'pg';
-import {ConversationNotificationWorker,type ConversationHintDispatchPort,type ConversationNotificationRun} from './notificationWorker.js';
+import {ConversationNotificationWorker,ConversationNotificationWorkerError,type ConversationHintDispatchPort,type ConversationNotificationRun} from './notificationWorker.js';
 
 /** Explicit queue credential; no consumer or migration-owner fallback. */
 export function notificationConnectionConfig(env:NodeJS.ProcessEnv):pg.PoolConfig|null{
@@ -15,7 +15,19 @@ export function notificationConnectionConfig(env:NodeJS.ProcessEnv):pg.PoolConfi
   return {connectionString:url.toString(),ssl:local?false:{rejectUnauthorized:true},max:2,connectionTimeoutMillis:8000,idleTimeoutMillis:10000,statement_timeout:10000,allowExitOnIdle:true,application_name:'encho_cr1_notification_hints'};
  }catch{throw new Error('NOTIFICATION_RUNTIME_CONFIGURATION_INVALID');}
 }
-export interface NotificationRuntimeReport{code:'NOTIFICATION_HINT_BATCH'|'NOTIFICATION_HINT_RUNTIME_UNAVAILABLE';counts?:ConversationNotificationRun}
+export interface NotificationRuntimeReport{
+ code:'NOTIFICATION_HINT_BATCH'|'NOTIFICATION_HINT_RUNTIME_UNAVAILABLE'|'NOTIFICATION_HINT_OUTCOME_UNKNOWN';
+ counts?:ConversationNotificationRun;
+ stage?:'CLAIM_OR_HEARTBEAT'|'FINALIZATION';
+}
+/** Deliberately project stable bounded codes only, never PG causes, IDs or payloads. */
+export function notificationRuntimeFailure(error:unknown):NotificationRuntimeReport{
+ if(error instanceof ConversationNotificationWorkerError){
+  if(error.code==='NOTIFICATION_QUEUE_OUTCOME_UNKNOWN')return {code:'NOTIFICATION_HINT_OUTCOME_UNKNOWN',stage:'CLAIM_OR_HEARTBEAT'};
+  if(error.code==='NOTIFICATION_FINALIZATION_OUTCOME_UNKNOWN')return {code:'NOTIFICATION_HINT_OUTCOME_UNKNOWN',stage:'FINALIZATION'};
+ }
+ return {code:'NOTIFICATION_HINT_RUNTIME_UNAVAILABLE'};
+}
 /** Socket hints remain an optimization. This in-process adapter has no channel
  * delivery claim; canonical participant polling is the reconnect/fan-out fallback. */
 export function startConversationNotifications(env:NodeJS.ProcessEnv,port:ConversationHintDispatchPort,report:(event:NotificationRuntimeReport)=>void):{stop:()=>Promise<void>}|null{
@@ -30,7 +42,7 @@ export function startConversationNotifications(env:NodeJS.ProcessEnv,port:Conver
   if(stopped)return;
   active=(async()=>{
    try{const counts=await worker.runOnce();if(counts.claimed)report({code:'NOTIFICATION_HINT_BATCH',counts});}
-   catch{report({code:'NOTIFICATION_HINT_RUNTIME_UNAVAILABLE'});}
+   catch(error){report(notificationRuntimeFailure(error));}
    finally{active=null;if(!stopped){timer=setTimeout(run,10000);timer.unref();}}
   })();
  };

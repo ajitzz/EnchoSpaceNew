@@ -18,7 +18,13 @@ Object.assign(env, {
   JWT_SECRET: 'encho-isolated-test-signing-key-not-a-production-secret',
 });
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const child = spawn(process.execPath, [fileURLToPath(new URL('../../node_modules/vitest/vitest.mjs', import.meta.url)), 'run', ...process.argv.slice(2)], {
+const args=process.argv.slice(2);
+const nodeTests=args[0]==='--node-test';
+if(nodeTests&&(args.length<2||args.slice(1).some(file=>!/^scripts\/[A-Za-z0-9_/-]+\.test\.mjs$/.test(file)))){
+  console.error('Node test mode requires explicit script test files.');process.exit(1);
+}
+const child = spawn(process.execPath, nodeTests?['--test','--test-reporter=dot',...args.slice(1)]
+  :[fileURLToPath(new URL('../../node_modules/vitest/vitest.mjs', import.meta.url)), 'run', ...args], {
   cwd: root, env, stdio: 'inherit',
 });
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));

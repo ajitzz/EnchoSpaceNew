@@ -1,0 +1,2 @@
+src/test/harvo/conversation_notification_worker.test.ts(189,52): error TS2532: Object is possibly 'undefined'.
+src/test/harvo/conversation_notification_worker.test.ts(189,77): error TS2493: Tuple type '[]' of length '0' has no element at index '0'.

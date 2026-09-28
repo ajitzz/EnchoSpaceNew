@@ -1,0 +1,134 @@
+{
+  "kind": "LOCAL_AUDIT_VALIDATION_ONLY",
+  "productionCertification": false,
+  "generatedAt": "2026-09-28T15:37:04.582104+00:00",
+  "head": "0e4c6fec2fe86f1b793760c5f7a3daf08bbf7508",
+  "preExistingStagedChangeSummary": {
+    "files": 66,
+    "insertions": 19189,
+    "deletions": 30946
+  },
+  "stagedDiffSha256": "854471966ac51c7fbf44e69095990f5f5eb2892b772cc4aef9adfbb0f502a520",
+  "scope": "Risk-based source review; not exhaustive line-by-line certification",
+  "targetedTests": {
+    "passed": 97,
+    "failed": 2,
+    "files": 8,
+    "batches": [
+      {
+        "name": "certification",
+        "passed": 10,
+        "failed": 0,
+        "files": [
+          "src/test/harvo/cr1_p8_3_canary_hardening.test.ts",
+          "src/test/harvo/cr1_release_candidate_certification.test.ts"
+        ],
+        "command": "npx -y node@24 scripts/testing/run.mjs src/test/harvo/cr1_p8_3_canary_hardening.test.ts src/test/harvo/cr1_release_candidate_certification.test.ts --reporter=dot",
+        "logSha256": "4c319854caf7c1f8b37ef7b2ddf6dd0f52bc0857686be6357d3a73a0f01e98f0"
+      },
+      {
+        "name": "foundation",
+        "passed": 37,
+        "failed": 0,
+        "files": [
+          "src/test/harvo/cr1_privileged_actions.test.ts",
+          "src/test/harvo/conversation_delivery.test.ts"
+        ],
+        "command": "npx -y node@24 scripts/testing/run.mjs src/test/harvo/cr1_privileged_actions.test.ts src/test/harvo/conversation_delivery.test.ts --reporter=dot",
+        "logSha256": "972f8ee550db563d591942cf713f24b3744145610ad8968b6955866805b79346"
+      },
+      {
+        "name": "workforce",
+        "passed": 18,
+        "failed": 2,
+        "files": [
+          "src/test/harvo/cr1_admin_workforce_command.test.ts",
+          "src/test/cr1_operations_api.test.ts"
+        ],
+        "command": "npx -y node@24 scripts/testing/run.mjs src/test/harvo/cr1_admin_workforce_command.test.ts src/test/cr1_operations_api.test.ts --reporter=dot",
+        "logSha256": "f5472b8585f0777545bd71d26f3e308cd294eb6172cea1924374760968941b67"
+      },
+      {
+        "name": "durable-finance",
+        "passed": 32,
+        "failed": 0,
+        "files": [
+          "src/test/harvo/durable_outbox.test.ts",
+          "src/test/harvo/finance_service.test.ts"
+        ],
+        "command": "npx -y node@24 scripts/testing/run.mjs src/test/harvo/durable_outbox.test.ts src/test/harvo/finance_service.test.ts --reporter=dot",
+        "logSha256": "83aae7f999e653d2ecc034077f753e0f058faf385568efa05c1ce8ac39a11338"
+      }
+    ]
+  },
+  "failures": [
+    "cr1_operations_api.test.ts: explicit workforce configuration / strict remote TLS contract",
+    "cr1_operations_api.test.ts: trusted environment / insecure staging origin rejection"
+  ],
+  "staticChecks": {
+    "clientTypeScript": {
+      "command": "npx -y node@24 node_modules/typescript/bin/tsc --noEmit",
+      "exitCode": 0
+    },
+    "serverTypeScript": {
+      "command": "npx -y node@24 node_modules/typescript/bin/tsc -p tsconfig.server.json --noEmit",
+      "exitCode": 0
+    },
+    "scopedEslint": {
+      "exitCode": 0,
+      "scope": [
+        "src/lib/iam/staffSessionIssuer.ts",
+        "src/server/operations/runtime.ts",
+        "src/lib/iam/workforceAdminService.ts",
+        "src/lib/compliance/pausedCanaryHardeningEngine.ts",
+        "src/lib/commerce/staysCommerceEngine.ts"
+      ]
+    },
+    "inventory": {
+      "status": "FAILED",
+      "command": "node scripts/cr1/verify-inventory.mjs",
+      "output": "Uninventoried Express route owner: src/server/admin/workforceRouter.ts"
+    }
+  },
+  "offlineProbes": {
+    "assertionGroups": 8,
+    "script": "docs/audits/CR1_QUALITY_AUDIT_2026_09_28_PROBES.mts",
+    "scriptSha256": "faffe0682cdf5a8d7869388905a2055e3e034f9118a64fc963ce11f460bd022c",
+    "resultSha256": "2a7e8cbb6f3d354913d17964e67bb24c34c252c1dc5c59ce97484eb288b380c7",
+    "actualDatabaseContacted": false,
+    "actualProviderContacted": false
+  },
+  "notExecuted": [
+    "full regression",
+    "full production build",
+    "remote database inspection or migration",
+    "provider API request",
+    "browser/a11y/performance/load/restore certification",
+    "live payment",
+    "deployment"
+  ],
+  "sourceSha256": {
+    "server.ts": "5224fc63d1b09b0aee77c031617f0d35ba871994751246870441f0fd96ca3215",
+    "vite.config.ts": "054d444a78d7e7bcfbf8f6fbf394e1291b279307cad1ab36e201bd56d4a6d66a",
+    "package.json": "876a506576cffaedb0a510066d0083b346b724a3dbe7d71010d0d0e71fa91151",
+    "src/lib/iam/staffSessionIssuer.ts": "739e683e4605e931870b4c6d24cccb33d7d50266a3a057209cdbc75c715f65f3",
+    "src/server/operations/runtime.ts": "fdefc77105fc338080b7e9ebefeb43e4aefdcd497ee982175a9e94da5b34dc6c",
+    "src/lib/iam/workforceAdminService.ts": "deda74fc057ac9a8343f3476fee8cde69f6ad52db05c4b95b8453b5fa42f7e16",
+    "src/server/admin/workforceRouter.ts": "c97cffe09cd1bedfbcd21f298036bbf2d7614acef2708cc7090373eea648bae6",
+    "src/lib/compliance/pausedCanaryHardeningEngine.ts": "9db3e5c1d091f355c3ada3c1324dd08df219f5e64f2fe6fe1e6c2d2d9ce6b422",
+    "src/lib/compliance/statutoryTaxVerificationEngine.ts": "c12ce24ed4e0107ea4020e39b308c216e15be9f3f52e1d2f75498f8eb9974d3b",
+    "src/lib/commerce/staysCommerceEngine.ts": "4c4401c47529b5d391b0f82f499fe5d1cfaee862beb7139b371ff8249db36fde",
+    "scripts/compliance/generate-staging-preflight-receipt.mjs": "487f78b8d9f822c410e9e3c6c2fc8e2f384096c4678f0d0ab02fe4b49c04451a",
+    "scripts/compliance/generate-provider-canary-receipt.mjs": "13125c0145937561e0ffce91e82df149748e9f9ffd8df4e0961f7384b2086741",
+    "scripts/compliance/generate-tax-clearance-receipt.mjs": "3923bf8f72fe3756904c173312d0191730dc480a77a78c63274bba1591f33d89",
+    "scripts/compliance/generate-cr1-rc-dossier.mjs": "56fa54dbd563eed95440f3ee386ff3626bb158a18ad72bbfd60339b402b93f79",
+    "scripts/deployment/verify-schema-sync.mjs": "0ba3ccf900a24071fd81d4c8778b0569ac1b7e8108fb83ccaab092810f8faf1c",
+    "src/lib/platform/durableOutbox.ts": "7d0edbc954b85bbc12a822706247d3dc1e1d8f92e59e2ac690d5aeeecf1dc23b",
+    "src/lib/marketing/financeService.ts": "385697ccf528c55a18894f55960e338a14418ca7cec6e30bab3945f77ebf5cb4",
+    "src/migrations/execution.ts": "820a4ad6df8af1396b73d8f50474fc6df3530150747670267d108797754b8513",
+    "src/server/marketing/legacyBoundary.ts": "ffc9da049d334cf5394cacc20c370e3daf3df16cc7d2e096d67b9d77937d006c"
+  },
+  "report": "docs/audits/CR1_ENGINEERING_QUALITY_AUDIT_2026_09_28.md",
+  "reportSha256": "d0a82af9f35692b2d0e93a640ca9893653813244d36525f674c66f7de330a693",
+  "caveat": "Hashes identify reviewed bytes. They do not establish external approval, production behavior or completeness."
+}

@@ -10,8 +10,6 @@
  * 4. Generates an immutable, cryptographically verifiable CR1_STAGING_DEPLOYMENT_RECEIPT.json.
  */
 
-import { writeFileSync, mkdirSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { validateStagingConfig } from './staging-preflight.mjs';
 import { verifyDatabaseRoles } from './verify-database-roles.mjs';
@@ -36,7 +34,11 @@ export async function executeStagingDeploymentRunbook({
     };
   }
 
-  // Step 2: Database Least-Privilege Role Auditing
+  // Configuration is not a database observation. No client means no evidence.
+  if (!dbClient || typeof dbClient.query !== 'function') {
+    return { success: false, stepFailed: 'DATABASE_ROLES', errors: ['DATABASE_OBSERVATION_REQUIRED'], warnings: preflight.warnings, receipt: null };
+  }
+  // Step 2: Database Least-Privilege Role Auditing (partial collector, not clearance)
   let roleMetadata = {
     roleName: 'unknown',
     rolsuper: false,
@@ -96,7 +98,10 @@ export function generateStagingReceipt(data) {
   const receipt = {
     schemaVersion: '1.0.0',
     type: 'ENCHO_CR1_STAGING_DEPLOYMENT_RECEIPT',
-    status: 'CERTIFIED',
+    status: 'REQUIRES_INDEPENDENT_REVIEW',
+    classification: 'UNTRUSTED_OBSERVATION',
+    productionGateEligible: false,
+    limitations: ['Caller/client provenance unverified', 'No artifact or migration manifest binding', 'Role collector does not establish full grants, policies, inherited membership or FORCE RLS acceptance'],
     receiptId: `rcpt_staging_${Date.now()}`,
     generatedAt: new Date().toISOString(),
     gitCommit: data.gitCommit,
@@ -109,19 +114,10 @@ export function generateStagingReceipt(data) {
       .digest('hex'),
   };
 
-  const targetPath = resolve(
-    process.cwd(),
-    'docs/harvo/receipts/CR1_STAGING_DEPLOYMENT_RECEIPT.json'
-  );
-
-  mkdirSync(dirname(targetPath), { recursive: true });
-  writeFileSync(targetPath, JSON.stringify(receipt, null, 2), 'utf8');
-
   return receipt;
 }
 
 if (process.argv[1] && process.argv[1].endsWith('run-staging-deployment.mjs')) {
-  console.log('--- ENCHO CR1 STAGING DEPLOYMENT RUNBOOK ---');
-  console.log('Executing automated staging deployment preflight and verification...');
-  // CLI entrypoint execution logic
+  console.log(JSON.stringify({ status: 'NOT_RUN', productionGateEligible: false, reason: 'Explicit target, authenticated collector and artifact identity required; this CLI does not deploy or connect.' }));
+  process.exitCode = 1;
 }

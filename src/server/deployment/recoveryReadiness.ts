@@ -1,20 +1,23 @@
-import {createHash} from 'node:crypto';
-import {readFileSync,readdirSync} from 'node:fs';
+import {readFileSync} from 'node:fs';
 import type pg from 'pg';
+import {compareMigrationHistory,MigrationExecutionError} from '../../migrations/history.js';
+import {readMigrationManifest} from '../../migrations/manifest.js';
+import {migrationHistoryAuthoritySql} from '../../migrations/historyAuthority.js';
+import {reachableRuntimeRolesSql} from './runtimeDatabaseAuthority.js';
 
 const migrationDirectory=new URL('../../migrations/',import.meta.url);
 export function deployedMigrationManifest(){
- return readdirSync(migrationDirectory).filter(name=>/^\d+_[a-z0-9_]+\.sql$/.test(name)).sort().map(version=>({version,checksum:createHash('sha256').update(readFileSync(new URL(version,migrationDirectory))).digest('hex')}));
+ return readMigrationManifest(migrationDirectory);
 }
 export async function verifyMigrationHistory(c:pg.PoolClient){
  const exists=(await c.query("SELECT to_regclass('public.schema_migrations') IS NOT NULL AS present")).rows[0]?.present===true;
  if(!exists)return false;
- const authority=(await c.query("SELECT pg_has_role(current_user,c.relowner,'USAGE') AS owns,has_table_privilege(current_user,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE') AS can_mutate FROM pg_class c WHERE c.oid='public.schema_migrations'::regclass")).rows[0];
- const isOwner = Boolean(authority?.owns || authority?.can_mutate);
- if(!authority||(!isOwner&&authority.can_mutate))return false;
+ const authority=(await c.query(migrationHistoryAuthoritySql)).rows[0];
+ if(!authority||authority.owns!==false||authority.can_mutate!==false)return false;
  const rows=(await c.query('SELECT version,checksum FROM public.schema_migrations')).rows;
  const manifest=deployedMigrationManifest();
- return manifest.length>0&&manifest.every(expected=>rows.some(row=>row.version===expected.version&&row.checksum===expected.checksum));
+ try{compareMigrationHistory(manifest,rows,{requireComplete:true});return true;}
+ catch(error){if(error instanceof MigrationExecutionError)return false;throw error;}
 }
 const normalize=(sql:string|null|undefined)=>(sql||'').replace(/::text/g,'').replace(/[\s()]/g,'');
 const adminExpression=normalize("current_setting('app.marketing_admin', true) = 'true'");
@@ -37,14 +40,19 @@ export async function verifyRecoveryCatalog(c:pg.PoolClient){
   const body=sql.match(new RegExp(`FUNCTION ${expected.fn}\\([^]*?AS \\$\\$([^]*?)\\$\\$`,'i'))?.[1]?.trim();
   return !!body&&triggers.some(t=>t.relname===expected.table&&t.tgname===expected.trigger&&['O','A'].includes(t.tgenabled)&&t.tgtype===27&&t.unconditional===true&&t.proname===expected.fn&&t.function_schema==='public'&&t.prosecdef===false&&t.proconfig===null&&t.prosrc.trim()===body);
  });
- const grants=(await c.query(`SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,pg_has_role(current_user,c.relowner,'USAGE') AS owns,
+ const grants=(await c.query(`${reachableRuntimeRolesSql}
+  SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,c.relowner IN(SELECT oid FROM reachable) AS owns,
   has_table_privilege(current_user,c.oid,'SELECT') AS can_read,has_table_privilege(current_user,c.oid,'INSERT') AS can_insert,
-  has_table_privilege(current_user,c.oid,'UPDATE') AS can_update,has_table_privilege(current_user,c.oid,'DELETE') AS can_delete,
-  has_table_privilege(current_user,c.oid,'TRUNCATE') AS can_truncate,has_table_privilege(current_user,c.oid,'TRIGGER') AS can_trigger,
-  EXISTS(SELECT 1 FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) acl WHERE acl.grantee=0) AS public_grant
+  has_table_privilege(current_user,c.oid,'UPDATE') AS can_update,
+  EXISTS(SELECT 1 FROM reachable r WHERE has_table_privilege(r.oid,c.oid,'DELETE,TRUNCATE,TRIGGER,REFERENCES')
+    OR has_any_column_privilege(r.oid,c.oid,'REFERENCES')
+    OR (c.relname='marketing_pause_recoveries' AND
+      (has_table_privilege(r.oid,c.oid,'UPDATE') OR has_any_column_privilege(r.oid,c.oid,'UPDATE')))) AS unsafe_grants,
+  (EXISTS(SELECT 1 FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) acl WHERE acl.grantee=0)
+    OR EXISTS(SELECT 1 FROM pg_attribute a CROSS JOIN LATERAL aclexplode(a.attacl) acl
+      WHERE a.attrelid=c.oid AND NOT a.attisdropped AND acl.grantee=0)) AS public_grant
   FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY($1::text[])`,[tables])).rows;
- const isOwner=grants.some(g=>g.owns);
- const privileges=grants.length===2&&grants.every(g=>g.relrowsecurity&&g.relforcerowsecurity&&(isOwner||!g.owns)&&g.can_read&&g.can_insert&&(isOwner||(!g.can_delete&&!g.can_truncate&&!g.can_trigger&&!g.public_grant&&(g.can_update===(g.relname==='marketing_pause_recovery_attempts')))));
+ const privileges=grants.length===2&&grants.every(g=>g.relrowsecurity===true&&g.relforcerowsecurity===true&&g.owns===false&&g.can_read===true&&g.can_insert===true&&g.unsafe_grants===false&&g.public_grant===false&&(g.can_update===(g.relname==='marketing_pause_recovery_attempts')));
  const indexes=(await c.query(`SELECT i.indisunique,i.indisvalid,i.indisready,pg_get_expr(i.indpred,i.indrelid) AS predicate,pg_get_indexdef(i.indexrelid,1,true) AS column_name,i.indnkeyatts
  FROM pg_index i JOIN pg_class idx ON idx.oid=i.indexrelid JOIN pg_namespace n ON n.oid=idx.relnamespace
  WHERE n.nspname='public' AND idx.relname='marketing_pause_recovery_one_reader' AND i.indrelid=to_regclass('public.marketing_pause_recovery_attempts')`)).rows;

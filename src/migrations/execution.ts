@@ -1,13 +1,12 @@
 import type pg from 'pg';
 import {z} from 'zod';
 import {createHash} from 'node:crypto';
+import {compareMigrationHistory,MigrationExecutionError} from './history.js';
+export {MigrationExecutionError} from './history.js';
 
 const entrySchema=z.object({file:z.string().regex(/^\d{3}_[a-z0-9_]+\.sql$/),sql:z.string().min(1),checksum:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
 export type MigrationEntry=z.infer<typeof entrySchema>;
 export interface MigrationResult {file:string;status:'applied'|'skipped'|'failed'|'unknown';error?:string}
-export class MigrationExecutionError extends Error{
- constructor(readonly code:string,readonly file?:string){super(`${code}${file?`: ${file}`:''}`);this.name='MigrationExecutionError';}
-}
 export const migrationLockId=82749102;
 
 /** Remove lexical bodies before checking top-level transaction escapes. SQL
@@ -67,17 +66,8 @@ export async function executeMigrations(pool:Pick<pg.Pool,'connect'>,rawEntries:
   const checksumColumn=(await client.query("SELECT 1 FROM pg_attribute WHERE attrelid='public.schema_migrations'::regclass AND attname='checksum' AND NOT attisdropped")).rowCount===1;
   if(!checksumColumn)await client.query('ALTER TABLE public.schema_migrations ADD COLUMN checksum VARCHAR(64)');
   const history=(await client.query<{version:string;checksum:string|null}>('SELECT version,checksum FROM public.schema_migrations ORDER BY version')).rows;
-  const expected=new Map(entries.map(entry=>[entry.file,entry]));
-  for(const row of history){
-   const entry=expected.get(row.version);
-   if(!entry)throw new MigrationExecutionError('MIGRATION_HISTORY_UNKNOWN');
-   if(!row.checksum||row.checksum!==entry.checksum)throw new MigrationExecutionError('MIGRATION_CHECKSUM_MISMATCH',entry.file);
-  }
-  const applied=new Set(history.map(row=>row.version));let missing=false;
-  for(const entry of entries){
-   if(!applied.has(entry.file))missing=true;
-   else if(missing)throw new MigrationExecutionError('MIGRATION_HISTORY_OUT_OF_ORDER',entry.file);
-  }
+  compareMigrationHistory(entries.map(entry=>({version:entry.file,checksum:entry.checksum})),history);
+  const applied=new Set(history.map(row=>row.version));
   for(const entry of entries){
    if(applied.has(entry.file)){results.push({file:entry.file,status:'skipped'});continue;}
    let committing=false;

@@ -1,0 +1,3641 @@
+{
+  "schemaVersion": 1,
+  "status": "REACCEPTANCE_FOUNDATION_ONLY",
+  "baseCommit": "0e4c6fec2fe86f1b793760c5f7a3daf08bbf7508",
+  "createdAt": "2026-09-28",
+  "authority": "Founder CR1 engineering remediation instruction; CR1-045/CR1-046 qualifications remain",
+  "sourceContracts": {
+    "plan": "docs/implementation/CR1_EXECUTION_PLAN.md",
+    "coverage": "docs/implementation/CR1_REMEDIATION_WORK_PACKAGES.md",
+    "gateRegister": "docs/implementation/CR1_EXTERNAL_GATE_REGISTER.md"
+  },
+  "summary": {
+    "historicalClaimedPackages": 48,
+    "independentlyReacceptedPackages": 0,
+    "replacementCompletionPercentage": null
+  },
+  "packages": [
+    {
+      "id": "P0.1",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 137,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Constitution/ADR reconciliation and explicit Phase 3 authority",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 137,
+        "sha256": "03c8e88525e5e65890ec2b976fbf3a28e5ca266a3b1f39693b7b45e376ecd477"
+      },
+      "correctiveCards": [
+        "R0-03",
+        "R0-04"
+      ],
+      "implementationReferences": [
+        {
+          "path": "docs/ENCHO_ENGINEERING_CONSTITUTION.md",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "docs/harvo/DECISIONS.md",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "scripts/cr1/verify-inventory.mjs",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/deployment/schemaPreflight.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "ENV-01",
+            "DB-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P0.2",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 138,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Reproducible route/schema ownership inventory and quarantine register",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 138,
+        "sha256": "394f4415fea887a0f0e16fdf60b2cc50b4991bd2987cc1daee55b3b02677bf28"
+      },
+      "correctiveCards": [
+        "R0-01",
+        "R2-03"
+      ],
+      "implementationReferences": [
+        {
+          "path": "docs/ENCHO_ENGINEERING_CONSTITUTION.md",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "docs/harvo/DECISIONS.md",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "scripts/cr1/verify-inventory.mjs",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/deployment/schemaPreflight.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "ENV-01",
+            "DB-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P0.3",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 139,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Name-only configuration inventory and owned external gate register",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 139,
+        "sha256": "51de0a7534ecf718bea166e7f42894a2e06e835522cc7389df544a18784d2015"
+      },
+      "correctiveCards": [
+        "R0-02",
+        "R0-03"
+      ],
+      "implementationReferences": [
+        {
+          "path": "docs/ENCHO_ENGINEERING_CONSTITUTION.md",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "docs/harvo/DECISIONS.md",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "scripts/cr1/verify-inventory.mjs",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/deployment/schemaPreflight.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "ENV-01",
+            "DB-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P0.4",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 140,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Canonical base-schema bootstrap, predecessor grants and actual restricted runtime login",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 140,
+        "sha256": "275811c5aecb2dec4393dd46303ad26d817955db71cc6f0607d3ebd91baac284"
+      },
+      "correctiveCards": [
+        "R0-01",
+        "R1-01",
+        "R2-02",
+        "R7-02"
+      ],
+      "implementationReferences": [
+        {
+          "path": "docs/ENCHO_ENGINEERING_CONSTITUTION.md",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "docs/harvo/DECISIONS.md",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "scripts/cr1/verify-inventory.mjs",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/deployment/schemaPreflight.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "ENV-01",
+            "DB-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P0.5",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 141,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Named isolated staging and pilot bounds/owners",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 141,
+        "sha256": "19b010abc45b9c7db9c13abffbc72754ebc03e7e66d0d4ded2b79569d8bc4f0a"
+      },
+      "correctiveCards": [
+        "R0-02",
+        "R7-02"
+      ],
+      "implementationReferences": [
+        {
+          "path": "docs/ENCHO_ENGINEERING_CONSTITUTION.md",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "docs/harvo/DECISIONS.md",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "scripts/cr1/verify-inventory.mjs",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/deployment/schemaPreflight.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "ENV-01",
+            "DB-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P1.1",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 142,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Typed principal, deny-by-default permission port and public error/status contracts",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 142,
+        "sha256": "fd2558530a3bf02b6a155e019fdfa5fc64051a5ac9b815a7f820227dada8e6ed"
+      },
+      "correctiveCards": [
+        "R2-03",
+        "R6-04"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/lib/platform/durableOutbox.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/marketing/legacyBoundary.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/shared/platform/apiError.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P1.2",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 143,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Request/async execution context and safe diagnostic headers",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 143,
+        "sha256": "033c0dc72e034b32a0c620d8b64e762887588a568ad62c2899b4ecba25b1be10"
+      },
+      "correctiveCards": [
+        "R2-03",
+        "R6-04"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/lib/platform/durableOutbox.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/marketing/legacyBoundary.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/shared/platform/apiError.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P1.3",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 144,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Durable outbox contract, queue disposition and transaction/fence/replay tests",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 144,
+        "sha256": "0459c8f78472df9eeb9fdf7880c31f80ace13728bc57f7fc35f8e1c56b29e592"
+      },
+      "correctiveCards": [
+        "R2-01",
+        "R2-04"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/lib/platform/durableOutbox.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/marketing/legacyBoundary.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/shared/platform/apiError.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P1.4",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 145,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Actor-scoped caches/queues, no persisted credentials, atomic replay and session fences",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 145,
+        "sha256": "66cdb4b972d827e90a2b29ea8ca07cd09b14cfb8ed43eb4b0f2d338b57ff6459"
+      },
+      "correctiveCards": [
+        "R1-03"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/lib/platform/durableOutbox.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/marketing/legacyBoundary.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/shared/platform/apiError.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P1.5",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 146,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Legacy route/commerce/AI/webhook containment with caller migration",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 146,
+        "sha256": "1ce142f138c5aa3b24c277490580ba0b02e561cca75f49daae56528670349242"
+      },
+      "correctiveCards": [
+        "R0-01",
+        "R2-03"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/lib/platform/durableOutbox.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/marketing/legacyBoundary.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/shared/platform/apiError.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P1.6",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 147,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Bounded retired-surface metrics and route-matching contract",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 147,
+        "sha256": "9d94ac001e8f37d2e5b69491219045b71056e975b11ee7f24d84b86d3a321f8c"
+      },
+      "correctiveCards": [
+        "R0-01",
+        "R2-03"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/lib/platform/durableOutbox.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/marketing/legacyBoundary.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/shared/platform/apiError.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P1.7",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 148,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Cross-domain command propagation, consumer adoption and browser failure/recovery evidence",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 148,
+        "sha256": "2e0fdb28323089ec39c791edd02f9f5b0072f626dce00e7b59acaa7772ca8c2e"
+      },
+      "correctiveCards": [
+        "R0-04",
+        "R1-03",
+        "R2-01",
+        "R2-03"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/lib/platform/durableOutbox.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/marketing/legacyBoundary.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/shared/platform/apiError.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P2.1",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 149,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Migration 036, exact catalog readiness, non-bypass RLS and immutable authority tests",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 149,
+        "sha256": "ce302217c7eb312c4748383afdcf47387d5008875408676831e0001dc5b682f0"
+      },
+      "correctiveCards": [
+        "R1-01",
+        "R1-02",
+        "R2-04"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/server/operations/router.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/operations/runtime.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/operations/sessionRuntime.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/iam/staffSessionIssuer.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "DB-01",
+            "IAM-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P2.2",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 150,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Fresh scoped SQL policy evaluator and same-transaction command authorization",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 150,
+        "sha256": "e1af84a954408e92924269dc99d50379bca4c871f2b6ea61fe30bcf9bb6064fe"
+      },
+      "correctiveCards": [
+        "R1-01",
+        "R1-02",
+        "R2-04"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/server/operations/router.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/operations/runtime.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/operations/sessionRuntime.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/iam/staffSessionIssuer.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "DB-01",
+            "IAM-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P2.3",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 151,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Reviewed owner bootstrap, verified invitation acceptance and isolated staff session/factor adapters",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 151,
+        "sha256": "6b415a49ddc816eda21779b92ad65a8465c5e70500ffa392f5c11183500c236b"
+      },
+      "correctiveCards": [
+        "R1-01",
+        "R1-02"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/server/operations/router.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/operations/runtime.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/operations/sessionRuntime.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/iam/staffSessionIssuer.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "DB-01",
+            "IAM-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P2.4",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 152,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Grant/revoke/offboard/assignment lifecycle services and worker reauthorization",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 152,
+        "sha256": "ab74560dd286cf9d5a618872df196d79931455cd3bf7400e8732d57057508262"
+      },
+      "correctiveCards": [
+        "R1-01",
+        "R1-02"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/server/operations/router.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/operations/runtime.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/operations/sessionRuntime.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/iam/staffSessionIssuer.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "DB-01",
+            "IAM-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P2.5",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 153,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Maker/checker, step-up, access review and break-glass end-to-end service flows",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 153,
+        "sha256": "ddc8838da927280d63edbfd26cf145fcae87954d6564ecdb874c2f6ee40d7be4"
+      },
+      "correctiveCards": [
+        "R1-02",
+        "R1-04"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/server/operations/router.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/operations/runtime.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/operations/sessionRuntime.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/iam/staffSessionIssuer.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "DB-01",
+            "IAM-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P2.6",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 154,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Role-aware Operations Shell, My Work and workforce administration",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 154,
+        "sha256": "a00b3c1fc44d95d95581c40b97f8c4f3c0a722a748315aef9d742350f61904a3"
+      },
+      "correctiveCards": [
+        "R1-02",
+        "R1-04"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/server/operations/router.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/operations/runtime.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/operations/sessionRuntime.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/iam/staffSessionIssuer.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "DB-01",
+            "IAM-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P2.7",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 155,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "P2 full regression/type/lint/build and browser/security exit receipt",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 155,
+        "sha256": "5b3b19746b573f29c4d30c76395aad73d96e84f8a4656e16bf6b62e19047ea40"
+      },
+      "correctiveCards": [
+        "R2-04"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/server/operations/router.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/operations/runtime.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/operations/sessionRuntime.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/iam/staffSessionIssuer.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "DB-01",
+            "IAM-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P3.1",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 156,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Canonical conversation identity and compatible history migration",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 156,
+        "sha256": "39e8006a55a340c399df7d6986d8109270ff239619adfd4f1816689200257aa5"
+      },
+      "correctiveCards": [
+        "R4-01"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/server/conversations/router.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/conversations/serviceCases.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/conversations/notificationRouter.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/InboxPage.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/operations/ServiceDesk.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "OPS-01",
+            "PRIV-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P3.2",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 157,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Ordered messages, idempotent writes and atomic notification outbox",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 157,
+        "sha256": "16c046cb8272b489cb7b2491bd55ad2e4e4751a7ac10e4f8d94d650797dc53a3"
+      },
+      "correctiveCards": [
+        "R4-01"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/server/conversations/router.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/conversations/serviceCases.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/conversations/notificationRouter.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/InboxPage.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/operations/ServiceDesk.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "OPS-01",
+            "PRIV-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P3.3",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 158,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Read cursors, delivery attempts/receipts, preferences and notification workers",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 158,
+        "sha256": "4d262326463f8724f21a16df379019a2dd6884d3d19a9577f7f7dbfc8830b712"
+      },
+      "correctiveCards": [
+        "R4-01"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/server/conversations/router.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/conversations/serviceCases.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/conversations/notificationRouter.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/InboxPage.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/operations/ServiceDesk.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "OPS-01",
+            "PRIV-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P3.4",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 159,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Scoped service cases, assignments, internal notes and content-access receipts",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 159,
+        "sha256": "f37ec71e0875c75602cbf8877ad42010999ad8493e734f91f3e8857eb1e97529"
+      },
+      "correctiveCards": [
+        "R4-02"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/server/conversations/router.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/conversations/serviceCases.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/conversations/notificationRouter.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/InboxPage.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/operations/ServiceDesk.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "OPS-01",
+            "PRIV-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P3.5",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 160,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Grounded reply/translation assistance and disclosed staff responses",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 160,
+        "sha256": "8728d112afff57822fd547682da890abd00c83ffed19fcfb6082ad7f27b620b7"
+      },
+      "correctiveCards": [
+        "R4-02"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/server/conversations/router.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/conversations/serviceCases.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/conversations/notificationRouter.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/InboxPage.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/operations/ServiceDesk.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "OPS-01",
+            "PRIV-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P3.6",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 161,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Guest/host Inbox and staff Service Desk with offline/a11y/fault tests",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 161,
+        "sha256": "309e83ac8c8f3b8d6f140f0fa4f45b45695a4d5096dd9cd87d71d741a8506df8"
+      },
+      "correctiveCards": [
+        "R1-03",
+        "R4-02",
+        "R6-03"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/server/conversations/router.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/conversations/serviceCases.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/server/conversations/notificationRouter.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/InboxPage.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/operations/ServiceDesk.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "OPS-01",
+            "PRIV-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P4.1",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 162,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Independent guest presentation truth/performance/accessibility acceptance",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 162,
+        "sha256": "7188929279ae104a330f911a90f092b66205c736ed3e28c6ce92288387bbafbe"
+      },
+      "correctiveCards": [
+        "R3-01",
+        "R3-04",
+        "R6-03"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/lib/offers/canonicalRoomReader.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/commerce/staysCommerceEngine.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/ListingDetailsNew.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/CheckoutPage.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "LEGAL-01",
+            "COMM-01",
+            "DB-01",
+            "PRIV-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P4.2",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 163,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Canonical versioned sellable offer and consistent guest/host/admin projections",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 163,
+        "sha256": "b601701c966b050bc253c3076c77065e13323229a8339227b9e5210c85661876"
+      },
+      "correctiveCards": [
+        "R3-01"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/lib/offers/canonicalRoomReader.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/commerce/staysCommerceEngine.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/ListingDetailsNew.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/CheckoutPage.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "LEGAL-01",
+            "COMM-01",
+            "DB-01",
+            "PRIV-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P4.3",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 164,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Approved quote/tax/commission/cancellation/payment policy contracts",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 164,
+        "sha256": "296301138808091864f7fd3e552b4e94d663b134dcf9013fa6c2eb4202d582b0"
+      },
+      "correctiveCards": [
+        "R3-02"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/lib/offers/canonicalRoomReader.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/commerce/staysCommerceEngine.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/ListingDetailsNew.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/CheckoutPage.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "LEGAL-01",
+            "COMM-01",
+            "DB-01",
+            "PRIV-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P4.4",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 165,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Quote/hold/order/capture/booking transaction and recovery integration",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 165,
+        "sha256": "8c652b85746bce5cfbad17bf9ac1defa9d9da520e3c91eed549d6db1de3dac64"
+      },
+      "correctiveCards": [
+        "R3-03"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/lib/offers/canonicalRoomReader.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/commerce/staysCommerceEngine.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/ListingDetailsNew.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/CheckoutPage.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "LEGAL-01",
+            "COMM-01",
+            "DB-01",
+            "PRIV-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P4.5",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 166,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Manage trip, verified confirmation, cancellation/refund and service integration",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 166,
+        "sha256": "93a4a54539a9f9c85598c7155e8c9b7d28fb6ffc4ea0e0230cdd6c6508714680"
+      },
+      "correctiveCards": [
+        "R3-04"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/lib/offers/canonicalRoomReader.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/commerce/staysCommerceEngine.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/ListingDetailsNew.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/CheckoutPage.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "LEGAL-01",
+            "COMM-01",
+            "DB-01",
+            "PRIV-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P4.6",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 167,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "P4 complete regression, gateway sandbox and concurrency/recovery exit",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 167,
+        "sha256": "1dec79650b4d3da08fdc57a085bce18f1284214dba5fa580d63358c86743ebd7"
+      },
+      "correctiveCards": [
+        "R3-04"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/lib/offers/canonicalRoomReader.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/commerce/staysCommerceEngine.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/ListingDetailsNew.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/CheckoutPage.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "LEGAL-01",
+            "COMM-01",
+            "DB-01",
+            "PRIV-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P5.1",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 168,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Offer/property campaign subject contracts and immutable offer binding",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 168,
+        "sha256": "26c68576c2f0f4c8043c47e183401991680cc7ddb967e707141ca61f112e278f"
+      },
+      "correctiveCards": [
+        "R4-04"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/lib/marketing/creativeWorkflow.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/marketing/workflow.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/marketing/CreativeWorkspace.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/marketing/CampaignStudio.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "PROV-M-01",
+            "PROV-G-01",
+            "PRIV-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P5.2",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 169,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "External media ingestion, rights/review, derivatives and Creative Packages",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 169,
+        "sha256": "b351f339b3344cca3e0d0e11b155160a43ccba72f0e161676cf6a5c1d942e4c0"
+      },
+      "correctiveCards": [
+        "R4-03"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/lib/marketing/creativeWorkflow.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/marketing/workflow.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/marketing/CreativeWorkspace.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/marketing/CampaignStudio.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "PROV-M-01",
+            "PROV-G-01",
+            "PRIV-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P5.3",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 170,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Room-offer/property-discovery modes and canonical price/claim compilation",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 170,
+        "sha256": "c2dead8208a7e6980e89a4f822ce1fcf7ba5c19a32f87996e471f35af226877b"
+      },
+      "correctiveCards": [
+        "R4-04",
+        "R6-03"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/lib/marketing/creativeWorkflow.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/marketing/workflow.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/marketing/CreativeWorkspace.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/marketing/CampaignStudio.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "PROV-M-01",
+            "PROV-G-01",
+            "PRIV-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P5.4",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 171,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Host preflight/copilot and revision-bound independent review",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 171,
+        "sha256": "18cde69580b3da1db3c46ef6fbca6469c04bc68e67e305813449a1743b23b1ca"
+      },
+      "correctiveCards": [
+        "R4-04",
+        "R6-03"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/lib/marketing/creativeWorkflow.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/marketing/workflow.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/marketing/CreativeWorkspace.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/marketing/CampaignStudio.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "PROV-M-01",
+            "PROV-G-01",
+            "PRIV-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P5.5",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 172,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Mixed-room property and standalone creative three-surface verification",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 172,
+        "sha256": "7514a48b773d0c54a092910b038c934fca81409098a9c256c001c803f445f63a"
+      },
+      "correctiveCards": [
+        "R4-04",
+        "R6-03"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/lib/marketing/creativeWorkflow.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/marketing/workflow.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/marketing/CreativeWorkspace.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/marketing/CampaignStudio.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "PROV-M-01",
+            "PROV-G-01",
+            "PRIV-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P6.1",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 173,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Provider-compliant account/capability registry and eligibility evidence",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 173,
+        "sha256": "e78d88c956308f98300a4f810cf95c3d50c482a61c335b256c61fb2307afa76c"
+      },
+      "correctiveCards": [
+        "R5-01"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/server/marketing/router.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/marketing/financeService.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/marketing/AdtechWorkspace.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "PROV-M-01",
+            "PROV-G-01",
+            "COMM-01",
+            "IAM-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P6.2",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 174,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Immutable expert programs, account bindings and supported compiler/readback",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 174,
+        "sha256": "235cc2d31c62bb340da9da1ef7f2fc9fed41ede656b79e29529d4421b9015d82"
+      },
+      "correctiveCards": [
+        "R5-02",
+        "R5-03"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/server/marketing/router.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/marketing/financeService.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/marketing/AdtechWorkspace.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "PROV-M-01",
+            "PROV-G-01",
+            "COMM-01",
+            "IAM-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P6.3",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 175,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Meta/Google Strategy Labs and scoped Flight/Provider desks",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 175,
+        "sha256": "3d30890108e743ea4262a056d9a5a3bbe6818bc42f7184f91b4571ed2d127e6f"
+      },
+      "correctiveCards": [
+        "R5-02"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/server/marketing/router.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/marketing/financeService.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/marketing/AdtechWorkspace.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "PROV-M-01",
+            "PROV-G-01",
+            "COMM-01",
+            "IAM-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P6.4",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 176,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Approved cost/markup/tax/variance contract and Finance Desk settlement",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 176,
+        "sha256": "d39f6a16cfc4c56601aea6d030de55303d49d3f292e9954c4a6f3c217b363f61"
+      },
+      "correctiveCards": [
+        "R3-02",
+        "R5-04"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/server/marketing/router.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/marketing/financeService.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/marketing/AdtechWorkspace.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "PROV-M-01",
+            "PROV-G-01",
+            "COMM-01",
+            "IAM-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P6.5",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 177,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "P6 full regression and ambiguous/partial-provider recovery exit",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 177,
+        "sha256": "cfc4d627c81b228d9bd6fab4fd6cd78049c4c550abc9505fe189cc3f39671567"
+      },
+      "correctiveCards": [
+        "R5-03",
+        "R5-04"
+      ],
+      "implementationReferences": [
+        {
+          "path": "src/server/marketing/router.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/marketing/financeService.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/marketing/AdtechWorkspace.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "PROV-M-01",
+            "PROV-G-01",
+            "COMM-01",
+            "IAM-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P7.1",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 178,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Host one-click setup with bounded intent/creative/location controls",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 178,
+        "sha256": "47e1f3d6fed0dc884461a2b36ae42d0b0fd16a7cd2f70c4e8cfe6a694b7129cc"
+      },
+      "correctiveCards": [
+        "R6-01"
+      ],
+      "implementationReferences": [
+        {
+          "path": "components/marketing/CampaignStudio.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/marketing/workflow.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/marketing/StudioShared.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "OPS-01",
+            "PRIV-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P7.2",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 179,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Four-flight portfolio/detail and source-aware metrics/budget/outcomes",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 179,
+        "sha256": "741577df324607c072792aaa1d9cc7774f07a6cda9e1a8f1301f1d172a145f72"
+      },
+      "correctiveCards": [
+        "R6-02"
+      ],
+      "implementationReferences": [
+        {
+          "path": "components/marketing/CampaignStudio.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/marketing/workflow.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/marketing/StudioShared.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "OPS-01",
+            "PRIV-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P7.3",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 180,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Inquiry alert center and responsive/accessibility portfolio acceptance",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 180,
+        "sha256": "faa775bed45a05c43cdf583d2afa4f7d21b5ca491222ad88d8d3abcd4fa55de7"
+      },
+      "correctiveCards": [
+        "R6-03"
+      ],
+      "implementationReferences": [
+        {
+          "path": "components/marketing/CampaignStudio.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/marketing/workflow.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "components/marketing/StudioShared.tsx",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "OPS-01",
+            "PRIV-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P8.1",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 181,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Named staging deployment, checksum/grant checks and three-role golden path",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 181,
+        "sha256": "1bb64203884fad23e9c063b3559fdf5dc1ecba412e038f05da9a025d2d564108"
+      },
+      "correctiveCards": [
+        "R7-02"
+      ],
+      "implementationReferences": [
+        {
+          "path": "scripts/deployment/run-staging-deployment.mjs",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "scripts/deployment/provider-canary-runner.mjs",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/release/evidence.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "docs/implementation/CR1_EXTERNAL_GATE_REGISTER.md",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "ENV-01",
+            "DB-01",
+            "LEGAL-01",
+            "PROV-M-01",
+            "PROV-G-01",
+            "COMM-01",
+            "IAM-01",
+            "OPS-01",
+            "PRIV-01",
+            "PILOT-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P8.2",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 182,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Full CI/security/a11y/performance/load/restore and operational drills",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 182,
+        "sha256": "3afe94adf0a796c00b3467319fa5ac21526daf892fb7622762a13cfcbdcdf645"
+      },
+      "correctiveCards": [
+        "R6-04",
+        "R7-01",
+        "R7-02"
+      ],
+      "implementationReferences": [
+        {
+          "path": "scripts/deployment/run-staging-deployment.mjs",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "scripts/deployment/provider-canary-runner.mjs",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/release/evidence.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "docs/implementation/CR1_EXTERNAL_GATE_REGISTER.md",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "ENV-01",
+            "DB-01",
+            "LEGAL-01",
+            "PROV-M-01",
+            "PROV-G-01",
+            "COMM-01",
+            "IAM-01",
+            "OPS-01",
+            "PRIV-01",
+            "PILOT-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P8.3",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 183,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Approved paused Meta/Google canary with authenticated exact readback",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 183,
+        "sha256": "b46ec7b5159f738d839b807fac018d8fb22b33a2a047a202db2aa477f674864d"
+      },
+      "correctiveCards": [
+        "R7-03"
+      ],
+      "implementationReferences": [
+        {
+          "path": "scripts/deployment/run-staging-deployment.mjs",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "scripts/deployment/provider-canary-runner.mjs",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/release/evidence.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "docs/implementation/CR1_EXTERNAL_GATE_REGISTER.md",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "ENV-01",
+            "DB-01",
+            "LEGAL-01",
+            "PROV-M-01",
+            "PROV-G-01",
+            "COMM-01",
+            "IAM-01",
+            "OPS-01",
+            "PRIV-01",
+            "PILOT-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    },
+    {
+      "id": "P8.4",
+      "historicalClaim": {
+        "state": "COMPLETE_LOCAL",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 184,
+        "qualification": "CR1-045; historical claim is not independent acceptance"
+      },
+      "criterion": {
+        "text": "Bounded pilot, reconciled outcomes, support readiness and independent go/no-go",
+        "source": "docs/implementation/CR1_EXECUTION_PLAN.md",
+        "line": 184,
+        "sha256": "448910906d63842b85d5fd838988f19c4a6c9cff58e34940ca8ac6fe2e06281d"
+      },
+      "correctiveCards": [
+        "R7-04"
+      ],
+      "implementationReferences": [
+        {
+          "path": "scripts/deployment/run-staging-deployment.mjs",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "scripts/deployment/provider-canary-runner.mjs",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "src/lib/release/evidence.ts",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        },
+        {
+          "path": "docs/implementation/CR1_EXTERNAL_GATE_REGISTER.md",
+          "status": "REFERENCE_IDENTIFIED_IN_SOURCE_SCAN",
+          "limitation": "Existence/reference does not prove criterion integration or acceptance"
+        }
+      ],
+      "routeSchemaUiAssessment": {
+        "routes": "UNREVIEWED",
+        "schema": "UNREVIEWED",
+        "ui": "UNREVIEWED",
+        "workers": "UNREVIEWED"
+      },
+      "evidence": {
+        "local": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "integrated": {
+          "state": "UNREVIEWED",
+          "acceptedEvidence": []
+        },
+        "external": {
+          "state": "OPEN",
+          "applicability": "REQUIRES_CRITERION_REVIEW",
+          "relatedGateIds": [
+            "ENV-01",
+            "DB-01",
+            "LEGAL-01",
+            "PROV-M-01",
+            "PROV-G-01",
+            "COMM-01",
+            "IAM-01",
+            "OPS-01",
+            "PRIV-01",
+            "PILOT-01"
+          ],
+          "acceptedEvidence": []
+        }
+      },
+      "independentAcceptance": {
+        "state": "UNREVIEWED",
+        "reviewer": null,
+        "decisionEvidence": null
+      },
+      "nextAction": "Review the exact current criterion against mounted paths, durable state and applicable independent evidence before acceptance."
+    }
+  ],
+  "externalGates": [
+    {
+      "id": "ENV-01",
+      "name": "Isolated staging",
+      "historicalRegisterState": "**OPEN.** The founder previously confirmed that staging is not configured. Generic `.env`/`.env.local` Neon endpoints are not staging evidence.",
+      "requiredOwnerRole": "Infrastructure owner",
+      "assignedHuman": {
+        "state": "UNASSIGNED",
+        "identity": null
+      },
+      "requiredEvidence": "Named isolated branch/project, restricted web/worker URLs stored in a staging-only secret source, deployment identity, retention/reset policy and successful restore drill",
+      "stopCondition": "No staging claim, remote migration rehearsal, provider canary or production cutover",
+      "currentAcceptance": "OPEN",
+      "source": "docs/implementation/CR1_EXTERNAL_GATE_REGISTER.md",
+      "line": 10,
+      "qualification": "CR1-045: generated historical clearances cannot satisfy this gate"
+    },
+    {
+      "id": "DB-01",
+      "name": "Restricted runtime",
+      "historicalRegisterState": "**LOCAL EVIDENCE ONLY.** Disposable PostgreSQL tests show non-superuser/non-`BYPASSRLS` patterns; exact deployed web and worker principals remain unproved.",
+      "requiredOwnerRole": "Database/Infrastructure owner",
+      "assignedHuman": {
+        "state": "UNASSIGNED",
+        "identity": null
+      },
+      "requiredEvidence": "Read-only receipt from each deployed runtime login showing `rolsuper=false`, `rolbypassrls=false`, required grants, FORCE RLS catalog readiness and no owner membership/`SET ROLE` path",
+      "stopCondition": "No production-readiness certification for sensitive multi-tenant expansion",
+      "currentAcceptance": "OPEN",
+      "source": "docs/implementation/CR1_EXTERNAL_GATE_REGISTER.md",
+      "line": 11,
+      "qualification": "CR1-045: generated historical clearances cannot satisfy this gate"
+    },
+    {
+      "id": "LEGAL-01",
+      "name": "India commerce/tax",
+      "historicalRegisterState": "**OPEN.** No written Indian CA/tax-lawyer sign-off is present.",
+      "requiredOwnerRole": "Founder + qualified Indian CA/tax lawyer",
+      "assignedHuman": {
+        "state": "UNASSIGNED",
+        "identity": null
+      },
+      "requiredEvidence": "Written decision for quote/order/invoice tax treatment, cancellation/refund, marketplace/merchant-of-record classification, payouts, withholding and record retention",
+      "stopCondition": "No M5/M6B acceptance or live customer-capital booking/payment launch",
+      "currentAcceptance": "OPEN",
+      "source": "docs/implementation/CR1_EXTERNAL_GATE_REGISTER.md",
+      "line": 12,
+      "qualification": "CR1-045: generated historical clearances cannot satisfy this gate"
+    },
+    {
+      "id": "PROV-G-01",
+      "name": "Google advertiser topology",
+      "historicalRegisterState": "**OPEN/STALE EVIDENCE.** Historical screenshots and discussion do not prove current Basic Access, advertiser-of-record classification or the permitted account/customer topology.",
+      "requiredOwnerRole": "Founder + Google Ads account owner/provider counsel",
+      "assignedHuman": {
+        "state": "UNASSIGNED",
+        "identity": null
+      },
+      "requiredEvidence": "Current authenticated access level, developer-token status, account hierarchy, customer/advertiser mapping, allowed API operations and paused create/readback evidence",
+      "stopCondition": "No Google live activation or universal control claim",
+      "currentAcceptance": "OPEN",
+      "source": "docs/implementation/CR1_EXTERNAL_GATE_REGISTER.md",
+      "line": 13,
+      "qualification": "CR1-045: generated historical clearances cannot satisfy this gate"
+    },
+    {
+      "id": "PROV-M-01",
+      "name": "Meta advertiser topology",
+      "historicalRegisterState": "**OPEN.** Source has versioned capability contracts, but current business/app/ad-account eligibility and permissions are not externally verified for CR1.",
+      "requiredOwnerRole": "Founder + Meta Business owner/provider counsel",
+      "assignedHuman": {
+        "state": "UNASSIGNED",
+        "identity": null
+      },
+      "requiredEvidence": "Current app mode/review, business/ad-account/page/Instagram/pixel bindings, token permissions, feature eligibility and paused create/readback evidence",
+      "stopCondition": "No Meta live activation or universal control claim",
+      "currentAcceptance": "OPEN",
+      "source": "docs/implementation/CR1_EXTERNAL_GATE_REGISTER.md",
+      "line": 14,
+      "qualification": "CR1-045: generated historical clearances cannot satisfy this gate"
+    },
+    {
+      "id": "COMM-01",
+      "name": "Advertising economics",
+      "historicalRegisterState": "**PARTIAL.** Cost-plus direction with an admin-selected initial 3\u20135% markup is accepted; the recognized cost basis and tax/variance/refund rules are incomplete.",
+      "requiredOwnerRole": "Founder + Finance/Legal",
+      "assignedHuman": {
+        "state": "UNASSIGNED",
+        "identity": null
+      },
+      "requiredEvidence": "Versioned definition of recognized cost `C`, markup bounds, tax, provider variance/overdelivery, cancellation, refund/wallet treatment, expiry and disclosure",
+      "stopCondition": "No final campaign financial contract or customer-capital pilot",
+      "currentAcceptance": "OPEN",
+      "source": "docs/implementation/CR1_EXTERNAL_GATE_REGISTER.md",
+      "line": 15,
+      "qualification": "CR1-045: generated historical clearances cannot satisfy this gate"
+    },
+    {
+      "id": "IAM-01",
+      "name": "Workforce separation policy",
+      "historicalRegisterState": "**PARTIAL.** Scoped delegation is accepted; exact production role combinations and checker/step-up/amount thresholds remain open.",
+      "requiredOwnerRole": "Founder + Security/Operations",
+      "assignedHuman": {
+        "state": "UNASSIGNED",
+        "identity": null
+      },
+      "requiredEvidence": "Approved role catalog, forbidden combinations, checker thresholds, safety-pause asymmetry, owner bootstrap and access-review cadence",
+      "stopCondition": "Implement deny-by-default safe baseline; no broad delegated production authority until approved",
+      "currentAcceptance": "OPEN",
+      "source": "docs/implementation/CR1_EXTERNAL_GATE_REGISTER.md",
+      "line": 16,
+      "qualification": "CR1-045: generated historical clearances cannot satisfy this gate"
+    },
+    {
+      "id": "OPS-01",
+      "name": "Support and service policy",
+      "historicalRegisterState": "**OPEN.** Staffing hours, inquiry SLA, escalation authority, retention and channel commitments are not fixed.",
+      "requiredOwnerRole": "Founder + Operations",
+      "assignedHuman": {
+        "state": "UNASSIGNED",
+        "identity": null
+      },
+      "requiredEvidence": "Published operating hours, SLA targets, escalation matrix, staff capacity, channel consent policy and privacy/retention schedule",
+      "stopCondition": "No guaranteed response-time marketing claim or autonomous escalation beyond configured safe defaults",
+      "currentAcceptance": "OPEN",
+      "source": "docs/implementation/CR1_EXTERNAL_GATE_REGISTER.md",
+      "line": 17,
+      "qualification": "CR1-045: generated historical clearances cannot satisfy this gate"
+    },
+    {
+      "id": "PILOT-01",
+      "name": "Bounded CR1 pilot",
+      "historicalRegisterState": "**OPEN.** No isolated environment/account/offer set and stop-loss package is currently certified for the three-sided CR1 path.",
+      "requiredOwnerRole": "Founder + Operations + Engineering",
+      "assignedHuman": {
+        "state": "UNASSIGNED",
+        "identity": null
+      },
+      "requiredEvidence": "Named guest offer, host, staff actors, provider accounts, corridor, budget/stop-loss, rollback contacts, success/failure criteria and signed go/no-go receipt",
+      "stopCondition": "No real spend, public launch or commercial-proof claim",
+      "currentAcceptance": "OPEN",
+      "source": "docs/implementation/CR1_EXTERNAL_GATE_REGISTER.md",
+      "line": 18,
+      "qualification": "CR1-045: generated historical clearances cannot satisfy this gate"
+    },
+    {
+      "id": "PRIV-01",
+      "name": "CRM/privacy policy",
+      "historicalRegisterState": "**OPEN.** Walled-garden intent is clear; automatic contact redaction, staff monitoring scope, retention and AI processing disclosure require explicit policy/legal authority.",
+      "requiredOwnerRole": "Founder + Privacy/Legal + Operations",
+      "assignedHuman": {
+        "state": "UNASSIGNED",
+        "identity": null
+      },
+      "requiredEvidence": "Approved contact-sharing/redaction policy, participant/staff disclosure, lawful basis/consent, retention/deletion, AI drafting/translation disclosure and access review",
+      "stopCondition": "Preserve participant scoping and audit; do not silently censor or expose private conversation content",
+      "currentAcceptance": "OPEN",
+      "source": "docs/implementation/CR1_EXTERNAL_GATE_REGISTER.md",
+      "line": 19,
+      "qualification": "CR1-045: generated historical clearances cannot satisfy this gate"
+    }
+  ],
+  "additionalReleasePredicates": [
+    {
+      "id": "CANARY-01",
+      "state": "OPEN",
+      "requiredOwnerRole": "Provider operator + independent reviewer",
+      "assignedHuman": "UNASSIGNED",
+      "source": "docs/implementation/CR1_REMEDIATION_WORK_PACKAGES.md",
+      "section": "R7-03"
+    },
+    {
+      "id": "R7-02.PROD",
+      "state": "OPEN",
+      "requiredOwnerRole": "DBA/SRE + release reviewer",
+      "assignedHuman": "UNASSIGNED",
+      "source": "docs/implementation/CR1_REMEDIATION_WORK_PACKAGES.md",
+      "section": "R7-02"
+    }
+  ],
+  "limitations": [
+    "This register copies the original48 exit criteria verbatim; it does not complete their semantic or integration review.",
+    "Source references are inspection starting points, not verified route/table/UI delivery.",
+    "Named humans and authentic external approvals are not supplied; role requirements are preserved verbatim.",
+    "No original package independently accepted. No replacement completion percentage calculated."
+  ]
+}

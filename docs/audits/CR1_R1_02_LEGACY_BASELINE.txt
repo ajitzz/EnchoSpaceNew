@@ -1,0 +1,44 @@
+
+ RUN  v4.1.10 /Users/ajit/Documents/EnchoSpaceNew
+
+(node:2781) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:2781) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+stdout | src/test/harvo/cr1_admin_workforce_command.test.ts
+[WORKER ENGINE] Background worker timers disabled (Serverless/Test runtime detected).
+
+ℹ️ [INTEGRATION INSPECTION INFO - MOCK MODE ACTIVE]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ℹ️ Service/Feature : Upstash Redis Cache
+📍 Trigger Context: Upstash Redis Cache Initialization
+🔑 Variable Name  : UPSTASH_REDIS_REST_URL
+📊 Key Status    : MISSING
+🔍 Masked Value  : [ABSENT]
+📝 Issue Details : Environment variable 'UPSTASH_REDIS_REST_URL' is not set or empty.
+🛠️  Action Needed : Create database in Upstash Redis Console and set UPSTASH_REDIS_REST_URL.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+ℹ️ [INTEGRATION INSPECTION INFO - MOCK MODE ACTIVE]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ℹ️ Service/Feature : Upstash Redis Cache
+📍 Trigger Context: Upstash Redis Cache Initialization
+🔑 Variable Name  : UPSTASH_REDIS_REST_TOKEN
+📊 Key Status    : MISSING
+🔍 Masked Value  : [ABSENT]
+📝 Issue Details : Environment variable 'UPSTASH_REDIS_REST_TOKEN' is not set or empty.
+🛠️  Action Needed : Set UPSTASH_REDIS_REST_TOKEN from Upstash database REST API section.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+stderr | src/test/harvo/cr1_admin_workforce_command.test.ts
+[DATABASE CONFIG WARNING] No valid DATABASE_URL or POSTGRES_URL configured. Database-dependent endpoints will return 503.
+{"timestamp":"2026-09-28T17:57:56.037Z","severity":"ERROR","service":"encho-marketing-engine","environment":"test","message":"[WORKFORCE] Restricted operations runtime unavailable","context":{"errorCode":"WORKFORCE_UNAVAILABLE"}}
+
+···········
+
+ Test Files  1 passed (1)
+      Tests  11 passed (11)
+   Start at  17:57:53
+   Duration  3.59s (transform 1.19s, setup 31ms, import 2.22s, tests 1.23s, environment 0ms)
+

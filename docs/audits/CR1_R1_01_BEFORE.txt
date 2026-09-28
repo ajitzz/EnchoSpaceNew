@@ -1,0 +1,68 @@
+
+ RUN  v4.1.10 /Users/ajit/Documents/EnchoSpaceNew
+
+(node:93793) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:93793) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+·····xx··(node:93794) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:93794) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+················
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |legacy| src/test/cr1_operations_api.test.ts > CR1 independent workforce HTTP boundary > uses only explicit workforce configuration with strict remote TLS
+AssertionError: expected { …(8) } to be null
+
+- Expected:
+null
+
++ Received:
+{
+  "allowExitOnIdle": true,
+  "application_name": "encho_cr1_workforce",
+  "connectionString": "postgres://owner:secret@live.test/encho",
+  "connectionTimeoutMillis": 8000,
+  "idleTimeoutMillis": 10000,
+  "max": 2,
+  "ssl": {
+    "rejectUnauthorized": false,
+  },
+  "statement_timeout": 10000,
+}
+
+ ❯ src/test/cr1_operations_api.test.ts:67:97
+     65|   });
+     66|   it('uses only explicit workforce configuration with strict remote TL…
+     67|     expect(workforceConnectionConfig({DATABASE_URL:'postgres://owner:s…
+       |                                                                                                 ^
+     68|     const parsed = workforceConnectionConfig({CR1_WORKFORCE_DATABASE_U…
+     69|     expect(parsed?.ssl).toEqual({rejectUnauthorized:true});
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |legacy| src/test/cr1_operations_api.test.ts > CR1 independent workforce HTTP boundary > uses trusted environment configuration and refuses production downgrades or insecure staging origins
+AssertionError: expected 'http://localhost:3000' to be null
+
+- Expected:
+null
+
++ Received:
+"http://localhost:3000"
+
+ ❯ src/test/cr1_operations_api.test.ts:78:113
+     76|     expect(workforceEnvironment({NODE_ENV:'production',CR1_WORKFORCE_E…
+     77|     expect(()=>workforceEnvironment({NODE_ENV:'production',CR1_WORKFOR…
+     78|     expect(workforceOrigin({CR1_WORKFORCE_ENVIRONMENT:'STAGING',CR1_WO…
+       |                                                                                                                 ^
+     79|   });
+     80|   it('requires a fixed trusted origin and exact command input before e…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  2 failed | 23 passed (25)
+   Start at  17:34:20
+   Duration  17.50s (transform 254ms, setup 317ms, import 764ms, tests 16.24s, environment 0ms)
+

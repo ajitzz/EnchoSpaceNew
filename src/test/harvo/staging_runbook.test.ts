@@ -1,5 +1,5 @@
-import { afterAll, describe, expect, it, vi } from 'vitest';
-import { existsSync, unlinkSync } from 'node:fs';
+import { describe, expect, it, vi } from 'vitest';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   executeStagingDeploymentRunbook,
@@ -11,16 +11,6 @@ describe('CR1 Phase P8.1 & Track 1: Staging Deployment Orchestrator & Runbook', 
     process.cwd(),
     'docs/harvo/receipts/CR1_STAGING_DEPLOYMENT_RECEIPT.json'
   );
-
-  afterAll(() => {
-    if (existsSync(receiptPath)) {
-      try {
-        unlinkSync(receiptPath);
-      } catch {
-        // Clean up test receipt
-      }
-    }
-  });
 
   const validStagingEnv = {
     NODE_ENV: 'staging',
@@ -48,7 +38,7 @@ describe('CR1 Phase P8.1 & Track 1: Staging Deployment Orchestrator & Runbook', 
           ],
         };
       }
-      return { rows: [] };
+      return { rows: ['host_marketing_campaigns', 'conversations', 'campaign_financial_contracts'].map(relname => ({ relname, relrowsecurity: true, relforcerowsecurity: true })) };
     }),
   };
 
@@ -63,7 +53,7 @@ describe('CR1 Phase P8.1 & Track 1: Staging Deployment Orchestrator & Runbook', 
     expect(result.success).toBe(false);
     expect(result.stepFailed).toBe('PREFLIGHT');
     expect(result.errors.length).toBeGreaterThan(0);
-    expect(existsSync(receiptPath)).toBe(false);
+    expect(result.receipt).toBeNull();
   });
 
   it('Scenario 2: Fails closed when database user has superuser privileges', async () => {
@@ -96,7 +86,8 @@ describe('CR1 Phase P8.1 & Track 1: Staging Deployment Orchestrator & Runbook', 
     expect(result.errors).toContain('Database user postgres must not be a superuser');
   });
 
-  it('Scenario 3: Successfully completes staging orchestration and writes immutable receipt', async () => {
+  it('Scenario 3: reports a supplied client observation without certification or historical artifact writes', async () => {
+    const before = existsSync(receiptPath) ? readFileSync(receiptPath) : null;
     const result = await executeStagingDeploymentRunbook({
       env: validStagingEnv,
       dbClient: validMockDbClient as any,
@@ -105,8 +96,9 @@ describe('CR1 Phase P8.1 & Track 1: Staging Deployment Orchestrator & Runbook', 
 
     expect(result.success).toBe(true);
     expect(result.receipt).toBeDefined();
-    expect(result.receipt.status).toBe('CERTIFIED');
-    expect(existsSync(receiptPath)).toBe(true);
+    expect(result.receipt.status).toBe('REQUIRES_INDEPENDENT_REVIEW');
+    expect(result.receipt.productionGateEligible).toBe(false);
+    expect(existsSync(receiptPath) ? readFileSync(receiptPath) : null).toEqual(before);
   });
 
   it('Scenario 4: generateStagingReceipt formats compliant receipt with SHA256 checksum', () => {
@@ -122,8 +114,23 @@ describe('CR1 Phase P8.1 & Track 1: Staging Deployment Orchestrator & Runbook', 
       complianceGatesEnforced: true,
     });
 
-    expect(receipt.status).toBe('CERTIFIED');
+    expect(receipt.status).toBe('REQUIRES_INDEPENDENT_REVIEW');
+    expect(receipt.productionGateEligible).toBe(false);
     expect(receipt.verificationChecksum).toBeDefined();
     expect(receipt.verificationChecksum.length).toBe(64); // SHA-256 length
   });
+  it('rejects absent database client instead of fabricating safe role flags', async () => {
+    const result = await executeStagingDeploymentRunbook({ env: validStagingEnv, dbClient: undefined, gitCommit: 'a'.repeat(40) });
+    expect(result.success).toBe(false);
+    expect(result.errors).toContain('DATABASE_OBSERVATION_REQUIRED');
+    expect(result.receipt).toBeNull();
+  });
+  it('rejects missing expected tables and disabled FORCE RLS', async () => {
+    const dbClient = { query: vi.fn(async (sql: string) => sql.includes('pg_roles') ? { rows: [{ current_user: 'app', rolname: 'app', rolsuper: false, rolbypassrls: false }] } : { rows: [{ relname: 'conversations', relrowsecurity: true, relforcerowsecurity: false }] }) };
+    const result = await executeStagingDeploymentRunbook({ env: validStagingEnv, dbClient, gitCommit: 'a'.repeat(40) });
+    expect(result.success).toBe(false);
+    expect(result.errors.join(' ')).toContain('REQUIRED_TABLE_NOT_OBSERVED');
+    expect(result.errors.join(' ')).toContain('RLS_NOT_FORCED');
+  });
+
 });

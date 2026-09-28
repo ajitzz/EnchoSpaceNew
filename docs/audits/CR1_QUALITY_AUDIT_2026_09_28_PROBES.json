@@ -1,0 +1,23 @@
+{
+  "scope": "OFFLINE_CONTRACT_REPRODUCTION",
+  "databaseContacted": false,
+  "providerContacted": false,
+  "duplicateRegistryWritesAcrossInstances": 2,
+  "conflictingPayloadAcceptedAsReplay": true,
+  "olderSequenceAcceptedAfterInstanceReset": true,
+  "operatorTextInterpolatedIntoSqlWithoutParameters": true,
+  "wrongProviderReadbackAccepted": true,
+  "fabricatedFormatOnlyAttestationMarkedVerified": true,
+  "taxArithmeticSample": {
+    "baseStayPricePaise": 100000,
+    "stayGstPaise": 12000,
+    "guestTotalPaise": 112000,
+    "platformCommissionPaise": 15000,
+    "platformCommissionGstPaise": 2700,
+    "tcsSection52Paise": 1000,
+    "tdsSection194OPaise": 1000,
+    "netHostPayoutPaise": 83000
+  },
+  "syntheticCredentialFormattingAccepted": true,
+  "ownerSessionIssuerAcceptedInProductionWithoutOptIn": true
+}

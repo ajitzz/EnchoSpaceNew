@@ -1,0 +1,39 @@
+
+ RUN  v4.1.10 /Users/ajit/Documents/EnchoSpaceNew
+
+···········x···········
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |marketing| src/test/harvo/conversation_notification_worker.test.ts > CR1 queue-only conversation hint worker > refuses runtime, owner and widened-policy pools before dispatch
+AssertionError: promise resolved "{ claimed: 1, completed: 1, …(3) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "claimLost": 0,
++   "claimed": 1,
++   "completed": 1,
++   "dead": 0,
++   "retried": 0,
+  }
+
+ ❯ src/test/harvo/conversation_notification_worker.test.ts:59:111
+     57|  it('refuses runtime, owner and widened-policy pools before dispatch',…
+     58|   const dispatch=vi.fn(async()=>accepted());
+     59|   for(const pool of [f.runtime,f.pool])await expect(worker({dispatch},…
+       |                                                                                                               ^
+     60|   await f.pool.query('ALTER POLICY notification_worker_read ON notific…
+     61|   await expect(worker({dispatch}).runOnce()).rejects.toMatchObject({co…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 22 passed (23)
+   Start at  18:05:01
+   Duration  13.91s (transform 104ms, setup 36ms, import 181ms, tests 13.53s, environment 0ms)
+

@@ -56,6 +56,26 @@ describe('CR1 verified workforce invitations on isolated PostgreSQL',()=>{
   const issue=async()=>service.issue(await approve(await prepare()));
   const accept=(value:{receipt:InvitationReceipt;invitationToken:string|null},overrides:Record<string,unknown>={})=>service.accept({principal:invitee(),invitationToken:value.invitationToken,expectedGrantBundleHash:value.receipt.grantBundleHash,identityReceiptHash:receiptHash,...overrides});
 
+  it.each([
+    ['reachable replication','ALTER ROLE invitation_ancestor REPLICATION'],
+    ['reachable database CREATE','GRANT CREATE ON DATABASE postgres TO invitation_ancestor'],
+    ['reachable schema CREATE','GRANT CREATE ON SCHEMA public TO invitation_ancestor'],
+    ['reachable account column','GRANT SELECT(email) ON users TO invitation_ancestor'],
+    ['reachable extra definer','GRANT EXECUTE ON FUNCTION internal_iam_issue_invitation(jsonb,uuid,text,text) TO invitation_ancestor'],
+    ['reachable sequence','CREATE SEQUENCE invitation_private_sequence; GRANT SELECT ON SEQUENCE invitation_private_sequence TO invitation_ancestor'],
+  ] as const)('rejects identity writer %s before invitation acceptance',async(_name,mutation)=>{
+    const pending=await issue();
+    await fixture.pool.query('CREATE ROLE invitation_ancestor NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE; ALTER ROLE cr1_iam_identity NOINHERIT; GRANT invitation_ancestor TO cr1_iam_identity');
+    await fixture.pool.query(mutation);
+    const client=await identity.connect();try{
+      expect((await client.query('SELECT current_user,session_user')).rows[0]).toEqual({current_user:'cr1_iam_identity',session_user:'cr1_iam_identity'});
+      expect(await verifyIamInvitationCatalog(client,'IDENTITY_WRITER')).toMatchObject({ready:false,roleSafe:false});
+    }finally{client.release();}
+    await expect(accept(pending)).rejects.toMatchObject({code:'IDENTITY_WRITER_UNAVAILABLE'});
+    expect(Number((await fixture.pool.query('SELECT count(*) FROM internal_organization_memberships WHERE user_id=93')).rows[0].count)).toBe(0);
+    expect(Number((await fixture.pool.query('SELECT count(*) FROM internal_invitation_identity_receipts')).rows[0].count)).toBe(0);
+  });
+
   it('bounds unavailable runtime connections without exposing database error text',async()=>{
     const unavailable=new Proxy(fixture.runtime,{get(target,key,receiver){
       if (key==='connect') return async()=>{throw new Error('postgres://private-credential@example.test');};
@@ -200,11 +220,12 @@ describe('CR1 verified workforce invitations on isolated PostgreSQL',()=>{
   });
 
   it('reports unknown commit acknowledgement and resolves acceptance by exact replay',async()=>{
-    const result=await issue();let fail=true;
+    const result=await issue();let fail=true;const releases:unknown[]=[];
     const transport=new Proxy(identity,{get(target,key){
       if(key==='connect') return async()=>{
         const client=await target.connect();
         return new Proxy(client,{get(connection,property){
+          if(property==='release')return (destroy:unknown)=>{releases.push(destroy);connection.release(destroy===true);};
           if(property==='query') return async(...args:unknown[])=>{
             const value=await Reflect.apply(connection.query,connection,args);
             if(args[0]==='COMMIT' && fail){fail=false;throw new Error('Isolated acknowledgement loss.');}return value;
@@ -216,6 +237,7 @@ describe('CR1 verified workforce invitations on isolated PostgreSQL',()=>{
     }});
     const uncertain=new WorkforceInvitations(fixture.runtime,{environment:'LOCAL',identityWriter:transport,identityEvidence:proof});
     await expect(uncertain.accept({principal:invitee(),invitationToken:result.invitationToken,expectedGrantBundleHash:result.receipt.grantBundleHash,identityReceiptHash:receiptHash})).rejects.toMatchObject({code:'OUTCOME_UNKNOWN'});
+    expect(releases).toEqual([true]);
     expect(await accept(result)).toMatchObject({outcome:'ALREADY_ACCEPTED'});
   });
 

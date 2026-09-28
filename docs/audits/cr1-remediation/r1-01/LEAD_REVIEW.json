@@ -1,0 +1,28 @@
+{
+  "card": "R1-01",
+  "status": "READY_FOR_REVIEW",
+  "reviewer": "root integration lead (not identity implementer)",
+  "implementationReceipt": "docs/audits/CR1_R1_01_LOCAL_RECEIPT.json",
+  "independentTests": {
+    "command": "Node24 scripts/testing/run.mjs src/test/cr1_operations_api.test.ts src/test/harvo/cr1_staff_session_issuer.test.ts --reporter=dot",
+    "passed": 33,
+    "failed": 0,
+    "exitCode": 0,
+    "log": "docs/audits/cr1-remediation/r1-01/LEAD_INDEPENDENT_TESTS.txt",
+    "sha256": "548966ceaa58fad107ef690ccc8b526779553c3aec395c6cf408d344d73f025b"
+  },
+  "reviewedCorrections": [
+    "no owner/general DB or advertising OAuth fallback",
+    "strict actual LOGIN and transitive-role/column/replication/database-authority denial",
+    "explicit environment/origin/org validation",
+    "no consumer identity enrollment during staff login",
+    "original Operations assertions unchanged",
+    "canonical immutable receipt/nonce/revocation/unknown-COMMIT preserved"
+  ],
+  "limitations": [
+    "local synthetic Google identity and disposable PostgreSQL, not deployed workforce acceptance",
+    "R1-02 command/factor/invitation composition remains separate",
+    "independent authenticated release acceptance workflow not configured"
+  ],
+  "productionCertification": false
+}

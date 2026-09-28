@@ -2,6 +2,8 @@ import {afterEach,beforeEach,describe,it,expect} from 'vitest';
 import pg from 'pg';
 import {randomUUID} from 'node:crypto';
 import {z} from 'zod';
+import express from 'express';
+import request from 'supertest';
 import {createCr1IamFixture} from './helpers/cr1IamFixture.js';
 import {createGoogleWorkforceFixture,workforceAudience} from './helpers/googleWorkforceFixture.js';
 import {createPasskeyFixture} from './helpers/passkeyFixture.js';
@@ -14,6 +16,9 @@ import {PrivilegedActions} from '../../lib/iam/privilegedActions.js';
 import {PostgresWorkforceAuthorization} from '../../lib/iam/postgresAuthorization.js';
 import {permissionCheckInputSchema} from '../../lib/iam/authorizationPort.js';
 import {parsePrincipalContext} from '../../shared/iam/principalContext.js';
+import {CanonicalWorkforceFactor} from '../../server/operations/workforceFactor.js';
+import {createWorkforceFactorRouter} from '../../server/operations/workforceFactorRouter.js';
+import {createHttpExecutionContextMiddleware} from '../../server/observability/httpExecutionContext.js';
 
 describe('CR1 isolated action-bound passkey proof chain on real PostgreSQL',()=>{
  let fixture:Awaited<ReturnType<typeof createCr1IamFixture>>,issuerPool:pg.Pool,factorPool:pg.Pool,service:WorkforceStepUp;
@@ -47,6 +52,13 @@ describe('CR1 isolated action-bound passkey proof chain on real PostgreSQL',()=>
  afterEach(async()=>{await factorPool?.end();await issuerPool?.end();await fixture?.close();});
  const begin=(actionHash='d'.repeat(64))=>service.begin({credential:issued.private.credential,enrollmentId:key.credential.recordId,actionHash,correlationId:'local-factor-start'});
  const completion=(start:Awaited<ReturnType<WorkforceStepUp['begin']>>,counter=5)=>({credential:issued.private.credential,challengeId:start.challengeId,response:key.assertion({client:{challenge:start.publicKey.challenge},counter}),correlationId:'local-factor-complete'});
+ const mount=(organizationId=fixture.organizationId)=>{
+  const app=express();app.use(createHttpExecutionContextMiddleware());
+  app.use('/factor',createWorkforceFactorRouter(new CanonicalWorkforceFactor(fixture.runtime,factorPool,{organizationId,environment:'LOCAL'}),'https://ops.encho.test'));
+  return app;
+ };
+ const post=(app:express.Express,input:string|object)=>request(app).post('/factor').set('Cookie',`__Host-encho_workforce=${issued.private.credential}`)
+  .set('Origin','https://ops.encho.test').set('X-Encho-Workforce-Command','1').send(input);
  const action=()=>{
   const principal=parsePrincipalContext({...fixture.principals.maker,sessionId:issued.public.sessionId,assuranceLevel:'AAL1',authenticatedAt:issued.public.authenticatedAt});
   const actions=new PrivilegedActions(fixture.runtime,{environment:'LOCAL',permission:'workforce.invite',commandKind:'local.factor.fixture',commandSchema:z.object({operation:z.literal('INVITE')}).strict()});
@@ -71,6 +83,47 @@ describe('CR1 isolated action-bound passkey proof chain on real PostgreSQL',()=>
   await expect(factorPool.query('SELECT credential FROM internal_workforce_passkey_enrollments')).rejects.toMatchObject({code:'42501'});
   await fixture.pool.query('GRANT SELECT(credential) ON internal_workforce_passkey_enrollments TO cr1_factor_writer');
   await expect(begin()).rejects.toMatchObject({code:'FACTOR_STORE_UNAVAILABLE'});
+ });
+ it('completes a mounted cookie-authenticated factor HTTP journey with only public proof fields',async()=>{
+  const app=mount();const actionHash='f'.repeat(64);
+  const first=await post(app,{action:'BEGIN',enrollmentId:key.credential.recordId,actionHash});expect(first.status,first.text).toBe(200);
+  const response=key.assertion({client:{challenge:first.body.publicKey.challenge},counter:5});
+  const done=await post(app,{action:'COMPLETE',challengeId:first.body.challengeId,response});expect(done.status,done.text).toBe(200);
+  expect(done.body).toEqual({status:'VERIFIED',challengeId:first.body.challengeId,actionHash,assuranceLevel:'PHISHING_RESISTANT',expiresAt:expect.any(String)});
+  expect(done.headers['cache-control']).toBe('no-store');expect(done.text).not.toContain(issued.private.credential);
+  expect((await post(app,{action:'COMPLETE',challengeId:first.body.challengeId,response})).status).toBe(409);
+  expect(Number((await fixture.pool.query('SELECT count(*) FROM internal_workforce_passkey_receipts')).rows[0].count)).toBe(1);
+ });
+ it('denies HTTP identity injection, wrong origin, consumer tokens, foreign org and invalid bodies before effects',async()=>{
+  const app=mount();const input={action:'BEGIN',enrollmentId:key.credential.recordId,actionHash:'e'.repeat(64)};
+  expect((await post(app,input).set('Origin','https://encho.test')).status).toBe(403);
+  expect((await post(app,input).set('Authorization','Bearer consumer-admin-jwt')).status).toBe(401);
+  expect((await post(app,input).set('Cookie',`__Host-encho_workforce=${issued.private.credential}; __Host-encho_workforce=${issued.private.credential}`)).status).toBe(401);
+  expect((await post(mount(randomUUID()),input)).status).toBe(401);
+  for(const supplied of [{credential:issued.private.credential},{organizationId:fixture.organizationId},{environment:'PRODUCTION'},{principal:fixture.principals.maker}])
+   expect((await post(app,{...input,...supplied})).status).toBe(422);
+  expect((await post(app,{...input,junk:'a'.repeat(15000)})).status).toBe(413);
+  expect((await post(app,'{broken').set('Content-Type','application/json')).status).toBe(400);
+  expect(Number((await fixture.pool.query('SELECT count(*) FROM internal_workforce_passkey_ceremonies')).rows[0].count)).toBe(0);
+ });
+ it.each([
+  ['direct replication','ALTER ROLE cr1_factor_writer REPLICATION'],
+  ['reachable replication','ALTER ROLE factor_ancestor REPLICATION'],
+  ['reachable schema CREATE','GRANT CREATE ON SCHEMA public TO factor_ancestor'],
+  ['database ownership','ALTER SCHEMA public OWNER TO cr1_iam_migrator; REVOKE CREATE ON SCHEMA public FROM PUBLIC; ALTER DATABASE postgres OWNER TO cr1_factor_writer'],
+  ['reachable database CREATE','GRANT CREATE ON DATABASE postgres TO factor_ancestor'],
+  ['reachable credential column','GRANT SELECT(credential) ON internal_workforce_passkey_enrollments TO factor_ancestor'],
+  ['reachable extra definer','GRANT EXECUTE ON FUNCTION internal_iam_issue_staff_session(uuid,text,jsonb,text,text,text) TO factor_ancestor'],
+  ['reachable sequence','CREATE SEQUENCE factor_private_sequence; GRANT USAGE ON SEQUENCE factor_private_sequence TO factor_ancestor'],
+ ] as const)('denies %s before any ceremony under an actual LOGIN',async(_name,mutation)=>{
+  await fixture.pool.query('CREATE ROLE factor_ancestor NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE; ALTER ROLE cr1_factor_writer NOINHERIT; GRANT factor_ancestor TO cr1_factor_writer');
+  await fixture.pool.query(mutation);
+  const client=await factorPool.connect();try{
+   expect((await client.query('SELECT current_user,session_user')).rows[0]).toEqual({current_user:'cr1_factor_writer',session_user:'cr1_factor_writer'});
+   expect(await verifyWorkforceFactorCatalog(client)).toMatchObject({ready:false,roleSafe:false});
+  }finally{client.release();}
+  await expect(begin()).rejects.toMatchObject({code:'FACTOR_STORE_UNAVAILABLE'});
+  expect(Number((await fixture.pool.query('SELECT count(*) FROM internal_workforce_passkey_ceremonies')).rows[0].count)).toBe(0);
  });
  it('consumes one challenge once under concurrent completion and updates the counter atomically',async()=>{
   const start=await begin();const results=await Promise.allSettled([service.complete(completion(start)),service.complete(completion(start))]);
@@ -139,8 +192,9 @@ describe('CR1 isolated action-bound passkey proof chain on real PostgreSQL',()=>
   expect((await fixture.pool.query('SELECT counter,version FROM internal_workforce_passkey_state')).rows[0]).toMatchObject({counter:'4',version:1});
  });
  it('reports unknown commit outcome and refuses to replay verified evidence',async()=>{
-  const start=await begin();let fail=true;const transport=new Proxy(factorPool,{get(target,key){if(key==='connect')return async()=>{const client=await target.connect();let recorded=false;return new Proxy(client,{get(c,k){if(k==='query')return async(...args:unknown[])=>{const result=await Reflect.apply(c.query,c,args);if(String(args[0]).startsWith('SELECT internal_iam_record_passkey('))recorded=true;if(args[0]==='COMMIT'&&recorded&&fail){fail=false;throw new Error('lost local acknowledgement');}return result;};const value=Reflect.get(c,k);return typeof value==='function'?value.bind(c):value;}});};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
+  const start=await begin();let fail=true;const releases:unknown[]=[];const transport=new Proxy(factorPool,{get(target,key){if(key==='connect')return async()=>{const client=await target.connect();let recorded=false;return new Proxy(client,{get(c,k){if(k==='release')return (destroy:unknown)=>{releases.push(destroy);c.release(destroy===true);};if(k==='query')return async(...args:unknown[])=>{const result=await Reflect.apply(c.query,c,args);if(String(args[0]).startsWith('SELECT internal_iam_record_passkey('))recorded=true;if(args[0]==='COMMIT'&&recorded&&fail){fail=false;throw new Error('lost local acknowledgement');}return result;};const value=Reflect.get(c,k);return typeof value==='function'?value.bind(c):value;}});};const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;}});
   await expect(new WorkforceStepUp(transport,'LOCAL').complete(completion(start))).rejects.toMatchObject({code:'FACTOR_OUTCOME_UNKNOWN'});
+  expect(releases).toEqual([false,true]);
   await expect(service.complete(completion(start))).rejects.toMatchObject({code:'FACTOR_CHALLENGE_INVALID'});
   expect(Number((await fixture.pool.query('SELECT count(*) FROM internal_workforce_passkey_receipts')).rows[0].count)).toBe(1);
  });

@@ -1,5 +1,6 @@
 import { get, del, keys, update } from 'idb-keyval';
 import { z } from 'zod';
+import { purgeRetiredWorkboxQueue } from './legacyOfflineQueue';
 
 /**
  * Local-First Sync Service
@@ -16,6 +17,7 @@ const REPLAY_LEASE_MS = 60_000;
 const REPLAY_LEASE_RENEW_MS = 20_000;
 const MAX_OFFLINE_QUEUE_ITEMS = 100;
 const MAX_OFFLINE_BODY_BYTES = 64 * 1024;
+const ACTOR_REPLAY_FENCE_PREFIX = 'encho:v3:offline-revoked-before:';
 
 const actorIdSchema = z.string().min(1).max(128).regex(/^[A-Za-z0-9:_-]+$/);
 const persistedHeaderSchema = z.record(z.string(), z.string());
@@ -77,16 +79,18 @@ function readStoredToken(): string | null {
     }
 }
 
-interface ActorSession { actorId: string; token: string }
+interface ActorSession { actorId: string; token: string; replayFence: string }
 
 function readActorSession(): ActorSession | null {
     const actorId = readStoredActorId();
     const token = readStoredToken();
-    return actorId && token ? { actorId, token } : null;
+    try { return actorId && token ? { actorId, token, replayFence: replayFence(actorId) } : null; }
+    catch { return null; }
 }
 
 function isCurrentSession(session: ActorSession | null): boolean {
-    return session !== null && readStoredActorId() === session.actorId && readStoredToken() === session.token;
+    return session !== null && readStoredActorId() === session.actorId && readStoredToken() === session.token
+        && replayFence(session.actorId) === session.replayFence;
 }
 
 /** Only reviewed, idempotent, non-financial domains may use browser retry. */
@@ -117,6 +121,23 @@ function actorCacheKey(actorId: string | number, cacheKey: string): string {
 
 function actorReplayLeaseKey(actorId: string | number): string {
     return `${ACTOR_STORAGE_PREFIX}${normalizedActorId(actorId)}:replay-lease`;
+}
+
+const replayGenerationSchema = z.union([
+    z.string().regex(/^(0|[1-9]\d{0,15})$/).refine(value => Number.isSafeInteger(Number(value))),
+    z.string().regex(/^n_[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/),
+]);
+
+function replayGeneration(owner: string): string {
+    const value = localStorage.getItem(`${ACTOR_REPLAY_FENCE_PREFIX}${owner}`) ?? '0';
+    if (!replayGenerationSchema.safeParse(value).success) throw new Error('OFFLINE_GENERATION_INVALID');
+    return value;
+}
+
+function replayFence(actorId: string): string {
+    // Compare both generations independently. Math.max can conceal a global
+    // logout when an actor generation is ahead after wall-clock adjustment.
+    return `${replayGeneration(actorId)}:${replayGeneration('*')}`;
 }
 
 function hasAuthorizationHeader(headers?: HeadersInit): boolean {
@@ -214,6 +235,9 @@ export interface OfflineQueueItem {
     headers?: Record<string, string>;
     requiresAuth: boolean;
     timestamp: number;
+    /** Session generation, independent of wall-clock ordering. Missing only on
+     * legacy records, which are valid before the first revocation fence. */
+    replayFence?: string;
     type?: 'FETCH' | 'CUSTOM_MUTATION';
     customId?: string;
 }
@@ -228,6 +252,10 @@ const offlineQueueItemSchema = z.object({
     headers: persistedHeaderSchema.optional(),
     requiresAuth: z.boolean(),
     timestamp: z.number().int().nonnegative(),
+    replayFence: z.string().max(160).refine(value => {
+        const parts=value.split(':');
+        return parts.length===2&&parts.every(part=>replayGenerationSchema.safeParse(part).success);
+    }).optional(),
     type: z.enum(['FETCH', 'CUSTOM_MUTATION']).optional(),
     customId: z.string().min(1).max(128).optional(),
 }).strict();
@@ -272,7 +300,7 @@ async function acknowledgeActorCommands(actorId: string, completedIds: ReadonlyS
 async function removeUnsafeLegacyQueue(): Promise<void> {
     // The legacy queue could contain bearer credentials and had no actor owner.
     // It cannot be safely migrated, so it must be destroyed.
-    await del(LEGACY_SYNC_QUEUE_KEY).catch(() => undefined);
+    await Promise.all([del(LEGACY_SYNC_QUEUE_KEY), purgeRetiredWorkboxQueue()]);
 }
 
 async function withActorReplayLease(actorId: string, work: (ownsLease: () => Promise<boolean>) => Promise<void>): Promise<void> {
@@ -435,6 +463,7 @@ export async function queueMutationWithReceipt<T = unknown>(
             headers: sanitizePersistedHeaders(requestHeaders),
             requiresAuth: true,
             timestamp: Date.now(),
+            replayFence: session.replayFence,
         };
         return await appendActorCommand(session, newItem)
             ? { status: 'QUEUED', mutationId }
@@ -463,6 +492,10 @@ export async function processOfflineQueue(): Promise<void> {
             for (const item of queue) {
                 if (!await ownsLease() || !isCurrentSession(session)) break;
                 if (item.actorId !== session.actorId) continue;
+                // Logout records this fence synchronously before asynchronous
+                // IDB deletion. Failed cleanup must not revive a prior intent
+                // when the same actor signs back in later.
+                if ((item.replayFence ?? '0:0') !== session.replayFence) { completedIds.add(item.id); continue; }
                 // Retire legacy/custom or financial commands instead of running
                 // them under a newer browser session without a domain contract.
                 if (item.type === 'CUSTOM_MUTATION' || !supportsOfflineReplay(item.url, item.method, item.body)
@@ -503,6 +536,36 @@ if (typeof window !== 'undefined') {
     window.addEventListener('online', () => {
         processOfflineQueue();
     });
+    // localStorage is shared across tabs. Revoke the prior actor's durable intent
+    // when another tab logs out/switches; do not reuse its credentials or UI data.
+    window.addEventListener('storage', event => {
+        if (event.key !== 'user' && event.key !== 'token' && event.key !== null) return;
+        if (event.key === 'token' && event.newValue !== null) {
+            // Token rotation for the same actor preserves unresolved event IDs.
+            void purgeRetiredWorkboxQueue().catch(() => console.error('Legacy offline queue cleanup failed.'));
+            return;
+        }
+        let priorActor: string | null = null;
+        if (event.key === 'user' && event.oldValue) {
+            try {
+                const value = z.object({ id: z.union([z.string(), z.number()]) }).passthrough().parse(JSON.parse(event.oldValue));
+                priorActor = normalizedActorId(value.id);
+                const next = event.newValue ? z.object({ id: z.union([z.string(), z.number()]) }).passthrough().parse(JSON.parse(event.newValue)) : null;
+                if (next && normalizedActorId(next.id) === priorActor) {
+                    // A profile refresh is not a logout; keep the unresolved
+                    // canonical message identity and current session fence.
+                    void purgeRetiredWorkboxQueue().catch(() => console.error('Legacy offline queue cleanup failed.'));
+                    return;
+                }
+            } catch { /* Unknown ownership requires all private state to be purged. */ }
+        } else if (event.key === 'user' && !event.oldValue) {
+            void purgeRetiredWorkboxQueue().catch(() => console.error('Legacy offline queue cleanup failed.'));
+            return;
+        }
+        void clearActorScopedOfflineData(priorActor).catch(() => {
+            console.error('Offline identity cleanup failed; reconnect before retrying.');
+        });
+    });
 }
 
 export async function queueCustomMutation(customId: string, payload: unknown): Promise<boolean> {
@@ -519,10 +582,17 @@ export async function queueCustomMutation(customId: string, payload: unknown): P
  * because they predate actor scoping and cannot be attributed safely.
  */
 export async function clearActorScopedOfflineData(actorId?: string | number | null): Promise<void> {
-    const validatedActorId = actorId === null || actorId === undefined
-        ? readStoredActorId()
+    const validatedActorId = actorId === null ? null : actorId === undefined ? readStoredActorId()
         : normalizedActorId(actorId);
-    const allKeys = await keys().catch(() => []);
+    if (typeof localStorage !== 'undefined') {
+        const owner = validatedActorId ?? '*';
+        const key = `${ACTOR_REPLAY_FENCE_PREFIX}${owner}`;
+        // localStorage read/increment/write is not atomic across tabs. A unique
+        // nonce prevents concurrent revocations from writing the same generation.
+        localStorage.setItem(key, `n_${crypto.randomUUID()}`);
+    }
+    await purgeRetiredWorkboxQueue();
+    const allKeys = await keys();
     const actorPrefix = validatedActorId ? `${ACTOR_STORAGE_PREFIX}${validatedActorId}:` : null;
 
     await Promise.all(allKeys.map(async key => {

@@ -1,0 +1,10 @@
+
+ RUN  v4.1.10 /Users/ajit/Documents/EnchoSpaceNew
+
+·
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  17:53:45
+   Duration  1.15s (transform 57ms, setup 32ms, import 89ms, tests 944ms, environment 0ms)
+

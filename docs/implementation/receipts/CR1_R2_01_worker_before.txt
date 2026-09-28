@@ -1,0 +1,88 @@
+
+ RUN  v4.1.10 /Users/ajit/Documents/EnchoSpaceNew
+
+·xx······x·
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |marketing| src/test/harvo/conversation_notification_worker.test.ts > CR1 queue-only conversation hint worker > refuses runtime, owner and widened-policy pools before dispatch
+AssertionError: promise resolved "{ claimed: 1, completed: 1, …(3) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "claimLost": 0,
++   "claimed": 1,
++   "completed": 1,
++   "dead": 0,
++   "retried": 0,
+  }
+
+ ❯ src/test/harvo/conversation_notification_worker.test.ts:31:111
+     29|  it('refuses runtime, owner and widened-policy pools before dispatch',…
+     30|   const dispatch=vi.fn(async()=>accepted());
+     31|   for(const pool of [f.runtime,f.pool])await expect(worker({dispatch},…
+       |                                                                                                               ^
+     32|   await f.pool.query('ALTER POLICY notification_worker_read ON notific…
+     33|   await expect(worker({dispatch}).runOnce()).rejects.toMatchObject({co…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  |marketing| src/test/harvo/conversation_notification_worker.test.ts > CR1 queue-only conversation hint worker > reauthorizes worker authority after a committed claim and before a socket effect
+AssertionError: promise resolved "{ claimed: 1, completed: 1, …(3) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "claimLost": 0,
++   "claimed": 1,
++   "completed": 1,
++   "dead": 0,
++   "retried": 0,
+  }
+
+ ❯ src/test/harvo/conversation_notification_worker.test.ts:50:77
+     48|   }}) as pg.Pool;
+     49|   const dispatch=vi.fn(async()=>accepted());
+     50|   await expect(worker({dispatch},'notification.revoked',1000,pool).run…
+       |                                                                             ^
+     51|   expect(revoked).toBe(true);expect(dispatch).not.toHaveBeenCalled();
+     52|   const row=await intent();expect(row.state).toBe('RUNNING');expect(ro…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  |marketing| src/test/harvo/conversation_notification_worker.test.ts > CR1 queue-only conversation hint worker > surfaces a lost finalization acknowledgement without falsely reporting completion or redispatching committed success
+AssertionError: expected ConversationNotificationWorkerError: NOTI… { code: '…' } to match object { Object (code) }
+(1 matching property omitted from actual)
+
+- Expected
++ Received
+
+- {
+-   "code": "NOTIFICATION_FINALIZATION_OUTCOME_UNKNOWN",
++ ConversationNotificationWorkerError {
++   "code": "NOTIFICATION_FINALIZATION_UNAVAILABLE",
+  }
+
+ ❯ src/test/harvo/conversation_notification_worker.test.ts:106:79
+    104|   }}) as pg.Pool;
+    105|   const dispatch=vi.fn(async()=>{loseReply=true;return accepted();});
+    106|   await expect(worker({dispatch},'notification.uncertain',1000,pool).r…
+       |                                                                               ^
+    107|   expect((await intent()).state).toBe('SUCCEEDED');
+    108|   expect(await worker({dispatch},'notification.recheck').runOnce()).to…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 8 passed (11)
+   Start at  18:03:25
+   Duration  10.39s (transform 96ms, setup 31ms, import 135ms, tests 10.13s, environment 0ms)
+

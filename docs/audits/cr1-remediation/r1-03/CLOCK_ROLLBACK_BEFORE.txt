@@ -1,0 +1,95 @@
+
+ RUN  v4.1.10 /Users/ajit/Documents/EnchoSpaceNew
+
+stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > does not lift an in-flight pre-logout mutation above the new fence on same-token re-login
+Direct mutation failed for /api/threads/3/messages, queuing offline Error: fixture lost response after logout
+    at /Users/ajit/Documents/EnchoSpaceNew/src/test/cr1_actor_scoped_sync.test.ts:132:13
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+Refusing offline replay without a current session and an approved domain contract
+
+stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > refuses to durably persist credential-like fields hidden in a mutation body
+Refusing to persist an offline mutation containing credential-like fields
+
+······x··········stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > cannot enqueue a failed direct request under the account switched in during its network wait
+Direct mutation failed for /api/wishlists, queuing offline Error: Lost response
+    at /Users/ajit/Documents/EnchoSpaceNew/src/test/cr1_actor_scoped_sync.test.ts:365:13
+    at fetch (file:///Users/ajit/Documents/EnchoSpaceNew/node_modules/@vitest/spy/dist/index.js:332:34)
+    at Module.queueMutationWithReceipt (/Users/ajit/Documents/EnchoSpaceNew/lib/syncService.ts:403:36)
+    at /Users/ajit/Documents/EnchoSpaceNew/src/test/cr1_actor_scoped_sync.test.ts:367:18
+    at file:///Users/ajit/Documents/EnchoSpaceNew/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///Users/ajit/Documents/EnchoSpaceNew/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///Users/ajit/Documents/EnchoSpaceNew/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///Users/ajit/Documents/EnchoSpaceNew/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///Users/ajit/Documents/EnchoSpaceNew/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+Refusing offline replay without a current session and an approved domain contract
+
+stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > never durably queues financial, booking, campaign, or arbitrary external requests
+Refusing offline replay without a current session and an approved domain contract
+
+stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > never durably queues financial, booking, campaign, or arbitrary external requests
+Refusing offline replay without a current session and an approved domain contract
+
+stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > never durably queues financial, booking, campaign, or arbitrary external requests
+Refusing offline replay without a current session and an approved domain contract
+
+stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > never durably queues financial, booking, campaign, or arbitrary external requests
+Refusing offline replay without a current session and an approved domain contract
+
+··········stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > requires the message domain deduplication UUID before persisting inquiry retries
+Refusing offline replay without a current session and an approved domain contract
+
+····
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |legacy| src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > retires persisted commands after logout despite a backward clock and failed IndexedDB cleanup
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array [
+      "/api/threads/3/messages",
+      Object {
+        "body": "{"content":"Intent from prior session","clientEventId":"11111111-1111-4111-8111-111111111111"}",
+        "headers": Object {
+          "Authorization": "Bearer new-session-token",
+          "Content-Type": "application/json",
+          "content-type": "application/json",
+          "x-idempotency-key": "07dce7ce-0f45-4929-a17c-9454d740ffca",
+        },
+        "method": "POST",
+        "signal": AbortSignal {
+          Symbol(kEvents): undefined,
+          Symbol(events.maxEventTargetListeners): 0,
+          Symbol(events.maxEventTargetListenersWarned): false,
+          Symbol(kHandlers): undefined,
+          Symbol(kAborted): false,
+          Symbol(kReason): undefined,
+          Symbol(kComposite): false,
+          Symbol(kTimeout): true,
+        },
+      },
+    ]
+
+
+Number of calls: 1
+
+ ❯ src/test/cr1_actor_scoped_sync.test.ts:148:25
+    146|     const fetcher=vi.fn().mockResolvedValue(new Response('{}',{status:…
+    147|     await processOfflineQueue();
+    148|     expect(fetcher).not.toHaveBeenCalled();expect(idb.store.get(actorQ…
+       |                         ^
+    149|   });
+    150|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 30 passed (31)
+   Start at  18:13:32
+   Duration  708ms (transform 88ms, setup 300ms, import 104ms, tests 216ms, environment 0ms)
+

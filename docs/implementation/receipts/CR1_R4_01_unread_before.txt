@@ -1,0 +1,32 @@
+
+ RUN  v4.1.10 /Users/ajit/Documents/EnchoSpaceNew
+
+·x·····
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |legacy| src/test/cr1_conversation_api.test.ts > CR1 canonical conversation HTTP boundary > returns explicit unavailable unread evidence with a safe reference instead of a fabricated zero
+AssertionError: expected 200 to be 503 // Object.is equality
+
+- Expected
++ Received
+
+- 503
++ 200
+
+ ❯ src/test/cr1_conversation_api.test.ts:27:20
+     25|   const f=fixture();f.ready.mockResolvedValue(false);
+     26|   const r=await request(f.app).get('/api/unread-counts');
+     27|   expect(r.status).toBe(503);expect(r.headers['cache-control']).toBe('…
+       |                    ^
+     28|   expect(r.body).toMatchObject({code:'FEATURE_UNAVAILABLE',correlation…
+     29|   for(const field of ['unread','unreadCount','guestUnread','hostUnread…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed (7)
+   Start at  18:23:20
+   Duration  607ms (transform 89ms, setup 303ms, import 171ms, tests 44ms, environment 0ms)
+

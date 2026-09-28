@@ -1,5 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { writeFixtureReceipt } from '../compliance/fixture-output.mjs';
 
 /**
  * Audits provider environment variables and advertiser topology against FAANG L7/L8 Zero-Trust rules.
@@ -56,7 +55,7 @@ export function auditProviderConfiguration(env) {
 /**
  * Validates that a canary campaign payload satisfies the strict Zero-Spend and Housing policy invariants.
  */
-export function validateCanaryCampaignPayload(provider, payload) {
+export function validateCanaryCampaignPayload(provider, payload, capability) {
   const errors = [];
 
   // Invariant 1: Status must be PAUSED. Never allow ACTIVE creation during canary validation.
@@ -65,11 +64,11 @@ export function validateCanaryCampaignPayload(provider, payload) {
   }
 
   if (provider === 'meta') {
-    // Invariant 2: Meta requires Housing special ad category
-    if (!payload.special_ad_categories || !payload.special_ad_categories.includes('HOUSING')) {
-      errors.push('META_HOUSING_POLICY_VIOLATION: Meta real-estate/hospitality campaigns must declare special_ad_categories: ["HOUSING"]');
-    }
+    // Policy applicability must come from the released capability, never hospitality guesswork.
+    if (!capability || !Array.isArray(capability.specialAdCategories) || !capability.releaseHash) errors.push('META_POLICY_CAPABILITY_REQUIRED');
+    else if (!Array.isArray(payload.special_ad_categories) || JSON.stringify([...payload.special_ad_categories].sort()) !== JSON.stringify([...capability.specialAdCategories].sort())) errors.push('META_POLICY_CAPABILITY_MISMATCH');
   }
+  if (!['meta', 'google'].includes(provider)) errors.push('CANARY_PROVIDER_UNSUPPORTED');
 
   return {
     valid: errors.length === 0,
@@ -80,7 +79,7 @@ export function validateCanaryCampaignPayload(provider, payload) {
 /**
  * Evaluates provider readback response to verify that an external campaign has 0 spend, 0 impressions, and status PAUSED.
  */
-export async function verifyPausedCanaryReadback(providerClient, campaignId) {
+export async function verifyPausedCanaryReadback(providerClient, campaignId, expected) {
   const readback = await providerClient.getCampaign(campaignId);
 
   if (!readback) {
@@ -91,15 +90,24 @@ export async function verifyPausedCanaryReadback(providerClient, campaignId) {
     throw new Error(`CANARY_DRIFT_DETECTED: Provider campaign ${campaignId} has active status: ${readback.status}. Expected strictly PAUSED.`);
   }
 
-  const spendCents = Number(readback.spendCents || 0);
-  if (spendCents > 0) {
+  const spendCents = readback.spendCents;
+  const impressions = readback.impressions;
+  if (!Number.isSafeInteger(spendCents) || spendCents < 0 || !Number.isSafeInteger(impressions) || impressions < 0) throw new Error('CANARY_OBSERVATION_INCOMPLETE: explicit nonnegative spend and impression observations are required');
+  if (spendCents !== 0) {
     throw new Error(`FINANCIAL_DRIFT_DETECTED: Provider campaign ${campaignId} incurred unexpected spend of ${spendCents} cents.`);
   }
 
-  const impressions = Number(readback.impressions || 0);
+  if (impressions !== 0) throw new Error('CANARY_DELIVERY_DRIFT: impressions observed during zero-delivery canary');
+  if (!expected || !['meta', 'google'].includes(expected.provider) || typeof expected.accountRef !== 'string' || !expected.accountRef) throw new Error('CANARY_EXPECTED_SCOPE_REQUIRED');
+  if (readback.provider !== expected.provider || readback.accountRef !== expected.accountRef || readback.campaignId !== campaignId) throw new Error('CANARY_SCOPE_MISMATCH');
+  const observedAt = Date.parse(readback.observedAt);
+  const now = expected.now === undefined ? Date.now() : expected.now;
+  if (!Number.isFinite(now) || !Number.isFinite(observedAt) || observedAt > now || now - observedAt > 300000) throw new Error('CANARY_OBSERVATION_STALE');
 
   return {
     verified: true,
+    verificationScope: 'SUPPLIED_CLIENT_READBACK_ONLY',
+    productionGateEligible: false,
     campaignId,
     provider: readback.provider,
     status: readback.status,
@@ -113,11 +121,15 @@ export async function verifyPausedCanaryReadback(providerClient, campaignId) {
 /**
  * Generates an immutable canary verification receipt artifact.
  */
-export function generateCanaryReceipt(receipt, targetPath = resolve(process.cwd(), 'docs/harvo/receipts/PROVIDER_CANARY_READBACK_RECEIPT.json')) {
-  const dir = dirname(targetPath);
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(targetPath, JSON.stringify(receipt, null, 2), { mode: 0o644 });
-  return targetPath;
+export function generateCanaryReceipt(receipt, targetPath) {
+  // Do not copy arbitrary provider payloads/credentials into a local artifact.
+  const observation = {
+    provider: ['meta', 'google'].includes(receipt?.provider) ? receipt.provider : 'UNKNOWN',
+    status: receipt?.status === 'PAUSED' ? 'PAUSED' : 'UNKNOWN',
+    spendCents: Number.isSafeInteger(receipt?.spendCents) ? receipt.spendCents : null,
+    impressions: Number.isSafeInteger(receipt?.impressions) ? receipt.impressions : null,
+  };
+  return writeFixtureReceipt('untrusted-provider-readback', { observation, qualification: 'Formatting supplied values does not authenticate the provider client' }, targetPath).receiptPath;
 }
 
 // CLI Runner execution
@@ -126,18 +138,22 @@ if (process.argv[1] && process.argv[1].endsWith('provider-canary-runner.mjs')) {
     const audit = auditProviderConfiguration(process.env);
     if (!audit.valid) {
       console.log(JSON.stringify({
-        status: 'CANARY_PREFLIGHT_VERIFIED',
+        status: 'CANARY_CONFIGURATION_INCOMPLETE',
+        productionGateEligible: false,
         message: 'Provider canary harness validated. Live Meta/Google advertiser credentials pending operator provision.',
         missing_credentials: audit.errors,
         invariants: [
           'STATUS: PAUSED strictly enforced',
-          'Meta special_ad_categories: ["HOUSING"] mandatory',
+          'Meta policy category must match a released account capability',
           'Readback assertion: 0 spend, 0 impressions, 0 active delivery',
         ],
       }, null, 2));
+      process.exitCode = 1;
     } else {
       console.log(JSON.stringify({
         status: 'CANARY_CONFIG_READY',
+        productionGateEligible: false,
+        qualification: 'Syntax/configuration check only; no provider contact or authenticated readback occurred',
         meta_account: audit.meta.adAccountId,
         google_mcc: audit.google.mccId,
         allowLiveSpend: audit.allowLiveSpend,
@@ -149,4 +165,3 @@ if (process.argv[1] && process.argv[1].endsWith('provider-canary-runner.mjs')) {
     process.exitCode = 1;
   }
 }
-

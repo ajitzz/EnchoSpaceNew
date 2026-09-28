@@ -5,7 +5,6 @@ import {StaffSessionIssuerError,type StaffSessionIssuer} from '../../lib/iam/sta
 import {staffSessionCredential} from '../../lib/iam/staffSessions.js';
 import {requireExecutionContext} from '../../lib/observability/executionContext.js';
 import {workforceLoginChallengeSchema,workforceLoginSubmissionSchema} from '../../shared/iam/sessionTransport.js';
-import {originAllowed} from '../deployment/origins.js';
 
 export type WorkforceLoginPort=Pick<StaffSessionIssuer,'begin'|'complete'|'logout'>;
 const loginCookie='__Host-encho_workforce_login';
@@ -26,7 +25,7 @@ export function createWorkforceSessionRouter(port:WorkforceLoginPort|null,origin
     handler:(_req,res)=>res.status(429).json({code:'LOGIN_RATE_LIMITED',error:'Too many sign-in attempts. Try again shortly.'})}));
   router.use((req,res,next)=>{
     if(!origin||!port)return res.status(503).json({code:'LOGIN_NOT_CONFIGURED',error:'Workforce sign-in is unavailable in this deployment.'});
-    const originMatches = req.headers.origin === origin || (Boolean(req.headers.origin) && originAllowed(req.headers.origin));
+    const originMatches = req.headers.origin === origin;
     if(req.method!=='POST'||!originMatches||req.headers['x-encho-workforce-command']!=='1'||!req.is('application/json')){
       return res.status(403).json({code:'COMMAND_ORIGIN_DENIED',error:'Use the Encho Operations sign-in page.'});
     }
@@ -70,13 +69,6 @@ export function createWorkforceSessionRouter(port:WorkforceLoginPort|null,origin
       res.clearCookie(sessionCookie,cookieOptions);res.clearCookie(loginCookie,cookieOptions);
       return res.json({status:'LOGGED_OUT'});
     }catch(error){
-      console.error('[WORKFORCE_SESSION_ERROR]', {
-        action,
-        code: error instanceof StaffSessionIssuerError ? error.code : 'UNKNOWN',
-        message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-        correlationId: context.correlationId,
-      });
       if(error instanceof z.ZodError)return fail(422,'INPUT_INVALID','Review the sign-in request.');
       if(error instanceof StaffSessionIssuerError){
         if(error.code==='OUTCOME_UNKNOWN'){

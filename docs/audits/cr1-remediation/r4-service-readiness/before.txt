@@ -1,0 +1,98 @@
+
+ RUN  v4.1.10 /Users/ajit/Documents/EnchoSpaceNew
+
+(node:9611) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:9611) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+·xxxxxxxxxx
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 10 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_service_case_readiness_authority.test.ts > service readiness uses actual restricted LOGIN and reachable authority > never treats migration-owner inspection as a ready runtime boundary
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/test/harvo/cr1_service_case_readiness_authority.test.ts:21:69
+     19|   it('never treats migration-owner inspection as a ready runtime bound…
+     20|     const c = await f.migrator.connect();
+     21|     try { expect((await verifyServiceCaseBoundaryCatalog(c)).ready).to…
+       |                                                                     ^
+     22|     finally { c.release(); }
+     23|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/10]⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_service_case_readiness_authority.test.ts > service readiness uses actual restricted LOGIN and reachable authority > rejects a privileged login hidden under SET ROLE
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/test/harvo/cr1_service_case_readiness_authority.test.ts:28:66
+     26|     try {
+     27|       await c.query('BEGIN READ ONLY; SET LOCAL ROLE cr1_iam_runtime');
+     28|       expect((await verifyServiceCaseCatalog(c, 'STAFF')).ready).toBe(…
+       |                                                                  ^
+     29|     } finally { await c.query('ROLLBACK'); c.release(); }
+     30|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/10]⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_service_case_readiness_authority.test.ts > service readiness uses actual restricted LOGIN and reachable authority > denies staff replication
+ FAIL  |marketing| src/test/harvo/cr1_service_case_readiness_authority.test.ts > service readiness uses actual restricted LOGIN and reachable authority > denies definer replication
+ FAIL  |marketing| src/test/harvo/cr1_service_case_readiness_authority.test.ts > service readiness uses actual restricted LOGIN and reachable authority > denies staff database CREATE
+ FAIL  |marketing| src/test/harvo/cr1_service_case_readiness_authority.test.ts > service readiness uses actual restricted LOGIN and reachable authority > denies definer database CREATE
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/test/harvo/cr1_service_case_readiness_authority.test.ts:38:61
+     36|   ])('denies %s', async (_name, grant, revoke) => {
+     37|     await f.pool.query(grant);
+     38|     try { expect((await inspect(f.runtime, 'STAFF')).ready).toBe(false…
+       |                                                             ^
+     39|     finally { await f.pool.query(revoke); }
+     40|     expect((await inspect(f.runtime, 'STAFF')).ready).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/10]⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_service_case_readiness_authority.test.ts > service readiness uses actual restricted LOGIN and reachable authority > denies NOINHERIT raw message column SELECT
+ FAIL  |marketing| src/test/harvo/cr1_service_case_readiness_authority.test.ts > service readiness uses actual restricted LOGIN and reachable authority > denies NOINHERIT case DELETE
+ FAIL  |marketing| src/test/harvo/cr1_service_case_readiness_authority.test.ts > service readiness uses actual restricted LOGIN and reachable authority > denies NOINHERIT staff calling consumer command
+ FAIL  |marketing| src/test/harvo/cr1_service_case_readiness_authority.test.ts > service readiness uses actual restricted LOGIN and reachable authority > denies NOINHERIT consumer calling staff command
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/test/harvo/cr1_service_case_readiness_authority.test.ts:51:53
+     49|     await f.pool.query(grant);
+     50|     const pool = kind === 'STAFF' ? f.runtime : f.consumer;
+     51|     try { expect((await inspect(pool, kind)).ready).toBe(false); }
+       |                                                     ^
+     52|     finally {
+     53|       await f.pool.query(revoke);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/10]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  10 failed | 1 passed (11)
+   Start at  18:09:23
+   Duration  1.60s (transform 149ms, setup 31ms, import 363ms, tests 1.12s, environment 0ms)
+

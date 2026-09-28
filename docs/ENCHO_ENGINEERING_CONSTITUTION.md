@@ -1,5 +1,9 @@
 # ENCHO ENGINEERING CONSTITUTION
-**Status:** Active | **Last Updated:** 2026-09-24
+**Status:** Active | **Last Updated:** 2026-09-28
+
+### Current engineering acceptance qualification — CR1-045 through CR1-047
+
+Historical CR1 48/48 and generated clearance certificates are preserved claims, not current release authority. Follow the corrective blueprint and criterion-level reacceptance register linked from HARVO. Workforce identity requires explicitly configured, isolated LOGIN roles and validated remote TLS; consumer/admin or advertising OAuth credentials do not supply workforce authority. Compiling/package checks must not load `.env` or contact a database; deployment schema preflight uses an explicitly named target and a held read-only connection. Source-generated or simulated legal/provider/staging/pilot receipts cannot clear an external gate. These corrections preserve the approved domain contracts and do not approve missing legal, commercial or production policy.
 
 ## 1. Executive Summary
 

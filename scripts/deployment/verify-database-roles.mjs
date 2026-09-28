@@ -15,7 +15,7 @@ export async function verifyDatabaseRoles(pool) {
   const roleRes = await pool.query(roleQuery);
   if (roleRes.rows.length === 0) {
     errors.push('ROLE_LOOKUP_FAILED: Unable to resolve permissions for current_user');
-    return { valid: false, errors, warnings, role: null };
+    return { valid: false, errors, warnings, role: null, productionGateEligible: false, scope: 'PARTIAL_ROLE_OBSERVATION_ONLY' };
   }
 
   const role = roleRes.rows[0];
@@ -42,15 +42,23 @@ export async function verifyDatabaseRoles(pool) {
 
   const rlsRes = await pool.query(rlsQuery);
   for (const table of rlsRes.rows) {
-    if (!table.relrowsecurity) {
-      warnings.push(`RLS_DISABLED: Table ${table.relname} does not have ROW LEVEL SECURITY enabled`);
+    if (table.relrowsecurity !== true || table.relforcerowsecurity !== true) {
+      errors.push(`RLS_NOT_FORCED: Table ${table.relname} requires ENABLE and FORCE ROW LEVEL SECURITY`);
     }
   }
 
+  const requiredTables = ['host_marketing_campaigns', 'conversations', 'campaign_financial_contracts'];
+  for (const table of requiredTables) {
+    if (!rlsRes.rows.some(row => row.relname === table)) errors.push(`REQUIRED_TABLE_NOT_OBSERVED: ${table}`);
+  }
+  if (role.rolsuper !== false || role.rolbypassrls !== false) errors.push('ROLE_FLAGS_NOT_EXPLICITLY_SAFE');
   const valid = errors.length === 0;
 
   return {
     valid,
+    productionGateEligible: false,
+    scope: 'PARTIAL_ROLE_OBSERVATION_ONLY',
+    limitations: ['No inherited membership, full grants, named-policy, immutable-trigger or source/artifact verification'],
     role: {
       user: role.current_user,
       isSuperuser: role.rolsuper,
@@ -64,28 +72,10 @@ export async function verifyDatabaseRoles(pool) {
 }
 
 // CLI Runner execution
-if (process.argv[1] && process.argv[1].endsWith('verify-database-roles.mjs')) {
-  const dbUrl = process.env.STAGING_DATABASE_URL || process.env.DATABASE_URL;
-  if (!dbUrl) {
-    console.log(JSON.stringify({
-      status: 'PREFLIGHT_VERIFIED',
-      message: 'Role verification engine ready. Set STAGING_DATABASE_URL to execute live remote catalog audit.',
-      invariants: ['NOSUPERUSER (rolsuper=false)', 'NOBYPASSRLS (rolbypassrls=false)', 'RLS_ENABLED on domain tables'],
-    }, null, 2));
-  } else {
-    import('pg').then(async ({ default: pg }) => {
-      const pool = new pg.Pool({ connectionString: dbUrl, ssl: dbUrl.includes('sslmode=require') ? { rejectUnauthorized: false } : false });
-      try {
-        const result = await verifyDatabaseRoles(pool);
-        console.log(JSON.stringify(result, null, 2));
-        if (!result.valid) process.exitCode = 1;
-      } catch (err) {
-        console.error(JSON.stringify({ status: 'FAILED', error: err.message }, null, 2));
-        process.exitCode = 1;
-      } finally {
-        await pool.end();
-      }
-    });
-  }
+if (process.argv[1]?.endsWith('verify-database-roles.mjs')) {
+  console.log(JSON.stringify({
+    status: 'NOT_RUN', productionGateEligible: false,
+    reason: 'No implicit target or connection is allowed. Use npm run deployment:schema-preflight with an explicitly named target and credentials. That preflight is not full domain RLS certification.',
+  }, null, 2));
+  process.exitCode = 1;
 }
-

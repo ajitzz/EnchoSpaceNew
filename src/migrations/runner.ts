@@ -1,10 +1,10 @@
-import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import pkg from 'pg';
 import dotenv from 'dotenv';
 import {executeMigrations,MigrationExecutionError,type MigrationResult} from './execution.js';
+import {readMigrationEntries} from './manifest.js';
 export type {MigrationResult} from './execution.js';
 
 const { Pool } = pkg;
@@ -51,10 +51,7 @@ export function computeChecksum(content: string): string {
 export async function runMigrations(customPool?:pkg.Pool):Promise<MigrationResult[]>{
   const pool=customPool??new Pool(migrationConnectionConfig(process.env.DATABASE_URL));
   try{
-    const entries=fs.readdirSync(__dirname).filter(file=>file.endsWith('.sql')).sort().map(file=>{
-      const sql=fs.readFileSync(path.join(__dirname,file),'utf8');
-      return {file,sql,checksum:computeChecksum(sql)};
-    });
+    const entries=readMigrationEntries(__dirname);
     return await executeMigrations(pool,entries);
   }finally{if(!customPool)await pool.end();}
 }

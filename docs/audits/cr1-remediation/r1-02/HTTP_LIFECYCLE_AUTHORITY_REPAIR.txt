@@ -1,0 +1,96 @@
+
+ RUN  v4.1.10 /Users/ajit/Documents/EnchoSpaceNew
+
+(node:5923) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:5923) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+····x·(node:6091) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:6091) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+·····xx····x·
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_workforce_commands_http.test.ts > R1-02 mounted canonical workforce HTTP on restricted PostgreSQL LOGIN > rejects revocation between review and execution and stale membership version
+error: new row for relation "internal_staff_sessions" violates check constraint "internal_staff_sessions_check1"
+ ❯ node_modules/pg-pool/index.js:45:11
+ ❯ src/test/harvo/cr1_workforce_commands_http.test.ts:95:5
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_workforce_lifecycle.test.ts > CR1 workforce revocation and offboarding on real PostgreSQL > rejects absent/changed/previously consumed authority and stale membership versions
+AssertionError: expected WorkforceLifecycleError: AUTHORIZATION_IN… { …(2) } to match object { code: 'COMMAND_CONFLICT' }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+- {
+-   "code": "COMMAND_CONFLICT",
++ WorkforceLifecycleError {
++   "code": "AUTHORIZATION_INVALID",
+  }
+
+ ❯ src/test/harvo/cr1_workforce_lifecycle.test.ts:97:109
+     95|     const target=await member();const command=await approved(target.me…
+     96|     await expect(service.execute({...command.input,context:{...command…
+     97|     await expect(service.execute({...command.input,command:{...command…
+       |                                                                                                             ^
+     98|     const stale=await approved(target.membershipId!,{version:2});
+     99|     await expect(service.execute(stale.input)).rejects.toMatchObject({…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_workforce_lifecycle.test.ts > CR1 workforce revocation and offboarding on real PostgreSQL > rejects self-governance and permissionless or fabricated principals
+AssertionError: expected WorkforceLifecycleError: AUTHORIZATION_IN… { …(2) } to match object { code: 'PERMISSION_DENIED' }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+- {
+-   "code": "PERMISSION_DENIED",
++ WorkforceLifecycleError {
++   "code": "AUTHORIZATION_INVALID",
+  }
+
+ ❯ src/test/harvo/cr1_workforce_lifecycle.test.ts:107:126
+    105|     await expect(service.execute(self.input)).rejects.toMatchObject({c…
+    106|     const target=await member();const command=await approved(target.me…
+    107|     await expect(service.execute({...command.input,context:{...command…
+       |                                                                                                                              ^
+    108|     await expect(service.execute({...command.input,context:{...command…
+    109|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_workforce_lifecycle.test.ts > CR1 workforce revocation and offboarding on real PostgreSQL > enforces the approved minimum production owner quorum without inventing a threshold
+AssertionError: expected WorkforceLifecycleError: AUTHORIZATION_IN… { …(2) } to match object { code: 'PERMISSION_DENIED' }
+(2 matching properties omitted from actual)
+
+- Expected
++ Received
+
+- {
+-   "code": "PERMISSION_DENIED",
++ WorkforceLifecycleError {
++   "code": "AUTHORIZATION_INVALID",
+  }
+
+ ❯ src/test/harvo/cr1_workforce_lifecycle.test.ts:161:133
+    159|       await policy(2);
+    160|       const allowed=await approved(target.membershipId!,{protected:tru…
+    161|       await expect(allowed.service.execute({...allowed.input,context:{…
+       |                                                                                                                                     ^
+    162|       expect(await allowed.service.execute(allowed.input)).toMatchObje…
+    163|     }finally{await fixture.pool.query('UPDATE internal_iam_current_pol…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  4 failed | 15 passed (19)
+   Start at  18:05:25
+   Duration  8.54s (transform 213ms, setup 32ms, import 798ms, tests 7.53s, environment 0ms)
+

@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "status": "READY_FOR_REVIEW",
+  "classification": "LOCAL_TEST_OBSERVATION",
+  "productionGateEligible": false,
+  "cards": [
+    "R0-02",
+    "R0-04 foundation only"
+  ],
+  "baseCommit": "0e4c6fec2fe86f1b793760c5f7a3daf08bbf7508",
+  "nodeVersion": "24.21.0",
+  "externalDatabaseContacted": false,
+  "externalProviderContacted": false,
+  "tests": {
+    "before": {
+      "command": "node24 scripts/testing/run.mjs src/test/harvo/cr1_evidence_quarantine.test.ts --reporter=dot",
+      "failed": 2,
+      "passed": 0,
+      "exitCode": 1
+    },
+    "after": {
+      "uniquePassingTests": 80,
+      "files": 7,
+      "failed": 0,
+      "fullSuite": false
+    },
+    "commands": [
+      {
+        "files": [
+          "cr1_release_evidence.test.ts",
+          "cr1_evidence_quarantine.test.ts"
+        ],
+        "commandPrefix": "node24 scripts/testing/run.mjs src/test/harvo/",
+        "flags": "--reporter=dot",
+        "passed": 41,
+        "exitCode": 0
+      },
+      {
+        "files": [
+          "provider_canary.test.ts",
+          "staging_runbook.test.ts"
+        ],
+        "passed": 23,
+        "exitCode": 0
+      },
+      {
+        "files": [
+          "cr1_release_candidate_certification.test.ts",
+          "pilot_tranche.test.ts"
+        ],
+        "passed": 9,
+        "exitCode": 0
+      },
+      {
+        "files": [
+          "track4_pilot_simulation.test.ts",
+          "cr1_release_evidence.test.ts"
+        ],
+        "passed": 36,
+        "exitCode": 0,
+        "qualification": "Earlier evidence suite had 29 cases; seven pilot tests remain applicable. Final evidence suite has 30 cases in the separate 41-pass run."
+      }
+    ]
+  },
+  "validation": {
+    "strictLibraryTypeScript": {
+      "exitCode": 0,
+      "files": [
+        "src/lib/release/evidence.ts",
+        "src/lib/compliance/cr1ReleaseCertificateEngine.ts",
+        "src/lib/compliance/pilotStopLossEngine.ts"
+      ]
+    },
+    "scopedEslint": {
+      "exitCode": 0
+    },
+    "nodeSyntax": {
+      "files": 14,
+      "exitCode": 0
+    },
+    "scopedDiffWhitespace": {
+      "exitCode": 0
+    },
+    "redactionChangeEslint": {
+      "exitCode": 0
+    }
+  },
+  "sourceFiles": {
+    "scripts/compliance/generate-ca-tax-packet.mjs": "25933c3f96c6d996a89fb6d46fc6c5bc308b05efb363ef6183b9cf68c5f78d3a",
+    "scripts/compliance/generate-google-mcc-clearance-receipt.mjs": "0173e8670fe6ca45bd33c32396d09770d6a9fce44e020bf9c5b70ec8bd511bdc",
+    "scripts/compliance/generate-cr1-rc-dossier.mjs": "635fef401a5be3d2133671bdcef98c418f1ae098675bbba724155bbe127e7375",
+    "scripts/compliance/generate-meta-hec-clearance-receipt.mjs": "61a1bfbb44781cc8a6333d9914f0c6e3e1f6710907a72501cab16ccbf5d632b4",
+    "scripts/compliance/simulate-pilot-stop-loss.mjs": "3aea3a6deb26f8b9da87c3a7d6ebccd326e95ec82aeab261f5aae3b7b1ec50f6",
+    "scripts/compliance/generate-tax-clearance-receipt.mjs": "9c6ae104d5782a4d2d19862a406a0f51c99cf7ed24e1ac1bf7dc0da464a1add6",
+    "scripts/compliance/generate-staging-preflight-receipt.mjs": "fe9d25aca4d541927c1db1f7652ebaca7d48e3dba7f1ca54e01dca75daef9a30",
+    "scripts/compliance/generate-adtech-markup-clearance-receipt.mjs": "94f3e0eb118f79d998621350172cd087cfcaacaa63f7c35709eb97363e1081b1",
+    "scripts/compliance/generate-provider-canary-receipt.mjs": "3697dd3649cf87fc1e7c5812347a7c8f9c839f7097f7c6644014e1ce8f8dd37b",
+    "scripts/compliance/fixture-output.mjs": "9d55ca963dad6d8b5b7d37cbe96bb5f703c55454923a261e66efdea67573c44d",
+    "scripts/deployment/run-staging-deployment.mjs": "3930da012f4d15913f9ef8e5bba94f994e1344eecc2188a9502d1bed80667861",
+    "scripts/deployment/provider-canary-runner.mjs": "aa1e43a8d115be82ef0bdfbd908471f54754642701a63af11cae4898e9e4e3a9",
+    "scripts/deployment/verify-database-roles.mjs": "a38947f1b0cb6c3b4f76434b81e05fa78ec1a5f090c358a2c6a9c030015c7c3c",
+    "scripts/deployment/pilot-tranche-monitor.mjs": "39d9d6f075f1ad6601b24b3a288b24cb17595199d250cf7a523959ef35bc54f0",
+    "src/lib/release/evidence.ts": "46036c2712e7d186fc03c9bfaf621959e90a1dd14f6c72d03ebdce611e778f74",
+    "src/lib/compliance/cr1ReleaseCertificateEngine.ts": "5d0c1a58b1d06f69766e93405c72c81f1cfb785410b29bfec9f5f9a8ae44c115",
+    "src/lib/compliance/pilotStopLossEngine.ts": "4b23d4e91bfe2261961d1d11e646998217c380735691e24ae801c299d2c27f7b",
+    "src/test/harvo/cr1_release_evidence.test.ts": "09ad23b3e06868cea5350b4424aca16131f9804e20abc2ac8c6e0f3c001265fa",
+    "src/test/harvo/cr1_evidence_quarantine.test.ts": "4ac30349b1f2883b09596a7485edc1ba44d801bdc216abc419816439ec79a8a1",
+    "src/test/harvo/cr1_release_candidate_certification.test.ts": "0b969791e9c4fc1ef285d9d7d3b694c50d538fcee3e1c6474659fbd2fe4f83f0",
+    "src/test/harvo/provider_canary.test.ts": "bc74dbabf76888d8bd31fe565095c6abf981d9c66c590768e9a61ead71d2d5c6",
+    "src/test/harvo/staging_runbook.test.ts": "21f3a440860e9f3ed620ff690708f74e461a7b082f0e8edd136ab02dae8ecdce",
+    "src/test/harvo/pilot_tranche.test.ts": "204af1ab03ce635b9fc64b18d46dc5d732ffd8f2540f8dbdba64569d9722520d",
+    "src/test/harvo/track4_pilot_simulation.test.ts": "e546f94b979e4a632990b709db01df5d0573b328d7dc426dab884b15ec164a7a"
+  },
+  "logs": {
+    "docs/audits/cr1-remediation/r0-02/retired-authority.txt": "fa94f04a11e8437e42dbf18f06fee9f57dc4153cd76ebf6df79bb24ecb7eb0e3",
+    "docs/audits/cr1-remediation/r0-02/lint.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "docs/audits/cr1-remediation/r0-02/typecheck.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "docs/audits/cr1-remediation/r0-02/redaction-lint.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "docs/audits/cr1-remediation/r0-02/evidence-and-quarantine.txt": "d719d791d8f9abaed903d0fa7d5eab4c87117b8bf13930477f0c4b2ebe1cb8f0",
+    "docs/audits/cr1-remediation/r0-02/before-regressions.txt": "80d26e8668e3d6a11ad6a3b0e1e75227cf831259e5253b039afa915ddd26b9a6",
+    "docs/audits/cr1-remediation/r0-02/pilot-and-evidence-earlier.txt": "bcc2f785e7cb5627564e840df85773703374928908ee0084975b57e1dd078eb6",
+    "docs/audits/cr1-remediation/r0-02/provider-and-staging.txt": "0783e527938f337b71e79bcbec6730e1117b4abd8e08c9f9c45fc4f918b19e79"
+  },
+  "limitations": [
+    "No independently configured production trust implementation",
+    "No CI promotion wiring or append-only release workflow acceptance",
+    "No actual database/provider/staging/professional observation",
+    "No full regression or build",
+    "Historical release claims remain disputed"
+  ]
+}

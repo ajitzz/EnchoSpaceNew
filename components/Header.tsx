@@ -8,6 +8,8 @@ import { useAuth } from './AuthContext';
 import { useMapsLibrary } from '@vis.gl/react-google-maps';
 import { CurrencySelector } from './CurrencySelector';
 import { useToast } from './ToastContext';
+import {useUnreadCount,unreadCountDescription} from '../lib/useUnreadCount';
+import {UnreadCountBadge} from './UnreadCountBadge';
 
 interface HeaderProps {
   onSearch: (city: string) => void;
@@ -60,7 +62,7 @@ const Header: React.FC<HeaderProps> = ({
     onStaysClick,
     onProfileClick
 }) => {
-  const { user, logout } = useAuth();
+  const { user, token, logout } = useAuth();
   const { addToast } = useToast();
   
   const { isInstallable, promptInstall } = usePWAInstall();
@@ -69,7 +71,7 @@ const Header: React.FC<HeaderProps> = ({
   const [isFocused, setIsFocused] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDesktopMenuOpen, setIsDesktopMenuOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const unread=useUnreadCount(user?.id,token);
   const [whatsappConfig, setWhatsappConfig] = useState<{ enabled: boolean, number: string } | null>(null);
   const [callConfig, setCallConfig] = useState<{ enabled: boolean, number: string } | null>(null);
 
@@ -213,32 +215,6 @@ const Header: React.FC<HeaderProps> = ({
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-     const token = localStorage.getItem('token');
-     if (user && token) {
-         fetch('/api/unread-counts', {
-             headers: { 'Authorization': `Bearer ${token}` }
-         })
-         .then(res => res.ok ? res.json() : null)
-         .then(data => data && setUnreadCount(data.unread || 0))
-         .catch(() => {});
-         
-         const interval = setInterval(() => {
-             const currentToken = localStorage.getItem('token');
-             if (!currentToken) return;
-             fetch('/api/unread-counts', {
-                 headers: { 'Authorization': `Bearer ${currentToken}` }
-             })
-             .then(res => res.ok ? res.json() : null)
-             .then(data => data && setUnreadCount(data.unread || 0))
-             .catch(() => {});
-         }, 30000);
-         return () => clearInterval(interval);
-     } else {
-         setUnreadCount(0);
-     }
-  }, [user]);
-  
   const searchRef = useRef<HTMLFormElement>(null);
   const desktopMenuRef = useRef<HTMLDivElement>(null);
 
@@ -368,11 +344,11 @@ const Header: React.FC<HeaderProps> = ({
                   onProfileClick?.();
               }}
               className="w-9 h-9 rounded-full bg-[#F4F4F6] hover:bg-[#E9EBED] active:scale-95 transition-all flex items-center justify-center relative justify-self-end border border-gray-200/5 shadow-sm"
+              aria-label={`Profile menu. ${unreadCountDescription(unread)}`}
+              title={unreadCountDescription(unread)}
             >
               <MenuIcon className="w-4.5 h-4.5 text-[#5e687a] stroke-[2.5]" />
-              {unreadCount > 0 && (
-                <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-[#e51d53] border border-white animate-pulse" />
-              )}
+              <UnreadCountBadge state={unread} compact className="absolute -top-1 -right-1"/>
             </button>
           </div>
         
@@ -704,14 +680,12 @@ const Header: React.FC<HeaderProps> = ({
               <button 
                 onClick={() => { uiAudio.playPop(); onInboxClick?.(); }}
                 className="relative hidden md:flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-full transition-all duration-300 text-gray-500 hover:text-black hover:bg-gray-100"
+                aria-label={`Inbox. ${unreadCountDescription(unread)}`}
+                title={unreadCountDescription(unread)}
               >
                   <MessageCircleIcon className="w-5 h-5" />
-                  <span className="hidden lg:inline">Inbox</span>
-                  {unreadCount > 0 && (
-                      <span className="absolute top-1 right-2 lg:top-0 lg:right-0 bg-red-500 text-white text-[10px] font-bold px-1.5 h-4 rounded-full flex items-center justify-center">
-                          {unreadCount}
-                      </span>
-                  )}
+                  <span className="hidden lg:inline">{unread.status==='UNAVAILABLE'?'Inbox unavailable':'Inbox'}</span>
+                  <UnreadCountBadge state={unread} className="absolute top-1 right-2 lg:top-0 lg:right-0"/>
               </button>
           )}
 

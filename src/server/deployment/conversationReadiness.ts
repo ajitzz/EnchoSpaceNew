@@ -2,6 +2,7 @@ import {readFileSync} from 'node:fs';
 import type pg from 'pg';
 import {conversationColumnContract,conversationConstraintContract,conversationIndexContract,conversationRecentIndexContract} from './conversationCatalogContract.js';
 import {serviceCaseThreadExpression,serviceCaseMessageExpression,verifyServiceCaseBoundaryCatalog} from './serviceCaseReadiness.js';
+import {reachableRuntimeRolesSql,verifyRuntimeDatabaseAuthority} from './runtimeDatabaseAuthority.js';
 
 export const conversationDeliveryTables=['threads','messages','conversation_read_cursors','notification_intents','notification_intent_events'] as const;
 const intentMutable=['state','fence','attempts','lease_until','available_at','claimed_by','last_error_code','updated_at','completed_at'];
@@ -61,10 +62,8 @@ export function conversationWorkerGrants(workerRole:string):string[]{
 
 /** Catalog checks read metadata only; role/behavior tests remain an independent gate. */
 export async function verifyConversationCatalog(client:pg.PoolClient,mode:'runtime'|'worker'='runtime'){
- const role=(await client.query<{name:string;safe:boolean}>(`SELECT current_user AS name,
-  NOT(r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR r.rolcreatedb OR has_schema_privilege(current_user,'public','CREATE')
-  OR EXISTS(SELECT 1 FROM pg_roles inherited WHERE pg_has_role(current_user,inherited.oid,'MEMBER') AND(inherited.rolsuper OR inherited.rolbypassrls OR inherited.rolcreaterole OR inherited.rolcreatedb))) AS safe
-  FROM pg_roles r WHERE r.rolname=current_user`)).rows[0];
+ const authority=await verifyRuntimeDatabaseAuthority(client);
+ const role=(await client.query<{name:string}>('SELECT current_user AS name')).rows[0];
  const tableRows=(await client.query<{relname:string;relrowsecurity:boolean;relforcerowsecurity:boolean;owns:boolean;public_grant:boolean}>(`SELECT c.relname,c.relrowsecurity,c.relforcerowsecurity,pg_has_role(current_user,c.relowner,'MEMBER') AS owns,
   EXISTS(SELECT 1 FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a WHERE a.grantee=0) AS public_grant
   FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY($1::text[])`,[conversationDeliveryTables])).rows;
@@ -113,18 +112,44 @@ export async function verifyConversationCatalog(client:pg.PoolClient,mode:'runti
  const sql=readFileSync(new URL('../../migrations/037_conversation_delivery.sql',import.meta.url),'utf8');
  const functionRows=(await client.query<{proname:string;prosrc:string;prosecdef:boolean;proconfig:string[]|null;public_execute:boolean}>(`SELECT p.proname,p.prosrc,p.prosecdef,p.proconfig,EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE') AS public_execute FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname=ANY($1::text[])`,[functions])).rows;
  const functionsValid=functionRows.length===functions.length&&functions.every(name=>{const body=sql.match(new RegExp(`CREATE FUNCTION ${name}\\([^]*?AS \\$\\$([^]*?)\\$\\$`,'i'))?.[1]?.trim();return body&&functionRows.some(row=>row.proname===name&&!row.prosecdef&&!row.public_execute&&row.proconfig?.includes('search_path=pg_catalog, public')&&(name==='conversation_notification_fingerprint'||row.proconfig.includes('row_security=on'))&&row.prosrc.trim()===body);});
- const privileges=(await client.query<{table_name:string;column_name:string;can_select:boolean;can_insert:boolean;can_update:boolean;can_delete:boolean;can_truncate:boolean;can_trigger:boolean}>(`SELECT c.relname AS table_name,a.attname AS column_name,has_column_privilege(current_user,c.oid,a.attnum,'SELECT') AS can_select,has_column_privilege(current_user,c.oid,a.attnum,'INSERT') AS can_insert,has_column_privilege(current_user,c.oid,a.attnum,'UPDATE') AS can_update,has_table_privilege(current_user,c.oid,'DELETE') AS can_delete,has_table_privilege(current_user,c.oid,'TRUNCATE') AS can_truncate,has_table_privilege(current_user,c.oid,'TRIGGER') AS can_trigger FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped WHERE n.nspname='public' AND c.relname=ANY($1::text[])`,[conversationDeliveryTables])).rows;
- const grantsValid=isOwner||(privileges.length>0&&privileges.every(row=>{
+ const privileges=(await client.query<{table_name:string;column_name:string;current_role:boolean;can_select:boolean;can_insert:boolean;can_update:boolean;can_delete:boolean;can_truncate:boolean;can_trigger:boolean;can_reference:boolean}>(`${reachableRuntimeRolesSql}
+  SELECT c.relname AS table_name,a.attname AS column_name,r.oid=current_user::regrole AS current_role,
+   has_column_privilege(r.oid,c.oid,a.attnum,'SELECT') AS can_select,has_column_privilege(r.oid,c.oid,a.attnum,'INSERT') AS can_insert,
+   has_column_privilege(r.oid,c.oid,a.attnum,'UPDATE') AS can_update,has_table_privilege(r.oid,c.oid,'DELETE') AS can_delete,
+   has_table_privilege(r.oid,c.oid,'TRUNCATE') AS can_truncate,has_table_privilege(r.oid,c.oid,'TRIGGER') AS can_trigger,
+   has_column_privilege(r.oid,c.oid,a.attnum,'REFERENCES') AS can_reference
+  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped
+   CROSS JOIN reachable r WHERE n.nspname='public' AND c.relname=ANY($1::text[])`,[conversationDeliveryTables])).rows;
+ const grantsValid=privileges.some(row=>row.current_role)&&privileges.every(row=>{
   const runtimeUpdate=row.table_name==='threads'?threadMutable.includes(row.column_name):row.table_name==='messages'?row.column_name==='is_read':row.table_name==='conversation_read_cursors';
   const expectedUpdate=mode==='runtime'?runtimeUpdate:row.table_name==='notification_intents'&&intentMutable.includes(row.column_name);
   const expectedRead=mode==='runtime'||['notification_intents','notification_intent_events'].includes(row.table_name);
   const expectedInsert=mode==='runtime'||row.table_name==='notification_intent_events';
-  return row.can_select===expectedRead&&row.can_insert===expectedInsert&&row.can_update===expectedUpdate&&!row.can_delete&&!row.can_truncate&&!row.can_trigger;
- }));
- const execute=(await client.query<{proname:string;allowed:boolean}>(`SELECT p.proname,has_function_privilege(current_user,p.oid,'EXECUTE') AS allowed FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname=ANY($1::text[])`,[functions])).rows;
- const executeValid=isOwner||(execute.length===functions.length&&execute.every(row=>row.allowed===(['conversation_actor_id','conversation_notification_fingerprint',...(mode==='runtime'?['conversation_acknowledge_read']:[])].includes(row.proname))));
- const sequences=(await client.query<{name:string;usage:boolean;can_update:boolean;owns:boolean}>(`SELECT c.relname AS name,has_sequence_privilege(current_user,c.oid,'USAGE') AS usage,has_sequence_privilege(current_user,c.oid,'UPDATE') AS can_update,pg_has_role(current_user,c.relowner,'MEMBER') AS owns FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='S' AND c.relname=ANY($1::text[])`,[['threads_id_seq','messages_id_seq','notification_intent_events_id_seq']])).rows;
- const sequenceValid=isOwner?(sequences.length===3&&sequences.every(row=>row.usage)):(sequences.length===3&&sequences.every(row=>!row.owns&&!row.can_update&&row.usage===(mode==='runtime'||row.name==='notification_intent_events_id_seq')));
- const roleSafe=isOwner||role?.safe===true;
+  // Exact grants must work for current_user; NOINHERIT ancestors may not add a
+  // forbidden capability merely because it is dormant until SET ROLE.
+  const allowed=row.current_role?row.can_select===expectedRead&&row.can_insert===expectedInsert&&row.can_update===expectedUpdate:
+   (!row.can_select||expectedRead)&&(!row.can_insert||expectedInsert)&&(!row.can_update||expectedUpdate);
+  return allowed&&!row.can_delete&&!row.can_truncate&&!row.can_trigger&&!row.can_reference;
+ });
+ const execute=(await client.query<{proname:string;current_role:boolean;allowed:boolean}>(`${reachableRuntimeRolesSql}
+  SELECT p.proname,r.oid=current_user::regrole AS current_role,has_function_privilege(r.oid,p.oid,'EXECUTE') AS allowed
+  FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace CROSS JOIN reachable r
+  WHERE n.nspname='public' AND p.proname=ANY($1::text[])`,[functions])).rows;
+ const executeValid=execute.filter(row=>row.current_role).length===functions.length&&execute.every(row=>{
+  const expected=['conversation_actor_id','conversation_notification_fingerprint',...(mode==='runtime'?['conversation_acknowledge_read']:[])].includes(row.proname);
+  return row.current_role?row.allowed===expected:!row.allowed||expected;
+ });
+ const sequences=(await client.query<{name:string;current_role:boolean;usage:boolean;can_update:boolean;owns:boolean}>(`${reachableRuntimeRolesSql}
+  SELECT c.relname AS name,r.oid=current_user::regrole AS current_role,has_sequence_privilege(r.oid,c.oid,'USAGE') AS usage,
+   has_sequence_privilege(r.oid,c.oid,'UPDATE') AS can_update,pg_has_role(r.oid,c.relowner,'MEMBER') AS owns
+  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace CROSS JOIN reachable r
+  WHERE n.nspname='public' AND c.relkind='S' AND c.relname=ANY($1::text[])`,[['threads_id_seq','messages_id_seq','notification_intent_events_id_seq']])).rows;
+ const sequenceValid=sequences.filter(row=>row.current_role).length===3&&sequences.every(row=>{
+  const expected=mode==='runtime'||row.name==='notification_intent_events_id_seq';
+  return !row.owns&&!row.can_update&&(row.current_role?row.usage===expected:!row.usage||expected);
+ });
+ // Both modes certify running services, never migration authority. Owner catalog
+ // inspection remains possible but must not certify an RLS-bypassing service pool.
+ const roleSafe=!isOwner&&authority.safe;
  return {ready:roleSafe&&tableSafety&&columnsValid&&constraintsValid&&indexesValid&&policyValid&&triggersValid&&functionsValid&&grantsValid&&executeValid&&sequenceValid,roleSafe,tableSafety,columnsValid,constraintsValid,indexesValid,policyValid,triggersValid,functionsValid,grantsValid,executeValid,sequenceValid};
 }

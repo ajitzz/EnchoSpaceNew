@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "status": "READY_FOR_REVIEW_FOUNDATION_ONLY",
+  "classification": "LOCAL_VALIDATION",
+  "productionGateEligible": false,
+  "baseCommit": "0e4c6fec2fe86f1b793760c5f7a3daf08bbf7508",
+  "independentlyReacceptedPackages": 0,
+  "originalPackages": 48,
+  "commands": [
+    {
+      "command": "node24 scripts/cr1/verify-reacceptance-register.mjs",
+      "exitCode": 0,
+      "result": "STRUCTURE_VERIFIED"
+    },
+    {
+      "command": "node24 scripts/testing/run.mjs src/test/harvo/cr1_reacceptance_register.test.ts --reporter=dot",
+      "exitCode": 0,
+      "passed": 4
+    },
+    {
+      "command": "node24 scripts/testing/run.mjs src/test/harvo/cr1_schema_preflight_owner_review.test.ts --reporter=dot",
+      "exitCode": 0,
+      "passed": 1,
+      "scope": "Independent reviewer regression against local Unix-socket PostgreSQL after lead fix; no remote endpoint"
+    }
+  ],
+  "sourceHashes": {
+    "docs/implementation/CR1_PACKAGE_REACCEPTANCE_REGISTER.json": "16860537f1a1bd35101770f2d6e5137a1017070f1bbb003c1ca25c05977ce890",
+    "docs/implementation/CR1_PACKAGE_REACCEPTANCE_REGISTER.md": "d088ac9e02a507ed1d9918f3ef6572138c8d35c46edbc4075091893c91fd8cc7",
+    "scripts/cr1/verify-reacceptance-register.mjs": "641385ff108544d1f03d91b51558623fe7ef6e38c985adb014dd761fe6b8f049",
+    "src/test/harvo/cr1_reacceptance_register.test.ts": "da8cb8f17fe9c9e5d37675d1d68b691bec6c07a92293af76a7bd25b4d7fd4a00",
+    "src/test/harvo/cr1_schema_preflight_owner_review.test.ts": "0fa69a0e787c5b36f7ca2a5f35e34165a90828f942df82532b80f6c81bb783f2"
+  },
+  "reviewLogSha256": "45620217aba3b8db3253dec8177c19122439d9da9a0354ddcb58254e4cc93def",
+  "limitations": [
+    "No semantic acceptance of all48",
+    "No reviewer identity or external authority manufactured",
+    "Initial independent-test CREATE DATABASE harness setup failed before assertion and was corrected; no exploit reproduction claimed"
+  ]
+}

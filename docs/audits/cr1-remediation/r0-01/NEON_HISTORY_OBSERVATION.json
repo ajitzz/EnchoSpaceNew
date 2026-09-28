@@ -1,0 +1,766 @@
+{
+  "observedAt": "2026-09-28T18:15:07.873Z",
+  "scope": "FOUNDER_AUTHORIZED_READ_ONLY_DOTENV_HISTORY",
+  "environment": "UNVERIFIED_PRIMARY_NEON_CANDIDATE",
+  "branchIdentity": "NOT_SUPPLIED",
+  "productionCertification": false,
+  "migrationApplyAuthorized": false,
+  "credentialSource": ".env:DATABASE_URL",
+  "tlsCertificateVerification": true,
+  "collectorSha256": "21a8082021c5148f0cb6da30d8a0e532dc07bbc5fd749d4c9c3aa2182ed98226",
+  "head": "0e4c6fec2fe86f1b793760c5f7a3daf08bbf7508",
+  "source": [
+    {
+      "version": "001_add_listings_slug.sql",
+      "checksum": "5c89756fa1ab553e2c9373355c13415369db80c9e079f94cb5229e421e043210"
+    },
+    {
+      "version": "002_add_listings_publication_status.sql",
+      "checksum": "1fef345f692b1806a785b2755eea6f937031a0e4be611ce3e81cce6475165f70"
+    },
+    {
+      "version": "003_canonical_room_and_media_authority.sql",
+      "checksum": "50b00b35ac7ac9f7f881d9bc5d2dc5dce1222ba2ad4af211e0123bcf25c5c0ca"
+    },
+    {
+      "version": "004_canonical_constraints.sql",
+      "checksum": "25923896ef6c915e7bbb58aaa1b84080ecbb740dfdcdf4043b714bf4bd4996bc"
+    },
+    {
+      "version": "005_inventory_days_and_atomic_holds.sql",
+      "checksum": "d367bdc41fd6ba1109babebdf2680e3ed27ec52f9f8a2d789ca6cf07843ab39d"
+    },
+    {
+      "version": "006_legacy_calendar_block_mapping.sql",
+      "checksum": "52a4dd349620cf1248050c98c9c0e4325751e4ec1c9e5c6b7b72bafb76f89a8f"
+    },
+    {
+      "version": "007_legacy_conflict_ledger_uniqueness.sql",
+      "checksum": "59be809281f5f80f205f0e81d43d0d0c441171afaa528dc6dffaec39f304e7cc"
+    },
+    {
+      "version": "009_harvo_marketing_finance.sql",
+      "checksum": "25ca2c36169fed0b0b347b8341f61307007885dfbb51e60c276cbd310c6508a8"
+    },
+    {
+      "version": "010_harvo_marketing_workflow.sql",
+      "checksum": "89023e5f4ab669a1615fe0f1f32566727f14e87b2d26e27f7fb0e2fe6c77df0e"
+    },
+    {
+      "version": "011_harvo_marketing_measurement.sql",
+      "checksum": "616a76335587c7fbc00490a6d6530707f5af2738e36e680bf3313a949cdf44c2"
+    },
+    {
+      "version": "012_harvo_marketing_settlement.sql",
+      "checksum": "aa96bf24b4c84c9d06bfd440f8726b57ca067f587f53d9531801c730aa79c714"
+    },
+    {
+      "version": "013_harvo_marketing_conversion_delivery.sql",
+      "checksum": "1a0c0f2fa329a5ecab95569b9cca8120f21236e4e02b7bed94868d1e47709f24"
+    },
+    {
+      "version": "014_harvo_marketing_request_limits.sql",
+      "checksum": "3441d1033c7793ec107d2f8f08b90f88bda8bde263dcc08de2abb849142cda98"
+    },
+    {
+      "version": "015_harvo_marketing_creative_review.sql",
+      "checksum": "561c3286bf368f9c6cf6538ea1398a311c877d5031199944f1a8bc992eb6f79a"
+    },
+    {
+      "version": "016_harvo_google_invoice_imports.sql",
+      "checksum": "14fd5acf3c0454162004adfb05394e808865e01ecd3369af878edf1b526b2a4d"
+    },
+    {
+      "version": "017_calendar_operation_audit.sql",
+      "checksum": "2a8112c3bdc79e0b52639754ed3ba431a1413231c9a3b542cb365e72bdbeb2d5"
+    },
+    {
+      "version": "018_outreach_lead_tenant_boundary.sql",
+      "checksum": "f6d9c0f0cf81afd4d1eb1a52e8ecf3d56e23663e30aaaf8f79c58c01f14b4c59"
+    },
+    {
+      "version": "019_marketing_operational_isolation.sql",
+      "checksum": "9a20aa25a07db45d4310674a3ad831e9c864ad3378f307e060f13769df36b4d7"
+    },
+    {
+      "version": "020_marketing_pause_recovery.sql",
+      "checksum": "0fdddc26011508c082c7cf792d22bb53d0d22c75f97a63379657f2b263f65292"
+    },
+    {
+      "version": "021_legacy_telemetry_evidence.sql",
+      "checksum": "577d9d9435d621a3479178c858c28e75bcd3f86abdd6491c37717de545a3b137"
+    },
+    {
+      "version": "022_marketing_pause_recovery_attempts.sql",
+      "checksum": "ac1181cd8b334cd0a5772d31d5f09929df394426c36df17d3844f937a0cb0b7d"
+    },
+    {
+      "version": "023_marketing_product_facts.sql",
+      "checksum": "f3a59c240ba2c6f61bd07c5c4d2a2538685d9abb08c5adba9802a7809b2062fa"
+    },
+    {
+      "version": "024_marketing_keyword_research.sql",
+      "checksum": "ef465f7f630ac0edb602a3a7da09b9700a6c0095725f4f793d1c1eb57799be20"
+    },
+    {
+      "version": "025_marketing_revision_products.sql",
+      "checksum": "376541df23fc6ed1c6d257c3fcd52bee6e8db5c28dd19189220ebd3cc620eece"
+    },
+    {
+      "version": "026_search_portfolio_shadow.sql",
+      "checksum": "54e449bed41a6a6bfbaf6890f36b2c6d1c48aafad4226400f961c2660adc0ee8"
+    },
+    {
+      "version": "027_marketing_attribution_links.sql",
+      "checksum": "6f24c5a1e05fe87f6c816024b95671d61cd499b68ca564ba562535e7806daa91"
+    },
+    {
+      "version": "028_marketing_consent_touchpoints.sql",
+      "checksum": "f732578fad0a7d50df83ed971c79b2b06342f707034c0967b864b8640b05e9aa"
+    },
+    {
+      "version": "029_marketing_destination_pools.sql",
+      "checksum": "10e517cc537355604962f59662486d24f5ba7aad110a567ae01e0afbb4afd6e3"
+    },
+    {
+      "version": "030_marketing_spatial_stories.sql",
+      "checksum": "50990d62f3c8cee903269789e8247872adf3c62c00b71735ec5f12f50e063779"
+    },
+    {
+      "version": "031_marketing_inquiry_attribution.sql",
+      "checksum": "312e6258b8a79107f2a2ee4d65afb3deceac8f94be5c1b30f88ccd6fe912ec91"
+    },
+    {
+      "version": "032_marketing_adtech_registry.sql",
+      "checksum": "f0e83c16233563beb1aeb123df6ee2a07dad0e424f297bb3870ac0edfd538f2f"
+    },
+    {
+      "version": "033_marketing_adtech_corridors.sql",
+      "checksum": "aac5b96f4a244ce8b7e045152b8e45b5a3ef0539095c28fa110c28a2c269f49f"
+    },
+    {
+      "version": "034_marketing_adtech_bindings.sql",
+      "checksum": "1efe17cc3d24d9e5f8559a58cdae626395deff4bbb78a040f8e1d3e5c7668a76"
+    },
+    {
+      "version": "035_marketing_corridor_inference.sql",
+      "checksum": "9f0fa5878095080d5f4b8ecce613e0a84d409e59b09ef5bc4d6e9109c5683f98"
+    },
+    {
+      "version": "036_internal_organization_iam.sql",
+      "checksum": "365ec8a7c6d0e370c8c474ac26eff04fff207c3d51218e019c5f233fcf382cf4"
+    },
+    {
+      "version": "037_conversation_delivery.sql",
+      "checksum": "5d13517eb755ca299e3c98cdec50319efb2776057962b10435852af0c0f82377"
+    },
+    {
+      "version": "038_service_cases.sql",
+      "checksum": "3dcc2f52db2298b1cf11d741afb1571df36ddb0e3db7153b8c88d9b249a4a130"
+    },
+    {
+      "version": "039_conversation_notification_preferences.sql",
+      "checksum": "47ce2455a8183e243483e8814a6bc8e7a68dd775ee8509ef0afd0270101004b9"
+    },
+    {
+      "version": "040_service_assignment_dispatch.sql",
+      "checksum": "406e409b074c5e156a9cce5ba9bbba6f60c694b5ab2132ed10bf4646d646cda4"
+    }
+  ],
+  "packaged": [
+    {
+      "version": "001_add_listings_slug.sql",
+      "checksum": "5c89756fa1ab553e2c9373355c13415369db80c9e079f94cb5229e421e043210"
+    },
+    {
+      "version": "002_add_listings_publication_status.sql",
+      "checksum": "1fef345f692b1806a785b2755eea6f937031a0e4be611ce3e81cce6475165f70"
+    },
+    {
+      "version": "003_canonical_room_and_media_authority.sql",
+      "checksum": "50b00b35ac7ac9f7f881d9bc5d2dc5dce1222ba2ad4af211e0123bcf25c5c0ca"
+    },
+    {
+      "version": "004_canonical_constraints.sql",
+      "checksum": "25923896ef6c915e7bbb58aaa1b84080ecbb740dfdcdf4043b714bf4bd4996bc"
+    },
+    {
+      "version": "005_inventory_days_and_atomic_holds.sql",
+      "checksum": "d367bdc41fd6ba1109babebdf2680e3ed27ec52f9f8a2d789ca6cf07843ab39d"
+    },
+    {
+      "version": "006_legacy_calendar_block_mapping.sql",
+      "checksum": "52a4dd349620cf1248050c98c9c0e4325751e4ec1c9e5c6b7b72bafb76f89a8f"
+    },
+    {
+      "version": "007_legacy_conflict_ledger_uniqueness.sql",
+      "checksum": "59be809281f5f80f205f0e81d43d0d0c441171afaa528dc6dffaec39f304e7cc"
+    },
+    {
+      "version": "009_harvo_marketing_finance.sql",
+      "checksum": "25ca2c36169fed0b0b347b8341f61307007885dfbb51e60c276cbd310c6508a8"
+    },
+    {
+      "version": "010_harvo_marketing_workflow.sql",
+      "checksum": "89023e5f4ab669a1615fe0f1f32566727f14e87b2d26e27f7fb0e2fe6c77df0e"
+    },
+    {
+      "version": "011_harvo_marketing_measurement.sql",
+      "checksum": "616a76335587c7fbc00490a6d6530707f5af2738e36e680bf3313a949cdf44c2"
+    },
+    {
+      "version": "012_harvo_marketing_settlement.sql",
+      "checksum": "aa96bf24b4c84c9d06bfd440f8726b57ca067f587f53d9531801c730aa79c714"
+    },
+    {
+      "version": "013_harvo_marketing_conversion_delivery.sql",
+      "checksum": "1a0c0f2fa329a5ecab95569b9cca8120f21236e4e02b7bed94868d1e47709f24"
+    },
+    {
+      "version": "014_harvo_marketing_request_limits.sql",
+      "checksum": "3441d1033c7793ec107d2f8f08b90f88bda8bde263dcc08de2abb849142cda98"
+    },
+    {
+      "version": "015_harvo_marketing_creative_review.sql",
+      "checksum": "561c3286bf368f9c6cf6538ea1398a311c877d5031199944f1a8bc992eb6f79a"
+    },
+    {
+      "version": "016_harvo_google_invoice_imports.sql",
+      "checksum": "14fd5acf3c0454162004adfb05394e808865e01ecd3369af878edf1b526b2a4d"
+    },
+    {
+      "version": "017_calendar_operation_audit.sql",
+      "checksum": "2a8112c3bdc79e0b52639754ed3ba431a1413231c9a3b542cb365e72bdbeb2d5"
+    },
+    {
+      "version": "018_outreach_lead_tenant_boundary.sql",
+      "checksum": "f6d9c0f0cf81afd4d1eb1a52e8ecf3d56e23663e30aaaf8f79c58c01f14b4c59"
+    },
+    {
+      "version": "019_marketing_operational_isolation.sql",
+      "checksum": "9a20aa25a07db45d4310674a3ad831e9c864ad3378f307e060f13769df36b4d7"
+    },
+    {
+      "version": "020_marketing_pause_recovery.sql",
+      "checksum": "0fdddc26011508c082c7cf792d22bb53d0d22c75f97a63379657f2b263f65292"
+    },
+    {
+      "version": "021_legacy_telemetry_evidence.sql",
+      "checksum": "577d9d9435d621a3479178c858c28e75bcd3f86abdd6491c37717de545a3b137"
+    },
+    {
+      "version": "022_marketing_pause_recovery_attempts.sql",
+      "checksum": "ac1181cd8b334cd0a5772d31d5f09929df394426c36df17d3844f937a0cb0b7d"
+    },
+    {
+      "version": "023_marketing_product_facts.sql",
+      "checksum": "f3a59c240ba2c6f61bd07c5c4d2a2538685d9abb08c5adba9802a7809b2062fa"
+    },
+    {
+      "version": "024_marketing_keyword_research.sql",
+      "checksum": "ef465f7f630ac0edb602a3a7da09b9700a6c0095725f4f793d1c1eb57799be20"
+    },
+    {
+      "version": "025_marketing_revision_products.sql",
+      "checksum": "376541df23fc6ed1c6d257c3fcd52bee6e8db5c28dd19189220ebd3cc620eece"
+    },
+    {
+      "version": "026_search_portfolio_shadow.sql",
+      "checksum": "54e449bed41a6a6bfbaf6890f36b2c6d1c48aafad4226400f961c2660adc0ee8"
+    },
+    {
+      "version": "027_marketing_attribution_links.sql",
+      "checksum": "6f24c5a1e05fe87f6c816024b95671d61cd499b68ca564ba562535e7806daa91"
+    },
+    {
+      "version": "028_marketing_consent_touchpoints.sql",
+      "checksum": "f732578fad0a7d50df83ed971c79b2b06342f707034c0967b864b8640b05e9aa"
+    },
+    {
+      "version": "029_marketing_destination_pools.sql",
+      "checksum": "10e517cc537355604962f59662486d24f5ba7aad110a567ae01e0afbb4afd6e3"
+    },
+    {
+      "version": "030_marketing_spatial_stories.sql",
+      "checksum": "50990d62f3c8cee903269789e8247872adf3c62c00b71735ec5f12f50e063779"
+    },
+    {
+      "version": "031_marketing_inquiry_attribution.sql",
+      "checksum": "312e6258b8a79107f2a2ee4d65afb3deceac8f94be5c1b30f88ccd6fe912ec91"
+    },
+    {
+      "version": "032_marketing_adtech_registry.sql",
+      "checksum": "f0e83c16233563beb1aeb123df6ee2a07dad0e424f297bb3870ac0edfd538f2f"
+    },
+    {
+      "version": "033_marketing_adtech_corridors.sql",
+      "checksum": "aac5b96f4a244ce8b7e045152b8e45b5a3ef0539095c28fa110c28a2c269f49f"
+    },
+    {
+      "version": "034_marketing_adtech_bindings.sql",
+      "checksum": "1efe17cc3d24d9e5f8559a58cdae626395deff4bbb78a040f8e1d3e5c7668a76"
+    },
+    {
+      "version": "035_marketing_corridor_inference.sql",
+      "checksum": "9f0fa5878095080d5f4b8ecce613e0a84d409e59b09ef5bc4d6e9109c5683f98"
+    },
+    {
+      "version": "036_internal_organization_iam.sql",
+      "checksum": "365ec8a7c6d0e370c8c474ac26eff04fff207c3d51218e019c5f233fcf382cf4"
+    },
+    {
+      "version": "037_conversation_delivery.sql",
+      "checksum": "5d13517eb755ca299e3c98cdec50319efb2776057962b10435852af0c0f82377"
+    },
+    {
+      "version": "038_service_cases.sql",
+      "checksum": "3dcc2f52db2298b1cf11d741afb1571df36ddb0e3db7153b8c88d9b249a4a130"
+    },
+    {
+      "version": "039_conversation_notification_preferences.sql",
+      "checksum": "47ce2455a8183e243483e8814a6bc8e7a68dd775ee8509ef0afd0270101004b9"
+    },
+    {
+      "version": "040_service_assignment_dispatch.sql",
+      "checksum": "406e409b074c5e156a9cce5ba9bbba6f60c694b5ab2132ed10bf4646d646cda4"
+    }
+  ],
+  "endpointSha256": "895a2980a2e698fd8d8c4c4de9a0b55e9707810aae1d9d0aec2a714423087c54",
+  "databaseSha256": "693fe5919fc229a2cf404ad99e03e8e9277fa4a6d34e88a0d4224d81b0b057a8",
+  "loginSha256": "6f198191100386e1f0c093fc1c902c0520c6382059d75fb4743ec1ec75cc7842",
+  "connected": {
+    "transactionReadOnly": true,
+    "currentRoleSha256": "6f198191100386e1f0c093fc1c902c0520c6382059d75fb4743ec1ec75cc7842",
+    "superuser": false,
+    "bypassRls": true,
+    "createRole": true,
+    "createDatabase": true,
+    "replication": true
+  },
+  "historyTableExists": true,
+  "history": [
+    {
+      "version": "001_add_listings_slug.sql",
+      "checksum": "5c89756fa1ab553e2c9373355c13415369db80c9e079f94cb5229e421e043210"
+    },
+    {
+      "version": "002_add_listings_publication_status.sql",
+      "checksum": "1fef345f692b1806a785b2755eea6f937031a0e4be611ce3e81cce6475165f70"
+    },
+    {
+      "version": "003_canonical_room_and_media_authority.sql",
+      "checksum": "50b00b35ac7ac9f7f881d9bc5d2dc5dce1222ba2ad4af211e0123bcf25c5c0ca"
+    },
+    {
+      "version": "004_canonical_constraints.sql",
+      "checksum": "25923896ef6c915e7bbb58aaa1b84080ecbb740dfdcdf4043b714bf4bd4996bc"
+    },
+    {
+      "version": "005_inventory_days_and_atomic_holds.sql",
+      "checksum": "d367bdc41fd6ba1109babebdf2680e3ed27ec52f9f8a2d789ca6cf07843ab39d"
+    },
+    {
+      "version": "006_legacy_calendar_block_mapping.sql",
+      "checksum": "52a4dd349620cf1248050c98c9c0e4325751e4ec1c9e5c6b7b72bafb76f89a8f"
+    },
+    {
+      "version": "007_legacy_conflict_ledger_uniqueness.sql",
+      "checksum": "59be809281f5f80f205f0e81d43d0d0c441171afaa528dc6dffaec39f304e7cc"
+    },
+    {
+      "version": "009_harvo_marketing_finance.sql",
+      "checksum": "25ca2c36169fed0b0b347b8341f61307007885dfbb51e60c276cbd310c6508a8"
+    },
+    {
+      "version": "010_harvo_marketing_workflow.sql",
+      "checksum": "89023e5f4ab669a1615fe0f1f32566727f14e87b2d26e27f7fb0e2fe6c77df0e"
+    },
+    {
+      "version": "011_harvo_marketing_measurement.sql",
+      "checksum": "616a76335587c7fbc00490a6d6530707f5af2738e36e680bf3313a949cdf44c2"
+    },
+    {
+      "version": "012_harvo_marketing_settlement.sql",
+      "checksum": "aa96bf24b4c84c9d06bfd440f8726b57ca067f587f53d9531801c730aa79c714"
+    },
+    {
+      "version": "013_harvo_marketing_conversion_delivery.sql",
+      "checksum": "1a0c0f2fa329a5ecab95569b9cca8120f21236e4e02b7bed94868d1e47709f24"
+    },
+    {
+      "version": "014_harvo_marketing_request_limits.sql",
+      "checksum": "3441d1033c7793ec107d2f8f08b90f88bda8bde263dcc08de2abb849142cda98"
+    },
+    {
+      "version": "015_harvo_marketing_creative_review.sql",
+      "checksum": "561c3286bf368f9c6cf6538ea1398a311c877d5031199944f1a8bc992eb6f79a"
+    },
+    {
+      "version": "016_harvo_google_invoice_imports.sql",
+      "checksum": "14fd5acf3c0454162004adfb05394e808865e01ecd3369af878edf1b526b2a4d"
+    },
+    {
+      "version": "017_calendar_operation_audit.sql",
+      "checksum": "2a8112c3bdc79e0b52639754ed3ba431a1413231c9a3b542cb365e72bdbeb2d5"
+    },
+    {
+      "version": "018_outreach_lead_tenant_boundary.sql",
+      "checksum": "f6d9c0f0cf81afd4d1eb1a52e8ecf3d56e23663e30aaaf8f79c58c01f14b4c59"
+    },
+    {
+      "version": "019_marketing_operational_isolation.sql",
+      "checksum": "9a20aa25a07db45d4310674a3ad831e9c864ad3378f307e060f13769df36b4d7"
+    },
+    {
+      "version": "020_marketing_pause_recovery.sql",
+      "checksum": "0fdddc26011508c082c7cf792d22bb53d0d22c75f97a63379657f2b263f65292"
+    },
+    {
+      "version": "021_legacy_telemetry_evidence.sql",
+      "checksum": "577d9d9435d621a3479178c858c28e75bcd3f86abdd6491c37717de545a3b137"
+    },
+    {
+      "version": "022_marketing_pause_recovery_attempts.sql",
+      "checksum": "ac1181cd8b334cd0a5772d31d5f09929df394426c36df17d3844f937a0cb0b7d"
+    },
+    {
+      "version": "023_marketing_product_facts.sql",
+      "checksum": "f3a59c240ba2c6f61bd07c5c4d2a2538685d9abb08c5adba9802a7809b2062fa"
+    },
+    {
+      "version": "024_marketing_keyword_research.sql",
+      "checksum": "ef465f7f630ac0edb602a3a7da09b9700a6c0095725f4f793d1c1eb57799be20"
+    },
+    {
+      "version": "025_marketing_revision_products.sql",
+      "checksum": "376541df23fc6ed1c6d257c3fcd52bee6e8db5c28dd19189220ebd3cc620eece"
+    },
+    {
+      "version": "026_search_portfolio_shadow.sql",
+      "checksum": "54e449bed41a6a6bfbaf6890f36b2c6d1c48aafad4226400f961c2660adc0ee8"
+    },
+    {
+      "version": "027_marketing_attribution_links.sql",
+      "checksum": "6f24c5a1e05fe87f6c816024b95671d61cd499b68ca564ba562535e7806daa91"
+    },
+    {
+      "version": "028_marketing_consent_touchpoints.sql",
+      "checksum": "f732578fad0a7d50df83ed971c79b2b06342f707034c0967b864b8640b05e9aa"
+    },
+    {
+      "version": "029_marketing_destination_pools.sql",
+      "checksum": "10e517cc537355604962f59662486d24f5ba7aad110a567ae01e0afbb4afd6e3"
+    },
+    {
+      "version": "030_marketing_spatial_stories.sql",
+      "checksum": "50990d62f3c8cee903269789e8247872adf3c62c00b71735ec5f12f50e063779"
+    },
+    {
+      "version": "031_marketing_inquiry_attribution.sql",
+      "checksum": "312e6258b8a79107f2a2ee4d65afb3deceac8f94be5c1b30f88ccd6fe912ec91"
+    },
+    {
+      "version": "032_marketing_adtech_registry.sql",
+      "checksum": "f0e83c16233563beb1aeb123df6ee2a07dad0e424f297bb3870ac0edfd538f2f"
+    },
+    {
+      "version": "033_marketing_adtech_corridors.sql",
+      "checksum": "aac5b96f4a244ce8b7e045152b8e45b5a3ef0539095c28fa110c28a2c269f49f"
+    },
+    {
+      "version": "034_marketing_adtech_bindings.sql",
+      "checksum": "1efe17cc3d24d9e5f8559a58cdae626395deff4bbb78a040f8e1d3e5c7668a76"
+    },
+    {
+      "version": "035_marketing_corridor_inference.sql",
+      "checksum": "9f0fa5878095080d5f4b8ecce613e0a84d409e59b09ef5bc4d6e9109c5683f98"
+    },
+    {
+      "version": "036_internal_organization_iam.sql",
+      "checksum": "365ec8a7c6d0e370c8c474ac26eff04fff207c3d51218e019c5f233fcf382cf4"
+    },
+    {
+      "version": "037_conversation_delivery.sql",
+      "checksum": "5d13517eb755ca299e3c98cdec50319efb2776057962b10435852af0c0f82377"
+    },
+    {
+      "version": "038_service_cases.sql",
+      "checksum": "3dcc2f52db2298b1cf11d741afb1571df36ddb0e3db7153b8c88d9b249a4a130"
+    },
+    {
+      "version": "039_conversation_notification_preferences.sql",
+      "checksum": "47ce2455a8183e243483e8814a6bc8e7a68dd775ee8509ef0afd0270101004b9"
+    },
+    {
+      "version": "040_service_assignment_dispatch.sql",
+      "checksum": "406e409b074c5e156a9cce5ba9bbba6f60c694b5ab2132ed10bf4646d646cda4"
+    },
+    {
+      "version": "041_stays_canonical_commerce.sql",
+      "checksum": "c2ca50ab312f406a7b9c460880e0b9703b2e31803df38f7aae276acde2147dff"
+    },
+    {
+      "version": "042_marketing_creative_packages.sql",
+      "checksum": "012e11eb0777f9c6a5796b295e0c4f7222e1dfe76a62f24633d2cf246a793fa8"
+    },
+    {
+      "version": "043_worker_daemon_and_circuit_breaker.sql",
+      "checksum": "1a066cdb24bd5f380e637f22ca972793d19338e770f23b67f06f0852afeace49"
+    },
+    {
+      "version": "044_feeder_corridors_and_godmode_targeting.sql",
+      "checksum": "befcbe236dbdf96110cfe88c10ab74f11d57b470d36a6130691801f659ab0c18"
+    },
+    {
+      "version": "045_multi_role_security_and_rls.sql",
+      "checksum": "1674caab502189e9c496c0ff2f93c91c5dfdd1c2ff6e44ea3f256967f0d1e950"
+    },
+    {
+      "version": "046_canary_execution_and_pilot_certification.sql",
+      "checksum": "b5ea22bab44517cd2406e8c7e31ef42ff84b1fa5ea510ba7f648ae6eb6f0978b"
+    },
+    {
+      "version": "047_campaign_flight_controls_and_drain_requests.sql",
+      "checksum": "a3d4a1b91ea5c3e00c208803b0611354a7fc520050d5a43953696bc44ce7369e"
+    }
+  ],
+  "pending": [],
+  "unknown": [
+    {
+      "version": "041_stays_canonical_commerce.sql",
+      "checksum": "c2ca50ab312f406a7b9c460880e0b9703b2e31803df38f7aae276acde2147dff"
+    },
+    {
+      "version": "042_marketing_creative_packages.sql",
+      "checksum": "012e11eb0777f9c6a5796b295e0c4f7222e1dfe76a62f24633d2cf246a793fa8"
+    },
+    {
+      "version": "043_worker_daemon_and_circuit_breaker.sql",
+      "checksum": "1a066cdb24bd5f380e637f22ca972793d19338e770f23b67f06f0852afeace49"
+    },
+    {
+      "version": "044_feeder_corridors_and_godmode_targeting.sql",
+      "checksum": "befcbe236dbdf96110cfe88c10ab74f11d57b470d36a6130691801f659ab0c18"
+    },
+    {
+      "version": "045_multi_role_security_and_rls.sql",
+      "checksum": "1674caab502189e9c496c0ff2f93c91c5dfdd1c2ff6e44ea3f256967f0d1e950"
+    },
+    {
+      "version": "046_canary_execution_and_pilot_certification.sql",
+      "checksum": "b5ea22bab44517cd2406e8c7e31ef42ff84b1fa5ea510ba7f648ae6eb6f0978b"
+    },
+    {
+      "version": "047_campaign_flight_controls_and_drain_requests.sql",
+      "checksum": "a3d4a1b91ea5c3e00c208803b0611354a7fc520050d5a43953696bc44ce7369e"
+    }
+  ],
+  "changed": [],
+  "invalidChecksums": [],
+  "duplicateVersions": [],
+  "exactSourceMatch": false,
+  "tables": [
+    "admin_audit_logs",
+    "async_webhook_queue",
+    "backfill_conflict_records",
+    "booking_hold_nights",
+    "booking_holds",
+    "bookings",
+    "calendar_operations",
+    "calendar_prices",
+    "campaign_creative_variants",
+    "campaign_daily_rollups",
+    "campaign_financial_contracts",
+    "campaign_godmode_targeting",
+    "campaign_metrics",
+    "campaign_raw_event_logs",
+    "canary_execution_registry",
+    "canary_readback_verifications",
+    "circuit_breaker_events",
+    "conversation_notification_preference_events",
+    "conversation_notification_preferences",
+    "conversation_read_cursors",
+    "dco_evaluation_transactions",
+    "dco_external_actions",
+    "dead_letter_queue",
+    "encho_distributed_worker_locks",
+    "experience_bookings",
+    "experience_messages",
+    "experience_reviews",
+    "experience_videos",
+    "experience_wishlists",
+    "experiences",
+    "host_marketing_campaigns",
+    "host_meta_identities",
+    "host_outreach_leads",
+    "host_social_posts",
+    "host_wallets",
+    "inbound_webhooks",
+    "internal_access_review_items",
+    "internal_access_reviews",
+    "internal_action_approvals",
+    "internal_action_authorizations",
+    "internal_assignment_commands",
+    "internal_break_glass_events",
+    "internal_iam_current_policy",
+    "internal_iam_events",
+    "internal_iam_policy_versions",
+    "internal_invitation_identity_receipts",
+    "internal_membership_grant_revocations",
+    "internal_membership_grants",
+    "internal_organization_invitations",
+    "internal_organization_memberships",
+    "internal_organizations",
+    "internal_permission_catalog",
+    "internal_role_current_versions",
+    "internal_role_definitions",
+    "internal_role_permissions",
+    "internal_role_versions",
+    "internal_service_assignment_dispatches",
+    "internal_staff_sessions",
+    "internal_step_up_challenges",
+    "internal_work_assignments",
+    "internal_workforce_current_factor_policy",
+    "internal_workforce_current_identity_policy",
+    "internal_workforce_factor_policies",
+    "internal_workforce_identity_policies",
+    "internal_workforce_lifecycle_commands",
+    "internal_workforce_login_challenges",
+    "internal_workforce_login_receipts",
+    "internal_workforce_passkey_ceremonies",
+    "internal_workforce_passkey_enrollments",
+    "internal_workforce_passkey_receipts",
+    "internal_workforce_passkey_state",
+    "inventory_days",
+    "lead_inquiries",
+    "lead_lifecycle_events",
+    "lead_notification_intents",
+    "lead_security_audit_logs",
+    "ledger_entries",
+    "ledger_lines",
+    "legacy_block_conflict_ledger",
+    "listing_pricing_sync_events",
+    "listings",
+    "listings_drafts",
+    "marketing_adtech_current_release",
+    "marketing_adtech_profile_versions",
+    "marketing_adtech_release_members",
+    "marketing_adtech_releases",
+    "marketing_adtech_strategy_audits",
+    "marketing_adtech_tier_profiles",
+    "marketing_ai_attempts",
+    "marketing_attribution_links",
+    "marketing_attribution_touchpoints",
+    "marketing_booking_measurements",
+    "marketing_campaign_drain_requests",
+    "marketing_campaign_revisions",
+    "marketing_campaign_search_scopes",
+    "marketing_campaign_search_targets",
+    "marketing_campaign_strategy_bindings",
+    "marketing_campaign_workflows",
+    "marketing_checkout_attempts",
+    "marketing_commercial_preferences",
+    "marketing_conversion_deliveries",
+    "marketing_conversion_delivery_events",
+    "marketing_conversion_outbox",
+    "marketing_corridor_current_versions",
+    "marketing_corridor_geography_evidence",
+    "marketing_corridor_inference_jobs",
+    "marketing_corridor_inference_policy",
+    "marketing_corridor_inference_proposals",
+    "marketing_corridor_inference_rate",
+    "marketing_corridor_inference_requests",
+    "marketing_create_requests",
+    "marketing_creative_assets",
+    "marketing_creative_derivatives",
+    "marketing_creative_events",
+    "marketing_creative_packages",
+    "marketing_daily_rollups",
+    "marketing_destination_corridor_versions",
+    "marketing_destination_corridors",
+    "marketing_destination_pools",
+    "marketing_fact_snapshots",
+    "marketing_feeder_corridor_definitions",
+    "marketing_finance_accounts",
+    "marketing_finance_authorizations",
+    "marketing_finance_captures",
+    "marketing_finance_journals",
+    "marketing_finance_lines",
+    "marketing_finance_policies",
+    "marketing_finance_provider_events",
+    "marketing_finance_quotes",
+    "marketing_finance_refund_operations",
+    "marketing_finance_refunds",
+    "marketing_finance_reservations",
+    "marketing_google_invoice_imports",
+    "marketing_inquiry_attributions",
+    "marketing_jobs",
+    "marketing_keyword_customer_slots",
+    "marketing_keyword_research",
+    "marketing_measurement_consents",
+    "marketing_measurement_events",
+    "marketing_measurement_payloads",
+    "marketing_pause_recoveries",
+    "marketing_pause_recovery_attempts",
+    "marketing_pool_events",
+    "marketing_pool_exposures",
+    "marketing_pool_memberships",
+    "marketing_pool_spend_claims",
+    "marketing_request_limits",
+    "marketing_revision_products",
+    "marketing_search_conflict_assessments",
+    "marketing_search_conflict_reviews",
+    "marketing_settlement_allocations",
+    "marketing_settlement_documents",
+    "marketing_settlement_proposals",
+    "marketing_settlement_reviews",
+    "marketing_spatial_stories",
+    "marketing_spatial_story_reviews",
+    "marketing_workflow_events",
+    "media_assets",
+    "messages",
+    "meta_api_traces",
+    "meta_external_truth",
+    "meta_publishing_dlq",
+    "meta_publishing_events",
+    "meta_publishing_transactions",
+    "meta_reconciliation_incidents",
+    "notification_intent_events",
+    "notification_intents",
+    "offers",
+    "operation_idempotency_keys",
+    "platform_audit_log",
+    "processed_payments",
+    "processed_webhook_events",
+    "provider_entities",
+    "provider_publishing_transactions",
+    "retargeting_pixel_events",
+    "reviews",
+    "room_calendar_blocks",
+    "room_types",
+    "schema_migrations",
+    "seo_configurations",
+    "service_case_content_access_receipts",
+    "service_case_events",
+    "service_case_internal_notes",
+    "service_case_requests",
+    "service_case_runtime_bindings",
+    "service_cases",
+    "settings",
+    "soft_exit_leads",
+    "stays_holds",
+    "stays_orders",
+    "stays_quotes",
+    "stays_webhooks",
+    "threads",
+    "users",
+    "variant_daily_rollups",
+    "variant_meta_snapshots",
+    "variant_raw_event_logs",
+    "wallet_accounts",
+    "wallet_transactions",
+    "webhook_dlq",
+    "wishlists"
+  ],
+  "status": "OBSERVED_READ_ONLY"
+}

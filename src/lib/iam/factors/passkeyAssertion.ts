@@ -38,7 +38,7 @@ export const passkeyCeremonySchema=z.object({
   createdAt:timestamp,expiresAt:timestamp,sessionExpiresAt:timestamp,
 }).strict();
 export type PasskeyCeremony=z.infer<typeof passkeyCeremonySchema>;
-const assertionSchema=z.object({id:credentialId,rawId:credentialId,type:z.literal('public-key'),
+export const passkeyAssertionResponseSchema=z.object({id:credentialId,rawId:credentialId,type:z.literal('public-key'),
   response:z.object({clientDataJSON:encoded(2800),authenticatorData:encoded(5500),signature:encoded(1400),userHandle:encoded(86).optional()}).strict(),
   authenticatorAttachment:z.enum(['platform','cross-platform']).optional(),clientExtensionResults:z.object({}).strict(),
 }).strict();
@@ -67,7 +67,7 @@ export class PasskeyAssertionVerifier {
     const parsedPolicy=passkeyPolicySchema.safeParse(input.policy);
     if(!parsedPolicy.success || parsedPolicy.data.environment==='PRODUCTION'&&parsedPolicy.data.approvalStatus!=='APPROVED')throw new PasskeyAssertionError('FACTOR_POLICY_UNAVAILABLE');
     const policy=parsedPolicy.data;
-    const credential=reviewedPasskeyCredentialSchema.safeParse(input.credential),ceremony=passkeyCeremonySchema.safeParse(input.ceremony),response=assertionSchema.safeParse(input.response);
+    const credential=reviewedPasskeyCredentialSchema.safeParse(input.credential),ceremony=passkeyCeremonySchema.safeParse(input.ceremony),response=passkeyAssertionResponseSchema.safeParse(input.response);
     if(!credential.success||!ceremony.success||!response.success)throw new PasskeyAssertionError('FACTOR_INVALID');
     const c=credential.data,b=ceremony.data,r=response.data,now=this.now();
     if(Date.parse(b.expiresAt)<=now || Date.parse(b.sessionExpiresAt)<=now)throw new PasskeyAssertionError('FACTOR_EXPIRED');

@@ -1,3 +1,4 @@
+import {invitationWriterFunctions,isIsolatedWorkforceWriter} from './isolatedWriterBoundary.js';
 import {createHash, randomBytes} from 'node:crypto';
 import type pg from 'pg';
 import {z} from 'zod';
@@ -147,14 +148,7 @@ export class WorkforceInvitations {
     try {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout='5s'");await client.query("SET LOCAL statement_timeout='10s'");
-      const safe=(await client.query<{safe:boolean}>(`SELECT NOT(r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR r.rolcreatedb OR has_schema_privilege(current_user,'public','CREATE'))
-        AND session_user=current_user
-        AND NOT EXISTS(SELECT 1 FROM pg_roles inherited WHERE pg_has_role(current_user,inherited.oid,'MEMBER') AND (inherited.rolsuper OR inherited.rolbypassrls OR inherited.rolcreaterole OR inherited.rolcreatedb))
-        AND NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p')
-          AND (pg_has_role(current_user,c.relowner,'MEMBER') OR has_table_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER')
-            OR has_any_column_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,REFERENCES')))
-        AND has_function_privilege(current_user,'internal_iam_accept_invitation(text,text,jsonb,text,text)','EXECUTE')
-        AND NOT has_function_privilege(current_user,'internal_iam_issue_invitation(jsonb,uuid,text,text)','EXECUTE') AS safe FROM pg_roles r WHERE r.rolname=current_user`)).rows[0]?.safe;
+      const safe=await isIsolatedWorkforceWriter(client,invitationWriterFunctions);
       if (!safe) throw new WorkforceInvitationError('IDENTITY_WRITER_UNAVAILABLE');
       const value=(await client.query<{result:unknown}>('SELECT internal_iam_accept_invitation($1,$2,$3::jsonb,$4,$5) AS result',[
         digest(input.invitationToken),input.expectedGrantBundleHash,JSON.stringify(proof.data),this.environment,input.principal.correlationId,
@@ -164,8 +158,8 @@ export class WorkforceInvitations {
       if (result.outcome==='EXPIRED') throw new WorkforceInvitationError('INVITATION_EXPIRED');
       return result;
     } catch (error) {
+      if (committing) {destroy=true;throw new WorkforceInvitationError('OUTCOME_UNKNOWN');}
       try {await client.query('ROLLBACK');} catch {destroy=true;}
-      if (committing) throw new WorkforceInvitationError('OUTCOME_UNKNOWN');
       if (error instanceof WorkforceInvitationError) throw error;
       throw new WorkforceInvitationError('INVITATION_UNAVAILABLE');
     } finally {client.release(destroy);}

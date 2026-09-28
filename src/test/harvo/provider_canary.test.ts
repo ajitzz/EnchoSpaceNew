@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
-import { existsSync, unlinkSync } from 'node:fs';
+import { existsSync, unlinkSync, readFileSync, mkdtempSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { fixtureRoot } from '../../../scripts/compliance/fixture-output.mjs';
 import {
   auditProviderConfiguration,
   validateCanaryCampaignPayload,
@@ -73,7 +74,7 @@ describe('CR1 Phase P8.3 & Track 3: Provider Canary Readback & Audit Runner', ()
       );
     });
 
-    it('Scenario 2: Enforces Meta Housing special category for hospitality ads', () => {
+    it('Scenario 2: requires account capability evidence instead of guessing a universal Housing category', () => {
       const result = validateCanaryCampaignPayload('meta', {
         name: 'Malibu Villa Canary',
         status: 'PAUSED',
@@ -81,16 +82,16 @@ describe('CR1 Phase P8.3 & Track 3: Provider Canary Readback & Audit Runner', ()
       });
       expect(result.valid).toBe(false);
       expect(result.errors).toContain(
-        'META_HOUSING_POLICY_VIOLATION: Meta real-estate/hospitality campaigns must declare special_ad_categories: ["HOUSING"]'
+        'META_POLICY_CAPABILITY_REQUIRED'
       );
     });
 
-    it('Scenario 3: Valid PAUSED housing canary payload passes cleanly', () => {
+    it('Scenario 3: accepts only the supplied released capability category (empty is not Housing)', () => {
       const result = validateCanaryCampaignPayload('meta', {
         name: 'Malibu Villa Canary',
         status: 'PAUSED',
-        special_ad_categories: ['HOUSING'],
-      });
+        special_ad_categories: [],
+      }, { specialAdCategories: [], releaseHash: 'a'.repeat(64) });
       expect(result.valid).toBe(true);
       expect(result.errors.length).toBe(0);
     });
@@ -104,6 +105,7 @@ describe('CR1 Phase P8.3 & Track 3: Provider Canary Readback & Audit Runner', ()
       const mockClient = {
         getCampaign: async (id: string) => ({
           provider: 'meta',
+          accountRef: 'expected-account', observedAt: new Date().toISOString(),
           campaignId: id,
           status: 'PAUSED',
           spendCents: 0,
@@ -111,7 +113,7 @@ describe('CR1 Phase P8.3 & Track 3: Provider Canary Readback & Audit Runner', ()
         }),
       };
 
-      const receipt = await verifyPausedCanaryReadback(mockClient, 'meta_camp_123');
+      const receipt = await verifyPausedCanaryReadback(mockClient, 'meta_camp_123', { provider: 'meta', accountRef: 'expected-account' });
       expect(receipt.verified).toBe(true);
       expect(receipt.status).toBe('PAUSED');
       expect(receipt.spendCents).toBe(0);
@@ -138,6 +140,7 @@ describe('CR1 Phase P8.3 & Track 3: Provider Canary Readback & Audit Runner', ()
       const mockClient = {
         getCampaign: async (id: string) => ({
           provider: 'meta',
+          accountRef: 'expected-account', observedAt: new Date().toISOString(),
           campaignId: id,
           status: 'PAUSED',
           spendCents: 1500, // Unexpected financial leakage!
@@ -155,7 +158,7 @@ describe('CR1 Phase P8.3 & Track 3: Provider Canary Readback & Audit Runner', ()
   // TEST SUITE 4: Canary Receipt Generator (generateCanaryReceipt)
   // ──────────────────────────────────────────────────────────────────────────
   describe('Canary Receipt Artifact Generation', () => {
-    const testReceiptPath = resolve(process.cwd(), 'docs/harvo/receipts/test_canary_receipt.json');
+    const testReceiptPath = resolve(fixtureRoot(), `canary-${Date.now()}`, 'test-receipt.json');
 
     afterAll(() => {
       if (existsSync(testReceiptPath)) {
@@ -172,10 +175,26 @@ describe('CR1 Phase P8.3 & Track 3: Provider Canary Readback & Audit Runner', ()
         spendCents: 0,
         impressions: 0,
         timestamp: new Date().toISOString(),
+        access_token: 'secret-must-not-reach-artifact',
       };
 
       const path = generateCanaryReceipt(receipt, testReceiptPath);
       expect(existsSync(path)).toBe(true);
+      expect(readFileSync(path, 'utf8')).not.toContain('secret-must-not-reach-artifact');
+      expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({ classification: 'FIXTURE', productionGateEligible: false, status: 'NOT_EVIDENCE' });
     });
   });
+  it.each([undefined, null, '', '0', -1, NaN])('rejects unknown or invalid spend %s', async spendCents => {
+    await expect(verifyPausedCanaryReadback({ getCampaign: async () => ({ provider: 'meta', campaignId: 'campaign', status: 'PAUSED', spendCents, impressions: 0 }) }, 'campaign')).rejects.toThrow('CANARY_OBSERVATION_INCOMPLETE');
+  });
+  it('rejects wrong provider/account/campaign and stale observations', async () => {
+    const expected = { provider: 'meta', accountRef: 'account', now: Date.parse('2026-09-28T10:00:00Z') };
+    const data = { provider: 'meta', accountRef: 'account', campaignId: 'campaign', status: 'PAUSED', spendCents: 0, impressions: 0, observedAt: '2026-09-28T10:00:00Z' };
+    for (const patch of [{ provider: 'google' }, { accountRef: 'different' }, { campaignId: 'different' }]) {
+      await expect(verifyPausedCanaryReadback({ getCampaign: async () => ({ ...data, ...patch }) }, 'campaign', expected)).rejects.toThrow('CANARY_SCOPE_MISMATCH');
+    }
+    await expect(verifyPausedCanaryReadback({ getCampaign: async () => ({ ...data, observedAt: '2026-09-27T10:00:00Z' }) }, 'campaign', expected)).rejects.toThrow('CANARY_OBSERVATION_STALE');
+    await expect(verifyPausedCanaryReadback({ getCampaign: async () => ({ ...data, impressions: 1 }) }, 'campaign', expected)).rejects.toThrow('CANARY_DELIVERY_DRIFT');
+  });
+
 });

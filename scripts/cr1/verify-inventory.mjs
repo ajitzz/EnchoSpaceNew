@@ -15,7 +15,12 @@ const sources = new Map([
   ['src/server/marketing/measurementRouter.ts', '/api/marketing/measurement'],
   ['src/server/operations/router.ts', '/api/operations/v1'],
   ['src/server/operations/sessionRouter.ts', '/api/operations/v1/session'],
+  ['src/server/operations/workforceCommandRouter.ts', '/api/operations/v1/workforce/commands'],
+  ['src/server/operations/workforceFactorRouter.ts', '/api/operations/v1/workforce/factor'],
+  ['src/server/admin/workforceRouter.ts', '/api/admin/workforce'],
   ['src/server/conversations/router.ts', '/api'],
+  // Declared but not composed in server.ts. Relative paths are not live API claims.
+  ['src/server/conversations/notificationRouter.ts', ''],
   ['src/server/conversations/serviceRouter.ts', new Map([
     ['createParticipantServiceRouter', '/api/conversations/v1'],
     ['createStaffServiceRouter', '/api/operations/v1/service'],
@@ -108,7 +113,7 @@ function tableOccurrences(file, text, sql) {
   return found;
 }
 
-function mountedPrefix(file, receiver, factory) {
+function mountedPrefixes(file, receiver, factory) {
   const source = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true);
   const prefixes = [];
   visit(source, node => {
@@ -119,6 +124,10 @@ function mountedPrefix(file, receiver, factory) {
       prefixes.push(...values(node.arguments[0]));
     }
   });
+  return prefixes;
+}
+function mountedPrefix(file, receiver, factory) {
+  const prefixes=mountedPrefixes(file, receiver, factory);
   if (prefixes.length !== 1) throw new Error(`Expected one mounted prefix for ${factory}; found ${prefixes.length}`);
   return prefixes[0];
 }
@@ -131,10 +140,16 @@ export function collectInventory() {
     ['src/server/marketing/measurementRouter.ts', null, mountedPrefix('server.ts', 'app', 'createMeasurementRouter')],
     ['src/server/operations/router.ts', null, mountedPrefix('server.ts', 'app', 'createOperationsRouter')],
     ['src/server/operations/sessionRouter.ts', null, mountedPrefix('server.ts', 'app', 'createWorkforceSessionRouter')],
+    ['src/server/operations/workforceCommandRouter.ts', null, mountedPrefix('server.ts', 'app', 'createWorkforceCommandRouter')],
+    ['src/server/operations/workforceFactorRouter.ts', null, mountedPrefix('server.ts', 'app', 'createWorkforceFactorRouter')],
+    ['src/server/admin/workforceRouter.ts', null, mountedPrefix('server.ts', 'app', 'createAdminWorkforceRouter')],
     ['src/server/conversations/router.ts', null, mountedPrefix('server.ts', 'app', 'createConversationRouter')],
     ['src/server/conversations/serviceRouter.ts', 'createParticipantServiceRouter', mountedPrefix('server.ts', 'app', 'createParticipantServiceRouter')],
     ['src/server/conversations/serviceRouter.ts', 'createStaffServiceRouter', mountedPrefix('server.ts', 'app', 'createStaffServiceRouter')],
   ];
+  if(mountedPrefixes('server.ts','app','createParticipantNotificationRouter').length) {
+    throw new Error('Notification router now mounted; replace its explicit unmounted disposition and relative prefix');
+  }
   for (const [file, factory, prefix] of expectedMounts) {
     const registration = sources.get(file);
     const expected = registration instanceof Map ? registration.get(factory) : registration;

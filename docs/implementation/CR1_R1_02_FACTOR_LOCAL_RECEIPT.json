@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "card": "R1-02",
+  "status": "IN_PROGRESS",
+  "sliceDisposition": "READY_FOR_REVIEW",
+  "acceptance": "NOT_INDEPENDENTLY_ACCEPTED",
+  "scope": "Isolated factor/invitation writer guards and reviewed-passkey HTTP adapter; not a complete workforce UI",
+  "environment": "LOCAL_DISPOSABLE_POSTGRES_RESTRICTED_LOGIN_AND_SIGNED_AUTHENTICATOR_FIXTURES",
+  "recordedAt": "2026-09-28T18:28:39.813843+00:00",
+  "baselineCommit": "0e4c6fec2fe86f1b793760c5f7a3daf08bbf7508",
+  "stagedDiffSha256": "854471966ac51c7fbf44e69095990f5f5eb2892b772cc4aef9adfbb0f502a520",
+  "affectedTrackedDiffSha256": "36d5e9e24b07e0a0a52c1ae29b102279b8c97dd4f53e7c35e6f5b710ca8c4eed",
+  "sourceSha256": {
+    "src/lib/iam/isolatedWriterBoundary.ts": "b52bd0371b2d58655f41ab51a94e48d4874dc0dbcafcebaa295e86b762dd3bdd",
+    "src/lib/iam/factors/workforceStepUp.ts": "0e05ee9c93e2bf4916e41646e35aa377bb4cc7f743e550213f2dfcf007e47f01",
+    "src/lib/iam/factors/passkeyAssertion.ts": "6162f8ac8f221d028dd3f36b9ff162a1dff1d46a56555114d818e941c64332e0",
+    "src/lib/iam/workforceInvitations.ts": "012a9e63469c19d0d8994ce6121baa1c9f48cff82d5a2015580751ece2e240ef",
+    "src/server/deployment/iamFactorReadiness.ts": "fdae05632da10aa3b90b5be691a991469b40342b3e46f44d6eb50bc5d1d5c0fa",
+    "src/server/deployment/iamInvitationReadiness.ts": "badfc4f0121bad6f0aa040bedfc0ce6c824947707d4dc3f171f2444cd6d46f28",
+    "src/server/operations/workforceFactor.ts": "3796ddd08cdba14de4de33efebdab2a31996b261f4c288a0ccf291fb754ee47b",
+    "src/server/operations/workforceFactorRouter.ts": "69d28d7b1ffa0f6b1fa7e2f6e5abb3e2ba46b03d88b63948e311c145ce2f5a20",
+    "src/server/operations/workforceFactorRuntime.ts": "13abf838237e4c6abb584be4cfe475c9f88b8fb91712d76b3a7364ebb53a93aa",
+    "src/server/operations/workforceCommandRouter.ts": "ad56f3c3ec78634f0516c9a00765730288d1146c5fc57b6afdb74eae2102630a",
+    "src/test/harvo/cr1_workforce_step_up.test.ts": "afbc3a979be16d945b68ef6c2ffac056daf7c66e6670d2ede16870d063f06e53",
+    "src/test/harvo/cr1_workforce_invitations.test.ts": "463d1b5d636046d5165f8c38e880dcd6802352711b0955c08fc6be39cab16d1e",
+    "src/test/harvo/cr1_workforce_factor_runtime.test.ts": "e11b0233b0dafedc35bf6542df7a2390cd3bcba14fcbb5c18b436dbd1310d98c"
+  },
+  "sharedAuthorityDependency": {
+    "path": "src/server/deployment/runtimeDatabaseAuthority.ts",
+    "sha256": "0b510603f38af42fc543c9050473e0f87fe69b930c08b69be7cd9ff4be252470"
+  },
+  "tests": {
+    "latestDistinctPassed": 78,
+    "failed": 0,
+    "qualification": "Latest applicable result per file, not a full regression or production receipt. Pure runtime tests do not open remote connections.",
+    "files": {
+      "cr1_workforce_step_up.test.ts": 24,
+      "cr1_workforce_invitations.test.ts": 24,
+      "cr1_passkey_assertion.test.ts": 19,
+      "cr1_workforce_factor_runtime.test.ts": 5,
+      "cr1_workforce_commands_http.test.ts": 6
+    }
+  },
+  "commands": [
+    {
+      "command": "npx -y node@24 scripts/testing/run.mjs src/test/harvo/cr1_workforce_step_up.test.ts --reporter=dot",
+      "exitCode": 1,
+      "passed": 14,
+      "failed": 8,
+      "phase": "BEFORE authority repair"
+    },
+    {
+      "command": "npx -y node@24 scripts/testing/run.mjs src/test/harvo/cr1_workforce_step_up.test.ts src/test/harvo/cr1_workforce_invitations.test.ts --reporter=dot",
+      "exitCode": 0,
+      "passed": 48,
+      "phase": "FINAL"
+    },
+    {
+      "command": "npx -y node@24 scripts/testing/run.mjs src/test/cr1_passkey_assertion.test.ts src/test/harvo/cr1_workforce_factor_runtime.test.ts --reporter=dot",
+      "exitCode": 0,
+      "passed": 22,
+      "qualification": "Runtime suite then had3 tests; final5 below supersedes this subset."
+    },
+    {
+      "command": "npx -y node@24 scripts/testing/run.mjs src/test/harvo/cr1_workforce_factor_runtime.test.ts src/test/harvo/cr1_workforce_commands_http.test.ts --reporter=dot",
+      "exitCode": 0,
+      "passed": 11
+    },
+    {
+      "command": "npx -y node@24 node_modules/typescript/bin/tsc -p tsconfig.server.json --noEmit",
+      "exitCode": 0
+    },
+    {
+      "command": "npx -y node@24 node_modules/eslint/bin/eslint.js src/lib/iam/isolatedWriterBoundary.ts src/lib/iam/factors/workforceStepUp.ts src/lib/iam/factors/passkeyAssertion.ts src/lib/iam/workforceInvitations.ts src/server/deployment/iamFactorReadiness.ts src/server/deployment/iamInvitationReadiness.ts src/server/operations/workforceFactor.ts src/server/operations/workforceFactorRouter.ts src/server/operations/workforceFactorRuntime.ts src/server/operations/workforceCommandRouter.ts src/test/harvo/cr1_workforce_step_up.test.ts src/test/harvo/cr1_workforce_invitations.test.ts src/test/harvo/cr1_workforce_factor_runtime.test.ts",
+      "exitCode": 0
+    },
+    {
+      "command": "git diff --check -- src/lib/iam/isolatedWriterBoundary.ts src/lib/iam/factors/workforceStepUp.ts src/lib/iam/factors/passkeyAssertion.ts src/lib/iam/workforceInvitations.ts src/server/deployment/iamFactorReadiness.ts src/server/deployment/iamInvitationReadiness.ts src/server/operations/workforceFactor.ts src/server/operations/workforceFactorRouter.ts src/server/operations/workforceFactorRuntime.ts src/server/operations/workforceCommandRouter.ts src/test/harvo/cr1_workforce_step_up.test.ts src/test/harvo/cr1_workforce_invitations.test.ts src/test/harvo/cr1_workforce_factor_runtime.test.ts",
+      "exitCode": 0
+    }
+  ],
+  "durableAssertions": [
+    "NOINHERIT role grants are inspected before ceremony or invitation writes, including REPLICATION, database CREATE/ownership, schema CREATE, raw columns, sequence authority and unexpected public SECURITY DEFINER EXECUTE.",
+    "HTTP uses actual separate restricted LOGIN pools, signed Google-derived opaque session and ES256 fixture assertion. Duplicate proof records one receipt; invalid origin/org/body/consumer/duplicate cookie creates no ceremony.",
+    "Lost factor/invitation COMMIT acknowledgement discards the connection. Factor cannot reissue proof; invitation resolves by canonical exact replay. Existing counter/audit/revocation tests retained."
+  ],
+  "compatibility": [
+    "No applied migration bytes or numbers changed. Fixed EXECUTE grants and current canonical SQL functions reused.",
+    "Previously overprivileged factor/identity writers fail closed. Factor path is unavailable without explicit dedicated URL and existing reviewed enrollment/policies.",
+    "Only operational proof fields returned; no membership/session IDs, private assertion signature or credentials in successful completion response."
+  ],
+  "pending": [
+    "Independent peer review / integrated acceptance remains separate; protected card not self-accepted.",
+    "Reviewed enrollment discovery/projection is not available under current036 runtime grants; no manual UUID UI presented as complete.",
+    "Approved operational/factor policy, genuine enrollment provisioning/recovery, named deployment roles/TLS and staging evidence remain missing.",
+    "No real WebAuthn browser ceremony or staff UX completion claimed. Signed local authenticator fixture validates server cryptography only.",
+    "Broader R1-02 invitation browser, owner bootstrap and canonical staff command UI remain open."
+  ],
+  "rollback": "Disable factor route/runtime and leave legacy writes unavailable; do not restore permissive guards, automatic enrollment or consumer-admin staff promotion.",
+  "evidence": {
+    "docs/audits/cr1-remediation/r1-02/FACTOR_AUTHORITY_BEFORE.txt": "cb13036ff29101f36fc6a7567c3058fe502b65b8a8d3a52004b30c9909cdb4bd",
+    "docs/audits/cr1-remediation/r1-02/FACTOR_AUTHORITY_AFTER.txt": "3d7dbc83ecbc94788819a07dbca402099491aa99fd509be052cf2d6cc8588724",
+    "docs/audits/cr1-remediation/r1-02/FACTOR_FINAL.txt": "24d385d9420e1c2c18021cc5c3ac0efb800a1a1e8bdcead8067f4c9c9e7f409a",
+    "docs/audits/cr1-remediation/r1-02/FACTOR_CRYPTO_RUNTIME_FINAL.txt": "333e78e2098141385d40cf702be6939b41bb6484b5810013a9fab1ee66ed325b",
+    "docs/audits/cr1-remediation/r1-02/FACTOR_COMMAND_ROUTER_FINAL.txt": "314f34753f40c90b7b41fec6007b00b9b04229ec63a61cba5ee79a245f38a172",
+    "docs/audits/cr1-remediation/r1-02/FACTOR_SERVER_TYPECHECK_FINAL.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "docs/audits/cr1-remediation/r1-02/FACTOR_LINT_FINAL.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "compositionByParent": "Source observed at server.ts:1050: /api/operations/v1/workforce/factor mounted using isolated runtime and masked fault reporting before broad parser. Parent owns integration/inventory verification."
+}

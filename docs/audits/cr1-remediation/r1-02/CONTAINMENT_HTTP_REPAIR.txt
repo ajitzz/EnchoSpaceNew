@@ -1,0 +1,96 @@
+
+ RUN  v4.1.10 /Users/ajit/Documents/EnchoSpaceNew
+
+(node:4780) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:4780) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+··xxxx·······
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_workforce_commands_http.test.ts > R1-02 mounted canonical workforce HTTP on restricted PostgreSQL LOGIN > executes exact authorized command once with durable receipt and unchanged consumer role
+AssertionError: {"code":"WORKFORCE_UNAVAILABLE","error":"The workforce command was not accepted. Refresh access and current evidence.","correlationId":"de739cf5-25a7-4568-9495-0a169bdd0e7c","operationId":"1a8b0156-efbe-4b86-9ea5-c55395103398"}: expected 503 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 503
+
+ ❯ prepare src/test/harvo/cr1_workforce_commands_http.test.ts:46:98
+     44|     .set('Cookie',`__Host-encho_workforce=${credentials[name]}`).set('…
+     45|   const prepare=async(input:ReturnType<typeof body>)=>{
+     46|     const response=await send({...input,action:'PREPARE'});expect(resp…
+       |                                                                                                  ^
+     47|     const stepUpReceiptId=await fixture.issueFactor(fixture.principals…
+     48|     const requested=await send({...input,action:'REQUEST',stepUpReceip…
+ ❯ src/test/harvo/cr1_workforce_commands_http.test.ts:71:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_workforce_commands_http.test.ts > R1-02 mounted canonical workforce HTTP on restricted PostgreSQL LOGIN > requires distinct checker and canonical factor for protected authority
+AssertionError: {"code":"WORKFORCE_UNAVAILABLE","error":"The workforce command was not accepted. Refresh access and current evidence.","correlationId":"ad38eec7-f540-4366-83d4-888e77b7fa81","operationId":"60382f47-b6b9-48ad-b4c8-5d8de079c8b8"}: expected 503 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 503
+
+ ❯ prepare src/test/harvo/cr1_workforce_commands_http.test.ts:46:98
+     44|     .set('Cookie',`__Host-encho_workforce=${credentials[name]}`).set('…
+     45|   const prepare=async(input:ReturnType<typeof body>)=>{
+     46|     const response=await send({...input,action:'PREPARE'});expect(resp…
+       |                                                                                                  ^
+     47|     const stepUpReceiptId=await fixture.issueFactor(fixture.principals…
+     48|     const requested=await send({...input,action:'REQUEST',stepUpReceip…
+ ❯ src/test/harvo/cr1_workforce_commands_http.test.ts:81:46
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_workforce_commands_http.test.ts > R1-02 mounted canonical workforce HTTP on restricted PostgreSQL LOGIN > rejects revocation between review and execution and stale membership version
+AssertionError: {"code":"WORKFORCE_UNAVAILABLE","error":"The workforce command was not accepted. Refresh access and current evidence.","correlationId":"8ebd7826-e4da-4d94-8235-b421d2ee0d57","operationId":"b5bd88a4-803c-4f3e-914a-a5a815bfad0a"}: expected 503 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 503
+
+ ❯ prepare src/test/harvo/cr1_workforce_commands_http.test.ts:46:98
+     44|     .set('Cookie',`__Host-encho_workforce=${credentials[name]}`).set('…
+     45|   const prepare=async(input:ReturnType<typeof body>)=>{
+     46|     const response=await send({...input,action:'PREPARE'});expect(resp…
+       |                                                                                                  ^
+     47|     const stepUpReceiptId=await fixture.issueFactor(fixture.principals…
+     48|     const requested=await send({...input,action:'REQUEST',stepUpReceip…
+ ❯ src/test/harvo/cr1_workforce_commands_http.test.ts:92:86
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_workforce_commands_http.test.ts > R1-02 mounted canonical workforce HTTP on restricted PostgreSQL LOGIN > rejects wrong organization/environment and reusing a factor for altered command
+AssertionError: {"code":"WORKFORCE_UNAVAILABLE","error":"The workforce command was not accepted. Refresh access and current evidence.","correlationId":"d6fc3946-4ddd-4e1d-be84-d1bbf6c8afaf","operationId":"da540913-3a53-4817-bea0-efda09477f04"}: expected 503 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 503
+
+ ❯ prepare src/test/harvo/cr1_workforce_commands_http.test.ts:46:98
+     44|     .set('Cookie',`__Host-encho_workforce=${credentials[name]}`).set('…
+     45|   const prepare=async(input:ReturnType<typeof body>)=>{
+     46|     const response=await send({...input,action:'PREPARE'});expect(resp…
+       |                                                                                                  ^
+     47|     const stepUpReceiptId=await fixture.issueFactor(fixture.principals…
+     48|     const requested=await send({...input,action:'REQUEST',stepUpReceip…
+ ❯ src/test/harvo/cr1_workforce_commands_http.test.ts:100:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  4 failed | 9 passed (13)
+   Start at  18:03:34
+   Duration  7.62s (transform 283ms, setup 41ms, import 699ms, tests 6.67s, environment 0ms)
+

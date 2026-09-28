@@ -1,0 +1,14 @@
+✔ service factories retain their independently mounted participant and staff prefixes (5.626333ms)
+✔ new factories fail closed until assigned a mounted prefix (0.602542ms)
+✔ generated session action loop expands its concrete paths (0.904416ms)
+✔ setting reads are excluded and unknown dynamic paths fail closed (0.348833ms)
+✔ competing admin workforce routes keep their distinct mounted authority boundary (0.236ms)
+✔ unmounted notification declarations never acquire a fictional API prefix (0.1975ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 241.661042

@@ -1,5 +1,9 @@
 # CR1 Execution Plan
 
+> **28 September 2026 audit qualification (CR1-045):** The historical 48/48 COMPLETE_LOCAL ledger below is a claim, not a currently supported release certification. The [independent source and targeted-test audit](../audits/CR1_ENGINEERING_QUALITY_AUDIT_2026_09_28.md) reproduces two Operations boundary test failures, a route-inventory failure and eight offline contract weaknesses. Generated staging/provider/legal receipts do not establish external clearance. Preserve the ledger as history pending evidence-based package reacceptance; do not infer a new numeric completion percentage. No phase transition or production rollout was performed by the audit.
+
+> **Corrective planning addendum (CR1-046):** Use the [remediation blueprint](../blueprints/CR1_ENGINEERING_REMEDIATION_BLUEPRINT.md), [32 corrective work cards and original-package coverage](CR1_REMEDIATION_WORK_PACKAGES.md), and [engineer/reviewer prompts](CR1_ENGINEER_AND_REVIEWER_PROMPTS.md) to guide repairs. This is a specified plan, not executed remediation. It preserves the 48 rows below as history and requires current criterion-level reacceptance; it neither resets completion nor grants external clearance.
+
 **Authority:** Founder Phase 3 execution directive, 23 September 2026  
 **Controlling blueprint:** `docs/blueprints/ENCHO_THREE_SIDED_OPERATING_PLATFORM_BLUEPRINT.md`  
 **Source baseline:** `85b52ba` plus the Discussion 037 and Phase 2 documentation worktree  

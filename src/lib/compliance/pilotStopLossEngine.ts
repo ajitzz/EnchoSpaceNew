@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
 
 /**
  * CR1 Track 4: Bounded Commercial Pilot Charter & Stop-Loss Simulation Engine
@@ -90,7 +89,9 @@ export interface PilotSimulationInput {
 export interface PilotSimulationReceipt {
   schemaVersion: string;
   type: string;
-  status: 'SIMULATION_CERTIFIED';
+  status: 'NOT_EVIDENCE';
+  classification: 'FIXTURE';
+  productionGateEligible: false;
   receiptId: string;
   generatedAt: string;
   charterFilePath: string;
@@ -118,11 +119,11 @@ export interface PilotSimulationReceipt {
     conversionRatePercent: number;
   };
   complianceAudits: {
-    zeroDataLeakageVerified: boolean;
-    trappedCashEscrowEnforced: boolean;
-    taxWithholdingReconciled: boolean;
+    zeroDataLeakageVerified: null;
+    trappedCashEscrowEnforced: null;
+    taxWithholdingReconciled: null;
   };
-  boardVerdict: 'GO_FOR_EXPANDED_STAGE' | 'NO_GO_REMEDIATE';
+  boardVerdict: 'NOT_ASSESSED';
 }
 
 export class PilotStopLossEngine {
@@ -289,7 +290,7 @@ export class PilotStopLossEngine {
   }
 
   /**
-   * Executes a complete pilot simulation cycle and writes the certified receipt to disk.
+   * Formats local simulated inputs only. It never writes files or certifies a pilot.
    */
   executePilotSimulationAndGenerateReceipt(input: PilotSimulationInput): PilotSimulationReceipt {
     if (!existsSync(input.charterPath)) {
@@ -325,7 +326,9 @@ export class PilotStopLossEngine {
     const receipt: PilotSimulationReceipt = {
       schemaVersion: '1.0.0',
       type: 'ENCHO_CR1_PILOT_STOP_LOSS_SIMULATION_RECEIPT',
-      status: 'SIMULATION_CERTIFIED',
+      status: 'NOT_EVIDENCE',
+      classification: 'FIXTURE',
+      productionGateEligible: false,
       receiptId: `rcpt_pilot_sim_${Date.now()}`,
       generatedAt: new Date().toISOString(),
       charterFilePath: 'docs/compliance/TRACK_4_BOUNDED_PILOT_AGREEMENT_AND_STOP_LOSS_CHARTER.md',
@@ -333,7 +336,7 @@ export class PilotStopLossEngine {
       receiptSha256,
       propertyScope: {
         listingId: input.simulatedListing,
-        propertyName: 'Wayanad Sanctuary',
+        propertyName: 'Unverified simulation property',
         hostId: input.simulatedHost,
       },
       financialStopLoss: {
@@ -353,16 +356,12 @@ export class PilotStopLossEngine {
         conversionRatePercent,
       },
       complianceAudits: {
-        zeroDataLeakageVerified: true,
-        trappedCashEscrowEnforced: true,
-        taxWithholdingReconciled: true,
+        zeroDataLeakageVerified: null,
+        trappedCashEscrowEnforced: null,
+        taxWithholdingReconciled: null,
       },
-      boardVerdict: 'GO_FOR_EXPANDED_STAGE',
+      boardVerdict: 'NOT_ASSESSED',
     };
-
-    const dir = dirname(input.receiptPath);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(input.receiptPath, JSON.stringify(receipt, null, 2), { mode: 0o644 });
 
     return receipt;
   }

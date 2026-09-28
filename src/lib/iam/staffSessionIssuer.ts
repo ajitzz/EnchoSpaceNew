@@ -24,35 +24,30 @@ export class StaffSessionIssuerError extends Error {constructor(readonly code:ty
 function parse<T>(schema:z.ZodType<T>,input:unknown):T{const result=schema.safeParse(input);if(!result.success)throw new StaffSessionIssuerError('INPUT_INVALID');return result.data;}
 const mappedSqlErrors:Record<string,typeof errors[number]>={IAM_LOGIN_NOT_CONFIGURED:'LOGIN_NOT_CONFIGURED',IAM_LOGIN_RATE_LIMITED:'LOGIN_RATE_LIMITED',
   IAM_LOGIN_CHALLENGE_INVALID:'LOGIN_CHALLENGE_INVALID',IAM_LOGIN_IDENTITY_INVALID:'IDENTITY_INVALID',IAM_LOGIN_MEMBERSHIP_UNAVAILABLE:'MEMBERSHIP_UNAVAILABLE',IAM_LOGIN_SESSION_LIMIT:'SESSION_LIMIT_REACHED'};
-function mapSqlError(raw: unknown): typeof errors[number] | null {
-  if (!(raw instanceof Error)) return null;
-  const msg = raw.message.trim().replace(/^error:\s*/i, '');
-  if (msg in mappedSqlErrors) return mappedSqlErrors[msg];
-  for (const [key, code] of Object.entries(mappedSqlErrors)) {
-    if (msg.includes(key)) return code;
-  }
-  return null;
-}
 
 /** No raw-table rights or inherited administration are allowed on this connection. */
 export async function isIsolatedStaffSessionIssuer(client:pg.PoolClient):Promise<boolean>{
-  const allowOwner = process.env.HARVO_ALLOW_OWNER_ROLE === 'true' || (process.env.ENCHO_TEST_SANDBOX !== '1' && process.env.NODE_ENV !== 'test');
-  if (allowOwner) {
-    const isOwner = (await client.query("SELECT pg_has_role(current_user, (SELECT relowner FROM pg_class WHERE relname='internal_staff_sessions' AND relnamespace='public'::regnamespace), 'USAGE') AS owns")).rows[0]?.owns === true;
-    if (isOwner) {
-      const fnSafe = (await client.query("SELECT has_function_privilege(current_user,'internal_iam_issue_staff_session(uuid,text,jsonb,text,text,text)','EXECUTE') AS ok")).rows[0]?.ok;
-      return fnSafe === true;
-    }
-  }
-  const row=(await client.query<{safe:boolean}>(`SELECT NOT(r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR r.rolcreatedb OR has_schema_privilege(current_user,'public','CREATE'))
+  const row=(await client.query<{safe:boolean}>(`SELECT NOT(r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication OR has_schema_privilege(current_user,'public','CREATE'))
     AND session_user=current_user
-    AND NOT EXISTS(SELECT 1 FROM pg_roles inherited WHERE pg_has_role(current_user,inherited.oid,'MEMBER') AND (inherited.rolsuper OR inherited.rolbypassrls OR inherited.rolcreaterole OR inherited.rolcreatedb))
-    AND NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p') AND
-      (pg_has_role(current_user,c.relowner,'MEMBER') OR has_table_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER') OR has_any_column_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,REFERENCES')))
+    AND NOT EXISTS(SELECT 1 FROM pg_database d JOIN pg_roles reachable ON pg_has_role(current_user,reachable.oid,'MEMBER')
+      WHERE d.datname=current_database() AND (pg_has_role(reachable.oid,d.datdba,'MEMBER') OR has_database_privilege(reachable.oid,d.oid,'CREATE')))
+    AND NOT EXISTS(SELECT 1 FROM pg_roles inherited WHERE pg_has_role(current_user,inherited.oid,'MEMBER') AND (inherited.rolsuper OR inherited.rolbypassrls OR inherited.rolcreaterole OR inherited.rolcreatedb OR inherited.rolreplication OR has_schema_privilege(inherited.oid,'public','CREATE')))
+    AND NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_roles reachable ON pg_has_role(current_user,reachable.oid,'MEMBER')
+      WHERE n.nspname='public' AND c.relkind IN ('r','p') AND
+      (pg_has_role(reachable.oid,c.relowner,'MEMBER') OR has_table_privilege(reachable.oid,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER') OR has_any_column_privilege(reachable.oid,c.oid,'SELECT,INSERT,UPDATE,REFERENCES')))
+    AND NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_roles reachable ON pg_has_role(current_user,reachable.oid,'MEMBER')
+      WHERE n.nspname='public' AND c.relkind='S' AND has_sequence_privilege(reachable.oid,c.oid,'USAGE,SELECT,UPDATE'))
+    AND NOT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_roles reachable ON pg_has_role(current_user,reachable.oid,'MEMBER')
+      WHERE p.pronamespace='public'::regnamespace AND p.prosecdef AND has_function_privilege(reachable.oid,p.oid,'EXECUTE')
+      AND p.oid<>ALL(ARRAY['internal_iam_begin_workforce_login(uuid,text,text,uuid,text,text)'::regprocedure,
+        'internal_iam_read_workforce_login(uuid,text,text,text)'::regprocedure,
+        'internal_iam_issue_staff_session(uuid,text,jsonb,text,text,text)'::regprocedure,
+        'internal_iam_logout_staff_session(text,text,text)'::regprocedure]))
     AND has_function_privilege(current_user,'internal_iam_issue_staff_session(uuid,text,jsonb,text,text,text)','EXECUTE')
-    AND NOT has_function_privilege(current_user,'internal_iam_issue_invitation(jsonb,uuid,text,text)','EXECUTE')
-    AND NOT has_function_privilege(current_user,'internal_iam_accept_invitation(text,text,jsonb,text,text)','EXECUTE')
-    AND NOT has_function_privilege(current_user,'internal_iam_apply_workforce_lifecycle(jsonb,uuid,text,text,text)','EXECUTE') AS safe
+    AND NOT EXISTS(SELECT 1 FROM pg_roles reachable WHERE pg_has_role(current_user,reachable.oid,'MEMBER') AND
+      (has_function_privilege(reachable.oid,'internal_iam_issue_invitation(jsonb,uuid,text,text)','EXECUTE')
+       OR has_function_privilege(reachable.oid,'internal_iam_accept_invitation(text,text,jsonb,text,text)','EXECUTE')
+       OR has_function_privilege(reachable.oid,'internal_iam_apply_workforce_lifecycle(jsonb,uuid,text,text,text)','EXECUTE'))) AS safe
     FROM pg_roles r WHERE r.rolname=current_user`)).rows[0];
   return row?.safe===true;
 }
@@ -91,31 +86,21 @@ export class StaffSessionIssuer {
     const proof=parse(verifiedGoogleWorkforceIdentitySchema,verified);
     if(proof.audience!==this.clientId || proof.nonceHash!==challenge.nonceHash || proof.tokenHash!==digest(input.credential))throw new StaffSessionIssuerError('IDENTITY_INVALID');
     const credential=`wfs_${randomBytes(32).toString('base64url')}`;
+    // Subject binding belongs to reviewed invitation/enrollment, never login.
     const result=await this.transaction(async client=>{
-      if (proof.email && proof.subject) {
-        const canUpdate = (await client.query("SELECT has_table_privilege(current_user, 'public.users', 'UPDATE') AS ok")).rows[0]?.ok === true;
-        if (canUpdate) {
-          const colCheck = await client.query("SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name='email_verified'");
-          const hasEmailVerified = colCheck.rows.length > 0;
-          await client.query(`
-            UPDATE users
-            SET google_id = $1${hasEmailVerified ? ', email_verified = true' : ''}
-            WHERE lower(btrim(email)) = lower(btrim($2))
-              AND (google_id IS NULL OR google_id = $1)
-              AND EXISTS (
-                SELECT 1 FROM internal_organization_memberships m
-                WHERE m.user_id = users.id AND m.status = 'ACTIVE'
-              )
-          `, [proof.subject, proof.email]);
-        }
-      }
-      return (await client.query<{result:unknown}>(
+      const issued=parse(sessionSchema,(await client.query<{result:unknown}>(
         'SELECT internal_iam_issue_staff_session($1,$2,$3::jsonb,$4,$5,$6) AS result',[
           input.challengeId,digest(input.browserVerifier),JSON.stringify(proof),digest(credential),this.environment,input.correlationId,
-        ])).rows[0]?.result;
+        ])).rows[0]?.result);
+      // A nonce from another organization must not mint a session through this
+      // issuer, even when both organizations share a Google audience. Check
+      // before COMMIT so session, challenge consumption and audit roll back.
+      if(issued.organizationId!==this.organizationId)throw new StaffSessionIssuerError('MEMBERSHIP_UNAVAILABLE');
+      return issued;
     });
-    return {public:parse(sessionSchema,result),private:{credential}};
+    return {public:result,private:{credential}};
   }
+
   async logout(rawInput:unknown):Promise<{outcome:'LOGGED_OUT'}> {
     const input=parse(z.object({credential:z.string().regex(/^wfs_[A-Za-z0-9_-]{43}$/),correlationId:trace}).strict(),rawInput);
     const result=await this.transaction(async client=>(await client.query<{result:unknown}>(
@@ -134,16 +119,7 @@ export class StaffSessionIssuer {
       try{await client.query('ROLLBACK');}catch{discard=true;}
       if(committing)throw new StaffSessionIssuerError('OUTCOME_UNKNOWN');
       if(error instanceof StaffSessionIssuerError)throw error;
-      const mapped = mapSqlError(error);
-      if (!mapped) {
-        console.error('[STAFF_SESSION_ISSUER_UNAVAILABLE]', {
-          message: error instanceof Error ? error.message : String(error),
-          code: (error as any)?.code,
-          detail: (error as any)?.detail,
-          stack: error instanceof Error ? error.stack : undefined,
-        });
-      }
-      throw new StaffSessionIssuerError(mapped || 'ISSUER_UNAVAILABLE');
+      throw new StaffSessionIssuerError(error instanceof Error && mappedSqlErrors[error.message] || 'ISSUER_UNAVAILABLE');
     } finally {client.release(discard);}
   }
 }

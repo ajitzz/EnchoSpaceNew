@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {"strict": true},
+  "include": [
+    "../../lib/useUnreadCount.ts",
+    "../../components/UnreadCountBadge.tsx",
+    "../../components/Header.tsx",
+    "../../components/BottomNav.tsx",
+    "../../src/server/conversations/router.ts",
+    "../../src/test/cr1_conversation_api.test.ts",
+    "../../src/test/cr1_unread_navigation.test.tsx"
+  ],
+  "exclude": []
+}

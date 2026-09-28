@@ -1,0 +1,96 @@
+{
+  "card": "R4-01",
+  "recordedAt": "2026-09-28",
+  "status": "READY_FOR_REVIEW",
+  "scope": "Unread availability API/navigation slice only; notification routes remain unmounted; full card not accepted",
+  "environment": "LOCAL_EXPRESS_AND_REACT_DOM_FIXTURES",
+  "head": "0e4c6fec2fe86f1b793760c5f7a3daf08bbf7508",
+  "headTree": "4545c49ab8be21a10a13dc284951e5b2390f66b1",
+  "originalCriteria": [
+    "P3.1",
+    "P3.2",
+    "P3.3"
+  ],
+  "sourceHashes": {
+    "src/server/conversations/router.ts": "d062c05bb0ef3195a5f11ab83e1b43542935d4be7e1555c6649ac95530c592c4",
+    "lib/useUnreadCount.ts": "21a8f8379d68d69fc63654628bfd6ca04804c1d546c27eac1e3881fa2bdb342f",
+    "components/UnreadCountBadge.tsx": "a0c4f2052e5a693b5ce1cbe23ba1c92776ace836d7f6c01b0520d63f630b81f4",
+    "components/Header.tsx": "d1d6e1c1b5e7da2af752a0583a5e6cdc791aa7b2e663223a9287dfeb1143f407",
+    "components/BottomNav.tsx": "1e7376fcca1839121af7fe003970f3d07bfc2c06d3a7b834258517bcd6ff896f",
+    "src/test/cr1_conversation_api.test.ts": "1c27f8d520f3ddc2d024eb85d33b6fc360f2a608eb4a76c50a10081001d012fc",
+    "src/test/cr1_unread_navigation.test.tsx": "261e74cc35d1234cfa7ee00889cda904288fe7fbe648d035c7f9a94015ba8f36",
+    "scripts/testing/tsconfig.unread.json": "0da35ea097d650113c8c780c470a21d98f26e98f2479a6887abcc0b85d2534ca",
+    "docs/implementation/CR1_R4_01_UNREAD_IMPACT.md": "d5e3a7c33d7bcd7d68cc74b71d815dce58a81885522d28335d7a07fbcc094025"
+  },
+  "dependencyHashes": {
+    "components/AuthContext.tsx": "bb6dbee2e92077d368ca9437043bf5f8adeffe6d14eb404d35786c342c952fe8",
+    "src/shared/platform/apiError.ts": "76b8e2f2e07c55a88f69f0a0ec54e9bf4e0d35c515e1232b4feac535bfdb7237",
+    "src/lib/marketing/inquiryInbox.ts": "ef333cd86f69336f23f8c2767e89188c91bc970d6635ebf599a7e3b8d8629a62"
+  },
+  "commands": [
+    {
+      "command": "/Users/ajit/.npm/_npx/387698761821791d/node_modules/node/bin/node scripts/testing/run.mjs src/test/cr1_unread_navigation.test.tsx src/test/cr1_conversation_api.test.ts --reporter=dot",
+      "exitCode": 0,
+      "passed": 16,
+      "failed": 0,
+      "receipt": "docs/implementation/receipts/CR1_R4_01_unread_first_repair.txt"
+    },
+    {
+      "command": "/Users/ajit/.npm/_npx/387698761821791d/node_modules/node/bin/node node_modules/typescript/bin/tsc --project scripts/testing/tsconfig.unread.json --pretty false",
+      "exitCode": 0,
+      "scope": "strict bounded dependency graph",
+      "receipt": "docs/implementation/receipts/CR1_R4_01_unread_types.txt"
+    },
+    {
+      "command": "/Users/ajit/.npm/_npx/387698761821791d/node_modules/node/bin/node node_modules/eslint/bin/eslint.js lib/useUnreadCount.ts components/UnreadCountBadge.tsx components/Header.tsx components/BottomNav.tsx src/server/conversations/router.ts src/test/cr1_unread_navigation.test.tsx src/test/cr1_conversation_api.test.ts",
+      "exitCode": 0,
+      "receipt": "docs/implementation/receipts/CR1_R4_01_unread_lint.txt"
+    },
+    {
+      "command": "git diff --check -- src/server/conversations/router.ts components/Header.tsx components/BottomNav.tsx src/test/cr1_conversation_api.test.ts",
+      "exitCode": 0
+    }
+  ],
+  "failedEvidence": {
+    "command": "/Users/ajit/.npm/_npx/387698761821791d/node_modules/node/bin/node scripts/testing/run.mjs src/test/cr1_conversation_api.test.ts --reporter=dot",
+    "exitCode": 1,
+    "passed": 6,
+    "failed": 1,
+    "receipt": "docs/implementation/receipts/CR1_R4_01_unread_before.txt",
+    "finding": "Readiness false returned HTTP200 fabricated zero instead of canonical503."
+  },
+  "evidence": {
+    "before": {
+      "path": "docs/implementation/receipts/CR1_R4_01_unread_before.txt",
+      "sha256": "df92e88a0cd95590759f8ab545cf1337defbbc96704cbcbbeb936ff519d1a5d8"
+    },
+    "first-repair": {
+      "path": "docs/implementation/receipts/CR1_R4_01_unread_first_repair.txt",
+      "sha256": "dc11bff89b0958f6d4bb37cff492e3c0f0ed3f58d6407e247a4ad3e96c29bd5a"
+    },
+    "lint": {
+      "path": "docs/implementation/receipts/CR1_R4_01_unread_lint.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "types": {
+      "path": "docs/implementation/receipts/CR1_R4_01_unread_types.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "compatibility": {
+    "success": "Unchanged200{unread}",
+    "unavailable": "Canonical503FEATURE_UNAVAILABLE with safe reference; no count fields",
+    "database": "No schema/migration changes",
+    "notifications": "No send/preference/consent/channel behavior changed"
+  },
+  "rollback": "Hide/disable new indicator if necessary, retaining explicit API unavailable semantics; never restore zero fallback.",
+  "unknowns": [
+    "FullR4-01 depends onR2-04; this independent correction is not release acceptance",
+    "Preferences/evidence routes need039 reachable-privilege checks and parent composition integration",
+    "No live browser/deployment/customer notification proof",
+    "Retention/export/erasure and external channelconsent remain separate governed work"
+  ],
+  "review": {
+    "status": "REQUESTED"
+  }
+}

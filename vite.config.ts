@@ -31,6 +31,9 @@ export function marketingVendorChunk(id: string): string | undefined {
 
 export default defineConfig(() => {
     return {
+      // Deployment must supply reviewed public variables explicitly. Building a
+      // client must never import developer .env provider/database credentials.
+      envDir: false as const,
       server: {
         port: 3000,
         host: '0.0.0.0',
@@ -47,6 +50,9 @@ export default defineConfig(() => {
             enabled: false
           },
           registerType: 'autoUpdate',
+          strategies: 'injectManifest',
+          srcDir: 'src',
+          filename: 'sw.ts',
           includeAssets: ['logo.svg'],
           manifest: {
             name: 'EnchoSpace',
@@ -65,78 +71,8 @@ export default defineConfig(() => {
               }
             ]
           },
-          workbox: {
+          injectManifest: {
             globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-            navigateFallback: '/index.html',
-            navigateFallbackAllowlist: [/^\/$/], // only cache index, avoid caching /api routes
-            runtimeCaching: [
-              {
-                urlPattern: /^https:\/\/images\.unsplash\.com\/.*/i,
-                handler: 'CacheFirst',
-                options: {
-                  cacheName: 'unsplash-images-cache',
-                  expiration: {
-                    maxEntries: 40,
-                    maxAgeSeconds: 60 * 60 * 24 * 7, // 7 Days
-                    purgeOnQuotaError: true
-                  },
-                  cacheableResponse: {
-                    statuses: [200]
-                  }
-                }
-              },
-              {
-                // Money and campaign actions require a visible, current user intent.
-                urlPattern: /\/api\/(?!marketing\/v2(?:\/|$)|webhooks\/marketing\/v2(?:\/|$)|listings\/[^/]+\/room-calendar(?:\/|$)).*/i,
-                method: 'POST',
-                handler: 'NetworkOnly',
-                options: {
-                  backgroundSync: {
-                    name: 'api-syncQueue',
-                    options: {
-                      maxRetentionTime: 24 * 60 // 24 hours
-                    }
-                  }
-                }
-              },
-              {
-                urlPattern: /\/api\/image.*/i,
-                method: 'GET',
-                handler: 'CacheFirst',
-                options: {
-                  cacheName: 'optimized-image-cache',
-                  expiration: {
-                    maxEntries: 50,
-                    maxAgeSeconds: 7 * 24 * 60 * 60, // 7 Days
-                    purgeOnQuotaError: true
-                  },
-                  cacheableResponse: {
-                    statuses: [200]
-                  }
-                }
-              },
-              {
-                urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|avif)$/i,
-                method: 'GET',
-                handler: 'CacheFirst',
-                options: {
-                  cacheName: 'image-assets-cache',
-                  expiration: {
-                    maxEntries: 50,
-                    maxAgeSeconds: 7 * 24 * 60 * 60, // 7 Days
-                    purgeOnQuotaError: true
-                  },
-                  cacheableResponse: {
-                    statuses: [200]
-                  }
-                }
-              },
-              {
-                urlPattern: /\/api\/.*/i,
-                method: 'GET',
-                handler: 'NetworkOnly'
-              }
-            ]
           }
         })
       ],

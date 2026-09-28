@@ -1,27 +1,24 @@
 import pg from 'pg';
-import {z} from 'zod';
 import {StaffSessionIssuer,StaffSessionIssuerError} from '../../lib/iam/staffSessionIssuer.js';
-import {GoogleWorkforceIdentity,workforceGoogleClientIdSchema} from '../../lib/iam/googleWorkforceIdentity.js';
+import {GoogleWorkforceIdentity} from '../../lib/iam/googleWorkforceIdentity.js';
 import {verifyStaffSessionIssuerCatalog} from '../deployment/iamSessionIssuerReadiness.js';
-import {workforceConnectionConfig,workforceOrigin,workforceEnvironment} from './runtime.js';
+import {workforceConnectionConfig,workforceRuntimeSettings} from './runtime.js';
 import type {WorkforceLoginPort} from './sessionRouter.js';
 
-/** Dedicated identity writer with single-pooler and env fallback support. */
+/** Dedicated identity writer; no consumer/ad-account or owner fallback. */
 export function createWorkforceSessionRuntime(env:NodeJS.ProcessEnv,report:()=>void):WorkforceLoginPort|null{
-  const isTest = env.ENCHO_TEST_SANDBOX === '1' || env.NODE_ENV === 'test' || process.env.ENCHO_TEST_SANDBOX === '1' || process.env.NODE_ENV === 'test';
-  const allowOwner = env.HARVO_ALLOW_OWNER_ROLE === 'true' || !isTest;
-  const identityDbUrl = env.CR1_WORKFORCE_IDENTITY_DATABASE_URL || env.CR1_WORKFORCE_DATABASE_URL || (allowOwner ? env.DATABASE_URL : undefined);
-  if(!workforceOrigin(env)||!identityDbUrl)return null;
+  const identityDbUrl=env.CR1_WORKFORCE_IDENTITY_DATABASE_URL;
+  if(!identityDbUrl||!env.CR1_WORKFORCE_DATABASE_URL)return null;
   try{
+    const {googleClientId,organizationId,environment}=workforceRuntimeSettings(env);
+    // Validate both explicit connections before exposing a login path. Neither
+    // credential is opened here; actual-role readiness remains mandatory.
+    if(!workforceConnectionConfig(env))return null;
     const config=workforceConnectionConfig({...env,CR1_WORKFORCE_DATABASE_URL:identityDbUrl});
     if(!config)return null;
-    const rawGoogleClientId = env.CR1_WORKFORCE_GOOGLE_CLIENT_ID || (allowOwner ? (env.GOOGLE_ADS_CLIENT_ID || env.VITE_GOOGLE_CLIENT_ID || env.GOOGLE_CLIENT_ID) : undefined);
-    if(!rawGoogleClientId)return null;
-    const googleClientId=workforceGoogleClientIdSchema.parse(rawGoogleClientId);
-    const organizationId=z.string().uuid().parse(env.CR1_WORKFORCE_ORGANIZATION_ID || (allowOwner ? '00000000-0000-4000-8000-000000000001' : undefined));
     const pool=new pg.Pool({...config,application_name:'encho_cr1_identity'});pool.on('error',report);
     const issuer=new StaffSessionIssuer(pool,new GoogleWorkforceIdentity(googleClientId),{
-      googleClientId,organizationId,environment:workforceEnvironment(env),
+      googleClientId,organizationId,environment,
     });
     let until=0,pending:Promise<void>|null=null;
     const ready=async()=>{

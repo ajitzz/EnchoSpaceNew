@@ -33,6 +33,13 @@ describe('CR1 workforce identity HTTP transport',()=>{
   expect((await post(app,'complete',{credential:'x'.repeat(19000),challengeId})).status).toBe(400);
   expect(port.begin).not.toHaveBeenCalled();expect(port.complete).not.toHaveBeenCalled();
  });
+ it('does not widen workforce origin to public app or hosting origins',async()=>{
+  const {app,port}=setup();
+  for(const publicOrigin of ['https://encho.co.in','https://www.encho.co.in','https://encho-space-chi.vercel.app','http://localhost:3000']){
+   expect((await request(app).post('/session/begin').set('Origin',publicOrigin).set('X-Encho-Workforce-Command','1').send({})).status).toBe(403);
+  }
+  expect(port.begin).not.toHaveBeenCalled();
+ });
  it('rejects absent, duplicate or foreign browser binding and never accepts consumer tokens',async()=>{
   const {app,port}=setup();const body={challengeId,credential:'x'.repeat(120)};
   expect((await post(app,'complete',body)).status).toBe(401);

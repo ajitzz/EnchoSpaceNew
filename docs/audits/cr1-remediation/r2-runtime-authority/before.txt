@@ -1,0 +1,53 @@
+
+ RUN  v4.1.10 /Users/ajit/Documents/EnchoSpaceNew
+
+······xx··xx·
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |marketing| src/test/harvo/recovery_readiness.test.ts > recovery catalog readiness under a least-privilege non-bypass role > rejects catalog drift: immutable column update
+ FAIL  |marketing| src/test/harvo/recovery_readiness.test.ts > recovery catalog readiness under a least-privilege non-bypass role > rejects catalog drift: public column access
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/test/harvo/recovery_readiness.test.ts:34:72
+     32|   ['missing claim index','DROP INDEX marketing_pause_recovery_one_read…
+     33|  ])('rejects catalog drift: %s',async(_name,damage,restore)=>{
+     34|   await fixture.pool.query(damage);try{expect((await inspect()).ready)…
+       |                                                                        ^
+     35|  });
+     36|  it.each([
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  |marketing| src/test/harvo/recovery_readiness.test.ts > recovery catalog readiness under a least-privilege non-bypass role > rejects NOINHERIT reachable immutable column UPDATE authority
+ FAIL  |marketing| src/test/harvo/recovery_readiness.test.ts > recovery catalog readiness under a least-privilege non-bypass role > rejects NOINHERIT reachable attempt DELETE authority
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/test/harvo/recovery_readiness.test.ts:42:41
+     40|   await fixture.pool.query('ALTER ROLE readiness_runtime NOINHERIT; CR…
+     41|   await fixture.pool.query(grant);
+     42|   try { expect((await inspect()).ready).toBe(false); }
+       |                                         ^
+     43|   finally { await fixture.pool.query(revoke); await fixture.pool.query…
+     44|   expect((await inspect()).ready).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 9 passed (13)
+   Start at  18:02:54
+   Duration  1.19s (transform 56ms, setup 30ms, import 89ms, tests 980ms, environment 0ms)
+

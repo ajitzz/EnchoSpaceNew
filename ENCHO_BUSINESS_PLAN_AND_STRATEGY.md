@@ -1,5 +1,7 @@
 # 🚀 ENCHO SPACE: MASTER BUSINESS PLAN, COMPETITOR MATRIX & STRATEGIC BLUEPRINT
 
+> **Historical strategy, qualified 28 September 2026:** This document preserves early hypotheses. Its fixed 15% advertising fee, universal single serving account, automatic contact masking/trapped funds, survival probabilities and blanket production-verification claims are not current accepted operating evidence. Use the Engineering Constitution and CR1 blueprint for controlling contracts: separate advertising cost-plus direction from booking commission, provider-compliant account topology, explicit privacy/refund policy and evidence-based acceptance. See [CR1-045 quality audit](docs/audits/CR1_ENGINEERING_QUALITY_AUDIT_2026_09_28.md). No new commercial or legal policy is approved by this annotation.
+
 ## 📌 Executive Summary & Master Operating Protocol
 - **Company**: Encho Space (`@EnchoSpace`)
 - **Vision**: B2B2C Enterprise Property Hosting & One-Click Walled Garden Marketing Engine.

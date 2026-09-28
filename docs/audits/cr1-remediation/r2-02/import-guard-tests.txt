@@ -1,0 +1,13 @@
+✔ rejects a transitive prototype dependency: export {unsafe} from './prototype.js'; (5.667291ms)
+✔ rejects a transitive prototype dependency: import('./prototype.js'); (1.946209ms)
+✔ rejects a transitive prototype dependency: require('./prototype.js'); (1.280541ms)
+✔ rejects a transitive prototype dependency: import {unsafe} from '@/prototype'; (1.265041ms)
+✔ test-only historical prototypes do not become production dependencies (1.208541ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 205.868833

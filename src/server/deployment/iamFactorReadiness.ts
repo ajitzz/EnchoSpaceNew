@@ -1,4 +1,5 @@
 import type pg from 'pg';
+import {factorWriterFunctions} from '../../lib/iam/isolatedWriterBoundary.js';
 import {isIsolatedFactorWriter} from '../../lib/iam/factors/workforceStepUp.js';
 type Row={tablename:string;policyname:string;cmd:string;permissive:string;roles:string[];qual:string|null;with_check:string|null};
 const normalize=(value:string|null)=>value?.replace(/\s+/g,' ').trim()??null;
@@ -13,7 +14,7 @@ export function verifyFactorBaseOwnerPolicies(rows:readonly Row[],relations:read
  return found.length===factorBaseOwnerPolicyNames.length&&found.every(row=>{const expected=base[row.policyname as keyof typeof base];
  return row.tablename===expected.table&&row.cmd==='INSERT'&&row.permissive==='PERMISSIVE'&&row.qual===null&&normalize(row.with_check)===expected.check&&JSON.stringify(row.roles)===JSON.stringify([relations.find(r=>r.relname===expected.table)?.owner_name]);});
 }
-const funcs=['internal_iam_begin_passkey(text,uuid,text,uuid,text,text,text)','internal_iam_read_passkey_ceremony(text,uuid,text)','internal_iam_record_passkey(text,uuid,jsonb,text,text)'];
+const funcs=factorWriterFunctions;
 const tables=['internal_workforce_factor_policies','internal_workforce_current_factor_policy','internal_workforce_passkey_enrollments','internal_workforce_passkey_state','internal_workforce_passkey_ceremonies','internal_workforce_passkey_receipts'];
 export function workforceFactorGrants(role:string):string[]{if(!/^[a-z][a-z0-9_]{0,62}$/.test(role))throw new Error('IAM_ROLE_INVALID');return [`GRANT USAGE ON SCHEMA public TO "${role}"`,`GRANT EXECUTE ON FUNCTION ${funcs.join(',')} TO "${role}"`];}
 export async function verifyWorkforceFactorCatalog(client:pg.PoolClient){

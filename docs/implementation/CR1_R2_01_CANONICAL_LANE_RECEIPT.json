@@ -1,0 +1,126 @@
+{
+  "recordedAt": "2026-09-28",
+  "card": "R2-01",
+  "scope": "Canonical conversation notification lane only; full card remains partial",
+  "status": "READY_FOR_REVIEW",
+  "environment": "LOCAL_DISPOSABLE_POSTGRESQL_SEPARATE_LOGIN_ROLES_AND_NODE_PROCESSES",
+  "head": "0e4c6fec2fe86f1b793760c5f7a3daf08bbf7508",
+  "headTree": "4545c49ab8be21a10a13dc284951e5b2390f66b1",
+  "sourceHashAlgorithm": "SHA-256",
+  "sourceHashes": {
+    "src/lib/platform/durableOutbox.ts": "6d65f383704b81fc068b936ec193856cce01696684ed23216be9b7074991f33a",
+    "src/server/conversation/notificationWorker.ts": "811d33d196d220444b53e09eda0c736c70b28e0b56b6d3b3d36a0ef5190b6fd6",
+    "src/server/conversation/notificationRuntime.ts": "69e60a3a07230d04524ab7a9dd4d977d347a8648436c656c4f31db6b5341e1b6",
+    "src/server/deployment/conversationReadiness.ts": "0524cd71ac7e71cf0b2d82dd503585600e55647ef8acfa495272724e12a58350",
+    "src/server/deployment/runtimeDatabaseAuthority.ts": "0b510603f38af42fc543c9050473e0f87fe69b930c08b69be7cd9ff4be252470",
+    "src/test/harvo/durable_outbox.test.ts": "4b95a9eb93206881900701ba7519994cb52fde754f56b8027213d9328d90e084",
+    "src/test/harvo/conversation_notification_worker.test.ts": "401a1a4e0a5832411e0e4f4873822dc972a450f962550c11b296118410900b5a",
+    "scripts/testing/cr1-notification-worker.ts": "03c654892fb0f9455ac635f95a0e64ffcf5fa55bb03e1571957307da5eaddf8b",
+    "scripts/testing/tsconfig.outbox.json": "2e77340d77f22d9b1941e253a7ddd3d8ef01dada51fbd644ef5be4fb1a5fb312",
+    "docs/implementation/CR1_R2_01_CANONICAL_LANE_IMPACT.md": "47008f600c97e3af531b4d3c3531ecf0d0f0e3f7c720a8e226f397fa969e2dcf",
+    "src/server/deployment/serviceCaseReadiness.ts": "30eb503e2fb791cc196130d541ece08a8ac97f6527bbc4641c700fe947383a70",
+    "src/server/deployment/conversationCatalogContract.ts": "c588fb6bf07a0a77f2f600a9ba6b6c0970c391c784a5ccb4adc9247dccb60832",
+    "src/migrations/037_conversation_delivery.sql": "5d13517eb755ca299e3c98cdec50319efb2776057962b10435852af0c0f82377"
+  },
+  "sharedDependency": "runtimeDatabaseAuthority.ts owned by remediation_evidence_impl; included for exact source identity",
+  "verification": [
+    {
+      "command": "/Users/ajit/.npm/_npx/387698761821791d/node_modules/node/bin/node scripts/testing/run.mjs src/test/harvo/conversation_notification_worker.test.ts src/test/harvo/durable_outbox.test.ts --reporter=dot",
+      "exitCode": 0,
+      "passed": 37,
+      "failed": 0,
+      "receipt": "docs/implementation/receipts/CR1_R2_01_canonical_reviewed.txt"
+    },
+    {
+      "command": "/Users/ajit/.npm/_npx/387698761821791d/node_modules/node/bin/node scripts/testing/run.mjs src/test/harvo/conversation_delivery.test.ts src/test/harvo/cr1_service_cases.test.ts --reporter=dot",
+      "exitCode": 0,
+      "passed": 58,
+      "failed": 0,
+      "receipt": "docs/implementation/receipts/CR1_R2_01_readiness_compatibility_reviewed.txt"
+    },
+    {
+      "command": "/Users/ajit/.npm/_npx/387698761821791d/node_modules/node/bin/node node_modules/typescript/bin/tsc --project scripts/testing/tsconfig.outbox.json --pretty false",
+      "exitCode": 0,
+      "scope": "strict bounded dependency graph; not whole repository",
+      "receipt": "docs/implementation/receipts/CR1_R2_01_typecheck_reviewed.txt"
+    },
+    {
+      "command": "/Users/ajit/.npm/_npx/387698761821791d/node_modules/node/bin/node node_modules/eslint/bin/eslint.js src/lib/platform/durableOutbox.ts src/server/conversation/notificationWorker.ts src/server/conversation/notificationRuntime.ts src/server/deployment/conversationReadiness.ts src/test/harvo/durable_outbox.test.ts src/test/harvo/conversation_notification_worker.test.ts scripts/testing/cr1-notification-worker.ts",
+      "exitCode": 0,
+      "scope": "changed application/test files",
+      "receipt": "docs/implementation/receipts/CR1_R2_01_lint_reviewed.txt"
+    },
+    {
+      "command": "git diff --check -- src/lib/platform/durableOutbox.ts src/server/conversation/notificationWorker.ts src/server/conversation/notificationRuntime.ts src/server/deployment/conversationReadiness.ts src/test/harvo/durable_outbox.test.ts src/test/harvo/conversation_notification_worker.test.ts",
+      "exitCode": 0
+    }
+  ],
+  "failedEvidence": [
+    {
+      "receipt": "docs/implementation/receipts/CR1_R2_01_outbox_before.txt",
+      "vitestFailed": 3,
+      "vitestPassed": 7,
+      "exitCode": null,
+      "note": "Shell tail masked test exit; preserved Vitest failure report is evidence, not a passing run."
+    },
+    {
+      "receipt": "docs/implementation/receipts/CR1_R2_01_worker_before.txt",
+      "exitCode": 1,
+      "vitestFailed": 3,
+      "vitestPassed": 8
+    },
+    {
+      "receipt": "docs/implementation/receipts/CR1_R2_01_first_repair.txt",
+      "exitCode": 1,
+      "vitestFailed": 1,
+      "vitestPassed": 22
+    },
+    {
+      "receipt": "docs/implementation/receipts/CR1_R2_01_strict_typecheck_before.txt",
+      "exitCode": 2,
+      "note": "Test spy tuple annotation corrected; assertions unchanged."
+    }
+  ],
+  "durableAssertions": [
+    "Pre-COMMIT query failure retained by identity when rollback fails; broken client discarded",
+    "Before/after COMMIT transport faults emit OUTBOX_COMMIT_OUTCOME_UNKNOWN with original cause; no rollback-derived false outcome",
+    "Committed claims are not dispatched after missing acknowledgement; retry uses durable state and leases",
+    "Committed success never dispatches again; uncommitted finalization recovers same hint identity after lease expiry",
+    "Separate processes compete on PostgreSQL claims; actual child-process exit and restart retain dedupe identity",
+    "Current queue authority rechecked after claim; restricted LOGIN positive, owner/SET ROLE/NOINHERIT privilege reachability negative",
+    "Stale fence before dispatch suppresses hint; late lost lease does not falsely finalize",
+    "Current required grants stay exact while reachable NOINHERIT ancestors cannot add private message, queue insertion/mutation, acknowledgment function or sequence capabilities"
+  ],
+  "migration": "No migration bytes changed or applied. Migration037 trigger-derived dedupe namespace preserved.",
+  "runtimeCompatibility": "Normal interfaces unchanged; stable worker/runtime diagnostic codes extended for explicit uncertainty. Owner-backed runtime/worker configurations now fail readiness intentionally.",
+  "rollback": "Disable notification worker while retaining intents/events for reconciliation. Do not revert to unsafe owner runtime, process-memory replay or blind uncertain retry.",
+  "limits": [
+    "At-least-once content-free socket hints, not customer delivery proof",
+    "Revocation after last current-authority read can race socket effect; no exactly-once or serializable revocation claim",
+    "Catalog recheck latency not production benchmarked",
+    "Broader domain command adoption and prototype import guard owned separately; R2-01 not accepted",
+    "No external DB/provider/pilot/deployment evidence supplied"
+  ],
+  "evidence": {
+    "outbox_before": "docs/implementation/receipts/CR1_R2_01_outbox_before.txt",
+    "worker_before": "docs/implementation/receipts/CR1_R2_01_worker_before.txt",
+    "first_repair": "docs/implementation/receipts/CR1_R2_01_first_repair.txt",
+    "canonical_repaired": "docs/implementation/receipts/CR1_R2_01_canonical_repaired.txt",
+    "canonical_final": "docs/implementation/receipts/CR1_R2_01_canonical_final.txt",
+    "readiness_compatibility": "docs/implementation/receipts/CR1_R2_01_readiness_compatibility.txt",
+    "strict_typecheck_before": "docs/implementation/receipts/CR1_R2_01_strict_typecheck_before.txt",
+    "strict_typecheck_final": "docs/implementation/receipts/CR1_R2_01_strict_typecheck_final.txt",
+    "lint_final": "docs/implementation/receipts/CR1_R2_01_lint_final.txt",
+    "canonical_reviewed": "docs/implementation/receipts/CR1_R2_01_canonical_reviewed.txt",
+    "typecheck_reviewed": "docs/implementation/receipts/CR1_R2_01_typecheck_reviewed.txt",
+    "lint_reviewed": "docs/implementation/receipts/CR1_R2_01_lint_reviewed.txt",
+    "readiness-compatibility_reviewed": "docs/implementation/receipts/CR1_R2_01_readiness_compatibility_reviewed.txt"
+  },
+  "review": {
+    "status": "BOUNDED_SOURCE_AND_LOCAL_REVIEW_PASS",
+    "reviewer": "/root/remediation_identity_impl",
+    "receipt": "docs/audits/cr1-remediation/r2-01/INDEPENDENT_REVIEW.json",
+    "tests": 37,
+    "scope": "Canonical notification lane only; not full R2-01 or production acceptance"
+  }
+}

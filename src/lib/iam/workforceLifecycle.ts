@@ -68,7 +68,7 @@ export class WorkforceLifecycle {
       || context.resource.ancestors.length || context.resource.ownerAccountId || context.resource.assignmentId || context.resource.revision
       || context.conditions.provider || context.conditions.amountMinor)throw new WorkforceLifecycleError('INPUT_INVALID');
     const actions=context.permission==='workforce.suspend'?this.standardActions:this.protectedActions;
-    actions.fingerprint(input); // Validate exact semantic identity before any write.
+    const commandHash=actions.fingerprint(input);
     if(!context.evidence.actionAuthorizationId)throw new WorkforceLifecycleError('AUTHORIZATION_INVALID');
     const client=await this.runtime.connect().catch((cause:unknown)=>{throw new WorkforceLifecycleError('STORE_UNAVAILABLE',cause);});
     let committing=false;let discarded=false;
@@ -76,6 +76,15 @@ export class WorkforceLifecycle {
       await client.query('BEGIN');await client.query("SET LOCAL lock_timeout='5s'");await client.query("SET LOCAL statement_timeout='10s'");
       if(!await isRestrictedWorkforceRuntime(client))throw new WorkforceLifecycleError('IAM_NOT_READY');
       await client.query(`SELECT set_config('app.current_user_id',$1,true),set_config('app.organization_id',$2,true),set_config('app.membership_id',$3,true),set_config('app.staff_session_id',$4,true),set_config('app.bypass_rls','false',true),set_config('app.marketing_admin','false',true),set_config('app.workforce_environment',$5,true)`,[String(context.principal.accountId),context.tenant.organizationId,context.principal.membershipId,context.principal.sessionId,this.environment]);
+      // The SQL command correctly consumes stored authority. Bind that authority
+      // to this adapter invocation too: STANDARD cannot be relabelled PROTECTED
+      // (or vice versa) after maker/checker review.
+      const authority=(await client.query<{permission_code:string;command_hash:string}>(
+        'SELECT permission_code,command_hash FROM internal_action_authorizations WHERE id=$1 AND organization_id=$2',
+        [context.evidence.actionAuthorizationId,context.tenant.organizationId])).rows[0];
+      if(!authority)throw new WorkforceLifecycleError('PERMISSION_DENIED');
+      if(authority.permission_code!==context.permission)throw new WorkforceLifecycleError('AUTHORIZATION_INVALID');
+      if(authority.command_hash!==commandHash)throw new WorkforceLifecycleError('COMMAND_CONFLICT');
       // Do not pre-acquire a shared authority lock here. The rare safety command
       // takes the exclusive policy barrier and consumes approval atomically.
       const row=(await client.query<{result:unknown}>('SELECT internal_iam_apply_workforce_lifecycle($1::jsonb,$2,$3,$4,$5) AS result',[JSON.stringify(input.command),context.evidence.actionAuthorizationId,input.reason,context.principal.correlationId,context.principal.operationId])).rows[0];

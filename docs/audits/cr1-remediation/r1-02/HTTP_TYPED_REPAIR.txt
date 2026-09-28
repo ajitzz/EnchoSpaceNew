@@ -1,0 +1,43 @@
+
+ RUN  v4.1.10 /Users/ajit/Documents/EnchoSpaceNew
+
+(node:5111) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:5111) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+····xx
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_workforce_commands_http.test.ts > R1-02 mounted canonical workforce HTTP on restricted PostgreSQL LOGIN > rejects revocation between review and execution and stale membership version
+error: new row for relation "internal_staff_sessions" violates check constraint "internal_staff_sessions_check1"
+ ❯ node_modules/pg-pool/index.js:45:11
+ ❯ src/test/harvo/cr1_workforce_commands_http.test.ts:95:5
+     93|     const stale=await send({...input,action:'EXECUTE',stepUpReceiptId:…
+     94|     expect(stale.status,stale.text).toBe(409);expect(stale.body.code).…
+     95|     await fixture.pool.query("UPDATE internal_staff_sessions SET statu…
+       |     ^
+     96|     expect((await send({...input,action:'EXECUTE',stepUpReceiptId:auth…
+     97|     expect((await fixture.pool.query('SELECT status,version FROM inter…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_workforce_commands_http.test.ts > R1-02 mounted canonical workforce HTTP on restricted PostgreSQL LOGIN > rejects wrong organization/environment and reusing a factor for altered command
+AssertionError: {"receipt":{"authorizationId":"1495eee5-9649-8c78-9c67-41fcc85de96f","targetMembershipId":"f2ea4d65-0d7c-4d0b-8e6c-6167ea4afccc","operation":"SUSPEND","version":2,"status":"SUSPENDED","commandHash":"a6b74bec6fac7832e3b10c830c970c4242f4eafd2a7b725148385bbef27b2a0b","createdAt":"2026-09-28T23:34:21.263262+05:30","effects":{"grantsRevoked":0,"sessionsRevoked":0,"factorsExpired":0,"assignmentsReleased":0,"authorizationsCancelled":0}},"replayed":false}: expected 200 to be 403 // Object.is equality
+
+- Expected
++ Received
+
+- 403
++ 200
+
+ ❯ src/test/harvo/cr1_workforce_commands_http.test.ts:104:59
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 4 passed (6)
+   Start at  18:04:14
+   Duration  7.36s (transform 261ms, setup 36ms, import 649ms, tests 6.57s, environment 0ms)
+

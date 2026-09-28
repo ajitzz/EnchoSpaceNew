@@ -3,17 +3,15 @@
 /**
  * CR1 Phase P8.4 / Track 4: Bounded Commercial Pilot Tranche & Stop-Loss Monitor
  *
- * Enforces hard bounded commercial guardrails for the Encho Pilot Tranche (PILOT-01):
+ * Historical local arithmetic examples; no production pilot authority or enforcement.
+ * Example values (not an approved current charter):
  * 1. Hard stop-loss cap: Maximum aggregate ad spend of ₹50,000 INR (5,000,000 paise).
  * 2. Daily burn rate cap: Maximum daily budget of ₹2,000 INR (200,000 paise).
  * 3. 95% automatic circuit-breaker threshold: Pauses campaigns at ₹47,500 INR (4,750,000 paise).
  * 4. Single-property isolation boundary: Strictly Listing 1 (Wayanad Sanctuary).
- * 5. Idempotent top-up deduplication: Blocks duplicate charges on rapid UI bursts.
- * 6. Non-refundable wallet escrow: Locks unused funds inside platform ledger.
+ * Mutating operations are retired; canonical finance and accepted contracts remain authoritative.
  */
 
-import { writeFileSync, mkdirSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 
 export const PILOT_CONSTRAINTS = {
@@ -77,36 +75,7 @@ export async function processPilotTopUpIdempotent({
   amountPaise: _amountPaise,
   handler,
 }) {
-  if (!idempotencyKey) {
-    throw new Error('MISSING_IDEMPOTENCY_KEY: Top-up requests require a valid idempotency key');
-  }
-
-  // 1. Check if cached completed record exists
-  if (store.has(idempotencyKey)) {
-    const cached = store.get(idempotencyKey);
-    return { ...cached, isReplay: true };
-  }
-
-  // 2. Check if an identical request is currently in-flight (burst concurrency within 200ms)
-  if (inFlightOperations.has(idempotencyKey)) {
-    const result = await inFlightOperations.get(idempotencyKey);
-    return { ...result, isReplay: true };
-  }
-
-  // 3. Execute handler under promise guard
-  const executionPromise = (async () => {
-    try {
-      const outcome = await handler();
-      store.set(idempotencyKey, outcome);
-      return outcome;
-    } finally {
-      inFlightOperations.delete(idempotencyKey);
-    }
-  })();
-
-  inFlightOperations.set(idempotencyKey, executionPromise);
-  const freshResult = await executionPromise;
-  return { ...freshResult, isReplay: false };
+  throw new Error('PILOT_MUTATION_UNAVAILABLE: demonstration memory dedupe cannot authorize funding; use canonical finance commands');
 }
 
 /**
@@ -145,17 +114,7 @@ export function handlePilotTelemetrySpendEvent(currentState, event) {
  * Executes pilot database operations inside an explicit transaction with fail-closed rollback.
  */
 export async function executePilotDbTransactionWithFallback(dbClient, payload) {
-  await dbClient.query('BEGIN');
-  try {
-    const result = await dbClient.query(
-      `INSERT INTO host_marketing_campaigns (host_id, listing_id, budget_paise) VALUES ('${payload.hostId}', '${payload.listingId}', ${payload.budgetPaise})`
-    );
-    await dbClient.query('COMMIT');
-    return result;
-  } catch (err) {
-    await dbClient.query('ROLLBACK');
-    throw err;
-  }
+  throw new Error('PILOT_MUTATION_UNAVAILABLE: use canonical campaign/finance commands after named pilot authorization');
 }
 
 /**
@@ -165,7 +124,9 @@ export function generatePilotReceipt(auditData) {
   const receipt = {
     schemaVersion: '1.0.0',
     type: 'ENCHO_CR1_PILOT_GO_NOGO_RECEIPT',
-    status: 'CERTIFIED',
+    status: 'REQUIRES_INDEPENDENT_REVIEW',
+    classification: 'UNTRUSTED_OBSERVATION',
+    productionGateEligible: false,
     receiptId: `rcpt_pilot_${Date.now()}`,
     generatedAt: new Date().toISOString(),
     auditTimestamp: auditData.auditTimestamp,
@@ -195,14 +156,6 @@ export function generatePilotReceipt(auditData) {
       .digest('hex'),
   };
 
-  const targetPath = resolve(
-    process.cwd(),
-    'docs/harvo/receipts/CR1_PILOT_GO_NOGO_RECEIPT.json'
-  );
-
-  mkdirSync(dirname(targetPath), { recursive: true });
-  writeFileSync(targetPath, JSON.stringify(receipt, null, 2), 'utf8');
-
   return receipt;
 }
 
@@ -212,5 +165,6 @@ if (process.argv[1] && process.argv[1].endsWith('pilot-tranche-monitor.mjs')) {
   console.log(`Max Aggregate Budget: ₹${(PILOT_CONSTRAINTS.MAX_AGGREGATE_BUDGET_PAISE / 100).toLocaleString('en-IN')}`);
   console.log(`Max Daily Budget    : ₹${(PILOT_CONSTRAINTS.MAX_DAILY_BUDGET_PAISE / 100).toLocaleString('en-IN')}`);
   console.log(`Circuit Breaker At  : ${PILOT_CONSTRAINTS.CIRCUIT_BREAKER_THRESHOLD_PERCENT}% (₹${((PILOT_CONSTRAINTS.MAX_AGGREGATE_BUDGET_PAISE * 0.95) / 100).toLocaleString('en-IN')}`);
-  console.log('Status: ACTIVE & ENFORCING BOUNDS');
+  console.log('Status: NOT_RUNNING. This module does not observe or enforce a real pilot.');
+  process.exitCode = 1;
 }

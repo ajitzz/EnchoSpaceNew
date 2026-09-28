@@ -19,6 +19,14 @@ interface AdminAuthRequest extends Request {
 export function createAdminWorkforceRouter(pool: pg.Pool): Router {
   const router = Router();
   const service = new WorkforceAdminService(pool);
+  // Consumer admin is not workforce authority. Retire reads as well as writes:
+  // the legacy roster/audit projection has no organization-scoped staff session.
+  router.use((_req, res) => res.status(410).set('Cache-Control', 'no-store').json({
+    code: 'LEGACY_WORKFORCE_AUTHORITY_RETIRED',
+    error: 'Use Operations with your separately verified workforce session.',
+    operationsPath: '/operations/workforce',
+  }));
+
 
   const getAdminUserId = (req: AdminAuthRequest): number => {
     const id = req.user?.id;

@@ -193,6 +193,15 @@ export function calculateEventHash(
   return createHash('sha256').update(payload, 'utf8').digest('hex');
 }
 
+/** Retired consumer-admin adapter. Canonical IAM owns all workforce effects. */
+export class LegacyWorkforceAuthorityError extends Error {
+  readonly code = 'LEGACY_WORKFORCE_AUTHORITY_RETIRED';
+  constructor() { super('LEGACY_WORKFORCE_AUTHORITY_RETIRED'); }
+}
+function rejectLegacyWorkforceAuthority(): void {
+  throw new LegacyWorkforceAuthorityError();
+}
+
 export async function appendIamEvent(
   client: pg.PoolClient | pg.Pool,
   params: {
@@ -207,6 +216,7 @@ export async function appendIamEvent(
     correlationId?: string;
   }
 ): Promise<{ eventId: string; sequence: number; newHash: string }> {
+  rejectLegacyWorkforceAuthority();
   const correlationId = params.correlationId || randomUUID();
   const requestHash = createHash('sha256')
     .update(`${params.reason}:${params.eventType}:${params.entityId}:${correlationId}`, 'utf8')
@@ -264,6 +274,7 @@ export async function ensureAdminMembership(
   adminUserId: number,
   organizationId = MASTER_ORGANIZATION_ID
 ): Promise<string> {
+  rejectLegacyWorkforceAuthority();
   const existing = await client.query<{ id: string }>(
     `SELECT id FROM internal_organization_memberships WHERE organization_id = $1 AND user_id = $2`,
     [organizationId, adminUserId]
@@ -327,6 +338,7 @@ export class WorkforceAdminService {
    * Hires a new staff member atomically.
    */
   async hireStaffMember(rawInput: unknown) {
+  rejectLegacyWorkforceAuthority();
     const input = hireStaffInputSchema.parse(rawInput);
     const orgId = MASTER_ORGANIZATION_ID;
     const scopeId = input.scopeType === 'ORGANIZATION' ? orgId : (input.scopeId || orgId);
@@ -627,6 +639,7 @@ export class WorkforceAdminService {
    * Retrieves high-density department telemetry, headcounts, and active sessions.
    */
   async getWorkforceOverview() {
+  rejectLegacyWorkforceAuthority();
     const orgId = MASTER_ORGANIZATION_ID;
 
     // 1. Department Telemetry
@@ -750,6 +763,7 @@ export class WorkforceAdminService {
     limit?: number;
     offset?: number;
   }) {
+    rejectLegacyWorkforceAuthority();
     const orgId = MASTER_ORGANIZATION_ID;
     const limit = Math.min(options?.limit || 50, 100);
     const offset = options?.offset || 0;
@@ -845,6 +859,7 @@ export class WorkforceAdminService {
    * Executes atomic lifecycle action: SUSPEND, RESUME, REVOKE_SESSIONS, or OFFBOARD.
    */
   async executeLifecycleAction(rawInput: unknown) {
+  rejectLegacyWorkforceAuthority();
     const input = lifecycleActionSchema.parse(rawInput);
     const orgId = MASTER_ORGANIZATION_ID;
 
@@ -1020,6 +1035,7 @@ export class WorkforceAdminService {
    * Adjusts blast radius ceilings and daily velocity limits for an operator.
    */
   async updateStaffQuotas(rawInput: unknown) {
+  rejectLegacyWorkforceAuthority();
     const input = updateQuotasSchema.parse(rawInput);
     const orgId = MASTER_ORGANIZATION_ID;
 
@@ -1122,6 +1138,7 @@ export class WorkforceAdminService {
    * Lists staged Maker-Checker authorizations requiring dual-control ratification.
    */
   async getPendingAuthorizations() {
+  rejectLegacyWorkforceAuthority();
     const orgId = MASTER_ORGANIZATION_ID;
 
     const res = await this.pool.query(
@@ -1170,6 +1187,7 @@ export class WorkforceAdminService {
    * Ratifies (Approve or Reject) a staged Maker-Checker authorization request.
    */
   async ratifyAuthorization(rawInput: unknown) {
+  rejectLegacyWorkforceAuthority();
     const input = ratifyAuthorizationSchema.parse(rawInput);
     const orgId = MASTER_ORGANIZATION_ID;
 
@@ -1271,6 +1289,7 @@ export class WorkforceAdminService {
     offset?: number;
     eventType?: string;
   }) {
+    rejectLegacyWorkforceAuthority();
     const orgId = MASTER_ORGANIZATION_ID;
     const limit = Math.min(options?.limit || 50, 200);
     const offset = options?.offset || 0;
@@ -1332,6 +1351,7 @@ export class WorkforceAdminService {
    * Detects single-byte tampering in database rows.
    */
   async verifyMerkleAuditChain() {
+  rejectLegacyWorkforceAuthority();
     const orgId = MASTER_ORGANIZATION_ID;
 
     const res = await this.pool.query<{
@@ -1420,6 +1440,7 @@ export class WorkforceAdminService {
    * Nuclear Emergency Freeze Switch (Tier 1 / Tier 2 / Tier 3).
    */
   async executeEmergencyFreeze(rawInput: unknown) {
+  rejectLegacyWorkforceAuthority();
     const input = emergencyFreezeSchema.parse(rawInput);
     const orgId = MASTER_ORGANIZATION_ID;
 

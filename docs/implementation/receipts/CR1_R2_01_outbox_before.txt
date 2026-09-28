@@ -1,0 +1,60 @@
+
+ RUN  v4.1.10 /Users/ajit/Documents/EnchoSpaceNew
+
+xxx·······
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |marketing| src/test/harvo/durable_outbox.test.ts > CR1 shared durable outbox foundation on real PostgreSQL > preserves the original operation failure when rollback also fails and discards the connection
+AssertionError: expected Error: Rollback transport failure to be Error: Original query transport failure // Object.is equality
+
+- Expected
++ Received
+
+  Error {
+-   "message": "Original query transport failure",
++   "message": "Rollback transport failure",
+  }
+
+ ❯ src/test/harvo/durable_outbox.test.ts:93:68
+     91|     const original=new Error('Original query transport failure');
+     92|     const fault=faultPool({queryFailure:original,rollbackFailure:new E…
+     93|     await expect(fault.outbox.claimBatch({workerId:'fault-worker'})).r…
+       |                                                                    ^
+     94|     expect(fault.rollbackCalls).toEqual(['ROLLBACK']);expect(fault.rel…
+     95|     expect((await fixture.pool.query('SELECT count(*) FROM cr1_test_ou…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  |marketing| src/test/harvo/durable_outbox.test.ts > CR1 shared durable outbox foundation on real PostgreSQL > treats COMMIT transport failure as unknown with committed=false, discards and does not retry
+ FAIL  |marketing| src/test/harvo/durable_outbox.test.ts > CR1 shared durable outbox foundation on real PostgreSQL > treats COMMIT transport failure as unknown with committed=true, discards and does not retry
+AssertionError: expected Error: Must not mask the COMMIT to match object { …(2) }
+
+- Expected
++ Received
+
+- {
+-   "cause": Error {
+-     "message": "Lost COMMIT acknowledgement",
+-   },
+-   "code": "OUTBOX_COMMIT_OUTCOME_UNKNOWN",
++ Error {
++   "message": "Must not mask the COMMIT",
+  }
+
+ ❯ src/test/harvo/durable_outbox.test.ts:102:69
+    100|     const original=new Error('Lost COMMIT acknowledgement');
+    101|     const fault=faultPool({commitFailure:original,commitBeforeFailure:…
+    102|     await expect(fault.outbox.claimBatch({workerId:'commit-worker'})).…
+       |                                                                     ^
+    103|     expect(fault.released).toEqual([true]);expect(fault.rollbackCalls)…
+    104|     const stored=(await fixture.pool.query('SELECT state,attempts FROM…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 7 passed (10)
+   Start at  18:02:21
+   Duration  1.24s (transform 58ms, setup 32ms, import 88ms, tests 1.03s, environment 0ms)
+

@@ -1,6 +1,7 @@
 import {createHash,randomBytes,randomUUID} from 'node:crypto';
 import type pg from 'pg';
 import {z} from 'zod';
+import {factorWriterFunctions,isIsolatedWorkforceWriter} from '../isolatedWriterBoundary.js';
 import {stepUpReceiptSchema,workforceEnvironmentSchema,type StepUpReceipt} from '../../../shared/iam/contracts.js';
 import {PasskeyAssertionError,PasskeyAssertionVerifier,passkeyAssertionProofSchema,passkeyCeremonySchema,passkeyPolicySchema,reviewedPasskeyCredentialSchema} from './passkeyAssertion.js';
 const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
@@ -12,13 +13,7 @@ export class WorkforceStepUpError extends Error {constructor(readonly code:typeo
 const parse=<T>(schema:z.ZodType<T>,input:unknown):T=>{const result=schema.safeParse(input);if(!result.success)throw new WorkforceStepUpError('FACTOR_INVALID');return result.data;};
 const errors:Record<string,typeof codes[number]>={IAM_PASSKEY_CHALLENGE_INVALID:'FACTOR_CHALLENGE_INVALID',IAM_PASSKEY_PROOF_INVALID:'FACTOR_INVALID',IAM_PASSKEY_POLICY_UNAVAILABLE:'FACTOR_POLICY_UNAVAILABLE',IAM_PASSKEY_ENROLLMENT_UNAVAILABLE:'FACTOR_ENROLLMENT_UNAVAILABLE',IAM_PASSKEY_RATE_LIMITED:'FACTOR_RATE_LIMITED'};
 export async function isIsolatedFactorWriter(client:pg.PoolClient):Promise<boolean>{
- return (await client.query<{safe:boolean}>(`SELECT session_user=current_user AND NOT(r.rolsuper OR r.rolbypassrls OR r.rolcreatedb OR r.rolcreaterole OR has_schema_privilege(current_user,'public','CREATE'))
- AND NOT EXISTS(SELECT 1 FROM pg_roles x WHERE pg_has_role(current_user,x.oid,'MEMBER') AND (x.rolsuper OR x.rolbypassrls OR x.rolcreatedb OR x.rolcreaterole))
- AND NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p') AND (pg_has_role(current_user,c.relowner,'MEMBER') OR has_table_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER') OR has_any_column_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,REFERENCES')))
- AND has_function_privilege(current_user,'internal_iam_record_passkey(text,uuid,jsonb,text,text)','EXECUTE')
- AND NOT has_function_privilege(current_user,'internal_iam_issue_staff_session(uuid,text,jsonb,text,text,text)','EXECUTE')
- AND NOT has_function_privilege(current_user,'internal_iam_accept_invitation(text,text,jsonb,text,text)','EXECUTE')
- AND NOT has_function_privilege(current_user,'internal_iam_apply_workforce_lifecycle(jsonb,uuid,text,text,text)','EXECUTE') AS safe FROM pg_roles r WHERE r.rolname=current_user`)).rows[0]?.safe===true;
+ return isIsolatedWorkforceWriter(client,factorWriterFunctions);
 }
 /** Uses only an already reviewed enrollment; registration/import/recovery are intentionally absent. */
 export class WorkforceStepUp {
@@ -49,8 +44,12 @@ export class WorkforceStepUp {
    if(!await isIsolatedFactorWriter(client))throw new WorkforceStepUpError('FACTOR_STORE_UNAVAILABLE');
    await client.query("SELECT set_config('app.workforce_environment',$1,true)",[this.environment]);
    const value=await work(client);committing=writes;await client.query('COMMIT');committing=false;return value;
-  }catch(error){try{await client.query('ROLLBACK');}catch{discard=true;}
-   if(committing)throw new WorkforceStepUpError('FACTOR_OUTCOME_UNKNOWN');if(error instanceof WorkforceStepUpError)throw error;
+  }catch(error){
+   // An acknowledgement loss cannot be repaired by ROLLBACK. The writer must
+   // not return this uncertain connection to the pool or reissue proof.
+   if(committing){discard=true;throw new WorkforceStepUpError('FACTOR_OUTCOME_UNKNOWN');}
+   try{await client.query('ROLLBACK');}catch{discard=true;}
+   if(error instanceof WorkforceStepUpError)throw error;
    throw new WorkforceStepUpError(error instanceof Error&&errors[error.message]||'FACTOR_STORE_UNAVAILABLE');
   }finally{client.release(discard);}
  }

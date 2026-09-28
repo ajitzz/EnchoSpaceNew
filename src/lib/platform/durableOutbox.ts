@@ -136,8 +136,8 @@ export interface ResolveReconciliationInput extends ClaimedIdentity {
 }
 
 export class DurableOutboxError extends Error {
-  constructor(public readonly code: string, message: string) {
-    super(message);
+  constructor(public readonly code: string, message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = 'DurableOutboxError';
   }
 }
@@ -488,16 +488,28 @@ export class DurableOutbox<TPayload> {
 
   private async inTransaction<TResult>(fn: (client: pg.PoolClient) => Promise<TResult>): Promise<TResult> {
     const client = await this.pool.connect();
+    let commitAttempted = false;
+    let discardConnection = false;
     try {
       await client.query('BEGIN');
       const result = await fn(client);
+      commitAttempted = true;
       await client.query('COMMIT');
       return result;
     } catch (error) {
-      await client.query('ROLLBACK');
+      if (commitAttempted) {
+        // A transport failure can hide a committed claim/finalization. A later
+        // ROLLBACK cannot establish its outcome; reconcile durable state instead.
+        discardConnection = true;
+        throw new DurableOutboxError('OUTBOX_COMMIT_OUTCOME_UNKNOWN',
+          'The outbox transaction outcome must be reconciled from durable state.', {cause: error});
+      }
+      try { await client.query('ROLLBACK'); }
+      catch { discardConnection = true; }
+      // Keep the first failure intact even when cleanup loses its connection.
       throw error;
     } finally {
-      client.release();
+      client.release(discardConnection);
     }
   }
 }

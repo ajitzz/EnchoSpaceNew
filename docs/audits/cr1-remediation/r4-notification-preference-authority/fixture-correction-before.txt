@@ -1,0 +1,85 @@
+
+ RUN  v4.1.10 /Users/ajit/Documents/EnchoSpaceNew
+
+·xxxxxxxxxxxx··
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_notification_preference_authority.test.ts > notification preference readiness checks actual LOGIN and reachable authority > rejects NOINHERIT reachable forged preference timestamp before enabling the route
+error: column "created_at" of relation "conversation_notification_preferences" does not exist
+ ❯ node_modules/pg-pool/index.js:45:11
+ ❯ src/test/harvo/cr1_notification_preference_authority.test.ts:30:3
+     28|  ])('rejects NOINHERIT reachable %s before enabling the route',async(_…
+     29|   await f.pool.query('ALTER ROLE cr1_conversation_runtime NOINHERIT; C…
+     30|   await f.pool.query(`GRANT ${privilege} TO preference_reachable`);
+       |   ^
+     31|   try{
+     32|    const c=await f.runtime.connect();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_notification_preference_authority.test.ts > notification preference readiness checks actual LOGIN and reachable authority > rejects NOINHERIT reachable preference identity UPDATE before enabling the route
+ FAIL  |marketing| src/test/harvo/cr1_notification_preference_authority.test.ts > notification preference readiness checks actual LOGIN and reachable authority > rejects NOINHERIT reachable audit content UPDATE before enabling the route
+ FAIL  |marketing| src/test/harvo/cr1_notification_preference_authority.test.ts > notification preference readiness checks actual LOGIN and reachable authority > rejects NOINHERIT reachable audit deletion before enabling the route
+ FAIL  |marketing| src/test/harvo/cr1_notification_preference_authority.test.ts > notification preference readiness checks actual LOGIN and reachable authority > rejects NOINHERIT reachable preference truncation before enabling the route
+ FAIL  |marketing| src/test/harvo/cr1_notification_preference_authority.test.ts > notification preference readiness checks actual LOGIN and reachable authority > rejects NOINHERIT reachable column REFERENCES before enabling the route
+ FAIL  |marketing| src/test/harvo/cr1_notification_preference_authority.test.ts > notification preference readiness checks actual LOGIN and reachable authority > rejects NOINHERIT reachable trigger creation before enabling the route
+ FAIL  |marketing| src/test/harvo/cr1_notification_preference_authority.test.ts > notification preference readiness checks actual LOGIN and reachable authority > rejects NOINHERIT reachable trigger-function execution before enabling the route
+ FAIL  |marketing| src/test/harvo/cr1_notification_preference_authority.test.ts > notification preference readiness checks actual LOGIN and reachable authority > rejects NOINHERIT reachable forged audit timestamp before enabling the route
+error: role "preference_reachable" already exists
+ ❯ node_modules/pg-pool/index.js:45:11
+ ❯ src/test/harvo/cr1_notification_preference_authority.test.ts:29:3
+     27|   ['forged audit timestamp','INSERT(created_at) ON conversation_notifi…
+     28|  ])('rejects NOINHERIT reachable %s before enabling the route',async(_…
+     29|   await f.pool.query('ALTER ROLE cr1_conversation_runtime NOINHERIT; C…
+       |   ^
+     30|   await f.pool.query(`GRANT ${privilege} TO preference_reachable`);
+     31|   try{
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_notification_preference_authority.test.ts > notification preference readiness checks actual LOGIN and reachable authority > rejects PUBLIC column authority SELECT(version) ON conversation_notification_preferences
+ FAIL  |marketing| src/test/harvo/cr1_notification_preference_authority.test.ts > notification preference readiness checks actual LOGIN and reachable authority > rejects PUBLIC column authority REFERENCES(version) ON conversation_notification_preference_events
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/test/harvo/cr1_notification_preference_authority.test.ts:49:39
+     47|  ])('rejects PUBLIC column authority %s',async(privilege)=>{
+     48|   await f.pool.query(`GRANT ${privilege} TO PUBLIC`);
+     49|   try{expect((await catalog()).ready).toBe(false);}
+       |                                       ^
+     50|   finally{await f.pool.query(`REVOKE ${privilege} FROM PUBLIC`);}
+     51|   expect((await catalog()).ready).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+ FAIL  |marketing| src/test/harvo/cr1_notification_preference_authority.test.ts > notification preference readiness checks actual LOGIN and reachable authority > rejects direct column REFERENCES without treating it as a table grant
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/test/harvo/cr1_notification_preference_authority.test.ts:55:39
+     53|  it('rejects direct column REFERENCES without treating it as a table g…
+     54|   await f.pool.query('GRANT REFERENCES(version) ON conversation_notifi…
+     55|   try{expect((await catalog()).ready).toBe(false);}
+       |                                       ^
+     56|   finally{await f.pool.query('REVOKE REFERENCES(version) ON conversati…
+     57|   expect((await catalog()).ready).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/12]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  12 failed | 3 passed (15)
+   Start at  18:30:34
+   Duration  1.53s (transform 83ms, setup 31ms, import 130ms, tests 1.28s, environment 0ms)
+

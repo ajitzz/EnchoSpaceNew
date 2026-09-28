@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {"strict": true},
+  "include": [
+    "../../src/lib/platform/durableOutbox.ts",
+    "../../src/server/conversation/notificationWorker.ts",
+    "../../src/server/conversation/notificationRuntime.ts",
+    "../../src/server/deployment/conversationReadiness.ts",
+    "../../src/test/harvo/durable_outbox.test.ts",
+    "../../src/test/harvo/conversation_notification_worker.test.ts",
+    "cr1-notification-worker.ts"
+  ],
+  "exclude": []
+}

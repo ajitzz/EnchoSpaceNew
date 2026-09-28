@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "status": "LOCAL_IMPLEMENTATION_REVIEW_PASS",
+  "card": "R2-01",
+  "scope": "Durable outbox transaction outcome + notification worker runtime authority subset",
+  "reviewer": "identity_agent_independent_of_implementation",
+  "recordedAt": "2026-09-28T18:17:42.084586+00:00",
+  "sourceSha256": {
+    "src/lib/platform/durableOutbox.ts": "6d65f383704b81fc068b936ec193856cce01696684ed23216be9b7074991f33a",
+    "src/server/conversation/notificationWorker.ts": "811d33d196d220444b53e09eda0c736c70b28e0b56b6d3b3d36a0ef5190b6fd6",
+    "src/server/conversation/notificationRuntime.ts": "69e60a3a07230d04524ab7a9dd4d977d347a8648436c656c4f31db6b5341e1b6",
+    "src/server/deployment/conversationReadiness.ts": "0524cd71ac7e71cf0b2d82dd503585600e55647ef8acfa495272724e12a58350",
+    "src/server/deployment/runtimeDatabaseAuthority.ts": "0b510603f38af42fc543c9050473e0f87fe69b930c08b69be7cd9ff4be252470"
+  },
+  "resolvedFinding": "Conversation readiness originally checked current_user grants only. Repaired recursive reachable-role union rejects forbidden dormant NOINHERIT column/table/function/sequence privileges; actual LOGIN negatives verified.",
+  "reviewedCriteria": [
+    "Lost COMMIT preserves first cause, discards uncertain connection and never fabricates successful finalization.",
+    "Rollback cleanup failure does not replace original pre-COMMIT error.",
+    "Notification workers recheck actual role/catalog after claim before local socket hint.",
+    "Unknown outcome is surfaced via stable masked runtime codes.",
+    "Separate LOGIN role, parent privilege reachability, child-process competition/restart and durable-state checks pass."
+  ],
+  "validation": {
+    "command": "npx -y node@24 scripts/testing/run.mjs src/test/harvo/durable_outbox.test.ts src/test/harvo/conversation_notification_worker.test.ts --reporter=dot",
+    "exitCode": 0,
+    "passed": 37,
+    "failed": 0,
+    "log": "docs/audits/cr1-remediation/r2-01/INDEPENDENT_TRANSACTION_AUTHORITY.txt",
+    "sha256": "7c53d3e59909b0ff619155429e156cb3ac5156eabb869297ebef90c7821cf65d"
+  },
+  "limits": [
+    "Local disposable PostgreSQL and injected socket port only; no external message delivery.",
+    "R2-01 broader all worker classifications/authority integration not accepted by this slice.",
+    "No remote schema/role or production readiness evidence.",
+    "Post-claim check does not promise that an asynchronous external side effect can be revoked after dispatch; this worker only emits bounded local hints."
+  ]
+}

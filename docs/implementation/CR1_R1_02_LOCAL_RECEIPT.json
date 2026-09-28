@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "card": "R1-02",
+  "status": "IN_PROGRESS",
+  "sliceDisposition": "READY_FOR_REVIEW",
+  "scope": "Legacy containment and canonical lifecycle HTTP adaptation",
+  "acceptance": "NOT_INDEPENDENTLY_ACCEPTED",
+  "environment": "LOCAL_DISPOSABLE_POSTGRES_RESTRICTED_LOGIN_AND_STATIC_UI",
+  "recordedAt": "2026-09-28T18:10:36.041107+00:00",
+  "baselineCommit": "0e4c6fec2fe86f1b793760c5f7a3daf08bbf7508",
+  "stagedDiffSha256": "854471966ac51c7fbf44e69095990f5f5eb2892b772cc4aef9adfbb0f502a520",
+  "affectedTrackedDiffSha256": "2599d57d4be67fc0cbdade246f2b33c7381d473ed55b2578360925a73dea7760",
+  "sourceSha256": {
+    "src/server/admin/workforceRouter.ts": "569e40929b00dc4b7c99913174a99205423f6208f983f723f8d384ee9fb61b36",
+    "src/lib/iam/workforceAdminService.ts": "fdceb01c1c7674f1a95a75b5fd38fb755c1b41f2954eddbfe62cfad7f078c48d",
+    "components/admin/AdminStaffCommandCenter.tsx": "458ee40a6873fdecfd23360a944484b6a0546683ebe1e8e1116b9a48c947e012",
+    "src/lib/iam/workforceLifecycle.ts": "efd16bd1a6733068fe94bc2653641a99d9724f9249170fd367d352259748004f",
+    "src/server/operations/workforceCommands.ts": "343bb0e30ae6e3183d958606f68869931aeac8a6851d3ff72b56f79932bf9403",
+    "src/server/operations/workforceCommandRouter.ts": "ad56f3c3ec78634f0516c9a00765730288d1146c5fc57b6afdb74eae2102630a",
+    "src/server/operations/workforceCommandRuntime.ts": "1db40728a17679d1c8cf073cb728b81995308dab9aebcab779d67aa20e7c6225",
+    "src/test/harvo/cr1_workforce_commands_http.test.ts": "eaf0d5598a3f63f127205f8e4653c366ddc9c7c9001e1b6b0fbde56e48f0a5fd",
+    "src/test/harvo/cr1_admin_workforce_command.test.ts": "c40a938f1528c80b21ed5b39162abd274364b2b1c0a11031cdc6b6cd634542ad"
+  },
+  "compositionByParent": "server.ts mounts /api/operations/v1/workforce/commands before general JSON parser; parent owns shared file and verifies integrated build",
+  "latestTargetedTests": {
+    "passed": 68,
+    "failed": 0,
+    "qualification": "Latest applicable result per file, not a full regression run.",
+    "files": {
+      "cr1_workforce_commands_http.test.ts": 6,
+      "cr1_workforce_lifecycle.test.ts": 13,
+      "cr1_admin_workforce_command.test.ts": 8,
+      "cr1_privileged_actions.test.ts": 12,
+      "cr1_owner_bootstrap.test.ts": 11,
+      "cr1_workforce_invitations.test.ts": 18
+    }
+  },
+  "commands": [
+    {
+      "command": "npx -y node@24 scripts/testing/run.mjs src/test/harvo/cr1_workforce_commands_http.test.ts src/test/harvo/cr1_workforce_lifecycle.test.ts --reporter=dot",
+      "exitCode": 0,
+      "passed": 19
+    },
+    {
+      "command": "npx -y node@24 scripts/testing/run.mjs src/test/harvo/cr1_admin_workforce_command.test.ts src/test/harvo/cr1_privileged_actions.test.ts --reporter=dot",
+      "exitCode": 0,
+      "passed": 20
+    },
+    {
+      "command": "npx -y node@24 scripts/testing/run.mjs src/test/harvo/cr1_owner_bootstrap.test.ts src/test/harvo/cr1_workforce_invitations.test.ts --reporter=dot",
+      "exitCode": 0,
+      "passed": 29
+    },
+    {
+      "command": "npx -y node@24 scripts/testing/run.mjs src/test/harvo/cr1_workforce_commands_http.test.ts --reporter=dot",
+      "exitCode": 0,
+      "passed": 6,
+      "qualification": "Final original-review-payload hash check, 24KB bound and response projection negatives."
+    },
+    {
+      "command": "npx -y node@24 node_modules/typescript/bin/tsc --noEmit -p tsconfig.server.json",
+      "exitCode": 0
+    }
+  ],
+  "durableAssertions": [
+    "Legacy consumer admin cannot create user/member/grant or unscoped roster reads; service never connects.",
+    "HTTP lifecycle effects commit one receipt and replay same result without duplicate version bump.",
+    "STANDARD reviewed authority cannot be relabelled PROTECTED.",
+    "Reviewer original command/reason must bind exact lifecycle fingerprint; self-checker and reused factor denied.",
+    "Revoked session, wrong org/env, stale version and forged context denied.",
+    "Existing lifecycle13 verifies concurrency barrier, audit rollback and lost-COMMIT reconciliation."
+  ],
+  "failedEvidenceQualification": [
+    "Baseline11 tests passed old owner-backed direct hiring expectations; source preserved, not production evidence.",
+    "First HTTP fixture tried immutable token update; corrected to insert distinct sessions.",
+    "Next fixture omitted complete revocation evidence; corrected per schema without weakening constraints.",
+    "Mounted authority-switch regression exposed actual canonical fingerprint defect; repaired implementation, not assertion.",
+    "Early TypeScript union narrowing failed; repaired explicit discriminant guard."
+  ],
+  "fixtureQualification": "Exact local IAM migration and non-bypass runtime LOGIN; surrounding migration manifest metadata is fixture-only. Factors are local trusted test receipts, not actual user passkey evidence.",
+  "notDelivered": [
+    "Invitation authoring and verified acceptance browser/isolated identity-writer composition.",
+    "Step-up/factor browser composition; factor-writer authority hardening still needed.",
+    "Canonical staff command form UI and complete browser journey.",
+    "Independent R0-04/IAM operational policy acceptance and remote deployment identity."
+  ],
+  "migrationBytesChanged": false,
+  "remoteActionsPerformed": false,
+  "fullRegressionRun": false,
+  "rollback": "Disable new command adapter; preserve canonical Operations reads and durable authority. Never restore legacy bypass.",
+  "evidence": [
+    {
+      "path": "docs/audits/cr1-remediation/r1-02/BOOTSTRAP_INVITATION_REGRESSION.txt",
+      "sha256": "d13a2b8520835b7abbaac0c9d1ed572566fb454bf1f45bd9abf2beac04d771fc"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r1-02/CONTAINMENT_HTTP.txt",
+      "sha256": "f30a4f6df94df022a48c7c2c17a0ace5e2c0910b3beac40783c39d9179376d77"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r1-02/CONTAINMENT_HTTP_REPAIR.txt",
+      "sha256": "76d544def12af7455ed2125e0efcb84af2970d8dac5e4f1a64a2d0b0a1c05a66"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r1-02/CONTAINMENT_PRIVILEGED_FINAL.txt",
+      "sha256": "a8ce7210180ee5328deba096d1bac9954cd23c2b6fb2cdda6ab86df700fdb4ee"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r1-02/HISTORICAL_UNSAFE_AUTHORITY_TEST_SOURCE.txt",
+      "sha256": "0a67ca13e451091a6dbf24de0a40ef7283267910018462df9764a6bc6d023f58"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r1-02/HTTP_LIFECYCLE_AUTHORITY_REPAIR.txt",
+      "sha256": "30e4bab437a1008cfeded5d8ce5f601a81bb1e2710ab320366a042c19786ada2"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r1-02/HTTP_LIFECYCLE_FINAL.txt",
+      "sha256": "da72da2a4863a34db6f6f8e8a032f9a71c0d5f4280e71a4beb6aeb58e5d79d9f"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r1-02/HTTP_REVIEW_PAYLOAD_FINAL.txt",
+      "sha256": "4430490dba2bea9f84ab5880f5776cbf5bb5ae0e53255a0892df00469889bf1d"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r1-02/HTTP_TYPED_REPAIR.txt",
+      "sha256": "a99c7125b7b64f1f569374b4ea4617d71ebc3da8dfb81e69bec29b62aa999ad1"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r1-02/LINT.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r1-02/LINT_FINAL.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r1-02/SERVER_REVIEW_PAYLOAD_TYPECHECK.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r1-02/SERVER_TYPECHECK.txt",
+      "sha256": "311ef5e6525fff8ef6e720d3df65d55437cd485bd4417c7bc74eb9f6b3e6eb13"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r1-02/SERVER_TYPECHECK_FINAL.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r1-02/SERVER_TYPECHECK_REPAIR.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "followup": "docs/implementation/CR1_R1_02_FACTOR_LOCAL_RECEIPT.json",
+  "sourceSha256Qualification": "Latest command router rate-limit trace repair reverified6 HTTPtests; supplemental factor receipt records current hash. Historical receipts/transcripts remain preserved."
+}

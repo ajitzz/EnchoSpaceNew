@@ -50,14 +50,16 @@ export class ConversationNotificationWorker {
    const result:ConversationNotificationRun={claimed:claims.length,completed:0,retried:0,dead:0,claimLost:0};
    for(const claim of claims)await this.process(claim,result);
    return result;
-  }catch(error){if(error instanceof ConversationNotificationWorkerError)throw error;throw new ConversationNotificationWorkerError('NOTIFICATION_QUEUE_UNAVAILABLE');}
+  }catch(error){
+   if(error instanceof ConversationNotificationWorkerError)throw error;
+   throw new ConversationNotificationWorkerError(this.isUnknown(error)?'NOTIFICATION_QUEUE_OUTCOME_UNKNOWN':'NOTIFICATION_QUEUE_UNAVAILABLE');
+  }
   finally{this.running=false;}
  }
  private async process(claim:ClaimedOutboxItem<ConversationNotificationPayload>,result:ConversationNotificationRun){
   try{await this.outbox.heartbeat(claim,this.options.workerId,this.options.leaseSeconds);}
-  catch(error){if(this.isLost(error)){result.claimLost++;return;}throw new ConversationNotificationWorkerError('NOTIFICATION_QUEUE_UNAVAILABLE');}
-  const stored=(await this.pool.query(`SELECT recipient_id,payload FROM notification_intents
-   WHERE id=$1 AND fence=$2::bigint AND state='RUNNING' AND claimed_by=$3 AND lease_until>clock_timestamp()`,[claim.id,claim.fence,this.options.workerId])).rows[0];
+  catch(error){if(this.isLost(error)){result.claimLost++;return;}throw new ConversationNotificationWorkerError(this.isUnknown(error)?'NOTIFICATION_QUEUE_OUTCOME_UNKNOWN':'NOTIFICATION_QUEUE_UNAVAILABLE');}
+  const stored=await this.authorizedRecipient(claim);
   if(!stored){result.claimLost++;return;}
   const parsed=recipientRowSchema.safeParse(stored);
   const expectedFingerprint=durableRequestFingerprint({topic:claim.topic,partitionKey:claim.partitionKey,payload:claim.payload,executionClass:claim.executionClass,principalId:claim.principalId,organizationId:claim.organizationId});
@@ -75,8 +77,18 @@ export class ConversationNotificationWorker {
    if(this.isLost(error)){result.claimLost++;return;}
    // A lost COMMIT reply may hide successful finalization. Do not overwrite it
    // with RETRY or report completion. Lease recovery handles a genuine rollback.
-   throw new ConversationNotificationWorkerError('NOTIFICATION_FINALIZATION_UNAVAILABLE');
+   throw new ConversationNotificationWorkerError(this.isUnknown(error)?'NOTIFICATION_FINALIZATION_OUTCOME_UNKNOWN':'NOTIFICATION_FINALIZATION_UNAVAILABLE');
   }
+ }
+ private async authorizedRecipient(claim:ClaimedOutboxItem<ConversationNotificationPayload>):Promise<unknown>{
+  const client=await this.pool.connect();
+  try{
+   // Claims do not freeze service authority. Recheck the actual queue-only role,
+   // policies and grants before each effect, including work claimed before a revoke.
+   if(!(await verifyConversationCatalog(client,'worker')).ready)throw new ConversationNotificationWorkerError('NOTIFICATION_WORKER_NOT_READY');
+   return (await client.query(`SELECT recipient_id,payload FROM notification_intents
+    WHERE id=$1 AND fence=$2::bigint AND state='RUNNING' AND claimed_by=$3 AND lease_until>clock_timestamp()`,[claim.id,claim.fence,this.options.workerId])).rows[0];
+  }finally{client.release();}
  }
  private async dispatch(input:{recipient_id:number;payload:ConversationNotificationPayload}){
   const controller=new AbortController();
@@ -89,7 +101,8 @@ export class ConversationNotificationWorker {
  }
  private async fail(claim:ClaimedOutboxItem<ConversationNotificationPayload>,classification:'TRANSIENT'|'PERMANENT',errorCode:string,result:ConversationNotificationRun){
   try{const state=await this.outbox.fail({...claim,classification,errorCode},this.options.workerId);if(state==='RETRY')result.retried++;else if(state==='DEAD')result.dead++;}
-  catch(error){if(this.isLost(error)){result.claimLost++;return;}throw new ConversationNotificationWorkerError('NOTIFICATION_FINALIZATION_UNAVAILABLE');}
+  catch(error){if(this.isLost(error)){result.claimLost++;return;}throw new ConversationNotificationWorkerError(this.isUnknown(error)?'NOTIFICATION_FINALIZATION_OUTCOME_UNKNOWN':'NOTIFICATION_FINALIZATION_UNAVAILABLE');}
  }
  private isLost(error:unknown){return error instanceof DurableOutboxError&&error.code==='OUTBOX_CLAIM_LOST';}
+ private isUnknown(error:unknown){return error instanceof DurableOutboxError&&error.code==='OUTBOX_COMMIT_OUTCOME_UNKNOWN';}
 }

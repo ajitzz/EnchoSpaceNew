@@ -1,0 +1,31 @@
+
+ RUN  v4.1.10 /Users/ajit/Documents/EnchoSpaceNew
+
+stdout | src/test/harvo/cr1_offline_worker_lifecycle.test.ts
+vite v6.4.3 building for production...
+
+stdout | src/test/harvo/cr1_offline_worker_lifecycle.test.ts
+transforming...
+
+stdout | src/test/harvo/cr1_offline_worker_lifecycle.test.ts
+✓ 162 modules transformed.
+
+stdout | src/test/harvo/cr1_offline_worker_lifecycle.test.ts
+rendering chunks...
+
+stdout | src/test/harvo/cr1_offline_worker_lifecycle.test.ts
+computing gzip size...
+
+stdout | src/test/harvo/cr1_offline_worker_lifecycle.test.ts
+../../../../var/folders/xz/n8vtdw5x6js6lj7q5y211s3h0000gn/T/encho-offline-worker-oGMrGQ/client/sw.mjs  110.04 kB │ gzip: 31.26 kB
+
+stdout | src/test/harvo/cr1_offline_worker_lifecycle.test.ts
+✓ built in 244ms
+
+··········
+
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+   Start at  18:15:25
+   Duration  20.59s (transform 74ms, setup 47ms, import 906ms, tests 19.53s, environment 0ms)
+

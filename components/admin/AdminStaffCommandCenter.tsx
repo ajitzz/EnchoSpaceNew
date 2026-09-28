@@ -148,7 +148,18 @@ const DEPARTMENT_ROLES: Record<string, { key: string; name: string; desc: string
   ],
 };
 
-export const AdminStaffCommandCenter: React.FC<Props> = ({ token }) => {
+/** Consumer tokens never authorize organization staffing. */
+export const AdminStaffCommandCenter: React.FC<Props> = () => (
+  <section className="p-6" aria-labelledby="workforce-authority-title">
+    <h2 id="workforce-authority-title">Workforce Operations</h2>
+    <p>Use your separately verified staff session to review workforce access and assigned work.</p>
+    <a href="/operations/workforce">Open Workforce Operations</a>
+    <p>Invitation acceptance requires verified identity. Resume, quota changes and organization-wide freeze are unavailable until reviewed command contracts are enabled.</p>
+  </section>
+);
+
+/** Historical presentation retained during canonical adoption; never mounted. */
+export const RetiredAdminStaffCommandCenter: React.FC<Props> = ({ token }) => {
   const [activeTab, setActiveTab] = useState<'roster' | 'departments' | 'authorizations' | 'audit'>('roster');
   const [loading, setLoading] = useState(true);
   const [telemetry, setTelemetry] = useState<Record<string, DepartmentTelemetry>>({});

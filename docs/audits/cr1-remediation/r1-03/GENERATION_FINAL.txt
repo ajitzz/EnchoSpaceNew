@@ -1,0 +1,48 @@
+
+ RUN  v4.1.10 /Users/ajit/Documents/EnchoSpaceNew
+
+stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > does not lift an in-flight pre-logout mutation above the new fence on same-token re-login
+Direct mutation failed for /api/threads/3/messages, queuing offline Error: fixture lost response after logout
+    at /Users/ajit/Documents/EnchoSpaceNew/src/test/cr1_actor_scoped_sync.test.ts:132:13
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+Refusing offline replay without a current session and an approved domain contract
+
+stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > refuses to durably persist credential-like fields hidden in a mutation body
+Refusing to persist an offline mutation containing credential-like fields
+
+···················stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > cannot enqueue a failed direct request under the account switched in during its network wait
+Direct mutation failed for /api/wishlists, queuing offline Error: Lost response
+    at /Users/ajit/Documents/EnchoSpaceNew/src/test/cr1_actor_scoped_sync.test.ts:390:13
+    at fetch (file:///Users/ajit/Documents/EnchoSpaceNew/node_modules/@vitest/spy/dist/index.js:332:34)
+    at Module.queueMutationWithReceipt (/Users/ajit/Documents/EnchoSpaceNew/lib/syncService.ts:413:36)
+    at /Users/ajit/Documents/EnchoSpaceNew/src/test/cr1_actor_scoped_sync.test.ts:392:18
+    at file:///Users/ajit/Documents/EnchoSpaceNew/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///Users/ajit/Documents/EnchoSpaceNew/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///Users/ajit/Documents/EnchoSpaceNew/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///Users/ajit/Documents/EnchoSpaceNew/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///Users/ajit/Documents/EnchoSpaceNew/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+Refusing offline replay without a current session and an approved domain contract
+
+stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > never durably queues financial, booking, campaign, or arbitrary external requests
+Refusing offline replay without a current session and an approved domain contract
+
+stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > never durably queues financial, booking, campaign, or arbitrary external requests
+Refusing offline replay without a current session and an approved domain contract
+
+stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > never durably queues financial, booking, campaign, or arbitrary external requests
+Refusing offline replay without a current session and an approved domain contract
+
+stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > never durably queues financial, booking, campaign, or arbitrary external requests
+Refusing offline replay without a current session and an approved domain contract
+
+stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > requires the message domain deduplication UUID before persisting inquiry retries
+Refusing offline replay without a current session and an approved domain contract
+
+··············
+
+ Test Files  1 passed (1)
+      Tests  33 passed (33)
+   Start at  18:14:59
+   Duration  675ms (transform 96ms, setup 291ms, import 85ms, tests 201ms, environment 0ms)
+

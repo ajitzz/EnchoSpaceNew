@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": { "strict": true },
+  "include": [
+    "../../vite.config.ts",
+    "../../src/sw.ts",
+    "../../lib/legacyOfflineQueue.ts",
+    "../../lib/syncService.ts",
+    "../../components/AuthContext.tsx",
+    "cr1-offline-browser/entry.tsx",
+    "../../src/test/harvo/cr1_offline_worker_lifecycle.test.ts",
+    "../../src/test/cr1_actor_scoped_sync.test.ts"
+  ],
+  "exclude": []
+}

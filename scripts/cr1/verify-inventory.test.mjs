@@ -21,3 +21,11 @@ test('setting reads are excluded and unknown dynamic paths fail closed',()=>{
   assert.equal(scanRoutes('server.ts',"app.get('io');app.get('/health',handler);").length,1);
   assert.throws(()=>scanRoutes('server.ts','app.post(computedRoute,handler);'),/Unresolved dynamic route/);
 });
+test('competing admin workforce routes keep their distinct mounted authority boundary',()=>{
+  const routes=scanRoutes('src/server/admin/workforceRouter.ts',"function createAdminWorkforceRouter(){const router=Router();router.post('/hire',handler);return router;}");
+  assert.deepEqual(routes[0].paths,['/api/admin/workforce/hire']);
+});
+test('unmounted notification declarations never acquire a fictional API prefix',()=>{
+  const routes=scanRoutes('src/server/conversations/notificationRouter.ts',"function createNotificationRouter(){const router=Router();router.get('/preferences',handler);return router;}");
+  assert.deepEqual(routes[0].paths,['/preferences']);
+});

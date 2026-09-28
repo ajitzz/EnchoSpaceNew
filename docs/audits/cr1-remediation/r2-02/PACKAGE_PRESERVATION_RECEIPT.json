@@ -1,0 +1,37 @@
+{
+  "status": "READY_FOR_REVIEW",
+  "scope": "LOCAL_PACKAGING_AND_TEST_ISOLATION_ONLY",
+  "recordedAt": "2026-09-28T18:26:11.675274+00:00",
+  "head": "0e4c6fec2fe86f1b793760c5f7a3daf08bbf7508",
+  "sourceFrozen": false,
+  "productionCertification": false,
+  "commands": [
+    {
+      "command": "node24 scripts/testing/run.mjs --node-test scripts/deployment/migration-assets.test.mjs scripts/testing/run.test.mjs",
+      "exitCode": 0,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "evidence": "docs/audits/cr1-remediation/r2-02/PACKAGE_PRESERVATION_TESTS.txt"
+    },
+    {
+      "command": "node24 scripts/deployment/package-server-assets.mjs",
+      "exitCode": 0,
+      "scope": "Current39-filecandidatealreadyexact;noSQLreplaced"
+    }
+  ],
+  "files": {
+    "scripts/deployment/package-server-assets.mjs": "84ccca06ea7372b7aebe3c02d9a849320e0b5eff6ac3907c1a2dea93f4152da3",
+    "scripts/deployment/migration-assets.mjs": "18ff5e6a34026d52f66ef32596ec74ea860187837bbbb188ec2d971c2e50a9bd",
+    "scripts/deployment/migration-assets.test.mjs": "534a4b11dc29fb1d7a9a2a62fb8e09aeb02d907eed0fd3ebfda8b5d85c14ed08",
+    "scripts/testing/run.mjs": "f724649ec1f63c66766328a941d9ae9bea786f1ac6f6ea85bfacc3192fcfc8c7",
+    "scripts/testing/run.test.mjs": "1fdde7325e4425a3aba1fb1f37867cd87c9e679936cc54a2a2f42b469164ffb1",
+    ".github/workflows/ci.yml": "c4c229ff5800ce2d04de89a1f8f3858fffbf71b107cae2bb9d51d6353bfaa016"
+  },
+  "limits": [
+    "Initial pre-build SQL artifact bytes were not archived; previous artifact identity is unknown.",
+    "Do not infer missing047 was present or removed from previous build.",
+    "Exact Neon comparison currently fails; applied045 original bytes and047source unknown.",
+    "No fullbuild rerun or CIrun claimed for this follow-up."
+  ]
+}

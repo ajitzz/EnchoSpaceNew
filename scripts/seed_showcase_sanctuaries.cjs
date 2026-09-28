@@ -1,7 +1,8 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-const rawUrl = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_cF8derOS7aXT@ep-cool-salad-b3pdhiyg-pooler.c-4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require';
+const rawUrl = process.env.SEED_DATABASE_URL;
+if (!rawUrl) throw new Error('SEED_DATABASE_URL is required');
 const cleanUrl = rawUrl.includes('?') ? rawUrl.split('?')[0] : rawUrl;
 
 const pool = new Pool({

@@ -1,0 +1,42 @@
+
+ RUN  v4.1.10 /Users/ajit/Documents/EnchoSpaceNew
+
+stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > refuses to durably persist credential-like fields hidden in a mutation body
+Refusing to persist an offline mutation containing credential-like fields
+
+··············stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > cannot enqueue a failed direct request under the account switched in during its network wait
+Direct mutation failed for /api/wishlists, queuing offline Error: Lost response
+    at /Users/ajit/Documents/EnchoSpaceNew/src/test/cr1_actor_scoped_sync.test.ts:327:13
+    at fetch (file:///Users/ajit/Documents/EnchoSpaceNew/node_modules/@vitest/spy/dist/index.js:332:34)
+    at Module.queueMutationWithReceipt (/Users/ajit/Documents/EnchoSpaceNew/lib/syncService.ts:399:36)
+    at /Users/ajit/Documents/EnchoSpaceNew/src/test/cr1_actor_scoped_sync.test.ts:329:18
+    at file:///Users/ajit/Documents/EnchoSpaceNew/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+    at file:///Users/ajit/Documents/EnchoSpaceNew/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+    at file:///Users/ajit/Documents/EnchoSpaceNew/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel (file:///Users/ajit/Documents/EnchoSpaceNew/node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)
+    at file:///Users/ajit/Documents/EnchoSpaceNew/node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20
+Refusing offline replay without a current session and an approved domain contract
+
+stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > never durably queues financial, booking, campaign, or arbitrary external requests
+Refusing offline replay without a current session and an approved domain contract
+
+stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > never durably queues financial, booking, campaign, or arbitrary external requests
+Refusing offline replay without a current session and an approved domain contract
+
+stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > never durably queues financial, booking, campaign, or arbitrary external requests
+Refusing offline replay without a current session and an approved domain contract
+
+stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > never durably queues financial, booking, campaign, or arbitrary external requests
+Refusing offline replay without a current session and an approved domain contract
+
+··········stderr | src/test/cr1_actor_scoped_sync.test.ts > CR1 actor-scoped browser persistence > requires the message domain deduplication UUID before persisting inquiry retries
+Refusing offline replay without a current session and an approved domain contract
+
+····
+
+ Test Files  1 passed (1)
+      Tests  28 passed (28)
+   Start at  17:46:44
+   Duration  661ms (transform 88ms, setup 293ms, import 73ms, tests 205ms, environment 0ms)
+

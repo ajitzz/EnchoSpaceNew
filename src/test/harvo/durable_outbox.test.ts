@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import type pg from 'pg';
 import { createLocalPostgresFixture } from './postgres.js';
 import { DurableOutbox, DurableOutboxError, durableRequestFingerprint } from '../../lib/platform/durableOutbox.js';
 
@@ -66,6 +67,42 @@ describe('CR1 shared durable outbox foundation on real PostgreSQL', () => {
   afterAll(async () => { await fixture?.close(); });
   beforeEach(async () => {
     await fixture.pool.query('TRUNCATE cr1_test_outbox_events,cr1_test_outbox RESTART IDENTITY');
+  });
+
+  function faultPool(options:{queryFailure?:Error;commitFailure?:Error;commitBeforeFailure?:boolean;rollbackFailure?:Error}) {
+    const released:boolean[]=[];const rollbackCalls:string[]=[];
+    const pool=new Proxy(fixture.pool,{get(target,key){
+      if(key==='connect')return async()=>{const c=await target.connect();return new Proxy(c,{get(client,field){
+        if(field==='query')return async(sql:string,values?:unknown[])=>{
+          if(sql==='ROLLBACK'){rollbackCalls.push(sql);if(options.rollbackFailure)throw options.rollbackFailure;}
+          if(sql==='COMMIT'&&options.commitFailure){if(options.commitBeforeFailure)await client.query(sql,values);throw options.commitFailure;}
+          if(sql!=='BEGIN'&&sql!=='ROLLBACK'&&sql!=='COMMIT'&&options.queryFailure)throw options.queryFailure;
+          return client.query(sql,values);
+        };
+        if(field==='release')return (discard?:boolean)=>{released.push(discard===true);client.release(discard);};
+        const value=Reflect.get(client,field,client);return typeof value==='function'?value.bind(client):value;
+      }});};
+      const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
+    }}) as pg.Pool;
+    return {outbox:new DurableOutbox(pool,{tables:{outbox:'cr1_test_outbox',events:'cr1_test_outbox_events'},payloadSchema}),released,rollbackCalls};
+  }
+
+  it('preserves the original operation failure when rollback also fails and discards the connection',async()=>{
+    const original=new Error('Original query transport failure');
+    const fault=faultPool({queryFailure:original,rollbackFailure:new Error('Rollback transport failure')});
+    await expect(fault.outbox.claimBatch({workerId:'fault-worker'})).rejects.toBe(original);
+    expect(fault.rollbackCalls).toEqual(['ROLLBACK']);expect(fault.released).toEqual([true]);
+    expect((await fixture.pool.query('SELECT count(*) FROM cr1_test_outbox_events')).rows[0].count).toBe('0');
+  });
+
+  it.each([false,true])('treats COMMIT transport failure as unknown with committed=%s, discards and does not retry',async committed=>{
+    const item=await enqueue(`commit-${committed}`);
+    const original=new Error('Lost COMMIT acknowledgement');
+    const fault=faultPool({commitFailure:original,commitBeforeFailure:committed,rollbackFailure:new Error('Must not mask the COMMIT')});
+    await expect(fault.outbox.claimBatch({workerId:'commit-worker'})).rejects.toMatchObject({code:'OUTBOX_COMMIT_OUTCOME_UNKNOWN',cause:original});
+    expect(fault.released).toEqual([true]);expect(fault.rollbackCalls).toEqual([]);
+    const stored=(await fixture.pool.query('SELECT state,attempts FROM cr1_test_outbox WHERE id=$1',[item.id])).rows[0];
+    expect(stored).toEqual({state:committed?'RUNNING':'PENDING',attempts:committed?1:0});
   });
 
   it('fingerprints only persisted JSON meaning and rejects non-JSON/cyclic commands', () => {

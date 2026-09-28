@@ -5,7 +5,7 @@ ENV HUSKY=0
 COPY package*.json ./
 RUN npm ci --include=dev
 COPY . .
-RUN npm run build
+RUN --network=none npm run build:offline
 
 FROM node:24.21.0-bookworm-slim AS runner
 WORKDIR /app

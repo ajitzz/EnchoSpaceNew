@@ -1,7 +1,8 @@
 const { Pool } = require('pg');
+if (!process.env.SEED_DATABASE_URL) throw new Error('SEED_DATABASE_URL is required');
 
 const pool = new Pool({
-  connectionString: 'postgresql://neondb_owner:npg_4cbpQjKtym9n@ep-small-smoke-a1vjxk25.ap-southeast-1.aws.neon.tech/neondb?sslmode=require',
+  connectionString: process.env.SEED_DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 

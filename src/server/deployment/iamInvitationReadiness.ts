@@ -1,4 +1,6 @@
 import type pg from 'pg';
+import {invitationWriterFunctions,isIsolatedWorkforceWriter} from '../../lib/iam/isolatedWriterBoundary.js';
+import {isRestrictedWorkforceRuntime} from '../../lib/iam/runtimeBoundary.js';
 
 type PolicyRow={tablename:string;policyname:string;cmd:string;permissive:string;roles:string[];qual:string|null;with_check:string|null};
 type RelationRow={relname:unknown;owner_name:unknown};
@@ -54,13 +56,9 @@ export async function verifyIamInvitationCatalog(client:pg.PoolClient,mode:'RUNT
     FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace JOIN pg_roles r ON r.oid=p.proowner
     WHERE n.nspname='public' AND p.proname=ANY($1::text[])`,[['internal_iam_accept_invitation','internal_iam_issue_invitation','internal_iam_revoke_invitation']])).rows;
   const functionsSafe=functions.length===3 && functions.every(row=>row.safe && row.executable===(mode==='IDENTITY_WRITER'?row.proname==='internal_iam_accept_invitation':row.proname!=='internal_iam_accept_invitation'));
-  const role=(await client.query<{safe:boolean}>(`SELECT NOT(r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR r.rolcreatedb OR has_schema_privilege(current_user,'public','CREATE'))
-    AND session_user=current_user
-    AND NOT EXISTS(SELECT 1 FROM pg_roles inherited WHERE pg_has_role(current_user,inherited.oid,'MEMBER') AND (inherited.rolsuper OR inherited.rolbypassrls OR inherited.rolcreaterole OR inherited.rolcreatedb))
-    AND NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p') AND ($1::boolean OR c.relname LIKE 'internal_%')
-      AND (pg_has_role(current_user,c.relowner,'MEMBER') OR ($1::boolean AND
-        (has_table_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER') OR has_any_column_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,REFERENCES'))))) AS safe
-    FROM pg_roles r WHERE r.rolname=current_user`,[mode==='IDENTITY_WRITER'])).rows[0];
+  const roleSafe=mode==='IDENTITY_WRITER'
+    ? await isIsolatedWorkforceWriter(client,invitationWriterFunctions)
+    : await isRestrictedWorkforceRuntime(client);
   const receipt=(await client.query<{safe:boolean}>(`SELECT c.relrowsecurity AND c.relforcerowsecurity
     AND NOT has_table_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER')
     AND NOT has_any_column_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,REFERENCES')
@@ -77,6 +75,6 @@ export async function verifyIamInvitationCatalog(client:pg.PoolClient,mode:'RUNT
     EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid WHERE t.tgrelid='internal_organization_invitations'::regclass AND t.tgname='internal_invitation_transition' AND p.proname='internal_iam_guard_invitation')
     AND EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid WHERE t.tgrelid='internal_organization_invitations'::regclass AND t.tgname='internal_invitation_no_delete' AND p.proname='internal_iam_reject_mutation')
     AND EXISTS(SELECT 1 FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid WHERE t.tgrelid='internal_action_authorizations'::regclass AND t.tgname='internal_consumption_transaction' AND p.proname='internal_iam_stamp_consumption_transaction') AS safe`)).rows[0];
-  return {ready:functionsSafe && role?.safe===true && receipt?.safe===true && identityPoliciesSafe && lifecycle?.safe===true,
-    functionsSafe,roleSafe:role?.safe===true,receiptSafe:receipt?.safe===true,identityPoliciesSafe,lifecycleSafe:lifecycle?.safe===true};
+  return {ready:functionsSafe && roleSafe && receipt?.safe===true && identityPoliciesSafe && lifecycle?.safe===true,
+    functionsSafe,roleSafe:roleSafe,receiptSafe:receipt?.safe===true,identityPoliciesSafe,lifecycleSafe:lifecycle?.safe===true};
 }

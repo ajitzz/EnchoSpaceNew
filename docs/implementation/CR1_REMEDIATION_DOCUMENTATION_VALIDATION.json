@@ -1,0 +1,38 @@
+{
+  "kind": "DOCUMENTATION_STRUCTURE_AND_REVIEW_ONLY",
+  "generatedAt": "2026-09-28T16:11:37.634024+00:00",
+  "implementationAccepted": false,
+  "productionCertification": false,
+  "head": "0e4c6fec2fe86f1b793760c5f7a3daf08bbf7508",
+  "checks": {
+    "uniqueCorrectiveCards": 32,
+    "allRequiredCardFieldsPresent": true,
+    "dependencyGraphAcyclic": true,
+    "originalPackageCoverageExactlyOnce": 48,
+    "auditFindingCoverage": 15,
+    "initialCardStates": "PLANNED",
+    "stagedDiffUnchanged": true,
+    "auditedSourceHashesUnchanged": 19,
+    "localMarkdownLinksResolved": 7
+  },
+  "stagedDiffSha256": "854471966ac51c7fbf44e69095990f5f5eb2892b772cc4aef9adfbb0f502a520",
+  "documents": {
+    "docs/blueprints/CR1_ENGINEERING_REMEDIATION_BLUEPRINT.md": "7060f7596d38c32db73b55b5f727977107702022f2d5356c9c3dffde6feea916",
+    "docs/implementation/CR1_REMEDIATION_WORK_PACKAGES.md": "edbf2597d2512a08bea8fbfbd7ec5645b12884f74aecde837fa5d86334b5b260",
+    "docs/implementation/CR1_ENGINEER_AND_REVIEWER_PROMPTS.md": "aa2f37c22d94d7ae21b298a844f7a6b817f000a59c20bc3a13b4ae969557a75d"
+  },
+  "reviewScope": [
+    "Separate read-only security/acceptance review",
+    "Separate read-only product/traceability review",
+    "Separate read-only release/dependency review"
+  ],
+  "notExecuted": [
+    "Application implementation",
+    "Application tests or build",
+    "Database/provider operation",
+    "Customer messaging",
+    "Deployment or release certification",
+    "Git staging/commit/push"
+  ],
+  "limitation": "Source anchors must be reverified before implementation. Structural coverage is not implementation acceptance or exhaustive semantic assurance."
+}

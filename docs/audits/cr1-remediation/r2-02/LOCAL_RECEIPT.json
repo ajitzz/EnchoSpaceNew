@@ -1,0 +1,404 @@
+{
+  "schemaVersion": 1,
+  "status": "READY_FOR_REVIEW",
+  "classification": "LOCAL_IMPLEMENTATION_OBSERVATION",
+  "productionCertification": false,
+  "scope": "R2-02 preflight and build isolation, not complete domain role or deployed schema certification",
+  "capturedAt": "2026-09-28T18:07:22.289093+00:00",
+  "head": "0e4c6fec2fe86f1b793760c5f7a3daf08bbf7508",
+  "indexTree": "05cd902d696bad53d2d63f1f3f054639c0c75ca3",
+  "stagedDiffSha256": "854471966ac51c7fbf44e69095990f5f5eb2892b772cc4aef9adfbb0f502a520",
+  "unstagedTrackedDiffSha256": "a37ec9e98a2eb977c624f8b74077089e92fe3da00bf3fd976f9193d673052c0e",
+  "build": {
+    "command": "sandbox-exec -p '(version 1) (allow default) (deny network*)' <Node24> scripts/build/offline.mjs",
+    "exitCode": 0,
+    "networkNegativeControl": "EPERM for loopback TCP connect under the same OS profile",
+    "publicArtifactFiles": 43,
+    "sourceFrozen": false,
+    "limitation": "Isolation proof during active development; not the final artifact/source freeze and not acceptance of later source edits"
+  },
+  "latestDistinctManifestRunnerRecoveryTests": 42,
+  "independentOwnerRegression": {
+    "passed": 1,
+    "reference": "docs/implementation/CR1_R0_03_FOUNDATION_HANDOFF.md"
+  },
+  "schema": {
+    "source": [
+      {
+        "version": "001_add_listings_slug.sql",
+        "checksum": "5c89756fa1ab553e2c9373355c13415369db80c9e079f94cb5229e421e043210"
+      },
+      {
+        "version": "002_add_listings_publication_status.sql",
+        "checksum": "1fef345f692b1806a785b2755eea6f937031a0e4be611ce3e81cce6475165f70"
+      },
+      {
+        "version": "003_canonical_room_and_media_authority.sql",
+        "checksum": "50b00b35ac7ac9f7f881d9bc5d2dc5dce1222ba2ad4af211e0123bcf25c5c0ca"
+      },
+      {
+        "version": "004_canonical_constraints.sql",
+        "checksum": "25923896ef6c915e7bbb58aaa1b84080ecbb740dfdcdf4043b714bf4bd4996bc"
+      },
+      {
+        "version": "005_inventory_days_and_atomic_holds.sql",
+        "checksum": "d367bdc41fd6ba1109babebdf2680e3ed27ec52f9f8a2d789ca6cf07843ab39d"
+      },
+      {
+        "version": "006_legacy_calendar_block_mapping.sql",
+        "checksum": "52a4dd349620cf1248050c98c9c0e4325751e4ec1c9e5c6b7b72bafb76f89a8f"
+      },
+      {
+        "version": "007_legacy_conflict_ledger_uniqueness.sql",
+        "checksum": "59be809281f5f80f205f0e81d43d0d0c441171afaa528dc6dffaec39f304e7cc"
+      },
+      {
+        "version": "009_harvo_marketing_finance.sql",
+        "checksum": "25ca2c36169fed0b0b347b8341f61307007885dfbb51e60c276cbd310c6508a8"
+      },
+      {
+        "version": "010_harvo_marketing_workflow.sql",
+        "checksum": "89023e5f4ab669a1615fe0f1f32566727f14e87b2d26e27f7fb0e2fe6c77df0e"
+      },
+      {
+        "version": "011_harvo_marketing_measurement.sql",
+        "checksum": "616a76335587c7fbc00490a6d6530707f5af2738e36e680bf3313a949cdf44c2"
+      },
+      {
+        "version": "012_harvo_marketing_settlement.sql",
+        "checksum": "aa96bf24b4c84c9d06bfd440f8726b57ca067f587f53d9531801c730aa79c714"
+      },
+      {
+        "version": "013_harvo_marketing_conversion_delivery.sql",
+        "checksum": "1a0c0f2fa329a5ecab95569b9cca8120f21236e4e02b7bed94868d1e47709f24"
+      },
+      {
+        "version": "014_harvo_marketing_request_limits.sql",
+        "checksum": "3441d1033c7793ec107d2f8f08b90f88bda8bde263dcc08de2abb849142cda98"
+      },
+      {
+        "version": "015_harvo_marketing_creative_review.sql",
+        "checksum": "561c3286bf368f9c6cf6538ea1398a311c877d5031199944f1a8bc992eb6f79a"
+      },
+      {
+        "version": "016_harvo_google_invoice_imports.sql",
+        "checksum": "14fd5acf3c0454162004adfb05394e808865e01ecd3369af878edf1b526b2a4d"
+      },
+      {
+        "version": "017_calendar_operation_audit.sql",
+        "checksum": "2a8112c3bdc79e0b52639754ed3ba431a1413231c9a3b542cb365e72bdbeb2d5"
+      },
+      {
+        "version": "018_outreach_lead_tenant_boundary.sql",
+        "checksum": "f6d9c0f0cf81afd4d1eb1a52e8ecf3d56e23663e30aaaf8f79c58c01f14b4c59"
+      },
+      {
+        "version": "019_marketing_operational_isolation.sql",
+        "checksum": "9a20aa25a07db45d4310674a3ad831e9c864ad3378f307e060f13769df36b4d7"
+      },
+      {
+        "version": "020_marketing_pause_recovery.sql",
+        "checksum": "0fdddc26011508c082c7cf792d22bb53d0d22c75f97a63379657f2b263f65292"
+      },
+      {
+        "version": "021_legacy_telemetry_evidence.sql",
+        "checksum": "577d9d9435d621a3479178c858c28e75bcd3f86abdd6491c37717de545a3b137"
+      },
+      {
+        "version": "022_marketing_pause_recovery_attempts.sql",
+        "checksum": "ac1181cd8b334cd0a5772d31d5f09929df394426c36df17d3844f937a0cb0b7d"
+      },
+      {
+        "version": "023_marketing_product_facts.sql",
+        "checksum": "f3a59c240ba2c6f61bd07c5c4d2a2538685d9abb08c5adba9802a7809b2062fa"
+      },
+      {
+        "version": "024_marketing_keyword_research.sql",
+        "checksum": "ef465f7f630ac0edb602a3a7da09b9700a6c0095725f4f793d1c1eb57799be20"
+      },
+      {
+        "version": "025_marketing_revision_products.sql",
+        "checksum": "376541df23fc6ed1c6d257c3fcd52bee6e8db5c28dd19189220ebd3cc620eece"
+      },
+      {
+        "version": "026_search_portfolio_shadow.sql",
+        "checksum": "54e449bed41a6a6bfbaf6890f36b2c6d1c48aafad4226400f961c2660adc0ee8"
+      },
+      {
+        "version": "027_marketing_attribution_links.sql",
+        "checksum": "6f24c5a1e05fe87f6c816024b95671d61cd499b68ca564ba562535e7806daa91"
+      },
+      {
+        "version": "028_marketing_consent_touchpoints.sql",
+        "checksum": "f732578fad0a7d50df83ed971c79b2b06342f707034c0967b864b8640b05e9aa"
+      },
+      {
+        "version": "029_marketing_destination_pools.sql",
+        "checksum": "10e517cc537355604962f59662486d24f5ba7aad110a567ae01e0afbb4afd6e3"
+      },
+      {
+        "version": "030_marketing_spatial_stories.sql",
+        "checksum": "50990d62f3c8cee903269789e8247872adf3c62c00b71735ec5f12f50e063779"
+      },
+      {
+        "version": "031_marketing_inquiry_attribution.sql",
+        "checksum": "312e6258b8a79107f2a2ee4d65afb3deceac8f94be5c1b30f88ccd6fe912ec91"
+      },
+      {
+        "version": "032_marketing_adtech_registry.sql",
+        "checksum": "f0e83c16233563beb1aeb123df6ee2a07dad0e424f297bb3870ac0edfd538f2f"
+      },
+      {
+        "version": "033_marketing_adtech_corridors.sql",
+        "checksum": "aac5b96f4a244ce8b7e045152b8e45b5a3ef0539095c28fa110c28a2c269f49f"
+      },
+      {
+        "version": "034_marketing_adtech_bindings.sql",
+        "checksum": "1efe17cc3d24d9e5f8559a58cdae626395deff4bbb78a040f8e1d3e5c7668a76"
+      },
+      {
+        "version": "035_marketing_corridor_inference.sql",
+        "checksum": "9f0fa5878095080d5f4b8ecce613e0a84d409e59b09ef5bc4d6e9109c5683f98"
+      },
+      {
+        "version": "036_internal_organization_iam.sql",
+        "checksum": "365ec8a7c6d0e370c8c474ac26eff04fff207c3d51218e019c5f233fcf382cf4"
+      },
+      {
+        "version": "037_conversation_delivery.sql",
+        "checksum": "5d13517eb755ca299e3c98cdec50319efb2776057962b10435852af0c0f82377"
+      },
+      {
+        "version": "038_service_cases.sql",
+        "checksum": "3dcc2f52db2298b1cf11d741afb1571df36ddb0e3db7153b8c88d9b249a4a130"
+      },
+      {
+        "version": "039_conversation_notification_preferences.sql",
+        "checksum": "47ce2455a8183e243483e8814a6bc8e7a68dd775ee8509ef0afd0270101004b9"
+      },
+      {
+        "version": "040_service_assignment_dispatch.sql",
+        "checksum": "406e409b074c5e156a9cce5ba9bbba6f60c694b5ab2132ed10bf4646d646cda4"
+      }
+    ],
+    "packaged": [
+      {
+        "version": "001_add_listings_slug.sql",
+        "checksum": "5c89756fa1ab553e2c9373355c13415369db80c9e079f94cb5229e421e043210"
+      },
+      {
+        "version": "002_add_listings_publication_status.sql",
+        "checksum": "1fef345f692b1806a785b2755eea6f937031a0e4be611ce3e81cce6475165f70"
+      },
+      {
+        "version": "003_canonical_room_and_media_authority.sql",
+        "checksum": "50b00b35ac7ac9f7f881d9bc5d2dc5dce1222ba2ad4af211e0123bcf25c5c0ca"
+      },
+      {
+        "version": "004_canonical_constraints.sql",
+        "checksum": "25923896ef6c915e7bbb58aaa1b84080ecbb740dfdcdf4043b714bf4bd4996bc"
+      },
+      {
+        "version": "005_inventory_days_and_atomic_holds.sql",
+        "checksum": "d367bdc41fd6ba1109babebdf2680e3ed27ec52f9f8a2d789ca6cf07843ab39d"
+      },
+      {
+        "version": "006_legacy_calendar_block_mapping.sql",
+        "checksum": "52a4dd349620cf1248050c98c9c0e4325751e4ec1c9e5c6b7b72bafb76f89a8f"
+      },
+      {
+        "version": "007_legacy_conflict_ledger_uniqueness.sql",
+        "checksum": "59be809281f5f80f205f0e81d43d0d0c441171afaa528dc6dffaec39f304e7cc"
+      },
+      {
+        "version": "009_harvo_marketing_finance.sql",
+        "checksum": "25ca2c36169fed0b0b347b8341f61307007885dfbb51e60c276cbd310c6508a8"
+      },
+      {
+        "version": "010_harvo_marketing_workflow.sql",
+        "checksum": "89023e5f4ab669a1615fe0f1f32566727f14e87b2d26e27f7fb0e2fe6c77df0e"
+      },
+      {
+        "version": "011_harvo_marketing_measurement.sql",
+        "checksum": "616a76335587c7fbc00490a6d6530707f5af2738e36e680bf3313a949cdf44c2"
+      },
+      {
+        "version": "012_harvo_marketing_settlement.sql",
+        "checksum": "aa96bf24b4c84c9d06bfd440f8726b57ca067f587f53d9531801c730aa79c714"
+      },
+      {
+        "version": "013_harvo_marketing_conversion_delivery.sql",
+        "checksum": "1a0c0f2fa329a5ecab95569b9cca8120f21236e4e02b7bed94868d1e47709f24"
+      },
+      {
+        "version": "014_harvo_marketing_request_limits.sql",
+        "checksum": "3441d1033c7793ec107d2f8f08b90f88bda8bde263dcc08de2abb849142cda98"
+      },
+      {
+        "version": "015_harvo_marketing_creative_review.sql",
+        "checksum": "561c3286bf368f9c6cf6538ea1398a311c877d5031199944f1a8bc992eb6f79a"
+      },
+      {
+        "version": "016_harvo_google_invoice_imports.sql",
+        "checksum": "14fd5acf3c0454162004adfb05394e808865e01ecd3369af878edf1b526b2a4d"
+      },
+      {
+        "version": "017_calendar_operation_audit.sql",
+        "checksum": "2a8112c3bdc79e0b52639754ed3ba431a1413231c9a3b542cb365e72bdbeb2d5"
+      },
+      {
+        "version": "018_outreach_lead_tenant_boundary.sql",
+        "checksum": "f6d9c0f0cf81afd4d1eb1a52e8ecf3d56e23663e30aaaf8f79c58c01f14b4c59"
+      },
+      {
+        "version": "019_marketing_operational_isolation.sql",
+        "checksum": "9a20aa25a07db45d4310674a3ad831e9c864ad3378f307e060f13769df36b4d7"
+      },
+      {
+        "version": "020_marketing_pause_recovery.sql",
+        "checksum": "0fdddc26011508c082c7cf792d22bb53d0d22c75f97a63379657f2b263f65292"
+      },
+      {
+        "version": "021_legacy_telemetry_evidence.sql",
+        "checksum": "577d9d9435d621a3479178c858c28e75bcd3f86abdd6491c37717de545a3b137"
+      },
+      {
+        "version": "022_marketing_pause_recovery_attempts.sql",
+        "checksum": "ac1181cd8b334cd0a5772d31d5f09929df394426c36df17d3844f937a0cb0b7d"
+      },
+      {
+        "version": "023_marketing_product_facts.sql",
+        "checksum": "f3a59c240ba2c6f61bd07c5c4d2a2538685d9abb08c5adba9802a7809b2062fa"
+      },
+      {
+        "version": "024_marketing_keyword_research.sql",
+        "checksum": "ef465f7f630ac0edb602a3a7da09b9700a6c0095725f4f793d1c1eb57799be20"
+      },
+      {
+        "version": "025_marketing_revision_products.sql",
+        "checksum": "376541df23fc6ed1c6d257c3fcd52bee6e8db5c28dd19189220ebd3cc620eece"
+      },
+      {
+        "version": "026_search_portfolio_shadow.sql",
+        "checksum": "54e449bed41a6a6bfbaf6890f36b2c6d1c48aafad4226400f961c2660adc0ee8"
+      },
+      {
+        "version": "027_marketing_attribution_links.sql",
+        "checksum": "6f24c5a1e05fe87f6c816024b95671d61cd499b68ca564ba562535e7806daa91"
+      },
+      {
+        "version": "028_marketing_consent_touchpoints.sql",
+        "checksum": "f732578fad0a7d50df83ed971c79b2b06342f707034c0967b864b8640b05e9aa"
+      },
+      {
+        "version": "029_marketing_destination_pools.sql",
+        "checksum": "10e517cc537355604962f59662486d24f5ba7aad110a567ae01e0afbb4afd6e3"
+      },
+      {
+        "version": "030_marketing_spatial_stories.sql",
+        "checksum": "50990d62f3c8cee903269789e8247872adf3c62c00b71735ec5f12f50e063779"
+      },
+      {
+        "version": "031_marketing_inquiry_attribution.sql",
+        "checksum": "312e6258b8a79107f2a2ee4d65afb3deceac8f94be5c1b30f88ccd6fe912ec91"
+      },
+      {
+        "version": "032_marketing_adtech_registry.sql",
+        "checksum": "f0e83c16233563beb1aeb123df6ee2a07dad0e424f297bb3870ac0edfd538f2f"
+      },
+      {
+        "version": "033_marketing_adtech_corridors.sql",
+        "checksum": "aac5b96f4a244ce8b7e045152b8e45b5a3ef0539095c28fa110c28a2c269f49f"
+      },
+      {
+        "version": "034_marketing_adtech_bindings.sql",
+        "checksum": "1efe17cc3d24d9e5f8559a58cdae626395deff4bbb78a040f8e1d3e5c7668a76"
+      },
+      {
+        "version": "035_marketing_corridor_inference.sql",
+        "checksum": "9f0fa5878095080d5f4b8ecce613e0a84d409e59b09ef5bc4d6e9109c5683f98"
+      },
+      {
+        "version": "036_internal_organization_iam.sql",
+        "checksum": "365ec8a7c6d0e370c8c474ac26eff04fff207c3d51218e019c5f233fcf382cf4"
+      },
+      {
+        "version": "037_conversation_delivery.sql",
+        "checksum": "5d13517eb755ca299e3c98cdec50319efb2776057962b10435852af0c0f82377"
+      },
+      {
+        "version": "038_service_cases.sql",
+        "checksum": "3dcc2f52db2298b1cf11d741afb1571df36ddb0e3db7153b8c88d9b249a4a130"
+      },
+      {
+        "version": "039_conversation_notification_preferences.sql",
+        "checksum": "47ce2455a8183e243483e8814a6bc8e7a68dd775ee8509ef0afd0270101004b9"
+      },
+      {
+        "version": "040_service_assignment_dispatch.sql",
+        "checksum": "406e409b074c5e156a9cce5ba9bbba6f60c694b5ab2132ed10bf4646d646cda4"
+      }
+    ],
+    "remoteAppliedHistory": "UNKNOWN",
+    "allMigrationsAppliedInThisRun": false,
+    "newMigrationNumberAllocated": false
+  },
+  "records": [
+    {
+      "label": "build-before",
+      "path": "docs/audits/cr1-remediation/r2-02/build-before.txt",
+      "sha256": "038d5e77efa983b2867c9b016647d656c496afa74385d90c9866f6bebfb5ac83",
+      "exitCode": 2
+    },
+    {
+      "label": "build-repaired",
+      "path": "docs/audits/cr1-remediation/r2-02/build-repaired.txt",
+      "sha256": "3d4ed48295d3e1c64573cad82f1fed24d107add77386f6eb8d29b68d13b25c34",
+      "exitCode": 0
+    },
+    {
+      "label": "network-denial",
+      "path": "docs/audits/cr1-remediation/r2-02/network-denial.txt",
+      "sha256": "223036dad0eae25fa9f0f26be0972ca38fddeba3038a316621cc779689cb9d28",
+      "exitCode": 0
+    },
+    {
+      "label": "schema-runner",
+      "path": "docs/audits/cr1-remediation/r2-02/schema-runner.txt",
+      "sha256": "b8ade12322951f39b80d0fa7c05f61572eedf1cc0f1e5c140926d5dcde711589",
+      "exitCode": 0
+    },
+    {
+      "label": "schema-recovery",
+      "path": "docs/audits/cr1-remediation/r2-02/schema-recovery.txt",
+      "sha256": "39706563d8adb77db9a2864c40b3040cda18cb013dd0c1af53453aa80e8b84db",
+      "exitCode": 0
+    },
+    {
+      "label": "inventory-tests",
+      "path": "docs/audits/cr1-remediation/r2-02/inventory-tests.txt",
+      "sha256": "dd9a141fe9a53febc760e538d88c87a065fbf6a3901c6eadbab8a33e8923aa12",
+      "exitCode": 0
+    },
+    {
+      "label": "schema-lint",
+      "path": "docs/audits/cr1-remediation/r2-02/schema-lint.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exitCode": 0
+    },
+    {
+      "label": "import-guard-tests",
+      "path": "docs/audits/cr1-remediation/r2-02/import-guard-tests.txt",
+      "sha256": "25fea2b7d13b9a7bbba38f2318c95363286ffb33f92c769cde7c0e69c2d59e6c",
+      "exitCode": 0
+    }
+  ],
+  "externalActions": [],
+  "open": [
+    "named deployed artifact and schema identity",
+    "complete domain runtime role/grant acceptance",
+    "R0-01 staged deletion disposition",
+    "full P2 exit",
+    "independently authenticated promotion workflow"
+  ]
+}

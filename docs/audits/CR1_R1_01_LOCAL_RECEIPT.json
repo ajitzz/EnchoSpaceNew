@@ -1,0 +1,196 @@
+{
+  "schemaVersion": 1,
+  "card": "R1-01",
+  "status": "READY_FOR_REVIEW",
+  "acceptance": "NOT_INDEPENDENTLY_ACCEPTED",
+  "environment": "LOCAL_DISPOSABLE_POSTGRES_AND_OFFLINE_TLS",
+  "recordedAt": "2026-09-28T17:57:03.890026+00:00",
+  "baselineCommit": "0e4c6fec2fe86f1b793760c5f7a3daf08bbf7508",
+  "stagedDiffSha256": "854471966ac51c7fbf44e69095990f5f5eb2892b772cc4aef9adfbb0f502a520",
+  "affectedDiffSha256": "05e829498edee4e493a32fb8629d4bb5f7cb8d8e0606290fe7c765340ec0b729",
+  "sourceSha256": {
+    "src/server/operations/runtime.ts": "6845596fe0846b847c2e045499e7636cd7b25116eb3fbc8fbf2bb9ebc901dc0a",
+    "src/server/operations/sessionRuntime.ts": "2e5f1f8ed48a914f7eba08b626b54d2e2b43dedf007107e1cfbb53a63375661c",
+    "src/server/operations/sessionRouter.ts": "6f4eeb22b13d0203795c05b896914150dd8d2d43b009357ad3a358d3b1b3c419",
+    "src/lib/iam/staffSessionIssuer.ts": "a14efb208a39ae54097f56b8c602ff1390249d3b9e03fa5e4b2fe3e29f2cb8db",
+    "src/lib/iam/runtimeBoundary.ts": "7e854ff30fbf72ca8cc1063477a1aebb771161de89b31350885c82a8d0c92fd5",
+    "src/server/deployment/iamReadiness.ts": "7788d002d746af1cd148d66cc4045baed8468bf17cc81de731e3cfd3e985fe9f",
+    "src/server/deployment/iamSessionIssuerReadiness.ts": "d32334b3e85dc092ea11f0e03061c1a92b887ecf151eccdd0e4b536713de2eee",
+    "src/test/cr1_operations_api.test.ts": "35a8b12c33599581f23d87b1238d267ed6030071fa10a8efe35a79927f8dfbc9",
+    "src/test/cr1_workforce_session_api.test.ts": "4237995e595570ea4fa15cea43bc1d72013b0de70b29d2b04a8b0ee2d62ce93f",
+    "src/test/harvo/cr1_staff_session_issuer.test.ts": "b9153066afe83dcb84a372ccf20cba33c2375df0c7a54117587277041f53df56",
+    "src/test/harvo/cr1_workforce_runtime_config.test.ts": "99e289eb779b2041ef691fd60e245cc1ade5ecc93d789b36943824c8a3f5d74c",
+    "src/test/harvo/cr1_workforce_tls.test.ts": "a2aba6de55fd95ee1a35b84eefee1dcd6472127cd89c002d9beb36b0ca43d3e7"
+  },
+  "before": {
+    "command": "npx -y node@24 scripts/testing/run.mjs src/test/cr1_operations_api.test.ts src/test/harvo/cr1_staff_session_issuer.test.ts --reporter=dot",
+    "testRunnerExitCode": 1,
+    "shellWrapperExitCode": 0,
+    "wrapperQualification": "The initial wrapper tailed the captured log without propagating runner exit. Two failed tests are preserved; no passing command claim is inferred.",
+    "passed": 23,
+    "failed": 2
+  },
+  "after": [
+    {
+      "command": "npx -y node@24 scripts/testing/run.mjs src/test/cr1_operations_api.test.ts src/test/cr1_workforce_session_api.test.ts --reporter=dot",
+      "exitCode": 0,
+      "passed": 17,
+      "failed": 0
+    },
+    {
+      "command": "npx -y node@24 scripts/testing/run.mjs src/test/harvo/cr1_workforce_runtime_config.test.ts src/test/harvo/cr1_staff_session_issuer.test.ts --reporter=dot",
+      "exitCode": 0,
+      "passed": 26,
+      "failed": 0
+    },
+    {
+      "command": "npx -y node@24 scripts/testing/run.mjs src/test/harvo/cr1_staff_session_issuer.test.ts src/test/harvo/cr1_workforce_tls.test.ts --reporter=dot",
+      "exitCode": 0,
+      "passed": 22,
+      "failed": 0,
+      "qualification": "Earlier scoped run: issuer has 21 tests here. Final identity run adds HTTP composition coverage. TLS file unchanged after this run."
+    },
+    {
+      "command": "npx -y node@24 scripts/testing/run.mjs src/test/harvo/cr1_iam_assignment.test.ts src/test/harvo/cr1_workforce_invitations.test.ts --reporter=dot",
+      "exitCode": 0,
+      "passed": 30,
+      "failed": 0
+    },
+    {
+      "command": "npx -y node@24 scripts/testing/run.mjs src/test/harvo/cr1_staff_session_issuer.test.ts src/test/harvo/cr1_iam_assignment.test.ts --reporter=dot",
+      "exitCode": 0,
+      "passed": 35,
+      "failed": 0,
+      "qualification": "After independent reviewer correction: reject direct and NOINHERIT ancestor REPLICATION authority. Issuer now 23 tests; assignment 12."
+    },
+    {
+      "command": "npx -y node@24 scripts/testing/run.mjs src/test/harvo/cr1_workforce_runtime_config.test.ts --reporter=dot",
+      "exitCode": 0,
+      "passed": 4,
+      "failed": 0,
+      "qualification": "Both issuer/runtime URL configurations validated before pool construction."
+    },
+    {
+      "command": "npx -y node@24 scripts/testing/run.mjs src/test/harvo/cr1_staff_session_issuer.test.ts src/test/cr1_operations_api.test.ts --reporter=dot",
+      "exitCode": 0,
+      "passed": 33,
+      "failed": 0,
+      "qualification": "Database ownership without public schema ownership, NOINHERIT ancestor CREATE and previous role negatives: issuer24 + Operations9."
+    }
+  ],
+  "latestDistinctTargetedTests": {
+    "files": 7,
+    "passed": 76,
+    "failed": 0,
+    "qualification": "Latest applicable result per file, not a single full-suite run."
+  },
+  "lint": {
+    "exitCode": 0,
+    "files": 11,
+    "scope": "Seven changed source files and four changed/new test files; original Operations test unchanged."
+  },
+  "durableAssertions": [
+    "Restricted PostgreSQL LOGIN issuer creates one immutable receipt per nonce; replay does not mint another.",
+    "Revocation between identity verification and issue denies session.",
+    "Lost COMMIT acknowledgement reports OUTCOME_UNKNOWN and replay cannot mint replacement.",
+    "Failed audit insert rolls back nonce/session/receipt.",
+    "Foreign organization completion rolls back before commit.",
+    "Owner/superuser and NOINHERIT owner/raw-column membership rejected; narrow runtime/issuer pass.",
+    "HTTP begin/complete/logout stores hashes and revokes durable session; signed Google identity is a LOCAL fixture, not an external provider observation.",
+    "Strict pg TLS handshake rejects untrusted CA and wrong hostname against LOCAL peer."
+  ],
+  "externalPredicatesOpen": [
+    "Actual deployed issuer/runtime LOGIN roles and grants (DB-01)",
+    "Actual deployed explicit workforce configuration and named environment (ENV-01)",
+    "Operational IAM approval and identity policy (IAM-01)",
+    "External OIDC/browser/production deployment verification"
+  ],
+  "migrationsChanged": false,
+  "remoteActionsPerformed": false,
+  "fullRegressionRun": false,
+  "evidence": [
+    {
+      "label": "before",
+      "path": "docs/audits/CR1_R1_01_BEFORE.txt",
+      "sha256": "ac36845ea39fac444909e4e0d6d94f569c48fe82bc347bc95363fee16da57538"
+    },
+    {
+      "label": "http",
+      "path": "docs/audits/CR1_R1_01_HTTP.txt",
+      "sha256": "2c8df2dfe636e67d766d1fe397a540d98b7175281ca1111a3beeebb4692846cd"
+    },
+    {
+      "label": "identity",
+      "path": "docs/audits/CR1_R1_01_IDENTITY.txt",
+      "sha256": "d583f43e6bc7d4fddc0604dc3156f1381e12c8a03bcb1fceeb161032b79e4aa8"
+    },
+    {
+      "label": "role_tls",
+      "path": "docs/audits/CR1_R1_01_ROLE_TLS.txt",
+      "sha256": "6262a0cebd4c3eea2f478fe5148183e3883d5767f91dbc1973cadbda7b5b3001"
+    },
+    {
+      "label": "canonical_regression",
+      "path": "docs/audits/CR1_R1_01_CANONICAL_REGRESSION.txt",
+      "sha256": "a36ffad6fdb37cf92928c1c50ba1fa3ce2723cd8ee10238f91394322005af8c3"
+    },
+    {
+      "label": "lint",
+      "path": "docs/audits/CR1_R1_01_LINT.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "replication_review_repair",
+      "path": "docs/audits/CR1_R1_01_REPLICATION_REVIEW_REPAIR.txt",
+      "sha256": "8dc4ae2b416f69ff0c288888b9cbd3bb0277201745abc560e5707b8fab4f068e"
+    },
+    {
+      "label": "replication_lint",
+      "path": "docs/audits/CR1_R1_01_REPLICATION_LINT.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "runtime_url_validation",
+      "path": "docs/audits/CR1_R1_01_RUNTIME_URL_VALIDATION.txt",
+      "sha256": "6e745deb58bf8ac1fe1b6397747e584660e7ee6c71c5ba80b25f447e412f43be"
+    },
+    {
+      "path": "docs/audits/CR1_R1_01_DATABASE_AUTHORITY_REVIEW.txt",
+      "sha256": "0589c8235a26037692b0ba6e1f8cb97cbca86c9af39beaaba28dedb82931e6d3"
+    },
+    {
+      "path": "docs/audits/CR1_R1_01_FINAL_LINT.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "databaseFixtureQualification": "Existing createCr1IamFixture applies exact migration 036 to a fresh local cluster and seeds other manifest entries as fixture metadata. These tests prove scoped IAM/role behavior, not a full migration rehearsal or remote schema identity.",
+  "priorSourceSha256BeforeReplicationReview": {
+    "src/server/operations/runtime.ts": "722e20b669044dcf82d731eddc7fb269329a3c49c01a2beb370d1f8325d9291c",
+    "src/server/operations/sessionRuntime.ts": "54db0398f89c483ef65c439265d88c63a8a082e08eb444ab4003c98eb5be6ed6",
+    "src/server/operations/sessionRouter.ts": "6f4eeb22b13d0203795c05b896914150dd8d2d43b009357ad3a358d3b1b3c419",
+    "src/lib/iam/staffSessionIssuer.ts": "472560ce3ffd5bbec3fd512817fee1fbf44530f7718bc943e46db5ca069ec25e",
+    "src/lib/iam/runtimeBoundary.ts": "604f884872aaeeee4dc7c2c25ad7eaa673848347ab660019b1ed199435b8b1f2",
+    "src/server/deployment/iamReadiness.ts": "7788d002d746af1cd148d66cc4045baed8468bf17cc81de731e3cfd3e985fe9f",
+    "src/server/deployment/iamSessionIssuerReadiness.ts": "d32334b3e85dc092ea11f0e03061c1a92b887ecf151eccdd0e4b536713de2eee",
+    "src/test/cr1_operations_api.test.ts": "35a8b12c33599581f23d87b1238d267ed6030071fa10a8efe35a79927f8dfbc9",
+    "src/test/cr1_workforce_session_api.test.ts": "4237995e595570ea4fa15cea43bc1d72013b0de70b29d2b04a8b0ee2d62ce93f",
+    "src/test/harvo/cr1_staff_session_issuer.test.ts": "22f07bb31a3df2a44600d02132181df43c5526c4260f91d1a421727a2f79e4a8",
+    "src/test/harvo/cr1_workforce_runtime_config.test.ts": "db618e7792f46217b474fa07ec1f3eb00e1916ffbb877ad0b6ff99ad083bf973",
+    "src/test/harvo/cr1_workforce_tls.test.ts": "a2aba6de55fd95ee1a35b84eefee1dcd6472127cd89c002d9beb36b0ca43d3e7"
+  },
+  "reviewCorrection": "Parent review identified missing rolreplication denial. Both issuer/runtime predicates now reject current/reachable replication roles; real LOGIN role regressions added. This receipt remains READY_FOR_REVIEW.",
+  "priorSourceSha256BeforeDatabaseAuthorityReview": {
+    "src/server/operations/runtime.ts": "722e20b669044dcf82d731eddc7fb269329a3c49c01a2beb370d1f8325d9291c",
+    "src/server/operations/sessionRuntime.ts": "2e5f1f8ed48a914f7eba08b626b54d2e2b43dedf007107e1cfbb53a63375661c",
+    "src/server/operations/sessionRouter.ts": "6f4eeb22b13d0203795c05b896914150dd8d2d43b009357ad3a358d3b1b3c419",
+    "src/lib/iam/staffSessionIssuer.ts": "b11a5ab61f3e25f658b00880dd8295167f067162e476d49134b3229fe2a77c43",
+    "src/lib/iam/runtimeBoundary.ts": "29c5dfc45e68bb41c3cd392414971e49f3a0277b03f8830359b54e3888644316",
+    "src/server/deployment/iamReadiness.ts": "7788d002d746af1cd148d66cc4045baed8468bf17cc81de731e3cfd3e985fe9f",
+    "src/server/deployment/iamSessionIssuerReadiness.ts": "d32334b3e85dc092ea11f0e03061c1a92b887ecf151eccdd0e4b536713de2eee",
+    "src/test/cr1_operations_api.test.ts": "35a8b12c33599581f23d87b1238d267ed6030071fa10a8efe35a79927f8dfbc9",
+    "src/test/cr1_workforce_session_api.test.ts": "4237995e595570ea4fa15cea43bc1d72013b0de70b29d2b04a8b0ee2d62ce93f",
+    "src/test/harvo/cr1_staff_session_issuer.test.ts": "846ae448b5ac21db938c6cb15262bbb7db956cca8c0525223615446de3bbc102",
+    "src/test/harvo/cr1_workforce_runtime_config.test.ts": "99e289eb779b2041ef691fd60e245cc1ade5ecc93d789b36943824c8a3f5d74c",
+    "src/test/harvo/cr1_workforce_tls.test.ts": "a2aba6de55fd95ee1a35b84eefee1dcd6472127cd89c002d9beb36b0ca43d3e7"
+  }
+}

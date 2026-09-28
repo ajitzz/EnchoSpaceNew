@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "status": "READY_FOR_REVIEW",
+  "environment": "LOCAL_DISPOSABLE_POSTGRESQL",
+  "productionCertification": false,
+  "scope": "R4-02 Service Desk runtime readiness containment, not whole card acceptance",
+  "head": "0e4c6fec2fe86f1b793760c5f7a3daf08bbf7508",
+  "workingTree": "DIRTY; pre-existing staged changes preserved; no commit/stage",
+  "sources": [
+    {
+      "path": "src/server/deployment/serviceCaseReadiness.ts",
+      "sha256": "30eb503e2fb791cc196130d541ece08a8ac97f6527bbc4641c700fe947383a70"
+    },
+    {
+      "path": "src/server/deployment/runtimeDatabaseAuthority.ts",
+      "sha256": "0b510603f38af42fc543c9050473e0f87fe69b930c08b69be7cd9ff4be252470"
+    },
+    {
+      "path": "src/test/harvo/cr1_service_case_readiness_authority.test.ts",
+      "sha256": "c540b997f7385cbba7ab4c58c2c9922313f96989117179497ad6075773993326"
+    },
+    {
+      "path": "src/test/harvo/cr1_service_cases.test.ts",
+      "sha256": "57e17a0e181f2e1b4367fc123744940befacfb22eaac7391a4f8fd0b19f8a2d9"
+    }
+  ],
+  "evidence": [
+    {
+      "path": "docs/audits/cr1-remediation/r4-service-readiness/after-first.txt",
+      "sha256": "26022501a6d5f8e2b616ed641b9a3b95afe2e73672b7ddc8f9f64be4352fd796"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r4-service-readiness/after-regression.txt",
+      "sha256": "cdee99cae659ed5cdf69fb1bfac6db3fcdb282b7c6f24c9422f721f65a83c3dc"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r4-service-readiness/before.txt",
+      "sha256": "73e3a1b8c1764e917cf1cca5869f346e27f7ebc55dcd07b41677d990b98445c6"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r4-service-readiness/lint.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/audits/cr1-remediation/r4-service-readiness/typecheck.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "tests": [
+    {
+      "command": "/Users/ajit/.npm/_npx/387698761821791d/node_modules/node/bin/node scripts/testing/run.mjs src/test/harvo/cr1_service_case_readiness_authority.test.ts --reporter=dot",
+      "phase": "BEFORE",
+      "exitCode": 1,
+      "passed": 1,
+      "failed": 10
+    },
+    {
+      "command": "/Users/ajit/.npm/_npx/387698761821791d/node_modules/node/bin/node scripts/testing/run.mjs src/test/harvo/cr1_service_cases.test.ts src/test/harvo/cr1_service_case_readiness_authority.test.ts --reporter=dot",
+      "phase": "AFTER",
+      "exitCode": 0,
+      "passed": 44,
+      "failed": 0,
+      "skipped": 0
+    }
+  ],
+  "validation": {
+    "uniqueFinalTests": 44,
+    "scopedLintExitCode": 0,
+    "scopedStrictTypeScriptExitCode": 0,
+    "remoteContacts": false,
+    "migrationBytesChanged": false,
+    "reviewAcceptance": "PENDING"
+  },
+  "durableAssertions": [
+    "Committed immutable content-access receipts before content retrieval remain required.",
+    "Lost COMMIT acknowledgements do not return content.",
+    "Revoked session/role, stale or released assignment and withdrawn case deny access.",
+    "Internal notes stay separate from participant messages.",
+    "Owner/replication/database CREATE and indirect table/column/cross-scope EXECUTE authority deny readiness."
+  ],
+  "limitations": [
+    "No new reply/dispatch/grounded-AI feature delivered; R4-02 remains open.",
+    "Only local fixtures; no actual staging or production grants certified.",
+    "No legal/provider/pilot external gates cleared.",
+    "Arbitrary other SECURITY DEFINER surfaces require their own independent domain review."
+  ]
+}
