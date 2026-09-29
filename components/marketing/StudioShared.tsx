@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Check, Clock3, ArrowUpRight, ShieldCheck, CircleHelp, AlertCircle } from 'lucide-react';
-import type { StudioCampaign, CampaignQuote, MarketingListing } from './types';
+import type { StudioCampaign, CampaignQuote, MarketingListing, PortfolioOutcomes } from './types';
 import { humanStatus, money, observedTime, marketingRequest } from './api';
 import { normalizeMediaMeterEvidence } from './MediaBudgetEvidence';
 export { normalizeMediaMeterEvidence } from './MediaBudgetEvidence';
@@ -79,6 +79,21 @@ export function MetricsPanel({ campaign }: { campaign: StudioCampaign }) {
     {outcomes&&<div className="mkt-first-party"><p className="mkt-caption">Encho events across this campaign’s revisions, checked {observedTime(outcomes.observedAt)}. Counts cover recorded consented activity; they do not include every visitor or booking. Cancelled and refunded bookings are excluded.</p>{outcomes.unreadMessages&&BigInt(outcomes.unreadMessages)>0n&&<p role="status"><a href="/#messages">{recorded(outcomes.unreadMessages)} unread campaign inquiry messages · Open your inbox</a></p>}</div>}
     <MediaBudgetMeter campaign={campaign}/>
     <ObservationRefresh key={`${campaign.id}:${campaign.revision}`} campaign={campaign}/>
+  </section>;
+}
+export function PortfolioOutcomesSummary({ evidence }: { evidence?: PortfolioOutcomes }) {
+  const count = (value: string | null | undefined) => typeof value === 'string' && /^\d+$/.test(value)
+    ? BigInt(value).toLocaleString('en-IN') : '—';
+  return <section className="mkt-panel" aria-label="Current page booking outcomes">
+    <span className="mkt-eyebrow">Recorded booking outcomes</span>
+    <h3>Across campaigns on this page</h3>
+    <div className="mkt-metrics">
+      <div><span>Distinct attributed bookings</span><strong>{count(evidence?.activeAttributedBookings)}</strong></div>
+      <div><span>Captured bookings</span><strong>{count(evidence?.capturedBookings)}</strong></div>
+      <div><span>Fulfilled stays</span><strong>{count(evidence?.fulfilledStays)}</strong></div>
+    </div>
+    <p className="mkt-caption">These are distinct, consented Encho checkout records for the campaigns on this page, checked {observedTime(evidence?.observedAt)}. A booking touched by several ads is counted once here. Captured and fulfilled are stages of the same booking, not totals to add. Attribution does not prove the ad caused the booking.</p>
+    {!evidence || evidence.activeAttributedBookings === null ? <p className="mkt-caption" role="status">Canonical booking measurement is unavailable; a dash does not mean zero.</p> : null}
   </section>;
 }
 export function MediaBudgetMeter({

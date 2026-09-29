@@ -47,8 +47,20 @@ export interface MarketingPolicy {
   currency: string; markupPercent: number; configured: boolean; version?: number;
   costItems?: Array<{ label: string; amountMinor: MoneyMinor }>;
 }
+export interface PortfolioOutcomes {
+  source: 'CANONICAL_CHECKOUT';
+  scope: 'CURRENT_WORKSPACE_PAGE';
+  completeness: 'RECORDED_VERIFIED_EVENTS_ONLY';
+  observedAt: string;
+  activeAttributedBookings: string | null;
+  capturedBookings: string | null;
+  fulfilledStays: string | null;
+  cancelledBookings: string | null;
+  refundedBookings: string | null;
+}
 export interface StudioWorkspace {
   listings: MarketingListing[]; campaigns: StudioCampaign[]; policy: MarketingPolicy;
+  portfolioOutcomes?: PortfolioOutcomes;
   campaignListings?: MarketingListing[];
   page?: {limit:number;mayHaveMore:boolean;nextCursor:number|null;order?:string};
   listingPage?: {limit:number;mayHaveMore:boolean;nextCursor:number|null};

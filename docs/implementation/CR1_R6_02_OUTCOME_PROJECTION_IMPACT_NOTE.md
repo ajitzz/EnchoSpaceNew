@@ -1,0 +1,13 @@
+# R6-02 canonical portfolio outcome projection — impact note
+
+**Scope:** A bounded, read-only backend and host presentation part of R6-02. It does not accept the corrective card, change campaign funding, export conversions, or assert causal lift.
+
+**Source of truth:** `marketing_booking_measurements` is populated only by `MarketingMeasurementService` after trusted canonical checkout verification. The table uniquely binds `booking_id` and `order_id` to one campaign; its current `state` records capture, fulfillment, cancellation or full refund. The existing `CampaignOutcomes.decorate` transaction already verifies the caller and scopes the requested campaign page to its owner.
+
+**Affected surface:** Extend `src/lib/marketing/portfolio/outcomes.ts` to add a `portfolioOutcomes` summary to the authenticated workspace response for the current page only. Preserve existing per-campaign fields. Type that additive response in `components/marketing/types.ts`, render a bounded summary in `StudioShared.tsx` and place it above the current-page campaign cards in `CampaignStudio.tsx`. Add a disposable-PostgreSQL test to `src/test/harvo/inquiry_outcomes.test.ts` and a mounted UI test in `src/test/harvo/monitoring_ui.test.ts`. No schema, provider, worker, payment or public route change in this slice.
+
+**Security and compatibility:** Count distinct canonical booking identities only after the existing campaign ownership check; repeat the host filter in the aggregate query and require current `consent_status='GRANTED'` for an attributed marketing outcome. Canonical checkout booking truth remains separate and is not deleted on consent revocation. Return `null` counts if canonical verification is not configured. Do not sum provider conversions into bookings, leak another host's bookings, or imply all-page/all-time totals. Existing workspace shape remains compatible; the per-campaign marketing count is corrected to exclude withdrawn consent.
+
+**Validation:** Four-flight fixture with captured, fulfilled, cancelled and refunded records; revoked-consent booking exclusion; explicit current-page scope; hostile tenant rejection; database uniqueness rejecting one booking attributed to a second flight; disabled canonical verifier returning unknown rather than zero. Mount the summary with both verified counts and unknown counts, checking accessibility and a non-causal label. Run the two targeted Node 24 suites, client/server typecheck, scoped lint and whitespace check. A later independent R6-02 review still requires full worker/provider, pause and attribution proofs.
+
+**Rollback:** Remove the page summary component and additive projection without changing migrations or canonical measurement writes. Existing per-campaign outcomes continue to work.

@@ -6,7 +6,7 @@ import {MarketingError,type Actor} from '../domain.js';
 export class CampaignOutcomes {
  constructor(private pool:pg.Pool,private operator:Actor|undefined,private measurementConfigured:boolean,private canonicalBookingsConfigured:boolean){}
  async decorate<T extends {campaigns:Array<{id:string|number}>}>(actor:Actor,workspace:T){
-  if(!this.operator)return {...workspace,campaigns:workspace.campaigns.map(c=>({...c,firstPartyOutcomes:undefined,destinationMembership:undefined}))};
+  if(!this.operator)return {...workspace,portfolioOutcomes:undefined,campaigns:workspace.campaigns.map(c=>({...c,firstPartyOutcomes:undefined,destinationMembership:undefined}))};
   return inTransaction(this.pool,this.operator,async c=>{
    const principals=(await c.query('SELECT id,role FROM users WHERE id=ANY($1::int[])',[[actor.id,this.operator!.id]])).rows;
    if(!principals.some(u=>u.id===this.operator!.id&&u.role==='admin')||!principals.some(u=>u.id===actor.id&&(actor.role!=='admin'||u.role==='admin'))||actor.role==='system')throw new MarketingError('OUTCOMES_ACCESS_DENIED','Current account authority is required.',403);
@@ -19,12 +19,25 @@ export class CampaignOutcomes {
     (SELECT count(*)::text FROM marketing_inquiry_attributions a WHERE a.campaign_id=w.campaign_id AND a.host_id=w.host_id) AS inquiries,
     (SELECT coalesce(sum(t.unread_count_host),0)::text FROM marketing_inquiry_attributions a JOIN threads t ON t.id=a.thread_id WHERE a.campaign_id=w.campaign_id AND a.host_id=w.host_id AND t.host_id=w.host_id) AS unread,
     (SELECT max(a.occurred_at) FROM marketing_inquiry_attributions a WHERE a.campaign_id=w.campaign_id AND a.host_id=w.host_id) AS last_inquiry,
-    (SELECT count(*)::text FROM marketing_booking_measurements b WHERE b.campaign_id=w.campaign_id AND b.host_id=w.host_id AND b.state IN ('CAPTURED','FULFILLED')) AS bookings,
+    (SELECT count(*)::text FROM marketing_booking_measurements b WHERE b.campaign_id=w.campaign_id AND b.host_id=w.host_id AND b.consent_status='GRANTED' AND b.state IN ('CAPTURED','FULFILLED')) AS bookings,
     (SELECT jsonb_build_object('id',m.id,'poolId',m.pool_id,'state',m.state) FROM marketing_pool_memberships m WHERE m.campaign_id=w.campaign_id AND m.host_id=w.host_id AND m.state<>'WITHDRAWN') AS membership
-    FROM marketing_campaign_workflows w WHERE w.campaign_id=ANY($1::int[]) AND ($2 OR w.host_id=$3)`,[ids,actor.role==='admin',actor.id])).rows;
+   FROM marketing_campaign_workflows w WHERE w.campaign_id=ANY($1::int[]) AND ($2 OR w.host_id=$3)`,[ids,actor.role==='admin',actor.id])).rows;
    if(rows.length!==ids.length)throw new MarketingError('CAMPAIGN_NOT_FOUND','Campaign not found.',404);
+   // This is only the current workspace page. Count canonical booking identities,
+   // never touchpoints or provider-attributed conversions; a booking linked to
+   // several ad visits is still one verified booking.
+   const bookingSummary=this.canonicalBookingsConfigured?(await c.query(`SELECT
+    count(DISTINCT booking_id) FILTER (WHERE state IN ('CAPTURED','FULFILLED'))::text AS active_attributed_bookings,
+    count(DISTINCT booking_id) FILTER (WHERE state='CAPTURED')::text AS captured_bookings,
+    count(DISTINCT booking_id) FILTER (WHERE state='FULFILLED')::text AS fulfilled_stays,
+    count(DISTINCT booking_id) FILTER (WHERE state='CANCELLED')::text AS cancelled_bookings,
+    count(DISTINCT booking_id) FILTER (WHERE state='REFUNDED')::text AS refunded_bookings
+    FROM marketing_booking_measurements WHERE campaign_id=ANY($1::int[]) AND ($2 OR host_id=$3) AND consent_status='GRANTED'`,[ids,actor.role==='admin',actor.id])).rows[0]:null;
    const observedAt=new Date().toISOString();
-   return {...workspace,campaigns:workspace.campaigns.map(campaign=>{const row=rows.find(r=>r.campaign_id===Number(campaign.id));return {...campaign,destinationMembership:row.membership??null,firstPartyOutcomes:{source:'ENCHO_CONSENTED_EVENTS',scope:'CAMPAIGN_ALL_REVISIONS',completeness:'RECORDED_EVENTS_ONLY',observedAt,propertyVisits:this.measurementConfigured?row.visits:null,inquiries:this.measurementConfigured?row.inquiries:null,unreadMessages:this.measurementConfigured&&actor.role==='host'?row.unread:null,lastInquiryAt:row.last_inquiry?.toISOString()??null,bookings:this.canonicalBookingsConfigured?row.bookings:null}};})};
+   return {...workspace,portfolioOutcomes:{source:'CANONICAL_CHECKOUT' as const,scope:'CURRENT_WORKSPACE_PAGE' as const,completeness:'RECORDED_VERIFIED_EVENTS_ONLY' as const,observedAt,
+    activeAttributedBookings:bookingSummary?.active_attributed_bookings??null,capturedBookings:bookingSummary?.captured_bookings??null,
+    fulfilledStays:bookingSummary?.fulfilled_stays??null,cancelledBookings:bookingSummary?.cancelled_bookings??null,refundedBookings:bookingSummary?.refunded_bookings??null},
+    campaigns:workspace.campaigns.map(campaign=>{const row=rows.find(r=>r.campaign_id===Number(campaign.id));return {...campaign,destinationMembership:row.membership??null,firstPartyOutcomes:{source:'ENCHO_CONSENTED_EVENTS',scope:'CAMPAIGN_ALL_REVISIONS',completeness:'RECORDED_EVENTS_ONLY',observedAt,propertyVisits:this.measurementConfigured?row.visits:null,inquiries:this.measurementConfigured?row.inquiries:null,unreadMessages:this.measurementConfigured&&actor.role==='host'?row.unread:null,lastInquiryAt:row.last_inquiry?.toISOString()??null,bookings:this.canonicalBookingsConfigured?row.bookings:null}};})};
   });
  }
 }

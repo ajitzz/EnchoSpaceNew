@@ -4,7 +4,7 @@ import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {act,cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {RecoveryPanel} from '../../../components/marketing/RecoveryPanel.js';
 import HostCalendar from '../../../components/HostCalendar.js';
-import {MetricsPanel,MediaBudgetMeter,CampaignProgress,DeliveryEvidence,DeliveryStatusBadge,normalizeMediaMeterEvidence} from '../../../components/marketing/StudioShared.js';
+import {MetricsPanel,MediaBudgetMeter,CampaignProgress,DeliveryEvidence,DeliveryStatusBadge,PortfolioOutcomesSummary,normalizeMediaMeterEvidence} from '../../../components/marketing/StudioShared.js';
 import CampaignStudio from '../../../components/marketing/CampaignStudio.js';
 import {marketingRequest,MarketingRequestError} from '../../../components/marketing/api.js';
 import type {StudioCampaign} from '../../../components/marketing/types.js';
@@ -46,6 +46,20 @@ describe('private calendar selection boundaries',()=>{
  });
 });
 describe('campaign evidence and budget truth',()=>{
+ it('shows page-scoped distinct canonical outcomes without implying additive bookings or zero on missing verification',()=>{
+  const verified={source:'CANONICAL_CHECKOUT' as const,scope:'CURRENT_WORKSPACE_PAGE' as const,completeness:'RECORDED_VERIFIED_EVENTS_ONLY' as const,observedAt:new Date().toISOString(),activeAttributedBookings:'2',capturedBookings:'1',fulfilledStays:'1',cancelledBookings:'1',refundedBookings:'0'};
+  const view=render(React.createElement(PortfolioOutcomesSummary,{evidence:verified}));
+  expect(screen.getByRole('region',{name:'Current page booking outcomes'})).toBeTruthy();
+  expect(screen.getByText('Distinct attributed bookings').parentElement?.textContent).toContain('2');
+  expect(screen.getByText('Captured bookings').parentElement?.textContent).toContain('1');
+  expect(screen.getByText('Fulfilled stays').parentElement?.textContent).toContain('1');
+  expect(screen.getByText(/stages of the same booking, not totals to add/)).toBeTruthy();
+  expect(screen.getByText(/Attribution does not prove the ad caused the booking/)).toBeTruthy();
+  view.unmount();
+  render(React.createElement(PortfolioOutcomesSummary,{}));
+  expect(screen.getByText('Distinct attributed bookings').parentElement?.textContent).toContain('—');
+  expect(screen.getByRole('status').textContent).toContain('does not mean zero');
+ });
  it('explains no-report while keeping unavailable attribution distinct from zero',()=>{
   const value=campaign();value.metrics!.report!.status='NO_REPORT';render(React.createElement(MetricsPanel,{campaign:value}));
   expect(screen.getAllByText('No new network report · older report retained').length).toBeGreaterThan(0);expect(screen.getByText('Verified attributed bookings').parentElement?.textContent).toContain('—');expect(screen.getByText('Recorded guest inquiries').parentElement?.textContent).toContain('—');expect(screen.getByText('2.00%')).toBeTruthy();
@@ -694,6 +708,7 @@ describe('F0 truthful media budget meter evidence normalization and presentation
       refundableMinor: '100000',
       released: false,
     };
+    const portfolioOutcomes = { source: 'CANONICAL_CHECKOUT', scope: 'CURRENT_WORKSPACE_PAGE', completeness: 'RECORDED_VERIFIED_EVENTS_ONLY', observedAt: new Date().toISOString(), activeAttributedBookings: '2', capturedBookings: '1', fulfilledStays: '1', cancelledBookings: '0', refundedBookings: '0' };
     localStorage.setItem('token', 'host-a');
     const fetcher = vi.fn().mockImplementation(async (url: string) => {
       const urlStr = String(url);
@@ -704,6 +719,7 @@ describe('F0 truthful media budget meter evidence normalization and presentation
           json: async () => ({
             listings: [{ id: 20, title: 'Lake House', slug: 'lake-house', publicationStatus: 'PUBLISHED', media: [] }],
             campaigns: [f1, f2, f3, f4],
+            portfolioOutcomes,
             policy: { currency: 'INR', markupPercent: 5, configured: true },
             capabilities: { funding: true, publish: true },
           }),
@@ -718,6 +734,7 @@ describe('F0 truthful media budget meter evidence normalization and presentation
         return {
           listings: [{ id: 20, title: 'Lake House', slug: 'lake-house', publicationStatus: 'PUBLISHED', media: [] }],
           campaigns: [f1, f2, f3, f4],
+          portfolioOutcomes,
           policy: { currency: 'INR', markupPercent: 5, configured: true },
           capabilities: { funding: true, publish: true },
         } as any;
@@ -732,6 +749,7 @@ describe('F0 truthful media budget meter evidence normalization and presentation
       expect(screen.getByText('Review Flight 2')).toBeTruthy();
       expect(screen.getByText('Stale Flight 3')).toBeTruthy();
       expect(screen.getByText('Paused Flight 4')).toBeTruthy();
+      expect(screen.getByRole('region',{name:'Current page booking outcomes'}).textContent).toContain('Distinct attributed bookings2');
 
       expect(screen.getByText('45.0%')).toBeTruthy();
       expect(screen.getByText('Campaign reporting has not started')).toBeTruthy();

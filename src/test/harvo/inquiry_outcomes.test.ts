@@ -91,4 +91,29 @@ describe('SP7 first-party inquiry authority and tenant rollups',()=>{
   expect(await inbox.acknowledgeRead(host,thread.id,{throughMessageId:second.message.id})).toMatchObject({unread:0});
   expect(await inbox.acknowledgeRead(host,thread.id,{throughMessageId:first.message.id})).toMatchObject({unread:0});
  });
+ it('counts distinct canonical booking identities for only the four visible flights and separates terminal states',async()=>{
+  const flights=[];
+  for(let index=0;index<4;index++)flights.push((await workflow.create(host,workflowDraft({title:`Flight ${index+1}`}))).campaign_id);
+  const other=(await workflow.create(guest,workflowDraft({listingId:21,mediaIds:['101'],title:'Other host flight'}))).campaign_id;
+  const insert=async(orderId:string,bookingId:string,campaignId:number,hostId:number,listingId:number,state:string,consentStatus:'GRANTED'|'REVOKED'='GRANTED')=>fixture.pool.query(`INSERT INTO marketing_booking_measurements
+   (order_id,booking_id,campaign_id,host_id,listing_id,provider,external_campaign_id,currency,captured_minor,refunded_minor,state,sequence,canonical_evidence,consent_status,occurred_at)
+   VALUES($1,$2,$3,$4,$5,'META',$6,'INR',100000,$7,$8,1,'{}'::jsonb,$9,now())`,
+   [orderId,bookingId,campaignId,hostId,listingId,`external-${campaignId}`,state==='REFUNDED'?100000:0,state,consentStatus]);
+  await insert('order-captured','booking-captured',flights[0],10,20,'CAPTURED');
+  await insert('order-fulfilled','booking-fulfilled',flights[1],10,20,'FULFILLED');
+  await insert('order-cancelled','booking-cancelled',flights[2],10,20,'CANCELLED');
+  await insert('order-refunded','booking-refunded',flights[3],10,20,'REFUNDED');
+  await insert('order-revoked','booking-revoked',flights[0],10,20,'CAPTURED','REVOKED');
+  await insert('order-other','booking-other',other,11,21,'FULFILLED');
+  await expect(insert('order-duplicate','booking-captured',flights[1],10,20,'CAPTURED')).rejects.toThrow(/duplicate key/);
+  const canonical=new CampaignOutcomes(runtime,admin,true,true);
+  const view=await canonical.decorate(host,{campaigns:flights.map(id=>({id}))});
+  expect(view.portfolioOutcomes).toMatchObject({source:'CANONICAL_CHECKOUT',scope:'CURRENT_WORKSPACE_PAGE',completeness:'RECORDED_VERIFIED_EVENTS_ONLY',activeAttributedBookings:'2',capturedBookings:'1',fulfilledStays:'1',cancelledBookings:'1',refundedBookings:'1'});
+  expect(view.campaigns).toMatchObject([{firstPartyOutcomes:{bookings:'1'}},{firstPartyOutcomes:{bookings:'1'}},{firstPartyOutcomes:{bookings:'0'}},{firstPartyOutcomes:{bookings:'0'}}]);
+  expect((await canonical.decorate(host,{campaigns:[{id:flights[0]}]})).portfolioOutcomes?.activeAttributedBookings).toBe('1');
+  expect((await canonical.decorate(host,{campaigns:[]})).portfolioOutcomes?.activeAttributedBookings).toBe('0');
+  expect((await outcomes.decorate(host,{campaigns:flights.map(id=>({id}))})).portfolioOutcomes?.activeAttributedBookings).toBeNull();
+  await expect(canonical.decorate(guest,{campaigns:[{id:flights[0]}]})).rejects.toMatchObject({code:'CAMPAIGN_NOT_FOUND'});
+  expect((await canonical.decorate(guest,{campaigns:[{id:other}]})).portfolioOutcomes?.activeAttributedBookings).toBe('1');
+ });
 });
