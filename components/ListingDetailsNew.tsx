@@ -553,7 +553,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                             className="absolute bottom-4 right-4 flex items-center gap-2 rounded-xl border border-white/60 bg-white/95 px-5 py-3 text-[11px] font-extrabold uppercase tracking-widest text-zinc-900 shadow-lg backdrop-blur-xl transition hover:scale-[1.02] active:scale-95"
                           >
                             <ImageIcon className="h-4 w-4" aria-hidden="true" />
-                            Show all media
+                            Show All Media
                           </button>
                         )}
                     </div>
@@ -817,13 +817,10 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 </section>
 
                 {/* Preserve the original trust-card composition without manufacturing verification or escrow claims. */}
-                <section className="space-y-5" aria-labelledby="trust-and-safety-heading">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">Stay support</p>
-                    <h2 id="trust-and-safety-heading" className="mt-2 text-2xl font-extrabold tracking-tight text-zinc-900 font-display md:text-3xl">Encho Trust &amp; Safety</h2>
-                  </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="flex gap-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-[0_4px_22px_rgba(0,0,0,0.03)]">
+                <section className="space-y-4 pt-4" aria-labelledby="trust-and-safety-heading">
+                  <h2 id="trust-and-safety-heading" className="text-2xl font-extrabold tracking-tight text-zinc-900 font-display md:text-3xl">Encho Trust &amp; Safety Anchor</h2>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="flex items-start gap-3.5 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
                       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 text-emerald-700">
                         <ShieldCheck className="h-5 w-5" aria-hidden="true" />
                       </span>
@@ -832,7 +829,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         <p className="mt-1 text-xs leading-relaxed text-zinc-500">Independent verification is not published for this stay.</p>
                       </div>
                     </div>
-                    <div className="flex gap-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-[0_4px_22px_rgba(0,0,0,0.03)]">
+                    <div className="flex items-start gap-3.5 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
                       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-sky-100 bg-sky-50 text-sky-700">
                         <Lock className="h-5 w-5" aria-hidden="true" />
                       </span>
@@ -854,7 +851,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                       <div>
                         <div className="flex items-center gap-2">
                           <h3 className="text-xl font-extrabold text-zinc-900 tracking-tight font-display">{listing.provider || 'Property host'}</h3>
-
+                          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700">Encho contact</span>
                         </div>
                         <p className="text-xs text-slate-500 font-medium mt-0.5">Contact through Encho</p>
                       </div>
@@ -1197,7 +1194,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
             <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
               <div>
                 <h2 className="text-2xl font-extrabold tracking-tight font-display md:text-3xl">Neighborhood Radar</h2>
-                <p className="mt-1 text-sm font-medium text-zinc-500">Approximate area context and host-supplied nearby places.</p>
+                <p className="mt-1 text-sm font-medium text-zinc-500">Surrounding landmarks, private transit context, and host-supplied local highlights.</p>
               </div>
               {[listing.location?.locality, listing.location?.city || listing.city].filter(Boolean).length > 0 && (
                 <span className="inline-flex w-fit items-center gap-1.5 rounded-xl border border-indigo-100 bg-indigo-50 px-3.5 py-2 text-sm font-bold text-indigo-700">
@@ -1215,7 +1212,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   backgroundSize: '100% 100%'
                 }}
               />
-              <span className="absolute left-5 top-5 rounded-full bg-zinc-900 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white shadow-md">Approximate area</span>
+              <span className="absolute left-5 top-5 rounded-full bg-zinc-900 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white shadow-md">{listing.nearby?.length ? 'Top destinations' : 'Approximate area'}</span>
               <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
                 <div className="relative rounded-2xl border border-white/80 bg-white/90 px-4 py-3 shadow-xl backdrop-blur-md">
                   <span className="absolute -left-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-zinc-900 text-white shadow-md">
@@ -1225,12 +1222,22 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   <p className="pl-3 text-[10px] text-zinc-500">Approximate stay area</p>
                 </div>
               </div>
-              <p className="absolute bottom-5 left-5 rounded-xl border border-white/80 bg-white/90 px-4 py-3 text-xs font-medium text-zinc-600 shadow-md backdrop-blur-md">Approximate location map is being prepared.</p>
+              {listing.nearby?.[0] ? (
+                <div className="absolute bottom-5 left-5 max-w-[260px] rounded-2xl border border-white/80 bg-white/95 px-4 py-3 shadow-lg backdrop-blur-md">
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="truncate text-xs font-bold text-zinc-900">{listing.nearby[0].name}</p>
+                    {listing.nearby[0].distance && <span className="shrink-0 text-[10px] font-bold text-emerald-700">{listing.nearby[0].distance}</span>}
+                  </div>
+                  {listing.nearby[0].description && <p className="mt-1 line-clamp-1 text-[10px] text-zinc-500">{listing.nearby[0].description}</p>}
+                </div>
+              ) : (
+                <p className="absolute bottom-5 left-5 rounded-xl border border-white/80 bg-white/90 px-4 py-3 text-xs font-medium text-zinc-600 shadow-md backdrop-blur-md">Approximate location map is being prepared.</p>
+              )}
             </div>
 
             {listing.nearby?.length ? (
               <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {listing.nearby.map((poi, index) => (
+                {listing.nearby.slice(1).map((poi, index) => (
                   <li key={poi.id || index} className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
                     <div className="flex items-start justify-between gap-3">
                       <h3 className="font-semibold text-zinc-900">{poi.name}</h3>
@@ -1243,15 +1250,13 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
             ) : <p className="text-zinc-500">Nearby details are being prepared.</p>}
           </section>
 
-          <section className="border-t border-zinc-200/80 pt-8">
-            <div className="flex items-start gap-4 rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm md:p-8">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-500">
-                <Star className="h-5 w-5 fill-current" aria-hidden="true" />
-              </span>
-              <div>
-                <h2 className="text-2xl font-semibold font-display">New on Encho Stays</h2>
-                <p className="mt-2 text-zinc-500">This sanctuary has not yet accumulated verified guest reviews.</p>
-              </div>
+          <section className="space-y-6 border-t border-zinc-200/80 pt-8">
+            <div className="flex items-center gap-3">
+              <Star className="h-7 w-7 fill-amber-500 text-amber-500" aria-hidden="true" />
+              <h2 className="text-2xl font-extrabold tracking-tight text-zinc-900 font-display md:text-3xl">New on Encho Stays</h2>
+            </div>
+            <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm md:p-8">
+              <p className="text-zinc-500">This sanctuary has not yet accumulated verified guest reviews.</p>
             </div>
           </section>
 

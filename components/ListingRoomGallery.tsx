@@ -184,22 +184,22 @@ export function ListingRoomGallery({listing, onOpen, selectedRoomKey, onSelectRo
   };
 
   return (
-    <section className="space-y-7 border-t border-zinc-200/80 pt-8" aria-label="Rooms and room photography">
+    <section className="space-y-8 border-t border-zinc-200/80 pt-8" aria-label="Rooms and room photography">
       <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
         <div>
           <div className="mb-2 flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
-            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">The room collections</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 font-display">The room collections</span>
           </div>
-          <h2 className="text-3xl font-extrabold tracking-tight text-zinc-900 font-display md:text-4xl">Our Sanctuary Chambers</h2>
-          <p className="mt-1 text-sm font-medium text-zinc-500 md:text-base">Explore the room options and photography supplied by the host.</p>
+          <h2 className="text-2xl font-extrabold tracking-tight text-zinc-900 font-display md:text-4xl">Our Sanctuary Chambers</h2>
+          <p className="mt-1 text-sm font-medium text-zinc-500 md:text-base">Explore our curated selection of spaces.</p>
         </div>
 
         {rooms.length > 0 && (
           <div className="flex items-center gap-3 self-start md:self-end">
             <span className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-100 px-4 py-2 text-[11px] font-bold text-zinc-700">
               <span className="h-1.5 w-1.5 rounded-full bg-zinc-900" aria-hidden="true" />
-              Collection {String(activeIndex + 1).padStart(2, '0')} / {String(rooms.length).padStart(2, '0')}
+              COLLECTION {String(activeIndex + 1).padStart(2, '0')} / {String(rooms.length).padStart(2, '0')}
             </span>
             <button type="button" onClick={() => move(-1)} disabled={rooms.length < 2} className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-900 shadow-sm transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Previous room collection">
               <ChevronLeft className="h-5 w-5" aria-hidden="true" />
@@ -222,16 +222,16 @@ export function ListingRoomGallery({listing, onOpen, selectedRoomKey, onSelectRo
                 type="button"
                 aria-pressed={activeIndex === index}
                 onClick={() => select(index)}
-                className={`rounded-full px-4 py-2 text-xs font-bold transition ${activeIndex === index ? 'bg-zinc-900 text-white shadow-sm' : 'border border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
+                className={`rounded-full px-4 py-2 text-xs font-bold transition font-display ${activeIndex === index ? 'bg-zinc-900 text-white shadow-sm ring-1 ring-zinc-900' : 'border border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}
               >
                 {String(index + 1).padStart(2, '0')} · {entry.room.name}
               </button>
             ))}
           </div>
 
-          <div className="relative">
+          <div className="relative overflow-hidden rounded-3xl">
             {rooms.map((entry, index) => (
-              <div key={entry.key} className={activeIndex === index ? 'block' : 'hidden'} aria-hidden={activeIndex !== index}>
+              <div key={entry.key} className={activeIndex === index ? 'block animate-fade-in' : 'hidden'} aria-hidden={activeIndex !== index}>
                 <RoomCollection listing={listing} presentedRoom={entry} onOpen={onOpen} />
               </div>
             ))}
