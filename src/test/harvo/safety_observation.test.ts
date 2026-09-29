@@ -11,8 +11,9 @@ import type {AdProvider} from '../../lib/providers/AdProvider.js';
 const host={id:10,role:'host' as const};
 describe('independent local safety and durable fair observation scheduling',()=>{
  let fixture:Awaited<ReturnType<typeof createWorkflowPgFixture>>,workflow:MarketingWorkflowService,engine:MarketingEngine;
- const truth=vi.fn(),telemetry=vi.fn(),mutate=vi.fn();
- const provider={fetchAuthoritativeDeliveryTruth:truth,fetchTelemetrySnapshot:telemetry,createCampaignHierarchy:mutate,pauseCampaign:mutate,resumeCampaign:mutate} as unknown as AdProvider;
+ const truth=vi.fn(),telemetry=vi.fn(),calendar=vi.fn(),mutate=vi.fn();
+ const accountId='act_isolated_safety_account',accountTimeZone='Asia/Kolkata';
+ const provider={fetchAuthoritativeDeliveryTruth:truth,getServingAccountReportingCalendar:calendar,fetchTelemetrySnapshot:telemetry,createCampaignHierarchy:mutate,pauseCampaign:mutate,resumeCampaign:mutate} as unknown as AdProvider;
  const gateway={} as CampaignPaymentGateway;
  const runner=()=>new MarketingEngine(fixture.pool,workflow,workflowConfig,gateway,()=>provider);
  beforeAll(async()=>{fixture=await createWorkflowPgFixture();});afterAll(async()=>{await fixture?.close();});
@@ -21,10 +22,11 @@ describe('independent local safety and durable fair observation scheduling',()=>
   await fixture.pool.query("INSERT INTO room_types VALUES(1,20,'INR')");await fixture.pool.query("INSERT INTO inventory_days(listing_id,room_type_id,calendar_date,total_units) SELECT 20,1,d::date,2 FROM generate_series('2099-01-02'::date,'2099-01-03'::date,interval '1 day') d");
   workflow=new MarketingWorkflowService(fixture.pool,{ai:new CampaignAiReviewer({mediaOrigins:new Set()}),finance:{} as WorkflowFinancePort,fundingEnabled:false,publishingEnabled:false,activationEnabled:false,configurationReasons:[]});engine=runner();
   truth.mockReset().mockImplementation(async(externalCampaignId:string)=>({provider:'META',externalCampaignId,normalizedState:'UNKNOWN',isLive:false,isServingImpressions:false,lastObservedAt:new Date().toISOString()}));
-  telemetry.mockReset().mockImplementation(async()=>({dateStart:'2026-09-01',dateEnd:'2026-09-13',impressions:100,clicks:2,ctr:2,conversions:0,spend:{currency:'INR',minor_units:1000},observedAt:new Date().toISOString(),dataFreshness:'DELAYED'}));
+  calendar.mockReset().mockResolvedValue({provider:'META',accountId,accountTimeZone});
+  telemetry.mockReset().mockImplementation(async(externalCampaignId:string)=>({provider:'META',externalCampaignId,dateStart:'2026-09-01',dateEnd:'2026-09-13',impressions:100,clicks:2,ctr:2,conversions:0,spend:{currency:'INR',minor_units:1000},observedAt:new Date().toISOString(),dataFreshness:'DELAYED',providerMetadata:{accountId,accountTimeZone,dataAsOf:null}}));
   mutate.mockReset().mockRejectedValue(new Error('These read-only regressions must never mutate a provider.'));vi.spyOn(console,'error').mockImplementation(()=>undefined);
  });
- async function active(){const row=await workflow.create(host,workflowDraft({startDate:'2026-09-01',endDate:'2026-09-30',stayStartDate:'2099-01-02',stayEndDate:'2099-01-04'}));await fixture.pool.query("UPDATE marketing_campaign_workflows SET state='PROVIDER_REVIEW',provider_truth=$2,telemetry=$3 WHERE campaign_id=$1",[row.campaign_id,JSON.stringify({externalCampaignId:`isolated-provider-${row.campaign_id}`,configuredStatus:'ACTIVE',observedStatus:'UNKNOWN',observedAt:'2026-09-01T00:00:00Z',deliveryConfirmed:false}),JSON.stringify({impressions:7,clicks:1,spendMinor:'400',observedAt:'2026-09-01T00:00:00Z'})]);return row;}
+ async function active(){const row=await workflow.create(host,workflowDraft({startDate:'2026-09-01',endDate:'2026-09-30',stayStartDate:'2099-01-02',stayEndDate:'2099-01-04'}));const externalCampaignId=`isolated-provider-${row.campaign_id}`;await fixture.pool.query("INSERT INTO provider_entities(campaign_id,provider,entity_type,external_id,account_id) VALUES($1,'META','CAMPAIGN',$2,$3)",[row.campaign_id,externalCampaignId,accountId]);await fixture.pool.query("UPDATE marketing_campaign_workflows SET state='PROVIDER_REVIEW',provider_truth=$2,telemetry=$3 WHERE campaign_id=$1",[row.campaign_id,JSON.stringify({externalCampaignId,configuredStatus:'ACTIVE',observedStatus:'UNKNOWN',observedAt:'2026-09-01T00:00:00Z',deliveryConfirmed:false}),JSON.stringify({campaignId:row.campaign_id,revision:1,externalCampaignId,accountId,accountTimeZone,source:'META',budgetBasisMinor:'90000',currency:'INR',dateStart:'2026-09-01',dateEnd:'2026-09-13',impressions:7,clicks:1,spendMinor:'400',observedAt:'2026-09-01T00:00:00Z'})]);return row;}
  const pauses=async()=>(await fixture.pool.query("SELECT * FROM marketing_jobs WHERE kind='PAUSE'")).rows;
  it.each(['INVENTORY_UNAVAILABLE','LISTING_CHANGED'])('queues %s containment before a never-resolving report is attempted',async reason=>{
   const row=await active();truth.mockImplementation(()=>new Promise(()=>undefined));
