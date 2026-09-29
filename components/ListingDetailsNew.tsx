@@ -699,7 +699,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     )}
                   </div>
 
-                  {/* Accordion Item 2: House guidelines */}
+                  {/* Accordion Item 2: Aristocratic Hospitality Guidelines */}
                   <div className="border-b border-zinc-200/80 transition-colors">
                     <button
                       type="button"
@@ -710,9 +710,9 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         <span className="text-zinc-400 font-bold text-xs tracking-wider font-mono">02</span>
                         <div className="flex items-center gap-2">
                           <h3 className="text-lg md:text-xl font-bold text-zinc-900 tracking-tight group-hover:text-zinc-700 font-display">
-                            House guidelines
+                            Aristocratic Hospitality Guidelines
                           </h3>
-                          {parsedGuidelines.length > 0 && <span className="bg-amber-50 text-amber-800 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-200">Host supplied</span>}
+                          {parsedGuidelines.length > 0 && <span className="bg-amber-50 text-amber-800 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-200">Curated</span>}
                         </div>
                       </div>
                       <div className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-500 group-hover:bg-zinc-100 transition-all text-xl font-light">

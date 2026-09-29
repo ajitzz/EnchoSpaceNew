@@ -35,7 +35,7 @@ const server=createServer((req,res)=>{
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin=`http://127.0.0.1:${server.address().port}`;
 const browser=await chromium.launch({headless:true});const evidence=[];
 try{
- for(const width of [1440,390])for(const screen of ['guest','empty','builder']){
+ for(const width of [1920,1440,390])for(const screen of ['guest','empty','builder']){
   const page=await browser.newPage({viewport:{width,height:1000},reducedMotion:'reduce'});const errors=[];page.on('pageerror',error=>errors.push(error.message));
   await page.route('**/*',route=>route.request().url().startsWith(origin)?route.continue():route.abort());
   await page.goto(`${origin}/?screen=${screen}`);
