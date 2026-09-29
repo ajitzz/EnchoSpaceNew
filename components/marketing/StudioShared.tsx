@@ -311,8 +311,8 @@ export function MediaBudgetMeter({
           {money(evidence.plannedMediaMinor!, evidence.currency)} media plan
         </p>
         <p className="mkt-caption">
-          Current utilization is unavailable because the network report exceeds the freshness threshold.
-          Unused media allocation is not a refundable balance. Confirmed refundable funds are shown separately.
+          {evidence.subtext} Current utilization is unavailable. Unused media allocation is not a refundable balance.
+          Confirmed refundable funds are shown separately.
         </p>
         {evidence.capturedHostChargeMinor && (
           <p className="mkt-caption">

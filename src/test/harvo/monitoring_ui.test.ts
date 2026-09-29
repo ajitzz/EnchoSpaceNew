@@ -174,6 +174,8 @@ describe('F0 truthful media budget meter evidence normalization and presentation
     const { unmount } = render(React.createElement(MetricsPanel, { campaign: value }));
     expect(screen.getAllByText('No new network report · older report retained').length).toBeGreaterThan(0);
     expect(screen.getAllByText('₹200.00').length).toBeGreaterThan(0);
+    expect(screen.getByText(/The network returned no new report/)).toBeTruthy();
+    expect(screen.queryByText(/because the network report exceeds the freshness threshold/)).toBeNull();
     unmount();
 
     value.metrics!.revision = 3;
@@ -246,8 +248,8 @@ describe('F0 truthful media budget meter evidence normalization and presentation
     render(React.createElement(MediaBudgetMeter, { campaign: staleCamp, freshnessWindowMs: 20 * 60 * 1000 }));
     expect(screen.getByText('Media budget (Older report)')).toBeTruthy();
     expect(screen.getByText('Older report · refresh pending')).toBeTruthy();
-    expect(screen.getByText(/Current utilization is unavailable because the network report exceeds the freshness threshold/)).toBeTruthy();
-    expect(screen.getByText(/Last successful report/)).toBeTruthy();
+    expect(screen.getByText(/Older report · refresh pending \(Last successful report:.*Current utilization is unavailable/)).toBeTruthy();
+    expect(screen.getAllByText(/Last successful report/).length).toBeGreaterThan(0);
   });
 
   it('renders financial separation: reported spend, accepted host charge, and confirmed refundable', () => {
