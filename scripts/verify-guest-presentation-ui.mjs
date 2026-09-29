@@ -14,8 +14,9 @@ const directory=mkdtempSync(join(tmpdir(),'encho-guest-browser-'));
 await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{HelmetProvider}from'react-helmet-async';
 import{ListingDetailsNew}from'./components/ListingDetailsNew';import HostForm from'./components/HostForm';
 const screen=new URLSearchParams(location.search).get('screen');
-const roomPhoto={id:'fixture-room-photo',url:'/fixture/room.svg',category:'other',title:'Garden room photograph'};
-const listing={id:'1',title:'Lake House — local fixture',description:'A supplied property description for this isolated visual check.',city:'Kochi',locality:'Lake Road',price:6000,currency:'INR',type:'Villa',imageUrl:'/fixture/grounds.svg',imageUrls:['/fixture/grounds.svg','/fixture/room.svg'],imageCount:2,isVerified:false,amenities:['WiFi'],rooms:[{id:'101',type:'suite',name:'Garden room',price:3500.75,capacity:2,photos:[roomPhoto]},{id:'102',type:'suite',name:'Presidential room',price:8000,capacity:4,photos:[{...roomPhoto,id:'presidential-photo',url:'/fixture/presidential.svg',title:'Presidential room photograph'}]}]};
+const roomPhotos=['room','room-balcony','room-bath','room-view'].map((name,index)=>({id:'fixture-'+name,url:'/fixture/'+name+'.svg',category:index===1?'balcony':index===2?'bathroom':index===3?'view':'bedroom',title:['Garden room','Private balcony','En-suite bath','Garden outlook'][index]}));
+const presidentialPhotos=['presidential','presidential-lounge','presidential-bath','presidential-view'].map((name,index)=>({id:'fixture-'+name,url:'/fixture/'+name+'.svg',category:index===1?'living_room':index===2?'bathroom':index===3?'view':'bedroom',title:['Presidential room','Private lounge','Marble bath','Lake outlook'][index]}));
+const listing={id:'1',title:'Lake House — local fixture',description:'A supplied property description for this isolated visual check.',city:'Kochi',locality:'Lake Road',price:6000,currency:'INR',type:'Villa',imageUrl:'/fixture/grounds.svg',imageUrls:['/fixture/grounds.svg','/fixture/pool.svg','/fixture/exterior.svg','/fixture/spa.svg','/fixture/detail.svg'],imageCount:5,isVerified:false,amenities:['WiFi'],rooms:[{id:'101',type:'suite',name:'Garden room',price:3500.75,capacity:2,photos:roomPhotos},{id:'102',type:'suite',name:'Presidential room',price:8000,capacity:4,photos:presidentialPhotos}]};
 const empty={...listing,id:'fixture-empty',title:'Property details pending — local fixture',rooms:[],imageUrl:'',imageUrls:[],imageCount:0,price:0,amenities:[]};
 createRoot(document.getElementById('root')).render(<HelmetProvider>{screen==='builder'?<HostForm onBack={()=>{}} onSuccess={()=>{}}/>:<ListingDetailsNew listing={screen==='empty'?empty:listing} onBack={()=>{}}/>}</HelmetProvider>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,outfile:join(directory,'app.js'),platform:'browser',jsx:'automatic',define:{'import.meta.env':'{}','process.env.NODE_ENV':'"production"'},plugins:[{name:'fixture-context',setup(plugin){
  plugin.onResolve({filter:/(AuthContext|ToastContext|CurrencyContext)(?:\.js)?$/},args=>({path:args.path,namespace:'fixture'}));
@@ -26,7 +27,7 @@ const server=createServer((req,res)=>{
  const path=new URL(req.url,'http://127.0.0.1').pathname;
  if(path==='/app.js'){res.writeHead(200,{'Content-Type':'application/javascript'});return res.end(readFileSync(join(directory,'app.js')));}
  if(path==='/app.css'){res.writeHead(200,{'Content-Type':'text/css'});return res.end(css);}
- if(path.startsWith('/fixture/')){res.writeHead(200,{'Content-Type':'image/svg+xml'});return res.end(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600"><rect width="900" height="600" fill="${path.includes('room')?'#8eaa98':'#b3c5c3'}"/><rect x="130" y="100" width="640" height="400" rx="40" fill="#e5ebe6"/><text x="450" y="300" text-anchor="middle" font-size="32" fill="#173c32">${path.includes('room')?'Room photograph fixture':'Property photograph fixture'}</text><text x="450" y="360" text-anchor="middle" font-size="20" fill="#173c32">Local test data only</text></svg>`);}
+ if(path.startsWith('/fixture/')){const room=path.includes('room')||path.includes('presidential');const palette=path.includes('pool')?'#82aebb':path.includes('spa')?'#bea89d':path.includes('exterior')?'#ad9a7a':path.includes('detail')?'#c5b9aa':room?'#8eaa98':'#b3c5c3';res.writeHead(200,{'Content-Type':'image/svg+xml'});return res.end(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600"><rect width="900" height="600" fill="${palette}"/><rect x="130" y="100" width="640" height="400" rx="40" fill="#e5ebe6"/><text x="450" y="300" text-anchor="middle" font-size="32" fill="#173c32">${room?'Room photograph fixture':'Property photograph fixture'}</text><text x="450" y="360" text-anchor="middle" font-size="20" fill="#173c32">Local test data only</text></svg>`);}
  if(path==='/api/listings/1/availability'){const query=new URL(req.url,'http://127.0.0.1').searchParams;requests.push({path,method:req.method});res.writeHead(200,{'Content-Type':'application/json'});return res.end(JSON.stringify({listingId:1,from:query.get('from'),to:query.get('to'),observedAt:new Date().toISOString(),rooms:[{id:101,available:0},{id:102,available:2}]}));}
  if(path.startsWith('/api/')){requests.push({path,method:req.method});res.writeHead(404,{'Content-Type':'application/json'});return res.end('{"error":"No live services in browser fixture"}');}
  res.writeHead(200,{'Content-Type':'text/html'});res.end('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/app.css"><style>body{margin:0}.fixture-note{position:relative;z-index:9999;padding:8px;background:#173c32;color:white;font:12px system-ui}</style></head><body><div class="fixture-note">Isolated presentation verification — no live property, checkout or publishing</div><main id="root"></main><script src="/app.js"></script></body></html>');
@@ -45,21 +46,30 @@ try{
   }else{
    await page.getByRole('heading',{name:screen==='guest'?'Lake House — local fixture':'Property details pending — local fixture',exact:true}).first().waitFor();
    if(screen==='guest'){
-    await page.getByRole('status').filter({hasText:'No rooms are available'}).waitFor();
-    await page.getByRole('button',{name:'Presidential room',exact:true}).click();
-    await page.getByRole('status').filter({hasText:'2 rooms reported available'}).waitFor();
+    if(width>=1024){
+     await page.getByRole('status').filter({hasText:'No rooms are available'}).waitFor();
+     await page.getByRole('button',{name:'Presidential room',exact:true}).click();
+     await page.getByRole('status').filter({hasText:'2 rooms reported available'}).waitFor();
+    }else await page.getByText('Dates unavailable',{exact:true}).waitFor();
     if(await page.getByText('Instant Confirmation',{exact:true}).count())throw new Error('CLOSED_CHECKOUT_CONFIRMATION_CLAIM');
     for(const control of await page.getByRole('button',{name:/booking.*prepared/i}).all())if(!await control.isDisabled())throw new Error('CHECKOUT_GATE_OPEN');
-    await page.getByRole('button',{name:'Garden room',exact:true}).click();
-    await page.getByRole('status').filter({hasText:'No rooms are available'}).waitFor();
-    if(!await page.getByText('From ₹3,500.75',{exact:false}).first().isVisible())throw new Error('ROOM_PRICE_LOST_PAISE');
+    if(width>=1024){
+     await page.getByRole('button',{name:'Garden room',exact:true}).click();
+     await page.getByRole('status').filter({hasText:'No rooms are available'}).waitFor();
+    }
+    const exactPriceNodes=await page.getByText('From ₹3,500.75',{exact:false}).all();
+    if(!(await Promise.all(exactPriceNodes.map(node=>node.isVisible()))).some(Boolean))throw new Error('ROOM_PRICE_LOST_PAISE');
     await page.getByRole('button',{name:'View Garden room photo 1',exact:true}).click();
     await page.getByTitle('Close Lightbox (ESC)').waitFor();
     if(!await page.locator('img[src="/fixture/room.svg"]').last().isVisible())throw new Error('WRONG_ROOM_PHOTO');
+    await page.screenshot({path:join(directory,`gallery-lightbox-${width}.png`)});
     await page.keyboard.press('Escape');
     const gallery=page.getByRole('dialog',{name:'Lake House — local fixture photo gallery'});
     await gallery.waitFor();await page.keyboard.press('Tab');
     if(!await gallery.evaluate(element=>element.contains(document.activeElement)))throw new Error('GALLERY_FOCUS_ESCAPED');
+    await gallery.getByRole('button',{name:'View Garden room',exact:true}).waitFor();
+    await page.waitForTimeout(1000);
+    await page.screenshot({path:join(directory,`gallery-index-${width}.png`)});
     await page.keyboard.press('Escape');
     if(!await page.getByRole('button',{name:'View Garden room photo 1',exact:true}).evaluate(element=>element===document.activeElement))throw new Error('GALLERY_FOCUS_NOT_RESTORED');
    }else if(await page.locator('img').count())throw new Error('EMPTY_PROPERTY_HAS_INVENTED_MEDIA');

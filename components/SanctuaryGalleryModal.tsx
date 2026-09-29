@@ -38,7 +38,7 @@ export function buildGalleryCategories(listing: Listing): CategoryConfig[] {
       shortLabel: 'All',
       icon: '✨',
       headline: listing.title || 'Complete Property Panorama',
-      description: (listing.description || '').substring(0, 120) || 'A curated visual journey through every space.'
+      description: (listing.description || '').substring(0, 120) || 'Property photography supplied by the host.'
     },
     {
       key: 'common',
@@ -132,7 +132,7 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       if (initialCategory) setSelectedCategory(initialCategory as GalleryCategoryKey);
-      if (initialIndex !== undefined) setLightboxIndex(initialIndex);
+      if (initialIndex !== undefined) setLightboxIndex(initialIndex >= 0 ? initialIndex : null);
     }
   }, [isOpen, initialCategory, initialIndex]);
 
@@ -295,7 +295,7 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
                 </span>
                 <span className="text-[10px] text-zinc-500 font-mono">·</span>
                 <span className="text-[10px] text-zinc-400 font-mono">
-                  {allPhotos.length} Curated Perspectives
+                  {allPhotos.length} Supplied Perspectives
                 </span>
               </div>
               <h2 className="text-sm sm:text-base font-bold font-display text-white tracking-tight truncate max-w-[200px] sm:max-w-md">
@@ -481,7 +481,7 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
                                </div>
                              ) : (
                                <p className="text-zinc-500 text-base leading-loose font-light pt-4">
-                                 Experience the meticulously crafted details and architectural harmony of this space. Designed for ultimate comfort and aesthetic brilliance.
+                                 The host has not supplied a description for this photographed space.
                                </p>
                              )}
 

@@ -511,13 +511,51 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 </div>
             ) : (
                 <>
-                    <div className={`hidden md:grid ${images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-2.5 h-[65vh] lg:h-[75vh] rounded-3xl overflow-hidden bg-zinc-100 shadow-sm relative`}>
-                        {images.length === 0 ? <div className="flex items-center justify-center text-zinc-500">Property photography is being prepared.</div> : images.slice(0,4).map((url,index) => (
-                          <button key={url} type="button" className="relative overflow-hidden h-full" aria-label={`View property photo ${index+1}`} onClick={() => {trackPhotoView(index); openPropertyPhoto(url);}}>
-                            <OptimizedImage src={url} aspectRatio="4:3" priority={index===0} className="w-full h-full object-cover hover:scale-[1.03] duration-700 transition-transform" alt={index===0 ? `${listing.title} Main View` : `${listing.title} photo ${index+1}`} />
+                    <div className="relative hidden h-[65vh] min-h-[520px] max-h-[760px] overflow-hidden rounded-3xl bg-zinc-100 shadow-sm md:grid md:grid-cols-4 md:grid-rows-2 md:gap-2.5 lg:h-[72vh]">
+                        {images.length === 0 ? (
+                          <div className="col-span-4 row-span-2 flex items-center justify-center text-zinc-500">Property photography is being prepared.</div>
+                        ) : images.slice(0, 5).map((url, index) => {
+                          const count = Math.min(images.length, 5);
+                          const tileClass = count >= 5
+                            ? (index === 0 ? 'col-span-2 row-span-2' : 'col-span-1 row-span-1')
+                            : count === 4
+                              ? (index === 0 ? 'col-span-2 row-span-2' : index === 1 ? 'col-span-2 row-span-1' : 'col-span-1 row-span-1')
+                              : count === 3
+                                ? (index === 0 ? 'col-span-2 row-span-2' : 'col-span-2 row-span-1')
+                                : count === 2
+                                  ? 'col-span-2 row-span-2'
+                                  : 'col-span-4 row-span-2';
+                          return (
+                            <button
+                              key={url}
+                              type="button"
+                              className={`group relative h-full overflow-hidden bg-zinc-200 text-left ${tileClass}`}
+                              aria-label={`View property photo ${index + 1}`}
+                              onClick={() => { uiAudio.playClick(); trackPhotoView(index); openPropertyPhoto(url); }}
+                            >
+                              <OptimizedImage
+                                src={url}
+                                aspectRatio={index === 0 ? '4:3' : '16:9'}
+                                priority={index === 0}
+                                className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+                                alt={index === 0 ? `${listing.title} Main View` : `${listing.title} photo ${index + 1}`}
+                              />
+                              {index === count - 1 && (
+                                <span className="absolute inset-0 bg-black/0 transition-colors duration-500 group-hover:bg-black/10" aria-hidden="true" />
+                              )}
+                            </button>
+                          );
+                        })}
+                        {images.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => { uiAudio.playClick(); setGalleryInitialCategory('all'); setGalleryInitialIndex(-1); setIsGalleryOpen(true); }}
+                            className="absolute bottom-4 right-4 flex items-center gap-2 rounded-xl border border-white/60 bg-white/95 px-5 py-3 text-[11px] font-extrabold uppercase tracking-widest text-zinc-900 shadow-lg backdrop-blur-xl transition hover:scale-[1.02] active:scale-95"
+                          >
+                            <ImageIcon className="h-4 w-4" aria-hidden="true" />
+                            Show all media
                           </button>
-                        ))}
-                        {images.length > 0 && <button type="button" onClick={() => {setGalleryInitialCategory('all');setGalleryInitialIndex(0);setIsGalleryOpen(true);}} className="absolute bottom-4 right-4 bg-white/95 text-zinc-900 px-5 py-3 rounded-xl flex items-center gap-2 shadow-lg"><ImageIcon className="w-4 h-4"/>View all photos</button>}
+                        )}
                     </div>
 
                     <div className="md:hidden relative w-full aspect-[4/5] sm:aspect-square bg-zinc-200 overflow-hidden">
@@ -551,10 +589,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
         </div>
 
         
-        <section className="max-w-7xl mx-auto px-4 md:px-8 py-6">
-          <h1 className="text-3xl md:text-5xl font-display font-semibold tracking-tight text-zinc-900">{listing.title}</h1>
-          <p className="mt-3 text-zinc-500">{[listing.location?.locality, listing.location?.city || listing.city].filter(Boolean).join(', ')}</p>
-        </section>
+        <h1 className="sr-only">{listing.title}</h1>
         {'slug' in listing && typeof listing.slug === 'string' && listing.slug && <PublicSpatialStory key={listing.slug} slug={listing.slug}/>}
 
         {/* ========================================================================= */}
@@ -778,6 +813,34 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         </p>
                       </div>
                     )}
+                  </div>
+                </section>
+
+                {/* Preserve the original trust-card composition without manufacturing verification or escrow claims. */}
+                <section className="space-y-5" aria-labelledby="trust-and-safety-heading">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-zinc-400">Stay support</p>
+                    <h2 id="trust-and-safety-heading" className="mt-2 text-2xl font-extrabold tracking-tight text-zinc-900 font-display md:text-3xl">Encho Trust &amp; Safety</h2>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="flex gap-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-[0_4px_22px_rgba(0,0,0,0.03)]">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 text-emerald-700">
+                        <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+                      </span>
+                      <div>
+                        <h3 className="text-sm font-bold text-zinc-900">Host identity status</h3>
+                        <p className="mt-1 text-xs leading-relaxed text-zinc-500">Independent verification is not published for this stay.</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-[0_4px_22px_rgba(0,0,0,0.03)]">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-sky-100 bg-sky-50 text-sky-700">
+                        <Lock className="h-5 w-5" aria-hidden="true" />
+                      </span>
+                      <div>
+                        <h3 className="text-sm font-bold text-zinc-900">Booking protection status</h3>
+                        <p className="mt-1 text-xs leading-relaxed text-zinc-500">Online checkout is being prepared. No payment is requested on this page.</p>
+                      </div>
+                    </div>
                   </div>
                 </section>
 
@@ -1119,24 +1182,77 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
         {/* ========================================================================= */}
         <div className="w-full md:max-w-7xl mx-auto px-4 md:px-6 lg:px-8 mt-4 md:mt-6 flex flex-col gap-16 md:gap-24">
 
-          <ListingRoomGallery listing={listing} onOpen={(tier, index) => {
-            setGalleryInitialCategory(tier); setGalleryInitialIndex(index); setIsGalleryOpen(true);
-          }} />
-          <section className="space-y-6 pt-8 border-t border-zinc-200/80">
-            <h2 className="text-2xl md:text-3xl font-extrabold font-display">Neighborhood Radar</h2>
-            <p className="text-zinc-600">{[listing.location?.locality, listing.location?.city || listing.city].filter(Boolean).join(', ')}</p>
-            <div className="group rounded-3xl bg-zinc-100 border border-zinc-200 p-8">
-              <div className="opacity-50 grayscale group-hover:grayscale-0 transition-all duration-1000 ease-out">
-                <MapPin className="w-8 h-8 mb-3" /><p>Approximate location map is being prepared.</p>
+          <ListingRoomGallery
+            listing={listing}
+            selectedRoomKey={selectedRoomTier}
+            onSelectRoom={setSelectedRoomTier}
+            onOpen={(tier, index) => {
+              setSelectedRoomTier(tier);
+              setGalleryInitialCategory(tier);
+              setGalleryInitialIndex(index);
+              setIsGalleryOpen(true);
+            }}
+          />
+          <section className="space-y-6 border-t border-zinc-200/80 pt-8">
+            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+              <div>
+                <h2 className="text-2xl font-extrabold tracking-tight font-display md:text-3xl">Neighborhood Radar</h2>
+                <p className="mt-1 text-sm font-medium text-zinc-500">Approximate area context and host-supplied nearby places.</p>
+              </div>
+              {[listing.location?.locality, listing.location?.city || listing.city].filter(Boolean).length > 0 && (
+                <span className="inline-flex w-fit items-center gap-1.5 rounded-xl border border-indigo-100 bg-indigo-50 px-3.5 py-2 text-sm font-bold text-indigo-700">
+                  <MapPin className="h-4 w-4" aria-hidden="true" />
+                  {[listing.location?.locality, listing.location?.city || listing.city].filter(Boolean).join(', ')}
+                </span>
+              )}
+            </div>
+
+            <div className="group relative h-[360px] overflow-hidden rounded-3xl border border-zinc-200 bg-[#f1f2ef] shadow-inner md:h-[430px]">
+              <div
+                className="absolute inset-0 opacity-50 grayscale group-hover:grayscale-0 transition-all duration-1000 ease-out"
+                style={{
+                  backgroundImage: 'radial-gradient(circle at 22% 28%, rgba(255,255,255,.95) 0 2px, transparent 3px), radial-gradient(circle at 76% 62%, rgba(255,255,255,.95) 0 2px, transparent 3px), linear-gradient(32deg, transparent 46%, rgba(255,255,255,.9) 47% 49%, transparent 50%), linear-gradient(128deg, transparent 43%, rgba(255,255,255,.75) 44% 46%, transparent 47%), repeating-radial-gradient(ellipse at 50% 52%, rgba(113,128,119,.12) 0 1px, transparent 2px 34px)',
+                  backgroundSize: '100% 100%'
+                }}
+              />
+              <span className="absolute left-5 top-5 rounded-full bg-zinc-900 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white shadow-md">Approximate area</span>
+              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+                <div className="relative rounded-2xl border border-white/80 bg-white/90 px-4 py-3 shadow-xl backdrop-blur-md">
+                  <span className="absolute -left-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-zinc-900 text-white shadow-md">
+                    <MapPin className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                  <p className="pl-3 text-xs font-bold text-zinc-900">{listing.title}</p>
+                  <p className="pl-3 text-[10px] text-zinc-500">Approximate stay area</p>
+                </div>
+              </div>
+              <p className="absolute bottom-5 left-5 rounded-xl border border-white/80 bg-white/90 px-4 py-3 text-xs font-medium text-zinc-600 shadow-md backdrop-blur-md">Approximate location map is being prepared.</p>
+            </div>
+
+            {listing.nearby?.length ? (
+              <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {listing.nearby.map((poi, index) => (
+                  <li key={poi.id || index} className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="font-semibold text-zinc-900">{poi.name}</h3>
+                      {poi.distance && <span className="shrink-0 text-xs font-bold text-zinc-400">{poi.distance}</span>}
+                    </div>
+                    {poi.description && <p className="mt-2 text-sm leading-relaxed text-zinc-600">{poi.description}</p>}
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="text-zinc-500">Nearby details are being prepared.</p>}
+          </section>
+
+          <section className="border-t border-zinc-200/80 pt-8">
+            <div className="flex items-start gap-4 rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm md:p-8">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-500">
+                <Star className="h-5 w-5 fill-current" aria-hidden="true" />
+              </span>
+              <div>
+                <h2 className="text-2xl font-semibold font-display">New on Encho Stays</h2>
+                <p className="mt-2 text-zinc-500">This sanctuary has not yet accumulated verified guest reviews.</p>
               </div>
             </div>
-            {listing.nearby?.length ? <ul className="grid grid-cols-1 sm:grid-cols-2 gap-4">{listing.nearby.map((poi,index) => <li key={poi.id || index} className="p-5 rounded-2xl bg-white border border-zinc-200">
-              <h3 className="font-semibold">{poi.name}</h3>{poi.distance && <p className="text-sm text-zinc-500">{poi.distance}</p>}{poi.description && <p className="mt-2 text-sm text-zinc-600">{poi.description}</p>}
-            </li>)}</ul> : <p className="text-zinc-500">Nearby details are being prepared.</p>}
-          </section>
-          <section className="space-y-3 pt-8 border-t border-zinc-200/80">
-            <h2 className="text-2xl font-display font-semibold">New on Encho Stays</h2>
-            <p className="text-zinc-500">This sanctuary has not yet accumulated verified guest reviews.</p>
           </section>
 
           {/* 4. SIMILAR SANCTUARIES */}
