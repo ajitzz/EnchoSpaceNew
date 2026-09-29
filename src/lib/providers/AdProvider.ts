@@ -16,7 +16,8 @@ import {
   ProviderBudgetUpdateRequest,
   NormalizedDeliveryTruth,
   NormalizedTelemetrySnapshot,
-  ProviderReconciliationReport
+  ProviderReconciliationReport,
+  ServingAccountReportingCalendar
 } from './types.js';
 
 export interface AdProvider {
@@ -117,4 +118,12 @@ export interface AdProvider {
     dateWindow: { startDate: string; endDate: string },
     poolOrClient?: any
   ): Promise<NormalizedTelemetrySnapshot>;
+
+  /**
+   * Verifies the serving ad account bound to the external campaign and returns account identity plus IANA timezone.
+   */
+  getServingAccountReportingCalendar(
+    externalCampaignId: string,
+    poolOrClient?: any
+  ): Promise<ServingAccountReportingCalendar>;
 }

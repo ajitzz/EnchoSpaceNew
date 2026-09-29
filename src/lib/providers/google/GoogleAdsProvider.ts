@@ -16,7 +16,7 @@ import type {
   ProviderId, ProviderCapabilitySet, ProviderPublishRequest, ProviderPublishResult,
   ProviderControlRequest, ProviderControlResult, ProviderBudgetUpdateRequest,
   NormalizedDeliveryTruth, NormalizedTelemetrySnapshot, ProviderReconciliationReport,
-  ProviderEntity,
+  ProviderEntity, ServingAccountReportingCalendar
 } from '../types.js';
 import { providerRegistry } from '../providerRegistry.js';
 import { googleAdsClient, GoogleAdsClient, GOOGLE_ADS_API_VERSION } from './GoogleAdsClient.js';
@@ -456,7 +456,30 @@ export class GoogleAdsProvider implements AdProvider {
       }
     }
     const snapshot = GoogleTelemetryMapper.normalizeSnapshot(externalCampaignId, { impressions: metrics.impressions, clicks: metrics.clicks, cost_micros: metrics.costMicros, conversions: metrics.conversions }, dateWindow, customer.currencyCode);
-    return { ...snapshot, dataFreshness: 'DELAYED', providerMetadata: { raw_cost_micros: metrics.costMicros, source: 'GOOGLE_ADS_API', accountTimeZone: customer.timeZone, dataAsOf:null, conversionDataAvailable:true, ctrUnit: 'RATIO', deliveryIsRealtime: false } };
+    return { ...snapshot, dataFreshness: 'DELAYED', providerMetadata: { raw_cost_micros: metrics.costMicros, source: 'GOOGLE_ADS_API', accountId: String(customer.id), accountTimeZone: customer.timeZone, dataAsOf:null, conversionDataAvailable:true, ctrUnit: 'RATIO', deliveryIsRealtime: false } };
+  }
+
+  async getServingAccountReportingCalendar(externalCampaignId: string, poolOrClient?: any): Promise<ServingAccountReportingCalendar> {
+    if (poolOrClient?.query) {
+      await this.ownedEntities(externalCampaignId, poolOrClient);
+    } else {
+      const customerId = this.client.getCustomerId();
+      resourceId(externalCampaignId, customerId, 'campaigns');
+    }
+    const customer = await this.servingCustomer();
+    if (!customer.timeZone) {
+      throw new GoogleAdsError('GOOGLE_TELEMETRY_UNAVAILABLE', 'Google serving-account timezone was not verified.', { statusCode: 503, errorClass: 'VALIDATION' });
+    }
+    try {
+      new Intl.DateTimeFormat('en', { timeZone: customer.timeZone }).format();
+    } catch {
+      throw new GoogleAdsError('GOOGLE_TELEMETRY_UNAVAILABLE', 'Google serving-account timezone is invalid.', { statusCode: 503, errorClass: 'VALIDATION' });
+    }
+    return {
+      provider: 'GOOGLE',
+      accountId: String(customer.id),
+      accountTimeZone: customer.timeZone,
+    };
   }
 
   async applyDcoDecision(campaignId: number, decision: DcoEvaluationOutput, poolOrClient?: any) {

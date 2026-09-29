@@ -6,7 +6,7 @@ import {randomUUID} from 'node:crypto';
 import { ProviderReportPending } from '../reporting.js';
 import {metaHierarchyEvidence} from '../deliveryEvidence.js';
 import type { AdProvider } from '../AdProvider.js';
-import type { ProviderCapabilitySet, ProviderPublishRequest, ProviderPublishResult, ProviderEntity, ProviderControlRequest, ProviderControlResult, ProviderBudgetUpdateRequest, NormalizedDeliveryTruth, NormalizedTelemetrySnapshot, ProviderReconciliationReport } from '../types.js';
+import type { ProviderCapabilitySet, ProviderPublishRequest, ProviderPublishResult, ProviderEntity, ProviderControlRequest, ProviderControlResult, ProviderBudgetUpdateRequest, NormalizedDeliveryTruth, NormalizedTelemetrySnapshot, ProviderReconciliationReport, ServingAccountReportingCalendar } from '../types.js';
 import { providerRegistry } from '../providerRegistry.js';
 import { ProviderOperationStore, ProviderOperationError, semanticFingerprint, type ProviderAuthorizationGuard, type ProviderAuthorizationContext,type ProviderMediaVerifier,type ProviderLandingVerifier } from '../ProviderOperationStore.js';
 import { MetaAdsClient, metaAdsClient, MetaAdsError, metaId, META_ADS_API_VERSION } from './MetaAdsClient.js';
@@ -319,7 +319,24 @@ export class MetaAdProvider implements AdProvider {
         const spendMinor = BigInt(whole) * 100n + BigInt(fraction.padEnd(2, '0'));
         if (!Number.isSafeInteger(impressions) || !Number.isSafeInteger(clicks) || !Number.isFinite(conversions) || conversions < 0 || conversions > Number.MAX_SAFE_INTEGER || spendMinor > BigInt(Number.MAX_SAFE_INTEGER))
             throw new MetaAdsError('META_TELEMETRY_UNAVAILABLE', 'Meta metrics cannot be represented safely.');
-        return { provider: 'META', externalCampaignId, dateStart: window.startDate, dateEnd: window.endDate, impressions, clicks, spend: { currency: account.currency, minor_units: Number(spendMinor) }, conversions, ctr: impressions ? clicks / impressions : 0, cpc: clicks ? spend / clicks : 0, cpm: impressions ? spend / impressions * 1000 : 0, observedAt: new Date().toISOString(), dataFreshness: 'DELAYED', providerMetadata: { source: 'META_INSIGHTS', conversionMeaning: 'PROVIDER_ATTRIBUTED_PURCHASES', conversionDataAvailable: actionsAvailable, dataAsOf: null, ratios: { ctr: impressions ? clicks / impressions : null, cpc: clicks ? spend / clicks : null, cpm: impressions ? spend / impressions * 1000 : null }, accountTimeZone: account.timeZone } };
+        return { provider: 'META', externalCampaignId, dateStart: window.startDate, dateEnd: window.endDate, impressions, clicks, spend: { currency: account.currency, minor_units: Number(spendMinor) }, conversions, ctr: impressions ? clicks / impressions : 0, cpc: clicks ? spend / clicks : 0, cpm: impressions ? spend / impressions * 1000 : 0, observedAt: new Date().toISOString(), dataFreshness: 'DELAYED', providerMetadata: { source: 'META_INSIGHTS', conversionMeaning: 'PROVIDER_ATTRIBUTED_PURCHASES', conversionDataAvailable: actionsAvailable, dataAsOf: null, ratios: { ctr: impressions ? clicks / impressions : null, cpc: clicks ? spend / clicks : null, cpm: impressions ? spend / impressions * 1000 : null }, accountId: account.accountId, accountTimeZone: account.timeZone } };
+    }
+    async getServingAccountReportingCalendar(externalCampaignId: string, pool?: any): Promise<ServingAccountReportingCalendar> {
+        await this.owned(undefined, externalCampaignId, pool);
+        const account = await this.account();
+        if (!account.timeZone) {
+            throw new MetaAdsError('META_ACCOUNT_TIMEZONE_UNAVAILABLE', 'Meta account timezone is unavailable.');
+        }
+        try {
+            new Intl.DateTimeFormat('en', { timeZone: account.timeZone }).format();
+        } catch {
+            throw new MetaAdsError('META_ACCOUNT_TIMEZONE_UNAVAILABLE', 'Meta account timezone is invalid.');
+        }
+        return {
+            provider: 'META',
+            accountId: account.accountId,
+            accountTimeZone: account.timeZone,
+        };
     }
 }
 export const metaAdProvider = new MetaAdProvider();

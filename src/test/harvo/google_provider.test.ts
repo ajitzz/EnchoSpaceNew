@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Pool } from 'pg';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import ts from 'typescript';
 import { GoogleAdsClient } from '../../lib/providers/google/GoogleAdsClient.js';
 import { GoogleAdsProvider } from '../../lib/providers/google/GoogleAdsProvider.js';
@@ -166,8 +166,10 @@ describe('HARVO Google provider — real transport code and isolated PostgreSQL'
   it('queries real-shaped metrics with actual account currency and correct CTR units', async () => {
     const { provider } = providerFixture();
     expect((await provider.createCampaignHierarchy(request(), pool)).success).toBe(true);
+    expect(await provider.getServingAccountReportingCalendar(ids.campaign,pool)).toEqual({provider:'GOOGLE',accountId:customer,accountTimeZone:'Asia/Kolkata'});
+    await expect(provider.getServingAccountReportingCalendar(`${root}/campaigns/999`,pool)).rejects.toMatchObject({code:'GOOGLE_OWNERSHIP_MISMATCH'});
     const metrics = await provider.fetchTelemetrySnapshot(ids.campaign, { startDate: '2026-09-01', endDate: '2026-09-12' }, pool);
-    expect(metrics).toMatchObject({ impressions: 200, clicks: 20, conversions: 2.5, ctr: 0.1, spend: { currency: 'INR', minor_units: 123 }, dataFreshness: 'DELAYED' });
+    expect(metrics).toMatchObject({ impressions: 200, clicks: 20, conversions: 2.5, ctr: 0.1, spend: { currency: 'INR', minor_units: 123 }, dataFreshness: 'DELAYED',providerMetadata:{accountId:customer,accountTimeZone:'Asia/Kolkata'} });
   });
 
   it.each(['EMPTY_METRICS', 'INVALID_METRICS'])('preserves missing observations for %s rather than substituting zero', async mode => {
@@ -186,7 +188,10 @@ describe('HARVO Google provider — real transport code and isolated PostgreSQL'
   });
 
   it('retains unconditional production dispatch containment even with the environment flag enabled', async () => {
-    const source = readFileSync(new URL('../../../server.ts', import.meta.url), 'utf8');
+    const engineUrl = new URL('../../server/services/legacyMarketingEngine.ts', import.meta.url);
+    const serverUrl = new URL('../../../server.ts', import.meta.url);
+    const source = (existsSync(engineUrl) ? readFileSync(engineUrl, 'utf8') : '') + '\n' +
+      (existsSync(serverUrl) ? readFileSync(serverUrl, 'utf8') : '');
     const start = source.indexOf('async function dispatchGoogleAdsCampaign');
     expect(start).toBeGreaterThan(-1);
     const body = source.slice(start, source.indexOf('\n}', start) + 2);

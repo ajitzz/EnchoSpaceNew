@@ -28,10 +28,18 @@ export interface StudioCampaign {
   contentApproval: { status: string; revision?: number | null };
   delivery: { submitted?: boolean; readiness?: 'ELIGIBLE'|'LIMITED'|'REVIEWING'|'PENDING'|'LEARNING'|'BLOCKED'|'PAUSED'|'UNKNOWN'|null; statusCheck?: 'AVAILABLE'|'ERROR'|null; statusAttemptedAt?: string|null; configuredStatus: string | null; observedStatus: string | null; observedAt: string | null; externalCampaignId?: string | null; deliveryConfirmed?: boolean };
   observationJob?: {id: string; status: string; attempts: number; updatedAt: string; nextAttemptAt: string} | null;
-  metrics: { report?: {status: 'AVAILABLE'|'NO_REPORT'|'NOT_STARTED'|'ERROR'; attemptedAt: string; dateStart: string; dateEnd: string} | null;
-    currency?: string | null; freshness?: string | null; dataAsOf?: string | null; dateStart?: string | null; dateEnd?: string | null; accountTimeZone?: string | null;
+  metrics: {
+    campaignId?: number | null;
+    revision?: number | null;
+    externalCampaignId?: string | null;
+    budgetBasisMinor?: MoneyMinor | null;
+    report?: {status: 'AVAILABLE'|'NO_REPORT'|'NOT_STARTED'|'ACCOUNT_TIMEZONE_UNAVAILABLE'|'ERROR'; attemptedAt: string; requestedDateStart?: string | null; requestedDateEnd?: string | null; dateStart: string | null; dateEnd: string | null} | null;
+    currency?: string | null; freshness?: string | null; dataAsOf?: string | null;
+    requestedDateStart?: string | null; requestedDateEnd?: string | null;
+    dateStart?: string | null; dateEnd?: string | null; accountTimeZone?: string | null;
     providerAttributedConversions?: number | null; impressions: number | null; clicks: number | null; ctr: number | null; profileVisits?: number | null; leads: number | null;
-    bookings: number | null; spendMinor: MoneyMinor | null; observedAt: string | null; source: string | null } | null;
+    bookings: number | null; spendMinor: MoneyMinor | null; observedAt: string | null; source: string | null;
+  } | null;
   blockers: string[];
   activationBlockers?:string[];
 }

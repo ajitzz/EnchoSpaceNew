@@ -2,12 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { Check, Clock3, ArrowUpRight, ShieldCheck, CircleHelp, AlertCircle } from 'lucide-react';
 import type { StudioCampaign, CampaignQuote, MarketingListing } from './types';
 import { humanStatus, money, observedTime, marketingRequest } from './api';
+import { normalizeMediaMeterEvidence } from './MediaBudgetEvidence';
+export { normalizeMediaMeterEvidence } from './MediaBudgetEvidence';
+export type { MediaMeterReportState, NormalizedMediaMeterEvidence, NormalizeMediaEvidenceOptions } from './MediaBudgetEvidence';
 
 export function Notice({ children, error = false }: { children: React.ReactNode; error?: boolean }) {
   return <div className={`mkt-notice ${error ? 'mkt-notice-error' : ''}`} role={error ? 'alert' : 'status'}><AlertCircle size={17}/><div>{children}</div></div>;
 }
-export function StatusPill({ children, good = false }: { children: React.ReactNode; good?: boolean }) {
-  return <span className={`mkt-pill ${good ? 'mkt-pill-good' : ''}`}><span aria-hidden="true"/>{children}</span>;
+export function StatusPill({ children, good = false, attention = false, error = false }: { children: React.ReactNode; good?: boolean; attention?: boolean; error?: boolean }) {
+  const variant = good ? 'mkt-pill-good' : attention ? 'mkt-pill-attention' : error ? 'mkt-pill-error' : '';
+  return <span className={`mkt-pill ${variant}`}><span aria-hidden="true"/>{children}</span>;
 }
 export function CancelCampaignRequest({ busy, onRequest }: { busy: boolean; onRequest: (reason: string) => void }) {
   const [reason, setReason] = useState('');
@@ -58,16 +62,17 @@ export function MetricsPanel({ campaign }: { campaign: StudioCampaign }) {
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(timer); }, []);
   const m = campaign.metrics;
   const outcomes=campaign.firstPartyOutcomes;
+  const meter = normalizeMediaMeterEvidence(campaign, { now });
+  const showProviderTotals = ['AVAILABLE', 'REPORTED_ZERO', 'OVERRUN', 'STALE'].includes(meter.status);
   const recorded=(value:string|null|undefined)=>typeof value==='string'&&/^\d+$/.test(value)?BigInt(value).toLocaleString('en-IN'):'—';
   const count = (value: number | null | undefined) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value.toLocaleString('en-IN') : '—';
   const reportLabel = m?.report?.status === 'NO_REPORT' ? 'Waiting for the first network report'
     : m?.report?.status === 'NOT_STARTED' ? 'Campaign reporting has not started'
     : m?.report?.status === 'ERROR' ? 'Report refresh needs attention'
     : m?.observedAt ? 'Latest reported performance' : 'Performance not yet available';
-  const metrics = [['Impressions', count(m?.impressions)], ['Clicks', count(m?.clicks)], ['Click-through rate', typeof m?.ctr === 'number' && Number.isFinite(m.ctr) ? `${(m.ctr * 100).toFixed(2)}%` : '—'], ['Consented property visits', recorded(outcomes?.propertyVisits)], ['Recorded guest inquiries', recorded(outcomes?.inquiries)], ['Verified attributed bookings', recorded(outcomes?.bookings)], ['Reported media spend', m?.spendMinor != null && m.currency ? money(m.spendMinor, m.currency) : '—']];
-  const stale = !!m?.observedAt && (!Number.isFinite(Date.parse(m.observedAt)) || now-Date.parse(m.observedAt)>20*60*1000);
+  const metrics = [['Impressions', showProviderTotals ? count(m?.impressions) : '—'], ['Clicks', showProviderTotals ? count(m?.clicks) : '—'], ['Click-through rate', showProviderTotals && typeof m?.ctr === 'number' && Number.isFinite(m.ctr) ? `${(m.ctr * 100).toFixed(2)}%` : '—'], ['Consented property visits', recorded(outcomes?.propertyVisits)], ['Recorded guest inquiries', recorded(outcomes?.inquiries)], ['Verified attributed bookings', recorded(outcomes?.bookings)], ['Reported media spend', meter.reportedSpendMinor != null ? money(meter.reportedSpendMinor, meter.currency) : '—']];
   return <section className="mkt-panel"><div className="mkt-section-heading"><div><span className="mkt-eyebrow">Campaign performance</span><h3>From attention to bookings</h3></div><ArrowUpRight size={22}/></div>
-    <StatusPill>{stale ? 'Older report · refresh pending' : reportLabel}</StatusPill>
+    <StatusPill>{meter.status === 'STALE' ? meter.statusLabel : reportLabel}</StatusPill>
     <div className="mkt-metrics">{metrics.map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
     <p className="mkt-caption">{m?.dateStart && m.dateEnd ? `Reporting period: ${m.dateStart} → ${m.dateEnd}${m.accountTimeZone ? ` (${m.accountTimeZone})` : ''}. ` : ''}Retrieved: {observedTime(m?.observedAt)}. {m?.dataAsOf ? `Data current through: ${observedTime(m.dataAsOf)}.` : 'The network has not confirmed how current these totals are.'}</p>
     <p className="mkt-caption">A dash means unavailable, not zero. Network reports can arrive late. Verified bookings and inquiries require Encho measurement; ad clicks are not bookings.</p>
@@ -76,19 +81,292 @@ export function MetricsPanel({ campaign }: { campaign: StudioCampaign }) {
     <ObservationRefresh key={`${campaign.id}:${campaign.revision}`} campaign={campaign}/>
   </section>;
 }
-export function MediaBudgetMeter({ campaign }: { campaign: StudioCampaign }) {
-  const m=campaign.metrics, budget=campaign.mediaBudgetMinor;
-  const valid = typeof budget==='string' && /^[1-9]\d*$/.test(budget) && typeof m?.spendMinor==='string' && /^\d+$/.test(m.spendMinor)
-    && !!m.currency && m.currency === campaign.quote?.currency && m.dateStart===campaign.startDate;
-  if(!valid) return <div className="mkt-budget-meter"><span className="mkt-eyebrow">Media budget</span><p>Budget usage will appear when a compatible report is available.</p></div>;
-  const spent=BigInt(m!.spendMinor!), planned=BigInt(budget!), basisPoints=spent*10000n/planned;
-  const percent=Number(basisPoints>10000n?10000n:basisPoints)/100;
-  return <div className="mkt-budget-meter"><div className="mkt-section-heading"><strong>Reported media usage</strong><span>{percent.toFixed(1)}%</span></div>
-    <div className="mkt-budget-track" role="progressbar" aria-label="Reported media budget consumed" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100} aria-valuetext={`${money(m!.spendMinor,m!.currency!)} reported against ${money(budget,m!.currency!)} planned media`}><span style={{width:`${percent}%`}}/></div>
-    <p>{money(m!.spendMinor,m!.currency!)} reported / {money(budget,m!.currency!)} media plan</p>
-    {spent>planned && <Notice error>Reported spend exceeds the media plan. Encho operations must reconcile the overage.</Notice>}
-    <p className="mkt-caption">Media spend excludes Encho fees. Reports can be delayed; unused media allocation is not a refundable balance. Confirmed refundable funds are shown separately.</p>
-  </div>;
+export function MediaBudgetMeter({
+  campaign,
+  freshnessWindowMs,
+  compact = false,
+}: {
+  campaign: StudioCampaign;
+  freshnessWindowMs?: number;
+  compact?: boolean;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const evidence = normalizeMediaMeterEvidence(campaign, { now, freshnessWindowMs });
+
+  if (compact) {
+    if (evidence.status === 'HISTORICAL_UNVERIFIED') {
+      return (
+        <div className="mkt-meter-compact" aria-label={evidence.ariaLabel} style={{ padding: '6px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: 'var(--mkt-muted, #6a716e)' }}>
+            <span>Media spend</span>
+            <span style={{ fontStyle: 'italic', color: '#b45309' }}>Historical (unbound)</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10px', color: 'var(--mkt-muted, #6a716e)', marginTop: '2px' }}>
+            <span>{evidence.reportedSpendMinor ? money(evidence.reportedSpendMinor, evidence.currency) : '—'} reported</span>
+            <span style={{ color: '#b45309' }}>Utilization unverified</span>
+          </div>
+          {evidence.refundableMinor && BigInt(evidence.refundableMinor) > 0n && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10px', color: '#047857', marginTop: '3px' }}>
+              <span>Refundable</span>
+              <span style={{ fontWeight: 600 }}>{money(evidence.refundableMinor, evidence.currency)}</span>
+            </div>
+          )}
+          {campaign.funding?.pendingRefundMinor && BigInt(campaign.funding.pendingRefundMinor) > 0n && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10px', color: '#b45309', marginTop: '2px' }}>
+              <span>Pending refund</span>
+              <span style={{ fontWeight: 600 }}>{money(campaign.funding.pendingRefundMinor, evidence.currency)}</span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (!evidence.isAvailable && !evidence.isStale) {
+      return (
+        <div className="mkt-meter-compact" aria-label={evidence.ariaLabel} style={{ padding: '6px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: 'var(--mkt-muted, #6a716e)' }}>
+            <span>Media spend</span>
+            <span style={{ fontStyle: 'italic' }}>{evidence.statusLabel}</span>
+          </div>
+          {evidence.refundableMinor && BigInt(evidence.refundableMinor) > 0n && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10px', color: '#047857', marginTop: '3px' }}>
+              <span>Refundable</span>
+              <span style={{ fontWeight: 600 }}>{money(evidence.refundableMinor, evidence.currency)}</span>
+            </div>
+          )}
+          {campaign.funding?.pendingRefundMinor && BigInt(campaign.funding.pendingRefundMinor) > 0n && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10px', color: '#b45309', marginTop: '2px' }}>
+              <span>Pending refund</span>
+              <span style={{ fontWeight: 600 }}>{money(campaign.funding.pendingRefundMinor, evidence.currency)}</span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (evidence.isStale) {
+      return (
+        <div className="mkt-meter-compact" aria-label={evidence.ariaLabel} style={{ padding: '6px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+            <span style={{ color: 'var(--mkt-muted, #6a716e)' }}>Media (Older report)</span>
+            <span style={{ fontWeight: 600, color: 'var(--mkt-ink, #173c32)' }}>{evidence.utilizationPercent!.toFixed(1)}%</span>
+          </div>
+          <div
+            className="mkt-budget-track is-stale"
+            role="progressbar"
+            aria-label={evidence.ariaLabel}
+            aria-valuenow={evidence.utilizationPercent!}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuetext={evidence.ariaValueText}
+            style={{ height: '6px', margin: '4px 0' }}
+          >
+            <span style={{ width: `${evidence.utilizationPercent}%`, background: '#b45309' }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10px', color: 'var(--mkt-muted, #6a716e)' }}>
+            <span>{money(evidence.reportedSpendMinor!, evidence.currency)} / {money(evidence.plannedMediaMinor, evidence.currency)}</span>
+            <span style={{ fontStyle: 'italic', color: '#b45309' }}>Refresh pending</span>
+          </div>
+          {evidence.refundableMinor && BigInt(evidence.refundableMinor) > 0n && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10px', color: '#047857', marginTop: '3px' }}>
+              <span>Refundable</span>
+              <span style={{ fontWeight: 600 }}>{money(evidence.refundableMinor, evidence.currency)}</span>
+            </div>
+          )}
+          {campaign.funding?.pendingRefundMinor && BigInt(campaign.funding.pendingRefundMinor) > 0n && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10px', color: '#b45309', marginTop: '2px' }}>
+              <span>Pending refund</span>
+              <span style={{ fontWeight: 600 }}>{money(campaign.funding.pendingRefundMinor, evidence.currency)}</span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="mkt-meter-compact" aria-label={evidence.ariaLabel} style={{ padding: '6px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+          <span style={{ color: 'var(--mkt-muted, #6a716e)' }}>Reported media</span>
+          <span style={{ fontWeight: 600, color: evidence.isOverrun ? '#b91c1c' : 'var(--mkt-ink, #173c32)' }}>
+            {evidence.utilizationPercent!.toFixed(1)}%
+          </span>
+        </div>
+        <div
+          className="mkt-budget-track"
+          role="progressbar"
+          aria-label={evidence.ariaLabel}
+          aria-valuenow={evidence.utilizationPercent!}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuetext={evidence.ariaValueText}
+          style={{ height: '6px', margin: '4px 0' }}
+        >
+          <span style={{ width: `${evidence.utilizationPercent}%` }} />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10px', color: 'var(--mkt-muted, #6a716e)' }}>
+          <span>{money(evidence.reportedSpendMinor!, evidence.currency)} / {money(evidence.plannedMediaMinor, evidence.currency)}</span>
+          {evidence.isReportedZero && <span style={{ color: '#047857', fontWeight: 600 }}>Reported {money('0', evidence.currency)} (delayed)</span>}
+          {evidence.isOverrun && <span style={{ color: '#b91c1c', fontWeight: 600 }}>Overrun</span>}
+        </div>
+        {evidence.refundableMinor && BigInt(evidence.refundableMinor) > 0n && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10px', color: '#047857', marginTop: '3px' }}>
+            <span>Refundable</span>
+            <span style={{ fontWeight: 600 }}>{money(evidence.refundableMinor, evidence.currency)}</span>
+          </div>
+        )}
+        {campaign.funding?.pendingRefundMinor && BigInt(campaign.funding.pendingRefundMinor) > 0n && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10px', color: '#b45309', marginTop: '2px' }}>
+            <span>Pending refund</span>
+            <span style={{ fontWeight: 600 }}>{money(campaign.funding.pendingRefundMinor, evidence.currency)}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (evidence.status === 'HISTORICAL_UNVERIFIED') {
+    return (
+      <div className="mkt-budget-meter">
+        <div className="mkt-section-heading">
+          <strong>{evidence.headline}</strong>
+          <StatusPill>{evidence.statusLabel}</StatusPill>
+        </div>
+        <p>
+          Preserved spend evidence:{' '}
+          {evidence.reportedSpendMinor ? money(evidence.reportedSpendMinor, evidence.currency) : '—'} /{' '}
+          {money(evidence.plannedMediaMinor!, evidence.currency)} media plan
+        </p>
+        <p className="mkt-caption">
+          {evidence.subtext}
+        </p>
+        {evidence.capturedHostChargeMinor && (
+          <p className="mkt-caption">
+            Accepted host charge: {money(evidence.capturedHostChargeMinor, campaign.quote?.currency || evidence.currency)}.
+          </p>
+        )}
+        {evidence.refundableMinor && BigInt(evidence.refundableMinor) > 0n && (
+          <p className="mkt-caption">
+            Finance-confirmed refundable: {money(evidence.refundableMinor, evidence.currency)}.
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  if (!evidence.isAvailable && !evidence.isStale) {
+    return (
+      <div className="mkt-budget-meter">
+        <span className="mkt-eyebrow">Media budget</span>
+        {evidence.status === 'ERROR' ? (
+          <Notice error>{evidence.subtext}</Notice>
+        ) : (
+          <p>{evidence.subtext}</p>
+        )}
+        {evidence.mismatchReason && <p className="mkt-caption">{evidence.mismatchReason}</p>}
+      </div>
+    );
+  }
+
+  if (evidence.isStale) {
+    return (
+      <div className="mkt-budget-meter">
+        <div className="mkt-section-heading">
+          <strong>{evidence.headline}</strong>
+          <StatusPill>{evidence.statusLabel}</StatusPill>
+        </div>
+        <div
+          className="mkt-budget-track is-stale"
+          role="progressbar"
+          aria-label={evidence.ariaLabel}
+          aria-valuenow={evidence.utilizationPercent!}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuetext={evidence.ariaValueText}
+        >
+          <span style={{ width: `${evidence.utilizationPercent}%`, background: '#b45309' }} />
+        </div>
+        <p>
+          Last successful report ({observedTime(evidence.lastSuccessfulObservedAt)}):{' '}
+          {money(evidence.reportedSpendMinor!, evidence.currency)} reported /{' '}
+          {money(evidence.plannedMediaMinor!, evidence.currency)} media plan
+        </p>
+        <p className="mkt-caption">
+          Current utilization is unavailable because the network report exceeds the freshness threshold.
+          Unused media allocation is not a refundable balance. Confirmed refundable funds are shown separately.
+        </p>
+        {evidence.capturedHostChargeMinor && (
+          <p className="mkt-caption">
+            Accepted host charge: {money(evidence.capturedHostChargeMinor, campaign.quote?.currency || evidence.currency)}.
+          </p>
+        )}
+        {evidence.refundableMinor && BigInt(evidence.refundableMinor) > 0n && (
+          <p className="mkt-caption">
+            Finance-confirmed refundable: {money(evidence.refundableMinor, evidence.currency)}.
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mkt-budget-meter">
+      <div className="mkt-section-heading">
+        <strong>{evidence.headline}</strong>
+        <span>{evidence.utilizationPercent!.toFixed(1)}%</span>
+      </div>
+      <div
+        className="mkt-budget-track"
+        role="progressbar"
+        aria-label={evidence.ariaLabel}
+        aria-valuenow={evidence.utilizationPercent!}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuetext={evidence.ariaValueText}
+      >
+        <span style={{ width: `${evidence.utilizationPercent}%` }} />
+      </div>
+      <p>
+        {money(evidence.reportedSpendMinor!, evidence.currency)} reported /{' '}
+        {money(evidence.plannedMediaMinor!, evidence.currency)} media plan
+      </p>
+      {evidence.isReportedZero && (
+        <p className="mkt-caption">
+          Provider reported {money('0', evidence.currency)} for {evidence.dateStart && evidence.dateEnd ? `${evidence.dateStart} → ${evidence.dateEnd}` : 'flight window'}, retrieved {observedTime(evidence.observedAt)}; network reports can be delayed and later corrections remain possible.
+        </p>
+      )}
+      {evidence.isOverrun && (
+        <Notice error>Reported spend exceeds the media plan. Encho operations must reconcile the overage.</Notice>
+      )}
+      <div className="mkt-financial-separation">
+        {evidence.capturedHostChargeMinor && (
+          <p className="mkt-caption">
+            Accepted host charge: {money(evidence.capturedHostChargeMinor, campaign.quote?.currency || evidence.currency)} (includes media, fees & taxes under accepted quote).
+          </p>
+        )}
+        {evidence.refundableMinor && BigInt(evidence.refundableMinor) > 0n && (
+          <p className="mkt-caption">
+            Finance-confirmed refundable amount: {money(evidence.refundableMinor, evidence.currency)} (verified by finance settlement).
+          </p>
+        )}
+        {evidence.desiredStatus && evidence.observedStatus && (
+          <p className="mkt-caption">
+            Network delivery status: Requested ({humanStatus(evidence.desiredStatus)}) · Confirmed ({humanStatus(evidence.observedStatus)}).
+          </p>
+        )}
+      </div>
+      <p className="mkt-caption">
+        Latest report retrieved at {observedTime(evidence.observedAt)}. {evidence.dataAsOf ? `Data current through ${observedTime(evidence.dataAsOf)}.` : 'Network data currency unknown (provider reports delayed data).'}
+      </p>
+      <p className="mkt-caption">
+        Media spend excludes Encho fees. Reports can be delayed; unused media allocation is not a refundable balance. Confirmed refundable funds are shown separately.
+      </p>
+    </div>
+  );
 }
 function ObservationRefresh({campaign}:{campaign:StudioCampaign}) {
   const [busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState('');
@@ -124,6 +402,72 @@ export function DeliveryEvidence({ campaign, showProviderIdentity = false }: { c
     {delivery?.statusCheck==='ERROR'&&<p className="mkt-caption">The latest status check failed at {observedTime(delivery.statusAttemptedAt)}. The previous observation above is retained; it does not establish the current state.</p>}
     {showProviderIdentity && campaign.delivery?.externalCampaignId && <code>{campaign.delivery.externalCampaignId}</code>}
     <p className="mkt-caption">Eligibility means the reviewed campaign can compete for delivery. It does not confirm that an ad is being shown now. Performance totals and status checks update separately.</p></div></div>;
+}
+export function DeliveryStatusBadge({
+  delivery,
+  now: observedNow,
+}: {
+  delivery?: StudioCampaign['delivery'];
+  now?: number;
+}) {
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (observedNow !== undefined) return;
+    const timer = setInterval(() => setClockNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, [observedNow]);
+  const now = observedNow ?? clockNow;
+  if (!delivery) {
+    return <StatusPill>Awaiting confirmation</StatusPill>;
+  }
+
+  if (delivery.statusCheck === 'ERROR') {
+    return <StatusPill attention>Status check error</StatusPill>;
+  }
+
+  const isPauseRequested =
+    delivery.configuredStatus === 'PAUSED' && delivery.observedStatus !== 'PAUSED';
+  if (isPauseRequested) {
+    return <StatusPill attention>Pause requested</StatusPill>;
+  }
+
+  const observed = Date.parse(delivery.observedAt || '');
+  const isStale = !Number.isFinite(observed) || now - observed > 20 * 60 * 1000 || observed > now + 60_000;
+  if (isStale) {
+    return <StatusPill attention>Stale status · check pending</StatusPill>;
+  }
+
+  if (delivery.observedStatus === 'PAUSED') {
+    return <StatusPill>Paused at network</StatusPill>;
+  }
+
+  if (delivery.readiness === 'BLOCKED') {
+    return <StatusPill error>Delivery blocked</StatusPill>;
+  }
+  if (delivery.readiness === 'LIMITED') {
+    return <StatusPill attention>Eligible with limits</StatusPill>;
+  }
+  if (delivery.readiness === 'LEARNING') {
+    return <StatusPill attention>Bidding learning</StatusPill>;
+  }
+  if (delivery.readiness === 'REVIEWING') {
+    return <StatusPill>Under review</StatusPill>;
+  }
+  if (delivery.readiness === 'PENDING') {
+    return <StatusPill>Awaiting eligibility</StatusPill>;
+  }
+
+  if (delivery.observedStatus === 'ACTIVE') {
+    if (delivery.readiness !== 'ELIGIBLE') {
+      return <StatusPill attention>Active · readiness unconfirmed</StatusPill>;
+    }
+    if (delivery.deliveryConfirmed !== true) {
+      return <StatusPill attention>Active · unconfirmed delivery</StatusPill>;
+    }
+    return <StatusPill good>Active at network</StatusPill>;
+  }
+
+  return <StatusPill>{humanStatus(delivery.observedStatus || 'Awaiting confirmation')}</StatusPill>;
 }
 export function CampaignPlanDetails({ campaign, currency }: { campaign: StudioCampaign; currency?: string }) {
   const google = campaign.provider === 'GOOGLE';

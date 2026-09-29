@@ -198,3 +198,9 @@ export interface ProviderError {
   errorClass: 'AUTHENTICATION' | 'RATE_LIMIT' | 'TIMEOUT' | 'POLICY' | 'VALIDATION' | 'INTERNAL' | 'UNKNOWN';
   details?: Record<string, any>;
 }
+
+export interface ServingAccountReportingCalendar {
+  provider: ProviderId;
+  accountId: string;
+  accountTimeZone: string;
+}

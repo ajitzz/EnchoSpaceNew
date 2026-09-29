@@ -35,11 +35,13 @@ describe('Meta website publishing and controls with isolated PostgreSQL', () => 
     });
     it('blocks remote budget drift before activation and records explicit reporting availability',async()=>{
         const {provider,state}=fixture();expect((await provider.createCampaignHierarchy(request(),pool)).success).toBe(true);
+        expect(await provider.getServingAccountReportingCalendar(ids.campaign,pool)).toEqual({provider:'META',accountId:'act_123456789',accountTimeZone:'Asia/Kolkata'});
+        await expect(provider.getServingAccountReportingCalendar('999999999',pool)).rejects.toMatchObject({code:'META_OWNERSHIP_MISMATCH'});
         state.budget='20000';const initialPosts=state.posts.length;
         expect((await provider.resumeCampaign({campaignId:1,externalCampaignId:ids.campaign,action:'RESUME',actorType:'admin',actorId:1,idempotencyKey:'drift-resume',correlationId:'trace'},pool)).success).toBe(false);
         expect(state.posts.length).toBe(initialPosts);
         const metrics=await provider.fetchTelemetrySnapshot(ids.campaign,{startDate:'2026-09-01',endDate:'2026-09-13'},pool);
-        expect(metrics).toMatchObject({impressions:1000,clicks:20,spend:{minor_units:12345},providerMetadata:{conversionDataAvailable:true,dataAsOf:null}});
+        expect(metrics).toMatchObject({impressions:1000,clicks:20,spend:{minor_units:12345},providerMetadata:{accountId:'act_123456789',accountTimeZone:'Asia/Kolkata',conversionDataAvailable:true,dataAsOf:null}});
         expect((await fixture('NO_ACTIONS').provider.fetchTelemetrySnapshot(ids.campaign,{startDate:'2026-09-01',endDate:'2026-09-13'},pool)).providerMetadata).toMatchObject({conversionDataAvailable:false});
         await expect(fixture('BAD_METRICS').provider.fetchTelemetrySnapshot(ids.campaign,{startDate:'2026-09-01',endDate:'2026-09-13'},pool)).rejects.toMatchObject({code:'META_TELEMETRY_UNAVAILABLE'});
     });
