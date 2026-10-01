@@ -14,11 +14,13 @@ import type pg from 'pg';
 import { CampaignRefundGateway, type RazorpayRefundClient } from '../../lib/marketing/refunds.js';
 
 const host = { id: 10, role: 'host' as const }, admin = { id: 90, role: 'admin' as const };
+const fixtureTodayUtc = new Date().toISOString().slice(0, 10);
+const utcDate = (offsetDays: number): string => new Date(Date.parse(`${fixtureTodayUtc}T12:00:00Z`) + offsetDays * 86_400_000).toISOString().slice(0, 10);
 describe('HARVO engine durable execution boundaries on real PostgreSQL', () => {
   let fixture: Awaited<ReturnType<typeof createWorkflowPgFixture>>, service: MarketingWorkflowService, engine: MarketingEngine;
   let guard: ProviderAuthorizationGuard;
-  const publish = vi.fn(), pause = vi.fn(), resume = vi.fn(), truth = vi.fn(), telemetry = vi.fn(), verifyCapture = vi.fn();
-  const provider = { createCampaignHierarchy: publish, pauseCampaign: pause, resumeCampaign: resume, fetchAuthoritativeDeliveryTruth: truth, fetchTelemetrySnapshot: telemetry } as unknown as AdProvider;
+  const publish = vi.fn(), pause = vi.fn(), resume = vi.fn(), truth = vi.fn(), telemetry = vi.fn(), calendar = vi.fn(), verifyCapture = vi.fn();
+  const provider = { createCampaignHierarchy: publish, pauseCampaign: pause, resumeCampaign: resume, fetchAuthoritativeDeliveryTruth: truth, fetchTelemetrySnapshot: telemetry, getServingAccountReportingCalendar: calendar } as unknown as AdProvider;
   beforeAll(async () => { fixture = await createWorkflowPgFixture(); });
   afterAll(async () => { await fixture?.close(); });
   beforeEach(async () => {
@@ -38,7 +40,8 @@ describe('HARVO engine durable execution boundaries on real PostgreSQL', () => {
       return { success: true, provider: 'META', externalCampaignId: request.externalCampaignId, previousStatus: operation === 'PAUSE' ? 'ACTIVE' : 'PAUSED', newStatus: operation === 'PAUSE' ? 'PAUSED' : 'ACTIVE', normalizedDeliveryState: operation === 'PAUSE' ? 'PAUSED' : 'REVIEWING', modifiedAt: new Date().toISOString() };
     });
     truth.mockReset().mockImplementation(async () => ({ provider: 'META', externalCampaignId: 'verified-campaign-123', normalizedState: 'LIVE', rawStatus: 'ACTIVE', rawEffectiveStatus: 'ACTIVE', isLive: true, isServingImpressions: true, lastObservedAt: new Date().toISOString(), reconciliationRequired: false }));
-    telemetry.mockReset().mockImplementation(async () => ({ provider: 'META', externalCampaignId: 'verified-campaign-123', dateStart: '2099-01-01', dateEnd: '2099-01-15', impressions: 1000, clicks: 20, ctr: 2, conversions: 3, cpc: 50, cpm: 1000, spend: { currency: 'INR', minor_units: 1000 }, observedAt: new Date().toISOString(), dataFreshness: 'FRESH' }));
+    calendar.mockReset().mockResolvedValue({ provider: 'META', accountId: 'act_987654321', accountTimeZone: 'UTC' });
+    telemetry.mockReset().mockImplementation(async () => ({ provider: 'META', externalCampaignId: 'verified-campaign-123', dateStart: utcDate(-3), dateEnd: utcDate(0), impressions: 1000, clicks: 20, ctr: 2, conversions: 3, cpc: 50, cpm: 1000, spend: { currency: 'INR', minor_units: 1000 }, observedAt: new Date().toISOString(), dataFreshness: 'FRESH', providerMetadata: { accountId: 'act_987654321', accountTimeZone: 'UTC', dataAsOf: null } }));
     verifyCapture.mockReset();
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
   });
@@ -49,7 +52,7 @@ describe('HARVO engine durable execution boundaries on real PostgreSQL', () => {
     catch (e) { await c.query('ROLLBACK'); throw e; } finally { c.release(); }
   }
   async function quoted() {
-    const draft = workflowDraft({ startDate:'2026-09-01',endDate:'2026-09-30',stayStartDate: '2099-01-02', stayEndDate: '2099-01-04' });
+    const draft = workflowDraft({ startDate:utcDate(-3),endDate:utcDate(7),stayStartDate: '2099-01-02', stayEndDate: '2099-01-04' });
     const row = await service.create(host, draft); await service.evaluate(row.campaign_id, host, 1); await service.submit(row.campaign_id, host, 1);
     await service.review(row.campaign_id, admin, { revision: 1, decision: 'APPROVE', note: 'Manual AI fallback review of actual media and policy.', mediaConfirmed: true, policyConfirmed: true });
     return service.quote(row.campaign_id, host, 1, 'funding-quote');

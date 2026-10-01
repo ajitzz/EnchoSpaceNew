@@ -1,0 +1,17 @@
+# R2-02 direct schema export: Antigravity candidate review
+
+**Decision:** The first Antigravity patch is `CHANGES_REQUESTED`. Its eight focused tests passed, but they mutated `process.env.DATABASE_URL` after statically importing `server.ts`. The production pool and `dbUrl` are captured at module import, so the proposed guard could inspect a different target from the connected pool. It also introduced an `any` cast. Test success did not establish remote-pool safety.
+
+**Independent failing-before evidence:** `node scripts/testing/run.mjs src/test/cr1_legacy_marketing_schema_target_binding.test.ts --reporter=dot` exited 1 against the candidate. The test imported `server.ts` with a fake remote-shaped URL and a query transport mock, then changed the environment to a permitted synthetic URL. The candidate entered its DDL path and rejected with `NETWORK_QUERY_FORBIDDEN` rather than `LEGACY_SCHEMA_BOOTSTRAP_UNAVAILABLE`. No remote connection was made.
+
+**Reviewed local correction:** `ensureMarketingSchema()` now preserves its no-database/already-initialized no-op, then checks `legacySchemaBootstrapEnabled(process.env, dbUrl)` against the URL captured for its pool. It throws before DDL on a denied target. The misleading first-candidate test was removed; the target-binding adversarial test is retained. The focused adversarial and adjacent schema-gate suites passed 15/15; server TypeScript, scoped ESLint and `git diff --check` exited 0. Startup readiness in the isolated test emits expected blocked-query logs because the query spy forbids all transport; the direct-export assertion filters for DDL.
+
+This closes one direct-call escape locally. `processMetaReconciliation()` is separately under review; the applied migration 045 mismatch, catalog/role compatibility, external gates and R2-02 card acceptance remain open. No migration runner, remote provider or remote database mutation was invoked.
+
+## Second exported function: legacy Meta reconciliation
+
+Antigravity's follow-up guard again used a mutable `process.env.DATABASE_URL` after `server.ts` captured the pool URL. Seven candidate tests passed but used the same static-import/environment-mutation pattern. A new [adversarial test](../../../../src/test/cr1_legacy_meta_reconciliation_target_binding.test.ts) imported with a fake remote URL, then changed the environment to a permitted synthetic URL and supplied a fake lock pool. Against the candidate it exited 1: the call resolved `undefined` instead of rejecting, and the fake pool was reached. All real database transport was mocked.
+
+The reviewed local correction checks `legacyCommerceTestSandboxEnabled(process.env, dbUrl)` before lock, DDL or provider logic and throws `LEGACY_RECONCILIATION_UNAVAILABLE` on a denied call. The old interval was removed: `shouldRunBackgroundWorkers` forbids `NODE_ENV=test`, while `legacyCommerceTestSandboxEnabled` requires it, so Antigravity's conjunctive timer predicate could never run. The dedicated marketing worker remains separate. The candidate's misleading test was removed; the adversarial test and existing reconciliation/cutover suites passed 16/16. Server TypeScript, scoped lint and diff check exited 0.
+
+This does not prove how any already-persisted legacy unknown Meta transactions will be reconciled in a deployed environment. That recovery and the durable v2 worker remain release criteria; neither is silently accepted by retiring a dead timer.

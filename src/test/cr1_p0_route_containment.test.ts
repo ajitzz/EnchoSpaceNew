@@ -55,9 +55,22 @@ describe('CR1 P0 legacy route containment', () => {
     expect(response.body.code).toBe('HARVO_V2_REQUIRED');
   });
 
+  it.each(['/api/marketing/meta/webhooks', '/api/meta-webhooks', '/api/marketing/webhooks/meta-leads'])('retires simulated legacy Meta lead ingress before a fake CRM acknowledgement %s', async path => {
+    const response = await request(app).post(path).send({object:'page',entry:[]});
+    expect(response.status).toBe(410);
+    expect(response.body.code).toBe('HARVO_V2_REQUIRED');
+  });
+
   it('does not reflect a raw database exception in the health response', async () => {
     const response = await request(app).get('/api/health/db');
     expect(JSON.stringify(response.body)).not.toContain('detail');
     expect(JSON.stringify(response.body)).not.toContain('DATABASE_URL');
+  });
+
+  it('mounts notification preferences and evidence behind account authentication', async () => {
+    for (const path of ['/api/conversations/v1/notifications/preferences', '/api/conversations/v1/notifications/evidence']) {
+      const response = await request(app).get(path);
+      expect(response.status).toBe(401);
+    }
   });
 });

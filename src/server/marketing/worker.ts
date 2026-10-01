@@ -6,6 +6,7 @@ import {databaseReadiness} from '../deployment/databaseReadiness.js';
 import {freshWorkerProgress,runWorkerLoop,watchWorkerProgress,type MaintenanceTask} from '../deployment/workerSupervisor.js';
 import {writeWorkerProgress} from '../deployment/workerProgress.js';
 import {isProcessEntry} from '../deployment/lifecycle.js';
+import {resolveDatabasePoolConfig} from '../deployment/databaseTls.js';
 
 type Runtime=ReturnType<typeof createDeployedMarketingRuntime>;
 /** Dedicated owner; importing this module never starts timers or opens a database. */
@@ -15,7 +16,8 @@ export async function runMarketingWorker(options:{additionalMaintenance?:(runtim
  if(!raw||/dummy|placeholder|example\.com/i.test(raw))throw new Error('WORKER_DATABASE_CONFIGURATION_REQUIRED');
  const url=new URL(raw);if(!['postgres:','postgresql:'].includes(url.protocol))throw new Error('WORKER_DATABASE_PROTOCOL_INVALID');
  if(process.env.HARVO_HOLD_SWEEPER_ENABLED!=='true')throw new Error('WORKER_HOLD_SWEEPER_OWNERSHIP_REQUIRED');
- const pool=new pg.Pool({connectionString:raw,max:8,connectionTimeoutMillis:5000,statement_timeout:15000,query_timeout:20000});
+ const {poolConfig}=resolveDatabasePoolConfig(raw,{max:8,connectionTimeoutMillis:5000,statement_timeout:15000,query_timeout:20000},{targetLabel:'marketing_worker'});
+ const pool=new pg.Pool(poolConfig);
  const controller=new AbortController(),progress=freshWorkerProgress();let deadline:NodeJS.Timeout|undefined;
  const stop=()=>{if(controller.signal.aborted)return;controller.abort();deadline=setTimeout(()=>{progress.state='FAILED';progress.lastError='WORKER_SHUTDOWN_TIMEOUT';writeWorkerProgress(progress);process.exit(1);},60000);deadline.unref();};
  process.on('SIGTERM',stop);process.on('SIGINT',stop);writeWorkerProgress(progress);

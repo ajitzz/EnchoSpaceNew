@@ -25,7 +25,7 @@ test('competing admin workforce routes keep their distinct mounted authority bou
   const routes=scanRoutes('src/server/admin/workforceRouter.ts',"function createAdminWorkforceRouter(){const router=Router();router.post('/hire',handler);return router;}");
   assert.deepEqual(routes[0].paths,['/api/admin/workforce/hire']);
 });
-test('unmounted notification declarations never acquire a fictional API prefix',()=>{
-  const routes=scanRoutes('src/server/conversations/notificationRouter.ts',"function createNotificationRouter(){const router=Router();router.get('/preferences',handler);return router;}");
-  assert.deepEqual(routes[0].paths,['/preferences']);
+test('participant notification declarations carry their mounted API prefix',()=>{
+  const routes=scanRoutes('src/server/conversations/notificationRouter.ts',"function createNotificationRouter(){const router=Router();router.get('/notifications/preferences',handler);return router;}");
+  assert.deepEqual(routes[0].paths,['/api/conversations/v1/notifications/preferences']);
 });

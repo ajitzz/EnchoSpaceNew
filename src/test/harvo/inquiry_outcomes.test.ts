@@ -116,4 +116,99 @@ describe('SP7 first-party inquiry authority and tenant rollups',()=>{
   await expect(canonical.decorate(guest,{campaigns:[{id:flights[0]}]})).rejects.toMatchObject({code:'CAMPAIGN_NOT_FOUND'});
   expect((await canonical.decorate(guest,{campaigns:[{id:other}]})).portfolioOutcomes?.activeAttributedBookings).toBe('1');
  });
+ it('projects later verified-booking rows and withdrawn consent without retaining attributed host counts',async()=>{
+  const c1=(await workflow.create(host,workflowDraft({title:'R6-02 Active Flight 1'}))).campaign_id;
+  const c2=(await workflow.create(host,workflowDraft({title:'R6-02 Active Flight 2'}))).campaign_id;
+  const canonical=new CampaignOutcomes(runtime,admin,true,true);
+
+  // 1. Initial state: visitor touchpoint and inquiry without booking
+  const url=new URL(await links.issue(c1,1)),eventId=randomUUID();
+  const recorded=await touchpoints.record({eventId,token:url.searchParams.get('enc_ref'),path:url.pathname,disclosureVersion:'encho-measurement-v1',measurement:true,adUserData:false,personalization:false,parameters:{}},undefined,'browser');
+  const thread=await inbox.create(guest,{listingId:20});
+  await inbox.send(guest,thread.id,{content:'Is this available next week?',receiverId:10,clientEventId:randomUUID(),measurementVisitId:eventId},recorded.cookie);
+
+  let view=await canonical.decorate(host,{campaigns:[{id:c1},{id:c2}]});
+  expect(view.portfolioOutcomes).toMatchObject({
+   activeAttributedBookings:'0',
+   capturedBookings:'0',
+   fulfilledStays:'0',
+   cancelledBookings:'0',
+   refundedBookings:'0',
+  });
+  expect(view.campaigns[0].firstPartyOutcomes).toMatchObject({
+   bookings:'0',
+   inquiries:'1',
+  });
+  expect(view.campaigns[1].firstPartyOutcomes).toMatchObject({
+   bookings:'0',
+   inquiries:'0',
+  });
+
+  // Projection fixture only: this bypasses the canonical booking verifier and
+  // conversion outbox, whose ingestion and export contracts need separate tests.
+  const recordBooking=async(orderId:string,bookingId:string,campaignId:number,state:'CAPTURED'|'FULFILLED'|'CANCELLED'|'REFUNDED',consentStatus:'GRANTED'|'REVOKED'='GRANTED',seq=1)=>fixture.pool.query(
+   `INSERT INTO marketing_booking_measurements
+    (order_id,booking_id,campaign_id,host_id,listing_id,provider,external_campaign_id,currency,captured_minor,refunded_minor,state,sequence,canonical_evidence,consent_status,occurred_at)
+    VALUES($1,$2,$3,10,20,'META',$4,'INR',150000,0,$5,$6,'{"captureEvidenceId":"gw-cap-1"}'::jsonb,$7,now())
+    ON CONFLICT (order_id) DO UPDATE SET state=EXCLUDED.state, consent_status=EXCLUDED.consent_status, sequence=EXCLUDED.sequence, verified_at=now()`,
+   [orderId,bookingId,campaignId,`ext-${campaignId}`,state,seq,consentStatus]
+  );
+
+  // 2. Late booking capture occurs for flight 1 after inquiry interaction
+  await recordBooking('order-r6-late-1','booking-r6-late-1',c1,'CAPTURED','GRANTED',1);
+  view=await canonical.decorate(host,{campaigns:[{id:c1},{id:c2}]});
+  expect(view.portfolioOutcomes?.activeAttributedBookings).toBe('1');
+  expect(view.portfolioOutcomes?.capturedBookings).toBe('1');
+  expect(view.campaigns[0].firstPartyOutcomes?.bookings).toBe('1');
+  expect(view.campaigns[1].firstPartyOutcomes?.bookings).toBe('0');
+
+  // 3. Late booking capture occurs for flight 2
+  await recordBooking('order-r6-late-2','booking-r6-late-2',c2,'CAPTURED','GRANTED',1);
+  view=await canonical.decorate(host,{campaigns:[{id:c1},{id:c2}]});
+  expect(view.portfolioOutcomes?.activeAttributedBookings).toBe('2');
+  expect(view.portfolioOutcomes?.capturedBookings).toBe('2');
+  expect(view.campaigns[0].firstPartyOutcomes?.bookings).toBe('1');
+  expect(view.campaigns[1].firstPartyOutcomes?.bookings).toBe('1');
+
+  // 4. Guest withdraws consent for flight 1's booking
+  await recordBooking('order-r6-late-1','booking-r6-late-1',c1,'CAPTURED','REVOKED',2);
+  view=await canonical.decorate(host,{campaigns:[{id:c1},{id:c2}]});
+  expect(view.campaigns[0].firstPartyOutcomes?.bookings).toBe('0');
+  expect(view.campaigns[1].firstPartyOutcomes?.bookings).toBe('1');
+  expect(view.portfolioOutcomes?.activeAttributedBookings).toBe('1');
+  expect(view.portfolioOutcomes?.capturedBookings).toBe('1');
+
+  // 5. Late booking capture recorded when consent is ALREADY revoked
+  await recordBooking('order-r6-late-3','booking-r6-late-3',c1,'CAPTURED','REVOKED',1);
+  view=await canonical.decorate(host,{campaigns:[{id:c1}]});
+  expect(view.campaigns[0].firstPartyOutcomes?.bookings).toBe('0');
+  expect(view.portfolioOutcomes?.activeAttributedBookings).toBe('0');
+
+  // 6. Advancement of late capture to FULFILLED and subsequent consent revocation
+  await recordBooking('order-r6-late-2','booking-r6-late-2',c2,'FULFILLED','GRANTED',2);
+  view=await canonical.decorate(host,{campaigns:[{id:c2}]});
+  expect(view.portfolioOutcomes?.activeAttributedBookings).toBe('1');
+  expect(view.portfolioOutcomes?.capturedBookings).toBe('0');
+  expect(view.portfolioOutcomes?.fulfilledStays).toBe('1');
+  expect(view.campaigns[0].firstPartyOutcomes?.bookings).toBe('1');
+
+  await recordBooking('order-r6-late-2','booking-r6-late-2',c2,'FULFILLED','REVOKED',3);
+  view=await canonical.decorate(host,{campaigns:[{id:c2}]});
+  expect(view.portfolioOutcomes?.activeAttributedBookings).toBe('0');
+  expect(view.portfolioOutcomes?.fulfilledStays).toBe('0');
+  expect(view.campaigns[0].firstPartyOutcomes?.bookings).toBe('0');
+
+  // 7. Cancellation and refund terminal states obey consent status
+  await recordBooking('order-r6-late-4','booking-r6-late-4',c1,'CANCELLED','REVOKED',1);
+  await recordBooking('order-r6-late-5','booking-r6-late-5',c1,'REFUNDED','REVOKED',1);
+  view=await canonical.decorate(host,{campaigns:[{id:c1}]});
+  expect(view.portfolioOutcomes?.cancelledBookings).toBe('0');
+  expect(view.portfolioOutcomes?.refundedBookings).toBe('0');
+
+  await recordBooking('order-r6-late-6','booking-r6-late-6',c1,'CANCELLED','GRANTED',1);
+  await recordBooking('order-r6-late-7','booking-r6-late-7',c1,'REFUNDED','GRANTED',1);
+  view=await canonical.decorate(host,{campaigns:[{id:c1}]});
+  expect(view.portfolioOutcomes?.cancelledBookings).toBe('1');
+  expect(view.portfolioOutcomes?.refundedBookings).toBe('1');
+ });
 });

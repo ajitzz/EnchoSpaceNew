@@ -32,10 +32,13 @@ describe('HARVO operational boundaries',()=>{
   expect(report.find(r=>r.name==='GEMINI_API_KEY')?.status).toBe('PRESENT_UNVERIFIED');expect(report.find(r=>r.name==='META_ACCESS_TOKEN')?.status).toBe('PRESENT_UNVERIFIED');expect(report.find(r=>r.name==='GOOGLE_ADS_CUSTOMER_ID')?.status).toBe('MISSING');expect(JSON.stringify(report)).not.toContain('private-');
  });
  it('offline background sync excludes marketing financial and provider actions',()=>{
-  const source=readFileSync(new URL('../../../vite.config.ts',import.meta.url),'utf8');
-  const expression=source.match(/urlPattern: (\/[^\n]+\/i),\s*method: 'POST'/)?.[1];expect(expression).toBeTruthy();
-  const pattern=new RegExp(expression!.slice(1,-2),'i');
-  for(const path of ['/api/marketing/v2/campaigns/1/fund','/api/marketing/v2/campaigns/1/activate','/api/webhooks/marketing/v2/meta'])expect(pattern.test('https://encho.example'+path)).toBe(false);
-  expect(pattern.test('https://encho.example/api/unrelated-post')).toBe(true);
+  const source=readFileSync(new URL('../../../src/sw.ts',import.meta.url),'utf8');
+  // The current service worker has no POST route or background-sync queue at
+  // all. The production-built worker/old-queue migration is exercised by the
+  // separate cr1_offline_worker_lifecycle browser suite.
+  expect(source).toContain("url.pathname.startsWith('/api/')");
+  expect(source).toContain('new NetworkOnly()');
+  expect(source).not.toMatch(/BackgroundSyncPlugin|backgroundSync|new Queue\(/);
+  expect(source).not.toMatch(/registerRoute\([^;]+,\s*'POST'\s*\)/);
  });
 });

@@ -1,0 +1,17 @@
+{
+  "classification": "LOCAL_FORENSIC_RECOVERY_NOT_RELEASE_ACCEPTANCE",
+  "observedAtLocalDate": "2026-10-01",
+  "sourceArtifact": "/Users/ajit/.gemini/antigravity/worktrees/EnchoSpaceNew/setup_and_start_dev/build/server/src/migrations/047_campaign_flight_controls_and_drain_requests.sql",
+  "preservedCopy": "docs/audits/cr1-remediation/r0-01/RECOVERED_047_APPLIED_SQL.sql",
+  "fileBytes": 2495,
+  "sha256": "a3d4a1b91ea5c3e00c208803b0611354a7fc520050d5a43953696bc44ce7369e",
+  "recordedAppliedChecksumSource": "docs/audits/cr1-remediation/r0-01/NEON_HISTORY_OBSERVATION.json",
+  "byteIdentity": "cmp and SHA-256 confirmed the preserved copy equals the local packaged artifact and the previously recorded applied checksum",
+  "limits": [
+    "The original source path remains absent from the primary migration directory.",
+    "Migration 045 still has a recorded checksum mismatch with the available candidate bytes.",
+    "Recovered 047 includes a drain-request RLS policy that trusts app.current_user_role/current_user_id settings; actual grants, connection-role authority and adversarial behavior require independent catalog and restricted-role verification.",
+    "A matching migration-file checksum does not prove catalog compatibility, provider approval, a staging identity, or production readiness.",
+    "No remote database query or mutation occurred during this recovery."
+  ]
+}

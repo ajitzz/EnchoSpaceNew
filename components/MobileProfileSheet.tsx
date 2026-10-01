@@ -64,7 +64,7 @@ export const MobileProfileSheet: React.FC<MobileProfileSheetProps> = ({ isOpen, 
                         </div>
                         <div>
                             <div className="font-bold text-gray-900">{user.name}</div>
-                            <div className="text-sm text-gray-500">{user.email}</div>
+                            <div className="text-sm text-gray-500">{user.email ?? user.phone ?? 'Account contact unavailable'}</div>
                         </div>
                      </div>
                      <button onClick={() => { logout(); onClose(); }} className="flex items-center justify-center p-4 rounded-2xl bg-gray-50 hover:bg-gray-100 active:scale-95 transition-colors col-span-2">

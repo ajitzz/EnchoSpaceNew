@@ -5,12 +5,13 @@ import { useAuth } from './AuthContext';
 import { Send, ArrowLeft, Languages, Sparkles, House } from 'lucide-react';
 import { io,type Socket } from 'socket.io-client';
 import { uiAudio } from './audio';
-import { OFFLINE_MUTATION_COMMITTED_EVENT, fetchWithCache, queueMutationWithReceipt } from '../lib/syncService';
+import { OFFLINE_MUTATION_COMMITTED_EVENT, fetchWithCache, listPendingInquiryIntents, queueMutationWithReceipt } from '../lib/syncService';
 import { InboxSkeleton } from './Skeletons';
 import {acknowledgeInquiryRead} from '../lib/inquiryReadReceipts';
 import {canonicalInquiryMessageSchema,parseInquiryHistory,mergeInquiryMessages,inquiryMessageRenderKey,type InboxMessage as Message,parseInquiryThreads,mergeInquiryThreads,type InquiryThread as Thread} from '../lib/inquiryMessages';
 import {conversationNotificationPayloadSchema} from '../src/shared/conversation/delivery';
 import ConversationAssistance from './operations/ConversationAssistance';
+import {ConversationNotificationPanel} from './ConversationNotificationPanel';
 
 let socket: Socket | null = null;
 
@@ -20,6 +21,9 @@ function isCanonicalMessage(value: unknown): value is Message {
 
 const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'host' }) => {
     const { user, token } = useAuth();
+    const [inAppAlerts,setInAppAlerts]=useState<boolean|null>(null);
+    const inAppAlertsRef=useRef(false);
+    useEffect(()=>{inAppAlertsRef.current=inAppAlerts===true;},[inAppAlerts]);
     const reduceMotion=useReducedMotion();
     const nextOptimisticId=useRef(-1);
     const messageViewport=useRef<HTMLDivElement|null>(null);
@@ -74,6 +78,7 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
 
     useEffect(()=>{
       setObservedMessage(null);setThreads([]);setThreadCursor(null);setThreadsBusy(false);setMessages([]);setActiveThread(null);setNewMessage('');
+      setInAppAlerts(null);inAppAlertsRef.current=false;
       acknowledgedReads.current.clear();setReadStatusError('');setHistoryError('');setThreadsError('');
     },[user?.id,token]);
 
@@ -174,7 +179,7 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
 
     // Fetch Messages when active thread changes
     useEffect(() => {
-        if (!activeThread) return;
+        if (!activeThread || !user || !token) return;
 
         let active=true,pending=false;
         const current=()=>active&&activeThreadId.current===activeThread.id&&localStorage.getItem('token')===token;
@@ -182,13 +187,28 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
             if(pending||!current()||document.visibilityState!=='visible')return;
             pending=true;
             try{
+              let pendingLookupFailed=false;
+              const pendingIntents=await listPendingInquiryIntents(activeThread.id).catch(()=>{
+                pendingLookupFailed=true;return [];
+              });
+              if(!current())return;
+              const otherActor=user.id===activeThread.guest_id?activeThread.host_id:activeThread.guest_id;
+              const ownIntents=pendingIntents.filter(intent=>intent.receiverId===otherActor);
+              const localRows:Message[]=ownIntents.map((intent,index)=>({
+                id:-1-index,thread_id:activeThread.id,sender_id:user.id,receiver_id:otherActor,
+                content:intent.content,is_read:false,created_at:new Date(intent.queuedAt).toISOString(),
+                client_event_id:intent.clientEventId,sync_state:'QUEUED',
+              }));
+              nextOptimisticId.current=Math.min(nextOptimisticId.current,-1-localRows.length);
+              setMessages(previous=>mergeInquiryMessages([...previous,...localRows],[],activeThread.id));
               const data=await fetchWithCache(`/api/threads/${activeThread.id}/messages`, `messages_${activeThread.id}`, {
                 headers: {Authorization:`Bearer ${token}`}
               });
               const canonical=parseInquiryHistory(data,activeThread.id);
               if(!current())return;
               setMessages(previous=>mergeInquiryMessages(previous,canonical,activeThread.id));
-              setOlderAvailable(canonical.length===200);setHistoryError('');
+              setOlderAvailable(canonical.length===200);
+              setHistoryError(pendingLookupFailed?'Saved pending messages could not be checked. Reconnect to verify their status.':'');
             }catch{if(current())setHistoryError('Message history could not be refreshed. Reconnect to check for new replies.');}
             finally{pending=false;}
         };
@@ -221,7 +241,7 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
         const handleNewMessage = (message: Message) => {
           if (!current()||!isCanonicalMessage(message) || message.thread_id !== activeThreadId.current) return;
           if (message.sender_id !== user?.id) {
-              uiAudio.playPop();
+              if(inAppAlertsRef.current)uiAudio.playPop();
           }
           setMessages(previous=>mergeInquiryMessages(previous,[canonicalInquiryMessageSchema.parse(message)],activeThread.id));
           scrollToBottom();
@@ -376,6 +396,7 @@ const InboxPage = ({ onBack, role }: { onBack: () => void, role?: 'guest' | 'hos
                     <div className="p-4 border-b border-gray-100 bg-gray-50">
                         <h2 className="font-semibold text-gray-700">All Conversations</h2>
                     </div>
+                    {user&&token&&<ConversationNotificationPanel key={`${user.id}:${token}`} accountId={user.id} token={token} onAlertPreference={setInAppAlerts}/>}
                     {threadsError&&<p className="p-4 text-sm text-amber-800" role="status">{threadsError}</p>}
                     <div className="flex-1 overflow-y-auto">
                         {threads.length === 0 ? (

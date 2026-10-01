@@ -15,6 +15,7 @@ export function retiredMarketingSurface(method: string, path: string): RetiredMa
     || /^\/api\/admin\/payments\/escrow\/release$/.test(normalized)) return 'FINANCIAL_MUTATION';
   if (/^\/api\/telemetry\/pixel-event$/.test(normalized)) return 'CLIENT_TELEMETRY';
   if (/^\/api\/marketing\/(?:wallet\/refuel|simulate-webhook|pre-flight-check|copilot|grade-targeting|ai-generate-copy|social\/publish|track(?:\/|$)|pixel$|leads\/webhook$)/.test(normalized)
+    || /^\/api\/(?:marketing\/meta\/webhooks|meta-webhooks|marketing\/webhooks\/meta-leads)$/.test(normalized)
     || /^\/api\/admin\/marketing\/(?:replay|rollback|dlq\/resolve|kill-switch)/.test(normalized)
     || /^\/api\/host\/social-posts\/[^/]+\/boost$/.test(normalized)
     || /^\/api\/marketing\/leads\/[^/]+\/convert-booking$/.test(normalized)) return 'MARKETING_AUTOMATION';

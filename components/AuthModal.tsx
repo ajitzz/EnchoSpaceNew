@@ -13,6 +13,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
   const [name, setName] = useState('');
   const [isOtpSent, setIsOtpSent] = useState(false);
   const [error, setError] = useState('');
+  const [deliveryNotice, setDeliveryNotice] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   
@@ -25,6 +26,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
         return;
     }
     setError('');
+    setDeliveryNotice('');
     setLoading(true);
     try {
         const res = await fetch('/api/auth/otp/send', {
@@ -33,8 +35,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
             body: JSON.stringify({ phone }),
         });
         const data = res.headers.get('content-type')?.includes('json') ? await res.json() : { error: 'Server returned non-JSON response: ' + (await res.text()).slice(0, 150) } as any;
+        if (!res.ok && data?.deliveryStatus === 'UNKNOWN') {
+            setIsOtpSent(true);
+            setDeliveryNotice('We could not confirm WhatsApp delivery. If the code arrives, enter it below.');
+            return;
+        }
         if (!res.ok) throw new Error(data.error || 'Failed to send verification code');
         setIsOtpSent(true);
+        setDeliveryNotice('WhatsApp accepted the request. Delivery may take a moment.');
     } catch (err: any) {
         setError(err.message);
     } finally {
@@ -132,12 +140,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                   {error}
                 </div>
               )}
+              {deliveryNotice && isOtpSent && (
+                <div role="status" className="p-3 mb-4 bg-amber-50 text-amber-900 text-sm rounded-lg border border-amber-200">
+                  {deliveryNotice}
+                </div>
+              )}
 
               {!isOtpSent ? (
                    <form onSubmit={handleSendOTP} className="space-y-4">
                      <div>
-                       <label className="block text-sm font-medium text-gray-700 mb-1">Mobile Number</label>
+                       <label htmlFor="auth-phone" className="block text-sm font-medium text-gray-700 mb-1">Mobile Number</label>
                        <input
+                         id="auth-phone"
                          type="tel"
                          value={phone}
                          onChange={(e) => setPhone(e.target.value)}
@@ -147,8 +161,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                        />
                      </div>
                      <div>
-                       <label className="block text-sm font-medium text-gray-700 mb-1">Your Name (Optional)</label>
+                       <label htmlFor="auth-name" className="block text-sm font-medium text-gray-700 mb-1">Your Name (Optional)</label>
                        <input
+                         id="auth-name"
                          type="text"
                          value={name}
                          onChange={(e) => setName(e.target.value)}
@@ -164,15 +179,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                      >
                        {loading ? 'Sending...' : 'Send Verification Code'}
                      </motion.button>
+                     <button
+                       type="button"
+                       onClick={() => {
+                         setError('');
+                         setIsOtpSent(true);
+                         setDeliveryNotice('If a code already arrived, enter it below. Otherwise request a new code.');
+                       }}
+                       className="w-full text-sm font-medium text-[#075985] hover:underline"
+                     >
+                       I already have a code
+                     </button>
                    </form>
               ) : (
                    <form onSubmit={handleVerifyOTP} className="space-y-4">
                      <div className="text-sm text-gray-600 mb-4">
-                        We've sent a verification code to <span className="font-bold text-gray-900">{phone}</span>.
+                        Enter the code for <span className="font-bold text-gray-900">{phone}</span> if it arrives.
                      </div>
                      <div>
-                       <label className="block text-sm font-medium text-gray-700 mb-1">Verification Code</label>
+                       <label htmlFor="auth-code" className="block text-sm font-medium text-gray-700 mb-1">Verification Code</label>
                        <input
+                         id="auth-code"
                          type="text"
                          value={otp}
                          onChange={(e) => setOtp(e.target.value)}
@@ -185,7 +212,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                      <motion.button
                        whileTap={{ scale: 0.95 }}
                        type="submit"
-                       disabled={loading || otp.length < 4}
+                       disabled={loading || !/^\d{6}$/.test(otp)}
                        className="w-full bg-black hover:bg-gray-800 text-white py-3.5 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-75 disabled:cursor-not-allowed"
                      >
                        {loading ? 'Verifying...' : 'Verify & Continue'}
@@ -193,7 +220,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                      <div className="text-center mt-4">
                          <button
                              type="button"
-                             onClick={() => { setIsOtpSent(false); setOtp(''); }}
+                             onClick={() => { setIsOtpSent(false); setOtp(''); setDeliveryNotice(''); }}
                              className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors"
                          >
                              Change mobile number

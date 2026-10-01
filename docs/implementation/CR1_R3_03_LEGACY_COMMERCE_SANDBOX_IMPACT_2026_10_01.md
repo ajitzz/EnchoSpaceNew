@@ -1,0 +1,17 @@
+# R3-03 legacy commerce development containment — impact before code
+
+**Verified source.** `/api/bookings`, `/api/checkout/razorpay/order` and `/api/payments/razorpay/verify` currently reject production/VERCEL requests before legacy booking or payment effects. A long-running `npm run dev` process loading primary `.env` can still enter these legacy routes, execute schema DDL and, in the order path, reach a configured Razorpay client. This is not the accepted canonical quote/hold/capture journey; Indian tax/refund/fee signoff remains absent.
+
+**Scope.** Preserve the production responses and canonical finance/migration/provider routes. Permit these three legacy mutations only inside the credential-scrubbed test harness (`NODE_ENV=test`, `ENCHO_TEST_SANDBOX=1`, synthetic or loopback PostgreSQL target); otherwise return their existing production-style unavailable/retired response before price, booking, DDL or provider work. Do not create a new local-development override that could charge a real payment account. Existing local tests may continue exercising historical behavior with fake gateway transport. No schema or public success contract changes.
+
+**Validation.** Test the sandbox decision against primary-remote-shaped URLs, production/serverless, missing sandbox marker and synthetic/loopback tests. Run existing mounted production-containment cases plus adjacent route tests through the sanitized Node 24 runner. Confirm the code branches before any DDL/provider call, typecheck, scoped lint and diff check. No real Razorpay, Neon or customer request.
+
+**Compatibility and rollback.** A developer running the UI against a normal local/remote development server now receives a clear unavailable response on these retired flows; canonical booking must be completed under R3-03 before offering a payable journey. If an isolated test fixture needs the old path, use the existing test runner and fake gateway, not real credentials. Do not restore the development loophole. This is local containment, not R3-03 completion or legal clearance.
+
+## Local implementation and verification
+
+`legacyCommerceTestSandboxEnabled` permits the three legacy mutation routes only for `NODE_ENV=test`, `ENCHO_TEST_SANDBOX=1`, and the schema gate's synthetic or loopback PostgreSQL fixture. The route guard executes before booking DDL, Razorpay order creation, or client-side payment verification. Non-sandbox callers receive the pre-existing production-style 503/410 responses; no successful payment contract or schema is introduced.
+
+The focused commerce/schema/boundary set passed **55/55** locally. A second focused run of the mounted development-containment and sandbox tests passed **9/9**, using the scrubbed test harness with a development-mode request context. Server TypeScript, scoped ESLint and `git diff --check` exited 0. The mounted assertions cover booking 503, order 503 and client verify 410. These are local fixture results, not a live-payment, deployed-role or remote-development probe.
+
+Remaining direct legacy DDL is known structurally in `server.ts`, including booking and checkout helpers, an old Meta reconciliation function, and retired marketing/lead paths. Route reachability and remote-development containment beyond these three commerce mutations still require review. The primary `.env` remains an unapproved staging target; Indian CA/tax-lawyer sign-off and canonical quote/hold/capture integration remain open. R3-03 stays open.

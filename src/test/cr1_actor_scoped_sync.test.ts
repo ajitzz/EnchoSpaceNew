@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { keys } from 'idb-keyval';
 
-const idb = vi.hoisted(() => ({ store: new Map<IDBValidKey, unknown>() }));
+const idb = vi.hoisted(() => ({
+  store: new Map<IDBValidKey, unknown>(),
+  failUpdateForKey: null as IDBValidKey | null,
+}));
 
 vi.mock('idb-keyval', () => ({
   get: vi.fn(async (key: IDBValidKey) => idb.store.get(key)),
@@ -9,6 +12,10 @@ vi.mock('idb-keyval', () => ({
   del: vi.fn(async (key: IDBValidKey) => { idb.store.delete(key); }),
   keys: vi.fn(async () => [...idb.store.keys()]),
   update: vi.fn(async (key: IDBValidKey, updater: (current: unknown) => unknown) => {
+    if (key === idb.failUpdateForKey) {
+      idb.failUpdateForKey = null;
+      throw new Error('fixture IndexedDB acknowledgement failed');
+    }
     const next = updater(idb.store.get(key));
     if (next === undefined) idb.store.delete(key);
     else idb.store.set(key, next);
@@ -17,12 +24,15 @@ vi.mock('idb-keyval', () => ({
 
 import {
   actorQueueKey,
+  authorizeOfflineReplaySession,
   clearActorScopedOfflineData,
   fetchWithCache,
+  listPendingInquiryIntents,
   processOfflineQueue,
   queueMutation,
   queueMutationWithReceipt,
   queueCustomMutation,
+  revokeOfflineReplaySession,
 } from '../../lib/syncService.js';
 
 class MemoryStorage implements Storage {
@@ -42,15 +52,78 @@ function setOnline(value: boolean): void {
 function setActor(id: number, token = `token-${id}`): void {
   localStorage.setItem('user', JSON.stringify({ id, name: `Actor ${id}` }));
   localStorage.setItem('token', token);
+  // This unit fixture models a completed sign-in; browser tests separately
+  // prove that persisted credentials alone cannot authorize replay.
+  authorizeOfflineReplaySession(id, token);
 }
 
 describe('CR1 actor-scoped browser persistence', () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    revokeOfflineReplaySession();
     idb.store.clear();
+    idb.failUpdateForKey = null;
     vi.stubGlobal('localStorage', new MemoryStorage());
     setOnline(false);
+  });
+
+  it('requires a fresh in-process identity grant before replaying persisted credentials', async () => {
+    setActor(17);
+    await queueMutation('/api/threads/3/messages', 'POST', {
+      content: 'Pending verified session', clientEventId: '44444444-4444-4444-8444-444444444444',
+    });
+    revokeOfflineReplaySession(); // Simulates browser reload before /api/auth/me.
+    setOnline(true);
+    const fetcher = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetcher);
+    await processOfflineQueue();
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(idb.store.get(actorQueueKey(17))).toHaveLength(1);
+    expect(authorizeOfflineReplaySession(17, 'token-17')).toBe(true);
+    await processOfflineQueue();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(idb.store.get(actorQueueKey(17))).toEqual([]);
+  });
+
+  it('does not send a direct protected mutation from a saved but unverified session', async () => {
+    setActor(17);
+    revokeOfflineReplaySession(); // Browser reload: /api/auth/me has not completed.
+    setOnline(true);
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    await expect(queueMutationWithReceipt('/api/threads/3/messages', 'POST', {
+      content: 'Not yet verified', clientEventId: '55555555-5555-4555-8555-555555555555',
+    })).resolves.toMatchObject({ status: 'REJECTED' });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(idb.store.has(actorQueueKey(17))).toBe(false);
+  });
+
+  it('does not reveal private cached data from a saved but unverified session', async () => {
+    setActor(17);
+    idb.store.set('encho:v2:actor:17:cache:threads_17', [{ id: 'private-thread' }]);
+    revokeOfflineReplaySession(); // Browser reload: /api/auth/me has not completed.
+    setOnline(false);
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    await expect(fetchWithCache('/api/threads', 'threads_17')).resolves.toBeNull();
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(idb.store.get('encho:v2:actor:17:cache:threads_17')).toEqual([{ id: 'private-thread' }]);
+  });
+
+  it('hides pending inquiry content until the saved actor is reverified', async () => {
+    setActor(17);
+    await queueMutationWithReceipt('/api/threads/3/messages', 'POST', {
+      receiverId: 22, content: 'Private pending question',
+      clientEventId: '66666666-6666-4666-8666-666666666666',
+    });
+    revokeOfflineReplaySession(); // Simulates reload before /api/auth/me.
+    await expect(listPendingInquiryIntents(3)).resolves.toEqual([]);
+    expect(idb.store.get(actorQueueKey(17))).toHaveLength(1);
+    expect(authorizeOfflineReplaySession(17, 'token-17')).toBe(true);
+    await expect(listPendingInquiryIntents(3)).resolves.toMatchObject([
+      { content: 'Private pending question', clientEventId: '66666666-6666-4666-8666-666666666666' },
+    ]);
   });
 
   it('retains ambiguous inquiry commits for reconciliation using the same message event',async()=>{
@@ -111,6 +184,7 @@ describe('CR1 actor-scoped browser persistence', () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
     setActor(17);
     await clearActorScopedOfflineData(17);
+    setActor(17); // Fresh verified session after the prior actor fence.
     await queueMutation('/api/threads/3/messages', 'POST', { content: 'Unsent prior intent', clientEventId: '11111111-1111-4111-8111-111111111111' });
     vi.mocked(keys).mockRejectedValueOnce(new Error('fixture storage unavailable'));
     await expect(clearActorScopedOfflineData(17)).rejects.toThrow('fixture storage unavailable');
@@ -163,7 +237,7 @@ describe('CR1 actor-scoped browser persistence', () => {
 
   it('does not hide an unknown-owner global logout behind a newer actor generation', async () => {
     const clock=vi.spyOn(Date,'now').mockReturnValue(1_800_000_000_000);
-    setActor(17);await clearActorScopedOfflineData(17);
+    setActor(17);await clearActorScopedOfflineData(17);setActor(17);
     await queueMutation('/api/threads/3/messages','POST',{content:'Prior intent',clientEventId:'11111111-1111-4111-8111-111111111111'});
     clock.mockReturnValue(1_799_999_000_000);localStorage.removeItem('user');
     vi.mocked(keys).mockRejectedValueOnce(new Error('fixture blocked cleanup'));
@@ -179,6 +253,7 @@ describe('CR1 actor-scoped browser persistence', () => {
     const actualGet=localStorage.getItem.bind(localStorage);let staleSnapshot=true;
     vi.spyOn(localStorage,'getItem').mockImplementation(key=>key===fenceKey&&staleSnapshot?'0':actualGet(key));
     await clearActorScopedOfflineData(17);staleSnapshot=false;
+    setActor(17);
     const first=localStorage.getItem(fenceKey);
     await queueMutation('/api/threads/3/messages','POST',{content:'Between two revocations',clientEventId:'11111111-1111-4111-8111-111111111111'});
     staleSnapshot=true;vi.mocked(keys).mockRejectedValueOnce(new Error('fixture failed second-tab cleanup'));
@@ -210,6 +285,9 @@ describe('CR1 actor-scoped browser persistence', () => {
     const queued = (idb.store.get(actorQueueKey(17)) as Array<Record<string, unknown>>)[0];
 
     localStorage.setItem('token', 'fresh-token');
+    // A rotated token is usable for replay only after the new sign-in or /me
+    // response has confirmed this exact actor/token pair.
+    expect(authorizeOfflineReplaySession(17, 'fresh-token')).toBe(true);
     setOnline(true);
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
     await processOfflineQueue();
@@ -378,6 +456,86 @@ describe('CR1 actor-scoped browser persistence', () => {
     expect(idb.store.get(actorQueueKey(17))).toMatchObject([{ body: { listingId: 2 } }]);
   });
 
+  it('durably acknowledges the first successful inquiry before dispatching the next queued inquiry', async () => {
+    setActor(17);
+    const firstEventId = '11111111-1111-4111-8111-111111111111';
+    const secondEventId = '22222222-2222-4222-8222-222222222222';
+    expect((await queueMutationWithReceipt('/api/threads/3/messages', 'POST', {
+      content: 'First question', clientEventId: firstEventId,
+    })).status).toBe('QUEUED');
+    expect((await queueMutationWithReceipt('/api/threads/3/messages', 'POST', {
+      content: 'Second question', clientEventId: secondEventId,
+    })).status).toBe('QUEUED');
+
+    let finishSecond: (() => void) | undefined;
+    const secondGate = new Promise<Response>(resolve => {
+      finishSecond = () => resolve(new Response(JSON.stringify({ code: 'OPERATION_OUTCOME_UNKNOWN' }), {
+        status: 409, headers: { 'Content-Type': 'application/json' },
+      }));
+    });
+    const sent: string[] = [];
+    setOnline(true);
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+      const eventId = (JSON.parse(String(init?.body)) as { clientEventId: string }).clientEventId;
+      sent.push(eventId);
+      return eventId === firstEventId
+        ? new Response(JSON.stringify({ id: 101, client_event_id: firstEventId }), {
+          status: 200, headers: { 'Content-Type': 'application/json' },
+        })
+        : secondGate;
+    }));
+
+    const processing = processOfflineQueue();
+    try {
+      await vi.waitFor(() => expect(sent).toEqual([firstEventId, secondEventId]));
+      const duringSecond = idb.store.get(actorQueueKey(17)) as Array<{ body: { clientEventId: string } }>;
+      expect(duringSecond.map(item => item.body.clientEventId)).toEqual([secondEventId]);
+    } finally {
+      finishSecond?.();
+      await processing;
+    }
+    expect((idb.store.get(actorQueueKey(17)) as Array<{ body: { clientEventId: string } }>))
+      .toMatchObject([{ body: { clientEventId: secondEventId } }]);
+  });
+
+  it('stops the batch after a failed acknowledgement write instead of sending a later command', async () => {
+    setActor(17);
+    await queueMutationWithReceipt('/api/threads/3/messages', 'POST', {
+      content: 'First question', clientEventId: '11111111-1111-4111-8111-111111111111',
+    });
+    await queueMutationWithReceipt('/api/threads/3/messages', 'POST', {
+      content: 'Second question', clientEventId: '22222222-2222-4222-8222-222222222222',
+    });
+    idb.failUpdateForKey = actorQueueKey(17);
+    setOnline(true);
+    const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetcher);
+
+    await processOfflineQueue();
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(idb.store.get(actorQueueKey(17))).toHaveLength(2);
+  });
+
+  it('does not retry an HTTP-committed inquiry because its optional response JSON is malformed', async () => {
+    setActor(17);
+    await queueMutationWithReceipt('/api/threads/3/messages', 'POST', {
+      content: 'Question with malformed receipt',
+      clientEventId: '33333333-3333-4333-8333-333333333333',
+    });
+    setOnline(true);
+    const fetcher = vi.fn().mockResolvedValue(new Response('{invalid', {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetcher);
+
+    await processOfflineQueue();
+    await processOfflineQueue();
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(idb.store.get(actorQueueKey(17))).toEqual([]);
+  });
+
   it('stops replay after an account switch and suppresses the prior account response event', async () => {
     setActor(17);
     await queueMutationWithReceipt('/api/wishlists', 'POST', { listingId: 1 });
@@ -526,6 +684,21 @@ describe('CR1 actor-scoped browser persistence', () => {
     await expect(queueMutationWithReceipt('/api/threads/3/messages', 'POST', { content: 'Hello' }))
       .resolves.toMatchObject({ status: 'REJECTED' });
     expect(idb.store.has(actorQueueKey(17))).toBe(false);
+  });
+
+  it('exposes pending inquiry drafts only to their currently authenticated actor and exact thread', async () => {
+    setActor(17);
+    await queueMutationWithReceipt('/api/threads/3/messages', 'POST', {
+      receiverId: 22, content: 'Saved question', clientEventId: '11111111-1111-4111-8111-111111111111',
+    });
+    expect(await listPendingInquiryIntents(3)).toMatchObject([{
+      receiverId: 22, content: 'Saved question', clientEventId: '11111111-1111-4111-8111-111111111111',
+    }]);
+    expect(await listPendingInquiryIntents(4)).toEqual([]);
+    localStorage.removeItem('token');
+    expect(await listPendingInquiryIntents(3)).toEqual([]);
+    setActor(23);
+    expect(await listPendingInquiryIntents(3)).toEqual([]);
   });
 
 });

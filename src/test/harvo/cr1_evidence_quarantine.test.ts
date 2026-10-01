@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Cr1ReleaseCertificateEngine } from '../../lib/compliance/cr1ReleaseCertificateEngine.js';
@@ -61,6 +61,6 @@ describe('R0-02 reproduced evidence trust defects', () => {
       symlinkSync(outside, link);
       expect(() => writeFixtureReceipt('blocked', {}, join(link, 'new-directory', 'receipt.json'))).toThrow(/FIXTURE_SYMLINK_ESCAPE/);
       expect(existsSync(join(outside, 'new-directory'))).toBe(false);
-    } finally { rmSync(link, { force: true }); rmSync(fixture.receiptPath, { force: true }); rmSync(outside, { recursive: true, force: true }); }
+    } finally { unlinkSync(link); rmSync(fixture.receiptPath, { force: true }); rmSync(outside, { recursive: true, force: true }); }
   });
 });

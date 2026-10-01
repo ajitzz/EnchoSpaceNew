@@ -1,0 +1,17 @@
+# Phone OTP identity correction — 1 October 2026
+
+**Status:** local corrective work, pending tests and independent review; no deployment or release acceptance.
+
+## Source defect and impact
+
+The OTP verification lookup includes an empty third candidate for non-Indian phones. A legacy user with an empty/space-only `users.phone` then matches every such lookup after the one-time code has been consumed. New phone users also receive a predictable synthetic `@enchospace.local` email, which public registration can claim before the phone holder arrives. This is an authentication availability/identity defect, not a reason to weaken the OTP proof.
+
+The repair is scoped to `server.ts` OTP identity lookup/enrollment and `checkCanHostExperiences`, the public consumer-session schema in `src/lib/auth/sessionContract.ts`, the mobile account label in `components/MobileProfileSheet.tsx`, and focused HTTP/UI regressions. Phone-only users have `email: null` rather than an invented address; the `users.email` column is already intended to be nullable when phone support is installed. JWT and `/api/auth/me` must preserve that honest nullable projection. Existing actual emails remain unchanged. Canonical and legacy phone collision handling still fails closed. There is no database migration in this slice because applied 045/047 history is unresolved; deployed email nullability must be a named schema-readiness check before phone OTP activation.
+
+The remaining normalized-phone full-table scan is a scalability gap pending a reviewed indexed canonical identity migration. It is not solved by relaxing duplicate detection. Rollback is to disable the phone OTP route while retaining email/Google authentication; do not restore synthetic predictable email generation or process-local OTP state.
+
+An independent third read-only review found a separate schema drift case: a pre-existing `users.phone` column can coexist with `users.email NOT NULL`, because the legacy initializer drops the email constraint only while adding the phone column. The earlier phone-only insert would then fail *after* consuming the OTP. Before repair, a mounted HTTP regression sent a code (200) against this drifted schema; after repair, `/api/auth/otp/send` performs a read-only catalog check and returns 503 before issuing a Redis challenge or contacting WhatsApp. The guard is extracted to `src/server/auth/phoneOtpSchemaReadiness.ts` and tested against a disposable PostgreSQL cluster for missing, constrained, valid and incomplete schemas (1/1). The pg-mem mounted test uses a narrow catalog interceptor because pg-mem misreports column nullability; its 11/11 pass is not substituted for the real PostgreSQL result. Four adjacent OTP suites pass 22/22; Node 24 typecheck, scoped ESLint and diff check pass. This is fail-closed containment, not a migration or proof of deployed schema readiness. Reconcile applied 045/047 history before any new identity migration or phone-only activation.
+
+## Validation
+
+Reproduce and repair: non-Indian new phone with a blank legacy row; phone-only signup despite a pre-registered former synthetic email; nullable email round-trip through `/api/auth/me` and browser session validation; existing-email sign-in; ambiguous legacy phone denial. Run focused sanitized Node 24 HTTP/UI tests, typecheck, scoped lint, and diff check. These remain local fixtures, not staged identity, Redis or WhatsApp evidence.

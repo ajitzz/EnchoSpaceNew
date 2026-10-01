@@ -7,7 +7,11 @@
 **Scope:** Express route declarations, mounted route authority, SQL migration ownership, runtime DDL, source-level authentication guards and P0/P1 containment decisions
 **Non-claim:** This is a complete structural inventory of the declared HTTP surface and table-creation authorities. It is not a completed semantic security review of every handler, proof of the deployed database catalog, provider acceptance, or production certification.
 
-> **28 September correction:** The current ledger has 346 declarations / 369 paths, including 3 explicitly UNMOUNTED notification paths, 12 retired admin-workforce declarations and the isolated workforce-command adapter. There are 39 source migrations / 124 migration-created tables / 62 runtime-created tables (186 total). The original narrative counts below remain the dated 24 September baseline; refreshed appendices/count receipt describe source structure only.
+> **28 September correction:** The then-current ledger had 346 declarations / 369 paths, including 3 explicitly UNMOUNTED notification paths, 12 retired admin-workforce declarations and the isolated workforce-command adapter. There were 39 source migrations / 124 migration-created tables / 62 runtime-created tables (186 total). The original narrative counts below remain the dated 24 September baseline; refreshed appendices/count receipt describe source structure only.
+
+> **30 September structural refresh:** Current HEAD `7d924d1` has one additional fixed-origin workforce-factor POST declaration. Its route is classified `CANONICAL_MODULAR` with an opaque staff-session/step-up guard; this is a source classification, not an authorization audit. The 346 prior file/method/path signatures were unchanged; 237 route anchors and 59 runtime-table anchors moved. Current appendices and machine counts pass the read-only AST inventory validator. The 24 September narrative remains dated, and deployed migration/role identity remains unresolved.
+
+> **1 October working-tree qualification:** The participant notification router is now mounted under account authentication and an explicitly configured restricted pool. Its three declarations changed from relative, unmounted paths to concrete `/api/conversations/v1/notifications/*` paths without changing the total 347 declarations / 370 paths. All current route/runtime anchors were refreshed by exact signature and occurrence order; the validator and six parser tests pass. This proves source composition and ledger consistency, not catalog safety, live channel delivery or release acceptance. A separate disposable-PostgreSQL authority suite currently exposes 12 notification readiness false positives under reachable-role/column grants; R4-01 remains open.
 
 ## 1. Executive verdict
 
@@ -37,7 +41,7 @@ The read-only `scripts/cr1/verify-inventory.mjs` uses the TypeScript AST to enum
 - `src/server/operations/router.ts`
 - `src/server/operations/sessionRouter.ts`
 
-It excludes tests and ignores non-route calls such as `req.app.get('io')`. Array path arguments are expanded. Each marketing/session action loop counts as one declaration and three paths. Mounted prefixes are verified against actual `app.use`/`router.use` calls; `serviceRouter.ts` uses lexical factory-specific mappings because participant and staff factories have different prefixes and trust boundaries.
+It excludes tests and ignores non-route calls such as `req.app.get('io')`. Array path arguments are expanded. Each marketing/session action loop counts as one declaration and three paths. Mounted prefixes are verified against actual `app.use`/`router.use` calls; `serviceRouter.ts` uses lexical factory-specific mappings because participant and staff factories have different prefixes and trust boundaries. The notification router is now composed under `/api/conversations/v1` with a separately configured participant pool; route presence does not prove its database role is provisioned.
 
 ```bash
 rg -n --glob '*.ts' '^\s*(app|router)\.(get|post|put|patch|delete|options|head|all)\s*\(' server.ts src/server
@@ -66,13 +70,14 @@ The AST resolves 330 declarations and 353 expanded path registrations. It exclud
 | `src/server/operations/router.ts` | 3 | 3 |
 | `src/server/operations/sessionRouter.ts` | 1 | 3 |
 | `src/server/operations/workforceCommandRouter.ts` | 1 | 1 |
-| **Total** | **346** | **369** |
+| `src/server/operations/workforceFactorRouter.ts` | 1 | 1 |
+| **Total** | **347** | **370** |
 
 ### 3.2 Disposition classes
 
 | Class | Meaning | Declarations | Expanded paths | P0/P1 action |
 |---|---|---:|---:|---|
-| `CANONICAL_MODULAR` | Versioned/domain-owned modular route | 92 | 96 | Preserve; extend only through owning module |
+| `CANONICAL_MODULAR` | Versioned/domain-owned modular route | 96 | 100 | Preserve; extend only through owning module |
 | `CANONICAL_DEFERRED` | Canonical management contract for a deferred product; paid activation is fail-closed | 10 | 10 | Preserve circuit breaker; exclude from CR1 activation |
 | `CANONICAL_TRANSITIONAL` | Canonical behavior still inside `server.ts` | 12 | 12 | Extract behind contract tests |
 | `CORE_TRANSITIONAL` | Required core/listing/auth/upload path without final module owner | 26 | 26 | Assign owner; extract with compatibility telemetry |
@@ -81,8 +86,7 @@ The AST resolves 330 declarations and 353 expanded path registrations. It exclud
 | `LEGACY_REPLACE` | Reachable legacy path with known canonical direction | 61 | 64 | Instrument callers, replace, deprecate, retire |
 | `UNSAFE_QUARANTINE` | Privileged, unauthenticated, weakly authenticated, schema-mutating, synthetic or abuse-prone | 18 | 18 | P0 repair/block; do not expose in CR1 |
 | `UNRESOLVED_OWNER` | Feature exists but CR1 owner/retention decision is absent | 63 | 64 | Assign domain owner or explicitly exclude/retire |
-| `UNMOUNTED_DECLARATION` | Declared router without composition; relative paths are not live endpoints | 3 | 3 | R4-01 must integrate and test explicitly |
-| **Total** | | **346** | **369** | |
+| **Total** | | **347** | **370** | |
 
 Classification describes migration disposition, not security acceptance. A canonical label does not waive legal, provider, RLS, input-validation or operational gates.
 
@@ -100,10 +104,11 @@ Classification describes migration disposition, not security acceptance. A canon
 | JWT middleware; 503 grounded-assistance boundary | 4 |
 | JWT middleware; handler-owned authorization | 116 |
 | JWT middleware; production 410 retirement | 1 |
-| NOT MOUNTED; participant checks declared only | 3 |
+| JWT + restricted participant notification role | 3 |
 | fixed-origin JSON + isolated workforce identity flow | 1 |
 | fixed-origin JSON + opaque staff session + exact case assignment | 2 |
 | fixed-origin JSON + opaque staff session + fenced assignment | 1 |
+| fixed-origin JSON + opaque staff session + bound factor | 1 |
 | isolated workforce session + command-bound scoped IAM | 1 |
 | opaque workforce session + scoped projection | 2 |
 | optional verified JWT; production checkout blocked | 1 |
@@ -312,235 +317,235 @@ Every syntactic route declaration in the counted files appears exactly once belo
 
 | Source | Method | Registered path(s) | Declared guard | Disposition |
 |---|---|---|---|---|
-| `server.ts:840` | GET | `/api/health/live` | public or handler-local only | `PUBLIC_INFRA` |
-| `server.ts:884` | GET | `/privacy` | public or handler-local only | `PUBLIC_INFRA` |
-| `server.ts:885` | GET | `/terms-of-service` | public or handler-local only | `PUBLIC_INFRA` |
-| `server.ts:887` | GET | `/api/admin/integration-inspection` | verified JWT + persisted admin role | `UNSAFE_QUARANTINE` |
-| `server.ts:897` | GET | `/api/admin/metrics` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:905` | GET | `/api/admin/alerts` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:1061` | GET | `/api/stays/:slug/spatial-story` | public or handler-local only | `CANONICAL_TRANSITIONAL` |
-| `server.ts:1062` | GET | `/api/explore/:destination` | public or handler-local only | `CANONICAL_TRANSITIONAL` |
-| `server.ts:1069` | GET | `/api/webhooks/marketing/v2/meta` | provider challenge | `CANONICAL_TRANSITIONAL` |
-| `server.ts:1070` | POST | `/api/webhooks/marketing/v2/:provider` | provider signature/HMAC | `CANONICAL_TRANSITIONAL` |
-| `server.ts:1084` | ALL | `/api/webhooks/meta`, `/api/webhooks/ad-network` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:1099` | GET | `/api/health/ready` | public or handler-local only | `PUBLIC_INFRA` |
-| `server.ts:1100` | GET | `/api/encho/health` | public or handler-local only | `PUBLIC_INFRA` |
-| `server.ts:1110` | GET | `/api/config` | public or handler-local only | `UNRESOLVED_OWNER` |
-| `server.ts:1117` | GET | `/api/webhook/whatsapp` | public or handler-local only | `UNSAFE_QUARANTINE` |
-| `server.ts:1190` | POST | `/api/webhook/whatsapp` | provider signature/HMAC | `UNSAFE_QUARANTINE` |
-| `server.ts:2890` | GET | `/api` | public or handler-local only | `PUBLIC_INFRA` |
-| `server.ts:2914` | POST | `/api/auth/otp/send` | public authentication flow | `CORE_TRANSITIONAL` |
-| `server.ts:2930` | POST | `/api/auth/otp/verify` | public authentication flow | `CORE_TRANSITIONAL` |
-| `server.ts:2982` | POST | `/api/auth/register` | public authentication flow | `CORE_TRANSITIONAL` |
-| `server.ts:3023` | POST | `/api/auth/login` | public authentication flow | `CORE_TRANSITIONAL` |
-| `server.ts:3061` | POST | `/api/auth/google` | public authentication flow | `CORE_TRANSITIONAL` |
-| `server.ts:3101` | GET | `/api/auth/me` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
-| `server.ts:3118` | GET | `/api/admin/settings/experience-hosts` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:3130` | POST | `/api/admin/settings/experience-hosts` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:3142` | GET | `/api/admin/reviews` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:3164` | DELETE | `/api/admin/reviews/:id` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:3187` | GET | `/api/admin/offers` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:3198` | POST | `/api/admin/offers` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:3213` | DELETE | `/api/admin/offers/:id` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:3224` | GET | `/api/listings/:id/calendar` | public or handler-local only | `CORE_TRANSITIONAL` |
-| `server.ts:3241` | POST | `/api/listings/:id/calendar` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
-| `server.ts:3276` | GET | `/api/admin/users` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:3310` | DELETE | `/api/admin/users/:id` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:3322` | GET | `/api/keep-alive` | public or handler-local only | `UNRESOLVED_OWNER` |
-| `server.ts:3349` | GET | `/api/seo` | public or handler-local only | `UNRESOLVED_OWNER` |
-| `server.ts:3451` | GET | `/api/health/db` | public or handler-local only | `UNSAFE_QUARANTINE` |
-| `server.ts:3466` | POST | `/api/init-db` | verified JWT + persisted admin role | `UNSAFE_QUARANTINE` |
-| `server.ts:3488` | GET | `/api/image` | public or handler-local only | `UNSAFE_QUARANTINE` |
-| `server.ts:3561` | POST | `/api/marketing/assets/resize` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:3595` | PUT | `/api/mock-upload` | public or handler-local only | `UNSAFE_QUARANTINE` |
-| `server.ts:3600` | PUT | `/api/upload-local` | signed upload ticket + persisted session | `CORE_TRANSITIONAL` |
-| `server.ts:3613` | POST | `/api/upload-base64` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
-| `server.ts:3627` | POST | `/api/upload-video-url` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
-| `server.ts:3643` | GET | `/api/mux/upload/:uploadId` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
-| `server.ts:3660` | POST | `/api/upload-url` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
-| `server.ts:3696` | GET | `/api/admin/seo/:type/:id` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:3709` | PUT | `/api/admin/seo/:type/:id` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:3728` | PUT | `/api/listings/:id` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
-| `server.ts:4013` | PATCH | `/api/admin/listings/:id/status` | JWT middleware; handler-owned authorization | `CANONICAL_TRANSITIONAL` |
-| `server.ts:4054` | PUT | `/api/listings/:id/rooms` | JWT middleware; handler-owned authorization | `CANONICAL_TRANSITIONAL` |
-| `server.ts:4153` | PATCH | `/api/admin/media-assets/:id/moderation` | JWT middleware; handler-owned authorization | `CANONICAL_TRANSITIONAL` |
-| `server.ts:4237` | POST | `/api/admin/backfill/room-media-authority` | JWT middleware; handler-owned authorization | `CANONICAL_TRANSITIONAL` |
-| `server.ts:4433` | PUT | `/api/listings/:id/mode` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
-| `server.ts:4490` | GET | `/api/marketing/campaigns` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:4524` | GET | `/api/marketing/analytics` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:4582` | GET | `/api/marketing/campaigns/:id/control-center`, `/api/marketing/campaigns/:id/telemetry` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:4612` | GET | `/api/admin/marketing/campaigns/:id/control-center`, `/api/admin/campaigns/:id/control-center` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:4644` | GET | `/api/marketing/campaigns/:id/analytics` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:4713` | GET | `/api/marketing/campaigns/:id/analytics/performance` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:4740` | GET | `/api/marketing/campaigns/:id/analytics/funnel` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:4765` | GET | `/api/marketing/campaigns/:id/analytics/anomalies` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:4795` | GET | `/api/marketing/campaigns/:id/report/pdf` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:4826` | GET | `/api/admin/marketing/analytics/portfolio` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:4854` | POST | `/api/marketing/leads/webhook` | pre-handler 410 boundary | `UNSAFE_QUARANTINE` |
-| `server.ts:4892` | GET | `/api/marketing/leads` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:4917` | GET | `/api/marketing/leads/:id` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:4942` | PATCH | `/api/marketing/leads/:id/status` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:4971` | POST | `/api/marketing/leads/:id/message` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:5037` | POST | `/api/admin/marketing/leads/notifications/process` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:5054` | GET | `/api/admin/marketing/leads/health` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:5070` | POST | `/api/marketing/pre-flight-check` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:5124` | GET | `/api/marketing/campaigns/:id/preflight` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:5179` | POST | `/api/marketing/copilot` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:5348` | POST | `/api/marketing/campaigns` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:5415` | POST | `/api/telemetry/pixel-event` | pre-handler 410 boundary | `UNSAFE_QUARANTINE` |
-| `server.ts:5444` | POST | `/api/marketing/campaigns/:id/sync-pricing` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:5457` | GET | `/api/marketing/campaigns/:id/pricing-history` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:5471` | PUT | `/api/marketing/campaigns/:id` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:5647` | DELETE | `/api/marketing/campaigns/:id` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:5676` | GET | `/api/host/social-posts` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:5694` | POST | `/api/host/social-posts/generate-caption` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:5832` | POST | `/api/host/social-posts` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:5909` | POST | `/api/host/social-posts/:id/boost` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:5973` | DELETE | `/api/host/social-posts/:id` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:5992` | GET | `/api/admin/social-posts` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:6173` | POST | `/api/admin/social-posts/:id/approve` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:6188` | POST | `/api/admin/social-posts/:id/reject` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:6228` | GET | `/api/listings/:id/social-posts` | public or handler-local only | `CORE_TRANSITIONAL` |
-| `server.ts:6256` | POST | `/api/marketing/assets/upload` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:6276` | POST | `/api/marketing/social/publish` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:6313` | POST | `/api/marketing/campaigns/:id/ai-check` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:6527` | POST | `/api/marketing/campaigns/:id/sync-meta` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:6606` | GET | `/api/marketing/recommend-targeting` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:6693` | POST | `/api/marketing/grade-targeting` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:6784` | POST | `/api/marketing/ai-generate-copy` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:6981` | GET | `/api/marketing/campaigns/:id/leads` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:7203` | POST | `/api/marketing/leads/:leadId/convert-booking` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:7302` | POST | `/api/marketing/leads/:leadId/message` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:10673` | POST | `/api/payments/webhook` | provider signature/HMAC | `LEGACY_REPLACE` |
-| `server.ts:10865` | GET | `/api/webhooks/meta` | provider challenge | `LEGACY_REPLACE` |
-| `server.ts:10917` | POST | `/api/webhooks/meta` | provider signature/HMAC | `LEGACY_REPLACE` |
-| `server.ts:10941` | POST | `/api/webhooks/ad-network` | provider signature/HMAC | `LEGACY_REPLACE` |
-| `server.ts:11109` | POST | `/api/marketing/campaigns/:id/subscribe` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:11423` | GET | `/api/marketing/campaigns/:id/invoice` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:11500` | POST | `/api/marketing/campaigns/:id/pacing` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:11567` | GET | `/api/admin/marketing/campaigns/:id/traces` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:11587` | GET | `/api/admin/marketing/dashboard/stats` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:11653` | GET | `/api/admin/marketing/dlq` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:11674` | POST | `/api/admin/marketing/replay/:transactionId` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:11715` | GET | `/api/admin/marketing/health` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:11768` | POST | `/api/admin/marketing/kill-switch` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:11790` | GET | `/api/admin/marketing/transactions/:id/traces` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:11813` | POST | `/api/admin/marketing/dlq/resolve/:id` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:11833` | POST | `/api/admin/marketing/rollback/:metaId` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:11859` | GET | `/api/admin/marketing/transactions` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:11880` | GET | `/api/admin/marketing/campaigns` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:11915` | POST | `/api/admin/marketing/campaigns/:id/approve` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:11919` | POST | `/api/admin/marketing/campaigns/:id/resync-meta` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:11963` | POST | `/api/marketing/campaigns/:id/sync-telemetry` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:11982` | POST | `/api/marketing/campaigns/:id/sync-engagement` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:12001` | POST | `/api/admin/marketing/campaigns/:id/reject` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:12045` | POST | `/api/marketing/campaigns/:id/action-preview`, `/api/admin/marketing/campaigns/:id/action-preview`, `/api/admin/campaigns/:id/action-preview` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:12075` | POST | `/api/marketing/campaigns/:id/pause`, `/api/admin/marketing/campaigns/:id/pause`, `/api/admin/campaigns/:id/pause`, `/api/admin/marketing/campaigns/:id/pause-meta` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:12125` | POST | `/api/admin/marketing/campaigns/:id/emergency-pause`, `/api/admin/campaigns/:id/emergency-pause` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:12161` | POST | `/api/marketing/campaigns/:id/resume`, `/api/admin/marketing/campaigns/:id/resume`, `/api/admin/campaigns/:id/resume`, `/api/admin/marketing/campaigns/:id/resume-meta` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:12211` | POST | `/api/marketing/campaigns/:id/resync`, `/api/admin/marketing/campaigns/:id/resync`, `/api/admin/campaigns/:id/resync`, `/api/admin/marketing/campaigns/:id/resync-meta` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:12241` | POST | `/api/admin/marketing/campaigns/:id/reconcile`, `/api/admin/campaigns/:id/reconcile` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:12273` | POST | `/api/admin/marketing/campaigns/:id/objects/:objectType/:objectId/status`, `/api/admin/campaigns/:id/objects/:objectType/:objectId/status` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:12323` | POST | `/api/admin/marketing/campaigns/:id/kill-meta` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:12380` | POST | `/api/marketing/campaigns/:id/cancel` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:12423` | POST | `/api/admin/marketing/campaigns/:id/activate` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:12436` | POST | `/api/marketing/campaigns/:id/activate` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:12452` | GET | `/api/admin/audit-logs` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:12483` | POST | `/api/marketing/threads/:id/score-intent` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:12533` | GET | `/api/admin/outreach-leads` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:12553` | POST | `/api/admin/outreach-leads` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:12573` | PUT | `/api/admin/outreach-leads/:id` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:12612` | DELETE | `/api/admin/outreach-leads/:id` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:12629` | GET | `/api/listings/draft/:id` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
-| `server.ts:12640` | POST | `/api/listings/draft` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
-| `server.ts:12665` | POST | `/api/admin/listings/draft/:id/approve` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
-| `server.ts:12887` | POST | `/api/listings` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
-| `server.ts:13047` | GET | `/api/wishlist` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:13048` | GET | `/api/wishlists` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:13095` | POST | `/api/wishlists` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:13120` | DELETE | `/api/wishlists/:listingId` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:13144` | GET | `/api/experience-wishlists` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:13161` | POST | `/api/experience-wishlists` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:13186` | DELETE | `/api/experience-wishlists/:experienceId` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:13205` | GET | `/api/listings/:id/can-review` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
-| `server.ts:13226` | GET | `/api/listings/:id/reviews` | public or handler-local only | `CORE_TRANSITIONAL` |
-| `server.ts:13243` | POST | `/api/listings/:id/reviews` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
-| `server.ts:13270` | GET | `/api/v2/stays/:propertySlug` | public projection | `CANONICAL_TRANSITIONAL` |
-| `server.ts:13357` | POST | `/api/v2/stays/holds` | public or handler-local only | `CANONICAL_TRANSITIONAL` |
-| `server.ts:13435` | POST | `/api/v2/stays/holds/:id/release` | public or handler-local only | `CANONICAL_TRANSITIONAL` |
-| `server.ts:13487` | GET | `/api/v2/stays/holds/config` | public or handler-local only | `CANONICAL_TRANSITIONAL` |
-| `server.ts:13496` | GET | `/listing/:id`, `/listings/:id` | public or handler-local only | `UNRESOLVED_OWNER` |
-| `server.ts:13525` | GET | `/api/listings/:id` | public or handler-local only | `CORE_TRANSITIONAL` |
-| `server.ts:13622` | GET | `/api/listings` | public or handler-local only | `CORE_TRANSITIONAL` |
-| `server.ts:13925` | GET | `/api/host/reservations` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:14009` | PUT | `/api/host/reservations/:id/status` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:14115` | POST | `/api/messages` | JWT middleware; 503 canonical conversation boundary | `LEGACY_REPLACE` |
-| `server.ts:14179` | DELETE | `/api/listings/:id` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
-| `server.ts:14209` | GET | `/api/admin/metrics` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:14308` | GET | `/api/admin/threads` | JWT middleware; 403 scoped staff boundary | `LEGACY_REPLACE` |
-| `server.ts:14346` | DELETE | `/api/admin/messages/:id` | JWT middleware; 403 scoped staff boundary | `LEGACY_REPLACE` |
-| `server.ts:14357` | GET | `/api/admin/threads/:id/messages` | JWT middleware; 403 scoped staff boundary | `LEGACY_REPLACE` |
-| `server.ts:14374` | POST | `/api/ai/suggest-price` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:14426` | POST | `/api/ai/suggest-reply` | JWT middleware; 503 grounded-assistance boundary | `UNRESOLVED_OWNER` |
-| `server.ts:14467` | POST | `/api/ai/suggest-listing` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:14517` | POST | `/api/ai/curate-rules` | JWT middleware; 503 grounded-assistance boundary | `UNSAFE_QUARANTINE` |
-| `server.ts:14565` | POST | `/api/ai/radar-scan` | JWT middleware; 503 grounded-assistance boundary | `UNSAFE_QUARANTINE` |
-| `server.ts:14735` | POST | `/api/ai/suggest-sensory-tags` | JWT middleware; 503 grounded-assistance boundary | `UNSAFE_QUARANTINE` |
-| `server.ts:14819` | POST | `/api/ai/evaluate-listing` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:14915` | POST | `/api/ai/nearby-pois` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:14962` | POST | `/api/leads/soft-exit` | public or handler-local only | `UNSAFE_QUARANTINE` |
-| `server.ts:14994` | GET | `/api/host/soft-leads` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:15014` | PUT | `/api/user/profile` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:15032` | GET | `/api/user/bookings` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:15100` | PUT | `/api/user/bookings/:id/cancel` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:15146` | POST | `/api/bookings` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:15455` | GET | `/api/settings/whatsapp` | public or handler-local only | `UNRESOLVED_OWNER` |
-| `server.ts:15472` | POST | `/api/settings/whatsapp` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:15489` | GET | `/api/settings/experiences_page` | public or handler-local only | `UNRESOLVED_OWNER` |
-| `server.ts:15512` | POST | `/api/settings/experiences_page` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:15533` | GET | `/api/settings/call` | public or handler-local only | `UNRESOLVED_OWNER` |
-| `server.ts:15550` | POST | `/api/settings/call` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:15567` | GET | `/api/settings/demo_properties` | public or handler-local only | `UNRESOLVED_OWNER` |
-| `server.ts:15585` | POST | `/api/settings/demo_properties` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:15697` | GET | `/api/seed-ajith` | verified JWT + persisted admin role + explicit development fixture gate | `UNSAFE_QUARANTINE` |
-| `server.ts:15751` | GET | `/api/experiences` | public or handler-local only | `UNRESOLVED_OWNER` |
-| `server.ts:15805` | POST | `/api/experiences/seed` | verified JWT + persisted admin role + explicit development fixture gate | `UNSAFE_QUARANTINE` |
-| `server.ts:15892` | POST | `/api/experiences` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:15923` | PUT | `/api/experiences/:id` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:15967` | DELETE | `/api/experiences/:id` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:16000` | GET | `/api/experiences/:id/reviews` | public or handler-local only | `UNRESOLVED_OWNER` |
-| `server.ts:16023` | GET | `/api/experiences/:id/reviews/eligible` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:16039` | POST | `/api/experiences/:id/reviews` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:16076` | GET | `/api/experiences/:id/videos` | public or handler-local only | `UNRESOLVED_OWNER` |
-| `server.ts:16095` | POST | `/api/experiences/:id/videos` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:16121` | POST | `/api/experiences/videos/:id/like` | public or handler-local only | `UNSAFE_QUARANTINE` |
-| `server.ts:16141` | GET | `/api/experiences/:id/lobby/participants` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:16182` | GET | `/api/experiences/:id/lobby/messages` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:16223` | POST | `/api/experiences/:id/lobby/messages` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:16274` | POST | `/api/experience-bookings` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:16321` | GET | `/api/experience-bookings` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:16338` | PUT | `/api/user/experience-bookings/:id/cancel` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:16379` | GET | `/api/admin/experience-bookings` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:16399` | GET | `/api/settings/payment_rates` | public or handler-local only | `UNRESOLVED_OWNER` |
-| `server.ts:16417` | POST | `/api/settings/payment_rates` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
-| `server.ts:16441` | POST | `/api/create-payment-intent` | JWT middleware; 410 retirement | `LEGACY_REPLACE` |
-| `server.ts:16518` | GET | `/api/marketing/ledger` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:16547` | GET | `/api/marketing/admin/ledgers` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:16609` | GET | `/api/marketing/wallet` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
-| `server.ts:16670` | POST | `/api/marketing/meta/webhooks`, `/api/meta-webhooks` | provider signature/HMAC | `LEGACY_REPLACE` |
-| `server.ts:16769` | POST | `/api/marketing/wallet/refuel` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:16879` | POST | `/api/marketing/simulate-webhook` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:16930` | POST | `/api/checkout/razorpay/order` | optional verified JWT; production checkout blocked | `LEGACY_REPLACE` |
-| `server.ts:17096` | POST | `/api/payments/razorpay/verify` | JWT middleware; production 410 retirement | `UNSAFE_QUARANTINE` |
-| `server.ts:17293` | GET | `/api/payments/geo-route/detect` | pre-handler 410 boundary | `LEGACY_REPLACE` |
-| `server.ts:17350` | POST | `/api/payments/geo-route/initiate` | pre-handler 410 boundary | `LEGACY_REPLACE` |
-| `server.ts:17620` | GET | `/api/admin/payments/overview` | verified JWT + persisted admin role | `UNSAFE_QUARANTINE` |
-| `server.ts:17669` | POST | `/api/admin/payments/escrow/release` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:17768` | POST | `/api/marketing/webhooks/meta-leads` | provider signature/HMAC | `LEGACY_REPLACE` |
-| `server.ts:17871` | GET | `*all` | public or handler-local only | `PUBLIC_INFRA` |
-| `server.ts:19076` | POST | `/api/marketing/track/view` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:19103` | POST | `/api/marketing/track/interaction` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
-| `server.ts:19115` | POST | `/api/marketing/pixel` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:882` | GET | `/api/health/live` | public or handler-local only | `PUBLIC_INFRA` |
+| `server.ts:926` | GET | `/privacy` | public or handler-local only | `PUBLIC_INFRA` |
+| `server.ts:927` | GET | `/terms-of-service` | public or handler-local only | `PUBLIC_INFRA` |
+| `server.ts:929` | GET | `/api/admin/integration-inspection` | verified JWT + persisted admin role | `UNSAFE_QUARANTINE` |
+| `server.ts:939` | GET | `/api/admin/metrics` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:947` | GET | `/api/admin/alerts` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:1122` | GET | `/api/stays/:slug/spatial-story` | public or handler-local only | `CANONICAL_TRANSITIONAL` |
+| `server.ts:1123` | GET | `/api/explore/:destination` | public or handler-local only | `CANONICAL_TRANSITIONAL` |
+| `server.ts:1130` | GET | `/api/webhooks/marketing/v2/meta` | provider challenge | `CANONICAL_TRANSITIONAL` |
+| `server.ts:1131` | POST | `/api/webhooks/marketing/v2/:provider` | provider signature/HMAC | `CANONICAL_TRANSITIONAL` |
+| `server.ts:1145` | ALL | `/api/webhooks/meta`, `/api/webhooks/ad-network` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:1160` | GET | `/api/health/ready` | public or handler-local only | `PUBLIC_INFRA` |
+| `server.ts:1161` | GET | `/api/encho/health` | public or handler-local only | `PUBLIC_INFRA` |
+| `server.ts:1171` | GET | `/api/config` | public or handler-local only | `UNRESOLVED_OWNER` |
+| `server.ts:1178` | GET | `/api/webhook/whatsapp` | public or handler-local only | `UNSAFE_QUARANTINE` |
+| `server.ts:1251` | POST | `/api/webhook/whatsapp` | provider signature/HMAC | `UNSAFE_QUARANTINE` |
+| `server.ts:2951` | GET | `/api` | public or handler-local only | `PUBLIC_INFRA` |
+| `server.ts:2979` | POST | `/api/auth/otp/send` | public authentication flow | `CORE_TRANSITIONAL` |
+| `server.ts:3020` | POST | `/api/auth/otp/verify` | public authentication flow | `CORE_TRANSITIONAL` |
+| `server.ts:3095` | POST | `/api/auth/register` | public authentication flow | `CORE_TRANSITIONAL` |
+| `server.ts:3136` | POST | `/api/auth/login` | public authentication flow | `CORE_TRANSITIONAL` |
+| `server.ts:3174` | POST | `/api/auth/google` | public authentication flow | `CORE_TRANSITIONAL` |
+| `server.ts:3214` | GET | `/api/auth/me` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
+| `server.ts:3231` | GET | `/api/admin/settings/experience-hosts` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:3243` | POST | `/api/admin/settings/experience-hosts` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:3255` | GET | `/api/admin/reviews` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:3277` | DELETE | `/api/admin/reviews/:id` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:3300` | GET | `/api/admin/offers` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:3311` | POST | `/api/admin/offers` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:3326` | DELETE | `/api/admin/offers/:id` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:3337` | GET | `/api/listings/:id/calendar` | public or handler-local only | `CORE_TRANSITIONAL` |
+| `server.ts:3354` | POST | `/api/listings/:id/calendar` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
+| `server.ts:3389` | GET | `/api/admin/users` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:3423` | DELETE | `/api/admin/users/:id` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:3435` | GET | `/api/keep-alive` | public or handler-local only | `UNRESOLVED_OWNER` |
+| `server.ts:3462` | GET | `/api/seo` | public or handler-local only | `UNRESOLVED_OWNER` |
+| `server.ts:3564` | GET | `/api/health/db` | public or handler-local only | `UNSAFE_QUARANTINE` |
+| `server.ts:3579` | POST | `/api/init-db` | verified JWT + persisted admin role | `UNSAFE_QUARANTINE` |
+| `server.ts:3601` | GET | `/api/image` | public or handler-local only | `UNSAFE_QUARANTINE` |
+| `server.ts:3674` | POST | `/api/marketing/assets/resize` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:3708` | PUT | `/api/mock-upload` | public or handler-local only | `UNSAFE_QUARANTINE` |
+| `server.ts:3713` | PUT | `/api/upload-local` | signed upload ticket + persisted session | `CORE_TRANSITIONAL` |
+| `server.ts:3726` | POST | `/api/upload-base64` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
+| `server.ts:3740` | POST | `/api/upload-video-url` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
+| `server.ts:3756` | GET | `/api/mux/upload/:uploadId` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
+| `server.ts:3773` | POST | `/api/upload-url` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
+| `server.ts:3809` | GET | `/api/admin/seo/:type/:id` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:3822` | PUT | `/api/admin/seo/:type/:id` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:3841` | PUT | `/api/listings/:id` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
+| `server.ts:4126` | PATCH | `/api/admin/listings/:id/status` | JWT middleware; handler-owned authorization | `CANONICAL_TRANSITIONAL` |
+| `server.ts:4167` | PUT | `/api/listings/:id/rooms` | JWT middleware; handler-owned authorization | `CANONICAL_TRANSITIONAL` |
+| `server.ts:4266` | PATCH | `/api/admin/media-assets/:id/moderation` | JWT middleware; handler-owned authorization | `CANONICAL_TRANSITIONAL` |
+| `server.ts:4350` | POST | `/api/admin/backfill/room-media-authority` | JWT middleware; handler-owned authorization | `CANONICAL_TRANSITIONAL` |
+| `server.ts:4546` | PUT | `/api/listings/:id/mode` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
+| `server.ts:4603` | GET | `/api/marketing/campaigns` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:4637` | GET | `/api/marketing/analytics` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:4695` | GET | `/api/marketing/campaigns/:id/control-center`, `/api/marketing/campaigns/:id/telemetry` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:4725` | GET | `/api/admin/marketing/campaigns/:id/control-center`, `/api/admin/campaigns/:id/control-center` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:4757` | GET | `/api/marketing/campaigns/:id/analytics` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:4826` | GET | `/api/marketing/campaigns/:id/analytics/performance` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:4853` | GET | `/api/marketing/campaigns/:id/analytics/funnel` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:4878` | GET | `/api/marketing/campaigns/:id/analytics/anomalies` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:4908` | GET | `/api/marketing/campaigns/:id/report/pdf` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:4939` | GET | `/api/admin/marketing/analytics/portfolio` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:4967` | POST | `/api/marketing/leads/webhook` | pre-handler 410 boundary | `UNSAFE_QUARANTINE` |
+| `server.ts:5005` | GET | `/api/marketing/leads` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:5030` | GET | `/api/marketing/leads/:id` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:5055` | PATCH | `/api/marketing/leads/:id/status` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:5084` | POST | `/api/marketing/leads/:id/message` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:5150` | POST | `/api/admin/marketing/leads/notifications/process` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:5167` | GET | `/api/admin/marketing/leads/health` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:5183` | POST | `/api/marketing/pre-flight-check` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:5237` | GET | `/api/marketing/campaigns/:id/preflight` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:5292` | POST | `/api/marketing/copilot` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:5461` | POST | `/api/marketing/campaigns` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:5528` | POST | `/api/telemetry/pixel-event` | pre-handler 410 boundary | `UNSAFE_QUARANTINE` |
+| `server.ts:5557` | POST | `/api/marketing/campaigns/:id/sync-pricing` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:5570` | GET | `/api/marketing/campaigns/:id/pricing-history` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:5584` | PUT | `/api/marketing/campaigns/:id` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:5760` | DELETE | `/api/marketing/campaigns/:id` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:5789` | GET | `/api/host/social-posts` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:5807` | POST | `/api/host/social-posts/generate-caption` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:5945` | POST | `/api/host/social-posts` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:6022` | POST | `/api/host/social-posts/:id/boost` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:6086` | DELETE | `/api/host/social-posts/:id` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:6105` | GET | `/api/admin/social-posts` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:6286` | POST | `/api/admin/social-posts/:id/approve` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:6301` | POST | `/api/admin/social-posts/:id/reject` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:6341` | GET | `/api/listings/:id/social-posts` | public or handler-local only | `CORE_TRANSITIONAL` |
+| `server.ts:6369` | POST | `/api/marketing/assets/upload` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:6389` | POST | `/api/marketing/social/publish` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:6426` | POST | `/api/marketing/campaigns/:id/ai-check` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:6640` | POST | `/api/marketing/campaigns/:id/sync-meta` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:6719` | GET | `/api/marketing/recommend-targeting` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:6806` | POST | `/api/marketing/grade-targeting` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:6897` | POST | `/api/marketing/ai-generate-copy` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:7094` | GET | `/api/marketing/campaigns/:id/leads` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:7316` | POST | `/api/marketing/leads/:leadId/convert-booking` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:7415` | POST | `/api/marketing/leads/:leadId/message` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:10786` | POST | `/api/payments/webhook` | provider signature/HMAC | `LEGACY_REPLACE` |
+| `server.ts:10978` | GET | `/api/webhooks/meta` | provider challenge | `LEGACY_REPLACE` |
+| `server.ts:11030` | POST | `/api/webhooks/meta` | provider signature/HMAC | `LEGACY_REPLACE` |
+| `server.ts:11054` | POST | `/api/webhooks/ad-network` | provider signature/HMAC | `LEGACY_REPLACE` |
+| `server.ts:11222` | POST | `/api/marketing/campaigns/:id/subscribe` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:11536` | GET | `/api/marketing/campaigns/:id/invoice` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:11613` | POST | `/api/marketing/campaigns/:id/pacing` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:11680` | GET | `/api/admin/marketing/campaigns/:id/traces` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:11700` | GET | `/api/admin/marketing/dashboard/stats` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:11766` | GET | `/api/admin/marketing/dlq` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:11787` | POST | `/api/admin/marketing/replay/:transactionId` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:11828` | GET | `/api/admin/marketing/health` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:11881` | POST | `/api/admin/marketing/kill-switch` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:11903` | GET | `/api/admin/marketing/transactions/:id/traces` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:11926` | POST | `/api/admin/marketing/dlq/resolve/:id` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:11946` | POST | `/api/admin/marketing/rollback/:metaId` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:11972` | GET | `/api/admin/marketing/transactions` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:11993` | GET | `/api/admin/marketing/campaigns` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:12028` | POST | `/api/admin/marketing/campaigns/:id/approve` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:12032` | POST | `/api/admin/marketing/campaigns/:id/resync-meta` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:12076` | POST | `/api/marketing/campaigns/:id/sync-telemetry` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:12095` | POST | `/api/marketing/campaigns/:id/sync-engagement` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:12114` | POST | `/api/admin/marketing/campaigns/:id/reject` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:12158` | POST | `/api/marketing/campaigns/:id/action-preview`, `/api/admin/marketing/campaigns/:id/action-preview`, `/api/admin/campaigns/:id/action-preview` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:12188` | POST | `/api/marketing/campaigns/:id/pause`, `/api/admin/marketing/campaigns/:id/pause`, `/api/admin/campaigns/:id/pause`, `/api/admin/marketing/campaigns/:id/pause-meta` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:12238` | POST | `/api/admin/marketing/campaigns/:id/emergency-pause`, `/api/admin/campaigns/:id/emergency-pause` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:12274` | POST | `/api/marketing/campaigns/:id/resume`, `/api/admin/marketing/campaigns/:id/resume`, `/api/admin/campaigns/:id/resume`, `/api/admin/marketing/campaigns/:id/resume-meta` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:12324` | POST | `/api/marketing/campaigns/:id/resync`, `/api/admin/marketing/campaigns/:id/resync`, `/api/admin/campaigns/:id/resync`, `/api/admin/marketing/campaigns/:id/resync-meta` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:12354` | POST | `/api/admin/marketing/campaigns/:id/reconcile`, `/api/admin/campaigns/:id/reconcile` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:12386` | POST | `/api/admin/marketing/campaigns/:id/objects/:objectType/:objectId/status`, `/api/admin/campaigns/:id/objects/:objectType/:objectId/status` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:12436` | POST | `/api/admin/marketing/campaigns/:id/kill-meta` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:12493` | POST | `/api/marketing/campaigns/:id/cancel` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:12536` | POST | `/api/admin/marketing/campaigns/:id/activate` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:12549` | POST | `/api/marketing/campaigns/:id/activate` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:12565` | GET | `/api/admin/audit-logs` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:12596` | POST | `/api/marketing/threads/:id/score-intent` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:12646` | GET | `/api/admin/outreach-leads` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:12666` | POST | `/api/admin/outreach-leads` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:12686` | PUT | `/api/admin/outreach-leads/:id` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:12725` | DELETE | `/api/admin/outreach-leads/:id` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:12742` | GET | `/api/listings/draft/:id` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
+| `server.ts:12753` | POST | `/api/listings/draft` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
+| `server.ts:12778` | POST | `/api/admin/listings/draft/:id/approve` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
+| `server.ts:13000` | POST | `/api/listings` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
+| `server.ts:13160` | GET | `/api/wishlist` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:13161` | GET | `/api/wishlists` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:13208` | POST | `/api/wishlists` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:13233` | DELETE | `/api/wishlists/:listingId` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:13257` | GET | `/api/experience-wishlists` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:13274` | POST | `/api/experience-wishlists` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:13299` | DELETE | `/api/experience-wishlists/:experienceId` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:13318` | GET | `/api/listings/:id/can-review` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
+| `server.ts:13339` | GET | `/api/listings/:id/reviews` | public or handler-local only | `CORE_TRANSITIONAL` |
+| `server.ts:13356` | POST | `/api/listings/:id/reviews` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
+| `server.ts:13383` | GET | `/api/v2/stays/:propertySlug` | public projection | `CANONICAL_TRANSITIONAL` |
+| `server.ts:13470` | POST | `/api/v2/stays/holds` | public or handler-local only | `CANONICAL_TRANSITIONAL` |
+| `server.ts:13548` | POST | `/api/v2/stays/holds/:id/release` | public or handler-local only | `CANONICAL_TRANSITIONAL` |
+| `server.ts:13600` | GET | `/api/v2/stays/holds/config` | public or handler-local only | `CANONICAL_TRANSITIONAL` |
+| `server.ts:13609` | GET | `/listing/:id`, `/listings/:id` | public or handler-local only | `UNRESOLVED_OWNER` |
+| `server.ts:13638` | GET | `/api/listings/:id` | public or handler-local only | `CORE_TRANSITIONAL` |
+| `server.ts:13735` | GET | `/api/listings` | public or handler-local only | `CORE_TRANSITIONAL` |
+| `server.ts:14038` | GET | `/api/host/reservations` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:14122` | PUT | `/api/host/reservations/:id/status` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:14228` | POST | `/api/messages` | JWT middleware; 503 canonical conversation boundary | `LEGACY_REPLACE` |
+| `server.ts:14292` | DELETE | `/api/listings/:id` | JWT middleware; handler-owned authorization | `CORE_TRANSITIONAL` |
+| `server.ts:14322` | GET | `/api/admin/metrics` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:14421` | GET | `/api/admin/threads` | JWT middleware; 403 scoped staff boundary | `LEGACY_REPLACE` |
+| `server.ts:14459` | DELETE | `/api/admin/messages/:id` | JWT middleware; 403 scoped staff boundary | `LEGACY_REPLACE` |
+| `server.ts:14470` | GET | `/api/admin/threads/:id/messages` | JWT middleware; 403 scoped staff boundary | `LEGACY_REPLACE` |
+| `server.ts:14487` | POST | `/api/ai/suggest-price` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:14539` | POST | `/api/ai/suggest-reply` | JWT middleware; 503 grounded-assistance boundary | `UNRESOLVED_OWNER` |
+| `server.ts:14580` | POST | `/api/ai/suggest-listing` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:14630` | POST | `/api/ai/curate-rules` | JWT middleware; 503 grounded-assistance boundary | `UNSAFE_QUARANTINE` |
+| `server.ts:14678` | POST | `/api/ai/radar-scan` | JWT middleware; 503 grounded-assistance boundary | `UNSAFE_QUARANTINE` |
+| `server.ts:14848` | POST | `/api/ai/suggest-sensory-tags` | JWT middleware; 503 grounded-assistance boundary | `UNSAFE_QUARANTINE` |
+| `server.ts:14932` | POST | `/api/ai/evaluate-listing` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:15028` | POST | `/api/ai/nearby-pois` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:15075` | POST | `/api/leads/soft-exit` | public or handler-local only | `UNSAFE_QUARANTINE` |
+| `server.ts:15107` | GET | `/api/host/soft-leads` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:15127` | PUT | `/api/user/profile` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:15145` | GET | `/api/user/bookings` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:15213` | PUT | `/api/user/bookings/:id/cancel` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:15259` | POST | `/api/bookings` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:15568` | GET | `/api/settings/whatsapp` | public or handler-local only | `UNRESOLVED_OWNER` |
+| `server.ts:15585` | POST | `/api/settings/whatsapp` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:15602` | GET | `/api/settings/experiences_page` | public or handler-local only | `UNRESOLVED_OWNER` |
+| `server.ts:15625` | POST | `/api/settings/experiences_page` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:15646` | GET | `/api/settings/call` | public or handler-local only | `UNRESOLVED_OWNER` |
+| `server.ts:15663` | POST | `/api/settings/call` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:15680` | GET | `/api/settings/demo_properties` | public or handler-local only | `UNRESOLVED_OWNER` |
+| `server.ts:15698` | POST | `/api/settings/demo_properties` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:15810` | GET | `/api/seed-ajith` | verified JWT + persisted admin role + explicit development fixture gate | `UNSAFE_QUARANTINE` |
+| `server.ts:15864` | GET | `/api/experiences` | public or handler-local only | `UNRESOLVED_OWNER` |
+| `server.ts:15918` | POST | `/api/experiences/seed` | verified JWT + persisted admin role + explicit development fixture gate | `UNSAFE_QUARANTINE` |
+| `server.ts:16005` | POST | `/api/experiences` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:16036` | PUT | `/api/experiences/:id` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:16080` | DELETE | `/api/experiences/:id` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:16113` | GET | `/api/experiences/:id/reviews` | public or handler-local only | `UNRESOLVED_OWNER` |
+| `server.ts:16136` | GET | `/api/experiences/:id/reviews/eligible` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:16152` | POST | `/api/experiences/:id/reviews` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:16189` | GET | `/api/experiences/:id/videos` | public or handler-local only | `UNRESOLVED_OWNER` |
+| `server.ts:16208` | POST | `/api/experiences/:id/videos` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:16234` | POST | `/api/experiences/videos/:id/like` | public or handler-local only | `UNSAFE_QUARANTINE` |
+| `server.ts:16254` | GET | `/api/experiences/:id/lobby/participants` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:16295` | GET | `/api/experiences/:id/lobby/messages` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:16336` | POST | `/api/experiences/:id/lobby/messages` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:16387` | POST | `/api/experience-bookings` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:16434` | GET | `/api/experience-bookings` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:16451` | PUT | `/api/user/experience-bookings/:id/cancel` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:16492` | GET | `/api/admin/experience-bookings` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:16512` | GET | `/api/settings/payment_rates` | public or handler-local only | `UNRESOLVED_OWNER` |
+| `server.ts:16530` | POST | `/api/settings/payment_rates` | JWT middleware; handler-owned authorization | `UNRESOLVED_OWNER` |
+| `server.ts:16554` | POST | `/api/create-payment-intent` | JWT middleware; 410 retirement | `LEGACY_REPLACE` |
+| `server.ts:16631` | GET | `/api/marketing/ledger` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:16660` | GET | `/api/marketing/admin/ledgers` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:16722` | GET | `/api/marketing/wallet` | JWT middleware; handler-owned authorization | `LEGACY_REPLACE` |
+| `server.ts:16783` | POST | `/api/marketing/meta/webhooks`, `/api/meta-webhooks` | provider signature/HMAC | `LEGACY_REPLACE` |
+| `server.ts:16882` | POST | `/api/marketing/wallet/refuel` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:16992` | POST | `/api/marketing/simulate-webhook` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:17043` | POST | `/api/checkout/razorpay/order` | optional verified JWT; production checkout blocked | `LEGACY_REPLACE` |
+| `server.ts:17209` | POST | `/api/payments/razorpay/verify` | JWT middleware; production 410 retirement | `UNSAFE_QUARANTINE` |
+| `server.ts:17406` | GET | `/api/payments/geo-route/detect` | pre-handler 410 boundary | `LEGACY_REPLACE` |
+| `server.ts:17463` | POST | `/api/payments/geo-route/initiate` | pre-handler 410 boundary | `LEGACY_REPLACE` |
+| `server.ts:17733` | GET | `/api/admin/payments/overview` | verified JWT + persisted admin role | `UNSAFE_QUARANTINE` |
+| `server.ts:17782` | POST | `/api/admin/payments/escrow/release` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:17881` | POST | `/api/marketing/webhooks/meta-leads` | provider signature/HMAC | `LEGACY_REPLACE` |
+| `server.ts:17984` | GET | `*all` | public or handler-local only | `PUBLIC_INFRA` |
+| `server.ts:19189` | POST | `/api/marketing/track/view` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:19216` | POST | `/api/marketing/track/interaction` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
+| `server.ts:19228` | POST | `/api/marketing/pixel` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
 | `src/server/admin/workforceRouter.ts:69` | GET | `/api/admin/workforce/overview` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
 | `src/server/admin/workforceRouter.ts:82` | GET | `/api/admin/workforce/roster` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
 | `src/server/admin/workforceRouter.ts:104` | POST | `/api/admin/workforce/hire` | pre-handler 410 boundary | `LEGACY_BLOCKED_410` |
@@ -557,16 +562,16 @@ Every syntactic route declaration in the counted files appears exactly once belo
 | `src/server/calendar.ts:169` | POST | `/api/listings/:id/room-calendar/block` | JWT + resource scope | `CANONICAL_MODULAR` |
 | `src/server/calendar.ts:170` | DELETE | `/api/listings/:id/room-calendar/block/:blockId` | JWT + resource scope | `CANONICAL_MODULAR` |
 | `src/server/calendar.ts:171` | GET | `/api/listings/:id/availability` | public projection | `CANONICAL_MODULAR` |
-| `src/server/conversations/notificationRouter.ts:30` | GET | `/notifications/preferences` | NOT MOUNTED; participant checks declared only | `UNMOUNTED_DECLARATION` |
-| `src/server/conversations/notificationRouter.ts:31` | PUT | `/notifications/preferences` | NOT MOUNTED; participant checks declared only | `UNMOUNTED_DECLARATION` |
-| `src/server/conversations/notificationRouter.ts:35` | GET | `/notifications/evidence` | NOT MOUNTED; participant checks declared only | `UNMOUNTED_DECLARATION` |
-| `src/server/conversations/router.ts:44` | GET | `/api/messages/:bookingId` | JWT + canonical participant scope | `CANONICAL_MODULAR` |
-| `src/server/conversations/router.ts:45` | GET | `/api/threads` | JWT + canonical participant scope | `CANONICAL_MODULAR` |
-| `src/server/conversations/router.ts:46` | GET | `/api/unread-counts` | JWT + canonical participant scope | `CANONICAL_MODULAR` |
-| `src/server/conversations/router.ts:47` | POST | `/api/threads` | JWT + canonical participant scope | `CANONICAL_MODULAR` |
-| `src/server/conversations/router.ts:48` | GET | `/api/threads/:id/messages` | JWT + canonical participant scope | `CANONICAL_MODULAR` |
-| `src/server/conversations/router.ts:49` | POST | `/api/threads/:id/read` | JWT + canonical participant scope | `CANONICAL_MODULAR` |
-| `src/server/conversations/router.ts:50` | POST | `/api/threads/:id/messages` | JWT + canonical participant scope | `CANONICAL_MODULAR` |
+| `src/server/conversations/notificationRouter.ts:30` | GET | `/api/conversations/v1/notifications/preferences` | JWT + restricted participant notification role | `CANONICAL_MODULAR` |
+| `src/server/conversations/notificationRouter.ts:31` | PUT | `/api/conversations/v1/notifications/preferences` | JWT + restricted participant notification role | `CANONICAL_MODULAR` |
+| `src/server/conversations/notificationRouter.ts:35` | GET | `/api/conversations/v1/notifications/evidence` | JWT + restricted participant notification role | `CANONICAL_MODULAR` |
+| `src/server/conversations/router.ts:41` | GET | `/api/messages/:bookingId` | JWT + canonical participant scope | `CANONICAL_MODULAR` |
+| `src/server/conversations/router.ts:42` | GET | `/api/threads` | JWT + canonical participant scope | `CANONICAL_MODULAR` |
+| `src/server/conversations/router.ts:43` | GET | `/api/unread-counts` | JWT + canonical participant scope | `CANONICAL_MODULAR` |
+| `src/server/conversations/router.ts:44` | POST | `/api/threads` | JWT + canonical participant scope | `CANONICAL_MODULAR` |
+| `src/server/conversations/router.ts:45` | GET | `/api/threads/:id/messages` | JWT + canonical participant scope | `CANONICAL_MODULAR` |
+| `src/server/conversations/router.ts:46` | POST | `/api/threads/:id/read` | JWT + canonical participant scope | `CANONICAL_MODULAR` |
+| `src/server/conversations/router.ts:47` | POST | `/api/threads/:id/messages` | JWT + canonical participant scope | `CANONICAL_MODULAR` |
 | `src/server/conversations/serviceRouter.ts:22` | GET | `/api/conversations/v1/threads/:id/assistance` | JWT + canonical participant scope | `CANONICAL_MODULAR` |
 | `src/server/conversations/serviceRouter.ts:23` | POST | `/api/conversations/v1/cases` | JWT + canonical participant scope | `CANONICAL_MODULAR` |
 | `src/server/conversations/serviceRouter.ts:24` | POST | `/api/conversations/v1/cases/:id/withdraw` | JWT + canonical participant scope | `CANONICAL_MODULAR` |
@@ -657,7 +662,8 @@ Every syntactic route declaration in the counted files appears exactly once belo
 | `src/server/operations/router.ts:48` | POST | `/api/operations/v1/assignments/:id/actions` | fixed-origin JSON + opaque staff session + fenced assignment | `CANONICAL_MODULAR` |
 | `src/server/operations/router.ts:75` | GET | `/api/operations/v1/workforce` | opaque workforce session + scoped projection | `CANONICAL_MODULAR` |
 | `src/server/operations/sessionRouter.ts:35` | POST | `/api/operations/v1/session/begin`, `/api/operations/v1/session/complete`, `/api/operations/v1/session/logout` | fixed-origin JSON + isolated workforce identity flow | `CANONICAL_MODULAR` |
-| `src/server/operations/workforceCommandRouter.ts:15` | POST | `/api/operations/v1/workforce/commands/` | isolated workforce session + command-bound scoped IAM | `CANONICAL_MODULAR` |
+| `src/server/operations/workforceCommandRouter.ts:19` | POST | `/api/operations/v1/workforce/commands/` | isolated workforce session + command-bound scoped IAM | `CANONICAL_MODULAR` |
+| `src/server/operations/workforceFactorRouter.ts:17` | POST | `/api/operations/v1/workforce/factor/` | fixed-origin JSON + opaque staff session + bound factor | `CANONICAL_MODULAR` |
 
 ## Appendix B — Runtime table creation ledger
 
@@ -665,68 +671,68 @@ Creation anchors are source evidence; RLS labels describe migration/runtime decl
 
 | Table | Creation source(s) | Source RLS |
 |---|---|---|
-| `admin_audit_logs` | `server.ts:2301` | No source RLS declaration |
-| `async_webhook_queue` | `server.ts:1975` | No source RLS declaration |
-| `bookings` | `server.ts:1404` | ENABLE only |
-| `calendar_prices` | `server.ts:1607` | No source RLS declaration |
-| `campaign_creative_variants` | `server.ts:2479` | No source RLS declaration |
-| `campaign_daily_rollups` | `server.ts:2163` | No source RLS declaration |
-| `campaign_financial_contracts` | `server.ts:2317` | No source RLS declaration |
-| `campaign_metrics` | `server.ts:2138` | No source RLS declaration |
-| `campaign_raw_event_logs` | `server.ts:2152` | No source RLS declaration |
-| `dco_evaluation_transactions` | `server.ts:2546` | No source RLS declaration |
-| `dco_external_actions` | `server.ts:2578` | No source RLS declaration |
+| `admin_audit_logs` | `server.ts:2362` | No source RLS declaration |
+| `async_webhook_queue` | `server.ts:2036` | No source RLS declaration |
+| `bookings` | `server.ts:1465` | ENABLE only |
+| `calendar_prices` | `server.ts:1668` | No source RLS declaration |
+| `campaign_creative_variants` | `server.ts:2540` | No source RLS declaration |
+| `campaign_daily_rollups` | `server.ts:2224` | No source RLS declaration |
+| `campaign_financial_contracts` | `server.ts:2378` | No source RLS declaration |
+| `campaign_metrics` | `server.ts:2199` | No source RLS declaration |
+| `campaign_raw_event_logs` | `server.ts:2213` | No source RLS declaration |
+| `dco_evaluation_transactions` | `server.ts:2607` | No source RLS declaration |
+| `dco_external_actions` | `server.ts:2639` | No source RLS declaration |
 | `encho_distributed_worker_locks` | `src/lib/distributedLock.ts:39` | No source RLS declaration |
-| `experience_bookings` | `server.ts:1425`, `server.ts:1635`, `server.ts:17025`, `server.ts:18026`, `server.ts:2861` | ENABLE only |
-| `experience_messages` | `server.ts:1682` | No source RLS declaration |
-| `experience_reviews` | `server.ts:1657` | No source RLS declaration |
-| `experience_videos` | `server.ts:1668` | No source RLS declaration |
-| `experience_wishlists` | `server.ts:1551` | No source RLS declaration |
-| `experiences` | `server.ts:1465`, `server.ts:17995`, `server.ts:2837` | No source RLS declaration |
-| `host_marketing_campaigns` | `server.ts:1797` | ENABLE only |
-| `host_meta_identities` | `server.ts:2391` | No source RLS declaration |
-| `host_outreach_leads` | `server.ts:1916`, `server.ts:1998` | FORCE via migration |
-| `host_social_posts` | `server.ts:2356` | ENABLE only |
-| `host_wallets` | `server.ts:2062` | ENABLE only |
-| `inbound_webhooks` | `server.ts:1957` | No source RLS declaration |
-| `lead_inquiries` | `server.ts:1815` | No source RLS declaration |
-| `lead_lifecycle_events` | `server.ts:2649` | No source RLS declaration |
-| `lead_notification_intents` | `server.ts:2666` | No source RLS declaration |
-| `lead_security_audit_logs` | `server.ts:2690` | No source RLS declaration |
-| `ledger_entries` | `server.ts:2102` | No source RLS declaration |
-| `ledger_lines` | `server.ts:2112` | No source RLS declaration |
+| `experience_bookings` | `server.ts:1486`, `server.ts:1696`, `server.ts:2922`, `server.ts:17138`, `server.ts:18139` | ENABLE only |
+| `experience_messages` | `server.ts:1743` | No source RLS declaration |
+| `experience_reviews` | `server.ts:1718` | No source RLS declaration |
+| `experience_videos` | `server.ts:1729` | No source RLS declaration |
+| `experience_wishlists` | `server.ts:1612` | No source RLS declaration |
+| `experiences` | `server.ts:1526`, `server.ts:2898`, `server.ts:18108` | No source RLS declaration |
+| `host_marketing_campaigns` | `server.ts:1858` | ENABLE only |
+| `host_meta_identities` | `server.ts:2452` | No source RLS declaration |
+| `host_outreach_leads` | `server.ts:1977`, `server.ts:2059` | FORCE via migration |
+| `host_social_posts` | `server.ts:2417` | ENABLE only |
+| `host_wallets` | `server.ts:2123` | ENABLE only |
+| `inbound_webhooks` | `server.ts:2018` | No source RLS declaration |
+| `lead_inquiries` | `server.ts:1876` | No source RLS declaration |
+| `lead_lifecycle_events` | `server.ts:2710` | No source RLS declaration |
+| `lead_notification_intents` | `server.ts:2727` | No source RLS declaration |
+| `lead_security_audit_logs` | `server.ts:2751` | No source RLS declaration |
+| `ledger_entries` | `server.ts:2163` | No source RLS declaration |
+| `ledger_lines` | `server.ts:2173` | No source RLS declaration |
 | `listing_pricing_sync_events` | `src/lib/dynamicPricingSyncService.ts:89` | No source RLS declaration |
-| `listings` | `server.ts:1273` | No source RLS declaration |
-| `listings_drafts` | `server.ts:1296` | No source RLS declaration |
-| `messages` | `server.ts:1445` | FORCE via migration 037 |
-| `meta_api_traces` | `server.ts:2239` | No source RLS declaration |
-| `meta_external_truth` | `server.ts:2343` | No source RLS declaration |
-| `meta_publishing_dlq` | `server.ts:2283` | No source RLS declaration |
-| `meta_publishing_events` | `server.ts:2219` | No source RLS declaration |
-| `meta_publishing_transactions` | `server.ts:2189` | No source RLS declaration |
-| `meta_reconciliation_incidents` | `server.ts:18530` | No source RLS declaration |
-| `offers` | `server.ts:1577` | No source RLS declaration |
-| `operation_idempotency_keys` | `server.ts:2333` | No source RLS declaration |
-| `processed_payments` | `server.ts:17147`, `server.ts:1936` | No source RLS declaration |
-| `processed_webhook_events` | `server.ts:1907` | No source RLS declaration |
-| `provider_entities` | `server.ts:2738` | No source RLS declaration |
-| `provider_publishing_transactions` | `server.ts:2757` | No source RLS declaration |
-| `retargeting_pixel_events` | `server.ts:19081`, `server.ts:19123` | No source RLS declaration |
-| `reviews` | `server.ts:1596` | No source RLS declaration |
-| `room_calendar_blocks` | `server.ts:1306` | No source RLS declaration |
-| `seo_configurations` | `server.ts:1766` | No source RLS declaration |
-| `settings` | `server.ts:1457` | No source RLS declaration |
-| `soft_exit_leads` | `server.ts:1828` | No source RLS declaration |
-| `threads` | `server.ts:1524` | FORCE via migration 037 |
-| `users` | `server.ts:1226` | No source RLS declaration |
-| `variant_daily_rollups` | `server.ts:2625` | No source RLS declaration |
-| `variant_meta_snapshots` | `server.ts:2526` | No source RLS declaration |
-| `variant_raw_event_logs` | `server.ts:2594` | No source RLS declaration |
+| `listings` | `server.ts:1334` | No source RLS declaration |
+| `listings_drafts` | `server.ts:1357` | No source RLS declaration |
+| `messages` | `server.ts:1506` | FORCE via migration 037 |
+| `meta_api_traces` | `server.ts:2300` | No source RLS declaration |
+| `meta_external_truth` | `server.ts:2404` | No source RLS declaration |
+| `meta_publishing_dlq` | `server.ts:2344` | No source RLS declaration |
+| `meta_publishing_events` | `server.ts:2280` | No source RLS declaration |
+| `meta_publishing_transactions` | `server.ts:2250` | No source RLS declaration |
+| `meta_reconciliation_incidents` | `server.ts:18643` | No source RLS declaration |
+| `offers` | `server.ts:1638` | No source RLS declaration |
+| `operation_idempotency_keys` | `server.ts:2394` | No source RLS declaration |
+| `processed_payments` | `server.ts:1997`, `server.ts:17260` | No source RLS declaration |
+| `processed_webhook_events` | `server.ts:1968` | No source RLS declaration |
+| `provider_entities` | `server.ts:2799` | No source RLS declaration |
+| `provider_publishing_transactions` | `server.ts:2818` | No source RLS declaration |
+| `retargeting_pixel_events` | `server.ts:19194`, `server.ts:19236` | No source RLS declaration |
+| `reviews` | `server.ts:1657` | No source RLS declaration |
+| `room_calendar_blocks` | `server.ts:1367` | No source RLS declaration |
+| `seo_configurations` | `server.ts:1827` | No source RLS declaration |
+| `settings` | `server.ts:1518` | No source RLS declaration |
+| `soft_exit_leads` | `server.ts:1889` | No source RLS declaration |
+| `threads` | `server.ts:1585` | FORCE via migration 037 |
+| `users` | `server.ts:1287` | No source RLS declaration |
+| `variant_daily_rollups` | `server.ts:2686` | No source RLS declaration |
+| `variant_meta_snapshots` | `server.ts:2587` | No source RLS declaration |
+| `variant_raw_event_logs` | `server.ts:2655` | No source RLS declaration |
 | `visitor_pixel_events` | `src/lib/retargetingPixelService.ts:73` | No source RLS declaration |
-| `wallet_accounts` | `server.ts:2091` | No source RLS declaration |
-| `wallet_transactions` | `server.ts:2074` | ENABLE only |
-| `webhook_dlq` | `server.ts:2124` | No source RLS declaration |
-| `wishlists` | `server.ts:1586` | No source RLS declaration |
+| `wallet_accounts` | `server.ts:2152` | No source RLS declaration |
+| `wallet_transactions` | `server.ts:2135` | ENABLE only |
+| `webhook_dlq` | `server.ts:2185` | No source RLS declaration |
+| `wishlists` | `server.ts:1647` | No source RLS declaration |
 
 ## Appendix C — Validation record
 
@@ -737,8 +743,8 @@ node scripts/cr1/verify-inventory.mjs
 git diff --check -- docs/implementation/CR1_P0_ROUTE_SCHEMA_INVENTORY.md scripts/cr1/verify-inventory.mjs
 ```
 
-<!-- CR1_INVENTORY_COUNTS {"declarations":346,"expandedPaths":369,"migrationFiles":39,"migrationTables":124,"runtimeTables":62,"overlappingTables":0,"totalTables":186} -->
+<!-- CR1_INVENTORY_COUNTS {"declarations":347,"expandedPaths":370,"migrationFiles":39,"migrationTables":124,"runtimeTables":62,"overlappingTables":0,"totalTables":186} -->
 
 The validator compares every ledger method, expanded path and line anchor to AST-derived declarations; rejects missing/phantom routes and newly untracked route-owner files/factories; expands generated action loops; validates mounted factory prefixes, including two different prefixes in `serviceRouter.ts`; verifies every runtime table source anchor, migration table ledger, source-distribution summary and declared guard/disposition totals. Four focused parser checks pass via `node --test scripts/cr1/verify-inventory.test.mjs`. Guard/disposition counts validate internal ledger consistency, not handler semantics. Table totals are source creation declarations, excluding runner-owned `schema_migrations`; they do not prove an actual deployed catalog. RLS semantics and individual handler authorization require separate tests.
 
-Local structural revalidation on 28 September 2026: **PASS** — 346 declarations, 369 expanded paths, 124 migration-created tables, 62 runtime-created tables, zero overlapping creation authorities and 186 table names. This is a structural inventory, not semantic or deployment acceptance.
+Local structural revalidation on 30 September 2026: **PASS** — 347 declarations, 370 expanded paths, 124 migration-created tables, 62 runtime-created tables, zero overlapping creation authorities and 186 table names. This is a structural inventory, not semantic or deployment acceptance.

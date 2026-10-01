@@ -26,6 +26,22 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MediaBudgetMeter } from '../../../components/marketing/StudioShared.js';
 import { ProviderReportPending } from '../../lib/providers/reporting.js';
 
+// The mounted AuthProvider performs account-switch cleanup. Keep that storage
+// operation executable in this Node route/UI test instead of letting it reject
+// asynchronously because Node has no browser IndexedDB implementation.
+const offlineStore = vi.hoisted(() => new Map<IDBValidKey, unknown>());
+vi.mock('idb-keyval', () => ({
+  get: vi.fn(async (key: IDBValidKey) => offlineStore.get(key)),
+  set: vi.fn(async (key: IDBValidKey, value: unknown) => { offlineStore.set(key, value); }),
+  del: vi.fn(async (key: IDBValidKey) => { offlineStore.delete(key); }),
+  keys: vi.fn(async () => [...offlineStore.keys()]),
+  update: vi.fn(async (key: IDBValidKey, updater: (current: unknown) => unknown) => {
+    const next = updater(offlineStore.get(key));
+    if (next === undefined) offlineStore.delete(key);
+    else offlineStore.set(key, next);
+  }),
+}));
+
 /** Real router + PostgreSQL contracts; only auth, image/AI and checkout transports are injected.
  * No server startup, dotenv, external database, provider mutation or live payment is imported.
  */
@@ -41,6 +57,7 @@ describe('HARVO host/admin HTTP contracts against isolated PostgreSQL', () => {
   beforeAll(async () => { fixture = await createWorkflowPgFixture();await fixture.pool.query('ALTER TABLE listings ADD COLUMN amenities JSONB; ALTER TABLE room_types ADD COLUMN name TEXT,ADD COLUMN description TEXT,ADD COLUMN amenities JSONB');for(const file of ['012_harvo_marketing_settlement.sql','014_harvo_marketing_request_limits.sql','023_marketing_product_facts.sql','024_marketing_keyword_research.sql','026_search_portfolio_shadow.sql'])await fixture.pool.query(readFileSync(new URL(`../../migrations/${file}`,import.meta.url),'utf8')); });
   afterAll(async () => { await fixture?.close(); });
   beforeEach(async () => {
+    offlineStore.clear();
     await fixture.reset(); checkout.mockClear();
     generate.mockReset().mockResolvedValue(JSON.stringify({ score: 9, verdict: 'PASS', notes: ['Isolated fixture review of selected media and property copy.'], suggestions: [] }));
     await new MarketingFinanceService(fixture.pool, { actorContext: { id: 90, role: 'admin' } }).persistPolicy(workflowPolicy, 90);
@@ -1573,4 +1590,338 @@ describe('HARVO host/admin HTTP contracts against isolated PostgreSQL', () => {
     expect(missingProjection.metrics.spendMinor).toBeNull();
     expect(missingProjection.metrics).not.toHaveProperty('accountId');
   });
+  it('connects real MarketingEngine TELEMETRY persistence -> PostgreSQL -> authenticated /workspace route -> mounted CampaignStudio consumption', async () => {
+    // 1. Setup inventory & room types to satisfy protection invariants
+    await fixture.pool.query("INSERT INTO room_types(id, listing_id, currency, name, description) VALUES(201, 20, 'INR', 'Connected Suite', 'Connected Suite Room') ON CONFLICT DO NOTHING");
+    await fixture.pool.query("INSERT INTO inventory_days(listing_id, room_type_id, calendar_date, total_units) SELECT 20, 201, d::date, 5 FROM generate_series('2026-09-01'::date, '2026-11-30'::date, interval '1 day') d ON CONFLICT DO NOTHING");
+
+    await fixture.pool.query("INSERT INTO room_types(id, listing_id, currency, name, description) VALUES(202, 21, 'INR', 'Other Suite', 'Other Suite Room') ON CONFLICT DO NOTHING");
+    await fixture.pool.query("INSERT INTO inventory_days(listing_id, room_type_id, calendar_date, total_units) SELECT 21, 202, d::date, 5 FROM generate_series('2026-09-01'::date, '2026-11-30'::date, interval '1 day') d ON CONFLICT DO NOTHING");
+
+    // 2. Setup 4 campaigns for Host 10 and 1 campaign for Host 11
+    // Flight 1: Active flight with fresh spend (45000 / 100000 = 45.0%)
+    const cActive = await created({
+      title: 'Active Fresh Flight',
+      startDate: '2026-09-01',
+      endDate: '2026-10-15',
+      stayStartDate: '2026-10-01',
+      stayEndDate: '2026-10-05',
+      mediaBudgetMinor: '100000',
+    }, 'conn-active-intent');
+
+    // Flight 2: Stale flight with retained spend on refresh error (30000 / 100000 = 30.0%)
+    const cStale = await created({
+      title: 'Stale Retained Flight',
+      startDate: '2026-09-01',
+      endDate: '2026-10-15',
+      stayStartDate: '2026-10-01',
+      stayEndDate: '2026-10-05',
+      mediaBudgetMinor: '100000',
+    }, 'conn-stale-intent');
+
+    // Flight 3: Unstarted future flight
+    const cFuture = await created({
+      title: 'Future Unstarted Flight',
+      startDate: '2026-11-01',
+      endDate: '2026-11-20',
+      stayStartDate: '2026-11-05',
+      stayEndDate: '2026-11-10',
+      mediaBudgetMinor: '100000',
+    }, 'conn-future-intent');
+
+    // Flight 4: Flight with incompatible revision mismatch
+    const cMismatch = await created({
+      title: 'Mismatch Flight',
+      startDate: '2026-09-01',
+      endDate: '2026-10-15',
+      stayStartDate: '2026-10-01',
+      stayEndDate: '2026-10-05',
+      mediaBudgetMinor: '100000',
+    }, 'conn-mismatch-intent');
+
+    // Flight B: Host 11 campaign on listing 21
+    const resHostBCreated = await post('/campaigns', workflowDraft({
+      listingId: 21,
+      mediaIds: ['101'],
+      title: 'Host B Private Flight',
+      startDate: '2026-09-01',
+      endDate: '2026-10-15',
+      stayStartDate: '2026-10-01',
+      stayEndDate: '2026-10-05',
+      mediaBudgetMinor: '50000',
+    }), 11, 'conn-hostb-intent').expect(201);
+    const cHostB = resHostBCreated.body;
+
+    // Transition workflows to LIVE
+    await fixture.pool.query("UPDATE marketing_campaign_workflows SET state='LIVE',provider_truth=$2 WHERE campaign_id=$1",
+      [cActive.id, JSON.stringify({ externalCampaignId: 'ext-conn-act', configuredStatus: 'ACTIVE', observedStatus: 'ACTIVE', observedAt: new Date().toISOString(), deliveryConfirmed: true, readiness: 'ELIGIBLE' })]);
+    await fixture.pool.query("INSERT INTO provider_entities(campaign_id,provider,entity_type,external_id,account_id) VALUES($1,'META','CAMPAIGN',$2,$3)",
+      [cActive.id, 'ext-conn-act', 'act_conn_100']);
+
+    await fixture.pool.query("UPDATE marketing_campaign_workflows SET state='LIVE',provider_truth=$2 WHERE campaign_id=$1",
+      [cStale.id, JSON.stringify({ externalCampaignId: 'ext-conn-stale', configuredStatus: 'ACTIVE', observedStatus: 'ACTIVE', observedAt: new Date().toISOString(), deliveryConfirmed: true, readiness: 'ELIGIBLE' })]);
+    await fixture.pool.query("INSERT INTO provider_entities(campaign_id,provider,entity_type,external_id,account_id) VALUES($1,'META','CAMPAIGN',$2,$3)",
+      [cStale.id, 'ext-conn-stale', 'act_conn_200']);
+
+    await fixture.pool.query("UPDATE marketing_campaign_workflows SET state='LIVE',provider_truth=$2 WHERE campaign_id=$1",
+      [cFuture.id, JSON.stringify({ externalCampaignId: 'ext-conn-fut', configuredStatus: 'ACTIVE', observedStatus: 'ACTIVE', observedAt: new Date().toISOString(), deliveryConfirmed: true, readiness: 'ELIGIBLE' })]);
+    await fixture.pool.query("INSERT INTO provider_entities(campaign_id,provider,entity_type,external_id,account_id) VALUES($1,'META','CAMPAIGN',$2,$3)",
+      [cFuture.id, 'ext-conn-fut', 'act_conn_300']);
+
+    await fixture.pool.query("UPDATE marketing_campaign_workflows SET state='LIVE',provider_truth=$2 WHERE campaign_id=$1",
+      [cMismatch.id, JSON.stringify({ externalCampaignId: 'ext-conn-mis', configuredStatus: 'ACTIVE', observedStatus: 'ACTIVE', observedAt: new Date().toISOString(), deliveryConfirmed: true, readiness: 'ELIGIBLE' })]);
+
+    await fixture.pool.query("UPDATE marketing_campaign_workflows SET state='LIVE',provider_truth=$2 WHERE campaign_id=$1",
+      [cHostB.id, JSON.stringify({ externalCampaignId: 'ext-conn-hb', configuredStatus: 'ACTIVE', observedStatus: 'ACTIVE', observedAt: new Date().toISOString(), deliveryConfirmed: true, readiness: 'ELIGIBLE' })]);
+
+    // 3. Execute real MarketingEngine TELEMETRY jobs persisting into PostgreSQL
+    let staleRefreshFail = false;
+    const mockConnectedProvider = {
+      fetchAuthoritativeDeliveryTruth: vi.fn(async (extId: string) => ({
+        provider: 'META',
+        externalCampaignId: extId,
+        normalizedState: 'LIVE',
+        rawStatus: 'ACTIVE',
+        rawEffectiveStatus: 'ACTIVE',
+        isLive: true,
+        isServingImpressions: true,
+        lastObservedAt: new Date().toISOString(),
+        reconciliationRequired: false,
+        readiness: 'ELIGIBLE',
+      })),
+      getServingAccountReportingCalendar: vi.fn(async (extId?: string) => {
+        if (staleRefreshFail) throw new Error('Timezone unavailable');
+        const accId = extId === 'ext-conn-stale' ? 'act_conn_200' : 'act_conn_100';
+        return {
+          provider: 'META',
+          accountId: accId,
+          accountTimeZone: 'Asia/Kolkata',
+        };
+      }),
+      fetchTelemetrySnapshot: vi.fn(async (extId: string, window: any) => ({
+        provider: 'META',
+        externalCampaignId: extId,
+        dateStart: window.startDate,
+        dateEnd: window.endDate,
+        impressions: 1000,
+        clicks: 25,
+        ctr: 2.5,
+        conversions: 1,
+        cpc: 40,
+        cpm: 900,
+        spend: { currency: 'INR', minor_units: extId === 'ext-conn-stale' ? 30000 : 45000 },
+        observedAt: new Date().toISOString(),
+        dataFreshness: 'FRESH',
+        providerMetadata: {
+          accountId: extId === 'ext-conn-stale' ? 'act_conn_200' : 'act_conn_100',
+          accountTimeZone: 'Asia/Kolkata',
+          dataAsOf: new Date().toISOString(),
+          conversionDataAvailable: true,
+        },
+      })),
+    } as unknown as AdProvider;
+
+    const gateway = { checkout: vi.fn(), verifyCapture: vi.fn() } as unknown as CampaignPaymentGateway;
+    const engine = new MarketingEngine(fixture.pool, service, workflowConfig, gateway, () => mockConnectedProvider);
+
+    // 3a. Run TELEMETRY job for cActive -> persists fresh spend 45000
+    await enqueue(fixture.pool, {
+      campaignId: cActive.id,
+      revision: cActive.revision,
+      kind: 'TELEMETRY',
+      key: `worker-conn-active:${cActive.id}:${cActive.revision}`,
+    });
+    expect(await engine.runOnce()).toBe(true);
+
+    // 3b. Run TELEMETRY job for cStale -> initial run persists 30000
+    await enqueue(fixture.pool, {
+      campaignId: cStale.id,
+      revision: cStale.revision,
+      kind: 'TELEMETRY',
+      key: `worker-conn-stale-1:${cStale.id}:${cStale.revision}`,
+    });
+    expect(await engine.runOnce()).toBe(true);
+    // Refresh fails -> worker retains prior 30000 spend
+    staleRefreshFail = true;
+    await enqueue(fixture.pool, {
+      campaignId: cStale.id,
+      revision: cStale.revision,
+      kind: 'TELEMETRY',
+      key: `worker-conn-stale-2:${cStale.id}:${cStale.revision}`,
+    });
+    expect(await engine.runOnce()).toBe(true);
+    await fixture.pool.query("UPDATE marketing_jobs SET state='DEAD' WHERE campaign_id=$1 AND kind='PAUSE'", [cStale.id]);
+    await fixture.pool.query("UPDATE marketing_campaign_workflows SET state='LIVE' WHERE campaign_id=$1", [cStale.id]);
+
+    // 3c. Run TELEMETRY job for cFuture -> worker recognizes flight unstarted
+    staleRefreshFail = false;
+    await enqueue(fixture.pool, {
+      campaignId: cFuture.id,
+      revision: cFuture.revision,
+      kind: 'TELEMETRY',
+      key: `worker-conn-future:${cFuture.id}:${cFuture.revision}`,
+    });
+    expect(await engine.runOnce()).toBe(true);
+
+    // 3d. Telemetry mismatch for cMismatch -> revision mismatch in DB
+    await fixture.pool.query(
+      "UPDATE marketing_campaign_workflows SET telemetry=$2 WHERE campaign_id=$1",
+      [cMismatch.id, JSON.stringify({
+        campaignId: cMismatch.id,
+        revision: cMismatch.revision + 1, // REVISION MISMATCH
+        budgetBasisMinor: '100000',
+        currency: 'INR',
+        source: 'META',
+        spendMinor: '25000',
+        report: { status: 'ACCOUNT_TIMEZONE_UNAVAILABLE', requestedDateStart: null, requestedDateEnd: null, dateStart: null, dateEnd: null },
+      })]
+    );
+
+    // 4. Query authenticated /workspace route for both hosts
+    const wsHostA = await get('/workspace', 10).expect(200);
+    const wsHostB = await get('/workspace', 11).expect(200);
+
+    expect(wsHostA.body.campaigns).toHaveLength(4);
+    expect(wsHostB.body.campaigns).toHaveLength(1);
+
+    // Verify absence of master account IDs across both route responses
+    const jsonStrA = JSON.stringify(wsHostA.body);
+    const jsonStrB = JSON.stringify(wsHostB.body);
+    expect(jsonStrA).not.toContain('act_');
+    expect(jsonStrA).not.toContain('mgr_');
+    expect(jsonStrA).not.toContain('"accountId"');
+    expect(jsonStrB).not.toContain('act_');
+    expect(jsonStrB).not.toContain('mgr_');
+    expect(jsonStrB).not.toContain('"accountId"');
+    wsHostA.body.campaigns.forEach((c: any) => {
+      expect(c.delivery.externalCampaignId).toBeNull();
+      expect(c.metrics).not.toHaveProperty('accountId');
+    });
+
+    // 5. Mount CampaignStudio and verify it consumes THAT EXACT route response
+    const { JSDOM } = await import('jsdom');
+    const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
+      url: 'http://localhost',
+      pretendToBeVisual: true,
+    });
+    const prevFetch = global.fetch;
+    let tlrCleanup: (() => void) | undefined;
+
+    try {
+      global.window = dom.window as any;
+      global.document = dom.window.document as any;
+      global.localStorage = dom.window.localStorage as any;
+      global.HTMLElement = dom.window.HTMLElement as any;
+      global.Element = dom.window.Element as any;
+      global.Node = dom.window.Node as any;
+      global.Event = dom.window.Event as any;
+      global.CustomEvent = dom.window.CustomEvent as any;
+      dom.window.requestAnimationFrame = (fn: FrameRequestCallback) => setTimeout(() => fn(Date.now()), 16) as any;
+      dom.window.cancelAnimationFrame = (id: number) => clearTimeout(id);
+      dom.window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+      }));
+      dom.window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} } as any;
+      dom.window.IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} } as any;
+      global.ResizeObserver = dom.window.ResizeObserver;
+      global.IntersectionObserver = dom.window.IntersectionObserver;
+
+      const tlr = await import('@testing-library/react');
+      tlrCleanup = tlr.cleanup;
+      const { render, screen } = tlr;
+      const { default: CampaignStudio } = await import('../../../components/marketing/CampaignStudio.js');
+      const { AuthProvider } = await import('../../../components/AuthContext.js');
+
+      // global.fetch delivers the exact authenticated router responses from PostgreSQL into CampaignStudio
+      global.fetch = vi.fn(async (input: any) => {
+        const urlStr = String(input);
+        const token = global.localStorage.getItem('token');
+        const userId = token === 'host-b' ? 11 : 10;
+        if (urlStr.includes('/api/auth/me')) {
+          return new Response(
+            JSON.stringify({ user: { id: userId, email: `host${userId}@encho.example`, name: `Host ${userId}`, role: 'host' } }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        if (urlStr.includes('/api/marketing/v2/workspace')) {
+          const payload = userId === 11 ? wsHostB.body : wsHostA.body;
+          return new Response(
+            JSON.stringify(payload),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+      });
+
+      // 5a. Mount as Host 10
+      global.localStorage.setItem('token', 'host-a');
+      const viewA = render(React.createElement(AuthProvider, null, React.createElement(CampaignStudio)));
+
+      // Assert flight titles
+      await screen.findByText('Active Fresh Flight');
+      expect(screen.getByText('Stale Retained Flight')).toBeTruthy();
+      expect(screen.getByText('Future Unstarted Flight')).toBeTruthy();
+      expect(screen.getByText('Mismatch Flight')).toBeTruthy();
+
+      // Assert dated meter & utilization
+      expect(screen.getByText('45.0%')).toBeTruthy();
+      expect(screen.getByText('Media (Older report)')).toBeTruthy();
+      expect(screen.getByText('Refresh pending')).toBeTruthy();
+      expect(screen.getByText('30.0%')).toBeTruthy();
+
+      // Assert unstarted & mismatch states
+      expect(screen.getByText('Campaign reporting has not started')).toBeTruthy();
+      expect(screen.getByText('Incompatible report evidence')).toBeTruthy();
+
+      // Assert progressbar presence: progressbars exist for valid and stale spend, absent for unstarted/mismatch
+      const progressbars = screen.getAllByRole('progressbar');
+      expect(progressbars.length).toBe(2);
+      expect(progressbars.some((el: HTMLElement) => el.getAttribute('aria-valuenow') === '45')).toBe(true);
+      expect(progressbars.some((el: HTMLElement) => el.getAttribute('aria-valuenow') === '30')).toBe(true);
+
+      // Assert absence of master account IDs in rendered DOM
+      expect(dom.window.document.body.innerHTML).not.toContain('act_');
+      expect(dom.window.document.body.innerHTML).not.toContain('mgr_');
+      expect(dom.window.document.body.innerHTML).not.toContain('ext-conn-');
+
+      // Assert tenant isolation (Host 10 cannot see Host 11 flight)
+      expect(screen.queryByText('Host B Private Flight')).toBeNull();
+
+      viewA.unmount();
+      tlrCleanup?.();
+
+      // 5b. Mount as Host 11 (Host B)
+      global.localStorage.setItem('token', 'host-b');
+      const viewB = render(React.createElement(AuthProvider, null, React.createElement(CampaignStudio)));
+
+      await screen.findByText('Host B Private Flight');
+      // Assert zero cross-tenant contamination (Host 11 sees none of Host 10's campaigns)
+      expect(screen.queryByText('Active Fresh Flight')).toBeNull();
+      expect(screen.queryByText('Stale Retained Flight')).toBeNull();
+      expect(screen.queryByText('Future Unstarted Flight')).toBeNull();
+      expect(screen.queryByText('Mismatch Flight')).toBeNull();
+
+      viewB.unmount();
+      tlrCleanup?.();
+    } finally {
+      tlrCleanup?.();
+      delete (global as any).window;
+      delete (global as any).document;
+      delete (global as any).localStorage;
+      delete (global as any).HTMLElement;
+      delete (global as any).Element;
+      delete (global as any).Node;
+      delete (global as any).Event;
+      delete (global as any).CustomEvent;
+      delete (global as any).ResizeObserver;
+      delete (global as any).IntersectionObserver;
+      global.fetch = prevFetch;
+    }
+  });
+
 });

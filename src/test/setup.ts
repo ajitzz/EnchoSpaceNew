@@ -13,9 +13,30 @@ vi.mock('pg', async (importOriginal) => {
   const { readFileSync } = await import('node:fs');
   const { randomUUID } = await import('node:crypto');
   db.public.registerFunction({name: 'gen_random_uuid', returns: (await import('pg-mem')).DataType.uuid, impure: true, implementation: randomUUID});
+  // Match the production phone-identity lookup's punctuation normalization.
+  // pg-mem has no built-in regexp_replace; this fixture is not SQL/RLS proof.
+  db.public.registerFunction({
+    name: 'regexp_replace',
+    args: Array(4).fill((await import('pg-mem')).DataType.text),
+    returns: (await import('pg-mem')).DataType.text,
+    implementation: (value: string, pattern: string, replacement: string, flags: string) => {
+      if (pattern !== '[[:space:]().-]' || replacement !== '' || flags !== 'g') throw new Error('Unexpected regexp_replace fixture use');
+      return value.replace(/[\s().-]/g, '');
+    },
+  });
 
   // Fix pg-mem DECIMAL(10,2), set_config and DO $$ procedural blocks AST bug by intercepting queries
   (db.public as any).interceptQueries((queryText: string) => {
+    if (queryText.includes('cr1-phone-otp-schema-readiness')) {
+      // pg-mem currently reports every information_schema column as NOT NULL.
+      // Read its actual column constraint so the mounted HTTP test can exercise
+      // the real read-only readiness decision, including a drifted users table.
+      const users = db.public.getTable('users') as any;
+      return ['email', 'phone'].filter(name => users.columnMgr.has(name)).map(name => ({
+        column_name: name,
+        is_nullable: users.columnMgr.get(name).notNull ? 'NO' : 'YES',
+      }));
+    }
     if (queryText.includes('set_config')) {
       return [{ set_config: '' }]; // Mock set_config for RLS
     }

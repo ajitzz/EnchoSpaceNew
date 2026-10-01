@@ -15,6 +15,7 @@ describe('CR1 legacy route boundary parity', () => {
     '/api/telemetry/pixel-event/', '/API/TELEMETRY/PIXEL-EVENT',
     '/api/payments/geo-route/initiate/', '/api/admin/payments/escrow/release/',
     '/api/host/social-posts/123/boost/', '/api/marketing/campaigns/123/',
+    '/api/marketing/meta/webhooks/', '/API/META-WEBHOOKS', '/api/marketing/webhooks/meta-leads/',
   ])('blocks equivalent Express path %s', async path => {
     expect((await request(app).post(path)).status).toBe(410);
   });

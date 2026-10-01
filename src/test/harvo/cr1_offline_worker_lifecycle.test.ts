@@ -10,6 +10,7 @@ import { chromium, type Browser, type BrowserContext, type Page } from 'playwrig
 interface AuditFixture {
     state: string;
     login(id: number, token: string): void;
+    attemptInvalidLogin(): string;
     logout(): void;
     actorQueueKey(id: number): string;
     get(key: string): Promise<unknown>;
@@ -29,6 +30,10 @@ let serveLegacy = false;
 let serveWaiting = false;
 let uncertainMessages = false;
 let denyExpiredMessages = false;
+let denyExpiredAuth = false;
+let malformedAuthCheck = false;
+let heldAuthCheck: Promise<void> | null = null;
+let authCheckStarted = false;
 const requests: RecordedRequest[] = [];
 
 async function legacyEntries(page: Page): Promise<Array<{ queueName: string; requestData: { headers: Record<string, string> } }>> {
@@ -111,6 +116,16 @@ beforeAll(async () => {
                 if (request.method !== 'GET') requests.push({ url, body, authorization: request.headers.authorization });
                 response.setHeader('Content-Type', 'application/json');
                 if (url === '/api/auth/me') {
+                    authCheckStarted = true;
+                    if (heldAuthCheck) await heldAuthCheck;
+                    if (malformedAuthCheck) {
+                        response.end(JSON.stringify({ user: { id: 'wrong-type', role: 'admin' } }));
+                        return;
+                    }
+                    if (denyExpiredAuth && request.headers.authorization?.endsWith('-expired')) {
+                        response.statusCode = 401; response.end(JSON.stringify({ code: 'AUTH_EXPIRED' }));
+                        return;
+                    }
                     const actor = Number(request.headers.authorization?.match(/fixture-(\d+)/)?.[1]);
                     response.end(JSON.stringify({ user: { id: actor, name: 'Local fixture', email: 'local@example.invalid', role: 'host' } }));
                 } else if (url.startsWith('/api/private/')) {
@@ -145,7 +160,7 @@ afterAll(async () => {
     if (server) await new Promise<void>(resolveClosed => server.close(() => resolveClosed()));
     if (directory) await rm(directory, { recursive: true, force: true });
 });
-beforeEach(() => { serveLegacy = false; serveWaiting = false; uncertainMessages = false; denyExpiredMessages = false; requests.length = 0; });
+beforeEach(() => { serveLegacy = false; serveWaiting = false; uncertainMessages = false; denyExpiredMessages = false; denyExpiredAuth = false; malformedAuthCheck = false; heldAuthCheck = null; authCheckStarted = false; requests.length = 0; });
 
 describe('R1-03 production-built service worker with actual browser persistence', () => {
     it('upgrades the real legacy Workbox queue, purges credentials and claims both tabs', async () => {
@@ -288,11 +303,11 @@ describe('R1-03 production-built service worker with actual browser persistence'
             await page.evaluate(() => window.offlineAudit.login(17, 'fixture-17-expired'));
             uncertainMessages = true;
             expect(await page.evaluate(() => window.offlineAudit.queueMutationWithReceipt('/api/threads/3/messages', 'POST', { content: 'Local question', clientEventId: '11111111-1111-4111-8111-111111111111' }))).toMatchObject({ status: 'QUEUED' });
-            await page.reload(); await page.waitForFunction(() => window.offlineAudit?.state === 'READY');
-            await page.evaluate(() => window.offlineAudit.login(17, 'fixture-17-fresh'));
+            denyExpiredAuth = true;
+            await page.reload(); await page.getByTestId('actor').filter({ hasText: 'signed-out' }).waitFor();
             uncertainMessages = false;
-            await page.evaluate(() => window.offlineAudit.processOfflineQueue());
-            expect(await page.evaluate(() => window.offlineAudit.get(window.offlineAudit.actorQueueKey(17)))).toEqual([]);
+            await page.evaluate(() => window.offlineAudit.login(17, 'fixture-17-fresh'));
+            await expect.poll(() => page.evaluate(() => window.offlineAudit.get(window.offlineAudit.actorQueueKey(17)))).toEqual([]);
             const messages = requests.filter(request => request.url.includes('/messages'));
             expect(messages).toHaveLength(2);
             expect(messages.map(request => JSON.parse(request.body).clientEventId)).toEqual(Array(2).fill('11111111-1111-4111-8111-111111111111'));
@@ -315,6 +330,146 @@ describe('R1-03 production-built service worker with actual browser persistence'
             await page.evaluate(() => window.offlineAudit.processOfflineQueue());
             await expect.poll(() => page.evaluate(() => window.offlineAudit.get(window.offlineAudit.actorQueueKey(17)))).toEqual([]);
             expect(requests.at(-1)?.authorization).toBe('Bearer fixture-17-fresh');
+        } finally { await context.close(); }
+    });
+
+    it('keeps an unresolved inquiry identity after /auth/me expires until the same actor reauthenticates', async () => {
+        const context = await contextFixture();
+        try {
+            const page = context.pages()[0]; await openApplication(page);
+            await page.evaluate(() => window.offlineAudit.login(17, 'fixture-17-expired'));
+            await page.getByTestId('actor').filter({ hasText: '17' }).waitFor();
+            await context.setOffline(true);
+            const queued = await page.evaluate(() => window.offlineAudit.queueMutationWithReceipt('/api/threads/3/messages', 'POST', {
+                content: 'Pending question', clientEventId: '11111111-1111-4111-8111-111111111111',
+            }));
+            expect(queued.status).toBe('QUEUED');
+            denyExpiredAuth = true;
+            denyExpiredMessages = true;
+            await context.setOffline(false);
+            await page.reload();
+            await page.getByTestId('actor').filter({ hasText: 'signed-out' }).waitFor();
+            expect(await page.evaluate(() => window.offlineAudit.get(window.offlineAudit.actorQueueKey(17)))).toHaveLength(1);
+            expect(await page.evaluate(() => localStorage.getItem('token'))).toBeNull();
+            denyExpiredMessages = false;
+            await page.evaluate(() => window.offlineAudit.login(17, 'fixture-17-fresh'));
+            // Login itself resumes reviewed replay; no connectivity toggle or
+            // manual queue-processing command should be needed by the host.
+            await expect.poll(() => page.evaluate(() => window.offlineAudit.get(window.offlineAudit.actorQueueKey(17)))).toEqual([]);
+            const messages = requests.filter(request => request.url.includes('/messages'));
+            expect(messages.filter(request => request.authorization === 'Bearer fixture-17-fresh')).toHaveLength(1);
+            expect(messages.every(request => JSON.parse(request.body).clientEventId === '11111111-1111-4111-8111-111111111111')).toBe(true);
+        } finally { await context.close(); }
+    });
+
+    it('does not expose a saved identity before the server verifies it after reload', async () => {
+        const context = await contextFixture();
+        let releaseCheck: () => void = () => {};
+        try {
+            const page = context.pages()[0]; await openApplication(page);
+            await Promise.all([
+                page.waitForResponse(response => response.url().endsWith('/api/auth/me')),
+                page.evaluate(() => window.offlineAudit.login(17, 'fixture-17')),
+            ]);
+            heldAuthCheck = new Promise<void>(resolveCheck => { releaseCheck = resolveCheck; });
+            authCheckStarted = false;
+            await page.reload();
+            await expect.poll(() => authCheckStarted).toBe(true);
+            try {
+                await expect.poll(() => page.getByTestId('actor').textContent(), { timeout: 1500 }).toBe('signed-out');
+            } finally {
+                releaseCheck(); heldAuthCheck = null;
+            }
+            await page.getByTestId('actor').filter({ hasText: '17' }).waitFor();
+        } finally { releaseCheck(); heldAuthCheck = null; await context.close(); }
+    });
+
+    it('does not replay a saved inquiry before restored-session verification finishes', async () => {
+        const context = await contextFixture();
+        let releaseCheck: () => void = () => {};
+        try {
+            const page = context.pages()[0]; await openApplication(page);
+            await Promise.all([
+                page.waitForResponse(response => response.url().endsWith('/api/auth/me')),
+                page.evaluate(() => window.offlineAudit.login(17, 'fixture-17')),
+            ]);
+            uncertainMessages = true;
+            expect((await page.evaluate(() => window.offlineAudit.queueMutationWithReceipt('/api/threads/3/messages', 'POST', {
+                content: 'Revalidate before retry', clientEventId: '33333333-3333-4333-8333-333333333333',
+            }))).status).toBe('QUEUED');
+            uncertainMessages = false;
+            const initialAttempts = requests.filter(request => request.url.includes('/messages')).length;
+            heldAuthCheck = new Promise<void>(resolveCheck => { releaseCheck = resolveCheck; });
+            authCheckStarted = false;
+            await page.reload();
+            await expect.poll(() => authCheckStarted).toBe(true);
+            await page.evaluate(() => window.offlineAudit.processOfflineQueue());
+            expect(requests.filter(request => request.url.includes('/messages'))).toHaveLength(initialAttempts);
+            releaseCheck(); heldAuthCheck = null;
+            await expect.poll(() => requests.filter(request => request.url.includes('/messages')).length).toBe(initialAttempts + 1);
+            await expect.poll(() => page.evaluate(() => window.offlineAudit.get(window.offlineAudit.actorQueueKey(17)))).toEqual([]);
+        } finally { releaseCheck(); heldAuthCheck = null; await context.close(); }
+    });
+
+    it('rejects a malformed successful identity response and strips legacy private cached fields', async () => {
+        const context = await contextFixture();
+        try {
+            const page = context.pages()[0]; await openApplication(page);
+            await page.evaluate(() => {
+                localStorage.setItem('token', 'fixture-17');
+                localStorage.setItem('user', JSON.stringify({
+                    id: 17, email: 'local@example.invalid', name: 'Fixture', role: 'host',
+                    password_hash: 'must-not-remain-in-browser', wallet_balance: 7123,
+                }));
+            });
+            malformedAuthCheck = true;
+            authCheckStarted = false;
+            await page.reload();
+            await expect.poll(() => authCheckStarted).toBe(true);
+            await expect.poll(() => page.getByTestId('actor').textContent()).toBe('signed-out');
+            const cached = await page.evaluate(() => localStorage.getItem('user'));
+            expect(cached).not.toContain('password_hash');
+            expect(cached).not.toContain('wallet_balance');
+            expect(requests.filter(request => request.url.includes('/messages'))).toEqual([]);
+        } finally { await context.close(); }
+    });
+
+    it('does not install a malformed sign-in response as a browser session', async () => {
+        const context = await contextFixture();
+        try {
+            const page = context.pages()[0]; await openApplication(page);
+            expect(await page.evaluate(() => window.offlineAudit.attemptInvalidLogin()))
+                .toBe('Authentication response was invalid. Please try again.');
+            expect(await page.getByTestId('actor').textContent()).toBe('signed-out');
+            expect(await page.evaluate(() => localStorage.getItem('token'))).toBeNull();
+            expect(await page.evaluate(() => localStorage.getItem('user'))).toBeNull();
+        } finally { await context.close(); }
+    });
+
+    it('hides expired identity in both tabs and purges its inquiry before a different actor signs in', async () => {
+        const context = await contextFixture();
+        try {
+            const first = context.pages()[0]; await openApplication(first);
+            await first.evaluate(() => window.offlineAudit.login(17, 'fixture-17-expired'));
+            const second = await context.newPage(); await openApplication(second);
+            await context.setOffline(true);
+            expect((await first.evaluate(() => window.offlineAudit.queueMutationWithReceipt('/api/threads/3/messages', 'POST', {
+                content: 'Old actor question', clientEventId: '22222222-2222-4222-8222-222222222222',
+            }))).status).toBe('QUEUED');
+            denyExpiredAuth = true;
+            denyExpiredMessages = true;
+            await context.setOffline(false);
+            await second.reload();
+            await second.getByTestId('actor').filter({ hasText: 'signed-out' }).waitFor();
+            await first.getByTestId('actor').filter({ hasText: 'signed-out' }).waitFor();
+            expect(await first.evaluate(() => window.offlineAudit.get(window.offlineAudit.actorQueueKey(17)))).toHaveLength(1);
+            const requestCountBeforeSwitch = requests.filter(request => request.url.includes('/messages')).length;
+            await second.evaluate(() => window.offlineAudit.login(22, 'fixture-22'));
+            await expect.poll(() => first.evaluate(() => window.offlineAudit.get(window.offlineAudit.actorQueueKey(17)))).toBeUndefined();
+            await second.evaluate(() => window.offlineAudit.processOfflineQueue());
+            const messages = requests.filter(request => request.url.includes('/messages'));
+            expect(messages).toHaveLength(requestCountBeforeSwitch);
+            expect(messages.every(request => request.authorization !== 'Bearer fixture-22')).toBe(true);
         } finally { await context.close(); }
     });
 

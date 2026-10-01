@@ -2,6 +2,7 @@ import {readFileSync} from 'node:fs';
 import type pg from 'pg';
 import {verifyConversationCatalog} from './conversationReadiness.js';
 import {notificationPreferenceColumnContract,notificationPreferenceConstraintContract,notificationPreferenceIndexContract} from './notificationPreferencesCatalogContract.js';
+import {reachableRuntimeRolesSql} from './runtimeDatabaseAuthority.js';
 
 export const notificationPreferenceTables=['conversation_notification_preferences','conversation_notification_preference_events'] as const;
 const functions=['conversation_guard_notification_preference','conversation_record_notification_preference','conversation_guard_notification_preference_event'];
@@ -29,7 +30,13 @@ export function notificationPreferenceRuntimeGrants(runtimeRole:string):string[]
 export async function verifyNotificationPreferenceCatalog(client:pg.PoolClient){
  const conversationReady=(await verifyConversationCatalog(client,'runtime')).ready;
  const role=(await client.query<{name:string}>('SELECT current_user AS name')).rows[0]?.name;
- const tables=(await client.query<{name:string;safe:boolean}>(`SELECT c.relname AS name,c.relrowsecurity AND c.relforcerowsecurity AND NOT pg_has_role(current_user,c.relowner,'MEMBER') AND NOT EXISTS(SELECT 1 FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a WHERE a.grantee=0) AS safe FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY($1::text[])`,[notificationPreferenceTables])).rows;
+ const tables=(await client.query<{name:string;safe:boolean}>(`SELECT c.relname AS name,
+  c.relrowsecurity AND c.relforcerowsecurity
+  AND NOT pg_has_role(current_user,c.relowner,'MEMBER')
+  AND NOT EXISTS(SELECT 1 FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a WHERE a.grantee=0)
+  AND NOT EXISTS(SELECT 1 FROM pg_attribute a CROSS JOIN aclexplode(a.attacl) x WHERE a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped AND a.attacl IS NOT NULL AND x.grantee=0) AS safe
+ FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+ WHERE n.nspname='public' AND c.relname=ANY($1::text[])`,[notificationPreferenceTables])).rows;
  const tablesValid=tables.length===2&&tables.every(row=>row.safe);
  const policies=(await client.query<{tablename:string;policyname:string;roles:string[];permissive:string;cmd:string;qual:string|null;with_check:string|null}>("SELECT tablename,policyname,roles::text[],permissive,cmd,qual,with_check FROM pg_policies WHERE schemaname='public' AND tablename=ANY($1::text[])",[notificationPreferenceTables])).rows;
  const policiesValid=policies.length===4&&notificationPreferenceTables.every((table,index)=>[
@@ -45,9 +52,31 @@ export async function verifyNotificationPreferenceCatalog(client:pg.PoolClient){
  const triggerRows=(await client.query<{table_name:string;name:string;function_name:string;enabled:string;type:number;unconditional:boolean;schema:string}>(`SELECT c.relname AS table_name,t.tgname AS name,p.proname AS function_name,t.tgenabled AS enabled,t.tgtype AS type,t.tgqual IS NULL AS unconditional,pn.nspname AS schema FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_namespace pn ON pn.oid=p.pronamespace WHERE n.nspname='public' AND c.relname=ANY($1::text[]) AND NOT t.tgisinternal`,[notificationPreferenceTables])).rows;
  const triggersValid=triggerRows.length===triggers.length&&triggers.every(([table,name,fn,type])=>triggerRows.some(row=>row.table_name===table&&row.name===name&&row.function_name===fn&&row.enabled==='O'&&row.type===type&&row.unconditional&&row.schema==='public'));
  const sql=readFileSync(new URL('../../migrations/039_conversation_notification_preferences.sql',import.meta.url),'utf8');
- const functionRows=(await client.query<{name:string;body:string;security_definer:boolean;config:string[]|null;public_execute:boolean;caller_execute:boolean}>(`SELECT p.proname AS name,p.prosrc AS body,p.prosecdef AS security_definer,p.proconfig AS config,EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE') AS public_execute,has_function_privilege(current_user,p.oid,'EXECUTE') AS caller_execute FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname=ANY($1::text[])`,[functions])).rows;
- const functionsValid=functionRows.length===functions.length&&functions.every(name=>{const body=sql.match(new RegExp(`CREATE FUNCTION ${name}\\([^]*?AS \\$\\$([^]*?)\\$\\$`,'i'))?.[1]?.trim();return body&&functionRows.some(row=>row.name===name&&row.body.trim()===body&&!row.security_definer&&!row.public_execute&&!row.caller_execute&&row.config?.length===2&&row.config.includes('search_path=pg_catalog, public')&&row.config.includes('row_security=on'));});
- const grants=(await client.query<{table_name:string;column_name:string;read:boolean;insert:boolean;update:boolean;excess:boolean}>(`SELECT c.relname AS table_name,a.attname AS column_name,has_column_privilege(current_user,c.oid,a.attnum,'SELECT') AS read,has_column_privilege(current_user,c.oid,a.attnum,'INSERT') AS insert,has_column_privilege(current_user,c.oid,a.attnum,'UPDATE') AS update,(has_table_privilege(current_user,c.oid,'DELETE') OR has_table_privilege(current_user,c.oid,'TRUNCATE') OR has_table_privilege(current_user,c.oid,'REFERENCES') OR has_table_privilege(current_user,c.oid,'TRIGGER')) AS excess FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped WHERE n.nspname='public' AND c.relname=ANY($1::text[])`,[notificationPreferenceTables])).rows;
- const grantsValid=grants.length===columns.length&&grants.every(row=>row.read&&!row.excess&&row.insert===(row.table_name==='conversation_notification_preferences'?['user_id','in_app_alerts','version'].includes(row.column_name):row.column_name!=='created_at')&&row.update===(row.table_name==='conversation_notification_preferences'&&['in_app_alerts','version'].includes(row.column_name)));
+ const functionRows=(await client.query<{name:string;body:string;security_definer:boolean;config:string[]|null;public_execute:boolean;reachable_execute:boolean}>(`${reachableRuntimeRolesSql}
+  SELECT p.proname AS name,p.prosrc AS body,p.prosecdef AS security_definer,p.proconfig AS config,
+   EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE') AS public_execute,
+   EXISTS(SELECT 1 FROM reachable r WHERE has_function_privilege(r.oid,p.oid,'EXECUTE')) AS reachable_execute
+  FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+  WHERE n.nspname='public' AND p.proname=ANY($1::text[])`,[functions])).rows;
+ const functionsValid=functionRows.length===functions.length&&functions.every(name=>{const body=sql.match(new RegExp(`CREATE FUNCTION ${name}\\([^]*?AS \\$\\$([^]*?)\\$\\$`,'i'))?.[1]?.trim();return body&&functionRows.some(row=>row.name===name&&row.body.trim()===body&&!row.security_definer&&!row.public_execute&&!row.reachable_execute&&row.config?.length===2&&row.config.includes('search_path=pg_catalog, public')&&row.config.includes('row_security=on'));});
+ const privileges=(await client.query<{table_name:string;column_name:string;current_role:boolean;can_select:boolean;can_insert:boolean;can_update:boolean;can_delete:boolean;can_truncate:boolean;can_trigger:boolean;can_reference:boolean}>(`${reachableRuntimeRolesSql}
+  SELECT c.relname AS table_name,a.attname AS column_name,r.oid=current_user::regrole AS current_role,
+   has_column_privilege(r.oid,c.oid,a.attnum,'SELECT') AS can_select,
+   has_column_privilege(r.oid,c.oid,a.attnum,'INSERT') AS can_insert,
+   has_column_privilege(r.oid,c.oid,a.attnum,'UPDATE') AS can_update,
+   has_table_privilege(r.oid,c.oid,'DELETE') AS can_delete,
+   has_table_privilege(r.oid,c.oid,'TRUNCATE') AS can_truncate,
+   has_table_privilege(r.oid,c.oid,'TRIGGER') AS can_trigger,
+   has_column_privilege(r.oid,c.oid,a.attnum,'REFERENCES') AS can_reference
+  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped
+   CROSS JOIN reachable r WHERE n.nspname='public' AND c.relname=ANY($1::text[])`,[notificationPreferenceTables])).rows;
+ const grantsValid=privileges.filter(row=>row.current_role).length===columns.length&&privileges.every(row=>{
+  const expectedRead=true;
+  const expectedInsert=row.table_name==='conversation_notification_preferences'?['user_id','in_app_alerts','version'].includes(row.column_name):row.column_name!=='created_at';
+  const expectedUpdate=row.table_name==='conversation_notification_preferences'&&['in_app_alerts','version'].includes(row.column_name);
+  const allowed=row.current_role?row.can_select===expectedRead&&row.can_insert===expectedInsert&&row.can_update===expectedUpdate:
+   (!row.can_select||expectedRead)&&(!row.can_insert||expectedInsert)&&(!row.can_update||expectedUpdate);
+  return allowed&&!row.can_delete&&!row.can_truncate&&!row.can_trigger&&!row.can_reference;
+ });
  return {ready:conversationReady&&tablesValid&&policiesValid&&columnsValid&&constraintsValid&&indexesValid&&triggersValid&&functionsValid&&grantsValid,conversationReady,tablesValid,policiesValid,columnsValid,constraintsValid,indexesValid,triggersValid,functionsValid,grantsValid};
 }

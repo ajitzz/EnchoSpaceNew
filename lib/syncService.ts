@@ -18,6 +18,7 @@ const REPLAY_LEASE_RENEW_MS = 20_000;
 const MAX_OFFLINE_QUEUE_ITEMS = 100;
 const MAX_OFFLINE_BODY_BYTES = 64 * 1024;
 const ACTOR_REPLAY_FENCE_PREFIX = 'encho:v3:offline-revoked-before:';
+const EXPIRED_ACTOR_MARKER = 'encho:v3:offline-auth-expired-actor';
 
 const actorIdSchema = z.string().min(1).max(128).regex(/^[A-Za-z0-9:_-]+$/);
 const persistedHeaderSchema = z.record(z.string(), z.string());
@@ -81,11 +82,36 @@ function readStoredToken(): string | null {
 
 interface ActorSession { actorId: string; token: string; replayFence: string }
 
+// Browser storage is a persistence hint, not an authenticated session. A fresh
+// server identity check or completed sign-in must grant replay in this process.
+// The grant is intentionally never persisted across reloads or tabs.
+let verifiedReplaySession: Pick<ActorSession, 'actorId' | 'token'> | null = null;
+
 function readActorSession(): ActorSession | null {
     const actorId = readStoredActorId();
     const token = readStoredToken();
     try { return actorId && token ? { actorId, token, replayFence: replayFence(actorId) } : null; }
     catch { return null; }
+}
+
+export function authorizeOfflineReplaySession(actorId: string | number, token: string): boolean {
+    const current = readActorSession();
+    const normalized = normalizedActorId(actorId);
+    if (!current || current.actorId !== normalized || current.token !== token) {
+        verifiedReplaySession = null;
+        return false;
+    }
+    verifiedReplaySession = { actorId: normalized, token };
+    return true;
+}
+
+export function revokeOfflineReplaySession(): void {
+    verifiedReplaySession = null;
+}
+
+function isVerifiedReplaySession(session: ActorSession | null): session is ActorSession {
+    return isCurrentSession(session) && verifiedReplaySession?.actorId === session.actorId
+        && verifiedReplaySession.token === session.token;
 }
 
 function isCurrentSession(session: ActorSession | null): boolean {
@@ -109,6 +135,34 @@ function supportsOfflineReplay(url: string, method: string, body?: unknown): boo
 
 function normalizedActorId(actorId: string | number): string {
     return actorIdSchema.parse(String(actorId));
+}
+
+/** Authentication expiry is not an explicit logout. Keep credential-free inquiry
+ * identity for the same actor, while every replay still requires fresh auth. */
+export function markActorAuthenticationExpired(actorId: string | number): void {
+    if (verifiedReplaySession?.actorId === normalizedActorId(actorId)) revokeOfflineReplaySession();
+    localStorage.setItem(EXPIRED_ACTOR_MARKER, normalizedActorId(actorId));
+    void purgeRetiredWorkboxQueue().catch(() => console.error('Legacy offline queue cleanup failed.'));
+}
+
+export function clearExpiredActorMarker(): void {
+    localStorage.removeItem(EXPIRED_ACTOR_MARKER);
+}
+
+/** Revoke an expired actor's pending intents before a different actor signs in. */
+export function reconcileExpiredActorLogin(actorId: string | number): void {
+    const stored = localStorage.getItem(EXPIRED_ACTOR_MARKER);
+    if (!stored) return;
+    const oldActor = actorIdSchema.safeParse(stored);
+    if (!oldActor.success) {
+        localStorage.removeItem(EXPIRED_ACTOR_MARKER);
+        void clearActorScopedOfflineData(null).catch(() => console.error('Invalid expired actor cleanup failed.'));
+    } else if (oldActor.data !== normalizedActorId(actorId)) {
+        localStorage.removeItem(EXPIRED_ACTOR_MARKER);
+        void clearActorScopedOfflineData(oldActor.data).catch(() => console.error('Expired actor cleanup failed.'));
+    }
+    // Keep the marker after same-actor reauthentication until explicit logout
+    // or switch: another tab may still receive the older token-removal event.
 }
 
 export function actorQueueKey(actorId: string | number): string {
@@ -170,8 +224,8 @@ export async function fetchWithCache<T>(url: string, cacheKey: string, options?:
     const storageKey = privateRequest
         ? session ? actorCacheKey(session.actorId, cacheKey) : null
         : `${PUBLIC_CACHE_PREFIX}${cacheKey}`;
-    const canUseResponse = () => !privateRequest || isCurrentSession(session);
-    if (privateRequest && (!session || !isLocalApiPath(url))) return null;
+    const canUseResponse = () => !privateRequest || isVerifiedReplaySession(session);
+    if (privateRequest && (!isVerifiedReplaySession(session) || !isLocalApiPath(url))) return null;
     
     if (storageKey) {
         try {
@@ -271,6 +325,43 @@ function parseActorQueue(value: unknown): OfflineQueueItem[] {
 
 async function readActorQueue(actorId: string): Promise<OfflineQueueItem[]> {
     return parseActorQueue(await get(actorQueueKey(actorId)));
+}
+
+const pendingInquiryBodySchema = z.object({
+    receiverId: z.number().int().positive().safe(),
+    content: z.string().min(1).max(MAX_OFFLINE_BODY_BYTES),
+    clientEventId: z.string().uuid(),
+}).passthrough();
+
+export interface PendingInquiryIntent {
+    receiverId: number;
+    content: string;
+    clientEventId: string;
+    queuedAt: number;
+}
+
+/** Read only the current authenticated actor's unresolved inquiry intents.
+ * No bearer token is persisted or returned; the Inbox must still reconcile
+ * these event IDs with canonical server history before claiming delivery. */
+export async function listPendingInquiryIntents(threadId: number): Promise<PendingInquiryIntent[]> {
+    if (!Number.isSafeInteger(threadId) || threadId <= 0) return [];
+    const session = readActorSession();
+    if (!isVerifiedReplaySession(session)) return [];
+    const queue = await readActorQueue(session.actorId);
+    if (!isVerifiedReplaySession(session)) return [];
+    return queue.flatMap(item => {
+        if (item.actorId !== session.actorId || item.url !== `/api/threads/${threadId}/messages`
+            || item.method !== 'POST' || !item.requiresAuth
+            || (item.replayFence ?? '0:0') !== session.replayFence
+            || item.timestamp > 8_640_000_000_000_000) return [];
+        const parsed = pendingInquiryBodySchema.safeParse(item.body);
+        return parsed.success ? [{
+            receiverId: parsed.data.receiverId,
+            content: parsed.data.content,
+            clientEventId: parsed.data.clientEventId,
+            queuedAt: item.timestamp,
+        }] : [];
+    });
 }
 
 async function appendActorCommand(session: ActorSession, item: OfflineQueueItem): Promise<boolean> {
@@ -406,7 +497,7 @@ export async function queueMutationWithReceipt<T = unknown>(
 ): Promise<MutationDispatchResult<T>> {
     const mutationId = createMutationId();
     const session = readActorSession();
-    if (!session) return { status: 'REJECTED', mutationId };
+    if (!isVerifiedReplaySession(session)) return { status: 'REJECTED', mutationId };
     if (!isLocalApiPath(url)) {
         return { status: 'REJECTED', mutationId };
     }
@@ -423,11 +514,11 @@ export async function queueMutationWithReceipt<T = unknown>(
                 body: body !== undefined ? JSON.stringify(body) : undefined,
                 signal:AbortSignal.timeout(15_000),
             });
-            if (!isCurrentSession(session)) return { status: 'REJECTED', mutationId };
+            if (!isVerifiedReplaySession(session)) return { status: 'REJECTED', mutationId };
             if (response.ok) {
                 const isJson = response.headers.get('content-type')?.includes('json');
                 const data = isJson ? await response.json() as T : null;
-                return isCurrentSession(session)
+                return isVerifiedReplaySession(session)
                     ? { status: 'COMMITTED', mutationId, data }
                     : { status: 'REJECTED', mutationId };
             }
@@ -440,7 +531,7 @@ export async function queueMutationWithReceipt<T = unknown>(
     }
 
     try {
-        if (!isCurrentSession(session) || !supportsOfflineReplay(url, method, body)) {
+        if (!isVerifiedReplaySession(session) || !supportsOfflineReplay(url, method, body)) {
             console.error('Refusing offline replay without a current session and an approved domain contract');
             return { status: 'REJECTED', mutationId };
         }
@@ -482,29 +573,32 @@ export async function processOfflineQueue(): Promise<void> {
     const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
     if (!isOnline) return;
     const session = readActorSession();
-    if (!session) return;
+    if (!isVerifiedReplaySession(session)) return;
 
     try {
         await removeUnsafeLegacyQueue();
         await withActorReplayLease(session.actorId, async ownsLease => {
             const queue = await readActorQueue(session.actorId);
-            const completedIds = new Set<string>();
             for (const item of queue) {
-                if (!await ownsLease() || !isCurrentSession(session)) break;
+                if (!await ownsLease() || !isVerifiedReplaySession(session)) break;
                 if (item.actorId !== session.actorId) continue;
                 // Logout records this fence synchronously before asynchronous
                 // IDB deletion. Failed cleanup must not revive a prior intent
                 // when the same actor signs back in later.
-                if ((item.replayFence ?? '0:0') !== session.replayFence) { completedIds.add(item.id); continue; }
+                if ((item.replayFence ?? '0:0') !== session.replayFence) {
+                    await acknowledgeActorCommands(session.actorId, new Set([item.id]));
+                    continue;
+                }
                 // Retire legacy/custom or financial commands instead of running
                 // them under a newer browser session without a domain contract.
                 if (item.type === 'CUSTOM_MUTATION' || !supportsOfflineReplay(item.url, item.method, item.body)
                     || !item.requiresAuth || containsSensitivePersistedKey(item.body)) {
-                    completedIds.add(item.id);
+                    await acknowledgeActorCommands(session.actorId, new Set([item.id]));
                     continue;
                 }
+                let response: Response;
                 try {
-                    const response = await fetch(item.url, {
+                    response = await fetch(item.url, {
                         method: item.method,
                         headers: {
                             'Content-Type': 'application/json',
@@ -514,18 +608,24 @@ export async function processOfflineQueue(): Promise<void> {
                         body: item.body !== undefined ? JSON.stringify(item.body) : undefined,
                         signal:AbortSignal.timeout(15_000),
                     });
-                    if (!response.ok && (shouldRetainQueuedStatus(response.status)||await isReconcilableMessage(response,item.url,item.method,item.body))) continue;
-                    if (response.ok) {
-                        const isJson = response.headers.get('content-type')?.includes('json');
-                        const data: unknown = isJson ? await response.json() : null;
-                        if (isCurrentSession(session)) emitOfflineMutationCommitted(item, data);
-                    }
-                    completedIds.add(item.id);
                 } catch (e) {
                     console.warn(`Failed to process queued mutation ${item.id}`, e);
+                    continue;
                 }
+                if (!response.ok && (shouldRetainQueuedStatus(response.status)
+                    || await isReconcilableMessage(response, item.url, item.method, item.body))) continue;
+
+                let data: unknown = null;
+                if (response.ok && response.headers.get('content-type')?.includes('json')) {
+                    try { data = await response.json(); }
+                    catch (e) { console.warn(`Committed queued mutation ${item.id} returned invalid JSON`, e); }
+                }
+                // A later command may hang or be interrupted. Persist this result
+                // before dispatching the next one; an acknowledgement failure
+                // exits the batch and relies on server event UUID idempotency.
+                await acknowledgeActorCommands(session.actorId, new Set([item.id]));
+                if (response.ok && isVerifiedReplaySession(session)) emitOfflineMutationCommitted(item, data);
             }
-            await acknowledgeActorCommands(session.actorId, completedIds);
         });
     } catch (e) {
         console.error('Error processing offline queue', e);
@@ -540,6 +640,14 @@ if (typeof window !== 'undefined') {
     // when another tab logs out/switches; do not reuse its credentials or UI data.
     window.addEventListener('storage', event => {
         if (event.key !== 'user' && event.key !== 'token' && event.key !== null) return;
+        revokeOfflineReplaySession();
+        const expiredActor = actorIdSchema.safeParse(localStorage.getItem(EXPIRED_ACTOR_MARKER));
+        if (expiredActor.success && event.newValue === null && (event.key === 'token' || event.key === 'user')) {
+            // AuthContext marks expiry before deleting credentials. Other tabs
+            // hide the old account but must retain its unresolved event UUID.
+            void purgeRetiredWorkboxQueue().catch(() => console.error('Legacy offline queue cleanup failed.'));
+            return;
+        }
         if (event.key === 'token' && event.newValue !== null) {
             // Token rotation for the same actor preserves unresolved event IDs.
             void purgeRetiredWorkboxQueue().catch(() => console.error('Legacy offline queue cleanup failed.'));
@@ -584,6 +692,7 @@ export async function queueCustomMutation(customId: string, payload: unknown): P
 export async function clearActorScopedOfflineData(actorId?: string | number | null): Promise<void> {
     const validatedActorId = actorId === null ? null : actorId === undefined ? readStoredActorId()
         : normalizedActorId(actorId);
+    if (validatedActorId === null || verifiedReplaySession?.actorId === validatedActorId) revokeOfflineReplaySession();
     if (typeof localStorage !== 'undefined') {
         const owner = validatedActorId ?? '*';
         const key = `${ACTOR_REPLAY_FENCE_PREFIX}${owner}`;

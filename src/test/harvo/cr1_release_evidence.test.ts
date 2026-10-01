@@ -15,6 +15,7 @@ const receipt = (): ReleaseEvidence => ({
   predicates: [{ id: 'fixture-denied', result: 'PASS' }], dependencies: [],
 });
 const requirement = (value = receipt()): EvidenceRequirement => ({
+  packageId: 'R0-02', findingIds: ['A01'],
   subject: value.subject, level: 'LOCAL', predicateIds: ['fixture-denied'], kinds: ['UNIT'], protectedChange: true,
   maxAgeMs: 300000, now, dependencies: new Map(), requiredDependencyIds: [],
 });
@@ -35,6 +36,15 @@ describe('R0-04 strict evidence validation foundation (isolated fixtures)', () =
   it('has no default authority and rejects arbitrary authenticated:true fields', async () => {
     expect(await evaluateReleaseEvidence(receipt(), requirement())).toMatchObject({ accepted: false, reasons: ['TRUSTED_COLLECTOR_UNAVAILABLE'] });
     expect((await evaluateReleaseEvidence({ ...receipt(), authenticated: true }, requirement())).reasons).toContain('EVIDENCE_SCHEMA_INVALID');
+  });
+  it('does not reuse an independently attested receipt for another corrective card or finding', async () => {
+    const wrongPackage = receipt();
+    wrongPackage.packageId = 'R0-03';
+    expect((await evaluateReleaseEvidence(wrongPackage, requirement(), trust(wrongPackage))).reasons).toContain('EVIDENCE_PACKAGE_MISMATCH');
+
+    const wrongFinding = receipt();
+    wrongFinding.findingIds = ['A02'];
+    expect((await evaluateReleaseEvidence(wrongFinding, requirement(), trust(wrongFinding))).reasons).toContain('EVIDENCE_FINDING_SCOPE_INCOMPLETE');
   });
   it.each([
     ['fixture', (value: ReleaseEvidence) => { value.classification = 'FIXTURE'; }, 'FIXTURE_CANNOT_SATISFY_GATE'],

@@ -67,6 +67,8 @@ export interface EvidenceTrustBoundary {
 }
 
 export interface EvidenceRequirement {
+  packageId: ReleaseEvidence['packageId'];
+  findingIds: readonly ReleaseEvidence['findingIds'][number][];
   subject: EvidenceSubject;
   level: 'LOCAL' | 'EXTERNAL';
   predicateIds: readonly string[];
@@ -93,6 +95,8 @@ export async function evaluateReleaseEvidence(raw: unknown, requirement: Evidenc
   const finishedAt = Date.parse(receipt.collection.finishedAt);
   if (!Number.isFinite(now) || !Number.isFinite(requirement.maxAgeMs) || requirement.maxAgeMs <= 0) reasons.push('EVIDENCE_POLICY_INVALID');
   if (!requirement.predicateIds.length || !requirement.kinds.length) reasons.push('EVIDENCE_POLICY_INCOMPLETE');
+  if (receipt.packageId !== requirement.packageId) reasons.push('EVIDENCE_PACKAGE_MISMATCH');
+  if (requirement.findingIds.some(id => !receipt.findingIds.includes(id))) reasons.push('EVIDENCE_FINDING_SCOPE_INCOMPLETE');
   if (receipt.classification === 'FIXTURE') reasons.push('FIXTURE_CANNOT_SATISFY_GATE');
   if (requirement.level === 'EXTERNAL' && receipt.classification !== 'EXTERNAL_OBSERVATION') reasons.push('EXTERNAL_OBSERVATION_REQUIRED');
   if (receipt.classification === 'LOCAL_OBSERVATION' && receipt.subject.environment !== 'LOCAL') reasons.push('EVIDENCE_ENVIRONMENT_ESCALATION');

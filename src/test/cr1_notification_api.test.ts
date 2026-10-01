@@ -1,9 +1,11 @@
 import express from 'express';
+import {rateLimit} from 'express-rate-limit';
 import request from 'supertest';
 import {describe,it,expect,vi} from 'vitest';
 import {randomUUID} from 'node:crypto';
 import type pg from 'pg';
 import {createParticipantNotificationRouter} from '../server/conversations/notificationRouter.js';
+import {createNotificationPreferenceLimiter} from '../server/conversations/notificationPreferenceLimiter.js';
 import {createConversationNotificationRuntime} from '../server/conversations/notificationRuntimeAdapter.js';
 import {createHttpExecutionContextMiddleware} from '../server/observability/httpExecutionContext.js';
 import {ConversationNotificationError} from '../lib/conversations/notifications.js';
@@ -61,5 +63,35 @@ describe('CR1 participant notification HTTP boundary',()=>{
   const pool={connect:vi.fn()} as unknown as pg.Pool;
   expect(createConversationNotificationRuntime({},pool)).toBeNull();expect(createConversationNotificationRuntime({CR1_CONVERSATION_NOTIFICATIONS_ENABLED:'false'},pool)).toBeNull();
   expect(createConversationNotificationRuntime({CR1_CONVERSATION_NOTIFICATIONS_ENABLED:'true'},pool)).not.toBeNull();expect(pool.connect).not.toHaveBeenCalled();
+ });
+ it('keeps chat quota separate from the authenticated preference command and isolates shared-IP actors',async()=>{
+  const app=express();app.use(express.json(),createHttpExecutionContextMiddleware());
+  const chatLimiter=rateLimit({windowMs:900_000,max:1,validate:false,standardHeaders:false,legacyHeaders:false});
+  app.post('/api/messages',chatLimiter,(_req,res)=>{res.sendStatus(204);});
+  const counts=new Map<string,number>();let actor=20;
+  const store={eval:async<T>(_script:string,keys:string[],args:(string|number)[]):Promise<T>=>{
+   const count=(counts.get(keys[0])??0)+1;counts.set(keys[0],count);
+   return [count<=Number(args[1])?1:0,900,count] as T;
+  }};
+  const port={preferences:vi.fn(),evidence:vi.fn(),setPreference:vi.fn(async(id:number,input:unknown)=>{
+   const body=input as {requestId:string;expectedVersion:string;inAppAlerts:boolean};
+   return {accountId:id,requestId:body.requestId,previousVersion:body.expectedVersion,
+    version:'1',inAppAlerts:body.inAppAlerts,recordedAt:now};
+  })};
+  app.use('/api/conversations/v1',createParticipantNotificationRouter(port as unknown as Parameters<typeof createParticipantNotificationRouter>[0],{
+   authenticate:(_req,_res,next)=>next(),
+   mutationLimiter:createNotificationPreferenceLimiter({store,accountId:()=>actor,max:1}),
+   accountId:()=>actor,
+  }));
+  expect((await request(app).post('/api/messages')).status).toBe(204);
+  expect((await request(app).post('/api/messages')).status).toBe(429);
+  const url='/api/conversations/v1/notifications/preferences';
+  const send=(requestId:string)=>request(app).put(url).set('X-Encho-Conversation-Command','1')
+   .send({requestId,expectedVersion:'0',inAppAlerts:false});
+  expect((await send(randomUUID())).status).toBe(200);
+  const blocked=await send(randomUUID());expect(blocked.status).toBe(429);
+  expect(publicApiErrorSchema.parse(blocked.body).code).toBe('RATE_LIMITED');
+  actor=21;expect((await send(randomUUID())).status).toBe(200);
+  expect(port.setPreference).toHaveBeenCalledTimes(2);
  });
 });

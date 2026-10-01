@@ -3,6 +3,9 @@ import {InquiryInbox} from './src/lib/marketing/inquiryInbox.js';
 import {createConversationRouter} from './src/server/conversations/router.js';
 import {conversationReadiness} from './src/server/conversations/readiness.js';
 import {startConversationNotifications} from './src/server/conversation/notificationRuntime.js';
+import {createParticipantNotificationRuntime} from './src/server/conversations/participantNotificationRuntime.js';
+import {createParticipantNotificationRouter} from './src/server/conversations/notificationRouter.js';
+import {createNotificationPreferenceLimiterFromEnv} from './src/server/conversations/notificationPreferenceLimiter.js';
 import {measurementVisitor} from './src/server/marketing/measurementRouter.js';
 import {createMeasurementRouter} from './src/server/marketing/measurementRouter.js';
 import {registerSecureRealtime} from './src/server/realtime.js';
@@ -10,8 +13,13 @@ import {originAllowed} from './src/server/deployment/origins.js';
 import { installPoolIsolation } from './src/server/deployment/poolIsolation.js';
 import { registerCalendarRoutes } from './src/server/calendar.js';
 import {createPublicAssetsMiddleware} from './src/server/deployment/staticAssets.js';
+import {phoneOtpEnrollmentSchemaReady} from './src/server/auth/phoneOtpSchemaReadiness.js';
 import {databaseReadiness} from './src/server/deployment/databaseReadiness.js';
 import {createShutdown,drainHttpServer,isProcessEntry} from './src/server/deployment/lifecycle.js';
+import {legacyServerWorkersEnabled} from './src/server/deployment/legacyServerWorkerGate.js';
+import {legacySchemaBootstrapEnabled} from './src/server/deployment/legacySchemaBootstrapGate.js';
+import {legacyCommerceTestSandboxEnabled} from './src/server/deployment/legacyCommerceSandbox.js';
+import {resolveDatabasePoolConfig, createFailClosedPool} from './src/server/deployment/databaseTls.js';
 import { createDeployedMarketingRuntime } from './src/server/marketing/runtime.js';
 import { createMarketingRouter, marketingErrorHandler } from './src/server/marketing/router.js';
 import { legacyMarketingBoundary } from './src/server/marketing/legacyBoundary.js';
@@ -105,7 +113,12 @@ export async function transitionCampaignState(params: {
 
     // 3. Validate transition
     const allowed = VALID_TRANSITIONS[currentState] || [];
-    // Allow admins to override safely
+    // Terminal cancellation cannot be reversed by an administrator-labelled
+    // legacy caller; a fresh reviewed/funded revision is required instead.
+    if (currentState === 'cancelled' || currentState === 'killed') {
+      throw new Error(`Terminal campaign state ${currentState} cannot transition`);
+    }
+    // Existing legacy admin overrides remain limited to nonterminal states.
     if (!allowed.includes(to) && actorType !== 'admin') {
        throw new Error(`Illegal transition from ${currentState} to ${to}`);
     }
@@ -119,17 +132,14 @@ export async function transitionCampaignState(params: {
     // 5. Append Immutable Event
     const eventCorrId = correlationId || crypto.randomUUID();
 
-    // We assume meta_publishing_events table exists. Let's do a safe insert or fallback if schema differs
-    try {
-      await client.query(`
-        INSERT INTO meta_publishing_events
-        (campaign_id, correlation_id, event_type, from_state, to_state, actor_type, actor_id, reason)
-        VALUES ($1, $2, 'STATE_TRANSITION', $3, $4, $5, $6, $7)
-      `, [campaignId, eventCorrId, currentState, to, actorType, String(actorId), reason]);
-    } catch (e: any) {
-      // If table doesn't have exact schema, log it but don't fail the FSM if it's missing columns (temporary until migration)
-      console.error('[FSM AUDIT WARN] Could not append to meta_publishing_events:', e.message);
-    }
+    // The transition and audit event are one logical write. An audit failure
+    // must abort the caller's transaction instead of reporting a state that
+    // PostgreSQL may have rolled back after an error.
+    await client.query(`
+      INSERT INTO meta_publishing_events
+      (campaign_id, correlation_id, event_type, from_state, to_state, actor_type, actor_id, reason)
+      VALUES ($1, $2, 'STATE_TRANSITION', $3, $4, $5, $6, $7)
+    `, [campaignId, eventCorrId, currentState, to, actorType, String(actorId), reason]);
 
     if (releaseClient) await client.query('COMMIT');
 
@@ -163,6 +173,7 @@ import { createWorkforceCommandRouter } from './src/server/operations/workforceC
 import { createWorkforceCommandRuntime } from './src/server/operations/workforceCommandRuntime.js';
 import { createWorkforceFactorRouter } from './src/server/operations/workforceFactorRouter.js';
 import { createWorkforceFactorRuntime } from './src/server/operations/workforceFactorRuntime.js';
+import { createPhoneOtpChallengeFromEnv, normalizeOtpPhone } from './src/server/auth/phoneOtpChallenge.js';
 import { createServiceCaseRuntime } from './src/server/conversations/serviceRuntime.js';
 import { createParticipantServiceRouter,createStaffServiceRouter } from './src/server/conversations/serviceRouter.js';
 import { conversationAssistanceBoundary } from './src/server/assistance/conversationAssistanceBoundary.js';
@@ -186,6 +197,7 @@ import sharp from 'sharp';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pkg from 'pg';
+import type pg from 'pg';
 import { Redis } from '@upstash/redis';
 import { createImmutableS3Upload, createMediaUploadS3Client } from './src/lib/immutableS3Upload.js';
 import dotenv from 'dotenv';
@@ -419,19 +431,12 @@ if (isDbConfigured) {
 // Background Worker Execution Gate
 // Workers MUST ONLY run on dedicated long-running containers (Cloud Run worker.ts).
 // Vercel Serverless Functions, AWS Lambda, and test runners MUST NEVER execute background interval loops.
-export const shouldRunBackgroundWorkers = Boolean(
-  process.env.NODE_ENV !== 'production' &&
-  process.env.DISABLE_BACKGROUND_WORKERS !== 'true' &&
-  !process.env.VERCEL &&
-  !process.env.NOW_REGION &&
-  !process.env.AWS_LAMBDA_FUNCTION_NAME &&
-  process.env.NODE_ENV !== 'test'
-);
+export const shouldRunBackgroundWorkers = legacyServerWorkersEnabled(process.env, dbUrl);
 
 if (shouldRunBackgroundWorkers) {
-  console.log('[WORKER ENGINE] Background worker timers enabled for long-running host.');
+  console.log('[WORKER ENGINE] Legacy server timers explicitly enabled for a local PostgreSQL target.');
 } else {
-  console.log('[WORKER ENGINE] Background worker timers disabled (Serverless/Test runtime detected).');
+  console.log('[WORKER ENGINE] Legacy server timers disabled; use the dedicated worker for marketing jobs.');
 }
 
 
@@ -500,6 +505,7 @@ async function syncDynamicPricingToMeta(listingId: any, oldPrice: any, newPrice:
 
 export const rlsStorage = new AsyncLocalStorage<{ userId?: number | string | null; isRequest?: boolean; bypassRls?: boolean }>();
 
+let dbConnectionError: string | null = null;
 
 const poolConfig: any = {
   max: process.env.VERCEL ? 3 : 20, // In serverless Vercel functions, limit pool per lambda to 3 to avoid connection pool exhaustion
@@ -512,16 +518,21 @@ const poolConfig: any = {
   allowExitOnIdle: true
 };
 
+let resolvedPrimaryConfig: pg.PoolConfig | null = null;
 if (isDbConfigured) {
-  poolConfig.connectionString = dbUrl;
-  if (!dbUrl.includes('localhost') && !dbUrl.includes('127.0.0.1')) {
-    poolConfig.ssl = { rejectUnauthorized: false };
-  } else {
-    poolConfig.ssl = false;
+  try {
+    const { poolConfig: resolvedPoolConfig } = resolveDatabasePoolConfig(dbUrl, poolConfig, { targetLabel: 'primary' });
+    resolvedPrimaryConfig = resolvedPoolConfig;
+  } catch (err: any) {
+    dbConnectionError = (err as Error).message || String(err);
+    console.error("[CRITICAL DB CONFIG ERROR]", dbConnectionError);
   }
 }
 
-const pool = new Pool(poolConfig);
+const pool: pg.Pool = resolvedPrimaryConfig
+  ? new Pool(resolvedPrimaryConfig)
+  : createFailClosedPool(dbConnectionError || 'Database connection not configured');
+
 pool.on('error', (err: any) => {
   console.error('[DATABASE POOL ERROR] Unexpected error on idle client:', err?.message || err);
 });
@@ -531,10 +542,27 @@ const readPoolConfig: any = {
   ...poolConfig,
   max: process.env.VERCEL ? 4 : 25
 };
-if (isDbConfigured) {
-  readPoolConfig.connectionString = process.env.READ_DATABASE_URL || dbUrl;
+const rawReadDbUrl = (process.env.READ_DATABASE_URL && process.env.READ_DATABASE_URL.trim()) || '';
+let resolvedReadConfig: pg.PoolConfig | null = null;
+if (isDbConfigured && rawReadDbUrl) {
+  try {
+    const { poolConfig: resolvedReadConfigValue } = resolveDatabasePoolConfig(rawReadDbUrl, readPoolConfig, { targetLabel: 'read_replica' });
+    resolvedReadConfig = resolvedReadConfigValue;
+  } catch (err: any) {
+    console.error("[CRITICAL DB READ REPLICA CONFIG ERROR]", (err as Error).message || String(err));
+  }
+} else if (resolvedPrimaryConfig) {
+  resolvedReadConfig = {
+    ...readPoolConfig,
+    connectionString: resolvedPrimaryConfig.connectionString,
+    ssl: resolvedPrimaryConfig.ssl
+  };
 }
-export const readPool = new Pool(readPoolConfig);
+
+export const readPool: pg.Pool = resolvedReadConfig
+  ? new Pool(resolvedReadConfig)
+  : createFailClosedPool(dbConnectionError || 'Database read replica not configured');
+
 readPool.on('error', (err: any) => {
   console.error('[DATABASE READ-POOL ERROR] Unexpected error on read replica idle client:', err?.message || err);
 });
@@ -547,8 +575,7 @@ export async function queryAnalyticsRead(text: string, params?: any[]) {
 installPoolIsolation(pool, () => rlsStorage.getStore());
 installPoolIsolation(readPool, () => rlsStorage.getStore());
 
-let dbConnectionError: string | null = null;
-if (isDbConfigured) {
+if (isDbConfigured && !dbConnectionError) {
   pool.query('SELECT 1').then(() => {
     dbConnectionError = null;
   }).catch((err: any) => {
@@ -646,6 +673,42 @@ const JWT_SECRET = configuredJwtSecret && configuredJwtSecret.length >= 32 ? con
 
 const META_API_TOKEN = process.env.META_API_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID || "982841698238647";
+const phoneOtpDeliveryConfig = z.object({
+  PHONE_OTP_WHATSAPP_TOKEN: z.string().min(20),
+  PHONE_OTP_WHATSAPP_PHONE_NUMBER_ID: z.string().regex(/^\d{10,30}$/),
+  PHONE_OTP_WHATSAPP_TEMPLATE_NAME: z.string().regex(/^[a-z][a-z0-9_]{2,511}$/),
+  PHONE_OTP_WHATSAPP_TEMPLATE_LANGUAGE: z.string().regex(/^[a-z]{2}(?:_[A-Z]{2})?$/),
+  PHONE_OTP_WHATSAPP_GRAPH_VERSION: z.string().regex(/^v\d+\.\d+$/),
+}).safeParse(process.env);
+
+// OTP delivery is a business-initiated Authentication template, never a
+// free-form service-window message. Only a definitive rejection revokes the
+// challenge; a timeout/5xx can have reached the handset.
+async function sendPhoneOtpTemplate(phone: string, code: string): Promise<'ACCEPTED' | 'REJECTED' | 'UNKNOWN'> {
+  if (!phoneOtpDeliveryConfig.success) return 'REJECTED';
+  const config = phoneOtpDeliveryConfig.data;
+  try {
+    const response = await fetch(
+      `https://graph.facebook.com/${config.PHONE_OTP_WHATSAPP_GRAPH_VERSION}/${config.PHONE_OTP_WHATSAPP_PHONE_NUMBER_ID}/messages`, {
+        method: 'POST', signal: AbortSignal.timeout(10_000),
+        headers: { Authorization: `Bearer ${config.PHONE_OTP_WHATSAPP_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp', recipient_type: 'individual', to: phone.slice(1), type: 'template',
+          template: {
+            name: config.PHONE_OTP_WHATSAPP_TEMPLATE_NAME,
+            language: { code: config.PHONE_OTP_WHATSAPP_TEMPLATE_LANGUAGE },
+            components: [
+              { type: 'body', parameters: [{ type: 'text', text: code }] },
+              { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: code }] },
+            ],
+          },
+        }),
+      });
+    if (!response.ok) return response.status >= 500 ? 'UNKNOWN' : 'REJECTED';
+    const body = await response.json().catch(() => null);
+    return typeof body?.messages?.[0]?.id === 'string' ? 'ACCEPTED' : 'UNKNOWN';
+  } catch { return 'UNKNOWN'; }
+}
 
 async function sendWhatsAppMessage(toPhone: string, messageText: string): Promise<boolean> {
   try {
@@ -923,9 +986,17 @@ const authLimiter = rateLimit({
   message: { error: 'Too many authentication attempts, please try again later' }
 });
 
-const otpLimiter = rateLimit({
+const otpSendLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5, // max 5 OTP requests per hour per IP
+  max: 100, // local load shedding; shared phone/IP limits live in Redis
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: false,
+  message: { error: 'Too many OTP requests, please try again later' }
+});
+const otpVerifyLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 300,
   standardHeaders: true,
   legacyHeaders: false,
   validate: false,
@@ -1061,6 +1132,21 @@ const harvoMarketing = createDeployedMarketingRuntime(pool);
 const serviceCasesRuntime=createServiceCaseRuntime(process.env,pool,()=>{
   StructuredLogger.error('[SERVICE_CASE] Scoped runtime unavailable',{errorCode:'SERVICE_CASE_UNAVAILABLE'});
 });
+const participantNotifications=createParticipantNotificationRuntime(process.env,()=>{
+  StructuredLogger.error('[CONVERSATION_NOTIFICATION] Restricted participant runtime unavailable',{errorCode:'PARTICIPANT_NOTIFICATION_UNAVAILABLE'});
+});
+const participantNotificationAccountId=(req:Request)=>Number((req as AuthRequest).user?.id);
+const participantNotificationMutationLimiter=participantNotifications
+  ? createNotificationPreferenceLimiterFromEnv(process.env,{
+      accountId:participantNotificationAccountId,
+      onFailure:event=>console.warn('[CR1_PARTICIPANT_NOTIFICATION_LIMITER_FAILED]',event),
+    })
+  : (_req:Request,_res:Response,next:NextFunction)=>next();
+app.use('/api/conversations/v1',createParticipantNotificationRouter(participantNotifications?.port??null,{
+  authenticate:authenticateToken,mutationLimiter:participantNotificationMutationLimiter,
+  accountId:participantNotificationAccountId,
+  onFailure:event=>console.warn('[CR1_PARTICIPANT_NOTIFICATION_FAILED]',event),
+}));
 app.use('/api/conversations/v1',createParticipantServiceRouter(serviceCasesRuntime?.participant??null,{authenticate:authenticateToken,accountId:req=>Number((req as AuthRequest).user?.id)}));
 app.use('/api/operations/v1/service',createStaffServiceRouter(serviceCasesRuntime?.staff??null,workforceOrigin(process.env)));
 app.get('/api/stays/:slug/spatial-story',rateLimit({windowMs:60000,limit:60,standardHeaders:'draft-8',legacyHeaders:false}),async(req:Request,res:Response,next:NextFunction)=>{try{res.setHeader('Cache-Control','no-store');res.json(await harvoMarketing.stories.publicStory(String(req.params.slug)));}catch(error){next(error);}},marketingErrorHandler);
@@ -1222,10 +1308,16 @@ app.post('/api/webhook/whatsapp', verifyMetaWebhook, async (req, res) => {
 });
 
 let usersTableInitialized = false;
+const requireExistingSchema = async () => {
+  const ready = await databaseReadiness(pool);
+  if (!ready.ready) throw new Error('DATABASE_MIGRATIONS_OR_ROLE_NOT_READY');
+  marketingSchemaInitialized = usersTableInitialized = listingsTableInitialized = true;
+};
 // Helper to ensure users table
 const ensureUsersTable = async () => {
   if (!isDbConfigured) return;
   if (usersTableInitialized) return;
+  if (!legacySchemaBootstrapEnabled(process.env, dbUrl)) return requireExistingSchema();
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -1273,6 +1365,7 @@ const ensureListingsTable = async () => {
   }
   if (!isDbConfigured) return;
   if (listingsTableInitialized) return;
+  if (!legacySchemaBootstrapEnabled(process.env, dbUrl)) return requireExistingSchema();
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS listings (
@@ -2061,6 +2154,10 @@ const ensureListingsTable = async () => {
 let marketingSchemaInitialized = false;
 export const ensureMarketingSchema = async () => {
   if (!isDbConfigured || marketingSchemaInitialized) return;
+  // The pool is bound to dbUrl at import, so a later env change cannot authorize it.
+  if (!legacySchemaBootstrapEnabled(process.env, dbUrl)) {
+    throw new Error('LEGACY_SCHEMA_BOOTSTRAP_UNAVAILABLE');
+  }
 
   // 1. host_wallets table (The Fuel Tank + Gap 13 Double-Entry Ledger)
   await pool.query(`
@@ -2811,12 +2908,12 @@ export const ensureMarketingSchema = async () => {
 let initPromise: Promise<void> | null = null;
 const ensureDbInitialized = async () => {
   if (!isDbConfigured) return;
-  if (process.env.NODE_ENV === 'production') {
+  // A dev server may load the primary remote .env. Legacy CREATE/ALTER startup
+  // is confined to an explicit disposable local target; all other targets
+  // take the same read-only readiness path as production.
+  if (!legacySchemaBootstrapEnabled(process.env, dbUrl)) {
     if (marketingSchemaInitialized && usersTableInitialized && listingsTableInitialized) return;
-    const ready = await databaseReadiness(pool);
-    if (!ready.ready) throw new Error('DATABASE_MIGRATIONS_OR_ROLE_NOT_READY');
-    marketingSchemaInitialized = usersTableInitialized = listingsTableInitialized = true;
-    return;
+    return requireExistingSchema();
   }
   if (marketingSchemaInitialized && usersTableInitialized && listingsTableInitialized) return;
   if (!initPromise) {
@@ -2914,66 +3011,118 @@ if (isDbConfigured) {
 }
 
 // Auth Routes
-const otpStore = new Map<string, { otp: string, expiresAt: number }>();
+// Phone challenges and attempt counters must be shared across server instances.
+// Missing credentials disable this path; a process-local fallback is unsafe.
+const phoneOtpAuthority = createPhoneOtpChallengeFromEnv();
+const otpSendInput = z.object({ phone: z.string() });
+const otpVerifyInput = z.object({ phone: z.string(), otp: z.string().regex(/^\d{6}$/), name: z.string().trim().max(120).optional() });
 
-app.post('/api/auth/otp/send', otpLimiter, async (req, res) => {
-  const { phone } = req.body;
-  if (!phone) return res.status(400).json({ error: 'Phone number is required' });
+app.post('/api/auth/otp/send', otpSendLimiter, async (req, res) => {
+  if (!phoneOtpAuthority || !phoneOtpDeliveryConfig.success || !isDbConfigured) {
+    return res.status(503).json({ error: 'Phone verification is temporarily unavailable' });
+  }
+  const input = otpSendInput.safeParse(req.body);
+  if (!input.success) return res.status(400).json({ error: 'A valid international phone number is required' });
+  let phone: string;
+  try { phone = normalizeOtpPhone(input.data.phone); }
+  catch { return res.status(400).json({ error: 'A valid international phone number is required' }); }
 
-  // Generate 6 digit OTP
-  const otp = crypto.randomInt(100000, 1000000).toString();
-  otpStore.set(phone, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
-
-
-  // Meta WA API sending using the global helper
-  const messageText = `Your EnchoSpace verification code is: ${otp}`;
-  const delivered = await sendWhatsAppMessage(phone, messageText);
-  if (!delivered) { otpStore.delete(phone); return res.status(503).json({ error: 'Verification code could not be sent. Try again later.' }); }
-  res.json({ success: true, message: 'Verification code sent' });
-});
-
-app.post('/api/auth/otp/verify', otpLimiter, async (req, res) => {
-  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  const { phone, otp, name } = req.body;
-  if (!phone || !otp) return res.status(400).json({ error: 'Phone and OTP are required' });
-
-  const record = otpStore.get(phone);
-  if (!record || record.otp !== otp || record.expiresAt < Date.now()) {
-    otpStore.delete(phone);
-    return res.status(400).json({ error: 'Invalid or expired OTP' });
+  try {
+    if (!(await phoneOtpEnrollmentSchemaReady(pool))) {
+      return res.status(503).json({ error: 'Phone verification is temporarily unavailable' });
+    }
+  } catch {
+    return res.status(503).json({ error: 'Phone verification is temporarily unavailable' });
   }
 
-  otpStore.delete(phone);
+  const otp = crypto.randomInt(100000, 1000000).toString();
+  try {
+    const issued = await phoneOtpAuthority.issue(phone, req.ip, otp);
+    if (!issued) return res.status(429).json({ error: 'Too many verification attempts. Try again later.' });
+    const delivery = await sendPhoneOtpTemplate(phone, otp);
+    if (delivery === 'REJECTED') {
+      await phoneOtpAuthority.revoke(phone, issued.generation);
+      return res.status(503).json({ error: 'Verification code could not be sent. Try again later.' });
+    }
+    if (delivery === 'UNKNOWN') {
+      return res.status(503).json({
+        error: 'Delivery status is unknown. If a code arrives, you can try it.',
+        deliveryStatus: 'UNKNOWN',
+      });
+    }
+    return res.json({ success: true, deliveryStatus: 'ACCEPTED',
+      message: 'Verification request accepted. Check WhatsApp for the code.' });
+  } catch {
+    // An ambiguous store/delivery result never becomes a successful send.
+    return res.status(503).json({ error: 'Phone verification is temporarily unavailable' });
+  }
+});
+
+app.post('/api/auth/otp/verify', otpVerifyLimiter, async (req, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  if (!phoneOtpAuthority) return res.status(503).json({ error: 'Phone verification is temporarily unavailable' });
+  const input = otpVerifyInput.safeParse(req.body);
+  if (!input.success) return res.status(400).json({ error: 'Phone and a six-digit verification code are required' });
+  let phone: string;
+  try { phone = normalizeOtpPhone(input.data.phone); }
+  catch { return res.status(400).json({ error: 'A valid international phone number is required' }); }
+  const { otp, name } = input.data;
+  try {
+    const result = await phoneOtpAuthority.verify(phone, req.ip, otp);
+    if (result === 'RATE_LIMITED') return res.status(429).json({ error: 'Too many verification attempts. Try again later.' });
+    if (result !== 'VERIFIED') return res.status(400).json({ error: 'Invalid or expired OTP' });
+  } catch {
+    return res.status(503).json({ error: 'Phone verification is temporarily unavailable' });
+  }
 
   try {
     await ensureUsersTable();
 
-    // Check if user exists
-    const existing = await pool.query('SELECT * FROM users WHERE phone = $1', [phone]);
+    // Legacy users may have stored formatting punctuation or omitted a prefix.
+    // Do not silently merge a digit-only identity into E.164 or create a second
+    // account for the same digits; such rows need a reviewed migration.
+    // The OTP response is consumed by the browser and cached for the session.
+    // Never select credential, provider-link or wallet columns for that response.
+    const phoneCandidates = [phone, phone.slice(1)];
+    if (/^\+91\d{10}$/.test(phone)) phoneCandidates.push(phone.slice(3));
+    const existing = await pool.query(
+      `SELECT id, email, name, role, phone FROM users
+       WHERE regexp_replace(phone, '[[:space:]().-]', '', 'g') = ANY($1::text[]) LIMIT 3`,
+      [phoneCandidates]);
+    if (existing.rows.length > 1 || (existing.rows.length === 1 &&
+        String(existing.rows[0].phone).replace(/[\s().-]/g, '') !== phone)) {
+      return res.status(503).json({ error: 'Phone account requires support review' });
+    }
+    // Consumer phone proof is not workforce authentication. A legacy admin
+    // row must use its existing privileged sign-in path instead of receiving
+    // an admin-role JWT from this lower-assurance channel.
+    if (existing.rows[0]?.role === 'admin') {
+      return res.status(403).json({ error: 'This account requires its existing sign-in method' });
+    }
     let user;
 
     if (existing.rows.length > 0) {
       user = existing.rows[0];
     } else {
-      const generatedEmail = `${phone.replace(/[^0-9]/g, '')}@enchospace.local`;
       const displayName = name || 'New User';
 
       const insertResult = await pool.query(
-        'INSERT INTO users (phone, email, name, role) VALUES ($1, $2, $3, $4) RETURNING id, email, name, role, phone',
-        [phone, generatedEmail, displayName, 'user']
+        'INSERT INTO users (phone, email, name, role) VALUES ($1, NULL, $2, $3) RETURNING id, email, name, role, phone',
+        [phone, displayName, 'user']
       );
       user = insertResult.rows[0];
     }
     const token = jwt.sign({ id: user.id, role: user.role, email: user.email, phone: user.phone }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ user, token });
+    res.json({ user: { id: user.id, email: user.email, name: user.name, role: user.role, phone: user.phone }, token });
   } catch (error) {
     console.error('OTP verify error:', error);
     res.status(500).json({ error: 'Verification failed' });
   }
 });
 
-async function checkCanHostExperiences(email: string, role: string) {
+async function checkCanHostExperiences(email: string | null, role: string) {
   if (role === 'admin') return true;
+  if (!email) return false;
   try {
     const settingsResult = await pool.query('SELECT value FROM settings WHERE key = $1', ['authorized_experience_hosts']);
     if (settingsResult.rows.length > 0) {
@@ -3469,7 +3618,7 @@ app.get('/api/health/db', async (req, res) => {
 // Legacy development-only schema initializer. Production schema authority is the
 // ordered migration runner; this route is disabled unless a developer opts in.
 app.post('/api/init-db', authenticateToken, requireAdmin, async (_req, res) => {
-  if (process.env.NODE_ENV === 'production' || process.env.VERCEL || process.env.ENCHO_ALLOW_RUNTIME_DDL !== 'true') {
+  if (process.env.ENCHO_ALLOW_RUNTIME_DDL !== 'true' || !legacySchemaBootstrapEnabled(process.env, dbUrl)) {
     return res.status(404).json({ error: 'Not found' });
   }
   if (!isDbConfigured) {
@@ -15152,7 +15301,7 @@ app.post('/api/bookings', authenticateToken, bookingLimiter, async (req: AuthReq
   if (!isDbConfigured) {
     return res.status(503).json({ error: 'DB not configured' });
   }
-  if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
+  if (!legacyCommerceTestSandboxEnabled(process.env, dbUrl)) {
     return res.status(503).json({
       code: 'STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE',
       error: 'Online stay reservations remain unavailable until the canonical quote, tax and booking authority is accepted.',
@@ -16938,7 +17087,7 @@ app.post('/api/checkout/razorpay/order', optionalAuthenticateToken, async (req: 
     const { listingId, experienceId, roomId, moveInDate, configuration, numTickets, name, phone } = req.body;
     const userId = req.user?.id;
 
-    const isProductionRuntime = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
+    const isProductionRuntime = !legacyCommerceTestSandboxEnabled(process.env, dbUrl);
     // This legacy path also creates draft booking rows and has no canonical quote
     // authority. Keep every product branch fail-closed in production.
     if (isProductionRuntime) {
@@ -17106,7 +17255,7 @@ app.post('/api/payments/razorpay/verify', authenticateToken, async (req: AuthReq
       return res.status(400).json({ error: 'Missing required Razorpay verification parameters' });
     }
 
-    const isProductionRuntime = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
+    const isProductionRuntime = !legacyCommerceTestSandboxEnabled(process.env, dbUrl);
     if (isProductionRuntime) {
       return res.status(410).json({
         error: 'Client payment verification is retired. Signed provider webhooks are authoritative.',
@@ -17990,7 +18139,7 @@ async function startServer() {
     printStartupIntegrationReport();
 
     // Development bootstrap only; production schema is installed by an audited migration process.
-    if (isDbConfigured && process.env.NODE_ENV !== 'production') {
+    if (isDbConfigured && legacySchemaBootstrapEnabled(process.env, dbUrl)) {
       try {
         await ensureUsersTable();
         await ensureListingsTable();
@@ -18521,6 +18670,10 @@ export async function verifyMetaExternalObjectDetailed(
 
 // Phase 9 / P0-3: DB <-> Meta Active Reconciliation Engine & Quarantine Worker (+ Advisory Lock)
 export const processMetaReconciliation = async (overridePool?: any, overrideAccessToken?: string) => {
+  // The default pool is bound at import; a later env change cannot authorize it.
+  if (!legacyCommerceTestSandboxEnabled(process.env, dbUrl)) {
+    throw new Error('LEGACY_RECONCILIATION_UNAVAILABLE');
+  }
   const dbPool = overridePool || pool;
   if (!dbPool) return;
   const accessToken = overrideAccessToken || process.env.META_ACCESS_TOKEN || process.env.META_API_TOKEN;
@@ -18848,10 +19001,8 @@ export const processMetaReconciliation = async (overridePool?: any, overrideAcce
     }
   );
 };
-// Run every 10 minutes
-if (shouldRunBackgroundWorkers) {
-  setInterval(processMetaReconciliation, 10 * 60 * 1000);
-}
+// The retired legacy reconciler is only callable by isolated test fixtures.
+// Its old interval cannot satisfy both the local-worker and test-sandbox gates.
 
 // ==========================================
 // Phase 2.9.3B: Durable Transaction Recovery Worker
@@ -19180,7 +19331,7 @@ export default app;
 const shutdown = createShutdown({
   markDraining: () => { serverDraining = true; },
   drain: async () => { await conversationNotifications?.stop(); globalIoInstance?.disconnectSockets(true); await drainHttpServer(managedHttpServer); globalIoInstance?.close(); },
-  closeResources: async () => { await Promise.all([pool.end(), ...(readPool !== pool ? [readPool.end()] : [])]); },
+  closeResources: async () => { await Promise.all([pool.end(), ...(readPool !== pool ? [readPool.end()] : []), ...(participantNotifications ? [participantNotifications.close()] : [])]); },
   exit: code => process.exit(code),
   log: event => console.log(JSON.stringify({event})),
 });

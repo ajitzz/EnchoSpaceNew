@@ -4,6 +4,7 @@ export const useAuth=()=>fixtureIdentity;
 export const uiAudio={playClick(){},playPop(){}};
 export const OFFLINE_MUTATION_COMMITTED_EVENT='encho:offline-mutation-committed';
 export async function fetchWithCache(url:string,_key:string,options:RequestInit){const response=await fetch(url,options);if(!response.ok)throw new Error('Fixture API unavailable');return response.json();}
+export async function listPendingInquiryIntents(_threadId:number){return [] as Array<{receiverId:number;content:string;clientEventId:string;queuedAt:number}>;}
 export async function queueMutationWithReceipt(url:string,method:string,body:unknown,headers:Record<string,string>){const response=await fetch(url,{method,headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify(body)});return response.ok?{status:'COMMITTED',mutationId:'fixture',data:await response.json()}:{status:'QUEUED',mutationId:'fixture'};}
 const handlers=new Map<string,(value:unknown)=>void>();
 Object.assign(window,{fixtureConversationEvent:(name:string,value:unknown)=>handlers.get(name)?.(value)});

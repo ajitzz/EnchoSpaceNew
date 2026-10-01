@@ -52,7 +52,7 @@ Execution now proceeds under the founder remediation instruction. States below d
 | R0-04 | Install review, acceptance and evidence validation workflow | Engineering lead + release engineer | M | P0 | IN_PROGRESS |
 | R1-01 | Repair workforce configuration, issuer and actual-role isolation | Identity/security engineer | L | P0 | READY_FOR_REVIEW |
 | R1-02 | Unify workforce administration with canonical IAM commands | IAM backend + staff frontend | XL | P0 | IN_PROGRESS |
-| R1-03 | Remove generic privileged offline replay and migrate old queues | Frontend platform + security QA | L | P0 | READY_FOR_REVIEW |
+| R1-03 | Remove generic privileged offline replay and migrate old queues | Frontend platform + security QA | L | P0 | CHANGES_REQUESTED — browser containment locally tested; server-side logout/cutover proof absent |
 | R1-04 | Make audit history correct across every IAM writer | Security/database engineer | L | P0 | IN_PROGRESS |
 | R2-01 | Replace process-local hardening authority with durable commands | Platform backend | L | P0 | IN_PROGRESS |
 | R2-02 | Separate credential-free builds from exact deployment verification | Release/DBA | M | P0 | IN_PROGRESS |
@@ -60,7 +60,7 @@ Execution now proceeds under the founder remediation instruction. States below d
 | R2-04 | Reaccept the P2 foundation exit | Independent security/release reviewer | M | P0 | PLANNED |
 | R3-01 | Establish canonical room-offer versions across three surfaces | Guest commerce + host/admin product | L | P0 | PLANNED |
 | R3-02 | Implement approved policy contracts without fabricated tax authority | Commerce/finance engineer + professional policy owner | L | P0 | PLANNED |
-| R3-03 | Connect quote, hold, verified capture and booking | Commerce/payments backend | XL | P0 | PLANNED |
+| R3-03 | Connect quote, hold, verified capture and booking | Commerce/payments backend | XL | P0 | IN_PROGRESS — retired development mutations contained locally; canonical payable journey not delivered |
 | R3-04 | Complete trip/refund support and reaccept P4 | Commerce/frontend + independent reviewer | L | P0 | PLANNED |
 | R4-01 | Complete durable inbox and notification delivery | CRM backend + notification engineer | L | P0 | IN_PROGRESS |
 | R4-02 | Complete scoped Service Desk and grounded assistance | CRM/workforce + privacy/product reviewer | L | P1 | IN_PROGRESS |

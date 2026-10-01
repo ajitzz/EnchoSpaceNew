@@ -19,8 +19,7 @@ const sources = new Map([
   ['src/server/operations/workforceFactorRouter.ts', '/api/operations/v1/workforce/factor'],
   ['src/server/admin/workforceRouter.ts', '/api/admin/workforce'],
   ['src/server/conversations/router.ts', '/api'],
-  // Declared but not composed in server.ts. Relative paths are not live API claims.
-  ['src/server/conversations/notificationRouter.ts', ''],
+  ['src/server/conversations/notificationRouter.ts', '/api/conversations/v1'],
   ['src/server/conversations/serviceRouter.ts', new Map([
     ['createParticipantServiceRouter', '/api/conversations/v1'],
     ['createStaffServiceRouter', '/api/operations/v1/service'],
@@ -144,12 +143,10 @@ export function collectInventory() {
     ['src/server/operations/workforceFactorRouter.ts', null, mountedPrefix('server.ts', 'app', 'createWorkforceFactorRouter')],
     ['src/server/admin/workforceRouter.ts', null, mountedPrefix('server.ts', 'app', 'createAdminWorkforceRouter')],
     ['src/server/conversations/router.ts', null, mountedPrefix('server.ts', 'app', 'createConversationRouter')],
+    ['src/server/conversations/notificationRouter.ts', null, mountedPrefix('server.ts', 'app', 'createParticipantNotificationRouter')],
     ['src/server/conversations/serviceRouter.ts', 'createParticipantServiceRouter', mountedPrefix('server.ts', 'app', 'createParticipantServiceRouter')],
     ['src/server/conversations/serviceRouter.ts', 'createStaffServiceRouter', mountedPrefix('server.ts', 'app', 'createStaffServiceRouter')],
   ];
-  if(mountedPrefixes('server.ts','app','createParticipantNotificationRouter').length) {
-    throw new Error('Notification router now mounted; replace its explicit unmounted disposition and relative prefix');
-  }
   for (const [file, factory, prefix] of expectedMounts) {
     const registration = sources.get(file);
     const expected = registration instanceof Map ? registration.get(factory) : registration;

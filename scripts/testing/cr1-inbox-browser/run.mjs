@@ -22,11 +22,22 @@ const thread={id:1,listing_id:4,experience_id:null,guest_id:10,host_id:20,last_m
 const initial={id:7,thread_id:1,sender_id:20,receiver_id:10,content:'We can explain the room options.',is_read:false,created_at:'2026-09-24T12:00:00Z',conversation_sequence:'1'};
 try{
  for(const width of [1440,360]){
-  const page=await browser.newPage({viewport:{width,height:900},reducedMotion:'reduce'});const errors=[];page.on('pageerror',error=>errors.push(error.message));let readCount=0,queued=false,assistance=null;const canonicalRows=[initial];
+  const page=await browser.newPage({viewport:{width,height:900},reducedMotion:'reduce'});const errors=[];page.on('pageerror',error=>errors.push(error.message));let readCount=0,queued=false,assistance=null,preferenceVersion=0,alertsEnabled=true;const canonicalRows=[initial];
   await page.route('**/*',async route=>{
    const req=route.request(),url=new URL(req.url());if(url.origin!==origin)return route.abort();
    if(!url.pathname.startsWith('/api/'))return route.continue();
    const reply=body=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
+   if(url.pathname==='/api/conversations/v1/notifications/preferences'){
+    if(req.method()==='GET')return reply({accountId:10,version:String(preferenceVersion),inAppAlerts:alertsEnabled,
+     source:preferenceVersion===0?'DEFAULT':'SAVED',updatedAt:preferenceVersion===0?null:'2026-10-01T00:00:00Z',
+     externalChannels:['EMAIL','PUSH','SMS'].map(channel=>({channel,availability:'NOT_CONFIGURED',consent:'NOT_RECORDED'}))});
+    assert(req.method()==='PUT'&&req.headers()['x-encho-conversation-command']==='1','Notification command boundary missing');
+    const body=req.postDataJSON();assert(body.expectedVersion===String(preferenceVersion)&&typeof body.requestId==='string','Notification CAS identity missing');
+    const previousVersion=String(preferenceVersion);alertsEnabled=body.inAppAlerts;preferenceVersion++;
+    return reply({accountId:10,requestId:body.requestId,inAppAlerts:alertsEnabled,previousVersion,
+     version:String(preferenceVersion),recordedAt:'2026-10-01T00:00:00Z'});
+   }
+   if(url.pathname==='/api/conversations/v1/notifications/evidence')return reply({accountId:10,items:[],nextBeforeId:null});
    if(url.pathname==='/api/threads')return reply([thread]);
    if(url.pathname.endsWith('/assistance'))return reply({case:assistance,disclosureVersion:'cr1-service-assistance-v1'});
    if(url.pathname==='/api/conversations/v1/cases'){const body=req.postDataJSON();assert(body.acceptAssistance===true&&body.disclosureVersion==='cr1-service-assistance-v1'&&/^[a-f0-9-]{36}$/.test(body.requestId),'Assistance bypassed explicit disclosed request');assistance={id:'77777777-7777-4777-8777-777777777777',threadId:1,state:'OPEN',version:1,disclosureVersion:body.disclosureVersion};return reply(assistance);}
@@ -38,6 +49,14 @@ try{
   });
   const record=name=>checks.push({width,name});const overflow=async()=>assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Horizontal overflow');
   await page.goto(origin);await page.getByRole('button',{name:/Host fixture/}).waitFor();assert(readCount===0,'List prefetched a read receipt');await overflow();record('list is read-only and fits viewport');
+  await page.getByRole('button',{name:'Notification settings'}).click();
+  const alertSwitch=page.getByRole('switch',{name:'In-app inquiry alerts'});await alertSwitch.waitFor();
+  assert(await alertSwitch.getAttribute('aria-checked')==='true','Verified default in-app preference not rendered');
+  await page.getByText('Email, push and SMS alerts are not configured.').waitFor();
+  await alertSwitch.click();await page.waitForFunction(()=>document.querySelector('[role="switch"][aria-label="In-app inquiry alerts"]')?.getAttribute('aria-checked')==='false');
+  assert(preferenceVersion===1&&!alertsEnabled,'Preference command did not converge to canonical version');
+  await page.screenshot({path:join(output,`notification-${width}.png`),fullPage:true});
+  await overflow();record('versioned notification preference and truthful channel state');
   await page.getByRole('button',{name:/Host fixture/}).click();await page.getByRole('log',{name:'Conversation messages'}).waitFor();await page.waitForFunction(()=>document.querySelector('[data-inquiry-read-id="7"]'));
   await page.waitForTimeout(250);assert(readCount===1,'Visible incoming message acknowledgement missing or repeated');await overflow();record('visible message acknowledges exact cursor once');
   await page.evaluate(()=>{window.fixtureReplyCounts=[];new MutationObserver(()=>window.fixtureReplyCounts.push([...document.querySelectorAll('[role=log] p')].filter(p=>p.textContent==='Which room fits two adults?').length)).observe(document.querySelector('[role=log]'),{childList:true,subtree:true});});
