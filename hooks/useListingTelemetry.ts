@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
 
-export function useListingTelemetry(listingId: string) {
+export function useListingTelemetry(listingId: string, enabled = true) {
   const trackedPhotos = useRef(new Set<number>());
   const trackingActive = useRef(true);
 
   // Intent Telemetry: Tracks photo scrolling
   const trackPhotoView = (photoIndex: number) => {
-    if (!trackingActive.current) return;
+    if (!enabled || !trackingActive.current) return;
     if (!trackedPhotos.current.has(photoIndex)) {
       trackedPhotos.current.add(photoIndex);
       
@@ -25,7 +25,7 @@ export function useListingTelemetry(listingId: string) {
 
   // Intent Telemetry: Tracks date selection
   const trackDateSelection = (checkIn: string, checkOut: string) => {
-    if (!trackingActive.current) return;
+    if (!enabled || !trackingActive.current) return;
     fetch('/api/marketing/track/interaction', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

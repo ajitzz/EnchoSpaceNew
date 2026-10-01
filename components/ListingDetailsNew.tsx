@@ -90,7 +90,8 @@ import {
   Wind,
   Anchor,
   Tent,
-  Bed, Menu
+  Bed, Menu,
+  Info
 } from 'lucide-react';
 import { uiAudio } from './audio';
 import { useToast } from './ToastContext';
@@ -100,7 +101,7 @@ import { getSensoryTagIcon } from './SensoryTagPicker';
 import MuxPlayer from '@mux/mux-player-react';
 import { ListingRoomGallery } from './ListingRoomGallery';
 
-interface ListingDetailsNewProps {
+export interface ListingDetailsNewProps {
   listing: Listing;
   onBack: () => void;
   onListingClick?: (listing: Listing) => void;
@@ -112,6 +113,7 @@ interface ListingDetailsNewProps {
   onRequestAuth?: () => void;
   initialGalleryOpen?: boolean;
   isPreview?: boolean;
+  demoMode?: boolean;
 }
 
 // Legacy getTagIcon removed in favor of shared getSensoryTagIcon
@@ -127,25 +129,28 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   onContactHost, 
   onRequestAuth,
   initialGalleryOpen = false,
-  isPreview = false
+  isPreview = false,
+  demoMode = false
 }) => {
+  // Only the isolated showcase route can opt into demonstration behavior.
+  const isDemoMode = demoMode;
   const [listing, setListing] = useState<Listing>(initialListing);
 
   useEffect(() => {
     setListing(initialListing);
     const controller = new AbortController();
-    if (!isPreview && /^[1-9]\d*$/.test(String(initialListing.id))) {
+    if (!isPreview && !isDemoMode && /^[1-9]\d*$/.test(String(initialListing.id))) {
       fetch(`/api/listings/${encodeURIComponent(initialListing.id)}`, {signal:controller.signal})
         .then(res => res.ok ? res.json() : null)
         .then(data => {if (!controller.signal.aborted && data && String(data.id) === String(initialListing.id)) setListing(data);})
         .catch(() => { /* Keep the supplied projection if its refresh is unavailable. */ });
     }
     return () => controller.abort();
-  }, [initialListing,isPreview]);
+  }, [initialListing, isPreview, isDemoMode]);
 
   const { user } = useAuth();
   const { addToast } = useToast();
-  const { trackPhotoView, trackDateSelection } = useListingTelemetry(listing.id);
+  const { trackPhotoView, trackDateSelection } = useListingTelemetry(listing.id, !isDemoMode);
   const [activeMobileImage, setActiveMobileImage] = useState(0);
 
   // Chameleon UI Dynamic Dominant Color
@@ -388,6 +393,10 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   // M5/M6B remain blocked: availability is not an accepted payment quote.
   const checkoutAvailable = false;
   const handleReserve = () => {
+    if (isDemoMode) {
+      addToast('Investor Demo Mode', 'Booking, payment, and checkout are disabled for this sample property.', 'info');
+      return;
+    }
     addToast('Online booking is being prepared', 'You can contact the host inside Encho. No payment has been requested.', 'info');
   };
 
@@ -408,6 +417,33 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
       <div className="min-h-screen bg-[#F9F8F6] dark:bg-[#F9F8F6] font-sans antialiased text-zinc-900 pb-28 md:pb-36 selection:bg-amber-500/20">
 
         
+
+        {/* Fictional Sample Content Investor Demo Banner */}
+        {isDemoMode && (
+          <aside
+            role="status"
+            aria-label="Investor demonstration notice"
+            className="w-full bg-amber-500/10 border-b border-amber-500/30 text-amber-950 px-4 py-2.5 text-xs font-medium relative z-30"
+          >
+            <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500 text-zinc-950 font-bold uppercase tracking-wider text-[10px]">
+                  <Sparkles className="w-3 h-3 text-zinc-950 fill-zinc-950" />
+                  Investor Demo
+                </span>
+                <span className="font-bold text-amber-950">
+                  Fictional Sample Content
+                </span>
+                <span className="text-zinc-600 hidden md:inline">
+                  · Illustrative property details, sample photography, and simulated pricing for demonstration only.
+                </span>
+              </div>
+              <span className="text-[11px] font-mono text-amber-800 font-semibold bg-amber-500/15 px-2.5 py-0.5 rounded-md border border-amber-500/20">
+                Booking &amp; Enquiries Suppressed
+              </span>
+            </div>
+          </aside>
+        )}
 
         {/* 10/10 AMAN-GRADE LUXURY EDITORIAL MASTER HEADER */}
         <header className={"sticky top-0 z-[60] w-full bg-[#F9F8F6]/90 backdrop-blur-md border-b border-[#E8E4DC] transition-all duration-300 ease-in-out " + (isHeaderVisible ? "translate-y-0" : "-translate-y-full")}>
@@ -459,8 +495,8 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
             {/* RIGHT: [♥ Wishlist]  [☰Menu ] */}
             <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-                {/* Wishlist Button */}
-                <button 
+                {/* Sample stays cannot enter a real guest wishlist. */}
+                {!isDemoMode && <button
                     onClick={(e) => { e.stopPropagation(); uiAudio.playPop(); if(onToggleFavorite) onToggleFavorite(listing); }}
                     className={`hidden sm:flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full transition-all cursor-pointer group/fav active:scale-95 ${
                         isFavorite 
@@ -478,10 +514,10 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     <span className="hidden md:inline text-[11px] font-medium font-sans uppercase tracking-[0.1em]">
                         {isFavorite ? 'Saved' : 'Wishlist'}
                     </span>
-                </button>
+                </button>}
 
                 {/* Menu Button */}
-                <button 
+                {!isDemoMode && <button
                     onClick={(e) => { e.stopPropagation(); uiAudio.playClick(); /* Future Menu Drawer */ }}
                     className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full hover:bg-black/5 transition-all text-zinc-900 cursor-pointer active:scale-95"
                     aria-label="Menu"
@@ -490,7 +526,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     <span className="hidden md:inline text-[11px] font-medium font-sans uppercase tracking-[0.1em]">
                         Menu
                     </span>
-                </button>
+                </button>}
             </div>
 
           </div>
@@ -506,7 +542,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         title={listing.title}
                         price={activeNightlyRate}
                         currency={listing.currency}
-                        onReserveClick={handleReserve}
+                        onReserveClick={isDemoMode ? undefined : handleReserve}
                     />
                 </div>
             ) : (
@@ -650,7 +686,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                       <Sparkles className="w-5 h-5 text-[#0284C7]" />
                       <span>Sensory Atmosphere Deck</span>
                     </h2>
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest font-display">Host supplied</span>
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-widest font-display">{isDemoMode ? 'Sample amenities' : 'Host supplied'}</span>
                   </div>
 
                   {sensoryTags.length === 0 && <p className="text-zinc-500">Amenities have not been supplied yet.</p>}
@@ -826,7 +862,11 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                       </span>
                       <div>
                         <h3 className="text-sm font-bold text-zinc-900">Host identity status</h3>
-                        <p className="mt-1 text-xs leading-relaxed text-zinc-500">Independent verification is not published for this stay.</p>
+                        <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                          {isDemoMode
+                            ? 'Fictional demo host. Verification claims suppressed for sample content.'
+                            : 'Independent verification is not published for this stay.'}
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-start gap-3.5 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
@@ -835,7 +875,11 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                       </span>
                       <div>
                         <h3 className="text-sm font-bold text-zinc-900">Booking protection status</h3>
-                        <p className="mt-1 text-xs leading-relaxed text-zinc-500">Online checkout is being prepared. No payment is requested on this page.</p>
+                        <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                          {isDemoMode
+                            ? 'Demonstration listing only. Online booking, checkout, and payment are suppressed.'
+                            : 'Online checkout is being prepared. No payment is requested on this page.'}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -850,24 +894,39 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <h3 className="text-xl font-extrabold text-zinc-900 tracking-tight font-display">{listing.provider || 'Property host'}</h3>
-                          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700">Encho contact</span>
+                          <h3 className="text-xl font-extrabold text-zinc-900 tracking-tight font-display">{listing.provider || (isDemoMode ? 'Sample Host' : 'Property host')}</h3>
+                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black ${
+                            isDemoMode
+                              ? 'border-zinc-200 bg-zinc-100 text-zinc-600'
+                              : 'border-amber-200 bg-amber-50 text-amber-700'
+                          }`}>
+                            {isDemoMode ? 'Demo Host' : 'Encho contact'}
+                          </span>
                         </div>
-                        <p className="text-xs text-slate-500 font-medium mt-0.5">Contact through Encho</p>
+                        <p className="text-xs text-slate-500 font-medium mt-0.5">
+                          {isDemoMode ? 'Fictional host profile · Enquiries disabled' : 'Contact through Encho'}
+                        </p>
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        uiAudio.playClick();
-                        if (onContactHost) onContactHost();
-                      }}
-                      className="px-6 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-all shadow-md active:scale-95 flex items-center gap-2 cursor-pointer"
-                    >
-                      <MessageCircle className="w-4 h-4" />
-                      <span>Message host</span>
-                    </button>
+                    {!isDemoMode ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          uiAudio.playClick();
+                          if (onContactHost) onContactHost();
+                        }}
+                        className="px-6 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-all shadow-md active:scale-95 flex items-center gap-2 cursor-pointer"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        <span>Message host</span>
+                      </button>
+                    ) : (
+                      <div className="px-4 py-2.5 rounded-xl bg-zinc-100 border border-zinc-200 text-xs font-semibold text-zinc-500 flex items-center gap-2">
+                        <Info className="w-3.5 h-3.5 text-zinc-400" />
+                        <span>Enquiries Suppressed (Demo)</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Host Philosophy / Editorial Message */}
@@ -1084,30 +1143,59 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                         </div>
                     </div>
 
-                    <p className={`mb-4 p-3 rounded-xl text-sm ${isDateRangeBlocked ? 'bg-amber-50 text-amber-900' : 'bg-emerald-50 text-emerald-900'}`} role="status">
-                      {availabilityUnknown ? 'Availability is not confirmed for these dates. Please check again shortly.'
-                        : remainingRooms === 0 ? 'No rooms are available for these dates.'
-                        : `${remainingRooms} room${remainingRooms === 1 ? '' : 's'} reported available for these dates. This observation does not hold a room or confirm a booking.`}
-                    </p>
+                    {isDemoMode ? (
+                      <div className="mb-4 p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/80 text-amber-900 text-xs space-y-1">
+                        <p className="font-bold flex items-center gap-1.5 text-amber-950">
+                          <Info className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                          <span>Sample Availability Calendar</span>
+                        </p>
+                        <p className="text-amber-800 leading-relaxed text-[11px]">
+                          Fictional schedule shown for investor presentation. No reservation holds or payment requests can be made.
+                        </p>
+                      </div>
+                    ) : (
+                      <p className={`mb-4 p-3 rounded-xl text-sm ${isDateRangeBlocked ? 'bg-amber-50 text-amber-900' : 'bg-emerald-50 text-emerald-900'}`} role="status">
+                        {availabilityUnknown ? 'Availability is not confirmed for these dates. Please check again shortly.'
+                          : remainingRooms === 0 ? 'No rooms are available for these dates.'
+                          : `${remainingRooms} room${remainingRooms === 1 ? '' : 's'} reported available for these dates. This observation does not hold a room or confirm a booking.`}
+                      </p>
+                    )}
 
                     <button 
-                        disabled={!checkoutAvailable || isDateRangeBlocked}
-                        onClick={() => handleReserve()}
+                        disabled={isDemoMode || !checkoutAvailable || isDateRangeBlocked}
+                        onClick={isDemoMode ? undefined : () => handleReserve()}
                         className={`w-full font-bold font-display py-4 rounded-2xl transition-all flex items-center justify-center gap-2 mb-4 ${
-                          isDateRangeBlocked
-                            ? 'bg-zinc-200 text-zinc-400 cursor-not-allowed border border-zinc-300/60 shadow-none'
-                            : 'bg-gradient-to-r from-zinc-900 to-zinc-800 text-white shadow-[0_4px_14px_rgba(0,0,0,0.15)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.2)] active:scale-[0.98] cursor-pointer'
+                          isDemoMode
+                            ? 'bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed shadow-none'
+                            : isDateRangeBlocked
+                              ? 'bg-zinc-200 text-zinc-400 cursor-not-allowed border border-zinc-300/60 shadow-none'
+                              : 'bg-gradient-to-r from-zinc-900 to-zinc-800 text-white shadow-[0_4px_14px_rgba(0,0,0,0.15)] hover:shadow-[0_6px_20px_rgba(0,0,0,0.2)] active:scale-[0.98] cursor-pointer'
                         }`}
                     >
-                        <CreditCard className="w-4 h-4" />
-                        <span>{!checkoutAvailable ? 'Online booking is being prepared' : isDateRangeBlocked ? 'Dates unavailable' : 'Reserve stay'}</span>
+                        {isDemoMode ? (
+                          <>
+                            <Lock className="w-4 h-4 text-zinc-400" />
+                            <span>Booking disabled (Demo Mode)</span>
+                          </>
+                        ) : (
+                          <>
+                            <CreditCard className="w-4 h-4" />
+                            <span>{!checkoutAvailable ? 'Online booking is being prepared' : isDateRangeBlocked ? 'Dates unavailable' : 'Reserve stay'}</span>
+                          </>
+                        )}
                     </button>
                     
                     <p className="text-[11px] text-zinc-400 text-center mb-6 font-medium">
-                      {!checkoutAvailable ? 'Contact the host through Encho for questions' : isDateRangeBlocked ? (availabilityUnknown ? 'Availability needs confirmation before reserving' : 'Choose alternate dates to reserve') : "You won't be charged yet"}
+                      {isDemoMode
+                        ? 'Illustrative demonstrator listing · No live transactions or payment gateways'
+                        : !checkoutAvailable ? 'Contact the host through Encho for questions' : isDateRangeBlocked ? (availabilityUnknown ? 'Availability needs confirmation before reserving' : 'Choose alternate dates to reserve') : "You won't be charged yet"}
                     </p>
 
-                    <p className="text-sm text-zinc-600">Taxes and final price will be shown before payment.</p>
+                    <p className="text-sm text-zinc-600">
+                      {isDemoMode
+                        ? 'Pricing and specifications shown for illustrative presentation only.'
+                        : 'Taxes and final price will be shown before payment.'}
+                    </p>
                 </div>
             </div>
 
@@ -1251,13 +1339,27 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
           </section>
 
           <section className="space-y-6 border-t border-zinc-200/80 pt-8">
-            <div className="flex items-center gap-3">
-              <Star className="h-7 w-7 fill-amber-500 text-amber-500" aria-hidden="true" />
-              <h2 className="text-2xl font-extrabold tracking-tight text-zinc-900 font-display md:text-3xl">New on Encho Stays</h2>
-            </div>
-            <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm md:p-8">
-              <p className="text-zinc-500">This sanctuary has not yet accumulated verified guest reviews.</p>
-            </div>
+            {isDemoMode ? (
+              <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm md:p-8 space-y-2">
+                <div className="flex items-center gap-2.5">
+                  <Info className="h-5 w-5 text-amber-600" aria-hidden="true" />
+                  <h2 className="text-xl font-extrabold tracking-tight text-zinc-900 font-display">Guest Reviews &amp; Ratings Suppressed</h2>
+                </div>
+                <p className="text-zinc-500 text-sm">
+                  This is a fictional sample property for demonstration. Ratings, star badges, and guest review claims are suppressed.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-3">
+                  <Star className="h-7 w-7 fill-amber-500 text-amber-500" aria-hidden="true" />
+                  <h2 className="text-2xl font-extrabold tracking-tight text-zinc-900 font-display md:text-3xl">New on Encho Stays</h2>
+                </div>
+                <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm md:p-8">
+                  <p className="text-zinc-500">This sanctuary has not yet accumulated verified guest reviews.</p>
+                </div>
+              </>
+            )}
           </section>
 
           {/* 4. SIMILAR SANCTUARIES */}
@@ -1329,16 +1431,18 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
 
                 <button
                   type="button"
-                  disabled={!checkoutAvailable || isDateRangeBlocked}
-                  onClick={() => handleReserve()}
-                  className={`text-xs md:text-sm font-extrabold font-display uppercase tracking-wider px-7 py-3 rounded-full shadow-lg active:scale-95 transition-all flex items-center gap-2 ${
-                    isDateRangeBlocked
-                      ? 'bg-zinc-700 text-zinc-400 cursor-not-allowed shadow-none'
-                      : 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-zinc-950 shadow-amber-500/20 cursor-pointer'
+                  disabled={isDemoMode || !checkoutAvailable || isDateRangeBlocked}
+                  onClick={isDemoMode ? undefined : () => handleReserve()}
+                  className={`text-xs md:text-sm font-extrabold font-display uppercase tracking-wider px-7 py-3 rounded-full shadow-lg transition-all flex items-center gap-2 ${
+                    isDemoMode
+                      ? 'bg-zinc-800 text-zinc-400 cursor-not-allowed shadow-none'
+                      : isDateRangeBlocked
+                        ? 'bg-zinc-700 text-zinc-400 cursor-not-allowed shadow-none'
+                        : 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-zinc-950 shadow-amber-500/20 cursor-pointer active:scale-95'
                   }`}
                 >
-                  <span>{!checkoutAvailable ? 'Booking being prepared' : isDateRangeBlocked ? 'Dates unavailable' : 'Reserve'}</span>
-                  {checkoutAvailable && !isDateRangeBlocked && <ArrowRight className="w-4 h-4 stroke-[2.5]" />}
+                  <span>{isDemoMode ? 'Booking Disabled (Demo)' : !checkoutAvailable ? 'Booking being prepared' : isDateRangeBlocked ? 'Dates unavailable' : 'Reserve'}</span>
+                  {!isDemoMode && checkoutAvailable && !isDateRangeBlocked && <ArrowRight className="w-4 h-4 stroke-[2.5]" />}
                 </button>
               </div>
             </motion.div>
@@ -1368,7 +1472,11 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     / nt
                   </span>
                 </div>
-                {isDateRangeBlocked ? (
+                {isDemoMode ? (
+                  <span className="text-[9px] font-semibold text-amber-400 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-500/30 mt-0.5 truncate max-w-[150px]">
+                    Demo Content
+                  </span>
+                ) : isDateRangeBlocked ? (
                   <span className="text-[9px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 mt-0.5 truncate max-w-[150px]">
                     {availabilityUnknown ? 'Availability unconfirmed' : 'Dates unavailable'}
                   </span>
@@ -1385,20 +1493,24 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
               </div>
 
               <button 
-                disabled={!checkoutAvailable || isDateRangeBlocked}
-                onClick={() => {
+                disabled={isDemoMode || !checkoutAvailable || isDateRangeBlocked}
+                onClick={isDemoMode ? undefined : () => {
                   uiAudio.playPop();
                   handleReserve();
                 }}
-                className={`font-bold font-display uppercase tracking-wider text-xs py-3 px-6 rounded-full active:scale-95 transition-all shadow-md flex items-center justify-center gap-1.5 ${
-                  isDateRangeBlocked
-                    ? "bg-zinc-300 text-zinc-500 cursor-not-allowed shadow-none"
-                    : showMobileStickyBar
-                      ? "bg-zinc-950 hover:bg-zinc-900 text-white cursor-pointer"
-                      : "bg-white text-zinc-950 hover:bg-zinc-100 shadow-white/20 cursor-pointer"
+                className={`font-bold font-display uppercase tracking-wider text-xs py-3 px-6 rounded-full transition-all shadow-md flex items-center justify-center gap-1.5 ${
+                  isDemoMode
+                    ? "bg-zinc-200 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500 cursor-not-allowed shadow-none"
+                    : isDateRangeBlocked
+                      ? "bg-zinc-300 text-zinc-500 cursor-not-allowed shadow-none"
+                      : showMobileStickyBar
+                        ? "bg-zinc-950 hover:bg-zinc-900 text-white cursor-pointer active:scale-95"
+                        : "bg-white text-zinc-950 hover:bg-zinc-100 shadow-white/20 cursor-pointer active:scale-95"
                 }`}
               >
-                {!checkoutAvailable ? (
+                {isDemoMode ? (
+                  <span>Demo Mode</span>
+                ) : !checkoutAvailable ? (
                   <span>Booking being prepared</span>
                 ) : isDateRangeBlocked ? (
                   <span>Dates unavailable</span>
@@ -1428,6 +1540,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
           initialIndex={galleryInitialIndex}
           initialCategory={galleryInitialCategory}
           onReserve={undefined}
+          demoMode={isDemoMode}
         />
 
       </div>

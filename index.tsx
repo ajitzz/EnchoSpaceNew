@@ -13,6 +13,9 @@ import { HelmetProvider } from 'react-helmet-async';
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import { ensureSafeOfflineWorker } from './lib/legacyOfflineQueue';
 
+// Keep fictional investor content outside the ordinary guest bundle and route.
+const InvestorShowcase = React.lazy(() => import('./components/InvestorShowcase').then((module) => ({ default: module.InvestorShowcase })));
+
 // In development / preview, ensure service worker is unregistered to prevent stale cache / navigation interception
 if ('serviceWorker' in navigator && (import.meta as any).env?.DEV) {
   navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -42,7 +45,9 @@ const renderApp = (
     <AuthProvider>
       <CurrencyProvider>
         <ToastProvider>
-          <App />
+          {window.location.pathname === '/investor-showcase'
+            ? <React.Suspense fallback={<main className="min-h-screen bg-[#102a24] text-white p-10">Opening the Encho concept showcase…</main>}><InvestorShowcase /></React.Suspense>
+            : <App />}
           <SpeedInsights />
         </ToastProvider>
       </CurrencyProvider>

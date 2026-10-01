@@ -16,6 +16,7 @@ export interface SanctuaryGalleryModalProps {
   initialIndex?: number;
   initialCategory?: string;
   onReserve?: () => void;
+  demoMode?: boolean;
 }
 
 export type GalleryCategoryKey = string;
@@ -30,7 +31,7 @@ interface CategoryConfig {
 }
 
 // ADR-005: Gallery tabs are now driven by host-defined room names from listing.rooms[]
-export function buildGalleryCategories(listing: Listing): CategoryConfig[] {
+export function buildGalleryCategories(listing: Listing, demoMode: boolean = false): CategoryConfig[] {
   const categories: CategoryConfig[] = [
     {
       key: 'all',
@@ -38,7 +39,9 @@ export function buildGalleryCategories(listing: Listing): CategoryConfig[] {
       shortLabel: 'All',
       icon: '✨',
       headline: listing.title || 'Complete Property Panorama',
-      description: (listing.description || '').substring(0, 120) || 'Property photography supplied by the host.'
+      description: demoMode
+        ? 'Illustrative sample photography for demonstration purposes only.'
+        : ((listing.description || '').substring(0, 120) || 'Property photography supplied by the host.')
     },
     {
       key: 'common',
@@ -46,7 +49,9 @@ export function buildGalleryCategories(listing: Listing): CategoryConfig[] {
       shortLabel: 'Amenities',
       icon: '🏗️',
       headline: 'Sanctuary Grounds & Shared Spaces',
-      description: 'Property photography supplied by the host.'
+      description: demoMode
+        ? 'Illustrative sample photography for demonstration purposes only.'
+        : 'Property photography supplied by the host.'
     }
   ];
   
@@ -116,10 +121,11 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
   listing,
   initialIndex = 0,
   initialCategory = 'all',
-  onReserve
+  onReserve,
+  demoMode = false
 }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
-  const galleryCategories = useMemo(() => buildGalleryCategories(listing), [listing]);
+  const galleryCategories = useMemo(() => buildGalleryCategories(listing, demoMode), [listing, demoMode]);
   const [selectedCategory, setSelectedCategory] = useState<GalleryCategoryKey>(initialCategory as GalleryCategoryKey);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [isZoomed, setIsZoomed] = useState(false);
@@ -295,7 +301,7 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
                 </span>
                 <span className="text-[10px] text-zinc-500 font-mono">·</span>
                 <span className="text-[10px] text-zinc-400 font-mono">
-                  {allPhotos.length} Supplied Perspectives
+                  {allPhotos.length} {demoMode ? 'Illustrative Perspectives' : 'Supplied Perspectives'}
                 </span>
               </div>
               <h2 className="text-sm sm:text-base font-bold font-display text-white tracking-tight truncate max-w-[200px] sm:max-w-md">
@@ -347,8 +353,19 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
               {copiedLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Share2 className="w-4 h-4" />}
             </button>
 
+            {/* Demo Mode Badge */}
+            {demoMode && (
+              <div
+                role="status"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-semibold shrink-0"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>Investor Demo · Fictional Sample Media</span>
+              </div>
+            )}
+
             {/* Quick Reserve CTA */}
-            {onReserve && (
+            {!demoMode && onReserve && (
               <button
                 type="button"
                 onClick={() => {
@@ -364,6 +381,16 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
             )}
           </div>
         </header>
+
+        {demoMode && (
+          <aside
+            role="status"
+            aria-label="Fictional sample media disclaimer"
+            className="w-full bg-amber-950/80 border-b border-amber-500/20 px-4 py-1.5 text-center text-[11px] font-medium text-amber-300/90 z-20 shrink-0"
+          >
+            Fictional Demonstration Media · Photography and spaces shown for investor demonstration only · Booking suppressed
+          </aside>
+        )}
 
         {/* ========================================================================= */}
         {/* HORIZONTAL SPATIAL CATEGORY TAXONOMY BAR                                   */}
@@ -740,7 +767,7 @@ export const SanctuaryGalleryModal: React.FC<SanctuaryGalleryModalProps> = ({
                     )}
                   </div>
 
-                  {onReserve && (
+                  {!demoMode && onReserve && (
                     <div className="pt-3 border-t border-zinc-800/80">
                       <button
                         type="button"
