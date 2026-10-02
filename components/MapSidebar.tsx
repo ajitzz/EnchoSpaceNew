@@ -118,7 +118,7 @@ const getStreetNames = (city: string) => {
   }
 };
 
-const markerPrices = new WeakMap<google.maps.marker.AdvancedMarkerElement, number>();
+const markerPrices = new WeakMap<google.maps.marker.AdvancedMarkerElement, { amount: number; currency: string }>();
 
 const MarkerWithInfoWindow = ({ 
   listing, 
@@ -144,7 +144,7 @@ const MarkerWithInfoWindow = ({
 
   useEffect(() => {
     if (marker && setMarkerRef) {
-        markerPrices.set(marker, currentPrice);
+        markerPrices.set(marker, { amount: currentPrice, currency: listing.currency });
         setMarkerRef(listing.id, marker);
     }
     return () => {
@@ -187,7 +187,7 @@ const MarkerWithInfoWindow = ({
             ) : (
                 // Inactive custom white/gray badge with price
                 <div className="bg-white text-gray-900 border border-gray-150 rounded-full px-2.5 py-1 text-[11px] font-black shadow-[0_4px_10px_rgba(0,0,0,0.12)] hover:scale-110 active:scale-95 transition-all">
-                    {formatPrice(currentPrice)}
+                    {formatPrice(currentPrice, listing.currency)}
                 </div>
             )
         ) : (
@@ -207,7 +207,7 @@ const MarkerWithInfoWindow = ({
               `}
             >
                 <span className={`font-bold whitespace-nowrap ${isActive ? 'text-sm' : 'text-xs'}`}>
-                    {formatPrice(currentPrice)}
+                    {formatPrice(currentPrice, listing.currency)}
                 </span>
             </div>
         )}
@@ -258,15 +258,21 @@ const MapInner = ({
                 renderer: {
                     render: ({ count, position, markers }: any) => {
                         let sum = 0;
+                        const currencies = new Set<string>();
                         
                         markers.forEach((marker: any) => {
-                            if (markerPrices.has(marker)) {
-                                sum += markerPrices.get(marker) || 0;
+                            const price = markerPrices.get(marker);
+                            if (price) {
+                                sum += price.amount;
+                                currencies.add(price.currency);
                             }
                         });
                         
                         const average = count > 0 ? Math.round(sum / count) : 0;
-                        const formattedPrice = formatPriceRef.current(average);
+                        // Never average unlike currencies into one misleading price badge.
+                        const formattedPrice = currencies.size === 1
+                            ? formatPriceRef.current(average, [...currencies][0])
+                            : 'Multiple stays';
                         
                         const div = document.createElement('div');
                         div.className = 'flex items-center justify-center rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.2)] bg-[#0284C7] text-white px-4 py-2 ring-2 ring-white z-50 transition-transform duration-300 hover:scale-110 cursor-pointer';
@@ -963,7 +969,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                            ) : (
                              // Cozy, premium badge with price text
                              <div className="bg-white text-gray-900 border border-gray-150 rounded-full px-2.5 py-1.5 text-[11px] font-black shadow-md hover:scale-110 active:scale-95 transition-all select-none whitespace-nowrap">
-                               {formatPrice(getActivePrice(listing))}
+                               {formatPrice(getActivePrice(listing), listing.currency)}
                              </div>
                            )}
                         </div>
@@ -1216,7 +1222,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                      <div className="flex flex-col">
                         <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Price / stay</span>
                         <div className="flex items-baseline gap-1 mt-0.5">
-                           <span className="text-base font-black text-gray-900">{formatPrice(getActivePrice(activeListing))}</span>
+                           <span className="text-base font-black text-gray-900">{formatPrice(getActivePrice(activeListing), activeListing.currency)}</span>
                            <span className="text-[10px] font-bold text-gray-500">/ night</span>
                         </div>
                      </div>
@@ -1323,7 +1329,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                              
                              <div className="flex items-baseline justify-between mt-0.5">
                                  <div>
-                                     <span className="text-sm font-black text-gray-900">{formatPrice(getActivePrice(listing))}</span>
+                                     <span className="text-sm font-black text-gray-900">{formatPrice(getActivePrice(listing), listing.currency)}</span>
                                      <span className="text-[9px] text-gray-400 font-bold"> / night</span>
                                  </div>
                              </div>

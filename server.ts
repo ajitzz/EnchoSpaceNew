@@ -13817,7 +13817,7 @@ app.get('/api/listings', async (req: Request, res: Response) => {
     const isPublicCatalogueFeed = !userId && !isAdminRequester;
     const publicCityKey = (city && city !== 'all') ? city.toLowerCase() : 'all';
     const cacheKey = isPublicCatalogueFeed
-      ? `listings_v3:public_cards:${publicCityKey}:${req.originalUrl}`
+      ? `listings_v4:public_cards:${publicCityKey}:${req.originalUrl}`
       : null;
 
     if (redis && cacheKey && isPublicCatalogueFeed) {
@@ -13940,7 +13940,7 @@ app.get('/api/listings', async (req: Request, res: Response) => {
           title: row.title,
           description: row.description,
           price: parseFloat(row.price),
-          currency: '₹',
+          currency: 'INR',
           type: row.type,
           address: row.address,
           city: row.city,

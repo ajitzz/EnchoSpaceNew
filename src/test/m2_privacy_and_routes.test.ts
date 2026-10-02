@@ -257,7 +257,7 @@ describe('Phase 3 Milestone 2 — Published Projection, Canonical Routes & Addre
       expect(card.lat).toBe(11.54);
       expect(card.lng).toBe(76.13);
       expect(card.price).toBe(25000);
-      expect(card.currency).toBe('₹');
+      expect(card.currency).toBe('INR');
 
       const serialized = JSON.stringify(card);
 
@@ -725,7 +725,7 @@ describe('Phase 3 Milestone 2 — Published Projection, Canonical Routes & Addre
       expect(content).not.toMatch(/fetch\s*\(\s*['"`]\/api\/listings\/['"`]\s*\+\s*initialListing\.id\s*\)/);
     });
 
-    describe('Redis Cache Privacy Cutover: listings_v3 Namespace & Leak Prevention', () => {
+    describe('Redis Cache Privacy Cutover: listings_v4 Namespace & Leak Prevention', () => {
       beforeEach(() => {
         __mockRedisStore.clear();
       });
@@ -764,7 +764,7 @@ describe('Phase 3 Milestone 2 — Published Projection, Canonical Routes & Addre
         expect(__mockRedisStore.has('listings_v2:all:/api/listings')).toBe(true);
       });
 
-      it('public cache reads and writes use ONLY the listings_v3:public_cards namespace', async () => {
+      it('public cache reads and writes use ONLY the listings_v4:public_cards namespace', async () => {
         // Issue fresh public request
         const res = await request(app)
           .get('/api/listings?city=Bengaluru')
@@ -774,14 +774,14 @@ describe('Phase 3 Milestone 2 — Published Projection, Canonical Routes & Addre
         const writtenKeys = Array.from(__mockRedisStore.keys());
         expect(writtenKeys.length).toBeGreaterThan(0);
 
-        // All public cache keys MUST use the new listings_v3:public_cards prefix
+        // All public cache keys MUST use the current listings_v4:public_cards prefix
         for (const key of writtenKeys) {
-          expect(key.startsWith('listings_v3:public_cards:')).toBe(true);
+          expect(key.startsWith('listings_v4:public_cards:')).toBe(true);
           expect(key).not.toContain('listings_v2');
         }
 
-        // Check key structure: listings_v3:public_cards:bengaluru:/api/listings?city=Bengaluru
-        const targetKey = 'listings_v3:public_cards:bengaluru:/api/listings?city=Bengaluru';
+        // Check key structure: listings_v4:public_cards:bengaluru:/api/listings?city=Bengaluru
+        const targetKey = 'listings_v4:public_cards:bengaluru:/api/listings?city=Bengaluru';
         expect(__mockRedisStore.has(targetKey)).toBe(true);
 
         // Verify that the cached content is the safe public-card projection
@@ -801,7 +801,7 @@ describe('Phase 3 Milestone 2 — Published Projection, Canonical Routes & Addre
           expect(card.nearby).toBeUndefined();
         }
 
-        // Verify subsequent request reads from listings_v3 cache
+        // Verify subsequent request reads from listings_v4 cache
         const res2 = await request(app)
           .get('/api/listings?city=Bengaluru')
           .expect(200);

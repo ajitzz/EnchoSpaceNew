@@ -516,7 +516,7 @@ export function toPublicListingCardProjection(rawListing: any): PublicListingCar
     type: sanitizePublicText(rawListing.type || 'Stay'),
     rental_mode: String(rawListing.rental_mode || 'entire_place'),
     price: Number(rawListing.price) || 0,
-    currency: '₹',
+    currency: 'INR',
     period: 'night',
     city,
     imageUrl,

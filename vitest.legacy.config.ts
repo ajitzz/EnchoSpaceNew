@@ -15,7 +15,7 @@ export default defineConfig({
     exclude: [...currentProviderContractFiles, ...legacyPostgresFiles, 'src/test/harvo/**', 'src/test/google_budget.test.ts', 'src/test/google_dco.test.ts',
       'src/test/m6a_guest_presentation_truth.test.tsx', 'src/test/sanctuary_gallery.test.ts',
       'src/test/m6a_interactive_gallery.test.tsx', 'src/test/property_presentation_boundary.test.tsx',
-      'src/test/cr1_guest_presentation.test.tsx'],
+      'src/test/cr1_guest_presentation.test.tsx', 'src/test/public_listing_price_currency.test.tsx'],
   },
   resolve: {alias: {'@': path.resolve(import.meta.dirname, './src')}},
 });
