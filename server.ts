@@ -785,7 +785,7 @@ export const optionalAuthenticateToken = (req: Request & Pick<AuthRequest, 'user
   jwt.verify(token, JWT_SECRET, {algorithms:['HS256']}, async (err: any, claims: any) => {
     if (err) return res.status(401).json({ error: 'Invalid or expired authentication token.' });
     try {
-      const user = await resolvePersistedSession(pool, claims);
+      const user = await resolvePersistedSession(consumerAuthPool, claims);
       req.user = user;
       rlsStorage.run({ userId: user.id, isRequest: true, bypassRls: user.role === 'admin' }, () => next());
     } catch { return res.status(401).json({ error: 'Account session is no longer available.' }); }
@@ -798,7 +798,7 @@ export const authenticateToken = (req: Request & Pick<AuthRequest, 'user'>, res:
   jwt.verify(token, JWT_SECRET, {algorithms:['HS256']}, async (err: any, claims: any) => {
     if (err) return res.status(401).json({ error: 'Invalid or expired authentication token.' });
     try {
-      const user = await resolvePersistedSession(pool, claims);
+      const user = await resolvePersistedSession(consumerAuthPool, claims);
       req.user = user;
       rlsStorage.run({ userId: user.id, isRequest: true, bypassRls: user.role === 'admin' }, () => next());
     } catch (error: any) {
