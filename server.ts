@@ -538,6 +538,26 @@ pool.on('error', (err: any) => {
   console.error('[DATABASE POOL ERROR] Unexpected error on idle client:', err?.message || err);
 });
 
+// Consumer Google sign-in uses a dedicated least-privilege login until the
+// whole web role has passed mounted Host/Admin authorization tests. No ambient
+// owner connection can satisfy consumerAuthReadiness in production.
+const consumerAuthDbUrl = process.env.CONSUMER_AUTH_DATABASE_URL?.trim();
+let consumerAuthPool: pg.Pool = pool;
+if (consumerAuthDbUrl) {
+  try {
+    const { poolConfig: authConfig } = resolveDatabasePoolConfig(consumerAuthDbUrl,
+      { ...poolConfig, max: process.env.VERCEL ? 2 : 4 }, { targetLabel: 'consumer_auth' });
+    consumerAuthPool = new Pool(authConfig);
+    consumerAuthPool.on('error', (err: any) => {
+      console.error('[CONSUMER AUTH POOL ERROR] Unexpected idle client error:', err?.message || err);
+    });
+  } catch (err) {
+    // A malformed credential must fail closed; never fall back to the owner
+    // pool just because dedicated auth was explicitly configured.
+    consumerAuthPool = createFailClosedPool((err as Error).message);
+  }
+}
+
 // Dual-pool: Neon Read-Replica Configuration for high-frequency marketing telemetry & analytics
 const readPoolConfig: any = {
   ...poolConfig,
@@ -1314,8 +1334,8 @@ const requireExistingSchema = async () => {
   if (!ready.ready) throw new Error('DATABASE_MIGRATIONS_OR_ROLE_NOT_READY');
   marketingSchemaInitialized = usersTableInitialized = listingsTableInitialized = true;
 };
-const requireConsumerAuthSchema = async (operation: ConsumerAuthOperation) => {
-  if (!(await consumerAuthReadiness(pool, operation))) throw new Error('AUTH_DATABASE_NOT_READY');
+const requireConsumerAuthSchema = async (operation: ConsumerAuthOperation, authDb: pg.Pool = pool) => {
+  if (!(await consumerAuthReadiness(authDb, operation))) throw new Error('AUTH_DATABASE_NOT_READY');
 };
 // Helper to ensure users table
 const ensureUsersTable = async (operation: ConsumerAuthOperation = 'READ') => {
@@ -3139,11 +3159,11 @@ app.post('/api/auth/otp/verify', otpVerifyLimiter, async (req, res) => {
   }
 });
 
-async function checkCanHostExperiences(email: string | null, role: string) {
+async function checkCanHostExperiences(email: string | null, role: string, authDb: pg.Pool = pool) {
   if (role === 'admin') return true;
   if (!email) return false;
   try {
-    const settingsResult = await pool.query('SELECT value FROM settings WHERE key = $1', ['authorized_experience_hosts']);
+    const settingsResult = await authDb.query('SELECT value FROM settings WHERE key = $1', ['authorized_experience_hosts']);
     if (settingsResult.rows.length > 0) {
       const allowedEmails = settingsResult.rows[0].value || [];
       return allowedEmails.map((e: string) => e.toLowerCase()).includes(email.toLowerCase());
@@ -3218,26 +3238,26 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 app.post('/api/auth/google', authLimiter, async (req, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
-    await ensureUsersTable('GOOGLE_LINK');
+    await requireConsumerAuthSchema('GOOGLE_LINK', consumerAuthPool);
     dbConnectionError = null;
     const identity = await verifyGoogleIdentity(req.body.credential, process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID);
     const { googleId, email, name } = identity;
-    const result = await pool.query('SELECT id, email, name, role, google_id FROM users WHERE google_id=$1 OR lower(email)=lower($2)', [googleId,email]);
+    const result = await consumerAuthPool.query('SELECT id, email, name, role, google_id FROM users WHERE google_id=$1 OR lower(email)=lower($2)', [googleId,email]);
     let user;
     if (result.rows.length > 1) return res.status(409).json({ error: 'Account linking needs support review.' });
     if (result.rows.length === 0) {
-      user=(await pool.query('INSERT INTO users(email,name,google_id,role) VALUES($1,$2,$3,$4) RETURNING id,email,name,role',[email,name,googleId,'user'])).rows[0];
+      user=(await consumerAuthPool.query('INSERT INTO users(email,name,google_id,role) VALUES($1,$2,$3,$4) RETURNING id,email,name,role',[email,name,googleId,'user'])).rows[0];
     } else {
       user=result.rows[0];
       if (user.google_id && user.google_id !== googleId) return res.status(401).json({ error: 'Google account does not match this account.' });
       if (!user.google_id) {
         if (!identity.authoritativeEmail || user.role === 'admin') return res.status(409).json({ error: 'Sign in with your existing method before linking Google.' });
-        await pool.query('UPDATE users SET google_id=$1 WHERE id=$2',[googleId,user.id]);
+        await consumerAuthPool.query('UPDATE users SET google_id=$1 WHERE id=$2',[googleId,user.id]);
       }
     }
 
     const token = jwt.sign({ id: user.id, role: user.role, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
-    const can_host_experiences = await checkCanHostExperiences(user.email, user.role);
+    const can_host_experiences = await checkCanHostExperiences(user.email, user.role, consumerAuthPool);
     res.json({ user: { id: user.id, email: user.email, name: user.name, role: user.role, can_host_experiences }, token });
   } catch (error: any) {
     if (error instanceof MarketingError) {
@@ -3248,17 +3268,17 @@ app.post('/api/auth/google', authLimiter, async (req, res) => {
 });
 
 app.get('/api/auth/me', async (_req: Request, res: Response, next: NextFunction) => {
-  try { await ensureUsersTable('READ'); next(); }
+  try { await requireConsumerAuthSchema('READ', consumerAuthPool); next(); }
   catch (error) { consumerAuthFailure(res, error, 'session'); }
 }, authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
-    const result = await pool.query('SELECT id, email, name, role, phone FROM users WHERE id = $1', [req.user?.id]);
+    const result = await consumerAuthPool.query('SELECT id, email, name, role, phone FROM users WHERE id = $1', [req.user?.id]);
     if (result.rows.length === 0) return res.status(401).json({ error: 'User not found, token invalid' });
     const user = result.rows[0];
 
 
-    user.can_host_experiences = await checkCanHostExperiences(user.email, user.role);
+    user.can_host_experiences = await checkCanHostExperiences(user.email, user.role, consumerAuthPool);
     res.json({ user });
   } catch (error) {
     console.error('Fetch me error:', error);

@@ -23,6 +23,10 @@ export function restrictedWebRuntimeRolePlan(roleName: string): readonly string[
     `GRANT USAGE ON SCHEMA public TO ${role}`,
     `GRANT SELECT ON public.schema_migrations TO ${role}`,
     `GRANT SELECT ON public.users,public.settings,public.listings,public.host_marketing_campaigns,public.marketing_campaign_revisions TO ${role}`,
+    // The public catalogue joins calendar_prices even for anonymous guests;
+    // detail and experience readers require these relations as well. Missing
+    // grants made the legacy handlers return a misleading empty 200 response.
+    `GRANT SELECT ON public.calendar_prices,public.experiences,public.experience_wishlists,public.room_types,public.media_assets,public.room_calendar_blocks,public.inventory_days,public.offers TO ${role}`,
     // Registration and Google/phone account creation use these exact columns.
     // SELECT is required by their RETURNING clauses and current SELECT * login.
     `GRANT INSERT(email,password_hash,name,role,phone,google_id) ON public.users TO ${role}`,

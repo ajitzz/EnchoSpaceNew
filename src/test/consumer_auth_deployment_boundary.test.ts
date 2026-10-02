@@ -6,12 +6,14 @@ import type {Express} from 'express';
 
 const fixture = vi.hoisted(() => ({
   ready: true, throwProbe: false, operations: [] as string[],
+  probePools: [] as Array<{operation: string; pool: unknown}>,
   challenge: null as null | {digest: string; attempts: number}, deliveredCode: '',
 }));
 
 vi.mock('../server/auth/consumerAuthReadiness.js', () => ({
   consumerAuthReadiness: vi.fn(async (_pool: unknown, operation: string) => {
     fixture.operations.push(operation);
+    fixture.probePools.push({operation, pool: _pool});
     if (fixture.throwProbe) throw new Error('postgres://secret@private-host.invalid/db');
     return fixture.ready;
   }),
@@ -44,6 +46,7 @@ beforeAll(async () => {
   // This remote-looking URL never reaches a network: setup.ts replaces pg with
   // pg-mem. It forces the production read-only path instead of legacy DDL.
   vi.stubEnv('DATABASE_URL', 'postgres://fixture@ep-auth-boundary.invalid/encho?sslmode=require');
+  vi.stubEnv('CONSUMER_AUTH_DATABASE_URL', 'postgres://restricted@ep-auth-boundary.invalid/encho?sslmode=require');
   vi.stubEnv('PHONE_OTP_REDIS_REST_URL', 'https://redis.invalid');
   vi.stubEnv('PHONE_OTP_REDIS_REST_TOKEN', 'fixture');
   vi.stubEnv('PHONE_OTP_HMAC_KEY', Buffer.alloc(32, 7).toString('base64url'));
@@ -89,6 +92,10 @@ describe('mounted consumer auth boundary during marketing drift', () => {
     expect(verified.status).toBe(200);
     expect(verified.body.token).toEqual(expect.any(String));
     expect(fixture.operations).toEqual(expect.arrayContaining(['READ', 'GOOGLE_LINK', 'ENROLL']));
+    const googlePool = fixture.probePools.find(entry => entry.operation === 'GOOGLE_LINK')?.pool;
+    expect(googlePool).toBeDefined();
+    expect(googlePool).not.toBe(fixture.probePools[0].pool);
+    expect(fixture.probePools.some(entry => entry.operation === 'READ' && entry.pool === googlePool)).toBe(true);
   });
 
   it('never issues an auth token or provider OTP when the role/schema probe fails', async () => {

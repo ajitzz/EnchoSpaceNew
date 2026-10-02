@@ -18,7 +18,6 @@ describe('fresh web runtime role plan on a separate disposable PostgreSQL LOGIN'
 
   beforeAll(async () => {
     fixture = await createWorkflowPgFixture();
-    try {
       await installInquirySchema(fixture.pool);
       await fixture.pool.query(`
         ALTER TABLE users ADD COLUMN email TEXT, ADD COLUMN password_hash TEXT,
@@ -48,14 +47,16 @@ describe('fresh web runtime role plan on a separate disposable PostgreSQL LOGIN'
       ]) {
         await fixture.pool.query(readFileSync(`src/migrations/${file}`, 'utf8'));
       }
+      // The minimal workflow fixture predates the public guest catalogue.
+      // Model only the relations whose SELECT grants this role plan declares.
+      for (const name of ['calendar_prices', 'experiences', 'experience_wishlists',
+        'room_types', 'media_assets', 'room_calendar_blocks', 'inventory_days', 'offers']) {
+        await fixture.pool.query(`CREATE TABLE IF NOT EXISTS public.${name}(id integer primary key)`);
+      }
       for (const statement of restrictedWebRuntimeRolePlan(role)) {
         await fixture.pool.query(statement);
       }
       runtime = new pg.Pool({ ...fixture.pool.options, user: role });
-    } catch (error) {
-      await fixture.close();
-      throw error;
-    }
   }, 60_000);
 
   afterAll(async () => { await runtime?.end(); await fixture?.close(); });
@@ -94,6 +95,7 @@ describe('fresh web runtime role plan on a separate disposable PostgreSQL LOGIN'
     expect((await runtime.query('SELECT google_id FROM users WHERE id=$1', [inserted.id])).rows[0].google_id)
       .toBe('isolated-google-id');
     await runtime.query('SELECT value FROM settings WHERE key=$1', ['authorized_experience_hosts']);
+    await runtime.query('SELECT id FROM calendar_prices LIMIT 0');
   });
 
   it('rejects schema writes, history edits, account privilege escalation and destructive evidence grants', async () => {

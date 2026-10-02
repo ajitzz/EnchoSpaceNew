@@ -7,6 +7,11 @@ import app from '../../server.js';
 // Only Google's certificate retrieval is replaced. The route still verifies real
 // RS256 signatures, issuer, audience, expiry and verified-email claims.
 const fixture = vi.hoisted(() => ({privateKey: '', publicKey: ''}));
+// This suite isolates Google's signed-identity contract. The separate
+// disposable-PostgreSQL suite checks the restricted database role boundary.
+vi.mock('../server/auth/consumerAuthReadiness.js', () => ({
+  consumerAuthReadiness: vi.fn(async () => true),
+}));
 vi.mock('../lib/marketing/authentication.js', async importOriginal => {
   const actual = await importOriginal<typeof import('../lib/marketing/authentication.js')>();
   const {generateKeyPairSync} = await import('node:crypto');
