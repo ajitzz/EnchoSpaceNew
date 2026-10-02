@@ -1,6 +1,6 @@
 # Google sign-in incident — 2 October 2026
 
-**Status:** Repair candidate; live Gmail sign-in remains unverified until the Vercel database-role cutover and browser readback. Do not use this receipt as CR1 release acceptance.
+**Status:** Gmail sign-in repaired and verified on the live site. Full application readiness remains blocked; do not use this receipt as CR1 release acceptance.
 
 ## Impact and proven cause
 
@@ -16,8 +16,9 @@ Instead, `CONSUMER_AUTH_DATABASE_URL` will supply a separate two-connection
 pool for Google sign-in and session reads. Google account SQL, its readiness
 check and the experience-host setting read use that pool. Existing account
 tokens and API response contracts are unchanged. No schema migration is
-needed. An absent/invalid dedicated URL falls back to the existing pool, whose
-owner-role readiness guard still fails closed in Production. Targeted tests
+needed. An absent dedicated URL uses the existing pool, whose owner-role
+readiness guard still fails closed in Production; an invalid dedicated URL
+creates a fail-closed pool. Targeted tests
 cover the role, auth route, and session; live readback must still prove Gmail.
 Rollback is removing the dedicated variable and redeploying the prior commit;
 that restores the known 503 instead of allowing an unsafe owner sign-in.
@@ -27,7 +28,13 @@ The candidate separates consumer identity readiness from full marketing-catalog 
 
 An isolated Neon staging branch was brought from migration 016 through 047 with the hardened runner. A new restricted staging LOGIN passed full readiness and consumer Google-link readiness. Mounted staging checks returned 200 for health, public listings (7 rows), listing detail, experiences, password registration/login/session, and read-only Host/Admin pages after exploratory grants. The **exploratory blanket grants were staging-only** and initially failed the immutable-evidence readiness checks; the strict portfolio/recovery/adtech grants were restored and full readiness returned 200. This demonstrates why blanket grants must not be copied to Production.
 
-On Production, a separate `encho_web_prod_20261002` LOGIN was created with the checked auth/catalog/public-read plan and a random credential stored outside Git in a mode-0600 local file. Read-only checks using that actual role returned safe authority, matching migration history, full catalog readiness, Google-link readiness and seven published listings. **Vercel has not yet been switched to this role at the time of this note.** The plan deliberately does not grant every Host/Admin mutation; a role cutover is not a certificate that all product journeys work.
+On Production, a separate `encho_web_prod_20261002` LOGIN was created with the checked auth/catalog/public-read plan and a random credential stored outside Git in a mode-0600 local file. Read-only checks using that actual role returned safe authority, matching migration history, full catalog readiness, Google-link readiness and seven published listings. Vercel now connects to this role only through `CONSUMER_AUTH_DATABASE_URL`; the primary `DATABASE_URL` is unchanged. The plan deliberately does not grant every Host/Admin mutation; Gmail access is not a certificate that all product journeys work.
+
+## Live result
+
+Production deployed Git commit `41fb8da` (following auth candidate `32b2c29`). An intentionally invalid credential sent to the live Google auth route returned HTTP 401 `IDENTITY_INVALID`, proving the former readiness 500 was cleared without accepting an invalid identity. In Chrome, the existing linked admin Google account signed in successfully; after reload, the account menu still identified the admin account and exposed its Dashboard entry. No credentials or bearer tokens are recorded here. A separate live `GET /api/health/ready` remained HTTP 503 with `scope: database_structure`, because the primary runtime still uses the owner role. The Inbox displayed an unavailable unread count after reload. These remain open application-readiness findings, not Gmail regressions.
+
+Focused auth tests passed 14/14 across two files; the disposable PostgreSQL restricted-role plan passed 6/6. Server TypeScript and scoped ESLint passed. The isolated offline client/server/service-worker build produced 44 public artifacts. No full regression suite or paid/provider workflow was run for this incident.
 
 ## Release sequence and rollback
 
@@ -36,4 +43,4 @@ On Production, a separate `encho_web_prod_20261002` LOGIN was created with the c
 3. Verify live Google sign-in returns an authenticated session and `/api/auth/me` reads it. The primary `/api/health/ready` remains a separate strict gate and is expected to report 503 while the old owner-backed `DATABASE_URL` remains. Do not infer Host/Admin readiness from a successful sign-in.
 4. On failure, remove the dedicated variable and redeploy the last known deployment. Do not weaken the readiness guard, edit applied migration bytes or promote a staging credential to Production.
 
-**Open:** Actual Google browser token exchange, full Host/Admin route grant matrix, workforce identity, legal/payment and provider gates. Preserve correlation IDs and failed/repaired receipts separately.
+**Open:** Full Host/Admin route grant matrix and primary-role cutover, unread Inbox failure, workforce identity, legal/payment and provider gates. Preserve correlation IDs and failed/repaired receipts separately.
