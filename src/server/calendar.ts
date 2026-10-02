@@ -170,3 +170,30 @@ export function registerCalendarRoutes(app: Express, pool: pg.Pool, authenticate
   app.delete('/api/listings/:id/room-calendar/block/:blockId', noCache, authenticate, handle(req => service.remove(req.params.id, req.user!.id, req.params.blockId, req.get('Idempotency-Key'))));
   app.get('/api/listings/:id/availability', noCache, handle(req => service.availability(req.params.id, req.query)));
 }
+
+export function registerLegacyCalendarRoutes(app: Express, pool: pg.Pool, authenticate: RequestHandler, configured: () => boolean) {
+  app.get('/api/listings/:id/calendar', async (req, res) => {
+    if (!configured()) return res.status(503).json({ error: 'DB not configured' });
+    if (isNaN(Number(req.params.id))) return res.json([]);
+    try {
+      const query = `
+        SELECT c.*, row_to_json(o.*) as offer
+        FROM calendar_prices c
+        LEFT JOIN offers o ON c.offer_id = o.id
+        WHERE c.listing_id = $1
+      `;
+      const result = await pool.query(query, [req.params.id]);
+      res.json(result.rows);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch calendar' });
+    }
+  });
+
+  app.post('/api/listings/:id/calendar', authenticate, (_req, res) => {
+    return res.status(410).json({
+      code: 'LEGACY_CALENDAR_MUTATION_RETIRED',
+      error: 'Direct calendar price and status mutation is retired. Use canonical room calendar endpoints (/api/listings/:id/room-calendar/block).',
+      migrationHint: '/api/listings/:id/room-calendar/block',
+    });
+  });
+}

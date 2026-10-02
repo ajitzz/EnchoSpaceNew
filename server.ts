@@ -11,7 +11,7 @@ import {createMeasurementRouter} from './src/server/marketing/measurementRouter.
 import {registerSecureRealtime} from './src/server/realtime.js';
 import {originAllowed} from './src/server/deployment/origins.js';
 import { installPoolIsolation } from './src/server/deployment/poolIsolation.js';
-import { registerCalendarRoutes } from './src/server/calendar.js';
+import { registerCalendarRoutes, registerLegacyCalendarRoutes } from './src/server/calendar.js';
 import {createPublicAssetsMiddleware} from './src/server/deployment/staticAssets.js';
 import {phoneOtpEnrollmentSchemaReady} from './src/server/auth/phoneOtpSchemaReadiness.js';
 import {consumerAuthReadiness, type ConsumerAuthOperation} from './src/server/auth/consumerAuthReadiness.js';
@@ -3373,54 +3373,9 @@ app.delete('/api/admin/offers/:id', authenticateToken, async (req: AuthRequest, 
   }
 });
 
-app.get('/api/listings/:id/calendar', async (req, res) => {
-  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  if (isNaN(Number(req.params.id))) return res.json([]);
-  try {
-    const query = `
-      SELECT c.*, row_to_json(o.*) as offer
-      FROM calendar_prices c
-      LEFT JOIN offers o ON c.offer_id = o.id
-      WHERE c.listing_id = $1
-    `;
-    const result = await pool.query(query, [req.params.id]);
-    res.json(result.rows);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch calendar' });
-  }
-});
+// Legacy calendar endpoints: public GET preserved; legacy POST fail-closed to 410 with migration hint.
+registerLegacyCalendarRoutes(app, pool, authenticateToken, () => isDbConfigured);
 
-app.post('/api/listings/:id/calendar', authenticateToken, async (req: AuthRequest, res) => {
-  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  if (isNaN(Number(req.params.id))) return res.json({ success: true, message: "Demo listing updated" });
-  try {
-    // Basic auth check: usually check if listing belongs to user or if admin
-    const { dates, price, offer_id, status } = req.body;
-    const listingId = req.params.id;
-
-    // Process each date
-    for (const date_string of dates) {
-      await pool.query(`
-        INSERT INTO calendar_prices (listing_id, date_string, price, offer_id, status)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (listing_id, date_string)
-        DO UPDATE SET price = $3, offer_id = $4, status = $5
-      `, [listingId, date_string, price, offer_id || null, status || 'available']);
-    }
-
-    // Milestone 5: The Circuit Breaker (Smart Pause) for manual calendar blocks
-    if (status === 'blocked' || status === 'booked') {
-        triggerSmartAutoPause(listingId, `MANUAL_BLOCK_${Date.now()}`).catch(err => {
-            console.error('[CIRCUIT BREAKER ERROR] Failed to pause campaigns from manual block:', err);
-        });
-    }
-
-    res.json({ message: 'Updated successfully' });
-  } catch (error) {
-    console.error('Update calendar error', error);
-    res.status(500).json({ error: 'Failed to update calendar' });
-  }
-});
 
 // Private calendars and public availability have separate, scoped contracts.
 registerCalendarRoutes(app, pool, authenticateToken, () => isDbConfigured);
