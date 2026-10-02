@@ -14,6 +14,7 @@ import { installPoolIsolation } from './src/server/deployment/poolIsolation.js';
 import { registerCalendarRoutes } from './src/server/calendar.js';
 import {createPublicAssetsMiddleware} from './src/server/deployment/staticAssets.js';
 import {phoneOtpEnrollmentSchemaReady} from './src/server/auth/phoneOtpSchemaReadiness.js';
+import {consumerAuthReadiness, type ConsumerAuthOperation} from './src/server/auth/consumerAuthReadiness.js';
 import {databaseReadiness} from './src/server/deployment/databaseReadiness.js';
 import {createShutdown,drainHttpServer,isProcessEntry} from './src/server/deployment/lifecycle.js';
 import {legacyServerWorkersEnabled} from './src/server/deployment/legacyServerWorkerGate.js';
@@ -1313,11 +1314,16 @@ const requireExistingSchema = async () => {
   if (!ready.ready) throw new Error('DATABASE_MIGRATIONS_OR_ROLE_NOT_READY');
   marketingSchemaInitialized = usersTableInitialized = listingsTableInitialized = true;
 };
+const requireConsumerAuthSchema = async (operation: ConsumerAuthOperation) => {
+  if (!(await consumerAuthReadiness(pool, operation))) throw new Error('AUTH_DATABASE_NOT_READY');
+};
 // Helper to ensure users table
-const ensureUsersTable = async () => {
+const ensureUsersTable = async (operation: ConsumerAuthOperation = 'READ') => {
   if (!isDbConfigured) return;
+  // Production auth must never inherit a cached full-service readiness result:
+  // its own held, read-only check also rejects owner and BYPASSRLS roles.
+  if (!legacySchemaBootstrapEnabled(process.env, dbUrl)) return requireConsumerAuthSchema(operation);
   if (usersTableInitialized) return;
-  if (!legacySchemaBootstrapEnabled(process.env, dbUrl)) return requireExistingSchema();
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -3016,6 +3022,14 @@ if (isDbConfigured) {
 const phoneOtpAuthority = createPhoneOtpChallengeFromEnv();
 const otpSendInput = z.object({ phone: z.string() });
 const otpVerifyInput = z.object({ phone: z.string(), otp: z.string().regex(/^\d{6}$/), name: z.string().trim().max(120).optional() });
+const consumerAuthFailure = (res: Response, error: unknown, operation: string) => {
+  const readinessFailure = error instanceof Error && error.message === 'AUTH_DATABASE_NOT_READY';
+  console.error('[CONSUMER_AUTH_FAILED]', {operation, code: readinessFailure ? 'AUTH_DATABASE_NOT_READY' : 'AUTH_REQUEST_FAILED'});
+  return res.status(readinessFailure ? 503 : 500).json({
+    code: readinessFailure ? 'AUTH_DATABASE_NOT_READY' : 'AUTH_REQUEST_FAILED',
+    error: 'Authentication is temporarily unavailable. Please try again later.',
+  });
+};
 
 app.post('/api/auth/otp/send', otpSendLimiter, async (req, res) => {
   if (!phoneOtpAuthority || !phoneOtpDeliveryConfig.success || !isDbConfigured) {
@@ -3028,6 +3042,7 @@ app.post('/api/auth/otp/send', otpSendLimiter, async (req, res) => {
   catch { return res.status(400).json({ error: 'A valid international phone number is required' }); }
 
   try {
+    await ensureUsersTable('ENROLL');
     if (!(await phoneOtpEnrollmentSchemaReady(pool))) {
       return res.status(503).json({ error: 'Phone verification is temporarily unavailable' });
     }
@@ -3068,6 +3083,12 @@ app.post('/api/auth/otp/verify', otpVerifyLimiter, async (req, res) => {
   catch { return res.status(400).json({ error: 'A valid international phone number is required' }); }
   const { otp, name } = input.data;
   try {
+    await ensureUsersTable('ENROLL');
+    if (!(await phoneOtpEnrollmentSchemaReady(pool))) throw new Error('AUTH_DATABASE_NOT_READY');
+  } catch {
+    return res.status(503).json({code: 'AUTH_DATABASE_NOT_READY', error: 'Phone verification is temporarily unavailable'});
+  }
+  try {
     const result = await phoneOtpAuthority.verify(phone, req.ip, otp);
     if (result === 'RATE_LIMITED') return res.status(429).json({ error: 'Too many verification attempts. Try again later.' });
     if (result !== 'VERIFIED') return res.status(400).json({ error: 'Invalid or expired OTP' });
@@ -3076,8 +3097,6 @@ app.post('/api/auth/otp/verify', otpVerifyLimiter, async (req, res) => {
   }
 
   try {
-    await ensureUsersTable();
-
     // Legacy users may have stored formatting punctuation or omitted a prefix.
     // Do not silently merge a digit-only identity into E.164 or create a second
     // account for the same digits; such rows need a reviewed migration.
@@ -3136,7 +3155,7 @@ async function checkCanHostExperiences(email: string | null, role: string) {
 app.post('/api/auth/register', authLimiter, async (req, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
-    await ensureUsersTable();
+    await ensureUsersTable('ENROLL');
     dbConnectionError = null;
     const { email, password, name } = req.body;
     if (!email || !password || !name) return res.status(400).json({ error: 'All fields required' });
@@ -3146,7 +3165,7 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 8 characters long for security.' });
     }
 
-    const existing = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const existing = await pool.query('SELECT 1 FROM users WHERE email = $1', [email]);
     if (existing.rows.length > 0) return res.status(400).json({ error: 'Email already exists' });
 
     const hash = await bcrypt.hash(password, 10);
@@ -3162,15 +3181,7 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
     const can_host_experiences = await checkCanHostExperiences(user.email, user.role);
     res.status(201).json({ user: { ...user, can_host_experiences }, token });
   } catch (error: any) {
-    const msg = error?.message || String(error);
-    console.error('Register error:', msg);
-    if (msg.includes('exceeded the compute time quota')) {
-      return res.status(503).json({ error: 'Database Quota Exceeded: Your Neon database has exceeded its compute time quota. Please check your Neon project/account.' });
-    }
-    if (msg.includes('password authentication failed')) {
-      return res.status(503).json({ error: 'Database Authentication Failed: Check DATABASE_URL password in Vercel settings.' });
-    }
-    res.status(500).json({ error: msg || 'Registration failed' });
+    return consumerAuthFailure(res, error, 'register');
   }
 });
 
@@ -3179,12 +3190,12 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     return res.status(503).json({ error: 'Database not configured.' });
   }
   try {
-    await ensureUsersTable();
+    await ensureUsersTable('READ');
     dbConnectionError = null;
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'All fields required' });
 
-    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const result = await pool.query('SELECT id, email, name, role, password_hash FROM users WHERE email = $1', [email]);
     if (result.rows.length === 0) return res.status(400).json({ error: 'Invalid credentials' });
 
     const user = result.rows[0];
@@ -3200,26 +3211,18 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     const can_host_experiences = await checkCanHostExperiences(user.email, user.role);
     res.json({ user: { id: user.id, email: user.email, name: user.name, role: user.role, can_host_experiences }, token });
   } catch (error: any) {
-    const msg = error?.message || String(error);
-    console.error('Login error:', msg);
-    if (msg.includes('exceeded the compute time quota')) {
-      return res.status(503).json({ error: 'Database Quota Exceeded: Your Neon database has exceeded its compute time quota. Please check your Neon project/account.' });
-    }
-    if (msg.includes('password authentication failed')) {
-      return res.status(503).json({ error: 'Database Authentication Failed: Check DATABASE_URL password in Vercel settings.' });
-    }
-    res.status(500).json({ error: msg || 'Login failed' });
+    return consumerAuthFailure(res, error, 'login');
   }
 });
 
 app.post('/api/auth/google', authLimiter, async (req, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
-    await ensureUsersTable();
+    await ensureUsersTable('GOOGLE_LINK');
     dbConnectionError = null;
     const identity = await verifyGoogleIdentity(req.body.credential, process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID);
     const { googleId, email, name } = identity;
-    const result = await pool.query('SELECT * FROM users WHERE google_id=$1 OR lower(email)=lower($2)', [googleId,email]);
+    const result = await pool.query('SELECT id, email, name, role, google_id FROM users WHERE google_id=$1 OR lower(email)=lower($2)', [googleId,email]);
     let user;
     if (result.rows.length > 1) return res.status(409).json({ error: 'Account linking needs support review.' });
     if (result.rows.length === 0) {
@@ -3240,19 +3243,14 @@ app.post('/api/auth/google', authLimiter, async (req, res) => {
     if (error instanceof MarketingError) {
       return res.status(error.status).json({ code: error.code, error: error.message });
     }
-    const msg = error?.message || String(error);
-    console.error('Google auth error:', msg);
-    if (msg.includes('exceeded the compute time quota')) {
-      return res.status(503).json({ error: 'Database Quota Exceeded: Your Neon database has exceeded its compute time quota. Please check your Neon project/account.' });
-    }
-    if (msg.includes('password authentication failed')) {
-      return res.status(503).json({ error: 'Database Authentication Failed: Check DATABASE_URL password in Vercel settings.' });
-    }
-    res.status(500).json({ error: msg || 'Google auth failed' });
+    return consumerAuthFailure(res, error, 'google');
   }
 });
 
-app.get('/api/auth/me', authenticateToken, async (req: AuthRequest, res) => {
+app.get('/api/auth/me', async (_req: Request, res: Response, next: NextFunction) => {
+  try { await ensureUsersTable('READ'); next(); }
+  catch (error) { consumerAuthFailure(res, error, 'session'); }
+}, authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   try {
     const result = await pool.query('SELECT id, email, name, role, phone FROM users WHERE id = $1', [req.user?.id]);
