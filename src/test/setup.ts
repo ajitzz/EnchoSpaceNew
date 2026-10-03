@@ -64,6 +64,7 @@ vi.mock('pg', async (importOriginal) => {
       avatar TEXT,
       editorial_quote VARCHAR(255),
       role VARCHAR(50) DEFAULT 'user',
+      is_active BOOLEAN DEFAULT true,
       wallet_balance FLOAT DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -358,6 +359,11 @@ vi.mock('@upstash/redis', () => {
         if (__mockRedisStore.delete(k)) count++;
       }
       return count;
+    }
+    async incr(key: string) {
+      const next = Number(__mockRedisStore.get(key) || 0) + 1;
+      __mockRedisStore.set(key, next);
+      return next;
     }
     async keys(pattern: string) {
       const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');

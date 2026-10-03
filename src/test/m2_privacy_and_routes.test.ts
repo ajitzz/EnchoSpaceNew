@@ -438,6 +438,13 @@ describe('Phase 3 Milestone 2 — Published Projection, Canonical Routes & Addre
       // Seed listings across all publication statuses: published, draft, unlisted, suspended, archived, and NULL
       // Fixture 501 is published and loaded with sensitive values across descriptions, rooms, photos, nearby, guidelines, tags, host philosophy, dynamic pricing, and raw rules
       await pool.query(`
+        INSERT INTO users (id, email, name, role, is_active) VALUES
+          (701, 'host-m2@example.test', 'M2 Host', 'host', true),
+          (999, 'admin-m2@example.test', 'M2 Admin', 'admin', true),
+          (802, 'stranger-m2@example.test', 'M2 Stranger', 'host', true)
+        ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role, is_active = EXCLUDED.is_active;
+      `);
+      await pool.query(`
         INSERT INTO listings (
           id, user_id, title, description, price, currency, type, address, city, lat, lng, slug, publication_status,
           rooms, photos, nearby, curated_guidelines, raw_rules, experience_tags, host_philosophy, concierge_privileges, dynamic_pricing
@@ -764,7 +771,7 @@ describe('Phase 3 Milestone 2 — Published Projection, Canonical Routes & Addre
         expect(__mockRedisStore.has('listings_v2:all:/api/listings')).toBe(true);
       });
 
-      it('public cache reads and writes use ONLY the listings_v4:public_cards namespace', async () => {
+      it('public cache reads and writes use only the current generation-scoped namespace', async () => {
         // Issue fresh public request
         const res = await request(app)
           .get('/api/listings?city=Bengaluru')
@@ -774,14 +781,14 @@ describe('Phase 3 Milestone 2 — Published Projection, Canonical Routes & Addre
         const writtenKeys = Array.from(__mockRedisStore.keys());
         expect(writtenKeys.length).toBeGreaterThan(0);
 
-        // All public cache keys MUST use the current listings_v4:public_cards prefix
+        // The generation marker is not a public card; all stored cards use the
+        // current namespace and no private feed is cached.
         for (const key of writtenKeys) {
-          expect(key.startsWith('listings_v4:public_cards:')).toBe(true);
+          expect(key === 'listings_v3:public_cards:generation' || key.startsWith('listings_v5:public_cards:g0:')).toBe(true);
           expect(key).not.toContain('listings_v2');
         }
 
-        // Check key structure: listings_v4:public_cards:bengaluru:/api/listings?city=Bengaluru
-        const targetKey = 'listings_v4:public_cards:bengaluru:/api/listings?city=Bengaluru';
+        const targetKey = 'listings_v5:public_cards:g0:bengaluru:/api/listings?city=Bengaluru';
         expect(__mockRedisStore.has(targetKey)).toBe(true);
 
         // Verify that the cached content is the safe public-card projection
@@ -801,7 +808,7 @@ describe('Phase 3 Milestone 2 — Published Projection, Canonical Routes & Addre
           expect(card.nearby).toBeUndefined();
         }
 
-        // Verify subsequent request reads from listings_v4 cache
+        // Verify subsequent request reads from the generation-scoped cache.
         const res2 = await request(app)
           .get('/api/listings?city=Bengaluru')
           .expect(200);

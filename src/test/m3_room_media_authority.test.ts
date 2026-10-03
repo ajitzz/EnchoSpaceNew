@@ -334,9 +334,10 @@ describe('Phase 3 Milestone 3 — Canonical Relational Room & Media Authority', 
 
   // Test 8: Non-destructive room updates preserve existing room IDs
   it('Test 8: Non-destructive room updates via PUT /api/listings/:id/rooms preserve existing room IDs', async () => {
+    // Note: Listing must be in 'draft' state; editing rooms on a published listing is rejected with 422 under R3-01 publication containment.
     const listingRes = await pool.query(`
       INSERT INTO listings (id, user_id, title, description, price, type, address, city, publication_status)
-      VALUES (308, 1001, 'Upsert Testing Haven', 'Testing non-destructive upserts', 14000, 'resort', 'Rd 8', 'Alibaug', 'published')
+      VALUES (308, 1001, 'Upsert Testing Haven', 'Testing non-destructive upserts', 14000, 'resort', 'Rd 8', 'Alibaug', 'draft')
       RETURNING id;
     `);
     const listingId = listingRes.rows[0].id;

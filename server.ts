@@ -28,6 +28,8 @@ import { verifyGoogleIdentity } from './src/lib/marketing/authentication.js';
 import { MarketingError } from './src/lib/marketing/domain.js';
 import {resolvePersistedSession,legacySocialPublishingEnabled,socialApprovalPredicate,approveLegacySocialPost} from './src/lib/marketing/legacyAuthorization.js';
 import {issueLocalUpload,verifyLocalUpload,randomMediaKey,writeImmutableMedia} from './src/lib/marketing/localMedia.js';
+import { moderateMediaAsset } from './src/server/media/mediaModerationService.js';
+import { AdminDraftPropertyError, updateAdminDraftProperty } from './src/server/listings/adminDraftPropertyService.js';
 // ==========================================
 // PHASE 2.2: CENTRAL CAMPAIGN STATE MACHINE
 // ==========================================
@@ -199,6 +201,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import pkg from 'pg';
 import type pg from 'pg';
+import type { PoolClient } from 'pg';
 import { Redis } from '@upstash/redis';
 import { createImmutableS3Upload, createMediaUploadS3Client } from './src/lib/immutableS3Upload.js';
 import dotenv from 'dotenv';
@@ -302,82 +305,9 @@ export function logGeminiWarning(context: string, err: any) {
   }
 }
 
-/**
- * Phase 3 Milestone 3 / Founder Gate PROPOSED-007 Validator:
- * A property cannot be published if any bookable room type has fewer than 3 approved,
- * room-specific photos. At least 1 approved photo per room must be explicitly classified
- * as showing the sleeping area (is_sleeping_area = true).
- * Property-wide media (room_type_id IS NULL or tier = 'common') never counts toward a room's minimum.
- */
-export async function validatePropertyPublication(
-  listingId: number | string,
-  clientOrPool: any
-): Promise<{ valid: boolean; errors: string[]; roomSummaries: any[] }> {
-  const numId = parseInt(String(listingId), 10);
-  if (isNaN(numId)) {
-    return { valid: false, errors: ['Invalid listing ID'], roomSummaries: [] };
-  }
+import { validatePropertyPublication } from './src/server/listings/publicationValidation.js';
+export { validatePropertyPublication };
 
-  // 1. Fetch relational room types for the listing
-  const roomsRes = await clientOrPool.query(
-    'SELECT id, name, type FROM room_types WHERE listing_id = $1 ORDER BY id ASC',
-    [numId]
-  );
-
-  if (roomsRes.rows.length === 0) {
-    return {
-      valid: false,
-      errors: ['Property must have at least one room type defined before publication.'],
-      roomSummaries: []
-    };
-  }
-
-  const errors: string[] = [];
-  const roomSummaries: any[] = [];
-
-  // 2. Validate each room type has >= 3 approved room-specific photos with >= 1 sleeping area photo
-  for (const rt of roomsRes.rows) {
-    const mediaRes = await clientOrPool.query(
-      `SELECT COUNT(*) as total_count,
-              COUNT(CASE WHEN is_sleeping_area = true THEN 1 END) as sleeping_count
-       FROM media_assets
-       WHERE entity_type = 'listing'
-         AND entity_id = $1
-         AND room_type_id = $2
-         AND moderation_status = 'approved'`,
-      [numId, rt.id]
-    );
-
-    const totalCount = parseInt(mediaRes.rows[0]?.total_count || '0', 10);
-    const sleepingCount = parseInt(mediaRes.rows[0]?.sleeping_count || '0', 10);
-
-    roomSummaries.push({
-      roomId: rt.id,
-      roomName: rt.name,
-      roomType: rt.type,
-      approvedPhotosCount: totalCount,
-      sleepingAreaPhotosCount: sleepingCount,
-      isCompliant: totalCount >= 3 && sleepingCount >= 1
-    });
-
-    if (totalCount < 3) {
-      errors.push(
-        `Room type "${rt.name || rt.type}" has only ${totalCount} approved photo(s). Minimum 3 approved room-specific photos are required for publication.`
-      );
-    }
-    if (sleepingCount < 1) {
-      errors.push(
-        `Room type "${rt.name || rt.type}" must have at least 1 approved photo showing the sleeping area.`
-      );
-    }
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-    roomSummaries
-  };
-}
 
 let stripe: Stripe | null = null;
 if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY !== 'dummy_stripe_key') {
@@ -621,6 +551,7 @@ const redis = isRedisConfigured
       token: process.env.UPSTASH_REDIS_REST_TOKEN!,
     })
   : null;
+const PUBLIC_LISTING_CACHE_GENERATION_KEY = 'listings_v3:public_cards:generation';
 
 // Initialize S3
 const s3 = createMediaUploadS3Client({
@@ -788,7 +719,12 @@ export const optionalAuthenticateToken = (req: Request & Pick<AuthRequest, 'user
       const user = await resolvePersistedSession(consumerAuthPool, claims);
       req.user = user;
       rlsStorage.run({ userId: user.id, isRequest: true, bypassRls: user.role === 'admin' }, () => next());
-    } catch { return res.status(401).json({ error: 'Account session is no longer available.' }); }
+    } catch (error: any) {
+      res.set('Cache-Control', 'private, no-store');
+      return error?.status === 401
+        ? res.status(401).json({ error: 'Account session is no longer available.' })
+        : res.status(503).json({ error: 'Account session verification is unavailable.' });
+    }
   });
 };
 
@@ -802,7 +738,10 @@ export const authenticateToken = (req: Request & Pick<AuthRequest, 'user'>, res:
       req.user = user;
       rlsStorage.run({ userId: user.id, isRequest: true, bypassRls: user.role === 'admin' }, () => next());
     } catch (error: any) {
-      return res.status(error?.status === 401 ? 401 : 503).json({ error: 'Account session verification is unavailable.' });
+      res.set('Cache-Control', 'private, no-store');
+      return error?.status === 401
+        ? res.status(401).json({ error: 'Account session is no longer available.' })
+        : res.status(503).json({ error: 'Account session verification is unavailable.' });
     }
   });
 };
@@ -1375,6 +1314,10 @@ const ensureUsersTable = async (operation: ConsumerAuthOperation = 'READ') => {
 
       IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='editorial_quote') THEN
         ALTER TABLE users ADD COLUMN editorial_quote VARCHAR(255);
+      END IF;
+
+      IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='is_active') THEN
+        ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT true;
       END IF;
 
     END $$;
@@ -3852,314 +3795,562 @@ app.put('/api/admin/seo/:type/:id', authenticateToken, async (req: AuthRequest, 
   }
 });
 
+const draftPresentationPatchFields = new Set([
+  'amenity_clusters', 'child_safety_specs', 'hero_video_url', 'hero_fallback_url',
+  'dominant_color_hex', 'raw_rules', 'curated_guidelines', 'experience_tags',
+  'concierge_privileges'
+]);
+const draftPresentationText = z.string().trim().max(10000);
+const draftPresentationItems = z.array(z.string().trim().min(1).max(500)).max(100);
+const draftPresentationUrl = z.string().trim().max(2048).refine((value) => {
+  if (!value) return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}, 'Media URL must be an absolute HTTPS URL or empty');
+const draftPresentationPatchSchema = z.object({
+  amenity_clusters: z.object({
+    vibe: draftPresentationItems.optional(),
+    comfort: draftPresentationItems.optional(),
+    work: draftPresentationItems.optional(),
+    culinary: draftPresentationItems.optional()
+  }).strict().optional(),
+  child_safety_specs: draftPresentationItems.optional(),
+  hero_video_url: draftPresentationUrl.optional(),
+  hero_fallback_url: draftPresentationUrl.optional(),
+  dominant_color_hex: z.string().trim().refine((value) => value === '' || /^#[0-9a-fA-F]{6}$/.test(value), 'Color must be a six-digit hex value or empty').optional(),
+  raw_rules: draftPresentationText.optional(),
+  curated_guidelines: draftPresentationItems.optional(),
+  experience_tags: draftPresentationItems.optional(),
+  concierge_privileges: draftPresentationText.optional()
+}).strict().refine((value) => Object.keys(value).length > 0, 'At least one presentation field is required');
+
+app.patch('/api/admin/listings/:id/draft-property', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+  res.setHeader('Cache-Control', 'private, no-store');
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  const rawId = String(req.params.id || '').trim();
+  const listingId = Number(rawId);
+  if (!/^[1-9]\d*$/.test(rawId) || !Number.isSafeInteger(listingId) || listingId > 2147483647) {
+    return res.status(400).json({ error: 'Invalid listing ID', code: 'INVALID_LISTING_ID' });
+  }
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ error: 'Request body must be a JSON object', code: 'INVALID_DRAFT_PROPERTY_PATCH' });
+  }
+  const { expected_current: expectedCurrent, ...patch } = req.body;
+  try {
+    // Reject revoked staff before taking an arbitrary listing lock. The service
+    // repeats this check under a held user lock to fence a concurrent revocation.
+    const adminId = Number(req.user?.id);
+    const currentAdmin = await pool.query('SELECT role, is_active FROM users WHERE id = $1', [adminId]);
+    if (currentAdmin.rows[0]?.role !== 'admin' || currentAdmin.rows[0]?.is_active !== true) {
+      return res.status(403).json({ error: 'Active administrator privileges are required', code: 'ADMIN_PRIVILEGES_REQUIRED' });
+    }
+    const result = await updateAdminDraftProperty(pool, {
+      listingId,
+      adminId,
+      patch,
+      expectedCurrent,
+      ipAddress: req.ip || null,
+    });
+    return res.json(result);
+  } catch (error) {
+    if (error instanceof AdminDraftPropertyError) {
+      return res.status(error.status).json({ error: error.message, code: error.code });
+    }
+    console.error('[ADMIN DRAFT PROPERTY UPDATE ERROR]', error);
+    return res.status(503).json({ error: 'Draft property update is unavailable', code: 'DRAFT_PROPERTY_UPDATE_UNAVAILABLE' });
+  }
+});
+
 app.put('/api/listings/:id', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ status: 'error', message: 'DB not configured' });
-  if (isNaN(Number(req.params.id))) return res.json({ id: req.params.id, message: "Demo listing preserved" });
+  const rawId = String(req.params.id || '').trim();
+  const listingId = Number(rawId);
+  if (!/^[1-9]\d*$/.test(rawId) || !Number.isSafeInteger(listingId) || listingId <= 0 || listingId > 2147483647) {
+    return res.status(400).json({ error: 'Invalid listing ID: must be a positive integer' });
+  }
+
+  // Safe request body validation
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ error: 'Request body must be a JSON object' });
+  }
+
+  // Direct publication_status mutation rejected on general listing endpoint
+  if (req.body.publication_status !== undefined) {
+    return res.status(400).json({
+      error: 'Direct publication_status mutation rejected on general listing endpoint. Use dedicated transition route (/api/admin/listings/:id/status).'
+    });
+  }
+
+  const hasDraftPresentationPatch = !('title' in req.body) &&
+    Object.keys(req.body).some((key) => draftPresentationPatchFields.has(key));
+  const presentationPatch = hasDraftPresentationPatch
+    ? draftPresentationPatchSchema.safeParse(req.body)
+    : null;
+  if (presentationPatch && !presentationPatch.success) {
+    return res.status(400).json({ error: 'Invalid draft presentation update', details: presentationPatch.error.issues });
+  }
+
+  let client: PoolClient | null = null;
   try {
     await ensureListingsTable();
+    client = await pool.connect();
+    await client.query('BEGIN');
 
-    // IDOR Protection: Verify ownership or admin role
-    const authCheck = await pool.query('SELECT user_id FROM listings WHERE id = $1', [req.params.id]);
-    if (authCheck.rows.length === 0) return res.status(404).json({ error: 'Listing not found' });
-    if (authCheck.rows[0].user_id !== req.user?.id && req.user?.role !== 'admin') {
-       return res.status(403).json({ error: 'Forbidden: You do not have permission to modify this listing.' });
+    // 1. Parent Listing Row Lock: Acquire exclusive lock on listings row FOR UPDATE
+    const listingRes = await client.query(
+      `SELECT id, user_id, publication_status, price, type, currency,
+              amenity_clusters, child_safety_specs, hero_video_url, hero_fallback_url,
+              dominant_color_hex, raw_rules, curated_guidelines, experience_tags,
+              concierge_privileges
+       FROM listings WHERE id = $1 FOR UPDATE`,
+      [listingId]
+    );
+    if (listingRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Listing not found' });
+    }
+    const listing = listingRes.rows[0];
+
+    // 2. Persisted owner / admin reauthorization on the held connection
+    const requesterId = req.user?.id;
+    if (!requesterId) {
+      await client.query('ROLLBACK');
+      return res.status(401).json({ error: 'Unauthorized: missing user identity' });
     }
 
-    const { title, description, price, type, address, city, imageUrl, imageUrls, videoUrl, rentalMode, rooms, maxGuests, bedrooms, beds, bathrooms, amenities, lat, lng, dynamicPricing, seo_title, seo_description, seo_keywords, seo_image_url, amenity_clusters, child_safety_specs, nearby, hero_video_url, hero_fallback_url, dominant_color_hex, raw_rules, curated_guidelines, experience_tags, brand, brand_font, brand_color } = req.body;
+    let userRes;
+    try {
+      userRes = await client.query(
+        'SELECT id, role, is_active FROM users WHERE id = $1 FOR SHARE',
+        [requesterId]
+      );
+    } catch (dbErr: any) {
+      await client.query('ROLLBACK');
+      if (dbErr?.code === '42703') {
+        return res.status(503).json({
+          error: 'Database schema readiness error: users.is_active column missing. Reauthorization failed closed.'
+        });
+      }
+      throw dbErr;
+    }
 
-    // Fetch existing listing record for oldPrice and defaults
-    const currentListingRes = await pool.query('SELECT price, type, currency FROM listings WHERE id = $1', [req.params.id]);
-    const oldPrice = currentListingRes.rows.length > 0 ? currentListingRes.rows[0].price : 0;
+    if (userRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(401).json({ error: 'Unauthorized: user account not found' });
+    }
+    const requesterUser = userRes.rows[0];
+    const isActive = requesterUser.is_active === true;
+    if (!isActive) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Forbidden: account is inactive or suspended' });
+    }
+
+    const isOwner = String(requesterId) === String(listing.user_id);
+    const isAdmin = requesterUser.role === 'admin';
+    if (!isAdmin && !isOwner) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Forbidden: You do not have permission to modify this listing.' });
+    }
+
+    // 3. Publication Containment: Reject general edits on published or unlisted listings
+    if (listing.publication_status === 'published') {
+      await client.query('ROLLBACK');
+      return res.status(422).json({
+        error: 'Cannot modify listing on a published listing: modification would alter verified listing and offer authority. Direct modification of published listings is prohibited; submit a draft successor review.',
+        listingId,
+        publicationStatus: listing.publication_status
+      });
+    }
+
+    if (listing.publication_status !== 'draft') {
+      await client.query('ROLLBACK');
+      return res.status(422).json({
+        error: `Cannot modify listing on an ${listing.publication_status} listing: ${listing.publication_status} listings represent accepted historical authority. Direct modification is prohibited; submit a draft successor review.`,
+        listingId,
+        publicationStatus: listing.publication_status
+      });
+    }
+
+    // 4. Draft Listing Updates: Execute mutations within held client transaction
+    const {
+      title, description, price, type, address, city, imageUrl, imageUrls, videoUrl,
+      rentalMode, rooms, maxGuests, bedrooms, beds, bathrooms, amenities, lat, lng,
+      dynamicPricing, seo_title, seo_description, seo_keywords, seo_image_url,
+      amenity_clusters, child_safety_specs, nearby, hero_video_url, hero_fallback_url,
+      dominant_color_hex, raw_rules, curated_guidelines, experience_tags, brand,
+      brand_font, brand_color, photos, concierge_privileges, host_philosophy, currency
+    } = req.body;
+
+    const oldPrice = listing.price || 0;
     const resolvedPrice = (price !== undefined && price !== null) ? price : oldPrice;
 
     const safeImageUrls = typeof imageUrls === 'string' ? imageUrls : JSON.stringify(imageUrls || []);
     const safeRooms = typeof rooms === 'string' ? rooms : JSON.stringify(rooms || []);
     const safeAmenities = typeof amenities === 'string' ? amenities : JSON.stringify(amenities || []);
     const safeDynamicPricing = typeof dynamicPricing === 'string' ? dynamicPricing : JSON.stringify(dynamicPricing || {});
-    
-    // New JSONB properties
-    const safeAmenityClusters = typeof amenity_clusters === 'object' ? JSON.stringify(amenity_clusters) : null;
+
+    const safeAmenityClusters = typeof amenity_clusters === 'object' && amenity_clusters !== null ? JSON.stringify(amenity_clusters) : null;
     const safeChildSafety = Array.isArray(child_safety_specs) ? JSON.stringify(child_safety_specs) : null;
     const safeNearby = Array.isArray(nearby) ? JSON.stringify(nearby) : null;
 
-    if (title) {
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-
-        const safePhotos = Array.isArray(req.body.photos) ? JSON.stringify(req.body.photos) : (typeof req.body.photos === 'string' ? req.body.photos : JSON.stringify([]));
-        await client.query(`
-          UPDATE listings
-          SET title=$1, description=$2, price=$3, type=$4, address=$5, city=$6, image_url=$7, image_urls=$8, video_url=$9, rental_mode=$10, rooms=$11, max_guests=$12, bedrooms=$13, beds=$14, bathrooms=$15, amenities=$16, lat=$18, lng=$19, dynamic_pricing=$20, seo_title=$21, seo_description=$22, seo_keywords=$23, seo_image_url=$24, amenity_clusters=$25, child_safety_specs=$26, nearby=$27, hero_video_url=$28, hero_fallback_url=$29, dominant_color_hex=$30, raw_rules=$31, curated_guidelines=$32, experience_tags=$33, photos=$34, concierge_privileges=$35, host_philosophy=$36, brand=$37, brand_font=$38, brand_color=$39
-          WHERE id=$17
-        `, [
-          title, description, resolvedPrice, type || currentListingRes.rows[0]?.type || 'Sanctuary', address, city, imageUrl, safeImageUrls, videoUrl, rentalMode, safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, req.params.id as string, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby, hero_video_url || null, hero_fallback_url || null, dominant_color_hex || null, raw_rules || null, curated_guidelines || null, Array.isArray(experience_tags) ? JSON.stringify(experience_tags) : JSON.stringify([]), safePhotos, req.body.concierge_privileges || null, req.body.host_philosophy || null, brand || null, brand_font || null, brand_color || null
-        ]);
-
-        // M3: Non-Destructive room_types upsert preserving row IDs
-        const roomTypeMap = new Map<string, number>(); // Map room type/name -> room_types.id
-        if (Array.isArray(rooms) && rooms.length > 0) {
-          // Fetch existing rooms to preserve IDs
-          const existingRoomsRes = await client.query(
-            'SELECT id, name, type FROM room_types WHERE listing_id = $1',
-            [req.params.id]
-          );
-          const existingRooms = existingRoomsRes.rows;
-          const processedRoomIds = new Set<number>();
-
-          for (const room of rooms) {
-            // Find existing row by matching ID, type, or name
-            const existing = existingRooms.find((er: any) =>
-              (room.id && !isNaN(Number(room.id)) && er.id === Number(room.id)) ||
-              (room.type && er.type === room.type) ||
-              (room.name && er.name === room.name)
-            );
-
-            let savedRoomId: number;
-            if (existing) {
-              await client.query(`
-                UPDATE room_types
-                SET name=$1, type=$2, icon=$3, tag=$4, base_price=$5, currency=$6,
-                    max_occupancy=$7, inventory_count=$8, description=$9, specs=$10,
-                    features=$11, amenities=$12, min_stay_nights=$13
-                WHERE id=$14
-              `, [
-                room.name || existing.name || 'Sanctuary Room',
-                room.type || existing.type || 'suites',
-                room.icon || '🛏️',
-                room.tag || '',
-                Number(room.price) || Number(price) || 0,
-                req.body.currency || 'INR',
-                Number(room.capacity) || 2,
-                Number(room.inventory_count) || 1,
-                room.description || '',
-                room.specs || '',
-                JSON.stringify(room.features || []),
-                JSON.stringify(room.amenities || []),
-                Number(room.min_stay_nights) || 1,
-                existing.id
-              ]);
-              savedRoomId = existing.id;
-              processedRoomIds.add(existing.id);
-            } else {
-              const insertRes = await client.query(`
-                INSERT INTO room_types (listing_id, name, type, icon, tag, base_price, currency, max_occupancy, inventory_count, description, specs, features, amenities, min_stay_nights)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-                RETURNING id
-              `, [
-                req.params.id,
-                room.name || 'Sanctuary Room',
-                room.type || 'suites',
-                room.icon || '🛏️',
-                room.tag || '',
-                Number(room.price) || Number(price) || 0,
-                req.body.currency || 'INR',
-                Number(room.capacity) || 2,
-                Number(room.inventory_count) || 1,
-                room.description || '',
-                room.specs || '',
-                JSON.stringify(room.features || []),
-                JSON.stringify(room.amenities || []),
-                Number(room.min_stay_nights) || 1
-              ]);
-              savedRoomId = insertRes.rows[0].id;
-              processedRoomIds.add(savedRoomId);
-            }
-
-            if (room.type) roomTypeMap.set(room.type, savedRoomId);
-            if (room.name) roomTypeMap.set(room.name, savedRoomId);
-            if (room.id) roomTypeMap.set(String(room.id), savedRoomId);
-          }
-        }
-
-        // M3: Non-Destructive media_assets upsert with room_type_id & is_sleeping_area
-        if (Array.isArray(req.body.photos) && req.body.photos.length > 0) {
-          const existingMediaRes = await client.query(
-            "SELECT id, url, tier, category, room_type_id, is_sleeping_area, moderation_status FROM media_assets WHERE entity_id = $1 AND entity_type = 'listing'",
-            [req.params.id]
-          );
-          const existingMedia = existingMediaRes.rows;
-
-          let orderIdx = 0;
-          for (const photo of req.body.photos) {
-            const photoUrl = photo.url || photo.previewUrl;
-            if (!photoUrl) continue;
-
-            const existing = existingMedia.find((em: any) => em.url === photoUrl || (photo.id && !isNaN(Number(photo.id)) && em.id === Number(photo.id)));
-
-            // Resolve room_type_id from roomTypeMap
-            let linkedRoomTypeId: number | null = null;
-            if (photo.room_type_id && !isNaN(Number(photo.room_type_id))) {
-              linkedRoomTypeId = Number(photo.room_type_id);
-            } else if (photo.tier && photo.tier !== 'common' && roomTypeMap.has(photo.tier)) {
-              linkedRoomTypeId = roomTypeMap.get(photo.tier) || null;
-            }
-
-            // Strict sleeping area: require explicit is_sleeping_area = true (never infer from bedroom)
-            const isSleepingArea = Boolean(photo.is_sleeping_area || photo.isSleepingArea);
-
-            // True admin-only approval rule:
-            // Host submissions NEVER directly set approved.
-            // Preserve approved status ONLY if existing asset was approved and had no material changes.
-            let modStatus = 'pending_review';
-            if (existing && existing.moderation_status === 'approved') {
-              const unchanged = existing.url === photoUrl &&
-                                (existing.tier || 'common') === (photo.tier || 'common') &&
-                                (existing.category || 'other') === (photo.category || 'other') &&
-                                Boolean(existing.is_sleeping_area) === isSleepingArea &&
-                                ((existing.room_type_id === null && linkedRoomTypeId === null) ||
-                                 Number(existing.room_type_id) === Number(linkedRoomTypeId));
-              if (unchanged) {
-                modStatus = 'approved';
-              }
-            }
-
-            if (existing) {
-              await client.query(`
-                UPDATE media_assets
-                SET tier=$1, category=$2, title=$3, description=$4, specs=$5, is_hero=$6,
-                    order_index=$7, is_sleeping_area=$8, room_type_id=$9, moderation_status=$10
-                WHERE id=$11
-              `, [
-                photo.tier || 'common',
-                photo.category || 'other',
-                photo.title || '',
-                photo.description || '',
-                photo.specs || '',
-                photo.isHero || false,
-                orderIdx++,
-                isSleepingArea,
-                linkedRoomTypeId,
-                modStatus,
-                existing.id
-              ]);
-            } else {
-              await client.query(`
-                INSERT INTO media_assets (entity_type, entity_id, url, tier, category, title, description, specs, is_hero, order_index, is_sleeping_area, room_type_id, moderation_status)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-              `, [
-                'listing',
-                req.params.id,
-                photoUrl,
-                photo.tier || 'common',
-                photo.category || 'other',
-                photo.title || '',
-                photo.description || '',
-                photo.specs || '',
-                photo.isHero || false,
-                orderIdx++,
-                isSleepingArea,
-                linkedRoomTypeId,
-                modStatus
-              ]);
-            }
-          }
-        }
-
-        await client.query('COMMIT');
-      } catch (putErr) {
-        await client.query('ROLLBACK');
-        throw putErr;
-      } finally {
-        client.release();
+    if (presentationPatch?.success) {
+      const submitted = presentationPatch.data as Record<string, unknown>;
+      const patchKeys = Object.keys(submitted);
+      const updates: string[] = [];
+      const values: unknown[] = [];
+      for (const key of patchKeys) {
+        const value = submitted[key];
+        values.push(['amenity_clusters', 'child_safety_specs', 'experience_tags'].includes(key)
+          ? JSON.stringify(value)
+          : key === 'curated_guidelines' ? JSON.stringify(value) : value);
+        const parameter = `$${values.length}`;
+        updates.push(key === 'amenity_clusters'
+          ? `amenity_clusters = COALESCE(amenity_clusters, '{}'::jsonb) || ${parameter}::jsonb`
+          : `${key} = ${parameter}`);
       }
-      if (price) await syncDynamicPricingToMeta(req.params.id, oldPrice, price);
+      values.push(listingId);
+      const updated = await client.query(
+        `UPDATE listings SET ${updates.join(', ')} WHERE id = $${values.length}
+         RETURNING amenity_clusters, child_safety_specs, hero_video_url, hero_fallback_url,
+                   dominant_color_hex, raw_rules, curated_guidelines, experience_tags,
+                   concierge_privileges`,
+        values
+      );
+      const previousFields = Object.fromEntries(patchKeys.map((key) => [key, listing[key]]));
+      const newFields = Object.fromEntries(patchKeys.map((key) => [key, updated.rows[0][key]]));
+      await client.query(
+        `INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
+         VALUES ($1, 'listing', $2, 'update_draft_presentation', $3, $4, $5)`,
+        [requesterId, listingId,
+          JSON.stringify({ publication_status: 'draft', fields: previousFields }),
+          JSON.stringify({ publication_status: 'draft', fields: newFields, actor_role: isAdmin ? 'admin' : 'owner' }),
+          req.ip || req.socket?.remoteAddress || null]
+      );
+    } else if (title) {
+      const safePhotos = Array.isArray(photos) ? JSON.stringify(photos) : (typeof photos === 'string' ? photos : JSON.stringify([]));
+      await client.query(`
+        UPDATE listings
+        SET title=$1, description=$2, price=$3, type=$4, address=$5, city=$6, image_url=$7, image_urls=$8, video_url=$9, rental_mode=$10, rooms=$11, max_guests=$12, bedrooms=$13, beds=$14, bathrooms=$15, amenities=$16, lat=$18, lng=$19, dynamic_pricing=$20, seo_title=$21, seo_description=$22, seo_keywords=$23, seo_image_url=$24, amenity_clusters=$25, child_safety_specs=$26, nearby=$27, hero_video_url=$28, hero_fallback_url=$29, dominant_color_hex=$30, raw_rules=$31, curated_guidelines=$32, experience_tags=$33, photos=$34, concierge_privileges=$35, host_philosophy=$36, brand=$37, brand_font=$38, brand_color=$39
+        WHERE id=$17
+      `, [
+        title, description, resolvedPrice, type || listing.type || 'Sanctuary', address, city, imageUrl, safeImageUrls, videoUrl, rentalMode, safeRooms, maxGuests, bedrooms, beds, bathrooms, safeAmenities, listingId, lat || null, lng || null, safeDynamicPricing, seo_title || null, seo_description || null, seo_keywords || null, seo_image_url || null, safeAmenityClusters, safeChildSafety, safeNearby, hero_video_url || null, hero_fallback_url || null, dominant_color_hex || null, raw_rules || null, curated_guidelines || null, Array.isArray(experience_tags) ? JSON.stringify(experience_tags) : JSON.stringify([]), safePhotos, concierge_privileges || null, host_philosophy || null, brand || null, brand_font || null, brand_color || null
+      ]);
+
+      // M3: Non-Destructive room_types upsert preserving row IDs
+      const roomTypeMap = new Map<string, number>();
+      if (Array.isArray(rooms) && rooms.length > 0) {
+        const existingRoomsRes = await client.query(
+          'SELECT id, name, type FROM room_types WHERE listing_id = $1',
+          [listingId]
+        );
+        const existingRooms = existingRoomsRes.rows;
+        const processedRoomIds = new Set<number>();
+
+        for (const room of rooms) {
+          const existing = existingRooms.find((er: any) =>
+            (room.id && !isNaN(Number(room.id)) && er.id === Number(room.id)) ||
+            (room.type && er.type === room.type) ||
+            (room.name && er.name === room.name)
+          );
+
+          let savedRoomId: number;
+          if (existing) {
+            await client.query(`
+              UPDATE room_types
+              SET name=$1, type=$2, icon=$3, tag=$4, base_price=$5, currency=$6,
+                  max_occupancy=$7, inventory_count=$8, description=$9, specs=$10,
+                  features=$11, amenities=$12, min_stay_nights=$13
+              WHERE id=$14
+            `, [
+              room.name || existing.name || 'Sanctuary Room',
+              room.type || existing.type || 'suites',
+              room.icon || '🛏️',
+              room.tag || '',
+              Number(room.price) || Number(price) || 0,
+              currency || 'INR',
+              Number(room.capacity) || 2,
+              Number(room.inventory_count) || 1,
+              room.description || '',
+              room.specs || '',
+              JSON.stringify(room.features || []),
+              JSON.stringify(room.amenities || []),
+              Number(room.min_stay_nights) || 1,
+              existing.id
+            ]);
+            savedRoomId = existing.id;
+            processedRoomIds.add(existing.id);
+          } else {
+            const insertRes = await client.query(`
+              INSERT INTO room_types (listing_id, name, type, icon, tag, base_price, currency, max_occupancy, inventory_count, description, specs, features, amenities, min_stay_nights)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+              RETURNING id
+            `, [
+              listingId,
+              room.name || 'Sanctuary Room',
+              room.type || 'suites',
+              room.icon || '🛏️',
+              room.tag || '',
+              Number(room.price) || Number(price) || 0,
+              currency || 'INR',
+              Number(room.capacity) || 2,
+              Number(room.inventory_count) || 1,
+              room.description || '',
+              room.specs || '',
+              JSON.stringify(room.features || []),
+              JSON.stringify(room.amenities || []),
+              Number(room.min_stay_nights) || 1
+            ]);
+            savedRoomId = insertRes.rows[0].id;
+            processedRoomIds.add(savedRoomId);
+          }
+
+          if (room.type) roomTypeMap.set(room.type, savedRoomId);
+          if (room.name) roomTypeMap.set(room.name, savedRoomId);
+          if (room.id) roomTypeMap.set(String(room.id), savedRoomId);
+        }
+      }
+
+      // M3: Non-Destructive media_assets upsert with room_type_id & is_sleeping_area
+      if (Array.isArray(photos) && photos.length > 0) {
+        const existingMediaRes = await client.query(
+          "SELECT id, url, tier, category, room_type_id, is_sleeping_area, moderation_status FROM media_assets WHERE entity_id = $1 AND entity_type = 'listing'",
+          [listingId]
+        );
+        const existingMedia = existingMediaRes.rows;
+
+        let orderIdx = 0;
+        for (const photo of photos) {
+          const photoUrl = photo.url || photo.previewUrl;
+          if (!photoUrl) continue;
+
+          const existing = existingMedia.find((em: any) => em.url === photoUrl || (photo.id && !isNaN(Number(photo.id)) && em.id === Number(photo.id)));
+
+          let linkedRoomTypeId: number | null = null;
+          if (photo.room_type_id && !isNaN(Number(photo.room_type_id))) {
+            linkedRoomTypeId = Number(photo.room_type_id);
+          } else if (photo.tier && photo.tier !== 'common' && roomTypeMap.has(photo.tier)) {
+            linkedRoomTypeId = roomTypeMap.get(photo.tier) || null;
+          }
+
+          const isSleepingArea = Boolean(photo.is_sleeping_area || photo.isSleepingArea);
+
+          let modStatus = 'pending_review';
+          if (existing && existing.moderation_status === 'approved') {
+            const unchanged = existing.url === photoUrl &&
+                              (existing.tier || 'common') === (photo.tier || 'common') &&
+                              (existing.category || 'other') === (photo.category || 'other') &&
+                              Boolean(existing.is_sleeping_area) === isSleepingArea &&
+                              ((existing.room_type_id === null && linkedRoomTypeId === null) ||
+                               Number(existing.room_type_id) === Number(linkedRoomTypeId));
+            if (unchanged) {
+              modStatus = 'approved';
+            }
+          }
+
+          if (existing) {
+            await client.query(`
+              UPDATE media_assets
+              SET tier=$1, category=$2, title=$3, description=$4, specs=$5, is_hero=$6,
+                  order_index=$7, is_sleeping_area=$8, room_type_id=$9, moderation_status=$10
+              WHERE id=$11
+            `, [
+              photo.tier || 'common',
+              photo.category || 'other',
+              photo.title || '',
+              photo.description || '',
+              photo.specs || '',
+              photo.isHero || false,
+              orderIdx++,
+              isSleepingArea,
+              linkedRoomTypeId,
+              modStatus,
+              existing.id
+            ]);
+          } else {
+            await client.query(`
+              INSERT INTO media_assets (entity_type, entity_id, url, tier, category, title, description, specs, is_hero, order_index, is_sleeping_area, room_type_id, moderation_status)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            `, [
+              'listing',
+              listingId,
+              photoUrl,
+              photo.tier || 'common',
+              photo.category || 'other',
+              photo.title || '',
+              photo.description || '',
+              photo.specs || '',
+              photo.isHero || false,
+              orderIdx++,
+              isSleepingArea,
+              linkedRoomTypeId,
+              modStatus
+            ]);
+          }
+        }
+      }
     } else if (videoUrl !== undefined) {
-      await pool.query('UPDATE listings SET video_url = $1 WHERE id = $2', [videoUrl, req.params.id]);
+      await client.query('UPDATE listings SET video_url = $1 WHERE id = $2', [videoUrl, listingId]);
     } else if (type !== undefined) {
-      await pool.query('UPDATE listings SET type = $1 WHERE id = $2', [type, req.params.id]);
+      await client.query('UPDATE listings SET type = $1 WHERE id = $2', [type, listingId]);
     } else if (amenities !== undefined) {
-      await pool.query('UPDATE listings SET amenities = $1 WHERE id = $2', [JSON.stringify(amenities), req.params.id]);
+      await client.query('UPDATE listings SET amenities = $1 WHERE id = $2', [safeAmenities, listingId]);
     } else if (req.body.lat !== undefined && req.body.lng !== undefined) {
-      await pool.query('UPDATE listings SET lat = $1, lng = $2 WHERE id = $3', [req.body.lat, req.body.lng, req.params.id]);
+      await client.query('UPDATE listings SET lat = $1, lng = $2 WHERE id = $3', [req.body.lat, req.body.lng, listingId]);
     } else if (price !== undefined) {
-      await pool.query('UPDATE listings SET price = $1 WHERE id = $2', [price, req.params.id]);
+      await client.query('UPDATE listings SET price = $1 WHERE id = $2', [price, listingId]);
     } else if (maxGuests !== undefined) {
-      await pool.query('UPDATE listings SET max_guests = $1, beds = $2, bedrooms = $3, bathrooms = $4 WHERE id = $5', [maxGuests, beds, bedrooms, bathrooms, req.params.id]);
+      await client.query('UPDATE listings SET max_guests = $1, beds = $2, bedrooms = $3, bathrooms = $4 WHERE id = $5', [maxGuests, beds, bedrooms, bathrooms, listingId]);
+    } else {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: 'Invalid update payload: no supported listing update fields provided for draft mutation.'
+      });
     }
 
-    // Gap 16: Dynamic Pricing Sync (The Trust Breaker)
-    // If the host changes price, immediately sync it to Meta to prevent Trust Breaks and high bounce rates
-    if (price !== undefined || title !== undefined) {
-       const activeCampaigns = await pool.query(
-          "SELECT id FROM host_marketing_campaigns WHERE listing_id = $1 AND status = 'active'",
-          [req.params.id]
-       );
-       if (activeCampaigns.rows.length > 0) {
-          const io = app.get('io');
-          for (const camp of activeCampaigns.rows) {
-             console.log(`[DYNAMIC PRICING SYNC] Fired instant webhook to Meta API. Campaign #${camp.id} updated with new pricing/data to prevent bounce rates.`);
-             if (io && req.user?.id) {
-               io.to(`user_${req.user!.id}`).emit('notification', {
-                 type: 'dynamic_price_sync',
-                 title: '⚡ Dynamic Price Synced',
-                 message: `Meta Ad Creative auto-updated with new rate ($${price || 'updated'}) to prevent bounce rates!`,
-                 campaignId: camp.id
-               });
-               io.to(`user_${req.user!.id}`).emit('dynamic_price_sync', {
-                 campaignId: camp.id,
-                 message: `Meta Ad Creative auto-updated with new rate ($${price || 'updated'}) to prevent bounce rates!`
-               });
-             }
-          }
-       }
-    }
-
-    // Publication Status Update & PROPOSED-007 Validation Gate
-    if (req.body.publication_status !== undefined) {
-      const targetStatus = req.body.publication_status;
-      if (targetStatus === 'published') {
-        const validation = await validatePropertyPublication(req.params.id, pool);
-        if (!validation.valid) {
-          return res.status(422).json({
-            error: 'Cannot publish listing: Failed room and media authority requirements (PROPOSED-007).',
-            details: validation.errors,
-            roomSummaries: validation.roomSummaries
-          });
-        }
-      }
-      await pool.query('UPDATE listings SET publication_status = $1 WHERE id = $2', [targetStatus, req.params.id]);
-    }
+    await client.query('COMMIT');
 
     // Invalidate Cache
     if (redis && city) {
-        try {
-           await redis.del(`listings:${city.toLowerCase()}`);
-        } catch (e) { console.error(e); }
+      try {
+        await redis.del(`listings:${city.toLowerCase()}`);
+      } catch (e) { console.error(e); }
     }
 
     broadcastDbEvent(req, 'listing');
-    res.json({ success: true, message: 'Listing updated successfully' });
+    return res.json({ success: true, message: 'Listing updated successfully' });
   } catch (error) {
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_rbErr) { void _rbErr; }
+    }
     console.error('Update Listing Error:', error);
-    res.status(500).json({ error: 'Failed to update listing' });
+    return res.status(500).json({ error: 'Failed to update listing' });
+  } finally {
+    if (client) client.release();
   }
 });
 
-// M3: Admin & Host Publication Status Mutation Endpoint with PROPOSED-007 Gate
+// M3: Admin & Host Publication Status Mutation Endpoint with PROPOSED-007 Gate & Explicit State Machine
+const listingStatusTransitionBodySchema = z
+  .object({
+    publication_status: z.enum(['draft', 'published', 'unlisted'])
+  })
+  .strict();
+
 app.patch('/api/admin/listings/:id/status', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  try {
-    const listingId = req.params.id;
-    const { publication_status } = req.body;
-    if (!publication_status) {
-      return res.status(400).json({ error: 'publication_status is required' });
-    }
+  const rawId = String(req.params.id || '').trim();
+  const listingId = Number(rawId);
+  if (!/^[1-9]\d*$/.test(rawId) || !Number.isSafeInteger(listingId) || listingId <= 0 || listingId > 2147483647) {
+    return res.status(400).json({ error: 'Invalid listing ID: must be a positive integer' });
+  }
 
-    // IDOR Protection: Admin or listing owner only
-    const listingRes = await pool.query('SELECT user_id, title FROM listings WHERE id = $1', [listingId]);
+  // Strict request body validation via Zod allowlist (rejects arbitrary/bogus states)
+  const bodyParse = listingStatusTransitionBodySchema.safeParse(req.body);
+  if (!bodyParse.success) {
+    return res.status(400).json({
+      error: "Invalid publication_status: must be one of 'draft', 'published', 'unlisted'",
+      details: bodyParse.error.issues
+    });
+  }
+  const { publication_status: requestedStatus } = bodyParse.data;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. Exclusive parent row lock FOR UPDATE
+    const listingRes = await client.query(
+      'SELECT id, user_id, title, publication_status FROM listings WHERE id = $1 FOR UPDATE',
+      [listingId]
+    );
     if (listingRes.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Listing not found' });
     }
     const listing = listingRes.rows[0];
-    if (req.user?.role !== 'admin' && String(req.user?.id) !== String(listing.user_id)) {
+    const currentStatus = listing.publication_status;
+
+    // 2. Persisted caller identity and active status reauthorization on held client
+    const requesterId = req.user?.id;
+    if (!requesterId) {
+      await client.query('ROLLBACK');
+      return res.status(401).json({ error: 'Unauthorized: missing user identity' });
+    }
+
+    let userRes;
+    try {
+      userRes = await client.query(
+        'SELECT id, role, is_active FROM users WHERE id = $1 FOR SHARE',
+        [requesterId]
+      );
+    } catch (dbErr: any) {
+      await client.query('ROLLBACK');
+      if (dbErr?.code === '42703') {
+        return res.status(503).json({
+          error: 'Database schema readiness error: users.is_active column missing. Reauthorization failed closed.'
+        });
+      }
+      throw dbErr;
+    }
+
+    if (userRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(401).json({ error: 'Unauthorized: user account not found' });
+    }
+    const requesterUser = userRes.rows[0];
+    if (requesterUser.is_active !== true) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Forbidden: account is inactive or suspended' });
+    }
+
+    const isOwner = String(requesterId) === String(listing.user_id);
+    const isAdmin = requesterUser.role === 'admin';
+    if (!isAdmin && !isOwner) {
+      await client.query('ROLLBACK');
       return res.status(403).json({ error: 'Forbidden: Insufficient privileges' });
     }
 
-    // PROPOSED-007 Gate: If transitioning to published, validate relational room and media rules
-    if (publication_status === 'published') {
-      const validation = await validatePropertyPublication(listingId, pool);
+    // 3. Status Verification & Explicit Transition Matrix
+    // Idempotent unchanged transition
+    if (currentStatus === requestedStatus) {
+      await client.query('COMMIT');
+      return res.json({ success: true, listingId, publication_status: requestedStatus, message: 'Status unchanged' });
+    }
+
+    // Unmanaged or corrupt current state rejection
+    if (!['draft', 'published', 'unlisted'].includes(currentStatus)) {
+      await client.query('ROLLBACK');
+      return res.status(422).json({
+        error: `Listing has unmanaged or corrupt publication_status: '${currentStatus}'. Cannot transition status.`,
+        listingId,
+        currentStatus,
+        requestedStatus
+      });
+    }
+
+    // Transition Rule A: Target is 'published' (from 'draft' or 'unlisted')
+    // Requires persisted Admin workforce authority; host self-publication is denied.
+    if (requestedStatus === 'published') {
+      if (!isAdmin) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({
+          error: 'Forbidden: Only administrators can approve and publish listings.',
+          listingId,
+          currentStatus,
+          requestedStatus
+        });
+      }
+
+      // PROPOSED-007 Gate: Validate relational room and media authority rules on held client
+      const validation = await validatePropertyPublication(listingId, client);
       if (!validation.valid) {
+        await client.query('ROLLBACK');
         return res.status(422).json({
           error: 'Cannot publish listing: Failed room and media authority requirements (PROPOSED-007).',
           details: validation.errors,
@@ -4167,112 +4358,871 @@ app.patch('/api/admin/listings/:id/status', authenticateToken, async (req: AuthR
         });
       }
     }
+    // Transition Rule B: Target is 'unlisted'
+    else if (requestedStatus === 'unlisted') {
+      if (currentStatus === 'draft') {
+        await client.query('ROLLBACK');
+        return res.status(422).json({
+          error: 'Transition from draft to unlisted is invalid: a draft property has not yet been approved or published.',
+          listingId,
+          currentStatus,
+          requestedStatus
+        });
+      }
+      // currentStatus === 'published': Safe host action! Owner or Admin can unlist/pause.
+    }
+    // Transition Rule C: Target is 'draft'
+    // Prohibited from accepted states ('published' or 'unlisted') without formal successor review
+    else if (requestedStatus === 'draft') {
+      await client.query('ROLLBACK');
+      return res.status(422).json({
+        error: `Transition from ${currentStatus} to draft rejected: direct demotion reopens accepted authority without reviewed successor contract. Submit a formal successor revision.`,
+        listingId,
+        currentStatus,
+        requestedStatus
+      });
+    }
+    // Unsupported / unhandled transition
+    else {
+      await client.query('ROLLBACK');
+      return res.status(422).json({
+        error: `Unsupported status transition from '${currentStatus}' to '${requestedStatus}'.`,
+        listingId,
+        currentStatus,
+        requestedStatus
+      });
+    }
 
-    await pool.query('UPDATE listings SET publication_status = $1 WHERE id = $2', [publication_status, listingId]);
-    broadcastDbEvent(req, 'listing');
-    return res.json({ success: true, listingId, publication_status });
+    // 4. Keep the transition and its actor evidence inseparable.
+    await client.query('UPDATE listings SET publication_status = $1 WHERE id = $2', [requestedStatus, listingId]);
+    await client.query(
+      `INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
+       VALUES ($1, 'listing', $2, 'publication_status_transition', $3, $4, $5)`,
+      [
+        requesterId,
+        listingId,
+        JSON.stringify({ publication_status: currentStatus }),
+        JSON.stringify({ publication_status: requestedStatus, actor_id: requesterId, actor_role: isAdmin ? 'admin' : 'owner' }),
+        req.ip || req.socket?.remoteAddress || null
+      ]
+    );
+    await client.query('COMMIT');
+
+    // A new generation makes every filtered public card miss without an unbounded
+    // key scan. Old cards expire after 60 seconds. Cache hits recheck persisted
+    // published state, so an increment outage cannot expose an unlisted stay.
+    if (redis) {
+      try {
+        await redis.incr(PUBLIC_LISTING_CACHE_GENERATION_KEY);
+      } catch (cacheError) {
+        console.warn('[STATUS PUBLIC CACHE INVALIDATION ERROR]', cacheError);
+      }
+    }
+
+    // The transition and audit receipt are committed. A realtime notification failure
+    // must not turn that successful mutation into a misleading 500/retry outcome.
+    try {
+      broadcastDbEvent(req, 'listing');
+    } catch (notificationError) {
+      console.warn('[STATUS UPDATE NOTIFICATION ERROR]', notificationError);
+    }
+    return res.json({ success: true, listingId, publication_status: requestedStatus });
   } catch (err: any) {
+    try {
+      await client.query('ROLLBACK');
+    } catch (_rbErr) {
+      void _rbErr;
+    }
     console.error('[STATUS UPDATE ERROR]', err);
     return res.status(500).json({ error: err?.message || 'Failed to update publication status' });
+  } finally {
+    client.release();
+  }
+});
+
+// M3: Admin Media Review Desk Schemas & Handlers
+const canonicalPositiveSafeIntegerRouteIdSchema = (name: string) =>
+  z.string()
+    .regex(/^[1-9]\d*$/, { message: `Invalid ${name}: must be a positive integer` })
+    .transform((val, ctx) => {
+      const num = Number(val);
+      if (!Number.isSafeInteger(num) || num > 2147483647) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Invalid ${name}: must be a positive integer`
+        });
+        return z.NEVER;
+      }
+      return num;
+    });
+
+const listingRouteIdSchema = canonicalPositiveSafeIntegerRouteIdSchema('listing ID');
+const assetRouteIdSchema = canonicalPositiveSafeIntegerRouteIdSchema('asset ID');
+
+const adminActorIdSchema = z.union([
+  z.number().int().positive().max(2147483647),
+  z.string().regex(/^[1-9]\d*$/).transform(Number).refine(n => Number.isSafeInteger(n) && n <= 2147483647)
+]);
+
+// Narrowly validated temporary room ID patterns used by client draft forms
+// (e.g. admin-room-${Date.now()}, room-${Date.now()}, new-room-*, temp*)
+const TEMPORARY_ROOM_ID_REGEX = /^(new-[a-zA-Z0-9_-]+|temp[a-zA-Z0-9_-]*|admin-room-[a-zA-Z0-9_-]+|room-[a-zA-Z0-9_-]+)$/;
+
+const roomInputSchema = z.object({
+  id: z.union([
+    z.number()
+      .int('Invalid room ID: must be a positive integer or accepted temporary identifier')
+      .positive('Invalid room ID: must be a positive integer or accepted temporary identifier')
+      .max(2147483647, 'Invalid room ID: must be a positive integer or accepted temporary identifier'),
+    z.string().trim().superRefine((val, ctx) => {
+      if (val === '') return;
+      if (/^[1-9]\d*$/.test(val)) {
+        const n = Number(val);
+        if (!Number.isSafeInteger(n) || n > 2147483647) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invalid room ID: must be a positive integer or accepted temporary identifier' });
+        }
+        return;
+      }
+      if (!TEMPORARY_ROOM_ID_REGEX.test(val)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invalid room ID: must be a positive integer or accepted temporary identifier' });
+      }
+    })
+  ]).optional().nullable(),
+  name: z.string({ message: 'Room name is required' }).trim().min(1, 'Room name must not be empty'),
+  type: z.string().trim().min(1, 'Room type must not be empty').optional().default('suites'),
+  icon: z.string().trim().max(20).optional().default('🛏️'),
+  tag: z.string().trim().max(100).optional().default(''),
+  price: z.any().superRefine((val, ctx) => {
+    if (val === undefined || val === null || val === '') {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Nightly price is required' });
+      return;
+    }
+    if (typeof val === 'boolean') {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invalid price: must be a positive number' });
+      return;
+    }
+    const num = Number(val);
+    if (!Number.isFinite(num) || isNaN(num) || num <= 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invalid price: must be a positive number' });
+    }
+  }).transform(val => Number(val)),
+  capacity: z.any().superRefine((val, ctx) => {
+    if (val === undefined || val === null || val === '') {
+      return;
+    }
+    if (typeof val === 'boolean') {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invalid capacity: must be a positive integer between 1 and 1000' });
+      return;
+    }
+    const num = Number(val);
+    if (!Number.isSafeInteger(num) || num <= 0 || num > 1000) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invalid capacity: must be a positive integer between 1 and 1000' });
+    }
+  }).transform(val => (val === undefined || val === null || val === '') ? 2 : Number(val)).default(2),
+  inventory_count: z.any().superRefine((val, ctx) => {
+    if (val === undefined || val === null || val === '') {
+      return;
+    }
+    if (typeof val === 'boolean') {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invalid inventory_count: must be a non-negative integer' });
+      return;
+    }
+    const num = Number(val);
+    if (!Number.isSafeInteger(num) || num < 0 || num > 100000) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invalid inventory_count: must be a non-negative integer' });
+    }
+  }).transform(val => (val === undefined || val === null || val === '') ? 1 : Number(val)).default(1),
+  description: z.string().optional().default(''),
+  specs: z.string().optional().default(''),
+  features: z.array(z.string()).optional().default([]),
+  amenities: z.array(z.string()).optional().default([])
+}).passthrough();
+
+const updateRoomsBodySchema = z.object({
+  rooms: z.array(roomInputSchema, {
+    message: 'rooms must be an array'
+  }).min(1, 'rooms must be a non-empty array')
+});
+
+/**
+ * Evaluates whether the raw listings.rooms legacy value contains unreconciled room data.
+ *
+ * In PostgreSQL, listings.rooms is defined as JSONB DEFAULT '[]'.
+ * node-postgres parses JSONB columns into JavaScript values:
+ * - JSON array -> Array
+ * - JSON object -> Object
+ * - JSON string -> string
+ * - JSON number/boolean/null -> number, boolean, null
+ *
+ * A listing is considered genuinely empty / reconciled only when rawRooms is:
+ * - null or undefined
+ * - empty Array ([])
+ * - empty Object ({})
+ * - empty string or whitespace ("")
+ * - string encoding null, empty array, or empty object ("null", "[]", "{}")
+ *
+ * Any nonempty array, nonempty object (e.g. {rooms: [...]}, {legacy: true}),
+ * nonempty unparseable string, or malformed nonempty primitive (number, boolean)
+ * must be treated as unreconciled legacy data, requiring canonical reconciliation
+ * before reads or writes succeed.
+ */
+export function hasUnreconciledLegacyRooms(rawRooms: unknown): boolean {
+  if (rawRooms === null || rawRooms === undefined) {
+    return false;
+  }
+  if (Array.isArray(rawRooms)) {
+    return rawRooms.length > 0;
+  }
+  if (typeof rawRooms === 'object') {
+    return Object.keys(rawRooms as Record<string, unknown>).length > 0;
+  }
+  if (typeof rawRooms === 'string') {
+    const trimmed = rawRooms.trim();
+    if (!trimmed) {
+      return false;
+    }
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed === null || parsed === undefined) {
+        return false;
+      }
+      if (Array.isArray(parsed)) {
+        return parsed.length > 0;
+      }
+      if (typeof parsed === 'object') {
+        return Object.keys(parsed).length > 0;
+      }
+      if (typeof parsed === 'string') {
+        return parsed.trim().length > 0;
+      }
+      // Non-null parsed primitive (number, boolean) is a malformed non-empty value
+      return true;
+    } catch {
+      // Non-empty unparseable legacy string represents unreconciled data
+      return true;
+    }
+  }
+  // Any other non-null, non-undefined primitive (e.g. number, boolean, symbol) is a malformed non-empty value
+  return true;
+}
+
+// M3: Admin / Host Dedicated Canonical Room Read Endpoint (GET /api/listings/:id/rooms)
+app.get('/api/listings/:id/rooms', authenticateToken, async (req: AuthRequest, res) => {
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+
+  const listingIdResult = listingRouteIdSchema.safeParse(req.params.id);
+  if (!listingIdResult.success) {
+    return res.status(400).json({
+      error: listingIdResult.error.issues[0]?.message || 'Invalid listing ID: must be a positive integer'
+    });
+  }
+  const listingId = listingIdResult.data;
+
+  try {
+    // 1. Fetch listing and verify existence
+    const listingRes = await pool.query(
+      'SELECT id, user_id, publication_status, rooms FROM listings WHERE id = $1',
+      [listingId]
+    );
+    if (listingRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Listing not found' });
+    }
+    const listing = listingRes.rows[0];
+
+    // 2. Persisted owner / admin reauthorization from database (never trust unverified JWT claims)
+    const requesterId = req.user?.id;
+    if (!requesterId) {
+      return res.status(401).json({ error: 'Unauthorized: missing user identity' });
+    }
+
+    // Persisted reauthorization check: query users table directly with strict is_active verification
+    let userRes;
+    try {
+      userRes = await pool.query(
+        'SELECT id, role, is_active FROM users WHERE id = $1',
+        [requesterId]
+      );
+    } catch (dbErr: any) {
+      if (dbErr?.code === '42703') {
+        return res.status(503).json({
+          error: 'Database schema readiness error: users.is_active column missing. Reauthorization failed closed.'
+        });
+      }
+      throw dbErr;
+    }
+
+    if (userRes.rows.length === 0) {
+      return res.status(401).json({ error: 'Unauthorized: user account not found' });
+    }
+    const requesterUser = userRes.rows[0];
+    const isActive = requesterUser.is_active === true;
+    if (!isActive) {
+      return res.status(403).json({ error: 'Forbidden: account is inactive or suspended' });
+    }
+
+    const isOwner = String(requesterId) === String(listing.user_id);
+    const isAdmin = requesterUser.role === 'admin';
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ error: 'Forbidden: unauthorized access to listing room authority' });
+    }
+
+    // 3. Fail-closed relational query directly against room_types (zero fallback to legacy JSON)
+    const rtResult = await pool.query(
+      `SELECT id, name, type, icon, tag, base_price, max_occupancy, inventory_count,
+              description, specs, features, amenities, min_stay_nights
+       FROM room_types
+       WHERE listing_id = $1
+       ORDER BY id ASC`,
+      [listingId]
+    );
+
+    // 4. Edge Case: If room_types returns 0 rows, check whether listings.rooms legacy JSON is nonempty.
+    // If listings.rooms has unreconciled rooms, 200 rooms: [] is NOT proof of reconciliation!
+    // Return a distinct fail-closed 409 Conflict.
+    if (rtResult.rows.length === 0) {
+      if (hasUnreconciledLegacyRooms(listing.rooms)) {
+        return res.status(409).json({
+          error: 'Legacy room inventory not yet reconciled to relational room_types. Canonical reconciliation required.',
+          code: 'ROOMS_UNRECONCILED',
+          listingId
+        });
+      }
+    }
+
+    const canonicalRooms = rtResult.rows.map((rt: any) => ({
+      id: Number(rt.id),
+      name: rt.name,
+      type: rt.type || '',
+      icon: rt.icon || '🛏️',
+      tag: rt.tag || '',
+      price: Number(rt.base_price),
+      capacity: Number(rt.max_occupancy),
+      inventory_count: Number(rt.inventory_count),
+      description: rt.description || '',
+      specs: rt.specs || '',
+      features: Array.isArray(rt.features)
+        ? rt.features
+        : (typeof rt.features === 'string' ? JSON.parse(rt.features || '[]') : []),
+      amenities: Array.isArray(rt.amenities)
+        ? rt.amenities
+        : (typeof rt.amenities === 'string' ? JSON.parse(rt.amenities || '[]') : []),
+      min_stay_nights: Number(rt.min_stay_nights || 1)
+    }));
+
+    return res.json({
+      success: true,
+      listingId,
+      rooms: canonicalRooms
+    });
+  } catch (err) {
+    console.error('[GET /api/listings/:id/rooms ERROR]', err);
+    return res.status(500).json({ error: 'Failed to read canonical rooms from database' });
   }
 });
 
 // M3: Admin / Host Dedicated Room Management Endpoint (PUT /api/listings/:id/rooms)
 app.put('/api/listings/:id/rooms', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  let client: any = null;
-  try {
-    const listingId = req.params.id;
-    const { rooms } = req.body;
-    if (!Array.isArray(rooms)) {
-      return res.status(400).json({ error: 'rooms must be an array' });
-    }
 
+  const listingIdResult = listingRouteIdSchema.safeParse(req.params.id);
+  if (!listingIdResult.success) {
+    return res.status(400).json({
+      error: listingIdResult.error.issues[0]?.message || 'Invalid listing ID: must be a positive integer'
+    });
+  }
+  const listingId = listingIdResult.data;
+
+  // Safe request body validation
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ error: 'Request body must be a JSON object' });
+  }
+
+  if (!Array.isArray(req.body.rooms)) {
+    return res.status(400).json({ error: 'rooms must be an array' });
+  }
+
+  const bodyParseResult = updateRoomsBodySchema.safeParse(req.body);
+  if (!bodyParseResult.success) {
+    const firstIssue = bodyParseResult.error.issues[0];
+    return res.status(400).json({
+      error: firstIssue?.message || 'Invalid room payload',
+      details: bodyParseResult.error.issues
+    });
+  }
+  const { rooms } = bodyParseResult.data;
+
+  // Validate duplicate IDs in payload and malformed non-numeric IDs
+  const seenIds = new Set<string>();
+  for (let i = 0; i < rooms.length; i++) {
+    const room = rooms[i];
+    if (room.id !== undefined && room.id !== null && room.id !== '') {
+      const strId = String(room.id).trim();
+      if (seenIds.has(strId)) {
+        return res.status(400).json({
+          error: `Duplicate room ID "${strId}" at index ${i}: each room in payload must have a unique identifier`
+        });
+      }
+      seenIds.add(strId);
+
+      const isTemp = TEMPORARY_ROOM_ID_REGEX.test(strId);
+      if (!isTemp) {
+        const numId = Number(strId);
+        if (!Number.isSafeInteger(numId) || numId <= 0 || numId > 2147483647) {
+          return res.status(400).json({
+            error: `Invalid room ID: "${room.id}" must be a positive integer or accepted temporary identifier`
+          });
+        }
+      }
+    }
+  }
+
+  let client: PoolClient | null = null;
+  try {
     client = await pool.connect();
     await client.query('BEGIN');
 
-    // IDOR Protection
-    const listingRes = await client.query('SELECT user_id FROM listings WHERE id = $1', [listingId]);
+    // 1. Parent-First Lock: Acquire exclusive lock on listings row (including rooms for legacy reconciliation detection)
+    const listingRes = await client.query(
+      'SELECT id, user_id, publication_status, rooms FROM listings WHERE id = $1 FOR UPDATE',
+      [listingId]
+    );
     if (listingRes.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Listing not found' });
     }
-    if (req.user?.role !== 'admin' && String(req.user?.id) !== String(listingRes.rows[0].user_id)) {
+    const listing = listingRes.rows[0];
+
+    // 2. Reauthorize owner/admin on the held connection against persisted database authority
+    const requesterId = req.user?.id;
+    if (!requesterId) {
       await client.query('ROLLBACK');
-      return res.status(403).json({ error: 'Forbidden' });
+      return res.status(401).json({ error: 'Unauthorized: missing user identity' });
     }
 
-    // Non-destructive upsert preserving row IDs (omitted rooms are preserved, never deleted)
-    const existingRoomsRes = await client.query('SELECT id, name, type FROM room_types WHERE listing_id = $1', [listingId]);
+    let userRes;
+    try {
+      userRes = await client.query(
+        'SELECT id, role, is_active FROM users WHERE id = $1 FOR SHARE',
+        [requesterId]
+      );
+    } catch (dbErr: any) {
+      await client.query('ROLLBACK');
+      if (dbErr?.code === '42703') {
+        return res.status(503).json({
+          error: 'Database schema readiness error: users.is_active column missing. Reauthorization failed closed.'
+        });
+      }
+      throw dbErr;
+    }
+
+    if (userRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(401).json({ error: 'Unauthorized: user account not found' });
+    }
+    const requesterUser = userRes.rows[0];
+    const isActive = requesterUser.is_active === true;
+    if (!isActive) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Forbidden: account is inactive or suspended' });
+    }
+
+    const isOwner = String(requesterId) === String(listing.user_id);
+    const isAdmin = requesterUser.role === 'admin';
+    if (!isAdmin && !isOwner) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Forbidden: unauthorized access to listing room authority' });
+    }
+
+    // 3. Reject room edits on non-draft listing
+    if (listing.publication_status === 'published') {
+      await client.query('ROLLBACK');
+      return res.status(422).json({
+        error: 'Cannot modify rooms on a published listing: modification would alter verified room authority. Unpublish listing first or submit a draft successor review.'
+      });
+    }
+
+    if (listing.publication_status !== 'draft') {
+      await client.query('ROLLBACK');
+      return res.status(422).json({
+        error: `Cannot modify rooms on an unlisted listing: unlisted listings represent accepted historical authority. Direct modification is prohibited; submit a reviewed successor revision.`
+      });
+    }
+
+    // 4. Fetch existing room types belonging to this listing
+    const roomAuditColumns = `id, listing_id, name, type, icon, tag, base_price, currency,
+      max_occupancy, inventory_count, description, specs, features, amenities, min_stay_nights`;
+    const existingRoomsRes = await client.query(
+      `SELECT ${roomAuditColumns} FROM room_types WHERE listing_id = $1 ORDER BY id ASC`,
+      [listingId]
+    );
     const existingRooms = existingRoomsRes.rows;
 
-    for (const room of rooms) {
-      const existing = existingRooms.find((er: any) =>
-        (room.id && !isNaN(Number(room.id)) && er.id === Number(room.id)) ||
-        (room.type && er.type === room.type) ||
-        (room.name && er.name === room.name)
-      );
-
-      if (existing) {
-        await client.query(`
-          UPDATE room_types
-          SET name=$1, type=$2, icon=$3, tag=$4, base_price=$5,
-              max_occupancy=$6, inventory_count=$7, description=$8, specs=$9,
-              features=$10, amenities=$11
-          WHERE id=$12
-        `, [
-          room.name || existing.name || 'Sanctuary Room',
-          room.type || existing.type || 'suites',
-          room.icon || '🛏️',
-          room.tag || '',
-          Number(room.price) || 0,
-          Number(room.capacity) || 2,
-          Number(room.inventory_count) || 1,
-          room.description || '',
-          room.specs || '',
-          JSON.stringify(room.features || []),
-          JSON.stringify(room.amenities || []),
-          existing.id
-        ]);
-      } else {
-        await client.query(`
-          INSERT INTO room_types (listing_id, name, type, icon, tag, base_price, currency, max_occupancy, inventory_count, description, specs, features, amenities)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-        `, [
-          listingId,
-          room.name || 'Sanctuary Room',
-          room.type || 'suites',
-          room.icon || '🛏️',
-          room.tag || '',
-          Number(room.price) || 0,
-          'INR',
-          Number(room.capacity) || 2,
-          Number(room.inventory_count) || 1,
-          room.description || '',
-          room.specs || '',
-          JSON.stringify(room.features || []),
-          JSON.stringify(room.amenities || [])
-        ]);
+    // Fail closed if existingRooms has 0 rows but listings.rooms legacy JSON contains unreconciled rooms
+    if (existingRooms.length === 0) {
+      if (hasUnreconciledLegacyRooms(listing.rooms)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          error: 'Legacy room inventory not yet reconciled to relational room_types. Canonical reconciliation required.',
+          code: 'ROOMS_UNRECONCILED',
+          listingId
+        });
       }
     }
 
-    // Update listings.rooms JSON for dual-write within the same transaction
-    await client.query('UPDATE listings SET rooms = $1 WHERE id = $2', [JSON.stringify(rooms), listingId]);
+    const existingIds = new Set(existingRooms.map((r: any) => Number(r.id)));
+
+    // 5. Pre-validate all explicit room IDs against foreign-listing ownership
+    for (const room of rooms) {
+      if (room.id !== undefined && room.id !== null && room.id !== '') {
+        const strId = String(room.id).trim();
+        const isTemp = TEMPORARY_ROOM_ID_REGEX.test(strId);
+        if (!isTemp) {
+          const rawNum = Number(strId);
+          if (!existingIds.has(rawNum)) {
+            const foreignCheck = await client.query(
+              'SELECT id, listing_id FROM room_types WHERE id = $1',
+              [rawNum]
+            );
+            if (foreignCheck.rows.length > 0) {
+              await client.query('ROLLBACK');
+              return res.status(422).json({
+                error: `Cross-property room update rejected: Room type #${rawNum} belongs to a different listing`
+              });
+            }
+            await client.query('ROLLBACK');
+            return res.status(422).json({
+              error: `Referenced room type #${rawNum} does not exist for this listing`
+            });
+          }
+        }
+      }
+    }
+
+    // 6. Map each submitted room to an existing relational row or mark as insert (null)
+    // Rule: Every existing row ID can be claimed by AT MOST ONE submitted room.
+    // If two distinct submitted rooms would map to the same existing row -> FAIL CLOSED with HTTP 422.
+    const claimedExistingIds = new Set<number>();
+    const roomTargetIds: (number | null)[] = new Array(rooms.length).fill(null);
+
+    // Pass 1: Explicit database IDs (highest authority)
+    for (let i = 0; i < rooms.length; i++) {
+      const room = rooms[i];
+      if (room.id !== undefined && room.id !== null && room.id !== '') {
+        const strId = String(room.id).trim();
+        const isTemp = TEMPORARY_ROOM_ID_REGEX.test(strId);
+        if (!isTemp) {
+          const rawNum = Number(strId);
+          roomTargetIds[i] = rawNum;
+          claimedExistingIds.add(rawNum);
+        }
+      }
+    }
+
+    // Pass 2: Submitted rooms without explicit DB IDs (legacy matching)
+    for (let i = 0; i < rooms.length; i++) {
+      if (roomTargetIds[i] !== null) continue; // Already mapped via explicit ID
+      const room = rooms[i];
+      const strId = room.id !== undefined && room.id !== null ? String(room.id).trim() : '';
+      const isTemp = TEMPORARY_ROOM_ID_REGEX.test(strId);
+
+      // Temporary client IDs (e.g. new-*, admin-room-*) explicitly declare intention to insert a new room
+      if (isTemp) {
+        roomTargetIds[i] = null;
+        continue;
+      }
+
+      // Check available unmapped existing rooms
+      const availableExisting = existingRooms.filter((er: any) => !claimedExistingIds.has(Number(er.id)));
+
+      // Criteria A: Both name AND type match
+      const exactMatches = availableExisting.filter((er: any) =>
+        room.name && er.name === room.name && room.type && er.type === room.type
+      );
+      if (exactMatches.length === 1) {
+        const matchedId = Number(exactMatches[0].id);
+        roomTargetIds[i] = matchedId;
+        claimedExistingIds.add(matchedId);
+        continue;
+      } else if (exactMatches.length > 1) {
+        await client.query('ROLLBACK');
+        return res.status(422).json({
+          error: `Ambiguous room update: multiple existing rooms match name "${room.name}" and type "${room.type}"`
+        });
+      }
+
+      // Criteria B: Unique name match (if name is specific and unique among remaining)
+      const nameMatches = availableExisting.filter((er: any) => room.name && er.name === room.name);
+      if (nameMatches.length === 1) {
+        const matchedId = Number(nameMatches[0].id);
+        roomTargetIds[i] = matchedId;
+        claimedExistingIds.add(matchedId);
+        continue;
+      } else if (nameMatches.length > 1) {
+        await client.query('ROLLBACK');
+        return res.status(422).json({
+          error: `Ambiguous room update: multiple existing rooms match name "${room.name}"`
+        });
+      }
+
+      // Criteria C: If room.type matches an available existing room, check for ambiguity
+      const typeMatches = availableExisting.filter((er: any) => room.type && er.type === room.type);
+      if (typeMatches.length > 1) {
+        await client.query('ROLLBACK');
+        return res.status(422).json({
+          error: `Ambiguous room update: multiple existing rooms match type "${room.type}"`
+        });
+      }
+
+      // If no unique match found, this is a new room to insert
+      roomTargetIds[i] = null;
+    }
+
+    // Pass 3: Collision guard across mapped target IDs
+    const mappedTargetIds = new Set<number>();
+    for (let i = 0; i < roomTargetIds.length; i++) {
+      const tid = roomTargetIds[i];
+      if (tid !== null) {
+        if (mappedTargetIds.has(tid)) {
+          await client.query('ROLLBACK');
+          return res.status(422).json({
+            error: `Ambiguous room mapping: multiple submitted rooms map to the same existing room type #${tid}`
+          });
+        }
+        mappedTargetIds.add(tid);
+      }
+    }
+
+    // 7. Execute updates and inserts using strictly validated values
+    const allocatedIds: number[] = new Array(rooms.length).fill(0);
+    for (let i = 0; i < rooms.length; i++) {
+      const room = rooms[i];
+      const targetId = roomTargetIds[i];
+
+      const roomPrice = Number(room.price);
+      const roomCapacity = Number(room.capacity);
+      const roomInventory = Number(room.inventory_count);
+      const roomName = room.name.trim();
+      const roomType = room.type.trim();
+      const roomIcon = room.icon.trim();
+      const roomTag = room.tag.trim();
+      const roomDescription = room.description;
+      const roomSpecs = room.specs;
+      const roomFeatures = room.features;
+      const roomAmenities = room.amenities;
+
+      if (targetId !== null) {
+        await client.query(
+          `UPDATE room_types
+           SET name=$1, type=$2, icon=$3, tag=$4, base_price=$5,
+               max_occupancy=$6, inventory_count=$7, description=$8, specs=$9,
+               features=$10, amenities=$11
+           WHERE id=$12 AND listing_id=$13`,
+          [
+            roomName,
+            roomType,
+            roomIcon,
+            roomTag,
+            roomPrice,
+            roomCapacity,
+            roomInventory,
+            roomDescription,
+            roomSpecs,
+            JSON.stringify(roomFeatures),
+            JSON.stringify(roomAmenities),
+            targetId,
+            listingId
+          ]
+        );
+        allocatedIds[i] = targetId;
+      } else {
+        const insertRes = await client.query(
+          `INSERT INTO room_types (listing_id, name, type, icon, tag, base_price, currency, max_occupancy, inventory_count, description, specs, features, amenities)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+           RETURNING id`,
+          [
+            listingId,
+            roomName,
+            roomType,
+            roomIcon,
+            roomTag,
+            roomPrice,
+            'INR',
+            roomCapacity,
+            roomInventory,
+            roomDescription,
+            roomSpecs,
+            JSON.stringify(roomFeatures),
+            JSON.stringify(roomAmenities)
+          ]
+        );
+        allocatedIds[i] = Number(insertRes.rows[0].id);
+      }
+    }
+
+    // 8. Build canonical rooms with real database IDs
+    const canonicalRooms = rooms.map((room, idx) => ({
+      ...room,
+      id: allocatedIds[idx],
+      price: Number(room.price),
+      capacity: Number(room.capacity),
+      inventory_count: Number(room.inventory_count)
+    }));
+
+    // 9. Dual-write listings.rooms JSON with real database IDs within the exact same transaction
+    await client.query('UPDATE listings SET rooms = $1 WHERE id = $2', [JSON.stringify(canonicalRooms), listingId]);
+
+    // The relational room rows and legacy read model must share one durable actor receipt.
+    const updatedRoomsRes = await client.query(
+      `SELECT ${roomAuditColumns} FROM room_types WHERE listing_id = $1 ORDER BY id ASC`,
+      [listingId]
+    );
+    await client.query(
+      `INSERT INTO admin_audit_logs (admin_id, entity_type, entity_id, action, previous_state, new_state, ip_address)
+       VALUES ($1, 'listing', $2, 'draft_rooms_updated', $3, $4, $5)`,
+      [
+        requesterId,
+        listingId,
+        JSON.stringify({ publication_status: 'draft', room_types: existingRooms, rooms_json: listing.rooms }),
+        JSON.stringify({ publication_status: 'draft', room_types: updatedRoomsRes.rows, rooms_json: canonicalRooms,
+          actor_id: requesterId, actor_role: isAdmin ? 'admin' : 'owner' }),
+        req.ip || req.socket?.remoteAddress || null
+      ]
+    );
 
     await client.query('COMMIT');
 
-    broadcastDbEvent(req, 'listing');
-    return res.json({ success: true, message: 'Room types saved successfully' });
-  } catch (err: any) {
+    try {
+      broadcastDbEvent(req, 'listing');
+    } catch (notificationError) {
+      console.warn('[ROOMS SAVE NOTIFICATION ERROR]', notificationError);
+    }
+    return res.json({
+      success: true,
+      listingId,
+      message: 'Room types saved successfully',
+      rooms: canonicalRooms
+    });
+  } catch (err: unknown) {
     if (client) {
       await client.query('ROLLBACK').catch(() => {});
     }
     console.error('[ROOMS SAVE ERROR]', err);
-    return res.status(500).json({ error: err?.message || 'Failed to save room types' });
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to save room types' });
   } finally {
     if (client) {
       client.release();
     }
+  }
+});
+
+const adminMediaModerationBodySchema = z
+  .object({
+    moderation_status: z
+      .enum(['pending_review', 'approved', 'rejected'], {
+        message: 'Invalid moderation_status: Allowed values are: pending_review, approved, rejected'
+      })
+      .optional(),
+    is_sleeping_area: z
+      .boolean({
+        message: 'Invalid is_sleeping_area: must be a boolean'
+      })
+      .optional(),
+    room_type_id: z
+      .union(
+        [
+          z
+            .number({
+              message: 'Invalid room_type_id: must be a positive integer or null'
+            })
+            .int('Invalid room_type_id: must be a positive integer or null')
+            .positive('Invalid room_type_id: must be a positive integer or null')
+            .max(2147483647, 'Invalid room_type_id: must be a positive integer or null'),
+          z.null()
+        ],
+        {
+          message: 'Invalid room_type_id: must be a positive integer or null'
+        }
+      )
+      .optional()
+  })
+  .strict()
+  .refine(
+    (data) =>
+      data.moderation_status !== undefined ||
+      data.is_sleeping_area !== undefined ||
+      data.room_type_id !== undefined,
+    {
+      message: 'No fields to update'
+    }
+  );
+
+// M3: Admin Media Review Desk: Relational Media Read Endpoint (GET /api/admin/listings/:id/media-assets)
+app.get('/api/admin/listings/:id/media-assets', authenticateToken, async (req: AuthRequest, res) => {
+  res.setHeader('Cache-Control', 'private, no-store');
+  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin privileges required' });
+  }
+
+  const adminIdResult = adminActorIdSchema.safeParse(req.user?.id);
+  if (!adminIdResult.success) {
+    return res.status(403).json({ error: 'Admin privileges required' });
+  }
+
+  const listingIdResult = listingRouteIdSchema.safeParse(req.params.id);
+  if (!listingIdResult.success) {
+    return res.status(400).json({
+      error: listingIdResult.error.issues[0]?.message || 'Invalid listing ID: must be a positive integer'
+    });
+  }
+  const listingId = listingIdResult.data;
+
+  try {
+    const adminRes = await pool.query(
+      'SELECT id, role, is_active FROM users WHERE id = $1',
+      [adminIdResult.data]
+    );
+    if (adminRes.rows[0]?.role !== 'admin' || adminRes.rows[0]?.is_active !== true) {
+      return res.status(403).json({ error: 'Admin privileges required' });
+    }
+
+    const listingRes = await pool.query(
+      'SELECT id, title, publication_status FROM listings WHERE id = $1',
+      [listingId]
+    );
+    if (listingRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Listing not found' });
+    }
+    const listing = listingRes.rows[0];
+
+    const roomsRes = await pool.query(
+      'SELECT id, name, type, base_price, max_occupancy FROM room_types WHERE listing_id = $1 ORDER BY id ASC',
+      [listingId]
+    );
+
+    const mediaRes = await pool.query(
+      `SELECT id, entity_type, entity_id, url, tier, category, title, description,
+              specs, is_hero, order_index, is_sleeping_area, room_type_id, moderation_status
+       FROM media_assets
+       WHERE entity_type = 'listing' AND entity_id = $1
+       ORDER BY order_index ASC, id ASC`,
+      [listingId]
+    );
+
+    const validation = await validatePropertyPublication(listingId, pool);
+
+    return res.json({
+      listingId: listing.id,
+      listingTitle: listing.title,
+      publicationStatus: listing.publication_status,
+      roomTypes: roomsRes.rows,
+      mediaAssets: mediaRes.rows,
+      validation
+    });
+  } catch (err: unknown) {
+    console.error('[ADMIN MEDIA READ ERROR]', err);
+    return res.status(500).json({ error: 'Failed to read media assets' });
   }
 });
 
@@ -4283,82 +5233,52 @@ app.patch('/api/admin/media-assets/:id/moderation', authenticateToken, async (re
     return res.status(403).json({ error: 'Admin privileges required' });
   }
 
-  const assetId = req.params.id;
-  const { moderation_status, is_sleeping_area, room_type_id } = req.body;
+  const adminIdResult = adminActorIdSchema.safeParse(req.user?.id);
+  if (!adminIdResult.success) {
+    return res.status(403).json({ error: 'Admin privileges required' });
+  }
+  const adminId = adminIdResult.data;
 
-  // Validate allowed moderation statuses
-  const ALLOWED_STATUSES = ['pending_review', 'approved', 'rejected'];
-  if (moderation_status !== undefined && !ALLOWED_STATUSES.includes(moderation_status)) {
+  const assetIdResult = assetRouteIdSchema.safeParse(req.params.id);
+  if (!assetIdResult.success) {
     return res.status(400).json({
-      error: `Invalid moderation_status: '${moderation_status}'. Allowed values are: ${ALLOWED_STATUSES.join(', ')}`
+      error: assetIdResult.error.issues[0]?.message || 'Invalid asset ID: must be a positive integer'
+    });
+  }
+  const assetId = assetIdResult.data;
+
+  const bodyParse = adminMediaModerationBodySchema.safeParse(req.body);
+  if (!bodyParse.success) {
+    const firstIssue = bodyParse.error.issues[0];
+    return res.status(400).json({
+      error: firstIssue?.message || 'Invalid request body',
+      details: bodyParse.error.issues
     });
   }
 
-  const client = await pool.connect();
+  const { moderation_status, is_sleeping_area, room_type_id } = bodyParse.data;
+
   try {
-    await client.query('BEGIN');
+    const result = await moderateMediaAsset(pool, {
+      assetId,
+      adminId,
+      moderation_status,
+      is_sleeping_area,
+      room_type_id,
+      ipAddress: req.ip || req.socket?.remoteAddress || null
+    });
 
-    // 1. Lock media asset row with SELECT ... FOR UPDATE
-    const assetRes = await client.query(
-      'SELECT id, entity_type, entity_id, room_type_id, moderation_status FROM media_assets WHERE id = $1 FOR UPDATE',
-      [assetId]
-    );
-    if (assetRes.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Media asset not found' });
-    }
-    const asset = assetRes.rows[0];
-
-    // 2. If room_type_id is provided, lock room_types row with SELECT ... FOR UPDATE and validate same-property ownership
-    if (room_type_id !== undefined && room_type_id !== null) {
-      const roomRes = await client.query(
-        'SELECT id, listing_id FROM room_types WHERE id = $1 FOR UPDATE',
-        [Number(room_type_id)]
-      );
-      if (roomRes.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(422).json({ error: 'Referenced room type does not exist' });
-      }
-      if (asset.entity_type === 'listing' && Number(asset.entity_id) !== Number(roomRes.rows[0].listing_id)) {
-        await client.query('ROLLBACK');
-        return res.status(422).json({ error: 'Cross-property room assignment rejected: media asset and room type belong to different listings' });
-      }
+    if ('status' in result) {
+      return res.status(result.status).json({ error: result.error });
     }
 
-    // 3. Build updates dynamically inside the transaction
-    const updates: string[] = [];
-    const values: any[] = [];
-
-    if (moderation_status !== undefined) {
-      values.push(moderation_status);
-      updates.push(`moderation_status = $${values.length}`);
-    }
-    if (is_sleeping_area !== undefined) {
-      values.push(Boolean(is_sleeping_area));
-      updates.push(`is_sleeping_area = $${values.length}`);
-    }
-    if (room_type_id !== undefined) {
-      values.push(room_type_id === null ? null : Number(room_type_id));
-      updates.push(`room_type_id = $${values.length}`);
-    }
-
-    if (updates.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'No fields to update' });
-    }
-
-    values.push(assetId);
-    await client.query(`UPDATE media_assets SET ${updates.join(', ')} WHERE id = $${values.length}`, values);
-
-    await client.query('COMMIT');
-    return res.json({ success: true, assetId });
-  } catch (err: any) {
-    await client.query('ROLLBACK').catch(() => {});
-    return res.status(500).json({ error: err?.message || 'Failed to update asset moderation' });
-  } finally {
-    client.release();
+    return res.json({ success: true, assetId: result.assetId });
+  } catch (err: unknown) {
+    console.error('[ADMIN MEDIA MODERATION ERROR]', err);
+    return res.status(500).json({ error: 'Failed to update asset moderation' });
   }
 });
+
 
 // M3: Idempotent Backfill Service Endpoint (POST /api/admin/backfill/room-media-authority)
 app.post('/api/admin/backfill/room-media-authority', authenticateToken, async (req: AuthRequest, res) => {
@@ -4557,26 +5477,117 @@ app.post('/api/admin/backfill/room-media-authority', authenticateToken, async (r
   }
 });
 
+const rentalModeBodySchema = z.object({
+  rentalMode: z.enum(['entire_place', 'private_rooms', 'hybrid'])
+}).strict();
+
 app.put('/api/listings/:id/mode', authenticateToken, async (req: AuthRequest, res) => {
   if (!isDbConfigured) return res.status(503).json({ status: 'error', message: 'DB not configured' });
-  if (isNaN(Number(req.params.id))) return res.json({ id: req.params.id, message: "Demo listing preserved" });
+
+  const rawId = String(req.params.id || '').trim();
+  const listingId = Number(rawId);
+  if (!/^[1-9]\d*$/.test(rawId) || !Number.isSafeInteger(listingId) || listingId <= 0 || listingId > 2147483647) {
+    return res.status(400).json({ error: 'Invalid listing ID: must be a positive integer' });
+  }
+
+  // Safe request body parsing with strict enum
+  const parsed = rentalModeBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: 'Invalid request body: rentalMode must be one of entire_place, private_rooms, or hybrid',
+      details: parsed.error.issues
+    });
+  }
+  const { rentalMode } = parsed.data;
+
+  let client: PoolClient | null = null;
   try {
     await ensureListingsTable();
+    client = await pool.connect();
+    await client.query('BEGIN');
 
-    // IDOR Protection: Verify ownership or admin role
-    const authCheck = await pool.query('SELECT user_id FROM listings WHERE id = $1', [req.params.id]);
-    if (authCheck.rows.length === 0) return res.status(404).json({ error: 'Listing not found' });
-    if (authCheck.rows[0].user_id !== req.user?.id && req.user?.role !== 'admin') {
-       return res.status(403).json({ error: 'Forbidden: You do not have permission to modify this listing.' });
+    // 1. Parent Listing Row Lock: Acquire exclusive lock on listings row FOR UPDATE
+    const listingRes = await client.query(
+      'SELECT id, user_id, publication_status, rental_mode FROM listings WHERE id = $1 FOR UPDATE',
+      [listingId]
+    );
+    if (listingRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Listing not found' });
+    }
+    const listing = listingRes.rows[0];
+
+    // 2. Persisted owner / admin reauthorization on the held connection
+    const requesterId = req.user?.id;
+    if (!requesterId) {
+      await client.query('ROLLBACK');
+      return res.status(401).json({ error: 'Unauthorized: missing user identity' });
     }
 
-    const { rentalMode } = req.body;
-    await pool.query('UPDATE listings SET rental_mode = $1 WHERE id = $2', [rentalMode, req.params.id]);
+    let userRes;
+    try {
+      userRes = await client.query(
+        'SELECT id, role, is_active FROM users WHERE id = $1',
+        [requesterId]
+      );
+    } catch (dbErr: any) {
+      await client.query('ROLLBACK');
+      if (dbErr?.code === '42703') {
+        return res.status(503).json({
+          error: 'Database schema readiness error: users.is_active column missing. Reauthorization failed closed.'
+        });
+      }
+      throw dbErr;
+    }
+
+    if (userRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(401).json({ error: 'Unauthorized: user account not found' });
+    }
+    const requesterUser = userRes.rows[0];
+    const isActive = requesterUser.is_active === true;
+    if (!isActive) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Forbidden: Account is deactivated or suspended.' });
+    }
+
+    const isOwner = String(requesterId) === String(listing.user_id);
+    const isAdmin = requesterUser.role === 'admin';
+    if (!isOwner && !isAdmin) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Forbidden: You do not have permission to modify this listing.' });
+    }
+
+    // 3. Draft-Only Containment: Published and Unlisted listings represent accepted authority
+    if (listing.publication_status !== 'draft') {
+      await client.query('ROLLBACK');
+      return res.status(422).json({
+        error: `Cannot modify rental_mode on a ${listing.publication_status} listing: modification would alter verified listing and booking authority. Direct modification of published or unlisted listings is prohibited; submit a reviewed successor revision.`,
+        currentStatus: listing.publication_status
+      });
+    }
+
+    // 4. Atomic mutation within transaction
+    await client.query('UPDATE listings SET rental_mode = $1 WHERE id = $2', [rentalMode, listingId]);
+    await client.query('COMMIT');
+
+    // 5. Broadcast strictly after commit
     broadcastDbEvent(req, 'listing');
-    res.json({ message: 'Listing rental mode updated successfully' });
+    return res.json({ message: 'Listing rental mode updated successfully', rental_mode: rentalMode });
   } catch (error) {
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_rollbackErr) {
+        // preserve original error
+      }
+    }
     console.error('Update Listing Mode Error:', error);
-    res.status(500).json({ error: 'Failed to update listing mode' });
+    return res.status(500).json({ error: 'Failed to update listing mode' });
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 });
 
@@ -12789,223 +13800,13 @@ app.post('/api/listings/draft', authenticateToken, async (req: AuthRequest, res)
   }
 });
 
+// Legacy uncontained draft approval endpoint quarantined under Strangler pattern (HTTP 410 Gone)
 app.post('/api/admin/listings/draft/:id/approve', authenticateToken, async (req: AuthRequest, res) => {
-  if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const draftRes = await client.query('SELECT * FROM listings_drafts WHERE id = $1', [req.params.id]);
-    if (draftRes.rows.length === 0) throw new Error('Draft not found');
-    
-    const draft = draftRes.rows[0];
-    const data = draft.draft_data;
-    
-    let listingId = draft.published_listing_id;
-    if (listingId) {
-       await client.query(`
-         UPDATE listings SET 
-           title = $1, description = $2, price = $3, city = $4, type = $5,
-           rental_mode = $6, max_guests = $7, bedrooms = $8, beds = $9, bathrooms = $10,
-           hero_video_url = $11, dominant_color_hex = $12, experience_tags = $13,
-           rooms = $14, photos = $15
-         WHERE id = $16
-       `, [
-         data.title, data.description, data.price || 0, data.city || 'Berlin', data.type,
-         data.rentalMode || 'entire_place', data.maxGuests || 2, data.bedrooms || 1, data.beds || 1, data.bathrooms || 1,
-         data.hero_video_url || '', data.dominant_color_hex || '#0284C7', JSON.stringify(data.experience_tags || []),
-         JSON.stringify(data.rooms || []), JSON.stringify(data.photos || []),
-         listingId
-       ]);
-    } else {
-       const newListing = await client.query(`
-         INSERT INTO listings (
-           user_id, title, description, price, city, type, address,
-           rental_mode, max_guests, bedrooms, beds, bathrooms,
-           hero_video_url, dominant_color_hex, experience_tags,
-           rooms, photos
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-         RETURNING id
-       `, [
-         draft.host_id, data.title, data.description, data.price || 0, data.city || 'Berlin', data.type, data.address || '',
-         data.rentalMode || 'entire_place', data.maxGuests || 2, data.bedrooms || 1, data.beds || 1, data.bathrooms || 1,
-         data.hero_video_url || '', data.dominant_color_hex || '#0284C7', JSON.stringify(data.experience_tags || []),
-         JSON.stringify(data.rooms || []), JSON.stringify(data.photos || [])
-       ]);
-       listingId = newListing.rows[0].id;
-    }
-    // Sync room_types table non-destructively
-    const roomTypeMap = new Map<string, number>();
-    if (data.rooms && Array.isArray(data.rooms) && data.rooms.length > 0) {
-      const existingRoomsRes = await client.query(
-        'SELECT id, name, type FROM room_types WHERE listing_id = $1',
-        [listingId]
-      );
-      const existingRooms = existingRoomsRes.rows;
-
-      for (const room of data.rooms) {
-        const existing = existingRooms.find((er: any) =>
-          (room.id && !isNaN(Number(room.id)) && er.id === Number(room.id)) ||
-          (room.type && er.type === room.type) ||
-          (room.name && er.name === room.name)
-        );
-
-        let savedRoomId: number;
-        if (existing) {
-          await client.query(`
-            UPDATE room_types
-            SET name=$1, type=$2, icon=$3, tag=$4, base_price=$5, currency=$6,
-                max_occupancy=$7, inventory_count=$8, description=$9, specs=$10,
-                features=$11, amenities=$12, min_stay_nights=$13
-            WHERE id=$14
-          `, [
-            room.name || existing.name || 'Sanctuary Room',
-            room.type || existing.type || 'suites',
-            room.icon || '🛏️',
-            room.tag || '',
-            Number(room.price) || Number(data.price) || 0,
-            data.currency || 'INR',
-            Number(room.capacity) || 2,
-            Number(room.inventory_count) || 1,
-            room.description || '',
-            room.specs || '',
-            JSON.stringify(room.features || []),
-            JSON.stringify(room.amenities || []),
-            Number(room.min_stay_nights) || 1,
-            existing.id
-          ]);
-          savedRoomId = existing.id;
-        } else {
-          const insertRes = await client.query(`
-            INSERT INTO room_types (listing_id, name, type, icon, tag, base_price, currency, max_occupancy, inventory_count, description, specs, features, amenities, min_stay_nights)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-            RETURNING id
-          `, [
-            listingId,
-            room.name || 'Sanctuary Room',
-            room.type || 'suites',
-            room.icon || '🛏️',
-            room.tag || '',
-            Number(room.price) || Number(data.price) || 0,
-            data.currency || 'INR',
-            Number(room.capacity) || 2,
-            Number(room.inventory_count) || 1,
-            room.description || '',
-            room.specs || '',
-            JSON.stringify(room.features || []),
-            JSON.stringify(room.amenities || []),
-            Number(room.min_stay_nights) || 1
-          ]);
-          savedRoomId = insertRes.rows[0].id;
-        }
-        if (room.type) roomTypeMap.set(room.type, savedRoomId);
-        if (room.name) roomTypeMap.set(room.name, savedRoomId);
-        if (room.id) roomTypeMap.set(String(room.id), savedRoomId);
-      }
-    }
-
-    // Sync media_assets table non-destructively
-    if (data.photos && Array.isArray(data.photos) && data.photos.length > 0) {
-      const existingMediaRes = await client.query(
-        "SELECT id, url, tier, category, room_type_id, is_sleeping_area, moderation_status FROM media_assets WHERE entity_id = $1 AND entity_type = 'listing'",
-        [listingId]
-      );
-      const existingMedia = existingMediaRes.rows;
-
-      let orderIdx = 0;
-      for (const photo of data.photos) {
-        const photoUrl = photo.url || photo.previewUrl;
-        if (!photoUrl) continue;
-
-        const existing = existingMedia.find((em: any) => em.url === photoUrl || (photo.id && !isNaN(Number(photo.id)) && em.id === Number(photo.id)));
-
-        let linkedRoomTypeId: number | null = null;
-        if (photo.room_type_id && !isNaN(Number(photo.room_type_id))) {
-          linkedRoomTypeId = Number(photo.room_type_id);
-        } else if (photo.tier && photo.tier !== 'common' && roomTypeMap.has(photo.tier)) {
-          linkedRoomTypeId = roomTypeMap.get(photo.tier) || null;
-        }
-
-        const isSleepingArea = Boolean(photo.is_sleeping_area || photo.isSleepingArea);
-
-        // True admin-only approval rule:
-        // Draft publication payload cannot grant approval; preserve existing approved only if unchanged.
-        let modStatus = 'pending_review';
-        if (existing && existing.moderation_status === 'approved') {
-          const unchanged = existing.url === photoUrl &&
-                            (existing.tier || 'common') === (photo.tier || 'common') &&
-                            (existing.category || 'other') === (photo.category || 'other') &&
-                            Boolean(existing.is_sleeping_area) === isSleepingArea &&
-                            ((existing.room_type_id === null && linkedRoomTypeId === null) ||
-                             Number(existing.room_type_id) === Number(linkedRoomTypeId));
-          if (unchanged) {
-            modStatus = 'approved';
-          }
-        }
-
-        if (existing) {
-          await client.query(`
-            UPDATE media_assets
-            SET tier=$1, category=$2, title=$3, description=$4, specs=$5, is_hero=$6,
-                order_index=$7, is_sleeping_area=$8, room_type_id=$9, moderation_status=$10
-            WHERE id=$11
-          `, [
-            photo.tier || 'common',
-            photo.category || 'other',
-            photo.title || '',
-            photo.description || '',
-            photo.specs || '',
-            photo.isHero || false,
-            orderIdx++,
-            isSleepingArea,
-            linkedRoomTypeId,
-            modStatus,
-            existing.id
-          ]);
-        } else {
-          await client.query(`
-            INSERT INTO media_assets (entity_type, entity_id, url, tier, category, title, description, specs, is_hero, order_index, is_sleeping_area, room_type_id, moderation_status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-          `, [
-            'listing',
-            listingId,
-            photoUrl,
-            photo.tier || 'common',
-            photo.category || 'other',
-            photo.title || '',
-            photo.description || '',
-            photo.specs || '',
-            photo.isHero || false,
-            orderIdx++,
-            isSleepingArea,
-            linkedRoomTypeId,
-            modStatus
-          ]);
-        }
-      }
-    }
-    // M3: Validate PROPOSED-007 publication rules before draft approval
-    const validation = await validatePropertyPublication(listingId, client);
-    if (!validation.valid) {
-      await client.query('ROLLBACK');
-      return res.status(422).json({
-        error: 'Cannot publish listing: Failed room and media authority requirements (PROPOSED-007).',
-        details: validation.errors,
-        roomSummaries: validation.roomSummaries
-      });
-    }
-
-    await client.query("UPDATE listings SET publication_status = 'published' WHERE id = $1", [listingId]);
-    await client.query(`UPDATE listings_drafts SET status = 'PUBLISHED', published_listing_id = $1 WHERE id = $2`, [listingId, draft.id]);
-
-    await client.query('COMMIT');
-    res.json({ success: true, listingId });
-  } catch (e: any) {
-    await client.query('ROLLBACK');
-    console.error('Draft Publish Error:', e);
-    res.status(500).json({ error: e?.message || 'Failed to publish draft' });
-  } finally {
-    client.release();
-  }
+  return res.status(410).json({
+    error: 'Legacy draft approval endpoint has been permanently retired and quarantined (HTTP 410 Gone). Direct replay of unversioned drafts into published listings is prohibited; the legacy replay endpoint is unavailable and an approved successor review flow is not yet implemented.',
+    code: 'LEGACY_DRAFT_APPROVAL_ENDPOINT_DEPRECATED_AND_QUARANTINED',
+    status: 'quarantined'
+  });
 });
 
 // --- END CMS PHASE B ---
@@ -13446,7 +14247,7 @@ app.get('/api/v2/stays/:propertySlug', async (req, res) => {
 
     // Apply strict privacy transformation and nested safe mappers
     const publicProjection = toPublicStayProjection(rawListing);
-    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=120');
+    res.setHeader('Cache-Control', 'no-store');
     return res.json(publicProjection);
   } catch (error) {
     res.setHeader('Cache-Control', 'no-store');
@@ -13649,7 +14450,33 @@ app.get(['/listing/:id', '/listings/:id'], async (req, res) => {
   }
 });
 
+type CurrentListingReader = { id: number; role: string };
+const resolveCurrentListingReader = async (req: Request): Promise<CurrentListingReader | null> => {
+  const authHeader = req.headers.authorization;
+  const token = typeof authHeader === 'string' && /^Bearer\s+\S+$/i.test(authHeader)
+    ? authHeader.replace(/^Bearer\s+/i, '')
+    : null;
+  if (!token) return null;
+  let decoded: any;
+  try {
+    decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+  } catch {
+    return null;
+  }
+  if (!decoded || typeof decoded !== 'object' || !Number.isSafeInteger(decoded.id) || decoded.id <= 0) {
+    return null;
+  }
+  const persisted = await pool.query('SELECT id, role, is_active FROM users WHERE id = $1', [decoded.id]);
+  const user = persisted.rows[0];
+  if (!user || Number(user.id) !== decoded.id || user.is_active !== true || typeof user.role !== 'string') {
+    return null;
+  }
+  return { id: Number(user.id), role: user.role };
+};
+
 app.get('/api/listings/:id', async (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', req.headers.authorization ? 'private, no-store' : 'no-store');
+  res.vary('Authorization');
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
   if (isNaN(Number(req.params.id))) return res.status(400).json({ error: 'Invalid ID' });
   try {
@@ -13657,20 +14484,10 @@ app.get('/api/listings/:id', async (req: Request, res: Response) => {
     if (result.rows.length === 0) return res.status(404).json({ error: 'Listing not found' });
     const listing = result.rows[0];
 
-    // Check optional authentication token to determine if requester is listing owner or admin
-    let isAuthorizedOwnerOrAdmin = false;
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (token) {
-      try {
-        const decoded: any = jwt.verify(token, JWT_SECRET);
-        if (decoded && (decoded.role === 'admin' || String(decoded.id) === String(listing.user_id))) {
-          isAuthorizedOwnerOrAdmin = true;
-        }
-      } catch (_jwtErr) {
-        // Invalid or expired token — proceed as anonymous/unauthorized
-      }
-    }
+    // Private editing facts require a currently active persisted owner or administrator.
+    const reader = await resolveCurrentListingReader(req);
+    const isAuthorizedOwnerOrAdmin = Boolean(reader &&
+      (reader.role === 'admin' || String(reader.id) === String(listing.user_id)));
 
     if (isAuthorizedOwnerOrAdmin) {
       // Authorized Host/Admin: Provide full editable raw listing record
@@ -13747,13 +14564,14 @@ app.get('/api/listings/:id', async (req: Request, res: Response) => {
 
 // Get listings (cache-first)
 app.get('/api/listings', async (req: Request, res: Response) => {
-  res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=120');
+  const privateRequest = Boolean(req.headers.authorization || req.query.userId);
+  // Publication can be revoked immediately. Shared HTTP caches cannot be purged by
+  // this origin, so catalogue responses must always be revalidated at the origin.
+  res.setHeader('Cache-Control', privateRequest ? 'private, no-store' : 'no-store');
+  res.vary('Authorization');
   if (!isDbConfigured) {
     return res.status(503).json({ status: 'error', message: 'DB not configured' });
   }
-
-  // Set edge caching headers. Cache for 60 seconds.
-  res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=120');
 
   try {
     let city = (req.query.city as string);
@@ -13765,17 +14583,8 @@ app.get('/api/listings', async (req: Request, res: Response) => {
     const minLng = req.query.minLng as string;
     const maxLng = req.query.maxLng as string;
 
-    // Optional authentication verification
-    let authenticatedUser: any = null;
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (token) {
-      try {
-        authenticatedUser = jwt.verify(token, JWT_SECRET);
-      } catch (_e) {
-        // Invalid or expired token
-      }
-    }
+    // JWT identity alone never grants private catalogue or staff read authority.
+    const authenticatedUser = await resolveCurrentListingReader(req);
 
     // If userId query param is provided, requester must be the owner or admin
     if (userId) {
@@ -13786,20 +14595,41 @@ app.get('/api/listings', async (req: Request, res: Response) => {
 
     const isAdminRequester = authenticatedUser && authenticatedUser.role === 'admin';
 
-    // Redis Edge Caching: Dedicated public catalogue safe-card cache namespace
+    // Redis public-card cache. A failed generation read bypasses caching so a stale
+    // key cannot be selected by guessing the last known generation.
     const isPublicCatalogueFeed = !userId && !isAdminRequester;
     const publicCityKey = (city && city !== 'all') ? city.toLowerCase() : 'all';
-    const cacheKey = isPublicCatalogueFeed
-      ? `listings_v4:public_cards:${publicCityKey}:${req.originalUrl}`
+    let cacheGeneration: number | null = null;
+    if (redis && isPublicCatalogueFeed) {
+      try {
+        const storedGeneration = await redis.get(PUBLIC_LISTING_CACHE_GENERATION_KEY);
+        const parsedGeneration = storedGeneration === null ? 0 : Number(storedGeneration);
+        if (Number.isSafeInteger(parsedGeneration) && parsedGeneration >= 0) cacheGeneration = parsedGeneration;
+      } catch (cacheError) {
+        console.warn('[LISTINGS PUBLIC CACHE GENERATION ERROR]', cacheError);
+      }
+    }
+    const cacheKey = cacheGeneration !== null
+      ? `listings_v5:public_cards:g${cacheGeneration}:${publicCityKey}:${req.originalUrl}`
       : null;
 
     if (redis && cacheKey && isPublicCatalogueFeed) {
       try {
         const cached = await redis.get(cacheKey);
         if (cached) {
-          // Serve from Redis Cache (Edge Cache)
-          const parsed = typeof cached === 'string' ? JSON.parse(cached) : cached;
-          return res.json(parsed);
+          const parsed: unknown = typeof cached === 'string' ? JSON.parse(cached) : cached;
+          if (Array.isArray(parsed)) {
+            const ids = parsed.map((card: any) => Number(card?.id));
+            const validIds = ids.every((id: number) => Number.isSafeInteger(id) && id > 0 && id <= 2147483647);
+            if (validIds) {
+              const published = ids.length > 0
+                ? await pool.query("SELECT id FROM listings WHERE publication_status = 'published' AND id = ANY($1::int[])", [ids])
+                : { rows: [] };
+              const publishedIds = new Set(published.rows.map((row: any) => Number(row.id)));
+              if (ids.every((id: number) => publishedIds.has(id))) return res.json(parsed);
+            }
+          }
+          await redis.del(cacheKey);
         }
       } catch (err) {
         console.warn('Redis Cache Error:', err);
@@ -13918,6 +14748,7 @@ app.get('/api/listings', async (req: Request, res: Response) => {
           address: row.address,
           city: row.city,
           user_id: row.user_id,
+          publication_status: row.publication_status,
           imageUrl: row.image_url || '',
           imageUrls: row.image_urls || [],
           photos: row.photos || [],
@@ -14036,7 +14867,7 @@ app.get('/api/listings', async (req: Request, res: Response) => {
 
     if (redis && cacheKey && isPublicCatalogueFeed) {
       try {
-        await redis.set(cacheKey, JSON.stringify(listings), { ex: 3600 });
+        await redis.set(cacheKey, JSON.stringify(listings), { ex: 60 });
       } catch (e) {
         console.warn('Redis Cache Error: Could not save to cache');
       }
@@ -14044,8 +14875,12 @@ app.get('/api/listings', async (req: Request, res: Response) => {
 
     res.json(listings);
   } catch (error) {
+    if (privateRequest) {
+      console.error('[LISTINGS PRIVATE FETCH ERROR]', error);
+      return res.status(503).json({ error: 'Private listing read is unavailable' });
+    }
     console.warn('[LISTINGS FETCH FALLBACK] Database query error, returning empty list:', error);
-    res.json([]);
+    return res.json([]);
   }
 });
 

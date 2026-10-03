@@ -9,7 +9,7 @@ export async function createWorkflowPgFixture() {
   const pool = fixture.pool!;
   try {
     await pool.query(`
-      CREATE TABLE users(id INTEGER PRIMARY KEY,role TEXT NOT NULL);
+      CREATE TABLE users(id INTEGER PRIMARY KEY,role TEXT NOT NULL,is_active BOOLEAN NOT NULL DEFAULT TRUE);
       ALTER TABLE listings ADD COLUMN description TEXT NOT NULL DEFAULT '', ADD COLUMN city TEXT NOT NULL DEFAULT '', ADD COLUMN currency TEXT NOT NULL DEFAULT 'INR', ADD COLUMN price NUMERIC(12,2) NOT NULL DEFAULT 5000;
       CREATE SEQUENCE host_marketing_campaigns_id_seq OWNED BY host_marketing_campaigns.id;
       ALTER TABLE host_marketing_campaigns ALTER COLUMN id SET DEFAULT nextval('host_marketing_campaigns_id_seq');

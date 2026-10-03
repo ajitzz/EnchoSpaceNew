@@ -1,10 +1,11 @@
 import AdtechWorkspace from './marketing/AdtechWorkspace';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { isSafeAdminImageUrl } from '../src/lib/mediaUrlSafety.js';
 import { SEO } from './SEO';
 import { AdminSEOTab } from './AdminSEOTab';
 import { Listing } from '../types';
-import { HomeIcon, ListIcon,  TrashIcon, EditIcon, CheckCircle2Icon, UserIcon, XIcon } from './Icons';
-import { Map, Compass, MoreHorizontal, Edit3, Megaphone, Link, CreditCard, TrendingUp, Send, RefreshCw, Plus, Phone, Mail, Users, Globe, Building, Check, Search, Sparkles, Loader2, Upload, Zap, Shield, ShieldCheck, FileText, ChevronRight, ChevronDown as ChevronDownIcon, AlertTriangle, Eye, CheckCircle, XCircle, Crown, Film, Palette, Tag, Play, CheckCircle2, ShieldAlert, Bed } from 'lucide-react';
+import { ListIcon,  TrashIcon, EditIcon, CheckCircle2Icon, UserIcon, XIcon } from './Icons';
+import { Map, MoreHorizontal, Edit3, Megaphone, Link, CreditCard, TrendingUp, Send, RefreshCw, Plus, Phone, Mail, Users, Globe, Building, Check, Search, Sparkles, Loader2, Upload, Zap, Shield, ShieldCheck, FileText, ChevronRight, ChevronDown as ChevronDownIcon, AlertTriangle, Eye, CheckCircle, XCircle, Crown, Film, Palette, Tag, Play, CheckCircle2, ShieldAlert, Bed, Camera } from 'lucide-react';
 import { useAuth, User } from './AuthContext';
 import AdminInbox from './AdminInbox';
 import { useCurrency } from './CurrencyContext';
@@ -17,54 +18,360 @@ import { useToast } from './ToastContext';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { io } from 'socket.io-client';
 import { AdminStaffCommandCenter } from './admin/AdminStaffCommandCenter';
+import { AdminDraftPropertyEditor } from './admin/AdminDraftPropertyEditor';
+
+export interface MediaDeskAsset {
+  id: number;
+  entity_type: string;
+  entity_id: number;
+  url: string;
+  tier: string;
+  category: string;
+  title: string | null;
+  description: string | null;
+  specs: string | null;
+  is_hero: boolean;
+  order_index: number;
+  is_sleeping_area: boolean;
+  room_type_id: number | null;
+  moderation_status: 'pending_review' | 'approved' | 'rejected';
+}
+
+export interface MediaDeskRoomType {
+  id: number;
+  name: string;
+  type: string;
+  base_price: number | string;
+  max_occupancy: number;
+}
+
+export interface MediaDeskRoomSummary {
+  roomId: number;
+  roomName: string;
+  roomType: string;
+  approvedPhotosCount: number;
+  sleepingAreaPhotosCount: number;
+  isCompliant: boolean;
+}
+
+export interface MediaDeskValidation {
+  valid: boolean;
+  errors: string[];
+  roomSummaries: MediaDeskRoomSummary[];
+}
+
+export interface MediaDeskData {
+  listingId: number;
+  listingTitle: string;
+  publicationStatus: string;
+  roomTypes: MediaDeskRoomType[];
+  mediaAssets: MediaDeskAsset[];
+  validation: MediaDeskValidation;
+}
 
 interface AdminDashboardProps {
   onBack: () => void;
-  onEditListing?: (listing: Listing) => void;
 }
 
-const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }) => {
+const canEditDraftListing = (listing: Listing | null): boolean => listing?.publication_status === 'draft';
+
+const parseCuratedGuidelines = (value: Listing['curated_guidelines']): string[] => {
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string');
+  if (typeof value !== 'string' || !value.trim()) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed.filter((item): item is string => typeof item === 'string');
+  } catch {
+    // Older listing rows store a single plain-text guideline.
+  }
+  return [value.trim()];
+};
+
+const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const { formatPrice } = useCurrency();
   const [adminMode, setAdminMode] = useState<'stays' | 'experiences'>('stays');
   const [activeTab, setActiveTab] = useState<'analytics' | 'listings' | 'users' | 'staff' | 'settings' | 'offers' | 'reviews' | 'messages' | 'seo' | 'marketing'>(window.location.pathname==='/admin/marketing/adtech'?'marketing':'analytics');
   const [editingRoomsListing, setEditingRoomsListing] = useState<Listing | null>(null);
+  const [editingDraftListing, setEditingDraftListing] = useState<Listing | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
   // ADR-001: Rooms now have free-form name + tier key + icon + tag + description + specs
   const [editingRoomsData, setEditingRoomsData] = useState<any[]>([]);
   const [editingRoomExpandedIdx, setEditingRoomExpandedIdx] = useState<number | null>(0);
+  const [editingRoomsError, setEditingRoomsError] = useState<string | null>(null);
+  const [lockedListingIds, setLockedListingIds] = useState<Record<string | number, string>>({});
+  const [isReloadingRooms, setIsReloadingRooms] = useState(false);
+  const [isSavingRooms, setIsSavingRooms] = useState(false);
+  const savingRoomsRef = useRef(false);
+
+  const isSaveLocked = Boolean(editingRoomsListing && lockedListingIds[editingRoomsListing.id]);
 
   const openRoomsEditor = (listing: Listing, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingRoomsListing(listing);
     setEditingRoomsData(listing.rooms ? JSON.parse(JSON.stringify(listing.rooms)) : []);
     setEditingRoomExpandedIdx(0);
+    // If listing was previously locked due to an unknown outcome, preserve lock and error message
+    const existingLockReason = lockedListingIds[listing.id];
+    if (existingLockReason) {
+      setEditingRoomsError(existingLockReason);
+    } else {
+      setEditingRoomsError(null);
+    }
+  };
+
+  const lockListingSave = (listingId: string | number, reason: string) => {
+    setEditingRoomsError(reason);
+    setLockedListingIds(prev => ({ ...prev, [listingId]: reason }));
+    alert(reason);
+  };
+
+  const reloadRoomsFromServer = async () => {
+    if (!editingRoomsListing) return;
+    const targetListingId = editingRoomsListing.id;
+    setIsReloadingRooms(true);
+    setEditingRoomsError(null);
+    try {
+      // Use the secured, fail-closed canonical room read endpoint (GET /api/listings/:id/rooms)
+      const res = await fetch(`/api/listings/${targetListingId}/rooms`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      if (res.ok) {
+        const responseData = await res.json().catch(() => null);
+        if (!responseData || typeof responseData !== 'object' || !Array.isArray(responseData.rooms)) {
+          const err = 'Failed to reload: Server did not return a valid canonical rooms payload. Save remains locked.';
+          setEditingRoomsError(err);
+          setLockedListingIds(prev => ({ ...prev, [targetListingId]: err }));
+          alert(err);
+          return;
+        }
+
+        // Validate listingId matches
+        if (responseData.listingId === undefined || Number(responseData.listingId) !== Number(targetListingId)) {
+          const err = `Failed to reload: Returned listingId (${responseData.listingId}) does not match requested listing (${targetListingId}). Save remains locked.`;
+          setEditingRoomsError(err);
+          setLockedListingIds(prev => ({ ...prev, [targetListingId]: err }));
+          alert(err);
+          return;
+        }
+
+        // Validate returned room IDs are unique positive safe integers within PostgreSQL INT4
+        const MAX_INT4 = 2147483647;
+        const seenIds = new Set<number>();
+        for (let idx = 0; idx < responseData.rooms.length; idx++) {
+          const r = responseData.rooms[idx];
+          if (!r || typeof r !== 'object') {
+            const err = `Failed to reload: Room at index ${idx} is not a valid object. Save remains locked.`;
+            setEditingRoomsError(err);
+            setLockedListingIds(prev => ({ ...prev, [targetListingId]: err }));
+            alert(err);
+            return;
+          }
+          const rawId = r.id;
+          if (typeof rawId === 'string' && /^(admin-room-|room-|new-|temp)/.test(rawId)) {
+            const err = `Failed to reload: Room at index ${idx} returned unassigned temporary ID "${rawId}". Save remains locked.`;
+            setEditingRoomsError(err);
+            setLockedListingIds(prev => ({ ...prev, [targetListingId]: err }));
+            alert(err);
+            return;
+          }
+          const isDigitsOrNum = typeof rawId === 'number' || (typeof rawId === 'string' && /^\d+$/.test(rawId));
+          const numId = Number(rawId);
+          if (!isDigitsOrNum || !Number.isSafeInteger(numId) || numId < 1 || numId > MAX_INT4) {
+            const err = `Failed to reload: Room at index ${idx} returned invalid ID "${rawId}". Save remains locked.`;
+            setEditingRoomsError(err);
+            setLockedListingIds(prev => ({ ...prev, [targetListingId]: err }));
+            alert(err);
+            return;
+          }
+          if (seenIds.has(numId)) {
+            const err = `Failed to reload: Duplicate room ID ${numId} in server response. Save remains locked.`;
+            setEditingRoomsError(err);
+            setLockedListingIds(prev => ({ ...prev, [targetListingId]: err }));
+            alert(err);
+            return;
+          }
+          seenIds.add(numId);
+        }
+
+        const freshRooms = responseData.rooms;
+        setEditingRoomsData(freshRooms);
+        setListings(prev => prev.map(l => l.id === targetListingId ? { ...l, rooms: freshRooms } : l));
+        // ONLY unlock after successful, verified canonical room validation!
+        setLockedListingIds(prev => {
+          const next = { ...prev };
+          delete next[targetListingId];
+          return next;
+        });
+        setEditingRoomsError(null);
+        addToast('Rooms Reloaded', 'Canonical rooms reloaded from server.', 'info');
+      } else {
+        const errorData = await res.json().catch(() => null);
+        const err = errorData?.error || (res.status === 409
+          ? 'Legacy room inventory not yet reconciled to relational storage. Save remains locked.'
+          : 'Failed to reload rooms from server. Save remains locked.');
+        setEditingRoomsError(err);
+        setLockedListingIds(prev => ({ ...prev, [targetListingId]: err }));
+        alert(err);
+      }
+    } catch (err) {
+      console.error(err);
+      const msg = 'Network error while attempting to reload rooms from server. Save remains locked.';
+      setEditingRoomsError(msg);
+      setLockedListingIds(prev => ({ ...prev, [targetListingId]: msg }));
+      alert(msg);
+    } finally {
+      setIsReloadingRooms(false);
+    }
   };
 
   const saveRoomsData = async () => {
     if (!editingRoomsListing) return;
+    if (savingRoomsRef.current) return;
+    setEditingRoomsError(null);
+
+    if (!canEditDraftListing(editingRoomsListing)) {
+      setEditingRoomsError('Direct room edits are locked for this property. A reviewed successor is required.');
+      return;
+    }
+
+    if (isSaveLocked) {
+      const errMsg = 'Save is locked until canonical rooms are reloaded. Please click "Reload From Server" to refresh room state before attempting to save.';
+      setEditingRoomsError(errMsg);
+      alert(errMsg);
+      return;
+    }
+
+    if (!editingRoomsData || editingRoomsData.length === 0) {
+      setEditingRoomsError('At least one room type is required.');
+      return;
+    }
+
+    for (let i = 0; i < editingRoomsData.length; i++) {
+      const room = editingRoomsData[i];
+      if (!room.name || !String(room.name).trim()) {
+        const err = `Room #${i + 1} is missing a name. Every room type must have a name.`;
+        setEditingRoomsError(err);
+        return;
+      }
+      const numPrice = Number(room.price);
+      if (!Number.isFinite(numPrice) || numPrice <= 0) {
+        const err = `Room "${String(room.name).trim()}" must have a positive nightly price (greater than ₹0).`;
+        setEditingRoomsError(err);
+        return;
+      }
+    }
+
+    savingRoomsRef.current = true;
+    setIsSavingRooms(true);
     try {
       const res = await fetch(`/api/listings/${editingRoomsListing.id}/rooms`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ rooms: editingRoomsData })
       });
       if (res.ok) {
-        setListings(prev => prev.map(l => l.id === editingRoomsListing.id ? { ...l, rooms: editingRoomsData } : l));
+        const responseData = await res.json().catch(() => null);
+
+        // 1. Validate responseData structure
+        if (!responseData || typeof responseData !== 'object' || Array.isArray(responseData)) {
+          const errMsg = 'Outcome Unknown: Server returned an invalid response object after dispatch. Changes may have already committed on the server. Further saves are locked until rooms are reloaded from the server to prevent duplicate rooms.';
+          lockListingSave(editingRoomsListing.id, errMsg);
+          return;
+        }
+
+        // 2. Validate listingId matches request
+        if (responseData.listingId === undefined || Number(responseData.listingId) !== Number(editingRoomsListing.id)) {
+          const errMsg = `Outcome Unknown: Server returned listingId (${responseData.listingId}) which does not match requested listing (${editingRoomsListing.id}). Changes may have committed on the server. Further saves are locked until rooms are reloaded.`;
+          lockListingSave(editingRoomsListing.id, errMsg);
+          return;
+        }
+
+        // 3. Validate responseData.rooms is an array and matches submitted count
+        if (!Array.isArray(responseData.rooms)) {
+          const errMsg = 'Outcome Unknown: Server response omitted rooms array. Changes may have committed on the server. Further saves are locked until rooms are reloaded.';
+          lockListingSave(editingRoomsListing.id, errMsg);
+          return;
+        }
+
+        if (responseData.rooms.length !== editingRoomsData.length) {
+          const errMsg = `Outcome Unknown: Server returned ${responseData.rooms.length} room(s), but ${editingRoomsData.length} room(s) were submitted. Truncation or state mismatch detected. Changes may have committed on the server. Further saves are locked until rooms are reloaded.`;
+          lockListingSave(editingRoomsListing.id, errMsg);
+          return;
+        }
+
+        // 4. Validate every returned ID is a unique positive safe integer within PostgreSQL INT4 (1 to 2147483647)
+        const seenIds = new Set<number>();
+        const MAX_INT4 = 2147483647;
+
+        for (let idx = 0; idx < responseData.rooms.length; idx++) {
+          const r = responseData.rooms[idx];
+          if (!r || typeof r !== 'object') {
+            const errMsg = `Outcome Unknown: Room at index ${idx} is not a valid object. Changes may have committed on the server. Further saves are locked until rooms are reloaded.`;
+            lockListingSave(editingRoomsListing.id, errMsg);
+            return;
+          }
+
+          const rawId = r.id;
+          if (typeof rawId === 'string' && /^(admin-room-|room-|new-|temp)/.test(rawId)) {
+            const errMsg = `Outcome Unknown: Server returned room at index ${idx} with unassigned temporary ID "${rawId}". Changes may have committed on the server. Further saves are locked until rooms are reloaded.`;
+            lockListingSave(editingRoomsListing.id, errMsg);
+            return;
+          }
+
+          const isDigitsOrNum = typeof rawId === 'number' || (typeof rawId === 'string' && /^\d+$/.test(rawId));
+          const numId = Number(rawId);
+          const isPositiveSafeInt = Number.isInteger(numId) && Number.isSafeInteger(numId) && numId >= 1 && numId <= MAX_INT4;
+
+          if (!isDigitsOrNum || !isPositiveSafeInt) {
+            const errMsg = `Outcome Unknown: Room at index ${idx} returned invalid ID "${rawId}". Every returned ID must be a unique positive safe integer within PostgreSQL INT4 (1 to ${MAX_INT4}). Changes may have committed on the server. Further saves are locked until rooms are reloaded.`;
+            lockListingSave(editingRoomsListing.id, errMsg);
+            return;
+          }
+
+          if (seenIds.has(numId)) {
+            const errMsg = `Outcome Unknown: Duplicate room ID ${numId} detected in server response at index ${idx}. Changes may have committed on the server. Further saves are locked until rooms are reloaded.`;
+            lockListingSave(editingRoomsListing.id, errMsg);
+            return;
+          }
+          seenIds.add(numId);
+        }
+
+        // All validations passed!
+        const canonicalRooms = responseData.rooms;
+        setEditingRoomsData(canonicalRooms);
+        setListings(prev => prev.map(l => l.id === editingRoomsListing.id ? { ...l, rooms: canonicalRooms } : l));
+        setLockedListingIds(prev => {
+          const next = { ...prev };
+          delete next[editingRoomsListing.id];
+          return next;
+        });
         setEditingRoomsListing(null);
       } else {
-        alert('Failed to update room types.');
+        const errorData = await res.json().catch(() => null);
+        const errorMessage = errorData?.error || 'Failed to update room types.';
+        setEditingRoomsError(errorMessage);
+        alert(errorMessage);
       }
     } catch (err) {
       console.error(err);
-
-          alert("Error saving rooms.");
-      }
+      // Network exception after dispatch: COMMIT may have succeeded on the server!
+      const errMsg = 'Outcome Unknown: A network exception occurred during or after dispatch. The database transaction may have already committed on the server. To prevent duplicate rooms, further saves are locked for this listing until rooms are reloaded from the server.';
+      lockListingSave(editingRoomsListing.id, errMsg);
+    } finally {
+      savingRoomsRef.current = false;
+      setIsSavingRooms(false);
+    }
   };
 
   const handleTogglePublicationStatus = async (listing: Listing, e: React.MouseEvent) => {
     e.stopPropagation();
-    const currentStatus = listing.publication_status || 'published';
-    const targetStatus = currentStatus === 'published' ? 'draft' : 'published';
+    const currentStatus = listing.publication_status;
+    if (currentStatus !== 'draft' && currentStatus !== 'published' && currentStatus !== 'unlisted') {
+      addToast('Status unavailable', 'Verify the property publication status before changing it.', 'error');
+      return;
+    }
+    // Match the server transition matrix: published -> unlisted; draft/unlisted -> published.
+    const targetStatus = currentStatus === 'published' ? 'unlisted' : 'published';
     try {
       const res = await fetch(`/api/admin/listings/${listing.id}/status`, {
         method: 'PATCH',
@@ -77,7 +384,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
       const data = await res.json();
       if (!res.ok) {
         const errorMsg = data.details ? data.details.join('\n') : (data.error || 'Failed to update publication status');
-        alert(`PROPOSED-007 Validation Block:\n${errorMsg}`);
+        alert(`Publication Review Block:\n${errorMsg}`);
         addToast('Publication Blocked', errorMsg, 'error');
         return;
       }
@@ -112,6 +419,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   const [rejectedFieldInputs, setRejectedFieldInputs] = useState<Record<string, string>>({});
   const [submittingRejection, setSubmittingRejection] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [listingsLoaded, setListingsLoaded] = useState(false);
   const [metrics, setMetrics] = useState({ totalListings: 0, totalUsers: 0, totalBookings: 0, revenue: 0, chartData: [], recentTransactions: [] as any[] });
   const [whatsappSettings, setWhatsappSettings] = useState({ enabled: false, number: '' });
   const [callSettings, setCallSettings] = useState({ enabled: false, number: '' });
@@ -122,6 +430,115 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
   const [savingSettings, setSavingSettings] = useState(false);
   const { token, logout, user } = useAuth();
   const { addToast } = useToast();
+
+  // Admin Media Review Desk state
+  const [reviewingMediaListing, setReviewingMediaListing] = useState<Listing | null>(null);
+  const [mediaDeskData, setMediaDeskData] = useState<MediaDeskData | null>(null);
+  const [loadingMediaDesk, setLoadingMediaDesk] = useState<boolean>(false);
+  const [mutatingAssetId, setMutatingAssetId] = useState<number | null>(null);
+  const [mediaDeskFilter, setMediaDeskFilter] = useState<'all' | 'unassigned' | string>('all');
+  const [failedImageIds, setFailedImageIds] = useState<Record<number, boolean>>({});
+  const [loadedImageIds, setLoadedImageIds] = useState<Record<number, boolean>>({});
+  const mediaDeskTriggerRef = useRef<HTMLElement | null>(null);
+  const mediaDeskCloseBtnRef = useRef<HTMLButtonElement | null>(null);
+  const mediaDeskDialogRef = useRef<HTMLDivElement | null>(null);
+  const reviewingMediaListingRef = useRef<Listing | null>(null);
+  useEffect(() => {
+    reviewingMediaListingRef.current = reviewingMediaListing;
+  }, [reviewingMediaListing]);
+  const mediaDeskRequestSeqRef = useRef<number>(0);
+  const mediaDeskAbortCtrlRef = useRef<AbortController | null>(null);
+
+  const closeMediaDesk = useCallback(() => {
+    mediaDeskRequestSeqRef.current++;
+    if (mediaDeskAbortCtrlRef.current) {
+      mediaDeskAbortCtrlRef.current.abort();
+      mediaDeskAbortCtrlRef.current = null;
+    }
+    reviewingMediaListingRef.current = null;
+    setReviewingMediaListing(null);
+    setMediaDeskData(null);
+    setLoadingMediaDesk(false);
+    setMutatingAssetId(null);
+    setFailedImageIds({});
+    setLoadedImageIds({});
+    setTimeout(() => {
+      mediaDeskTriggerRef.current?.focus();
+    }, 0);
+  }, []);
+
+  // Focus trap, Escape key handling, and background scroll locking for Media Review Desk
+  useEffect(() => {
+    if (!reviewingMediaListing) return;
+
+    // 1. Scroll lock background
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    // 2. Keyboard event handler for Escape & Tab focus containment
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeMediaDesk();
+        return;
+      }
+
+      if (e.key === 'Tab') {
+        const dialogNode = mediaDeskDialogRef.current;
+        if (!dialogNode) return;
+
+        const focusableSelectors = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+        const focusableElements = Array.from(
+          dialogNode.querySelectorAll<HTMLElement>(focusableSelectors)
+        ).filter(el => {
+          if (el.hasAttribute('disabled') || el.getAttribute('aria-hidden') === 'true') return false;
+          if (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function') {
+            const style = window.getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden') return false;
+          }
+          return true;
+        });
+
+        if (focusableElements.length === 0) {
+          e.preventDefault();
+          return;
+        }
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === firstElement || !dialogNode.contains(document.activeElement)) {
+            e.preventDefault();
+            lastElement.focus();
+          }
+        } else {
+          if (document.activeElement === lastElement || !dialogNode.contains(document.activeElement)) {
+            e.preventDefault();
+            firstElement.focus();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    // 3. Initial focus: place focus on close button or first interactive element
+    const timer = setTimeout(() => {
+      if (mediaDeskCloseBtnRef.current) {
+        mediaDeskCloseBtnRef.current.focus();
+      } else if (mediaDeskDialogRef.current) {
+        const first = mediaDeskDialogRef.current.querySelector<HTMLElement>('button:not([disabled]), [href], input, select');
+        first?.focus();
+      }
+    }, 50);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [reviewingMediaListing, closeMediaDesk]);
 
   // Multi-Million SaaS outreach & live systems states (Pillars Extension)
   const [outreachLeads, setOutreachLeads] = useState<any[]>([]);
@@ -166,7 +583,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
       child_safety: string; nearby: string;
   }>({ vibe: '', comfort: '', work: '', culinary: '', child_safety: '', nearby: '' });
 
-  // God-Level Luxury UI & Asset Moderation State (Milestone 3)
+  // Draft property presentation fields
   const [editingLuxuryListing, setEditingLuxuryListing] = useState<Listing | null>(null);
   const [luxuryFormData, setLuxuryFormData] = useState<{
     hero_video_url: string;
@@ -175,13 +592,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
     raw_rules: string;
     curated_guidelines: string[];
     experience_tags: string[];
+    concierge_privileges: string;
   }>({
     hero_video_url: '',
     hero_fallback_url: '',
     dominant_color_hex: '#06b6d4',
     raw_rules: '',
     curated_guidelines: [],
-    experience_tags: []
+    experience_tags: [],
+    concierge_privileges: ''
   });
   const [curatingAiInAdmin, setCuratingAiInAdmin] = useState(false);
   const [savingLuxuryAssets, setSavingLuxuryAssets] = useState(false);
@@ -282,6 +701,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
 
   const fetchData = async () => {
     setLoading(true);
+    setListingsLoaded(false);
     try {
       const headers = { 'Authorization': `Bearer ${token}` };
       
@@ -306,7 +726,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
       
       if (listingsRes.ok) {
         const data = listingsRes.headers.get('content-type')?.includes('json') ? await listingsRes.json() : { error: 'Server returned non-JSON response: ' + (await listingsRes.text()).slice(0, 150) } as any;
-        setListings(data);
+        if (Array.isArray(data)) {
+          setListings(data);
+          setListingsLoaded(true);
+        }
       }
       if (expRes.ok) {
         const data = expRes.headers.get('content-type')?.includes('json') ? await expRes.json() : { error: 'Server returned non-JSON response: ' + (await expRes.text()).slice(0, 150) } as any;
@@ -932,46 +1355,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
     }
   };
 
-  const handleDeleteListing = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (confirm('Are you sure you want to delete this listing?')) {
-      try {
-        const res = await fetch(`/api/listings/${id}`, { method: 'DELETE' });
-        if (res.ok) {
-          setListings(prev => prev.filter(l => l.id !== id));
-          setMetrics(prev => ({ ...prev, totalListings: prev.totalListings - 1 }));
-        } else {
-          alert("Failed to delete listing.");
-        }
-      } catch (err) {
-        console.error("Delete error", err);
-      }
-    }
-  };
-
-  const handleEditVideoUrl = async (listing: Listing, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const newUrl = prompt(`Edit Video URL for '${listing.title}':`, listing.video_url || '');
-    if (newUrl !== null) {
-      try {
-        const res = await fetch(`/api/listings/${listing.id}`, { 
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ videoUrl: newUrl })
-        });
-        if (res.ok) {
-          setListings(prev => prev.map(l => l.id === listing.id ? { ...l, video_url: newUrl } : l));
-        } else {
-          alert("Failed to update video URL.");
-        }
-      } catch (err) {
-        console.error("Update error", err);
-      }
-    }
-  };
-
   const openFaangFeaturesModal = (listing: Listing, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!canEditDraftListing(listing)) {
+      addToast('Review required', 'Accepted property facts require a reviewed successor before editing.', 'error');
+      return;
+    }
     setEditingFeatures(listing);
     setFeaturesFormData({
         vibe: (listing.amenity_clusters?.vibe || []).join(', '),
@@ -985,33 +1374,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
 
   const handleSaveFaangFeatures = async () => {
     if (!editingFeatures) return;
+    if (!canEditDraftListing(editingFeatures)) {
+      addToast('Review required', 'Accepted property facts require a reviewed successor before editing.', 'error');
+      return;
+    }
     try {
         const payload = {
-            title: editingFeatures.title,
-            description: editingFeatures.description,
-            price: editingFeatures.price,
-            type: editingFeatures.type,
-            address: editingFeatures.address,
-            city: editingFeatures.city,
-            imageUrl: editingFeatures.imageUrl,
-            imageUrls: editingFeatures.imageUrls,
-            photos: editingFeatures.photos,
-            videoUrl: editingFeatures.video_url,
-            rentalMode: editingFeatures.rental_mode,
-            rooms: editingFeatures.rooms,
-            maxGuests: editingFeatures.maxGuests,
-            bedrooms: editingFeatures.bedrooms,
-            beds: editingFeatures.beds,
-            bathrooms: editingFeatures.bathrooms,
-            amenities: editingFeatures.amenities,
-            lat: editingFeatures.lat,
-            lng: editingFeatures.lng,
-            dynamicPricing: editingFeatures.dynamicPricing,
-            seo_title: editingFeatures.seo_title,
-            seo_description: editingFeatures.seo_description,
-            seo_keywords: editingFeatures.seo_keywords,
-            seo_image_url: editingFeatures.seo_image_url,
-            nearby: editingFeatures.nearby,
             amenity_clusters: {
                 vibe: featuresFormData.vibe.split(',').map(s => s.trim()).filter(Boolean),
                 comfort: featuresFormData.comfort.split(',').map(s => s.trim()).filter(Boolean),
@@ -1033,14 +1401,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
             } : l));
             setEditingFeatures(null);
         } else {
-            alert("Failed to update FAANG features.");
+            const data = await res.json().catch(() => null);
+            addToast('Draft update failed', data?.error || 'Failed to update feature details.', 'error');
         }
     } catch (e) {
         console.error("Update error", e);
     }
   };
 
-  // God-Level Luxury UI Moderation Presets & Handlers (Milestone 3)
+  // Draft property presentation presets and handlers
   const LUXURY_PALETTE_OPTIONS = [
     { name: 'Aegean Cyan', hex: '#06b6d4', description: 'Aegean Sea & Cobalt Blue' },
     { name: 'Aman Terracotta', hex: '#ea580c', description: 'Desert Sunset & Sunbaked Earth' },
@@ -1050,22 +1419,120 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
     { name: 'Alpine Slate', hex: '#475569', description: 'Minimalist Stone & Mountain Mist' },
   ];
 
-  const PRESET_SENSORY_TAGS = [
-    'Ocean Waves', 'Forest Serenity', 'Heated Infinity Pool', 'Private Chef Available',
-    '1 Gbps Fiber WiFi', 'Panoramic Mountain View', 'Heli-Pad Access', 'Curated Wine Cellar',
-    'Private Spa & Sauna', 'Stargazing Sky Deck', 'Soundproof Media Studio', '24/7 Dedicated Butler'
-  ];
+  const fetchMediaDeskData = async (listingId: number | string) => {
+    const targetId = String(listingId);
+    const seq = ++mediaDeskRequestSeqRef.current;
+
+    if (mediaDeskAbortCtrlRef.current) {
+      mediaDeskAbortCtrlRef.current.abort();
+    }
+    const abortCtrl = new AbortController();
+    mediaDeskAbortCtrlRef.current = abortCtrl;
+
+    setLoadingMediaDesk(true);
+    try {
+      const authToken = localStorage.getItem('token') || token;
+      const res = await fetch(`/api/admin/listings/${targetId}/media-assets`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+        signal: abortCtrl.signal
+      });
+
+      if (mediaDeskRequestSeqRef.current !== seq) return;
+      if (String(reviewingMediaListingRef.current?.id) !== targetId) return;
+
+      if (res.ok) {
+        const data: MediaDeskData = await res.json();
+        if (mediaDeskRequestSeqRef.current !== seq) return;
+        if (String(reviewingMediaListingRef.current?.id) !== targetId) return;
+        setMediaDeskData(data);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        if (mediaDeskRequestSeqRef.current !== seq) return;
+        if (String(reviewingMediaListingRef.current?.id) !== targetId) return;
+        addToast('Error', errData.error || 'Failed to load media assets', 'error');
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      if (mediaDeskRequestSeqRef.current !== seq) return;
+      if (String(reviewingMediaListingRef.current?.id) !== targetId) return;
+
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('[MEDIA DESK FETCH ERR]', msg);
+      addToast('Network Error', 'Failed to fetch media assets.', 'error');
+    } finally {
+      if (mediaDeskRequestSeqRef.current === seq) {
+        setLoadingMediaDesk(false);
+      }
+    }
+  };
+
+  const openMediaReviewDesk = (listing: Listing, e: React.MouseEvent) => {
+    e.stopPropagation();
+    mediaDeskTriggerRef.current = e.currentTarget as HTMLElement;
+    reviewingMediaListingRef.current = listing;
+    setReviewingMediaListing(listing);
+    setMediaDeskData(null); // Clear previous listing data immediately to prevent cross-host leakage
+    setFailedImageIds({});
+    setLoadedImageIds({});
+    setMediaDeskFilter('all');
+    fetchMediaDeskData(listing.id);
+  };
+
+  const handleModerateAsset = async (
+    assetId: number,
+    patch: { moderation_status?: 'pending_review' | 'approved' | 'rejected'; is_sleeping_area?: boolean; room_type_id?: number | null }
+  ) => {
+    if (!reviewingMediaListing) return;
+    const targetListingId = reviewingMediaListing.id;
+    setMutatingAssetId(assetId);
+    try {
+      const authToken = localStorage.getItem('token') || token;
+      const res = await fetch(`/api/admin/media-assets/${assetId}/moderation`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`
+        },
+        body: JSON.stringify(patch)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (reviewingMediaListingRef.current?.id !== targetListingId) return;
+
+      if (res.ok) {
+        addToast('Success', 'Asset moderation updated.', 'success');
+        await fetchMediaDeskData(targetListingId);
+      } else {
+        addToast('Moderation Error', data.error || 'Failed to update asset.', 'error');
+      }
+    } catch (err: unknown) {
+      if (reviewingMediaListingRef.current?.id !== targetListingId) return;
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('[ASSET MODERATION ERR]', msg);
+      addToast('Network Error', 'Failed to update asset moderation.', 'error');
+    } finally {
+      if (reviewingMediaListingRef.current?.id === targetListingId) {
+        setMutatingAssetId(null);
+      }
+    }
+  };
 
   const openLuxuryStudioModal = async (listing: Listing, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!canEditDraftListing(listing)) {
+      addToast('Review required', 'Accepted property facts require a reviewed successor before editing.', 'error');
+      return;
+    }
     setEditingLuxuryListing(listing);
     setLuxuryFormData({
       hero_video_url: listing.hero_video_url || '',
       hero_fallback_url: listing.hero_fallback_url || '',
       dominant_color_hex: listing.dominant_color_hex || '#06b6d4',
       raw_rules: listing.raw_rules || '',
-      curated_guidelines: Array.isArray(listing.curated_guidelines) ? [...listing.curated_guidelines] : [],
-      experience_tags: Array.isArray(listing.experience_tags) ? [...listing.experience_tags] : []
+      curated_guidelines: parseCuratedGuidelines(listing.curated_guidelines),
+      experience_tags: Array.isArray(listing.experience_tags) ? [...listing.experience_tags] : [],
+      concierge_privileges: listing.concierge_privileges || ''
     });
     setNewGuidelineInput('');
     setNewExperienceTagInput('');
@@ -1118,16 +1585,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
 
   const handleSaveLuxuryAssets = async () => {
     if (!editingLuxuryListing) return;
+    if (!canEditDraftListing(editingLuxuryListing)) {
+      addToast('Review required', 'Accepted property facts require a reviewed successor before editing.', 'error');
+      return;
+    }
     setSavingLuxuryAssets(true);
     try {
       const payload = {
-        ...editingLuxuryListing,
         hero_video_url: luxuryFormData.hero_video_url,
         hero_fallback_url: luxuryFormData.hero_fallback_url,
         dominant_color_hex: luxuryFormData.dominant_color_hex,
         raw_rules: luxuryFormData.raw_rules,
         curated_guidelines: luxuryFormData.curated_guidelines,
-        experience_tags: luxuryFormData.experience_tags
+        experience_tags: luxuryFormData.experience_tags,
+        concierge_privileges: luxuryFormData.concierge_privileges
       };
       const res = await fetch(`/api/listings/${editingLuxuryListing.id}`, {
         method: 'PUT',
@@ -1142,159 +1613,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
           dominant_color_hex: luxuryFormData.dominant_color_hex,
           raw_rules: luxuryFormData.raw_rules,
           curated_guidelines: luxuryFormData.curated_guidelines,
-          experience_tags: luxuryFormData.experience_tags
+          experience_tags: luxuryFormData.experience_tags,
+          concierge_privileges: luxuryFormData.concierge_privileges
         } : l));
-        addToast('God-Level Luxury Assets & Guidelines saved successfully!', 'success');
+        addToast('Draft details saved', 'Presentation details saved to this draft property.', 'success');
         setEditingLuxuryListing(null);
       } else {
-        addToast('Failed to update luxury assets on server', 'error');
+        const data = await res.json().catch(() => null);
+        addToast('Draft update failed', data?.error || 'Failed to update presentation details.', 'error');
       }
     } catch (err) {
       console.error('Save luxury assets error:', err);
       addToast('Network error saving luxury assets', 'error');
     } finally {
       setSavingLuxuryAssets(false);
-    }
-  };
-
-  const handleEditCoordinates = async (listing: Listing, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const lat = prompt(`Edit Latitude for '${listing.title}':`, String(listing.lat || ''));
-    if (lat === null) return;
-    const lng = prompt(`Edit Longitude for '${listing.title}':`, String(listing.lng || ''));
-    if (lng === null) return;
-
-    try {
-      const res = await fetch(`/api/listings/${listing.id}`, { 
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ lat: Number(lat), lng: Number(lng) })
-      });
-      if (res.ok) {
-        window.location.reload();
-      } else {
-        alert('Failed to update coordinates');
-      }
-    } catch (e) {
-      console.error(e);
-      alert('Error updating coordinates');
-    }
-  };
-
-  const handleEditPrice = async (listing: Listing, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const newPriceStr = prompt(`Edit Price for '${listing.title}' (Numbers only):`, String(listing.price));
-    const newPrice = Number(newPriceStr);
-    if (newPriceStr !== null && !isNaN(newPrice)) {
-      try {
-        const res = await fetch(`/api/listings/${listing.id}`, { 
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ price: newPrice })
-        });
-        if (res.ok) {
-          setListings(prev => prev.map(l => l.id === listing.id ? { ...l, price: newPrice } : l));
-        } else {
-          alert("Failed to update price.");
-        }
-      } catch (err) {
-        console.error("Update error", err);
-      }
-    }
-  };
-
-  const handleEditCapacity = async (listing: Listing, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const guests = prompt(`Edit Max Guests for '${listing.title}':`, String(listing.maxGuests || 2));
-    const beds = prompt(`Edit Beds for '${listing.title}':`, String(listing.beds || 1));
-    const bedrooms = prompt(`Edit Bedrooms for '${listing.title}':`, String(listing.bedrooms || 1));
-    const bathrooms = prompt(`Edit Bathrooms for '${listing.title}':`, String(listing.bathrooms || 1));
-    
-    if (guests !== null && beds !== null && bedrooms !== null && bathrooms !== null) {
-      try {
-        const res = await fetch(`/api/listings/${listing.id}`, { 
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ maxGuests: Number(guests), beds: Number(beds), bedrooms: Number(bedrooms), bathrooms: Number(bathrooms) })
-        });
-        if (res.ok) {
-          setListings(prev => prev.map(l => l.id === listing.id ? { ...l, maxGuests: Number(guests), beds: Number(beds), bedrooms: Number(bedrooms), bathrooms: Number(bathrooms) } : l));
-        } else {
-          alert("Failed to update capacity.");
-        }
-      } catch (err) {
-        console.error("Update error", err);
-      }
-    }
-  };
-
-  const handleEditType = async (listing: Listing, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const newType = prompt(`Edit Property Type for '${listing.title}'\n(e.g., Apartment, House, Cabin, etc.):`, listing.type);
-    if (newType !== null && newType.trim() !== '') {
-      try {
-        const res = await fetch(`/api/listings/${listing.id}`, { 
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ type: newType.trim() })
-        });
-        if (res.ok) {
-          setListings(prev => prev.map(l => l.id === listing.id ? { ...l, type: newType.trim() } : l));
-        } else {
-          alert("Failed to update property type.");
-        }
-      } catch (err) {
-        console.error("Update error", err);
-      }
-    }
-  };
-
-  const handleEditAmenities = async (listing: Listing, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const currentAmenities = listing.amenities ? listing.amenities.join(', ') : '';
-    const newAmenitiesStr = prompt(`Edit Amenities for '${listing.title}'\n(Comma separated list, e.g., Wifi, Pool, Kitchen):`, currentAmenities);
-    if (newAmenitiesStr !== null) {
-      const newAmenities = newAmenitiesStr.split(',').map(a => a.trim()).filter(a => a);
-      try {
-        const res = await fetch(`/api/listings/${listing.id}`, { 
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ amenities: newAmenities })
-        });
-        if (res.ok) {
-          setListings(prev => prev.map(l => l.id === listing.id ? { ...l, amenities: newAmenities } : l));
-        } else {
-          alert("Failed to update amenities.");
-        }
-      } catch (err) {
-        console.error("Update error", err);
-      }
-    }
-  };
-
-  const handleEditRentalMode = async (listing: Listing, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const currentMode = listing.rental_mode || 'entire_place';
-    const newMode = prompt(`Edit Rental Mode for '${listing.title}'\n(Enter 'entire_place', 'private_rooms', or 'hybrid'):`, currentMode);
-    if (newMode !== null && (newMode === 'entire_place' || newMode === 'private_rooms' || newMode === 'hybrid')) {
-      try {
-        // We reuse the update endpoint since we only have one generic listing update, wait we don't have a rental_mode update yet...
-        // Let's create an endpoint in server.ts if it doesn't exist. Oh I'd need to add it to server.ts.
-        const res = await fetch(`/api/listings/${listing.id}/mode`, { 
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ rentalMode: newMode })
-        });
-        if (res.ok) {
-          setListings(prev => prev.map(l => l.id === listing.id ? { ...l, rental_mode: newMode as any } : l));
-        } else {
-          alert("Failed to update rental mode.");
-        }
-      } catch (err) {
-        console.error("Update error", err);
-      }
-    } else if (newMode !== null) {
-      alert("Invalid rental mode. Must be 'entire_place', 'private_rooms', or 'hybrid'.");
     }
   };
 
@@ -1464,8 +1796,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                   <span className="text-3xl font-bold text-gray-900">{metrics.totalBookings}</span>
                </div>
                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col hover:shadow-md transition-shadow">
-                  <span className="text-gray-500 text-sm font-medium mb-1">Active Properties</span>
-                  <span className="text-3xl font-bold text-gray-900">{metrics.totalListings}</span>
+                  <span className="text-gray-500 text-sm font-medium mb-1">Properties shown in directory</span>
+                  <span className="text-3xl font-bold text-gray-900">{listingsLoaded ? listings.length : '—'}</span>
+                  <span className="text-xs text-gray-500 mt-2">Up to 200 most recent properties</span>
                </div>
                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex flex-col hover:shadow-md transition-shadow">
                   <span className="text-gray-500 text-sm font-medium mb-1">Registered Users</span>
@@ -1578,7 +1911,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                          <th className="px-6 py-4 font-semibold uppercase text-xs tracking-wider">Property</th>
                          <th className="px-6 py-4 font-semibold uppercase text-xs tracking-wider">Location</th>
                          <th className="px-6 py-4 font-semibold uppercase text-xs tracking-wider">Mode</th>
-                         <th className="px-6 py-4 font-semibold uppercase text-xs tracking-wider">Price/Mo</th>
+                         <th className="px-6 py-4 font-semibold uppercase text-xs tracking-wider">Base nightly price</th>
                          <th className="px-6 py-4 font-semibold uppercase text-xs tracking-wider">Status</th>
                          <th className="px-6 py-4 font-semibold uppercase text-xs tracking-wider text-right">Actions</th>
                       </tr>
@@ -1646,17 +1979,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                   <td className="px-6 py-4 font-medium text-gray-900">{formatPrice(listing.price, 'INR')}</td>
                                   <td className="px-6 py-4">
                                        {(() => {
-                                         const pubStatus = listing.publication_status || 'published';
+                                         const pubStatus = listing.publication_status;
                                          const isPub = pubStatus === 'published';
+                                         const isUnlisted = pubStatus === 'unlisted';
+                                         const isDraft = pubStatus === 'draft';
+                                         const canTransition = isPub || isUnlisted || isDraft;
+                                         const buttonTitle = isPub
+                                           ? 'Unlist property. This moves Published to Unlisted, preserving accepted facts.'
+                                           : canTransition
+                                           ? 'Publish property after checking its facts and rights. The server checks the approved room-photo minimum.'
+                                           : 'Publication status must be verified before a transition.';
                                          return (
                                            <button
                                              type="button"
                                              onClick={(e) => handleTogglePublicationStatus(listing, e)}
-                                             title={isPub ? "Click to unpublish/set to draft" : "Click to publish (runs PROPOSED-007 check)"}
+                                             title={buttonTitle}
+                                             disabled={!canTransition}
                                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
                                                isPub
                                                  ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
-                                                 : pubStatus === 'in_review'
+                                                 : isUnlisted
                                                  ? 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200'
                                                  : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200 border border-zinc-200'
                                              }`}
@@ -1665,50 +2007,52 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                                <>
                                                  <CheckCircle2Icon className="w-3.5 h-3.5" /> Published
                                                </>
-                                             ) : (
+                                             ) : isUnlisted ? (
                                                <>
-                                                 <AlertTriangle className="w-3.5 h-3.5" /> {pubStatus === 'in_review' ? 'In Review' : 'Draft'}
+                                                 <AlertTriangle className="w-3.5 h-3.5" /> Unlisted
                                                </>
+                                             ) : isDraft ? (
+                                               <>
+                                                 <AlertTriangle className="w-3.5 h-3.5" /> Draft
+                                               </>
+                                             ) : (
+                                               <><AlertTriangle className="w-3.5 h-3.5" /> {pubStatus || 'Status unavailable'}</>
                                              )}
                                            </button>
                                          );
                                        })()}
                                    </td>
                                   <td className="px-6 py-4 text-right">
-                                      <div className="flex justify-end items-center gap-2">
-                                          <button onClick={(e) => openLuxuryStudioModal(listing, e)} title="God-Level Luxury Studio & Assets Moderation" className="p-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-md transition-colors font-bold shadow-xs border border-amber-200">
-                                             <Crown className="w-4 h-4" />
+                                      <div className="flex flex-col items-end gap-2">
+                                          <button onClick={(e) => openMediaReviewDesk(listing, e)} title="Media Review Desk (Relational Assets & Publication Compliance)" className="p-2 text-sky-600 hover:text-sky-700 hover:bg-sky-50 rounded-md transition-colors font-bold shadow-xs border border-sky-200">
+                                             <Camera className="w-4 h-4" />
                                           </button>
-                                          <button onClick={(e) => handleEditPrice(listing, e)} title="Edit Price" className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-md transition-colors">
-                                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                          </button>
-                                          <button onClick={(e) => handleEditCapacity(listing, e)} title="Edit Capacity" className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors">
-                                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                                          </button>
-                                          <button onClick={(e) => handleEditType(listing, e)} title="Edit Type" className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-md transition-colors">
-                                             <Map className="w-4 h-4" />
-                                          </button>
-                                          <button onClick={(e) => openFaangFeaturesModal(listing, e)} title="Edit FAANG Features" className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors">
-                                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
-                                          </button>
-                                          <button onClick={(e) => handleEditAmenities(listing, e)} title="Edit Amenities" className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-md transition-colors">
-                                             <CheckCircle2Icon className="w-4 h-4" />
-                                          </button>
-                                          <button onClick={(e) => handleEditRentalMode(listing, e)} title="Edit Rental Mode" className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-md transition-colors">
-                                             <HomeIcon className="w-4 h-4" />
-                                          </button>
-                                          <button onClick={(e) => handleEditCoordinates(listing, e)} title="Edit Coordinates" className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-md transition-colors">
-                                             <Compass className="w-4 h-4" />
-                                          </button>
-                                          <button onClick={(e) => handleEditVideoUrl(listing, e)} title="Edit Video URL" className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors">
-                                             <EditIcon className="w-4 h-4" />
-                                          </button>
-                                          <button onClick={(e) => openRoomsEditor(listing, e)} title="Manage Room Types" className="p-2 text-gray-400 hover:text-[#0284C7] hover:bg-[#0284C7]/10 rounded-md transition-colors">
-                                             <Bed className="w-4 h-4" />
-                                          </button>
-                                          <button onClick={(e) => handleDeleteListing(listing.id, e)} title="Delete" className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors">
-                                              <TrashIcon className="w-4 h-4" />
-                                          </button>
+                                          {canEditDraftListing(listing) ? (
+                                            <div role="group" aria-label={`Draft editing tools for ${listing.title}`} className="flex flex-wrap justify-end items-center gap-2 max-w-[28rem]">
+                                              <span className="w-full text-[11px] font-semibold text-zinc-500 text-right">Draft editing tools</span>
+                                              <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); setEditingDraftListing(listing); }}
+                                                title="Edit draft property details"
+                                                className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-bold text-sky-800 hover:bg-sky-100"
+                                              >
+                                                Edit property details
+                                              </button>
+                                              <button onClick={(e) => openLuxuryStudioModal(listing, e)} title="Edit draft presentation fields" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100">
+                                                Presentation details
+                                              </button>
+                                              <button onClick={(e) => openFaangFeaturesModal(listing, e)} title="Edit FAANG Features" className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-800 hover:bg-indigo-100">
+                                                Feature clusters
+                                              </button>
+                                              <button onClick={(e) => openRoomsEditor(listing, e)} title="Manage Room Types" className="rounded-lg border border-sky-200 bg-white px-3 py-2 text-xs font-bold text-sky-800 hover:bg-sky-50">
+                                                Room types
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <span role="note" className="max-w-48 whitespace-normal text-right text-xs font-medium text-amber-700">
+                                              Direct edits are locked. A reviewed successor is required.
+                                            </span>
+                                          )}
                                       </div>
                                   </td>
                               </tr>
@@ -4605,6 +4949,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
             </div>
         </div>
         
+        {editingDraftListing && canEditDraftListing(editingDraftListing) && (
+          <AdminDraftPropertyEditor
+            listing={editingDraftListing}
+            token={token || localStorage.getItem('token') || ''}
+            onClose={() => setEditingDraftListing(null)}
+            onSaved={() => {
+              setEditingDraftListing(null);
+              void fetchData();
+            }}
+          />
+        )}
+
         {/* FAANG Features Edit Modal */}
         {editingFeatures && (
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
@@ -4653,7 +5009,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
             </div>
         )}
 
-        {/* God-Level Luxury Studio & Asset Moderation Modal (Milestone 3) */}
+        {/* Draft property presentation modal */}
         {editingLuxuryListing && (
             <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[110] p-4 overflow-y-auto animate-in fade-in duration-200">
                <div className="bg-slate-900 text-slate-100 rounded-3xl w-full max-w-4xl max-h-[92vh] overflow-y-auto shadow-2xl border border-amber-500/30 flex flex-col">
@@ -4665,13 +5021,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                         </div>
                         <div>
                            <div className="flex items-center gap-2">
-                              <h2 className="text-xl font-black text-white tracking-tight">Luxury Studio & Asset Moderation</h2>
+                              <h2 className="text-xl font-black text-white tracking-tight">Property presentation</h2>
                               <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                                 10.0 Aman Standard
+                                 Draft presentation fields
                               </span>
                            </div>
                            <p className="text-xs text-slate-400 mt-0.5">
-                              Moderating: <span className="text-slate-200 font-semibold">{editingLuxuryListing.title}</span> • {editingLuxuryListing.city}
+                              Editing draft: <span className="text-slate-200 font-semibold">{editingLuxuryListing.title}</span> • {editingLuxuryListing.city}
                            </p>
                         </div>
                      </div>
@@ -4827,39 +5183,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                         <div className="flex items-center justify-between">
                            <div className="flex items-center gap-2">
                               <Tag className="w-5 h-5 text-purple-400" />
-                              <h3 className="text-sm font-black uppercase tracking-wider text-slate-200">2. Sensory Atmosphere Deck (Aman Tags)</h3>
+                              <h3 className="text-sm font-black uppercase tracking-wider text-slate-200">2. Experience tags</h3>
                            </div>
                            <span className="text-xs text-purple-300 font-bold">
                               {luxuryFormData.experience_tags.length} Selected
                            </span>
                         </div>
 
+                        <p className="text-xs text-slate-400">Add only tags supported by verified listing evidence. Existing tags can be removed below.</p>
                         <div className="flex flex-wrap gap-2">
-                           {PRESET_SENSORY_TAGS.map((tag) => {
-                              const isSelected = luxuryFormData.experience_tags.includes(tag);
-                              return (
-                                 <button
-                                    key={tag}
-                                    type="button"
-                                    onClick={() => {
-                                       setLuxuryFormData(prev => ({
-                                          ...prev,
-                                          experience_tags: isSelected
-                                             ? prev.experience_tags.filter(t => t !== tag)
-                                             : [...prev.experience_tags, tag]
-                                       }));
-                                    }}
-                                    className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 ${
-                                       isSelected
-                                          ? 'bg-purple-500/20 text-purple-200 border border-purple-400 shadow-xs'
-                                          : 'bg-slate-950 text-slate-400 border border-slate-800 hover:border-slate-600'
-                                    }`}
-                                 >
-                                    {isSelected ? <Check className="w-3 h-3 text-purple-400" /> : <Plus className="w-3 h-3 text-slate-500" />}
-                                    {tag}
-                                 </button>
-                              );
-                           })}
+                           {luxuryFormData.experience_tags.map((tag) => (
+                              <button
+                                 key={tag}
+                                 type="button"
+                                 onClick={() => setLuxuryFormData(prev => ({ ...prev, experience_tags: prev.experience_tags.filter(value => value !== tag) }))}
+                                 className="rounded-full border border-purple-400 bg-purple-500/20 px-3 py-1.5 text-xs font-bold text-purple-200"
+                                 aria-label={`Remove experience tag ${tag}`}
+                              >
+                                 {tag} ×
+                              </button>
+                           ))}
                         </div>
 
                         {/* Custom Sensory Tag Adder */}
@@ -4877,7 +5220,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                                     setNewExperienceTagInput('');
                                  }
                               }}
-                              placeholder="Add custom experience tag (e.g. Private Vineyard Tour)..."
+                              placeholder="Add verified experience tag"
                               className="flex-1 px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-100 placeholder-slate-500"
                            />
                            <button
@@ -5014,8 +5357,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                            </label>
                            <textarea
                               rows={3}
-                              value={(luxuryFormData as any).concierge_privileges || ''}
-                              onChange={e => setLuxuryFormData(prev => ({ ...prev, concierge_privileges: e.target.value } as any))}
+                              value={luxuryFormData.concierge_privileges}
+                              onChange={e => setLuxuryFormData(prev => ({ ...prev, concierge_privileges: e.target.value }))}
                               placeholder="All guests at this Encho Sanctuary receive direct access to our Walled Garden Host Concierge..."
                               className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500 resize-none font-medium"
                            />
@@ -5089,7 +5432,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                         className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-50 text-slate-950 font-black rounded-xl text-sm transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2"
                      >
                         {savingLuxuryAssets ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-                        <span>{savingLuxuryAssets ? 'Saving Assets...' : 'Save & Moderate Assets'}</span>
+                        <span>{savingLuxuryAssets ? 'Saving Draft...' : 'Save Draft Details'}</span>
                      </button>
                   </div>
                </div>
@@ -5098,21 +5441,29 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
 
         {/* ADR-001: Admin Room Type Manager Modal — supports free-form room names + tier keys */}
         {editingRoomsListing && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[999] flex items-center justify-center p-4 overflow-y-auto">
+          <div role="dialog" aria-modal="true" aria-labelledby="room-type-manager-title" className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[999] flex items-center justify-center p-4 overflow-y-auto">
             <div className="bg-white dark:bg-neutral-900 rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
               {/* Header */}
               <div className="p-6 border-b border-zinc-100 dark:border-neutral-800 flex items-center justify-between flex-shrink-0">
                 <div>
-                  <h2 className="text-xl font-extrabold text-zinc-900 dark:text-white">Room Type Manager</h2>
+                  <h2 id="room-type-manager-title" className="text-xl font-extrabold text-zinc-900 dark:text-white">Room Type Manager</h2>
                   <p className="text-xs text-zinc-500 mt-0.5 font-medium">{editingRoomsListing.title} · {editingRoomsData.length} room type(s)</p>
                 </div>
-                <button onClick={() => setEditingRoomsListing(null)} className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-neutral-800 transition-colors">
+                <button type="button" disabled={isSavingRooms} aria-label="Close Room Type Manager" onClick={() => setEditingRoomsListing(null)} className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-neutral-800 transition-colors disabled:opacity-50">
                   <XIcon className="w-5 h-5 text-zinc-500" />
                 </button>
               </div>
 
+              {/* Inline Error Alert */}
+              {editingRoomsError && (
+                <div role="alert" className="mx-6 mt-4 p-3.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 rounded-xl text-xs font-bold text-red-700 dark:text-red-400 flex items-center justify-between">
+                  <span>{editingRoomsError}</span>
+                  <button type="button" onClick={() => setEditingRoomsError(null)} className="text-red-500 hover:text-red-700 ml-2 font-black">✕</button>
+                </div>
+              )}
+
               {/* Room List */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-3">
+              <fieldset disabled={isSavingRooms || !canEditDraftListing(editingRoomsListing)} className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
                 {editingRoomsData.length === 0 && (
                   <div className="text-center py-12 text-zinc-400">
                     <p className="font-semibold">No room types defined.</p>
@@ -5137,31 +5488,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                       <div className="text-right flex-shrink-0">
                         <p className="font-extrabold text-zinc-900 dark:text-white">₹{(room.price || 0).toLocaleString()}</p>
                         <p className="text-[11px] text-zinc-500">{room.capacity || 2} guests · {room.inventory_count || 1} unit(s)</p>
-                        {(() => {
-                          const roomPhotos = Array.isArray(room.photos) ? room.photos : [];
-                          const approvedRoomPhotos = roomPhotos.filter((p: any) => !p.moderation_status || p.moderation_status === 'approved');
-                          const totalApproved = approvedRoomPhotos.length;
-                          const sleepingCount = approvedRoomPhotos.filter((p: any) => p.is_sleeping_area).length;
-                          const isCompliant = totalApproved >= 3 && sleepingCount >= 1;
-                          return (
-                            <div className="flex items-center justify-end gap-1.5 mt-1">
-                              <span
-                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                                  isCompliant
-                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400'
-                                    : 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400'
-                                }`}
-                                title={
-                                  isCompliant
-                                    ? 'PROPOSED-007 compliant: ≥3 approved photos with ≥1 sleeping area'
-                                    : `PROPOSED-007 check: ${totalApproved}/3 approved photos, ${sleepingCount}/1 sleeping area`
-                                }
-                              >
-                                📷 {totalApproved}/3 {sleepingCount >= 1 ? '🛏️' : '⚠️ No Bed'}
-                              </span>
-                            </div>
-                          );
-                        })()}
+                        <p className="mt-1 text-[10px] font-medium text-zinc-500 whitespace-normal max-w-40">
+                          Approved photo counts are verified in the Media Review Desk.
+                        </p>
                       </div>
                       <ChevronDownIcon className={`w-4 h-4 text-zinc-400 transition-transform flex-shrink-0 ${editingRoomExpandedIdx === idx ? 'rotate-180' : ''}`} />
                     </div>
@@ -5266,19 +5595,62 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                             className="w-full p-2.5 rounded-xl border border-zinc-200 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-sm outline-none focus:ring-2 focus:ring-[#0284C7] resize-none"
                           />
                         </div>
-                        {/* Delete button */}
-                        <div className="flex justify-end">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingRoomsData(prev => prev.filter((_: any, i: number) => i !== idx));
-                              setEditingRoomExpandedIdx(null);
-                            }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors"
-                          >
-                            <TrashIcon className="w-3.5 h-3.5" /> Delete Room Type
-                          </button>
-                        </div>
+                        {/* Delete / Remove control: omission in PUT is not deletion; only positively identified unsaved temporary rows can be removed */}
+                        {(() => {
+                          const isPositivelyUnsavedTemp = typeof room.id === 'string' && /^(admin-room-|room-|new-|temp)/.test(room.id);
+                          if (isPositivelyUnsavedTemp) {
+                            return (
+                              <div className="flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingRoomsData(prev => prev.filter((_: any, i: number) => i !== idx));
+                                    setEditingRoomExpandedIdx(null);
+                                  }}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors"
+                                >
+                                  <TrashIcon className="w-3.5 h-3.5" /> Remove Unsaved Room
+                                </button>
+                              </div>
+                            );
+                          }
+
+                          // If room.id is missing/empty, it is an ambiguous legacy room lacking canonical ID
+                          if (!room.id) {
+                            return (
+                              <div className="flex justify-end items-center gap-2">
+                                <span className="text-[11px] text-amber-600 dark:text-amber-400">
+                                  Legacy room missing ID; canonical reconciliation required before deletion.
+                                </span>
+                                <button
+                                  type="button"
+                                  disabled
+                                  title="Legacy rooms lacking a canonical ID cannot be deleted client-side. Complete canonical room reconciliation first."
+                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-zinc-400 bg-zinc-100 dark:bg-neutral-800 rounded-lg cursor-not-allowed opacity-60"
+                                >
+                                  <TrashIcon className="w-3.5 h-3.5" /> Delete Disabled (Unreconciled)
+                                </button>
+                              </div>
+                            );
+                          }
+
+                          // Persisted room with canonical ID
+                          return (
+                            <div className="flex justify-end items-center gap-2">
+                              <span className="text-[11px] text-zinc-400">
+                                Persisted rooms cannot be deleted by omission; retirement command required.
+                              </span>
+                              <button
+                                type="button"
+                                disabled
+                                title="Persisted room types cannot be deleted by omission in PUT. A dedicated room retirement command is required to retire active room inventory."
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-zinc-400 bg-zinc-100 dark:bg-neutral-800 rounded-lg cursor-not-allowed opacity-60"
+                              >
+                                <TrashIcon className="w-3.5 h-3.5" /> Delete Disabled (Persisted)
+                              </button>
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
@@ -5309,19 +5681,468 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack, onEditListing }
                 >
                   + Add Room Type
                 </button>
+              </fieldset>
+
+              {/* Footer */}
+              <div className="p-4 sm:p-6 border-t border-zinc-100 dark:border-neutral-800 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 flex-shrink-0">
+                <p className="text-xs text-zinc-400">
+                  {canEditDraftListing(editingRoomsListing)
+                    ? 'Edits save to draft authority with positive room pricing. Verified changes require publication review before appearing on the live guest booking page.'
+                    : 'This property has accepted authority. Direct room edits are locked; a reviewed successor is required.'}
+                </p>
+                <div className="flex flex-wrap gap-2 items-center justify-end">
+                  {isSaveLocked && canEditDraftListing(editingRoomsListing) && (
+                    <button
+                      type="button"
+                      onClick={reloadRoomsFromServer}
+                      disabled={isReloadingRooms || isSavingRooms}
+                      className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm rounded-xl transition-colors shadow-sm flex items-center gap-1.5"
+                    >
+                      {isReloadingRooms ? 'Reloading...' : '↻ Reload From Server'}
+                    </button>
+                  )}
+                  <button type="button" disabled={isSavingRooms} onClick={() => setEditingRoomsListing(null)} className="px-5 py-2.5 rounded-xl border border-zinc-200 dark:border-neutral-700 text-sm font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-neutral-800 transition-colors disabled:opacity-50">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={saveRoomsData}
+                    disabled={isSaveLocked || isSavingRooms || !canEditDraftListing(editingRoomsListing)}
+                    className={`px-6 py-2.5 font-bold text-sm rounded-xl transition-colors shadow-sm ${
+                      isSaveLocked || isSavingRooms || !canEditDraftListing(editingRoomsListing)
+                        ? 'bg-zinc-300 dark:bg-neutral-800 text-zinc-500 cursor-not-allowed'
+                        : 'bg-[#0284C7] hover:bg-[#0274B7] text-white'
+                    }`}
+                  >
+                    {!canEditDraftListing(editingRoomsListing) ? 'Reviewed successor required' : isSavingRooms ? 'Saving rooms...' : isSaveLocked ? 'Save Locked (Reload Required)' : 'Save Room Types'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Admin Media Review Desk Modal */}
+        {reviewingMediaListing && (
+          <div
+            ref={mediaDeskDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="media-review-desk-title"
+            tabIndex={-1}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                closeMediaDesk();
+              }
+            }}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[999] flex items-center justify-center p-2 sm:p-4 overflow-y-auto outline-none"
+          >
+            <div className="bg-white dark:bg-neutral-900 rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
+              {/* Header */}
+              <div className="p-4 sm:p-6 border-b border-zinc-100 dark:border-neutral-800 flex items-center justify-between flex-shrink-0 bg-zinc-50/50 dark:bg-neutral-900/50">
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-sky-50 dark:bg-sky-950/40 text-sky-600 flex items-center justify-center border border-sky-100 dark:border-sky-900/50 flex-shrink-0">
+                    <Camera className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h2 id="media-review-desk-title" className="text-base sm:text-xl font-extrabold text-zinc-900 dark:text-white flex items-center gap-1.5 sm:gap-2 truncate">
+                      <span className="truncate">Media Review Desk</span>
+                      <span className="text-xs font-mono font-medium px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-neutral-800 text-zinc-600 dark:text-zinc-400 flex-shrink-0">
+                        #{reviewingMediaListing.id}
+                      </span>
+                    </h2>
+                    <p className="text-xs text-zinc-500 mt-0.5 font-medium truncate">
+                      {mediaDeskData?.listingTitle || reviewingMediaListing.title} · Publication Status:{' '}
+                      <span className="font-semibold uppercase text-zinc-700 dark:text-zinc-300">
+                        {mediaDeskData?.publicationStatus || reviewingMediaListing.publication_status || 'draft'}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => fetchMediaDeskData(reviewingMediaListing.id)}
+                    title="Refresh media and compliance status"
+                    aria-label="Refresh media and compliance status"
+                    className="p-2 rounded-xl border border-zinc-200 dark:border-neutral-700 hover:bg-zinc-100 dark:hover:bg-neutral-800 text-zinc-600 dark:text-zinc-300 transition-colors focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loadingMediaDesk ? 'animate-spin' : ''}`} />
+                  </button>
+                  <button
+                    type="button"
+                    ref={mediaDeskCloseBtnRef}
+                    onClick={closeMediaDesk}
+                    aria-label="Close Media Review Desk"
+                    className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-neutral-800 text-zinc-500 transition-colors focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none"
+                  >
+                    <XIcon className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 overflow-y-auto space-y-6 flex-1">
+                {loadingMediaDesk && !mediaDeskData ? (
+                  <div className="flex flex-col items-center justify-center py-20 text-zinc-400 gap-3">
+                    <Loader2 className="w-8 h-8 animate-spin text-sky-600" />
+                    <p className="text-sm font-medium">Loading relational media assets and validation status...</p>
+                  </div>
+                ) : mediaDeskData ? (
+                  <>
+                    {/* Publication Gate Banner */}
+                    <div
+                      className={`p-4 rounded-2xl border flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                        mediaDeskData.validation?.valid
+                          ? 'bg-emerald-50/70 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/40 text-emerald-900 dark:text-emerald-200'
+                          : 'bg-amber-50/70 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/40 text-amber-900 dark:text-amber-200'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        {mediaDeskData.validation?.valid ? (
+                          <CheckCircle className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+                        ) : (
+                          <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                        )}
+                        <div>
+                          <div className="font-bold text-sm">
+                            {mediaDeskData.validation?.valid
+                              ? 'Room-photo minimum met'
+                              : 'Room-photo minimum incomplete'}
+                          </div>
+                          <div className="text-xs opacity-90 mt-0.5">
+                            Each bookable room type needs at least 3 approved room-specific photos, including a sleeping-area photo. This count does not verify property facts, image rights, or the full publication review.
+                          </div>
+                          {!mediaDeskData.validation?.valid && (mediaDeskData.validation?.errors?.length ?? 0) > 0 && (
+                            <ul className="mt-2 text-xs space-y-1 list-disc list-inside text-rose-700 dark:text-rose-400 font-medium">
+                              {mediaDeskData.validation.errors.map((err, idx) => (
+                                <li key={idx}>{err}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Room Type Compliance Cards */}
+                    <div>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-3">
+                        Room-by-Room Photo Requirements ({mediaDeskData.roomTypes?.length || 0} Room Types)
+                      </h3>
+                      {!mediaDeskData.roomTypes || mediaDeskData.roomTypes.length === 0 ? (
+                        <div className="p-4 rounded-xl bg-zinc-50 dark:bg-neutral-800/50 text-xs text-zinc-500 italic">
+                          No room types defined for this property yet. Room types must be defined before room-specific photos can be approved.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {mediaDeskData.roomTypes.map(rt => {
+                            const summary = mediaDeskData.validation?.roomSummaries?.find(s => Number(s.roomId) === Number(rt.id));
+                            const approved = summary?.approvedPhotosCount || 0;
+                            const sleeping = summary?.sleepingAreaPhotosCount || 0;
+                            const compliant = Boolean(summary?.isCompliant);
+
+                            return (
+                              <div
+                                key={rt.id}
+                                className={`p-4 rounded-2xl border transition-all ${
+                                  compliant
+                                    ? 'bg-white dark:bg-neutral-800/80 border-emerald-200 dark:border-emerald-800/40'
+                                    : 'bg-white dark:bg-neutral-800/80 border-zinc-200 dark:border-neutral-700'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="font-bold text-sm text-zinc-900 dark:text-white truncate">
+                                    {rt.name || rt.type}
+                                  </div>
+                                  <span
+                                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                      compliant
+                                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                                    }`}
+                                  >
+                                    {compliant ? 'Ready' : 'Deficient'}
+                                  </span>
+                                </div>
+                                <div className="space-y-1.5 text-xs text-zinc-600 dark:text-zinc-400">
+                                  <div className="flex justify-between items-center">
+                                    <span>Approved Photos:</span>
+                                    <span className={`font-mono font-bold ${approved >= 3 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                      {approved} / 3 min
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center">
+                                    <span>Sleeping Area:</span>
+                                    <span className={`font-mono font-bold ${sleeping >= 1 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                      {sleeping} / 1 min
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Filter Pills */}
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-2 border-t border-zinc-100 dark:border-neutral-800">
+                      <button
+                        type="button"
+                        onClick={() => setMediaDeskFilter('all')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                          mediaDeskFilter === 'all'
+                            ? 'bg-sky-600 text-white shadow-xs'
+                            : 'bg-zinc-100 dark:bg-neutral-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200'
+                        }`}
+                      >
+                        All Photos ({mediaDeskData.mediaAssets.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMediaDeskFilter('unassigned')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                          mediaDeskFilter === 'unassigned'
+                            ? 'bg-sky-600 text-white shadow-xs'
+                            : 'bg-zinc-100 dark:bg-neutral-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200'
+                        }`}
+                      >
+                        Common / Unassigned ({mediaDeskData.mediaAssets.filter(a => !a.room_type_id).length})
+                      </button>
+                      {mediaDeskData.roomTypes.map(rt => {
+                        const count = mediaDeskData.mediaAssets.filter(a => Number(a.room_type_id) === Number(rt.id)).length;
+                        return (
+                          <button
+                            key={rt.id}
+                            type="button"
+                            onClick={() => setMediaDeskFilter(String(rt.id))}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${
+                              mediaDeskFilter === String(rt.id)
+                                ? 'bg-sky-600 text-white shadow-xs'
+                                : 'bg-zinc-100 dark:bg-neutral-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200'
+                            }`}
+                          >
+                            {rt.name || rt.type} ({count})
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Media Assets Grid */}
+                    <div>
+                      {(() => {
+                        const filteredAssets = mediaDeskData.mediaAssets.filter(asset => {
+                          if (mediaDeskFilter === 'all') return true;
+                          if (mediaDeskFilter === 'unassigned') return !asset.room_type_id;
+                          return String(asset.room_type_id) === String(mediaDeskFilter);
+                        });
+
+                        if (filteredAssets.length === 0) {
+                          return (
+                            <div className="py-12 text-center text-zinc-400 text-xs italic bg-zinc-50 dark:bg-neutral-800/30 rounded-2xl border border-dashed border-zinc-200 dark:border-neutral-700">
+                              No media assets match this filter.
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                            {filteredAssets.map(asset => {
+                              const isMutating = mutatingAssetId === asset.id;
+                              const isApproved = asset.moderation_status === 'approved';
+                              const isRejected = asset.moderation_status === 'rejected';
+                              const previewReady = isSafeAdminImageUrl(asset.url) && loadedImageIds[asset.id] && !failedImageIds[asset.id];
+
+                              return (
+                                <div
+                                  key={asset.id}
+                                  className="bg-white dark:bg-neutral-800 rounded-2xl border border-zinc-200 dark:border-neutral-700 overflow-hidden flex flex-col shadow-xs"
+                                >
+                                  {/* Media Image Thumbnail with safe fallback and host URL safety inspection */}
+                                  <div className="relative aspect-video bg-zinc-100 dark:bg-neutral-900 flex items-center justify-center overflow-hidden">
+                                    {!isSafeAdminImageUrl(asset.url) ? (
+                                      <div
+                                        role="alert"
+                                        aria-label="Blocked unsafe image URL"
+                                        className="w-full h-full flex flex-col items-center justify-center p-3 text-center bg-rose-50/80 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200/50 dark:border-rose-900/50"
+                                      >
+                                        <ShieldAlert className="w-5 h-5 mb-1 text-rose-600 dark:text-rose-400" />
+                                        <span className="text-[11px] font-bold">Blocked Unsafe URL</span>
+                                        <span className="text-[9px] text-zinc-500 dark:text-zinc-400 mt-0.5 line-clamp-1 break-all font-mono" title={asset.url}>
+                                          Insecure or non-standard origin
+                                        </span>
+                                      </div>
+                                    ) : failedImageIds[asset.id] ? (
+                                      <div
+                                        role="alert"
+                                        aria-label="Image failed to load"
+                                        className="w-full h-full flex flex-col items-center justify-center p-3 text-center bg-zinc-100 dark:bg-neutral-900 text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-neutral-700"
+                                      >
+                                        <AlertTriangle className="w-5 h-5 mb-1 text-amber-500" />
+                                        <span className="text-[11px] font-bold">Image Failed to Load</span>
+                                        <span className="text-[9px] text-zinc-400 mt-0.5 font-mono">Asset #{asset.id}</span>
+                                      </div>
+                                    ) : (
+                                      <img
+                                        src={asset.url}
+                                        alt={asset.title || asset.category || `Asset #${asset.id}`}
+                                        referrerPolicy="no-referrer"
+                                        loading="lazy"
+                                        onLoad={() => setLoadedImageIds(prev => ({ ...prev, [asset.id]: true }))}
+                                        onError={() => {
+                                          setFailedImageIds(prev => ({ ...prev, [asset.id]: true }));
+                                          setLoadedImageIds(prev => ({ ...prev, [asset.id]: false }));
+                                        }}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    )}
+                                    {/* Status Badge overlay */}
+                                    <span
+                                      className={`absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-xs ${
+                                        isApproved
+                                          ? 'bg-emerald-500 text-white'
+                                          : isRejected
+                                          ? 'bg-rose-500 text-white'
+                                          : 'bg-amber-500 text-white'
+                                      }`}
+                                    >
+                                      {asset.moderation_status || 'pending_review'}
+                                    </span>
+                                    {/* Sleeping Area overlay badge */}
+                                    {asset.is_sleeping_area && (
+                                      <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-600 text-white shadow-xs flex items-center gap-1">
+                                        <Bed className="w-3 h-3" /> Sleeping Area
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Details */}
+                                  <div className="p-3.5 flex-1 flex flex-col justify-between space-y-3">
+                                    <div>
+                                      <div className="flex items-center justify-between text-[11px] text-zinc-500">
+                                        <span className="font-mono">ID: #{asset.id}</span>
+                                        <span className="uppercase font-semibold tracking-wider bg-zinc-100 dark:bg-neutral-700 px-1.5 py-0.5 rounded text-[9px]">
+                                          {asset.category || 'other'}
+                                        </span>
+                                      </div>
+                                      {!isApproved && !previewReady && (
+                                        <p className="mt-2 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                                          Approval waits until this image loads for review.
+                                        </p>
+                                      )}
+
+                                      {/* Room Binding Selector */}
+                                      <div className="mt-2.5">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block mb-1">
+                                          Room Association:
+                                        </label>
+                                        <select
+                                          value={asset.room_type_id || ''}
+                                          disabled={isMutating}
+                                          aria-label={`Room association for asset #${asset.id}`}
+                                          onChange={(e) => {
+                                            const val = e.target.value;
+                                            handleModerateAsset(asset.id, {
+                                              room_type_id: val ? Number(val) : null
+                                            });
+                                          }}
+                                          className="w-full p-1.5 text-xs rounded-lg border border-zinc-200 dark:border-neutral-700 bg-zinc-50 dark:bg-neutral-900 text-zinc-800 dark:text-zinc-200 outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                                        >
+                                          <option value="">Property-Wide / Common (Unassigned)</option>
+                                          {mediaDeskData.roomTypes.map(rt => (
+                                            <option key={rt.id} value={rt.id}>
+                                              {rt.name || rt.type} (ID: {rt.id})
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </div>
+
+                                      {/* Sleeping Area Toggle */}
+                                      <div className="mt-2 flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-neutral-700/60">
+                                        <span className="text-[11px] text-zinc-600 dark:text-zinc-400 font-medium">
+                                          Sleeping Area Photo
+                                        </span>
+                                        <button
+                                          type="button"
+                                          disabled={isMutating}
+                                          aria-label={asset.is_sleeping_area ? `Remove sleeping area claim for asset #${asset.id}` : `Set asset #${asset.id} as sleeping area photo`}
+                                          onClick={() => {
+                                            handleModerateAsset(asset.id, {
+                                              is_sleeping_area: !asset.is_sleeping_area
+                                            });
+                                          }}
+                                          className={`px-2 py-1 text-[10px] font-bold rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:outline-none ${
+                                            asset.is_sleeping_area
+                                              ? 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200'
+                                              : 'bg-zinc-100 dark:bg-neutral-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200'
+                                          }`}
+                                        >
+                                          {asset.is_sleeping_area ? '✓ Sleeping Area' : 'Set as Sleeping Area'}
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="pt-2 border-t border-zinc-100 dark:border-neutral-700/60 flex items-center gap-1.5">
+                                      {!isApproved && (
+                                        <button
+                                          type="button"
+                                          disabled={isMutating || !previewReady}
+                                          aria-label={`Approve asset #${asset.id}`}
+                                          title={!previewReady ? 'Image must load before approval' : 'Approve reviewed image'}
+                                          onClick={() => handleModerateAsset(asset.id, { moderation_status: 'approved' })}
+                                          className="flex-1 py-1.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:outline-none"
+                                        >
+                                          {isMutating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                          Approve
+                                        </button>
+                                      )}
+                                      {!isRejected && (
+                                        <button
+                                          type="button"
+                                          disabled={isMutating}
+                                          aria-label={`Reject asset #${asset.id}`}
+                                          onClick={() => handleModerateAsset(asset.id, { moderation_status: 'rejected' })}
+                                          className="flex-1 py-1.5 px-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg transition-colors flex items-center justify-center gap-1 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:outline-none"
+                                        >
+                                          {isMutating ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
+                                          Reject
+                                        </button>
+                                      )}
+                                      {(isApproved || isRejected) && (
+                                        <button
+                                          type="button"
+                                          disabled={isMutating}
+                                          aria-label={`Reset moderation for asset #${asset.id}`}
+                                          onClick={() => handleModerateAsset(asset.id, { moderation_status: 'pending_review' })}
+                                          className="py-1.5 px-2 bg-zinc-100 dark:bg-neutral-700 hover:bg-zinc-200 text-zinc-700 dark:text-zinc-300 font-bold text-xs rounded-lg transition-colors disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:outline-none"
+                                        >
+                                          Reset
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-10 text-zinc-400">Failed to load media desk data.</div>
+                )}
               </div>
 
               {/* Footer */}
-              <div className="p-6 border-t border-zinc-100 dark:border-neutral-800 flex justify-between items-center flex-shrink-0">
-                <p className="text-xs text-zinc-400">Changes will update the guest booking page and gallery immediately.</p>
-                <div className="flex gap-3">
-                  <button onClick={() => setEditingRoomsListing(null)} className="px-5 py-2.5 rounded-xl border border-zinc-200 dark:border-neutral-700 text-sm font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-neutral-800 transition-colors">
-                    Cancel
-                  </button>
-                  <button onClick={saveRoomsData} className="px-6 py-2.5 bg-[#0284C7] hover:bg-[#0274B7] text-white font-bold text-sm rounded-xl transition-colors shadow-sm">
-                    Save Room Types
-                  </button>
-                </div>
+              <div className="p-3 sm:p-4 border-t border-zinc-100 dark:border-neutral-800 flex justify-end items-center bg-zinc-50/50 dark:bg-neutral-900/50">
+                <button
+                  type="button"
+                  onClick={closeMediaDesk}
+                  className="px-5 py-2 rounded-xl border border-zinc-200 dark:border-neutral-700 text-xs font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-neutral-800 transition-colors focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none"
+                >
+                  Close Desk
+                </button>
               </div>
             </div>
           </div>
