@@ -162,6 +162,24 @@ describe('W0 real-route catalogue truth discrepancy on disposable PostgreSQL', (
     expect(response.body.code).toBe('VERIFIED_OFFER_PRICE_UNAVAILABLE');
   });
 
+  it('keeps contact text out of catalogue, detail, refresh and SEO metadata', async () => {
+    const contact = '+91 9876543210';
+    await pool.query(`UPDATE listings SET title=$1, description=$2, amenities=$3 WHERE id=$4`,
+      [`Villa Call ${contact}`, `A quiet retreat. Call ${contact}`, JSON.stringify([`Concierge ${contact}`, 'Pool']), listingId]);
+    const catalogue = (await request(app).get('/api/listings?city=Jaipur').expect(200)).body
+      .find((card: {id: string}) => card.id === String(listingId));
+    const detail = (await request(app).get(`/api/v2/stays/${slug}`).expect(200)).body;
+    const refresh = (await request(app).get(`/api/listings/${listingId}`).expect(200)).body;
+    const seo = await request(app).get(`/api/seo?type=stay&slug=${slug}`).expect(200);
+    for (const surface of [catalogue, detail, refresh]) {
+      expect(JSON.stringify(surface)).not.toContain(contact);
+      expect(surface.title).toContain('[REDACTED]');
+    }
+    expect(detail.amenities).toEqual(['Pool']);
+    expect(seo.text).not.toContain(contact);
+    expect(seo.text).toContain('[REDACTED]');
+  });
+
   it('bounds published catalogue pages with a stable cursor and filters occupancy from canonical rooms', async () => {
     const ids = Array.from({length: 26}, (_, index) => 8901 + index);
     try {
@@ -185,6 +203,29 @@ describe('W0 real-route catalogue truth discrepancy on disposable PostgreSQL', (
         VALUES ($1,'Verified suite',9000,'INR',3)`, [ids[0]]);
       const verified = await request(app).get('/api/listings?city=W0%20Paging&maxGuests=3').expect(200);
       expect(verified.body.map((card: {id: string}) => card.id)).toEqual([String(ids[0])]);
+    } finally {
+      await pool.query('DELETE FROM room_types WHERE listing_id = ANY($1::int[])', [ids]);
+      await pool.query('DELETE FROM listings WHERE id = ANY($1::int[])', [ids]);
+    }
+  });
+
+  it('applies room and space filters before slicing the published catalogue', async () => {
+    const ids = Array.from({length: 26}, (_, index) => 8951 + index);
+    try {
+      for (const id of ids) await pool.query(`INSERT INTO listings
+        (id,user_id,title,slug,publication_status,price,currency,type,city,rental_mode,amenities)
+        VALUES ($1,10,$2,$3,'published',9000,'INR','Villa','W0 Filter City','entire_place','[]'::jsonb)`,
+        [id, `Filter stay ${id}`, `filter-stay-${id}`]);
+      await pool.query(`UPDATE listings SET rental_mode='private_rooms' WHERE id=$1`, [ids[0]]);
+      await pool.query(`INSERT INTO room_types (listing_id,name,base_price,currency,max_occupancy,amenities)
+        VALUES ($1,'Verified room',9000,'INR',2,'["Air conditioning","Ensuite"]'::jsonb)`, [ids[0]]);
+      const filtered = await request(app).get(
+        '/api/listings?city=W0%20Filter%20City&rentalMode=private_rooms&mustHaveAc=true&mustHaveAttachedBathroom=true'
+      ).expect(200);
+      expect(filtered.body.map((card: {id: string}) => card.id)).toEqual([String(ids[0])]);
+      expect(filtered.headers['x-next-cursor']).toBeUndefined();
+      await request(app).get('/api/listings?city=W0%20Filter%20City&rentalMode=unknown').expect(400);
+      await request(app).get('/api/listings?city=W0%20Filter%20City&mustHaveAc=false').expect(400);
     } finally {
       await pool.query('DELETE FROM room_types WHERE listing_id = ANY($1::int[])', [ids]);
       await pool.query('DELETE FROM listings WHERE id = ANY($1::int[])', [ids]);

@@ -175,15 +175,9 @@ function App() {
   const [loadMoreError, setLoadMoreError] = useState(false);
   const currentCatalogueUrl = useRef('');
   
-  const visibleListings = React.useMemo(() =>
-      listings.filter(listing => {
-          if (filters.rentalMode && listing.rental_mode !== filters.rentalMode) return false;
-          if (filters.mustHaveAc && !(listing.amenities?.some(a => /air conditioning|aircon|\bac\b/i.test(a)) ||
-            listing.rooms?.some(room => room.amenities?.some(a => /air conditioning|aircon|\bac\b/i.test(a))))) return false;
-          if (filters.mustHaveAttachedBathroom && !(listing.amenities?.some(a => /private bathroom|attached bathroom|ensuite/i.test(a)) ||
-            listing.rooms?.some(room => room.amenities?.some(a => /private bathroom|attached bathroom|ensuite/i.test(a))))) return false;
-          return true;
-      }), [listings, filters]);
+  // The server applies every active filter before keyset pagination. Filtering
+  // only this loaded page can falsely report zero stays when matches are later.
+  const visibleListings = listings;
 
   const displayListings = React.useMemo(() => {
       const arr: Listing[] = [];
@@ -375,6 +369,9 @@ function App() {
         if (activeFilters.beds) url += `&beds=${activeFilters.beds}`;
         if (activeFilters.bathrooms) url += `&bathrooms=${activeFilters.bathrooms}`;
         if (activeFilters.maxGuests) url += `&maxGuests=${activeFilters.maxGuests}`;
+        if (activeFilters.rentalMode) url += `&rentalMode=${encodeURIComponent(activeFilters.rentalMode)}`;
+        if (activeFilters.mustHaveAc) url += '&mustHaveAc=true';
+        if (activeFilters.mustHaveAttachedBathroom) url += '&mustHaveAttachedBathroom=true';
         if (activeFilters.sort) url += `&sort=${activeFilters.sort}`;
         
         if (customBounds) {

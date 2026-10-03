@@ -379,8 +379,8 @@ export function mapPublicPolicies(rawGuidelines: any): PublicStayPolicies {
 export function toPublicStayProjection(rawListing: any): PublicStayProjection {
   const idStr = String(rawListing.id);
   const slug = rawListing.slug || generateListingSlug(rawListing.title, idStr);
-  const city = typeof rawListing.city === 'string' ? rawListing.city : 'India';
-  const locality = typeof rawListing.locality === 'string' ? rawListing.locality : city;
+  const city = typeof rawListing.city === 'string' ? sanitizePublicText(rawListing.city) : 'India';
+  const locality = typeof rawListing.locality === 'string' ? sanitizePublicText(rawListing.locality) : city;
 
   const {lat: approximateLatitude, lng: approximateLongitude} = publicCoordinatePair(rawListing.lat, rawListing.lng);
 
@@ -410,7 +410,10 @@ export function toPublicStayProjection(rawListing: any): PublicStayProjection {
     ? rawListing.amenities
     : (typeof rawListing.amenities === 'string' ? JSON.parse(rawListing.amenities || '[]') : []);
 
-  const amenities: string[] = rawAmenities.filter((a: any) => typeof a === 'string');
+  const amenities: string[] = rawAmenities
+    .filter((a: any) => typeof a === 'string')
+    .map((a: string) => sanitizePublicText(a))
+    .filter((a: string) => a && !a.includes('[REDACTED]'));
 
   const rawNearby = Array.isArray(rawListing.nearby)
     ? rawListing.nearby
@@ -433,7 +436,9 @@ export function toPublicStayProjection(rawListing: any): PublicStayProjection {
   const amenityClusters: Record<string, string[]> = {};
   for (const [clusterKey, val] of Object.entries(rawAmenityClusters)) {
     if (Array.isArray(val)) {
-      amenityClusters[clusterKey] = val.filter((item: any) => typeof item === 'string');
+      amenityClusters[clusterKey] = val.filter((item: any) => typeof item === 'string')
+        .map((item: string) => sanitizePublicText(item))
+        .filter((item: string) => item && !item.includes('[REDACTED]'));
     }
   }
 
@@ -441,15 +446,17 @@ export function toPublicStayProjection(rawListing: any): PublicStayProjection {
     ? rawListing.child_safety_specs
     : (typeof rawListing.child_safety_specs === 'string' ? JSON.parse(rawListing.child_safety_specs || '[]') : []);
 
-  const childSafetySpecs: string[] = rawChildSafety.filter((s: any) => typeof s === 'string');
+  const childSafetySpecs: string[] = rawChildSafety.filter((s: any) => typeof s === 'string')
+    .map((s: string) => sanitizePublicText(s))
+    .filter((s: string) => s && !s.includes('[REDACTED]'));
 
   const policies = mapPublicPolicies(rawListing.curated_guidelines);
 
   return {
     id: idStr,
     slug,
-    title: String(rawListing.title || ''),
-    type: String(rawListing.type || 'Stay'),
+    title: sanitizePublicText(rawListing.title || ''),
+    type: sanitizePublicText(rawListing.type || 'Stay'),
     rental_mode: String(rawListing.rental_mode || 'entire_place'),
     price: null,
     priceState: 'VERIFIED_OFFER_UNAVAILABLE',
@@ -479,11 +486,12 @@ export function toPublicStayProjection(rawListing: any): PublicStayProjection {
     dominant_color_hex: typeof rawListing.dominant_color_hex === 'string' ? rawListing.dominant_color_hex : undefined,
     curated_guidelines: policies.curatedGuidelines,
     policies,
-    experience_tags: experienceTags,
+    experience_tags: experienceTags.map(tag => sanitizePublicText(tag))
+      .filter(tag => tag && !tag.includes('[REDACTED]')),
     concierge_privileges: typeof rawListing.concierge_privileges === 'string' ? sanitizePublicText(rawListing.concierge_privileges) : undefined,
     host_philosophy: typeof rawListing.host_philosophy === 'string' ? sanitizePublicText(rawListing.host_philosophy) : undefined,
     editorial_quote: typeof rawListing.editorial_quote === 'string' ? sanitizePublicText(rawListing.editorial_quote) : undefined,
-    brand: typeof rawListing.brand === 'string' ? rawListing.brand : undefined,
+    brand: typeof rawListing.brand === 'string' ? sanitizePublicText(rawListing.brand) : undefined,
     brand_font: typeof rawListing.brand_font === 'string' ? rawListing.brand_font : undefined,
     brand_color: typeof rawListing.brand_color === 'string' ? rawListing.brand_color : undefined,
     rating: rawListing.rating != null ? Number(rawListing.rating) : undefined,

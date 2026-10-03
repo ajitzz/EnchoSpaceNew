@@ -422,7 +422,7 @@ describe('Phase 3 Milestone 2 — Published Projection, Canonical Routes & Addre
       expect(res.text).toContain('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;');
       expect(res.text).not.toContain('<script>alert("xss")</script>');
       expect(res.text).toContain('&quot;quotes&quot; &amp; &lt;tags&gt;');
-      expect(res.text).toContain('<link rel="canonical" href="https://encho.space/stay/hostile-xss-99" />');
+      expect(res.text).toContain('<link rel="canonical" href="https://www.encho.co.in/stay/hostile-xss-99" />');
     });
   });
 

@@ -3437,23 +3437,20 @@ app.get('/api/seo', async (req, res) => {
         }
         if (result && result.rows.length > 0) {
           const listing = result.rows[0];
-          const rawTitle = `${listing.title || ''} | Encho Stays`;
-          const rawDescription = listing.description?.substring(0, 160) || `Stay at ${listing.title || ''}`;
-
-          let approvedImageUrl = '';
+          let publicStay;
           try {
-            approvedImageUrl = toPublicStayProjection(await resolvePublicStayAuthority(pool, listing)).imageUrl;
+            publicStay = toPublicStayProjection(await resolvePublicStayAuthority(pool, listing));
           } catch (_mErr) {
             console.warn('[PUBLIC SEO STAY AUTHORITY UNAVAILABLE]');
             return res.status(503).set('Cache-Control', 'no-store').send('Stay preview is temporarily unavailable.');
           }
 
           const canonicalSlug = listing.slug || generateListingSlug(listing.title, listing.id);
-          const canonicalUrl = `https://encho.space/stay/${encodeURIComponent(canonicalSlug)}`;
+          const canonicalUrl = `https://www.encho.co.in/stay/${encodeURIComponent(canonicalSlug)}`;
 
-          const title = escapeHtml(rawTitle);
-          const description = escapeHtml(rawDescription);
-          const image = approvedImageUrl ? escapeHtml(approvedImageUrl) : '';
+          const title = escapeHtml(`${publicStay.title} | Encho Stays`);
+          const description = escapeHtml((publicStay.description || `Stay at ${publicStay.title}`).slice(0, 160));
+          const image = publicStay.imageUrl ? escapeHtml(publicStay.imageUrl) : '';
           const safeCanonicalUrl = escapeHtml(canonicalUrl);
 
           const imageTags = image ? `
@@ -14714,6 +14711,31 @@ app.get('/api/listings', async (req: Request, res: Response) => {
             queryParams.push(req.query.type);
             queryStr += ` AND l.type = $${queryParams.length}`;
         }
+        const rentalMode = req.query.rentalMode;
+        if (rentalMode !== undefined) {
+            if (rentalMode !== 'entire_place' && rentalMode !== 'private_rooms')
+              return res.status(400).json({code: 'INVALID_RENTAL_MODE_FILTER'});
+            // Hybrid stays sell both an entire-place and a room presentation.
+            queryParams.push(rentalMode);
+            queryStr += ` AND COALESCE(l.rental_mode, 'entire_place') IN ($${queryParams.length}, 'hybrid')`;
+        }
+        for (const [parameter, values] of [
+          ['mustHaveAc', ['air conditioning', 'aircon', 'ac']],
+          ['mustHaveAttachedBathroom', ['private bathroom', 'attached bathroom', 'ensuite']]
+        ] as const) {
+          const requested = req.query[parameter];
+          if (requested === undefined) continue;
+          if (requested !== 'true') return res.status(400).json({code: 'INVALID_AMENITY_FILTER'});
+          queryParams.push([...values]);
+          const aliases = `$${queryParams.length}::text[]`;
+          queryStr += ` AND (
+            EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(l.amenities::jsonb, '[]'::jsonb)) AS a(value)
+              WHERE lower(trim(a.value)) = ANY(${aliases}))
+            OR EXISTS (SELECT 1 FROM room_types rt,
+              LATERAL jsonb_array_elements_text(COALESCE(rt.amenities, '[]'::jsonb)) AS a(value)
+              WHERE rt.listing_id = l.id AND lower(trim(a.value)) = ANY(${aliases}))
+          )`;
+        }
         if (req.query.amenities) {
             const amenitiesList = (req.query.amenities as string).split(',');
             queryParams.push(JSON.stringify(amenitiesList));
@@ -18891,23 +18913,20 @@ async function startServer() {
                 }
                 if (result && result.rows.length > 0) {
                     const listing = result.rows[0];
-                    const rawTitle = `${listing.title || ''} | Encho Stays`;
-                    const rawDescription = listing.description?.substring(0, 160) || `Stay at ${listing.title || ''}`;
-
-                    let approvedImageUrl = '';
+                    let publicStay;
                     try {
-                        approvedImageUrl = toPublicStayProjection(await resolvePublicStayAuthority(pool, listing)).imageUrl;
+                        publicStay = toPublicStayProjection(await resolvePublicStayAuthority(pool, listing));
                     } catch (_mErr) {
                         console.warn('[DIRECT STAY AUTHORITY UNAVAILABLE]');
                         return res.status(503).set('Cache-Control', 'no-store').send('Stay preview is temporarily unavailable.');
                     }
 
                     const canonicalSlug = listing.slug || generateListingSlug(listing.title, listing.id);
-                    const canonicalUrl = `https://encho.space/stay/${encodeURIComponent(canonicalSlug)}`;
+                    const canonicalUrl = `https://www.encho.co.in/stay/${encodeURIComponent(canonicalSlug)}`;
 
-                    const title = escapeHtml(rawTitle);
-                    const description = escapeHtml(rawDescription);
-                    const image = approvedImageUrl ? escapeHtml(approvedImageUrl) : '';
+                    const title = escapeHtml(`${publicStay.title} | Encho Stays`);
+                    const description = escapeHtml((publicStay.description || `Stay at ${publicStay.title}`).slice(0, 160));
+                    const image = publicStay.imageUrl ? escapeHtml(publicStay.imageUrl) : '';
                     const safeCanonicalUrl = escapeHtml(canonicalUrl);
 
                     const imageTags = image ? `

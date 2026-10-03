@@ -24,7 +24,7 @@ try {
     (11,'w0-other@example.invalid','Other host')`);
   await pool.query(`INSERT INTO listings
     (id,user_id,title,description,slug,publication_status,price,currency,type,city,address,image_url,image_urls,rooms,lat,lng)
-    VALUES (9101,10,'W0 Built Stay','Verified public stay.','w0-built-stay-9101','published',9999,'INR','Villa',
+    VALUES (9101,10,'W0 Built Stay','Verified public stay. Call +91 9876543210','w0-built-stay-9101','published',9999,'INR','Villa',
       'W0 Built City','Private road 19','https://media.encho.test/unapproved.jpg','["https://media.encho.test/unapproved.jpg"]','[]',11.6,76.1),
     (9102,10,'W0 Missing Media','No approved photograph.','w0-missing-media-9102','published',9999,'INR','Villa',
       'W0 Built City','Private road 20','','[]','[]',null,null),
@@ -71,7 +71,8 @@ try {
   const direct=await get('/stay/w0-built-stay-9101',200);
   const directHtml=await direct.text();
   assert.match(directHtml,/W0 Built Stay/);
-  assert.doesNotMatch(directHtml,/unapproved\.jpg|Private road 19|product:price:amount/);
+  assert.doesNotMatch(directHtml,/unapproved\.jpg|Private road 19|9876543210|product:price:amount/);
+  assert.doesNotMatch(await (await get('/api/seo?type=stay&slug=w0-built-stay-9101',200)).text(),/9876543210/);
   const catalogue=await (await get('/api/listings?city=W0%20Built%20City',200)).json();
   assert.deepEqual(catalogue.map(row=>row.id),['9102','9101']);
   assert.equal(catalogue[1].price,null);
@@ -82,7 +83,7 @@ try {
   for(const view of [catalogue[1],detail,refresh]){
     assert.equal(view.price,null);
     assert.equal(view.rooms[0].id,String(room));
-    assert.doesNotMatch(JSON.stringify(view),/unapproved\.jpg|Private road 19/);
+    assert.doesNotMatch(JSON.stringify(view),/unapproved\.jpg|Private road 19|9876543210/);
   }
   assert.equal(detail.photos.find(photo=>photo.room_type_id===String(room))?.url,'/logo.svg');
   assert.equal((await (await get('/api/v2/stays/w0-missing-media-9102',200)).json()).imageUrl,'');
