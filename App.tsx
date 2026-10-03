@@ -7,10 +7,10 @@ import { MeasurementChoices } from './components/marketing/MeasurementChoices';
 import { uiAudio } from './components/audio';
 import Header from './components/Header';
 import FilterBar from './components/FilterBar';
-import ListingCard, { getStayStructure } from './components/ListingCard';
+import ListingCard from './components/ListingCard';
 import FlyToAnimation from './components/FlyToAnimation';
 import { MapIcon, ListIcon } from './components/Icons';
-import { Listing } from './types';
+import { Listing, Room } from './types';
 import { useAuth } from './components/AuthContext';
 import { AuthModal } from './components/AuthModal';
 import { NetworkStatus } from './components/NetworkStatus';
@@ -19,6 +19,7 @@ import { useAppBadge, useNativeNotification } from './components/usePWA';
 import { io } from 'socket.io-client';
 import { motion, AnimatePresence, useScroll, useMotionValueEvent } from 'framer-motion';
 import { fetchWithCache, queueMutation } from './lib/syncService';
+import { readCurrentPublicCataloguePage } from './lib/publicCatalogueClient';
 import {
   cancellationReceiptSchema, experienceBookingReceiptSchema, readReservationSession,
   reservationCommandNotice, sameReservationSession, sendReservationCommand, stayBookingReceiptSchema,
@@ -168,16 +169,38 @@ function App() {
   const { addToast } = useToast();
 
   const [listings, setListings] = useState<Listing[]>([]);
+  const [filters, setFilters] = useState<any>({});
+  const [nextCatalogueCursor, setNextCatalogueCursor] = useState<string | null>(null);
+  const [loadingMoreStays, setLoadingMoreStays] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState(false);
+  const currentCatalogueUrl = useRef('');
   
+  const visibleListings = React.useMemo(() =>
+      listings.filter(listing => {
+          if (filters.rentalMode && listing.rental_mode !== filters.rentalMode) return false;
+          if (filters.mustHaveAc && !(listing.amenities?.some(a => /air conditioning|aircon|\bac\b/i.test(a)) ||
+            listing.rooms?.some(room => room.amenities?.some(a => /air conditioning|aircon|\bac\b/i.test(a))))) return false;
+          if (filters.mustHaveAttachedBathroom && !(listing.amenities?.some(a => /private bathroom|attached bathroom|ensuite/i.test(a)) ||
+            listing.rooms?.some(room => room.amenities?.some(a => /private bathroom|attached bathroom|ensuite/i.test(a))))) return false;
+          return true;
+      }), [listings, filters]);
+
   const displayListings = React.useMemo(() => {
       const arr: Listing[] = [];
-      listings.forEach(listing => {
+      visibleListings.forEach(listing => {
           const mode = listing.rental_mode || 'entire_place';
           if (mode === 'entire_place' || mode === 'hybrid') {
               arr.push(listing);
           }
           if (mode === 'hybrid' || mode === 'private_rooms') {
               (listing.rooms || []).forEach(room => {
+                  // A property hero may belong to another room. Room cards use
+                  // only media linked by canonical room ID, then shared media.
+                  const roomMedia = (listing.photos || []).filter(photo =>
+                      photo.room_type_id != null && String(photo.room_type_id) === String(room.id));
+                  const sharedMedia = (listing.photos || []).filter(photo => photo.room_type_id == null);
+                  const cardMedia = roomMedia.length ? roomMedia : sharedMedia;
+                  const cardUrls = [...new Set(cardMedia.map(photo => photo.url).filter(Boolean))];
                   arr.push({
                       ...listing,
                       id: `${listing.id}_${room.id}`,
@@ -189,8 +212,10 @@ function App() {
                       displayTitle: `${listing.title} - ${room.name}`,
                       price: room.price,
                       displayPrice: room.price,
-                      imageUrl: (room.imageUrls && room.imageUrls.length > 0) ? room.imageUrls[0] : listing.imageUrl,
-                      imageUrls: (room.imageUrls && room.imageUrls.length > 0) ? room.imageUrls : listing.imageUrls,
+                      imageUrl: cardUrls[0] || '',
+                      imageUrls: cardUrls,
+                      imageCount: cardUrls.length,
+                      photos: cardMedia,
                       selectedConfigId: room.id,
                       amenities: room.amenities && room.amenities.length > 0 ? room.amenities : listing.amenities,
                       type: room.name, // Will display as "Master Bedroom" etc.
@@ -199,9 +224,11 @@ function App() {
           }
       });
       return arr;
-  }, [listings]);
+  }, [visibleListings]);
 
   const [loading, setLoading] = useState(false);
+  const [searchError, setSearchError] = useState(false);
+  const searchRequestSequence = useRef(0);
   const [showMap, setShowMap] = useState(false);
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
   const [selectedExperience, setSelectedExperience] = useState<Experience | null>(null);
@@ -253,7 +280,6 @@ function App() {
       hero_image_urls: ['https://images.unsplash.com/photo-1501555088652-021faa106b9b?auto=format&fit=crop&q=80&w=2400']
   });
   const [loadingExperiences, setLoadingExperiences] = useState(true);
-  const [filters, setFilters] = useState<any>({});
 
   const fetchGlobalExperiencesRef = useRef<((retryCount?: number) => Promise<void>) | null>(null);
 
@@ -330,7 +356,12 @@ function App() {
   }, [fetchGlobalExperiences]);
 
   const handleSearch = React.useCallback(async (searchCity: string, activeFilters: any = filters, customBounds?: any) => {
+    const requestSequence = ++searchRequestSequence.current;
     setLoading(true);
+    setNextCatalogueCursor(null);
+    setLoadingMoreStays(false);
+    setLoadMoreError(false);
+    setSearchError(false);
     setCity(searchCity);
     setCurrentView('SEARCH');
     setSelectedListing(null);
@@ -350,64 +381,40 @@ function App() {
             url += `&minLat=${customBounds.minLat}&maxLat=${customBounds.maxLat}&minLng=${customBounds.minLng}&maxLng=${customBounds.maxLng}`;
         }
 
-        let apiListings: Listing[] = await fetchWithCache(url, `listings_${url}`) || [];
-
-        // Apply advanced dynamic filters on client side
-        if (activeFilters.rentalMode) {
-            apiListings = apiListings.filter(l => l.rental_mode === activeFilters.rentalMode);
-        }
-
-        if (activeFilters.minAcousticRating) {
-            apiListings = apiListings.filter(l => {
-                const stayStructure = getStayStructure(l);
-                const privIndex = stayStructure.privacyPercent;
-                let acousticRating = 72;
-                if (privIndex === 100) acousticRating = 100;
-                else if (privIndex === 90) acousticRating = 90;
-                else if (privIndex === 85) acousticRating = 85;
-                else if (privIndex === 70) acousticRating = 70;
-                else if (privIndex === 60) acousticRating = 60;
-                return acousticRating >= activeFilters.minAcousticRating;
-            });
-        }
-
-        if (activeFilters.minCrowdingRating) {
-            apiListings = apiListings.filter(l => {
-                const stayStructure = getStayStructure(l);
-                const privIndex = stayStructure.privacyPercent;
-                let crowdingRating = 65;
-                if (privIndex === 100) crowdingRating = 100;
-                else if (privIndex === 90) crowdingRating = 80;
-                else if (privIndex === 85) crowdingRating = 80;
-                else if (privIndex === 70) crowdingRating = 65;
-                else if (privIndex === 60) crowdingRating = 65;
-                return crowdingRating >= activeFilters.minCrowdingRating;
-            });
-        }
-
-        if (activeFilters.mustHaveAc) {
-            apiListings = apiListings.filter(l => {
-                const hasAc = l.amenities?.some(a => a.toLowerCase().includes('air conditioning') || a.toLowerCase().includes('ac') || a.toLowerCase().includes('aircon')) ||
-                              l.rooms?.some(r => r.hasAc || r.amenities?.some(a => a.toLowerCase().includes('air conditioning') || a.toLowerCase().includes('ac') || a.toLowerCase().includes('aircon')));
-                return !!hasAc;
-            });
-        }
-
-        if (activeFilters.mustHaveAttachedBathroom) {
-            apiListings = apiListings.filter(l => {
-                const hasAttached = l.rooms?.some(r => r.hasAttachedBathroom) || 
-                                    l.amenities?.some(a => a.toLowerCase().includes('bathroom') && (a.toLowerCase().includes('private') || a.toLowerCase().includes('attached') || a.toLowerCase().includes('ensuite')));
-                return !!hasAttached;
-            });
-        }
-
+        currentCatalogueUrl.current = url;
+        const page = await readCurrentPublicCataloguePage(url);
+        const apiListings: Listing[] = page.items;
+        if (requestSequence !== searchRequestSequence.current) return;
+        setNextCatalogueCursor(page.nextCursor);
         setListings(apiListings);
     } catch (e) {
-        console.error("Failed to load listings", e);
+        if (requestSequence !== searchRequestSequence.current) return;
+        console.warn('Public catalogue temporarily unavailable');
+        setListings([]);
+        setSearchError(true);
     } finally {
-        setLoading(false);
+        if (requestSequence === searchRequestSequence.current) setLoading(false);
     }
   }, [filters]);
+
+  const loadMoreStays = React.useCallback(async () => {
+    if (!nextCatalogueCursor || loadingMoreStays) return;
+    const requestSequence = searchRequestSequence.current;
+    setLoadingMoreStays(true);
+    setLoadMoreError(false);
+    try {
+      const url = new URL(currentCatalogueUrl.current, window.location.origin);
+      url.searchParams.set('after', nextCatalogueCursor);
+      const page = await readCurrentPublicCataloguePage(url.pathname + url.search);
+      if (requestSequence !== searchRequestSequence.current) return;
+      setListings(previous => [...previous, ...page.items]);
+      setNextCatalogueCursor(page.nextCursor);
+    } catch {
+      if (requestSequence === searchRequestSequence.current) setLoadMoreError(true);
+    } finally {
+      if (requestSequence === searchRequestSequence.current) setLoadingMoreStays(false);
+    }
+  }, [nextCatalogueCursor, loadingMoreStays]);
   
   const { setBadge, clearBadge } = useAppBadge();
 
@@ -732,7 +739,11 @@ function App() {
         const contentType = res.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
           const stayData = await res.json();
-          setSelectedListing(stayData);
+          // A room card is a view of its parent property. Preserve its chosen
+          // canonical room only if the fresh authoritative detail still has it.
+          const selectedConfigId = listing.selectedConfigId;
+          setSelectedListing(selectedConfigId && stayData.rooms?.some((room: Room) => room.id === selectedConfigId)
+            ? {...stayData, selectedConfigId} : stayData);
           setCurrentView('DETAILS');
           window.scrollTo(0, 0);
           return;
@@ -744,11 +755,10 @@ function App() {
       setLoading(false);
     }
 
-    // Safe fallback from projection card if network fails
-    setSelectedListing(sourceListing);
-    setCurrentView('DETAILS');
-    window.scrollTo(0, 0);
-  }, [listings]);
+    // A search card does not carry authoritative room, media, price or
+    // availability facts. Keep the guest on search when detail cannot be read.
+    addToast('Stay temporarily unavailable', 'We could not verify this stay right now. Please try again.', 'warning');
+  }, [listings, addToast]);
 
   const handleBooking = React.useCallback(async (data: BookingData) => {
       if (!selectedListing) return;
@@ -1558,20 +1568,31 @@ function App() {
 
           <div className="flex gap-8 items-start pb-24 xl:pb-20">
             <div className={`flex-1 min-w-0 transition-opacity duration-300 ${showMap ? 'hidden opacity-0 xl:block xl:opacity-100' : 'block opacity-100'}`}>
-               {!loading && (
+               {!loading && !searchError && (
                    <div className="mb-6 flex items-baseline gap-2">
                       <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">Places to stay in {city}</h1>
-                      <span className="text-gray-500 font-medium text-sm border-l border-gray-300 pl-3 ml-1">{displayListings.length}+ stays</span>
+                      <span className="text-gray-500 font-medium text-sm border-l border-gray-300 pl-3 ml-1">{displayListings.length} shown</span>
                    </div>
                )}
 
-              {loading ? (
+              {searchError && !loading ? (
+                  <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-zinc-900">
+                    <h2 className="text-lg font-bold">Stays are temporarily unavailable</h2>
+                    <p className="mt-2 text-sm">We could not verify the current listings. Please try again.</p>
+                    <button type="button" onClick={() => handleSearch(city, filters)} className="mt-4 rounded-xl bg-zinc-900 px-5 py-3 font-semibold text-white">Try again</button>
+                  </div>
+              ) : loading ? (
                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3 gap-x-6 gap-y-8 md:gap-y-10">
                       {[1, 2, 3, 4, 5, 6].map((n) => (
                           <ListingCardSkeleton key={n} />
                       ))}
                    </div>
+              ) : displayListings.length === 0 ? (
+                  <div role="status" className="rounded-2xl border border-zinc-200 bg-white p-6 text-zinc-700">
+                    {nextCatalogueCursor ? 'No stays on this page match these filters. More results are available.' : 'No published stays match this search. Try another destination or fewer filters.'}
+                  </div>
               ) : (
+                  <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3 gap-x-6 gap-y-8 md:gap-y-10">
                   {displayListings.map((listing, index) => (
                       <ListingCard 
@@ -1585,19 +1606,19 @@ function App() {
                       />
                   ))}
                   </div>
+                  </>
               )}
+              {!loading && !searchError && loadMoreError && <p role="alert" className="mt-6 text-sm text-amber-800">More stays could not be loaded. Your current results are still available.</p>}
+              {!loading && !searchError && nextCatalogueCursor && <button type="button" onClick={loadMoreStays} disabled={loadingMoreStays}
+                className="mt-8 rounded-xl border border-zinc-300 bg-white px-6 py-3 font-semibold text-zinc-900 disabled:opacity-50">
+                {loadingMoreStays ? 'Loading more stays…' : 'Show more stays'}
+              </button>}
               
-               {!loading && (
-                  <div className="mt-12 flex flex-col items-center gap-4">
-                      <h3 className="text-lg font-bold text-gray-900">Continue exploring {city}</h3>
-                      <button className="px-8 py-3.5 bg-black text-white rounded-xl font-bold hover:bg-gray-800 transition-all active:scale-95 shadow-lg">Show more</button>
-                  </div>
-              )}
             </div>
 
             <div className={`xl:block xl:sticky xl:top-[160px] xl:w-[45%] xl:h-[calc(100vh-180px)] xl:rounded-2xl xl:overflow-hidden xl:z-0 xl:shadow-2xl ${showMap ? 'fixed inset-0 z-[150] block w-full h-[100dvh] bg-gray-50' : 'hidden'}`}>
                <MapSidebar 
-                 listings={listings} 
+                 listings={visibleListings}
                  highlightedId={hoveredListingId ? hoveredListingId.split('_')[0] : null} 
                  onBoundsChanged={(bounds) => handleSearch(city, filters, bounds)} 
                  onClose={() => setShowMap(false)}

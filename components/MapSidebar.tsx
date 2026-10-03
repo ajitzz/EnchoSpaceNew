@@ -6,6 +6,7 @@ import { Listing } from '../types';
 import { APIProvider, Map, AdvancedMarker, InfoWindow, useAdvancedMarkerRef, useMap, useMapsLibrary } from '@vis.gl/react-google-maps';
 import { MarkerClusterer } from '@googlemaps/markerclusterer';
 import { useCurrency } from './CurrencyContext';
+import { formatRating } from '../lib/ratingUtils';
 import { 
   MapPin, 
   Search, 
@@ -46,79 +47,34 @@ interface MapSidebarProps {
   currentView?: string;
 }
 
-const getListingCoords = (listing: any, index: number, city: string) => {
-  const norm = (city || '').toLowerCase();
-  const isYogya = norm.includes('yogyakarta') || norm.includes('jogja') || norm.includes('yogy');
-  
-  if (isYogya) {
-    const coords = [
-      { x: 570, y: 380 }, // On Gg. Kepel (our prime property from screenshot!)
-      { x: 450, y: 520 }, // Near Jl. Dipokusuman & Jl. Brigjen Katamso intersection
-      { x: 230, y: 480 }, // On Jl. Dipokusuman left
-      { x: 450, y: 260 }, // On Jl. Brigjen Katamso north
-      { x: 580, y: 640 }, // On Gg. Wiyono
-      { x: 740, y: 720 }, // On Jl. Keparakan
-      { x: 450, y: 780 }, // On Jl. Brigjen Katamso south
-    ];
-    return coords[index % coords.length];
-  }
-  
-  // Other cities: deterministic grid
-  const hash = String(listing.id).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const x = 250 + (hash % 500); // spread across 250 - 750
-  const y = 250 + ((hash * 23) % 500); // spread across 250 - 750
-  return { x, y };
+export const isValidCoordinate = (lat: any, lng: any): boolean => {
+  if (lat == null || lng == null) return false;
+  if (typeof lat === 'boolean' || typeof lng === 'boolean') return false;
+  const nLat = Number(lat);
+  const nLng = Number(lng);
+  if (!Number.isFinite(nLat) || !Number.isFinite(nLng)) return false;
+  if (nLat === 0 && nLng === 0) return false;
+  if (nLat < -90 || nLat > 90 || nLng < -180 || nLng > 180) return false;
+  return true;
 };
 
-const getStreetNames = (city: string) => {
-  const norm = (city || '').toLowerCase();
-  if (norm.includes('yogyakarta') || norm.includes('jogja') || norm.includes('yogy')) {
-    return {
-      mainNS: 'JL. BRIGJEN KATAMSO',
-      sideNS: 'JL. PANEMBAHAN',
-      mainEW: 'JL. DIPOKUSUMAN',
-      topEW: 'JL. IREDA',
-      bottomEW: 'JL. PRAWIROTAMAN',
-      alley1: 'Gg. Garuda',
-      alley2: 'Gg. Kurma',
-      alley3: 'Gg. Kepel',
-      alley4: 'Gg. Kates',
-      alley5: 'Gg. Wiyono',
-      sideNS2: 'Jl. Keparakan'
-    };
-  } else if (norm.includes('bengaluru') || norm.includes('bangalore')) {
-    return {
-      mainNS: 'MG ROAD',
-      sideNS: 'INDIRANAGAR LANE',
-      mainEW: 'KORAMANGALA BLVD',
-      topEW: 'HAL OLD AIRPORT ROAD',
-      bottomEW: 'OUTER RING ROAD',
-      alley1: '100 Feet Rd',
-      alley2: '80 Feet Rd',
-      alley3: 'Lavelle Road',
-      alley4: 'Residency Rd',
-      alley5: 'Richmond Rd',
-      sideNS2: 'Cubbon Park Road'
-    };
-  } else {
-    const upperCity = (city || 'Yogyakarta').toUpperCase();
-    return {
-      mainNS: `${upperCity} BLVD`,
-      sideNS: `${upperCity} AVENUE`,
-      mainEW: `${upperCity} EXPRESSWAY`,
-      topEW: 'HIGH STREET',
-      bottomEW: 'RIVER ROAD',
-      alley1: 'Lover\'s Lane',
-      alley2: 'Market St',
-      alley3: 'Main Alley',
-      alley4: 'Park Rd',
-      alley5: 'Garden St',
-      sideNS2: 'Station Road'
-    };
+const getListingCoords = (listing: any, _index: number, _city: string): { x: number; y: number } | null => {
+  if (!listing) return null;
+  if (!isValidCoordinate(listing.lat, listing.lng)) {
+    return null;
   }
+  const lat = Number(listing.lat);
+  const lng = Number(listing.lng);
+  // Deterministic projection within vector map viewport (1000x1000) for authentic coordinates
+  const latNorm = Math.abs(lat * 1000) % 600;
+  const lngNorm = Math.abs(lng * 1000) % 600;
+  return { x: 200 + latNorm, y: 200 + lngNorm };
 };
 
 const markerPrices = new WeakMap<google.maps.marker.AdvancedMarkerElement, { amount: number; currency: string }>();
+const visiblePrice = (listing: Listing, amount: number | null | undefined, format: (value: number, currency?: string) => string) =>
+  listing.priceState === 'VERIFIED_OFFER_UNAVAILABLE' || amount == null || !Number.isFinite(amount) || amount <= 0
+    ? 'Price after dates' : format(amount, listing.currency);
 
 const MarkerWithInfoWindow = ({ 
   listing, 
@@ -136,7 +92,7 @@ const MarkerWithInfoWindow = ({
   setMarkerRef?: (key: string, marker: google.maps.marker.AdvancedMarkerElement | null) => void,
   isMobile?: boolean,
   onMarkerClick?: (listing: Listing) => void,
-  activePrice?: number
+  activePrice?: number | null
 }) => {
   const [markerRef, marker] = useAdvancedMarkerRef();
   const { formatPrice } = useCurrency();
@@ -144,7 +100,9 @@ const MarkerWithInfoWindow = ({
 
   useEffect(() => {
     if (marker && setMarkerRef) {
-        markerPrices.set(marker, { amount: currentPrice, currency: listing.currency });
+        if (listing.priceState !== 'VERIFIED_OFFER_UNAVAILABLE' && currentPrice != null && Number.isFinite(currentPrice) && currentPrice > 0)
+          markerPrices.set(marker, { amount: currentPrice, currency: listing.currency });
+        else markerPrices.delete(marker);
         setMarkerRef(listing.id, marker);
     }
     return () => {
@@ -152,16 +110,15 @@ const MarkerWithInfoWindow = ({
     };
   }, [marker, listing.id, currentPrice, setMarkerRef]);
 
-  // Generate deterministic lat/lng if not present
+  // Authentic coordinates check: never invent fallback lat/lng or hash pins
   const position = useMemo(() => {
-    const lat = listing.lat, lng = listing.lng;
-    if (lat && lng && Number(lat) !== 0 && Number(lng) !== 0) return { lat: Number(lat), lng: Number(lng) };
-    const hash = String(listing.id).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    // Bangalore center ~ 12.9716, 77.5946
-    const fallBackLat = 12.9716 + ((hash % 100) - 50) * 0.002;
-    const fallBackLng = 77.5946 + (((hash * 13) % 100) - 50) * 0.002;
-    return { lat: fallBackLat, lng: fallBackLng };
-  }, [listing.id, listing.lat, listing.lng]);
+    if (!isValidCoordinate(listing.lat, listing.lng)) {
+      return null;
+    }
+    return { lat: Number(listing.lat), lng: Number(listing.lng) };
+  }, [listing.lat, listing.lng]);
+
+  if (!position) return null;
 
   return (
     <>
@@ -187,7 +144,7 @@ const MarkerWithInfoWindow = ({
             ) : (
                 // Inactive custom white/gray badge with price
                 <div className="bg-white text-gray-900 border border-gray-150 rounded-full px-2.5 py-1 text-[11px] font-black shadow-[0_4px_10px_rgba(0,0,0,0.12)] hover:scale-110 active:scale-95 transition-all">
-                    {formatPrice(currentPrice, listing.currency)}
+                    {visiblePrice(listing, currentPrice, formatPrice)}
                 </div>
             )
         ) : (
@@ -207,7 +164,7 @@ const MarkerWithInfoWindow = ({
               `}
             >
                 <span className={`font-bold whitespace-nowrap ${isActive ? 'text-sm' : 'text-xs'}`}>
-                    {formatPrice(currentPrice, listing.currency)}
+                    {visiblePrice(listing, currentPrice, formatPrice)}
                 </span>
             </div>
         )}
@@ -258,19 +215,21 @@ const MapInner = ({
                 renderer: {
                     render: ({ count, position, markers }: any) => {
                         let sum = 0;
+                        let pricedCount = 0;
                         const currencies = new Set<string>();
                         
                         markers.forEach((marker: any) => {
                             const price = markerPrices.get(marker);
                             if (price) {
                                 sum += price.amount;
+                                pricedCount++;
                                 currencies.add(price.currency);
                             }
                         });
                         
-                        const average = count > 0 ? Math.round(sum / count) : 0;
+                        const average = pricedCount > 0 ? Math.round(sum / pricedCount) : 0;
                         // Never average unlike currencies into one misleading price badge.
-                        const formattedPrice = currencies.size === 1
+                        const formattedPrice = pricedCount === 0 ? 'Price after dates' : currencies.size === 1
                             ? formatPriceRef.current(average, [...currencies][0])
                             : 'Multiple stays';
                         
@@ -328,54 +287,48 @@ const MapInner = ({
         if (!map || !markerLibrary || !listings || listings.length === 0) return;
         uiAudio.playSuccess();
         const bounds = new google.maps.LatLngBounds();
+        let validCoordsCount = 0;
         listings.forEach((listing: Listing) => {
-             let lat = listing.lat, lng = listing.lng;
-             if (!lat || !lng || (Number(lat) === 0 && Number(lng) === 0)) {
-                 const hash = String(listing.id).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-                 lat = 12.9716 + ((hash % 100) - 50) * 0.002;
-                 lng = 77.5946 + (((hash * 13) % 100) - 50) * 0.002;
+             if (isValidCoordinate(listing.lat, listing.lng)) {
+                 bounds.extend(new google.maps.LatLng(Number(listing.lat), Number(listing.lng)));
+                 validCoordsCount++;
              }
-             bounds.extend(new google.maps.LatLng(Number(lat), Number(lng)));
         });
-        map.fitBounds(bounds, 50); // 50px padding
+        if (validCoordsCount > 0) {
+            map.fitBounds(bounds, 50); // 50px padding
+        }
     };
 
     // Center on active marker on mobile with an offset to push pin to the top-middle
     useEffect(() => {
         if (!map || !activeMarkerId || !isMobile) return;
         const activeListing = listings.find((l: any) => l.id === activeMarkerId);
-        if (activeListing) {
-            let lat = activeListing.lat;
-            let lng = activeListing.lng;
-            if (!lat || !lng || (Number(lat) === 0 && Number(lng) === 0)) {
-                const hash = String(activeListing.id).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-                lat = 12.9716 + ((hash % 100) - 50) * 0.002;
-                lng = 77.5946 + (((hash * 13) % 100) - 50) * 0.002;
-            }
-            
-            // Adjust center slightly south (lower latitude) so that the pin is pushed 
+        if (activeListing && isValidCoordinate(activeListing.lat, activeListing.lng)) {
+            const lat = Number(activeListing.lat);
+            const lng = Number(activeListing.lng);
+            // Adjust center slightly south (lower latitude) so that the pin is pushed
             // upward into the top-half of the viewport, away from the bottom carousel card overlay!
-            const targetLat = Number(lat) - 0.0035;
-            map.panTo({ lat: targetLat, lng: Number(lng) });
+            const targetLat = lat - 0.0035;
+            map.panTo({ lat: targetLat, lng });
         }
-    }, [activeMarkerId, map, listings, isMobile]);
+    }, [activeMarkerId, isMobile, listings, map]);
     
-    // Fit bounds on first load if we have listings
+    // Fit bounds on first load if we have listings with authentic coordinates
     const didInitialFit = useRef(false);
     useEffect(() => {
         if (map && listings.length > 0 && !didInitialFit.current) {
              const bounds = new google.maps.LatLngBounds();
+             let validCount = 0;
              listings.forEach((listing: Listing) => {
-                 let lat = listing.lat, lng = listing.lng;
-                 if (!lat || !lng || (Number(lat) === 0 && Number(lng) === 0)) {
-                     const hash = String(listing.id).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-                     lat = 12.9716 + ((hash % 100) - 50) * 0.002;
-                     lng = 77.5946 + (((hash * 13) % 100) - 50) * 0.002;
+                 if (isValidCoordinate(listing.lat, listing.lng)) {
+                     bounds.extend(new google.maps.LatLng(Number(listing.lat), Number(listing.lng)));
+                     validCount++;
                  }
-                 bounds.extend(new google.maps.LatLng(Number(lat), Number(lng)));
-              });
-             map.fitBounds(bounds, 50);
-             didInitialFit.current = true;
+             });
+             if (validCount > 0) {
+                 map.fitBounds(bounds, 50);
+                 didInitialFit.current = true;
+             }
         }
     }, [map, listings]);
     
@@ -442,7 +395,9 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
   onNavigate,
   currentView = 'SEARCH'
 }) => {
-  const [activeListingId, setActiveListingId] = useState<string | null>(null);
+  const [activeListingId, setActiveListingId] = useState<string | null>(
+    () => highlightedId || (listings && listings.length > 0 ? listings[0].id : null)
+  );
   const activeListing = useMemo(() => {
     return listings.find((l: any) => l.id === activeListingId) || null;
   }, [listings, activeListingId]);
@@ -497,8 +452,6 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
   const dragStart = useRef({ x: 0, y: 0 });
   const panStart = useRef({ x: 0, y: 0 });
 
-  const streetNames = useMemo(() => getStreetNames(city), [city]);
-
   // Center vector map on a specific listing coordinate
   const centerOnListing = useCallback((listing: Listing, index: number, targetZoom?: number) => {
     if (!containerRef.current) return;
@@ -507,6 +460,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
     const H = rect.height || 600;
     
     const coords = getListingCoords(listing, index, city);
+    if (!coords) return;
     const activeZoom = targetZoom !== undefined ? targetZoom : zoom;
     
     // Offset center for mobile bottom card overlays (carousel details + bottom tab overlay)
@@ -721,7 +675,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
 
                 <div className="pointer-events-auto bg-white/95 backdrop-blur-md px-5 h-11 rounded-full shadow-lg border border-gray-100 flex items-center justify-center gap-1.5 text-xs font-extrabold text-gray-800">
                   <MapPin className="w-3.5 h-3.5 text-red-500 fill-red-100" />
-                  <span>{city || 'Yogyakarta, id'}</span>
+                  <span>{city || 'Explore stays'}</span>
                 </div>
 
                 <button 
@@ -840,6 +794,12 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                onWheel={handleWheel}
                className={`w-full h-full relative overflow-hidden select-none cursor-grab active:cursor-grabbing bg-[#f4f4f5]`}
             >
+               {/* Illustrative Map Label */}
+               <div className="absolute top-4 left-4 z-20 pointer-events-none bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-full text-[10px] font-bold text-gray-700 shadow-sm border border-gray-200/80 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                  <span>Illustrative map preview • Approximate locations</span>
+               </div>
+
                {/* Vector Map Canvas Stage */}
                <div 
                   className="absolute inset-0 w-[1000px] h-[1000px] origin-top-left"
@@ -856,7 +816,6 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                       
                       {/* Green Central Park */}
                       <rect x="150" y="320" width="130" height="150" rx="20" fill="#f0fdf4" stroke="#dcfce7" strokeWidth="4" />
-                      <text x="215" y="400" fill="#166534" fontFamily="system-ui" fontSize="10" fontWeight="800" textAnchor="middle" opacity="0.75">KRATON GARDENS</text>
 
                       {/* Scenic park details / trees */}
                       <g fill="#86efac" opacity="0.7">
@@ -914,30 +873,12 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                        <path d="M 450,640 L 750,640" strokeWidth="10" />
                        <path d="M 750,520 L 750,1000" strokeWidth="12" />
                      </g>
-
-                     {/* Street Names and Typography */}
-                     <g fill="#71717a" fontFamily="system-ui" fontSize="11" fontWeight="700" letterSpacing="0.05em">
-                       <text x="430" y="150" transform="rotate(-90, 430, 150)" opacity="0.8">{streetNames.mainNS}</text>
-                       <text x="80" y="200" transform="rotate(-90, 80, 200)" opacity="0.7">{streetNames.sideNS}</text>
-                       <text x="250" y="505" opacity="0.8">{streetNames.mainEW}</text>
-                       <text x="180" y="265" opacity="0.7">{streetNames.topEW}</text>
-                       <text x="150" y="785" opacity="0.8">{streetNames.bottomEW}</text>
-                       
-                       {/* Specific Side Alleys */}
-                       <g fontSize="9" fill="#a1a1aa" fontWeight="600">
-                         <text x="560" y="300">{streetNames.alley1}</text>
-                         <text x="470" y="300">{streetNames.alley2}</text>
-                         <text x="580" y="390" transform="rotate(90, 580, 390)" fill="#ef4444" fontWeight="800">{streetNames.alley3}</text>
-                         <text x="470" y="440">{streetNames.alley4}</text>
-                         <text x="470" y="630">{streetNames.alley5}</text>
-                         <text x="735" y="650" transform="rotate(-90, 735, 650)">{streetNames.sideNS2}</text>
-                       </g>
-                     </g>
                   </svg>
 
                   {/* Dynamic interactive property pins overlay */}
                   {filteredListings.map((listing, index) => {
                      const coords = getListingCoords(listing, index, city);
+                     if (!coords) return null;
                      const isActive = activeListingId === listing.id;
                      return (
                         <div 
@@ -969,7 +910,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                            ) : (
                              // Cozy, premium badge with price text
                              <div className="bg-white text-gray-900 border border-gray-150 rounded-full px-2.5 py-1.5 text-[11px] font-black shadow-md hover:scale-110 active:scale-95 transition-all select-none whitespace-nowrap">
-                               {formatPrice(getActivePrice(listing), listing.currency)}
+                               {visiblePrice(listing, getActivePrice(listing), formatPrice)}
                              </div>
                            )}
                         </div>
@@ -1003,24 +944,6 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                   </button>
                </div>
 
-               {/* Fixed Compass Rose inside Vector Map container */}
-               <div className="absolute bottom-6 left-6 z-30 pointer-events-none flex flex-col items-start gap-2">
-                  <div className="w-12 h-12 rounded-full bg-white/90 backdrop-blur-md shadow-md border border-gray-100 flex items-center justify-center pointer-events-auto">
-                     <Compass className="w-6 h-6 text-gray-700 animate-spin-slow" />
-                  </div>
-                  
-                  {/* Map Scale Legend Bar */}
-                  <div className="bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-gray-150 shadow-sm flex flex-col gap-0.5 pointer-events-auto">
-                     <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none">Scale</div>
-                     <div className="flex items-center gap-1.5 mt-0.5">
-                        <div className="w-12 h-1 bg-gray-900 relative">
-                           <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-gray-900 -translate-y-1 h-3"></div>
-                           <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-gray-900 -translate-y-1 h-3"></div>
-                        </div>
-                        <span className="text-[9px] font-black text-gray-800 whitespace-nowrap">{zoom > 2 ? '150 m' : zoom > 1.2 ? '300 m' : zoom > 0.8 ? '500 m' : '1.2 km'}</span>
-                     </div>
-                  </div>
-               </div>
             </div>
           ) : (
             /* GOOGLE MAPS CANVAS fallback */
@@ -1116,12 +1039,14 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
 
                   {/* Price range inputs inside the bar */}
                   <div className="flex items-center gap-1.5 px-3 border-l border-gray-100">
-                     <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Price</span>
+                     <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest" title="Price filtering requires verified public offers">Price pending</span>
                      <div className="flex items-center gap-1 bg-gray-50 rounded-lg px-2 py-1 border border-gray-100">
                         <span className="text-[10px] font-bold text-gray-400">Min</span>
                         <input 
                            type="number"
-                           placeholder="Any"
+                           disabled
+                           aria-label="Minimum price unavailable until offers are verified"
+                           placeholder="—"
                            value={localMinPrice}
                            onChange={(e) => setLocalMinPrice(e.target.value)}
                            className="w-12 bg-transparent text-[11px] font-black text-gray-800 focus:ring-0 outline-none p-0 border-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
@@ -1131,7 +1056,9 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                         <span className="text-[10px] font-bold text-gray-400">Max</span>
                         <input 
                            type="number"
-                           placeholder="Any"
+                           disabled
+                           aria-label="Maximum price unavailable until offers are verified"
+                           placeholder="—"
                            value={localMaxPrice}
                            onChange={(e) => setLocalMaxPrice(e.target.value)}
                            className="w-12 bg-transparent text-[11px] font-black text-gray-800 focus:ring-0 outline-none p-0 border-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
@@ -1167,12 +1094,18 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                   </button>
 
                   {/* Rating Badge */}
-                  <div className="absolute bottom-3 left-4 flex items-center gap-1.5 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-black text-gray-800 tracking-tight shadow-md">
-                     <Star className="w-3.5 h-3.5 text-orange-400 fill-orange-400" />
-                     <span>{activeListing.rating || 4.8}</span>
-                     <span className="text-gray-300">•</span>
-                     <span>{activeListing.reviewCount || 12} reviews</span>
-                  </div>
+                  {Number(activeListing.rating) > 0 && Number(activeListing.reviewCount) > 0 ? (
+                     <div className="absolute bottom-3 left-4 flex items-center gap-1.5 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-black text-gray-800 tracking-tight shadow-md">
+                        <Star className="w-3.5 h-3.5 text-orange-400 fill-orange-400" />
+                        <span>{formatRating(activeListing.rating)}</span>
+                        <span className="text-gray-300">•</span>
+                        <span>{activeListing.reviewCount} {activeListing.reviewCount === 1 ? 'review' : 'reviews'}</span>
+                     </div>
+                  ) : (
+                     <div className="absolute bottom-3 left-4 flex items-center gap-1.5 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-black text-gray-800 tracking-tight shadow-md">
+                        <span>New on Encho</span>
+                     </div>
+                  )}
 
                   {/* Type Pill */}
                   <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider text-gray-700 shadow-sm border border-gray-100">
@@ -1184,7 +1117,11 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                <div className="p-4 flex flex-col gap-3">
                   <div>
                      <h4 className="font-extrabold text-sm text-gray-900 leading-snug line-clamp-1">{activeListing.title}</h4>
-                     <p className="text-[11px] font-medium text-gray-500 mt-0.5 line-clamp-1">{activeListing.address || 'Central Area'}</p>
+                     {activeListing.address ? (
+                        <p className="text-[11px] font-medium text-gray-500 mt-0.5 line-clamp-1">{activeListing.address}</p>
+                     ) : activeListing.city ? (
+                        <p className="text-[11px] font-medium text-gray-500 mt-0.5 line-clamp-1">{activeListing.city}</p>
+                     ) : null}
                   </div>
 
                   {/* ADVANCED Accommodation Choice Selector */}
@@ -1222,7 +1159,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                      <div className="flex flex-col">
                         <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Price / stay</span>
                         <div className="flex items-baseline gap-1 mt-0.5">
-                           <span className="text-base font-black text-gray-900">{formatPrice(getActivePrice(activeListing), activeListing.currency)}</span>
+                           <span className="text-base font-black text-gray-900">{visiblePrice(activeListing, getActivePrice(activeListing), formatPrice)}</span>
                            <span className="text-[10px] font-bold text-gray-500">/ night</span>
                         </div>
                      </div>
@@ -1292,12 +1229,18 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                          {/* Card Content */}
                          <div className="flex-1 p-3 flex flex-col justify-between">
                              <div>
-                                 <div className="flex items-center gap-1 text-[10px] text-gray-400 font-bold mb-0.5">
-                                     <Star className="w-3 h-3 text-orange-400 fill-orange-400" />
-                                     <span>{listing.rating}</span>
-                                     <span className="text-gray-300">•</span>
-                                     <span>{listing.reviewCount} reviews</span>
-                                 </div>
+                                 {Number(listing.rating) > 0 && Number(listing.reviewCount) > 0 ? (
+                                    <div className="flex items-center gap-1 text-[10px] text-gray-400 font-bold mb-0.5">
+                                       <Star className="w-3 h-3 text-orange-400 fill-orange-400" />
+                                       <span>{formatRating(listing.rating)}</span>
+                                       <span className="text-gray-300">•</span>
+                                       <span>{listing.reviewCount} {listing.reviewCount === 1 ? 'review' : 'reviews'}</span>
+                                    </div>
+                                 ) : (
+                                    <div className="text-[10px] text-gray-400 font-bold mb-0.5">
+                                       <span>New on Encho</span>
+                                    </div>
+                                 )}
                                  <h4 className="font-extrabold text-xs text-gray-900 leading-tight line-clamp-2">{listing.title}</h4>
                                  
                                  {/* Mobile quick room selector chips */}
@@ -1329,7 +1272,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                              
                              <div className="flex items-baseline justify-between mt-0.5">
                                  <div>
-                                     <span className="text-sm font-black text-gray-900">{formatPrice(getActivePrice(listing), listing.currency)}</span>
+                                     <span className="text-sm font-black text-gray-900">{visiblePrice(listing, getActivePrice(listing), formatPrice)}</span>
                                      <span className="text-[9px] text-gray-400 font-bold"> / night</span>
                                  </div>
                              </div>
@@ -1378,7 +1321,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                     <div className="flex-1 overflow-y-auto p-6 space-y-6">
                         {/* Price Section */}
                         <div>
-                            <h4 className="font-extrabold text-xs text-gray-900 mb-3 uppercase tracking-wider">Price Range</h4>
+                            <h4 className="font-extrabold text-xs text-gray-900 mb-3 uppercase tracking-wider">Price filters available after offers are verified</h4>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-[9px] font-bold text-gray-400 uppercase mb-1.5">Min Price</label>
@@ -1386,6 +1329,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">₹</span>
                                         <input 
                                             type="number"
+                                            disabled
                                             value={localMinPrice}
                                             onChange={(e) => setLocalMinPrice(e.target.value)}
                                             placeholder="0"
@@ -1399,6 +1343,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">₹</span>
                                         <input 
                                             type="number"
+                                            disabled
                                             value={localMaxPrice}
                                             onChange={(e) => setLocalMaxPrice(e.target.value)}
                                             placeholder="Any"

@@ -13,7 +13,7 @@ interface SEOProps {
 export const SEO: React.FC<SEOProps> = ({
   title = 'Encho Space - Premium Stays & Experiences',
   description = 'Discover extraordinary homes, villas, and curated experiences worldwide. Book your next unforgettable journey with Encho Space.',
-  image = 'https://images.unsplash.com/photo-1488085061387-422e29b40080?auto=format&fit=crop&w=1200&q=80',
+  image = '',
   url = typeof window !== 'undefined' ? window.location.href : '',
   type = 'website',
   keywords = 'travel, stays, experiences, villas, vacation rentals, bookings',
@@ -33,14 +33,14 @@ export const SEO: React.FC<SEOProps> = ({
       <meta property="og:url" content={url} />
       <meta property="og:title" content={fullTitle} />
       <meta property="og:description" content={description} />
-      <meta property="og:image" content={image} />
+      {image && <meta property="og:image" content={image} />}
 
       {/* Twitter */}
       <meta property="twitter:card" content="summary_large_image" />
       <meta property="twitter:url" content={url} />
       <meta property="twitter:title" content={fullTitle} />
       <meta property="twitter:description" content={description} />
-      <meta property="twitter:image" content={image} />
+      {image && <meta property="twitter:image" content={image} />}
     </Helmet>
   );
 };

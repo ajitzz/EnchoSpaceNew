@@ -15,8 +15,6 @@ interface FilterState {
     maxGuests?: number;
     sort?: string;
     rentalMode?: string;
-    minAcousticRating?: number;
-    minCrowdingRating?: number;
     mustHaveAc?: boolean;
     mustHaveAttachedBathroom?: boolean;
 }
@@ -85,8 +83,6 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
   const [localBathrooms, setLocalBathrooms] = useState(currentFilters.bathrooms || 0);
   const [localSort, setLocalSort] = useState(currentFilters.sort || '');
   const [localRentalMode, setLocalRentalMode] = useState(currentFilters.rentalMode || '');
-  const [localMinAcousticRating, setLocalMinAcousticRating] = useState(currentFilters.minAcousticRating || 0);
-  const [localMinCrowdingRating, setLocalMinCrowdingRating] = useState(currentFilters.minCrowdingRating || 0);
   const [localMustHaveAc, setLocalMustHaveAc] = useState(currentFilters.mustHaveAc || false);
   const [localMustHaveAttachedBathroom, setLocalMustHaveAttachedBathroom] = useState(currentFilters.mustHaveAttachedBathroom || false);
 
@@ -100,8 +96,6 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
     setLocalBathrooms(currentFilters.bathrooms || 0);
     setLocalSort(currentFilters.sort || '');
     setLocalRentalMode(currentFilters.rentalMode || '');
-    setLocalMinAcousticRating(currentFilters.minAcousticRating || 0);
-    setLocalMinCrowdingRating(currentFilters.minCrowdingRating || 0);
     setLocalMustHaveAc(currentFilters.mustHaveAc || false);
     setLocalMustHaveAttachedBathroom(currentFilters.mustHaveAttachedBathroom || false);
     setShowMoreFilters(true);
@@ -119,17 +113,15 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
   const applyAdvancedFilters = () => {
     onFilterChange({
         ...currentFilters,
-        minPrice: localMin,
-        maxPrice: localMax,
+        minPrice: undefined,
+        maxPrice: undefined,
         type: localType || undefined,
         amenities: localAmenities.length > 0 ? localAmenities : undefined,
-        bedrooms: localBedrooms > 0 ? localBedrooms : undefined,
-        beds: localBeds > 0 ? localBeds : undefined,
-        bathrooms: localBathrooms > 0 ? localBathrooms : undefined,
+        bedrooms: undefined,
+        beds: undefined,
+        bathrooms: undefined,
         sort: localSort || undefined,
         rentalMode: localRentalMode || undefined,
-        minAcousticRating: localMinAcousticRating > 0 ? localMinAcousticRating : undefined,
-        minCrowdingRating: localMinCrowdingRating > 0 ? localMinCrowdingRating : undefined,
         mustHaveAc: localMustHaveAc || undefined,
         mustHaveAttachedBathroom: localMustHaveAttachedBathroom || undefined,
     });
@@ -146,8 +138,6 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
     setLocalBathrooms(0);
     setLocalSort('');
     setLocalRentalMode('');
-    setLocalMinAcousticRating(0);
-    setLocalMinCrowdingRating(0);
     setLocalMustHaveAc(false);
     setLocalMustHaveAttachedBathroom(false);
     onFilterChange({
@@ -160,8 +150,6 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
         bathrooms: undefined,
         sort: undefined,
         rentalMode: undefined,
-        minAcousticRating: undefined,
-        minCrowdingRating: undefined,
         mustHaveAc: undefined,
         mustHaveAttachedBathroom: undefined,
     });
@@ -171,21 +159,15 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
     onFilterChange({
         ...currentFilters,
         rentalMode: localRentalMode || undefined,
-        minAcousticRating: localMinAcousticRating > 0 ? localMinAcousticRating : undefined,
-        minCrowdingRating: localMinCrowdingRating > 0 ? localMinCrowdingRating : undefined,
     });
     setActivePopover(null);
   };
 
   const clearPrivacy = () => {
     setLocalRentalMode('');
-    setLocalMinAcousticRating(0);
-    setLocalMinCrowdingRating(0);
     onFilterChange({
         ...currentFilters,
         rentalMode: undefined,
-        minAcousticRating: undefined,
-        minCrowdingRating: undefined,
     });
     setActivePopover(null);
   };
@@ -230,10 +212,11 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
   const propertyTypes = ['Resort', 'Apartment', 'House', 'Barn', 'Bed & breakfast', 'Boat', 'Cabin', 'Campervan', 'Castle'];
   const allAmenities = ['Wifi', 'Kitchen', 'Washing machine', 'Air conditioning', 'Pool', 'Hot tub', 'Fire pit', 'BBQ grill', 'Free parking', 'First aid kit', 'TV', 'Gym'];
   const sortOptions = [
-    { label: 'Recommended', value: '' },
-    { label: 'Price: Low to High', value: 'price_asc' },
-    { label: 'Price: High to Low', value: 'price_desc' }
+    { label: 'Recommended', value: '' }
   ];
+  // The public API has no accepted offer-price filter yet. A hard feature gate
+  // prevents this UI from submitting a legacy listing-price query.
+  const acceptedOfferPriceFilteringEnabled = false;
 
   const renderPriceHistogram = (minVal: string, maxVal: string) => {
     const minP = parseInt(minVal) || 0;
@@ -270,7 +253,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
             }} />
             <div className="h-6 w-px bg-gray-200 mx-1 flex-shrink-0 hidden md:block"></div>
             
-            <div className="relative group/popover" ref={activePopover === 'price' ? popoverRef : null}>
+            {acceptedOfferPriceFilteringEnabled ? <div className="relative group/popover" ref={activePopover === 'price' ? popoverRef : null}>
                 <FilterChip 
                     label={currentFilters.minPrice || currentFilters.maxPrice ? `Price: ₹${currentFilters.minPrice || '0'} - ₹${currentFilters.maxPrice || 'Any'}` : 'Price'} 
                     hasDropdown 
@@ -318,7 +301,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                         </div>
                     </div>
                 )}
-            </div>
+            </div> : <span className="px-3 py-2 text-xs text-gray-500" title="Price filters require verified public offers">Price filters available after offers are verified</span>}
 
             <div className="relative" ref={activePopover === 'type' ? popoverRef : null}>
                 <FilterChip 
@@ -382,12 +365,12 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
             <div className="relative" ref={activePopover === 'privacy' ? popoverRef : null}>
                 <FilterChip 
                     label={
-                        currentFilters.rentalMode || currentFilters.minAcousticRating || currentFilters.minCrowdingRating
-                        ? 'Privacy Active'
-                        : 'Privacy & Seclusion'
+                        currentFilters.rentalMode
+                        ? 'Space Mode Active'
+                        : 'Space Mode'
                     } 
                     hasDropdown 
-                    active={!!currentFilters.rentalMode || !!currentFilters.minAcousticRating || !!currentFilters.minCrowdingRating}
+                    active={!!currentFilters.rentalMode}
                     onClick={() => handleChipClick('privacy')}
                 />
                 
@@ -395,9 +378,9 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                     <div className="absolute top-[calc(100%+0.5rem)] left-0 bg-white rounded-[2rem] shadow-[0_12px_48px_rgba(0,0,0,0.12)] border border-gray-100 p-6 md:p-8 w-[90vw] max-w-[360px] z-50 animate-scale-in font-sans">
                         <h4 className="font-extrabold text-gray-900 mb-1 text-lg flex items-center gap-2">
                             <Shield className="w-5 h-5 text-amber-500" />
-                            Privacy & Seclusion
+                            Space Configuration
                         </h4>
-                        <p className="text-xs text-gray-500 mb-5 leading-relaxed">Select acoustic levels, crowding limits, and space layout preferences.</p>
+                        <p className="text-xs text-gray-500 mb-5 leading-relaxed">Filter between entire place bookings and independent private room stays.</p>
                         
                         {/* Rental Mode Selection */}
                         <div className="mb-5">
@@ -415,64 +398,6 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                                 >
                                     Private Room
                                 </button>
-                            </div>
-                        </div>
-
-                        {/* Acoustic Seclusion Rating */}
-                        <div className="mb-5">
-                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1">
-                                <Volume2 className="w-3.5 h-3.5 text-emerald-500" />
-                                Decibel Shielding
-                            </label>
-                            <div className="flex flex-col gap-1.5">
-                                {[
-                                    { value: 100, label: "Whisper-Quiet (100%)", desc: "No shared walls" },
-                                    { value: 85, label: "High Isolation (85%+)", desc: "Sound cavity insulation" },
-                                    { value: 70, label: "Comfort (70%+)", desc: "Standard residential" }
-                                ].map((item) => (
-                                    <button 
-                                        key={item.value}
-                                        onClick={() => setLocalMinAcousticRating(localMinAcousticRating === item.value ? 0 : item.value)}
-                                        className={`flex items-center justify-between p-2.5 rounded-xl border text-left transition-all ${localMinAcousticRating === item.value ? 'bg-emerald-50/50 border-emerald-500 text-emerald-950 shadow-sm' : 'bg-white border-gray-100 text-gray-600 hover:bg-gray-50'}`}
-                                    >
-                                        <div>
-                                            <p className="text-xs font-bold">{item.label}</p>
-                                            <p className="text-[10px] text-gray-400 font-medium">{item.desc}</p>
-                                        </div>
-                                        {localMinAcousticRating === item.value && (
-                                            <Check className="w-4 h-4 text-emerald-500" />
-                                        )}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Social Crowding Dilution */}
-                        <div className="mb-6">
-                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1">
-                                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                                Social Density Dilution
-                            </label>
-                            <div className="flex flex-col gap-1.5">
-                                {[
-                                    { value: 100, label: "Peak Seclusion (100%)", desc: "Zero guest overlap" },
-                                    { value: 80, label: "Diluted Luxury (80%+)", desc: "Generous visual buffer" },
-                                    { value: 65, label: "Co-living (65%+)", desc: "Premium verified community" }
-                                ].map((item) => (
-                                    <button 
-                                        key={item.value}
-                                        onClick={() => setLocalMinCrowdingRating(localMinCrowdingRating === item.value ? 0 : item.value)}
-                                        className={`flex items-center justify-between p-2.5 rounded-xl border text-left transition-all ${localMinCrowdingRating === item.value ? 'bg-amber-50/50 border-amber-500 text-amber-950 shadow-sm' : 'bg-white border-gray-100 text-gray-600 hover:bg-gray-50'}`}
-                                    >
-                                        <div>
-                                            <p className="text-xs font-bold">{item.label}</p>
-                                            <p className="text-[10px] text-gray-400 font-medium">{item.desc}</p>
-                                        </div>
-                                        {localMinCrowdingRating === item.value && (
-                                            <Check className="w-4 h-4 text-amber-500" />
-                                        )}
-                                    </button>
-                                ))}
                             </div>
                         </div>
 
@@ -517,12 +442,6 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                 <span className="hidden md:block">Filters</span>
              </button>
              
-             <div className="hidden lg:flex items-center gap-3 text-sm font-medium text-gray-600 px-3 py-2 rounded-lg border border-gray-200 cursor-pointer hover:border-gray-900 hover:text-gray-900 transition-colors group">
-                <span className="group-hover:font-semibold transition-all">Total price before taxes</span>
-                <div className="w-9 h-5 bg-gray-200 rounded-full relative transition-colors group-hover:bg-gray-300">
-                    <div className="w-3.5 h-3.5 bg-white rounded-full absolute top-0.5 left-0.5 shadow-sm transform transition-transform group-hover:translate-x-4"></div>
-                </div>
-            </div>
         </div>
       </div>
       </div>
@@ -562,8 +481,8 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                     )}
                     {isMobileView() && <div className="w-full h-px bg-gray-100"></div>}
 
-                    {/* Price Range */}
-                    <section>
+                    {/* Re-enable only when accepted public offer prices exist. */}
+                    {acceptedOfferPriceFilteringEnabled && <section>
                         <h3 className="text-2xl font-bold text-gray-900 mb-2 tracking-tight">Price range</h3>
                         <p className="text-gray-500 text-base mb-4">Nightly prices before fees and taxes</p>
                         <div className="mb-6 -mx-4 md:mx-0 px-4 md:px-0">
@@ -600,7 +519,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                                 </div>
                             </div>
                         </div>
-                    </section>
+                    </section>}
 
                     <div className="w-full h-px bg-gray-100"></div>
 
@@ -654,34 +573,8 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
 
                     {/* Rooms and beds */}
                     <section>
-                        <h3 className="text-2xl font-bold text-gray-900 mb-8 tracking-tight">Rooms and beds</h3>
-                        <div className="space-y-8 max-w-2xl">
-                            {[
-                                { label: 'Bedrooms', value: localBedrooms, setter: setLocalBedrooms },
-                                { label: 'Beds', value: localBeds, setter: setLocalBeds },
-                                { label: 'Bathrooms', value: localBathrooms, setter: setLocalBathrooms },
-                            ].map((item) => (
-                                <div key={item.label} className="flex items-center justify-between pb-8 border-b border-gray-100 last:border-0 last:pb-0">
-                                    <span className="text-gray-900 text-lg font-medium">{item.label}</span>
-                                    <div className="flex items-center gap-4 md:gap-6">
-                                        <button 
-                                            onClick={() => item.setter(Math.max(0, item.value - 1))}
-                                            className={`w-10 h-10 md:w-12 md:h-12 rounded-full border flex items-center justify-center transition-all ${item.value > 0 ? 'border-gray-400 text-gray-600 hover:border-gray-900 hover:text-gray-900 hover:shadow-md active:scale-95' : 'border-gray-200 text-gray-200 cursor-not-allowed bg-gray-50'}`}
-                                            disabled={item.value === 0}
-                                        >
-                                            <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" /></svg>
-                                        </button>
-                                        <span className="w-8 text-center text-xl font-medium">{item.value === 0 ? 'Any' : item.value}</span>
-                                        <button 
-                                            onClick={() => item.setter(item.value + 1)}
-                                            className="w-10 h-10 md:w-12 md:h-12 rounded-full border border-gray-400 text-gray-600 flex items-center justify-center hover:border-gray-900 hover:text-gray-900 hover:shadow-md transition-all active:scale-95"
-                                        >
-                                            <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                        <h3 className="text-2xl font-bold text-gray-900 mb-2 tracking-tight">Rooms and beds</h3>
+                        <p className="text-sm text-gray-600">Room-count filters will return when verified room details are available.</p>
                     </section>
 
                     <div className="w-full h-px bg-gray-100"></div>
@@ -690,9 +583,9 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                     <section>
                         <h3 className="text-2xl font-bold text-gray-900 mb-2 tracking-tight flex items-center gap-2">
                             <Shield className="w-6 h-6 text-amber-500" />
-                            Premium Seclusion & Comfort
+                            Space configuration & amenities
                         </h3>
-                        <p className="text-gray-500 text-base mb-8">Refine your search by privacy indices, acoustic decibel shields, and spatial configs.</p>
+                        <p className="text-gray-500 text-base mb-8">Refine your search by published configuration and amenities.</p>
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl">
                             {/* Rental Mode */}
@@ -716,56 +609,6 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                                 </div>
                             </div>
 
-                            {/* Acoustic Seclusion Slider/Group */}
-                            <div>
-                                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1">
-                                    <Volume2 className="w-4 h-4 text-emerald-500" />
-                                    Decibel Shielding level
-                                </label>
-                                <div className="flex gap-2">
-                                    {[
-                                        { value: 0, label: 'Any' },
-                                        { value: 70, label: 'Comfort (70%+)' },
-                                        { value: 85, label: 'High (85%+)' },
-                                        { value: 100, label: 'Silent (100%)' }
-                                    ].map((opt) => (
-                                        <button 
-                                            key={opt.value}
-                                            type="button"
-                                            onClick={() => setLocalMinAcousticRating(opt.value)}
-                                            className={`flex-1 py-3 px-1 rounded-xl border text-xs font-bold transition-all text-center ${localMinAcousticRating === opt.value ? 'bg-emerald-500 border-emerald-500 text-white shadow-md' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`}
-                                        >
-                                            {opt.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Social Density Dilution */}
-                            <div>
-                                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1">
-                                    <Sparkles className="w-4 h-4 text-amber-500" />
-                                    Crowding Density Dilution
-                                </label>
-                                <div className="flex gap-2">
-                                    {[
-                                        { value: 0, label: 'Any' },
-                                        { value: 65, label: 'Co-living (65%+)' },
-                                        { value: 80, label: 'Diluted (80%+)' },
-                                        { value: 100, label: 'Peak (100%)' }
-                                    ].map((opt) => (
-                                        <button 
-                                            key={opt.value}
-                                            type="button"
-                                            onClick={() => setLocalMinCrowdingRating(opt.value)}
-                                            className={`flex-1 py-3 px-1 rounded-xl border text-xs font-bold transition-all text-center ${localMinCrowdingRating === opt.value ? 'bg-amber-500 border-amber-500 text-white shadow-md' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-400'}`}
-                                        >
-                                            {opt.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
                             {/* Specific Room Attributes */}
                             <div>
                                 <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Room comfort & features</label>
@@ -773,7 +616,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                                     <label className="flex items-center justify-between p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors group">
                                         <div className="flex flex-col">
                                             <span className="text-sm font-bold text-gray-800">Must have AC (Air Conditioning)</span>
-                                            <span className="text-xs text-gray-400">Guaranteed climatized private room</span>
+                                            <span className="text-xs text-gray-500">Matches listed air-conditioning amenities.</span>
                                         </div>
                                         <input 
                                             type="checkbox" 
@@ -786,7 +629,7 @@ const FilterBar: React.FC<FilterBarProps> = ({ currentFilters, onFilterChange })
                                     <label className="flex items-center justify-between p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors group">
                                         <div className="flex flex-col">
                                             <span className="text-sm font-bold text-gray-800">Must have Attached Ensuite Bathroom</span>
-                                            <span className="text-xs text-gray-400">Guaranteed private connected bathroom</span>
+                                            <span className="text-xs text-gray-500">Matches listed private or attached bathroom amenities.</span>
                                         </div>
                                         <input 
                                             type="checkbox" 

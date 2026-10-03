@@ -11,4 +11,5 @@ export const legacyPostgresFiles = [
   'src/test/p0_3_reconciliation.test.ts',
   'src/test/p2_6_m1_analytics_rollup.test.ts',
   'src/test/phase2_9_10_production_certification.test.ts',
+  'src/test/w0_real_route_truth.test.ts',
 ];

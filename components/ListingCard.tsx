@@ -9,250 +9,26 @@ import { getRatingWord, formatRating } from '../lib/ratingUtils';
 import { Home, Layers, Users, HelpCircle, ShieldAlert, Check, Share2 } from 'lucide-react';
 
 export const getTaxonomyDetails = (listing: Listing) => {
-  const isChild = !!listing.isChild;
-  const parentType = (listing.parentType || listing.type || 'Property').trim();
-  const parentTitle = (listing.parentTitle || listing.title || '').trim();
-  
-  const parentTypeLower = parentType.toLowerCase();
-  const parentTitleLower = parentTitle.toLowerCase();
-  
-  // Classify parent category
-  let category: 'apartment' | 'resort' | 'villa' | 'cottage' | 'house' | 'other' = 'other';
-  if (parentTypeLower.includes('apartment') || parentTitleLower.includes('apartment') || parentTypeLower.includes('flat') || parentTitleLower.includes('flat')) {
-    category = 'apartment';
-  } else if (parentTypeLower.includes('resort') || parentTitleLower.includes('resort') || parentTypeLower.includes('retreat') || parentTitleLower.includes('retreat')) {
-    category = 'resort';
-  } else if (parentTypeLower.includes('cottage') || parentTitleLower.includes('cottage') || parentTypeLower.includes('cabin') || parentTitleLower.includes('cabin')) {
-    category = 'cottage';
-  } else if (parentTypeLower.includes('villa') || parentTitleLower.includes('villa') || parentTypeLower.includes('castle') || parentTitleLower.includes('castle')) {
-    category = 'villa';
-  } else if (parentTypeLower.includes('house') || parentTitleLower.includes('house')) {
-    category = 'house';
-  }
-
-  // Get children summary if listing has rooms
-  let childUnitsSummary = "";
-  if (listing.rooms && listing.rooms.length > 0) {
-    const uniqueRoomNames = Array.from(new Set(listing.rooms.map(r => r.name.trim())));
-    
-    let hasCottages = false;
-    let hasRooms = false;
-    const bhkSizes: string[] = [];
-    const otherTypes: string[] = [];
-
-    uniqueRoomNames.forEach(name => {
-      const lower = name.toLowerCase();
-      // Match BHK sizes like "1BHK", "1 BHK", "2BHK", "3BHK", "4BHK"
-      const bhkMatch = name.match(/(\d)\s*bhk/i);
-      if (bhkMatch) {
-        if (!bhkSizes.includes(`${bhkMatch[1]}BHK`)) {
-          bhkSizes.push(`${bhkMatch[1]}BHK`);
-        }
-      } else if (lower.includes('cottage')) {
-        hasCottages = true;
-      } else if (lower.includes('room') || lower.includes('suite') || lower.includes('bedroom') || lower.includes('diamond') || lower.includes('platinum')) {
-        hasRooms = true;
-      } else {
-        const firstWord = name.split(' ')[0];
-        if (firstWord && !otherTypes.includes(firstWord)) {
-          otherTypes.push(firstWord);
-        }
-      }
-    });
-
-    const items: string[] = [];
-    if (hasCottages) {
-      items.push("Cottages");
-    }
-    if (hasRooms) {
-      items.push("Rooms");
-    }
-    if (bhkSizes.length > 0) {
-      bhkSizes.sort((a, b) => parseInt(a) - parseInt(b));
-      items.push(`House (${bhkSizes.join(', ')})`);
-    }
-    otherTypes.forEach(t => {
-      if (!items.includes(t)) items.push(t);
-    });
-
-    if (items.length > 0) {
-      childUnitsSummary = items.join(', ');
-    } else {
-      childUnitsSummary = uniqueRoomNames.join(', ');
-    }
-  } else {
-    // Elegant fallback lists based on categories if there's no rooms array loaded yet
-    if (category === 'resort') {
-      childUnitsSummary = "Cottages, Rooms, House (1BHK, 2BHK, 3BHK, 4BHK)";
-    } else if (category === 'apartment') {
-      childUnitsSummary = "Only Rooms Available";
-    } else if (category === 'villa') {
-      childUnitsSummary = "Suites, Private Bedrooms";
-    }
-  }
-
-  // Construct label showing the parent and child units structure
-  let labelText = "";
-  if (isChild) {
-    if (category === 'apartment') {
-      labelText = `Room in Apartment / Entire Apartment`;
-    } else if (category === 'resort') {
-      labelText = `Room inside Resort / Entire Resort`;
-    } else if (category === 'villa') {
-      labelText = `Suite inside Villa / Entire Villa`;
-    } else if (category === 'cottage') {
-      labelText = `Cottage Room / Entire Cottage`;
-    } else if (category === 'house') {
-      labelText = `Room inside House / Entire House`;
-    } else {
-      labelText = `Room in ${parentType} / Entire ${parentType}`;
-    }
-  } else {
-    const hasSubUnits = (listing.rooms && listing.rooms.length > 0) || category === 'resort' || listing.rental_mode === 'hybrid' || listing.rental_mode === 'private_rooms';
-    
-    if (category === 'apartment') {
-      labelText = hasSubUnits ? `Entire Apartment / Room in Apartment` : `Entire Apartment (Exclusive)`;
-    } else if (category === 'resort') {
-      labelText = childUnitsSummary ? `Entire Resort / ${childUnitsSummary}` : `Entire Resort / Cottages, Rooms, Houses (1BHK, 2BHK, 3BHK, 4BHK)`;
-    } else if (category === 'villa') {
-      labelText = hasSubUnits ? `Entire Villa / Suites, Rooms Available` : `Entire Villa (Exclusive)`;
-    } else if (category === 'cottage') {
-      labelText = hasSubUnits ? `Entire Cottage / Rooms Available` : `Entire Cottage (Exclusive)`;
-    } else if (category === 'house') {
-      labelText = hasSubUnits ? `Entire House / Rooms Available` : `Entire House (Exclusive)`;
-    } else {
-      labelText = hasSubUnits ? `Entire ${parentType} / Rooms Available` : `Entire ${parentType} (Exclusive)`;
-    }
-  }
-
-  if (isChild) {
-    let badge = "Room";
-    let explanation = `Private room inside a shared property`;
-    let iconColor = "text-teal-500 dark:text-teal-400";
-    let labelColor = "bg-teal-50/95 text-teal-700 border-teal-200/60 dark:bg-teal-950/90 dark:text-teal-300 dark:border-teal-800";
-    
-    const childTitleLower = (listing.title || '').toLowerCase();
-    const childTypeLower = (listing.type || '').toLowerCase();
-
-    if (category === 'apartment') {
-      badge = "Apartment Room";
-      explanation = `Private lockable Room inside ${parentTitle || 'an Apartment'} with shared common areas`;
-      iconColor = "text-purple-500 dark:text-purple-400";
-      labelColor = "bg-purple-50/95 text-purple-700 border-purple-200/60 dark:bg-purple-950/90 dark:text-purple-300 dark:border-purple-800";
-    } else if (category === 'resort') {
-      if (childTitleLower.includes('cottage') || childTypeLower.includes('cottage')) {
-        badge = "Resort Cottage";
-      } else if (childTitleLower.includes('house') || childTitleLower.includes('bhk') || childTypeLower.includes('house')) {
-        badge = "Resort House";
-      } else if (childTitleLower.includes('room') || childTitleLower.includes('bedroom') || childTitleLower.includes('suite') || childTitleLower.includes('diamond') || childTitleLower.includes('platinum')) {
-        badge = "Resort Room";
-      } else {
-        badge = "Resort Unit";
-      }
-      explanation = `Private Sub-Unit inside ${parentTitle || 'the Resort'} with shared resort grounds`;
-      iconColor = "text-blue-500 dark:text-blue-400";
-      labelColor = "bg-blue-50/95 text-blue-700 border-blue-200/60 dark:bg-blue-950/90 dark:text-blue-300 dark:border-blue-800";
-    } else if (category === 'villa') {
-      badge = "Villa Suite";
-      explanation = `Private Ensuite Room inside ${parentTitle || 'the Villa'} with shared common spaces`;
-      iconColor = "text-teal-500 dark:text-teal-400";
-      labelColor = "bg-teal-50/95 text-teal-700 border-teal-200/60 dark:bg-teal-950/90 dark:text-teal-300 dark:border-teal-800";
-    } else if (category === 'cottage') {
-      badge = "Cottage Room";
-      explanation = `Private Room inside ${parentTitle || 'the Cottage'} with shared outdoor areas`;
-      iconColor = "text-emerald-500 dark:text-emerald-400";
-      labelColor = "bg-emerald-50/95 text-emerald-700 border-emerald-200/60 dark:bg-emerald-950/90 dark:text-emerald-300 dark:border-emerald-800";
-    } else if (category === 'house') {
-      badge = "House Room";
-      explanation = `Private lockable Room inside ${parentTitle || 'the House'} with shared common facilities`;
-      iconColor = "text-orange-500 dark:text-orange-400";
-      labelColor = "bg-orange-50/95 text-orange-700 border-orange-200/60 dark:bg-orange-950/90 dark:text-orange-300 dark:border-orange-800";
-    } else {
-      badge = `${parentType} Room`;
-    }
-
-    return {
-      isChild: true,
-      badge,
-      pill: `Room in ${parentType}`,
-      description: explanation,
-      parentTitle,
-      parentType,
-      category,
-      iconColor,
-      labelColor,
-      privacyPercent: category === 'resort' ? 85 : category === 'apartment' ? 60 : 70,
-      labelText
-    };
-  } else {
-    let badge = "Entire Place";
-    let explanation = "Exclusive access to the full property for your group only.";
-    let iconColor = "text-zinc-500 dark:text-zinc-400";
-    let labelColor = "bg-zinc-50/95 text-zinc-700 border-zinc-200/60 dark:bg-zinc-900/90 dark:text-zinc-300 dark:border-zinc-800";
-
-    const hasSubUnits = (listing.rooms && listing.rooms.length > 0) || category === 'resort' || listing.rental_mode === 'hybrid' || listing.rental_mode === 'private_rooms';
-    const isPrivateRoomsOnly = listing.rental_mode === 'private_rooms';
-
-    if (category === 'apartment') {
-      badge = "Entire Apartment";
-      explanation = childUnitsSummary 
-        ? `Book the full Apartment or individual premium rooms: ${childUnitsSummary}`
-        : `Book the full, exclusive Apartment for absolute privacy and complete access`;
-      iconColor = "text-indigo-500 dark:text-indigo-400";
-      labelColor = "bg-indigo-50/95 text-indigo-700 border-indigo-200/60 dark:bg-indigo-950/90 dark:text-indigo-300 dark:border-indigo-800";
-    } else if (category === 'resort') {
-      badge = "Entire Resort";
-      explanation = childUnitsSummary 
-        ? `Rent the full resort, or reserve specific sub-units: ${childUnitsSummary}`
-        : `Rent the Entire Resort with all rooms and grounds for private, exclusive use`;
-      iconColor = "text-blue-600 dark:text-blue-400";
-      labelColor = "bg-blue-50/95 text-blue-700 border-blue-200/60 dark:bg-blue-950/90 dark:text-blue-300 dark:border-blue-800";
-    } else if (category === 'villa') {
-      badge = "Entire Villa";
-      explanation = childUnitsSummary 
-        ? `Exclusive standalone Villa with available individual suites: ${childUnitsSummary}`
-        : `Exclusive access to the entire standalone Estate / Villa and private pool/grounds`;
-      iconColor = "text-rose-500 dark:text-rose-400";
-      labelColor = "bg-rose-50/95 text-rose-700 border-rose-200/60 dark:bg-rose-950/90 dark:text-rose-300 dark:border-rose-800";
-    } else if (category === 'cottage') {
-      badge = "Entire Cottage";
-      explanation = childUnitsSummary 
-        ? `Standalone main Cottage with independent rooms available: ${childUnitsSummary}`
-        : `Standalone Cottage all to yourself for ultimate private nature retreat`;
-      iconColor = "text-emerald-600 dark:text-emerald-400";
-      labelColor = "bg-emerald-50/95 text-emerald-700 border-emerald-200/60 dark:bg-emerald-950/90 dark:text-emerald-300 dark:border-emerald-800";
-    } else if (category === 'house') {
-      badge = "Entire House";
-      explanation = childUnitsSummary 
-        ? `Standalone House or individual private rooms: ${childUnitsSummary}`
-        : `Standalone House all to yourself for ultimate private residential stay`;
-      iconColor = "text-orange-600 dark:text-orange-400";
-      labelColor = "bg-orange-50/95 text-orange-700 border-orange-200/60 dark:bg-orange-950/90 dark:text-orange-300 dark:border-orange-800";
-    } else {
-      badge = `Entire ${parentType}`;
-    }
-
-    return {
-      isChild: false,
-      badge,
-      pill: hasSubUnits 
-        ? (category === 'apartment' ? "Entire Apartment & Rooms" 
-           : category === 'resort' ? "Entire Resort & Sub-Units" 
-           : category === 'villa' ? "Entire Villa & Suites"
-           : category === 'cottage' ? "Entire Cottage & Rooms"
-           : category === 'house' ? "Entire House & Rooms"
-           : `Entire ${parentType} & Rooms`)
-        : `Entire ${parentType}`,
-      description: explanation,
-      parentTitle,
-      parentType,
-      category,
-      iconColor,
-      labelColor,
-      privacyPercent: hasSubUnits ? (isPrivateRoomsOnly ? 40 : 75) : 100,
-      labelText
-    };
-  }
+  // Publication tells us the listing's declared rental mode and canonical room
+  // names. It does not prove lockable doors, privacy scores or dated availability.
+  const isChild = Boolean(listing.isChild);
+  const parentType = (listing.parentType || listing.type || 'property').trim();
+  const parentTitle = (listing.parentTitle || listing.title || 'this stay').trim();
+  const mode = listing.rental_mode || 'entire_place';
+  const badge = isChild ? 'Room type' : mode === 'private_rooms' ? 'Room types'
+    : mode === 'hybrid' ? 'Entire place & room types' : 'Entire place';
+  const pill = isChild ? `Room type in ${parentType}` : badge;
+  const description = isChild ? `Room type listed for ${parentTitle}. Check terms and dates with the host.`
+    : mode === 'private_rooms' ? 'See the listed room types and check dates with the host.'
+    : mode === 'hybrid' ? 'See the property and room types. Check terms and dates with the host.'
+    : 'See the property details and check dates with the host.';
+  return {
+    isChild, badge, pill, description, parentTitle, parentType,
+    category: 'declared',
+    iconColor: 'text-[#003B95]',
+    labelColor: 'bg-blue-50/95 text-blue-700 border-blue-200/60',
+    labelText: pill,
+  };
 };
 
 export const getStayStructure = (listing: Listing) => {
@@ -267,7 +43,6 @@ export const getStayStructure = (listing: Listing) => {
         pill: "Private Suite inside Resort",
         description: "Shared resort grounds with independent private room keys.",
         privacyPercent: 85,
-        privacyText: "Resort Seclusion",
         color: "bg-blue-50/95 text-blue-700 border-blue-200/60 dark:bg-blue-950/90 dark:text-blue-300 dark:border-blue-800",
         indicatorBg: "bg-blue-500",
         type: "resort"
@@ -279,7 +54,6 @@ export const getStayStructure = (listing: Listing) => {
         pill: "Private Room inside Shared Flat",
         description: "Private lockable bedroom with shared lounge & kitchen.",
         privacyPercent: 60,
-        privacyText: "Shared Common Areas",
         color: "bg-purple-50/95 text-purple-700 border-purple-200/60 dark:bg-purple-950/90 dark:text-purple-300 dark:border-purple-800",
         indicatorBg: "bg-purple-500",
         type: "shared"
@@ -290,7 +64,6 @@ export const getStayStructure = (listing: Listing) => {
       pill: "Private Suite inside Villa/House",
       description: "Private ensuite room inside a multi-room shared residence.",
       privacyPercent: 70,
-      privacyText: "Shared Residence",
       color: "bg-teal-50/95 text-teal-700 border-teal-200/60 dark:bg-teal-950/90 dark:text-teal-300 dark:border-teal-800",
       indicatorBg: "bg-teal-500",
       type: "shared_villa"
@@ -301,7 +74,6 @@ export const getStayStructure = (listing: Listing) => {
       pill: "Entire Estate / Room Options Available",
       description: "Book the entire residence or select independent sub-suites.",
       privacyPercent: 90,
-      privacyText: "Flexible Seclusion",
       color: "bg-amber-50/95 text-amber-700 border-amber-200/60 dark:bg-amber-950/90 dark:text-amber-300 dark:border-amber-800",
       indicatorBg: "bg-amber-500",
       type: "hybrid"
@@ -311,10 +83,9 @@ export const getStayStructure = (listing: Listing) => {
     if (title.includes('cottage') || type.includes('cottage') || title.includes('cabin')) {
       return {
         badge: "Standalone Cottage",
-        pill: "100% Private Standalone Cottage",
-        description: "Completely detached house with private garden & entry.",
+        pill: "Private Standalone Cottage",
+        description: "Detached cottage with private grounds & entry.",
         privacyPercent: 100,
-        privacyText: "100% Absolute Privacy",
         color: "bg-emerald-50/95 text-emerald-700 border-emerald-200/60 dark:bg-emerald-950/90 dark:text-emerald-300 dark:border-emerald-800",
         indicatorBg: "bg-emerald-500",
         type: "standalone"
@@ -323,10 +94,9 @@ export const getStayStructure = (listing: Listing) => {
     if (title.includes('villa') || type.includes('villa') || title.includes('castle') || title.includes('house') || type.includes('house')) {
       return {
         badge: "Standalone House",
-        pill: "100% Private Standalone Estate",
-        description: "Completely independent villa or house for exclusive possession.",
+        pill: "Private Standalone Residence",
+        description: "Standalone property for your group.",
         privacyPercent: 100,
-        privacyText: "100% Absolute Privacy",
         color: "bg-rose-50/95 text-rose-700 border-rose-200/60 dark:bg-rose-950/90 dark:text-rose-300 dark:border-rose-800",
         indicatorBg: "bg-rose-500",
         type: "standalone_villa"
@@ -334,10 +104,9 @@ export const getStayStructure = (listing: Listing) => {
     }
     return {
       badge: "Entire Place",
-      pill: "100% Private Entire Residence",
-      description: "Exclusive access to the full property for your group only.",
+      pill: "Private Entire Residence",
+      description: "Access to the full property for your group only.",
       privacyPercent: 100,
-      privacyText: "100% Absolute Privacy",
       color: "bg-zinc-50/95 text-zinc-700 border-zinc-200/60 dark:bg-zinc-950/90 dark:text-zinc-300 dark:border-zinc-800",
       indicatorBg: "bg-zinc-600",
       type: "entire"
@@ -390,22 +159,8 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
     }
   };
 
-  // Real uploaded images or fallback to deterministic placeholders if no array exists
-  const baseImageUrl = listing.imageUrl || 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6';
-  
-  const FALLBACK_IMAGES = [
-    "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=400&q=80",
-    "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=400&q=80",
-    "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=400&q=80",
-    "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=400&q=80",
-    "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=400&q=80"
-  ];
-
-  const numImages = Math.max(listing.imageUrls?.length || 1, listing.imageCount || 1);
-  const images = Array.from({ length: numImages }).map((_, i) => {
-       if (listing.imageUrls && listing.imageUrls[i]) return listing.imageUrls[i];
-       return FALLBACK_IMAGES[i % FALLBACK_IMAGES.length];
-  });
+  // Only real, supplied property photos may be displayed
+  const images = (listing.imageUrls?.length ? listing.imageUrls : listing.imageUrl ? [listing.imageUrl] : []).filter(Boolean);
 
   const stayStructure = getStayStructure(listing);
   const taxonomy = getTaxonomyDetails(listing);
@@ -450,33 +205,44 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
     >
       {/* Image Container */}
       <div className="relative aspect-[4/3] rounded-t-3xl overflow-hidden bg-zinc-50/50 isolate cursor-grab active:cursor-grabbing group">
-        <motion.div
-            key={currentImageIndex}
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -50 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            drag="x"
-            dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={0.2}
-            onDragEnd={(e, { offset, velocity }) => {
-                const swipe = offset.x;
-                if (swipe < -50) {
-                    setCurrentImageIndex((prev) => (prev + 1) % images.length);
-                } else if (swipe > 50) {
-                    setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
-                }
-            }}
-            className="absolute inset-0 w-full h-full"
+        {images.length > 0 ? (
+          <motion.div
+              key={currentImageIndex}
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -50 }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              drag={images.length > 1 ? "x" : false}
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.2}
+              onDragEnd={(e, { offset, velocity }) => {
+                  if (images.length <= 1) return;
+                  const swipe = offset.x;
+                  if (swipe < -50) {
+                      setCurrentImageIndex((prev) => (prev + 1) % images.length);
+                  } else if (swipe > 50) {
+                      setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
+                  }
+              }}
+              className="absolute inset-0 w-full h-full"
+              onClick={handleClick}
+          >
+              <OptimizedImage
+                  src={images[currentImageIndex]}
+                  alt={listing.title}
+                  priority={priority}
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03] pointer-events-none"
+              />
+          </motion.div>
+        ) : (
+          <div
+            className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-zinc-100/80 text-zinc-400 p-4"
             onClick={handleClick}
-        >
-            <OptimizedImage 
-                src={images[currentImageIndex]} 
-                alt={listing.title}
-                priority={priority}
-                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03] pointer-events-none"
-            />
-        </motion.div>
+          >
+            <Home className="w-8 h-8 stroke-1 text-zinc-300 mb-1" />
+            <span className="text-xs font-semibold text-zinc-400">Photos in preparation</span>
+          </div>
+        )}
         
         {/* Gradient Overlay for Text Readability */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
@@ -560,29 +326,33 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
         </div>
 
         {/* Navigation Arrows - Hidden on mobile, visible on group hover for desktop */}
-        <div className={`hidden md:flex absolute inset-x-3 top-1/2 -translate-y-1/2 justify-between pointer-events-none transition-opacity duration-300 ${isHovered ? 'opacity-100' : 'opacity-0'}`}>
-             <button onClick={prevImage} className="w-9 h-9 bg-white/95 hover:bg-white rounded-full flex items-center justify-center shadow-md border border-zinc-200/50 pointer-events-auto transform transition-transform hover:scale-110 active:scale-95">
-                <ChevronLeft className="w-4 h-4 text-zinc-800" />
-             </button>
-             <button onClick={nextImage} className="w-9 h-9 bg-white/95 hover:bg-white rounded-full flex items-center justify-center shadow-md border border-zinc-200/50 pointer-events-auto transform transition-transform hover:scale-110 active:scale-95">
-                <ChevronRight className="w-4 h-4 text-zinc-800" />
-             </button>
-        </div>
+        {images.length > 1 && (
+          <div className={`hidden md:flex absolute inset-x-3 top-1/2 -translate-y-1/2 justify-between pointer-events-none transition-opacity duration-300 ${isHovered ? 'opacity-100' : 'opacity-0'}`}>
+               <button onClick={prevImage} className="w-9 h-9 bg-white/95 hover:bg-white rounded-full flex items-center justify-center shadow-md border border-zinc-200/50 pointer-events-auto transform transition-transform hover:scale-110 active:scale-95">
+                  <ChevronLeft className="w-4 h-4 text-zinc-800" />
+               </button>
+               <button onClick={nextImage} className="w-9 h-9 bg-white/95 hover:bg-white rounded-full flex items-center justify-center shadow-md border border-zinc-200/50 pointer-events-auto transform transition-transform hover:scale-110 active:scale-95">
+                  <ChevronRight className="w-4 h-4 text-zinc-800" />
+               </button>
+          </div>
+        )}
 
         {/* Dots Pagination */}
-        <div className="absolute bottom-4 inset-x-0 flex justify-center z-20">
-            <div className="bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full flex gap-1.5 shadow-sm border border-zinc-200/30">
-                {images.slice(0, 5).map((_, i) => (
-                    <div 
-                        key={i} 
-                        className={`
-                            h-1.5 rounded-full transition-all duration-300 
-                            ${i === (currentImageIndex % 5) ? 'bg-[#003B95] w-3.5' : 'bg-zinc-300 w-1.5'}
-                        `}
-                    />
-                ))}
-            </div>
-        </div>
+        {images.length > 1 && (
+          <div className="absolute bottom-4 inset-x-0 flex justify-center z-20">
+              <div className="bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full flex gap-1.5 shadow-sm border border-zinc-200/30">
+                  {images.slice(0, 5).map((_, i) => (
+                      <div
+                          key={i}
+                          className={`
+                              h-1.5 rounded-full transition-all duration-300
+                              ${i === (currentImageIndex % 5) ? 'bg-[#003B95] w-3.5' : 'bg-zinc-300 w-1.5'}
+                          `}
+                      />
+                  ))}
+              </div>
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -618,38 +388,19 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
                     )}
                     {taxonomy.pill}
                 </span>
-                {(() => {
-                    const privacyPercent = taxonomy.privacyPercent;
-                    const privacyTheme = privacyPercent >= 90
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-100"
-                      : privacyPercent >= 80
-                        ? "bg-teal-50 text-teal-700 border-teal-100"
-                        : "bg-blue-50 text-blue-700 border-blue-100";
-                    return (
-                        <span className={`text-[10px] font-extrabold font-mono px-2 py-0.5 rounded-full border ${privacyTheme}`}>
-                            {privacyPercent}% Privacy
-                        </span>
-                    );
-                })()}
-            </div>
-            
-            {/* Visual Mini Progress Bar for Privacy */}
-            <div className="w-full h-1.5 bg-zinc-200/50 rounded-full overflow-hidden">
-                <div 
-                    className={`h-full rounded-full transition-all duration-500 bg-gradient-to-r from-[#003B95]/70 to-[#003B95]`} 
-                    style={{ width: `${taxonomy.privacyPercent}%` }}
-                />
             </div>
             
             <p className="text-xs text-zinc-500 leading-relaxed font-normal">
                 {taxonomy.description}
             </p>
-
-
         </div>
 
         <div className="mt-auto pt-1.5 flex items-baseline gap-1.5 w-full">
-            {listing.rooms && listing.rooms.length > 0 ? (
+            {listing.priceState === 'VERIFIED_OFFER_UNAVAILABLE' || listing.price === null ? (
+                <div className="w-full rounded-2xl border border-blue-100/60 bg-blue-50/30 px-3.5 py-2.5 text-sm font-semibold text-[#003B95]">
+                    Price available after dates are selected
+                </div>
+            ) : listing.rooms && listing.rooms.length > 0 ? (
                 <div className="flex items-center gap-1.5 bg-blue-50/30 px-3.5 py-2.5 rounded-2xl border border-blue-100/30 w-full justify-between">
                     <div className="flex flex-col">
                         <span className="text-[#003B95] text-[10px] font-extrabold uppercase tracking-widest">Starts from</span>
@@ -657,7 +408,7 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
                     </div>
                     <div className="flex items-baseline gap-0.5">
                         <span className="font-extrabold font-display tabular-nums text-[#003B95] text-[18px] sm:text-[19px] tracking-tight">
-                            {formatPrice(listing.displayPrice ?? Math.min(...listing.rooms.map(r => r.price)), listing.currency)}
+                            {formatPrice(listing.displayPrice ?? Math.min(...listing.rooms.map(r => r.price ?? Infinity)), listing.currency)}
                         </span>
                         <span className="text-[#0369A1]/70 text-xs font-semibold">/{listing.period}</span>
                     </div>
@@ -667,7 +418,7 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
                     <span className="text-zinc-500 text-[10px] font-extrabold uppercase tracking-widest">Total Price</span>
                     <div className="flex items-baseline gap-0.5">
                         <span className="font-extrabold font-display tabular-nums text-zinc-900 text-[18px] tracking-tight">
-                            {formatPrice(listing.displayPrice ?? listing.price, listing.currency)}
+                            {formatPrice(listing.displayPrice ?? listing.price ?? 0, listing.currency)}
                         </span>
                         <span className="text-zinc-500 text-xs font-semibold">/{listing.period}</span>
                     </div>
@@ -675,40 +426,17 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
             )}
         </div>
 
-        {/* CTA Bottom Bar - Appears on Hover (Desktop Only) */}
-        <div className={`
-            hidden md:flex mt-2.5 pt-2.5 border-t border-zinc-100 items-center justify-between text-xs font-bold text-zinc-500
-            transition-all duration-300 overflow-hidden
-            ${isHovered ? 'max-h-12 opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-2'}
-        `}>
-            <button className="flex flex-col items-center gap-0.5 hover:text-[#003B95] hover:bg-zinc-50 px-2 py-1 rounded-lg transition-all">
-                <InfoIcon className="w-4 h-4 text-zinc-500 group-hover:text-[#003B95]" />
-                <span className="text-[10px] font-extrabold">Info</span>
-            </button>
-            <button className="flex flex-col items-center gap-0.5 hover:text-[#003B95] hover:bg-zinc-50 px-2 py-1 rounded-lg transition-all">
-                <MapIcon className="w-4 h-4 text-zinc-500 group-hover:text-[#003B95]" />
-                <span className="text-[10px] font-extrabold">Map</span>
-            </button>
-            <button className="flex flex-col items-center gap-0.5 hover:text-[#003B95] hover:bg-zinc-50 px-2 py-1 rounded-lg transition-all">
-                <EyeIcon className="w-4 h-4 text-zinc-500 group-hover:text-[#003B95]" />
-                <span className="text-[10px] font-extrabold">Details</span>
-            </button>
-            <button 
-                className="bg-[#003B95] hover:bg-[#002B70] text-white px-5 py-2 rounded-full font-extrabold shadow-sm hover:shadow transition-all active:scale-95"
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onClick?.(listing);
-                }}
-            >
-                Reserve
-            </button>
-        </div>
+        <button type="button"
+            aria-label={`View ${listing.displayTitle || listing.title} stay`}
+            className="mt-3 w-full rounded-xl bg-[#003B95] px-5 py-3 text-sm font-bold text-white hover:bg-[#002B70] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#003B95]"
+            onClick={(event) => {event.stopPropagation(); onClick?.(listing);}}>
+            View stay
+        </button>
       </div>
     </motion.div>
   );
 };
 
-export default React.memo(ListingCard, (prevProps, nextProps) => {
-  return prevProps.listing.id === nextProps.listing.id &&
-         prevProps.isFavorite === nextProps.isFavorite;
-});
+// Listing projections are immutable at this boundary. Shallow comparison keeps
+// all current and future listing fields observable without a second field list.
+export default React.memo(ListingCard);

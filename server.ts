@@ -164,7 +164,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
-import {resolvePublicStayAuthority, PublicStayAuthorityError} from './src/server/guest/publicStayAuthority.js';
+import {resolvePublicStayAuthority, resolvePublicStayAuthorities, PublicStayAuthorityError} from './src/server/guest/publicStayAuthority.js';
 import { toPublicStayProjection, toPublicListingCardProjection, generateListingSlug, escapeHtml, STAY_PUBLIC_SQL_COLUMNS, coarsenCoordinate } from './src/lib/stayProjection.js';
 import { assertPublicImageOrigin, isAllowedImageSource, parseImageTransformQuery, readBoundedImageResponse, REMOTE_IMAGE_LIMITS } from './src/server/media/remoteImageProxy.js';
 import { createLegacyListingAssistanceBoundary } from './src/server/assistance/legacyListingAiBoundary.js';
@@ -3428,38 +3428,49 @@ app.get('/api/seo', async (req, res) => {
         let result;
         try {
           result = await pool.query(
-            "SELECT id, title, description, image_url, image_urls, slug FROM listings WHERE slug = $1 AND publication_status = 'published'",
+            `SELECT ${STAY_PUBLIC_SQL_COLUMNS.join(', ')} FROM listings WHERE slug = $1 AND publication_status = 'published'`,
             [slug]
           );
         } catch (_e) {
-          result = { rows: [] };
+          console.warn('[PUBLIC SEO STAY READ UNAVAILABLE]');
+          return res.status(503).set('Cache-Control', 'no-store').send('Stay preview is temporarily unavailable.');
         }
         if (result && result.rows.length > 0) {
           const listing = result.rows[0];
           const rawTitle = `${listing.title || ''} | Encho Stays`;
           const rawDescription = listing.description?.substring(0, 160) || `Stay at ${listing.title || ''}`;
-          const rawImage = listing.image_url || (listing.image_urls && listing.image_urls[0]) || '';
+
+          let approvedImageUrl = '';
+          try {
+            approvedImageUrl = toPublicStayProjection(await resolvePublicStayAuthority(pool, listing)).imageUrl;
+          } catch (_mErr) {
+            console.warn('[PUBLIC SEO STAY AUTHORITY UNAVAILABLE]');
+            return res.status(503).set('Cache-Control', 'no-store').send('Stay preview is temporarily unavailable.');
+          }
+
           const canonicalSlug = listing.slug || generateListingSlug(listing.title, listing.id);
           const canonicalUrl = `https://encho.space/stay/${encodeURIComponent(canonicalSlug)}`;
 
           const title = escapeHtml(rawTitle);
           const description = escapeHtml(rawDescription);
-          const image = escapeHtml(rawImage);
+          const image = approvedImageUrl ? escapeHtml(approvedImageUrl) : '';
           const safeCanonicalUrl = escapeHtml(canonicalUrl);
+
+          const imageTags = image ? `
+            <meta property="og:image" content="${image}" />
+            <meta name="twitter:image" content="${image}" />` : '';
 
           injectedTags = `
             <title>${title}</title>
             <link rel="canonical" href="${safeCanonicalUrl}" />
             <meta name="description" content="${description}" />
             <meta property="og:title" content="${title}" />
-            <meta property="og:description" content="${description}" />
-            <meta property="og:image" content="${image}" />
+            <meta property="og:description" content="${description}" />${imageTags}
             <meta property="og:url" content="${safeCanonicalUrl}" />
             <meta property="og:type" content="website" />
             <meta name="twitter:card" content="summary_large_image" />
             <meta name="twitter:title" content="${title}" />
             <meta name="twitter:description" content="${description}" />
-            <meta name="twitter:image" content="${image}" />
           `;
         }
       }
@@ -14595,12 +14606,14 @@ app.get('/api/listings', async (req: Request, res: Response) => {
 
     const isAdminRequester = authenticatedUser && authenticatedUser.role === 'admin';
 
-    // Redis public-card cache. A failed generation read bypasses caching so a stale
-    // key cannot be selected by guessing the last known generation.
+    // Redis public-card cache.
+    // NOTE (W0 Public Truth): Public card caching is disabled until cache invalidation
+    // is hooked into media_assets moderation lifecycle. Missing/withheld media must not serve stale unapproved cards.
     const isPublicCatalogueFeed = !userId && !isAdminRequester;
+    const isPublicCardCacheEnabled = false;
     const publicCityKey = (city && city !== 'all') ? city.toLowerCase() : 'all';
     let cacheGeneration: number | null = null;
-    if (redis && isPublicCatalogueFeed) {
+    if (redis && isPublicCardCacheEnabled && isPublicCatalogueFeed) {
       try {
         const storedGeneration = await redis.get(PUBLIC_LISTING_CACHE_GENERATION_KEY);
         const parsedGeneration = storedGeneration === null ? 0 : Number(storedGeneration);
@@ -14613,7 +14626,7 @@ app.get('/api/listings', async (req: Request, res: Response) => {
       ? `listings_v5:public_cards:g${cacheGeneration}:${publicCityKey}:${req.originalUrl}`
       : null;
 
-    if (redis && cacheKey && isPublicCatalogueFeed) {
+    if (redis && cacheKey && isPublicCardCacheEnabled && isPublicCatalogueFeed) {
       try {
         const cached = await redis.get(cacheKey);
         if (cached) {
@@ -14637,9 +14650,9 @@ app.get('/api/listings', async (req: Request, res: Response) => {
     }
 
     let result;
+    let publicNextCursor: string | null = null;
 
-    try {
-      if (userId) {
+    if (userId) {
         // Authenticated host fetching their own listings
         result = await pool.query(`
           SELECT l.*,
@@ -14660,12 +14673,34 @@ app.get('/api/listings', async (req: Request, res: Response) => {
       } else {
         city = (city && city !== 'all') ? city : '';
 
+        // Published discovery is a bounded keyset walk. An ID is stable even
+        // when a listing's publication or media state changes between pages.
+        const after = req.query.after;
+        if (after !== undefined && (typeof after !== 'string' || !/^[1-9]\d*$/.test(after) ||
+          !Number.isSafeInteger(Number(after)) || Number(after) > 2147483647)) {
+          return res.status(400).json({code: 'INVALID_CATALOGUE_CURSOR'});
+        }
+
+        // A price filter/sort cannot use the legacy listing price when no
+        // accepted public offer price exists. Return an explicit unavailable
+        // filter state rather than misleadingly filtering on that legacy value.
+        if (minPrice || maxPrice || req.query.sort === 'price_asc' || req.query.sort === 'price_desc') {
+          return res.status(422).set('Cache-Control', 'no-store').json({
+            error: 'Verified offer prices are not available for price filtering.',
+            code: 'VERIFIED_OFFER_PRICE_UNAVAILABLE'
+          });
+        }
+        if (req.query.bedrooms || req.query.beds || req.query.bathrooms) {
+          return res.status(422).json({
+            error: 'Verified room configuration is not available for these filters.',
+            code: 'VERIFIED_ROOM_FILTER_UNAVAILABLE'
+          });
+        }
+
         // Public explore query: strictly enforce publication_status = 'published'
         let queryStr = `
-          SELECT l.*,
-                 COALESCE(cp.has_offers, false) as has_offers
+          SELECT l.*
           FROM listings l
-          LEFT JOIN (SELECT DISTINCT listing_id, true as has_offers FROM calendar_prices WHERE offer_id IS NOT NULL) cp ON cp.listing_id = l.id
           WHERE l.publication_status = 'published'
         `;
         const queryParams: any[] = [];
@@ -14675,14 +14710,6 @@ app.get('/api/listings', async (req: Request, res: Response) => {
             queryStr += ` AND l.city ILIKE '%' || $${queryParams.length} || '%'`;
         }
 
-        if (minPrice) {
-            queryParams.push(minPrice);
-            queryStr += ` AND l.price >= $${queryParams.length}`;
-        }
-        if (maxPrice) {
-            queryParams.push(maxPrice);
-            queryStr += ` AND l.price <= $${queryParams.length}`;
-        }
         if (req.query.type) {
             queryParams.push(req.query.type);
             queryStr += ` AND l.type = $${queryParams.length}`;
@@ -14692,50 +14719,54 @@ app.get('/api/listings', async (req: Request, res: Response) => {
             queryParams.push(JSON.stringify(amenitiesList));
             queryStr += ` AND l.amenities::jsonb @> $${queryParams.length}::jsonb`;
         }
-        if (req.query.bedrooms) {
-            queryParams.push(req.query.bedrooms);
-            queryStr += " AND (l.bedrooms >= $" + queryParams.length + " OR EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(l.rooms) = 'array' THEN l.rooms ELSE '[]'::jsonb END) as r WHERE (r->>'bedrooms') IS NOT NULL AND (r->>'bedrooms') != '' AND (r->>'bedrooms')::numeric >= $" + queryParams.length + "))";
-        }
-        if (req.query.beds) {
-            queryParams.push(req.query.beds);
-            queryStr += " AND (l.beds >= $" + queryParams.length + " OR EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(l.rooms) = 'array' THEN l.rooms ELSE '[]'::jsonb END) as r WHERE (r->>'beds') IS NOT NULL AND (r->>'beds') != '' AND (r->>'beds')::numeric >= $" + queryParams.length + "))";
-        }
-        if (req.query.bathrooms) {
-            queryParams.push(req.query.bathrooms);
-            queryStr += ` AND l.bathrooms >= $${queryParams.length}`;
-        }
         if (req.query.maxGuests) {
-            queryParams.push(req.query.maxGuests);
-            queryStr += " AND (l.max_guests >= $" + queryParams.length + " OR EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(l.rooms) = 'array' THEN l.rooms ELSE '[]'::jsonb END) as r WHERE (r->>'capacity') IS NOT NULL AND (r->>'capacity') != '' AND (r->>'capacity')::numeric >= $" + queryParams.length + "))";
+            const guests = req.query.maxGuests;
+            if (typeof guests !== 'string' || !/^[1-9]\d*$/.test(guests) || Number(guests) > 100)
+              return res.status(400).json({code: 'INVALID_GUEST_FILTER'});
+            queryParams.push(Number(guests));
+            queryStr += ` AND EXISTS (SELECT 1 FROM room_types rt WHERE rt.listing_id = l.id AND rt.max_occupancy >= $${queryParams.length})`;
         }
-
-        if (req.query.sort === 'price_asc') {
-            queryStr += ' ORDER BY l.price ASC, l.created_at DESC';
-        } else if (req.query.sort === 'price_desc') {
-            queryStr += ' ORDER BY l.price DESC, l.created_at DESC';
-        } else {
-            queryStr += ' ORDER BY l.created_at DESC';
+        if (minLat !== undefined || maxLat !== undefined || minLng !== undefined || maxLng !== undefined) {
+          const bounds = [minLat,maxLat,minLng,maxLng].map(Number);
+          if (bounds.some(value => !Number.isFinite(value)) || bounds[0] < -90 || bounds[1] > 90 ||
+            bounds[2] < -180 || bounds[3] > 180 || bounds[0] > bounds[1] || bounds[2] > bounds[3])
+            return res.status(400).json({code: 'INVALID_MAP_BOUNDS'});
+          for (const value of bounds) queryParams.push(value);
+          const first = queryParams.length - 3;
+          queryStr += ` AND l.lat BETWEEN $${first} AND $${first+1} AND l.lng BETWEEN $${first+2} AND $${first+3}`;
         }
-
+        if (after !== undefined) {
+          queryParams.push(Number(after));
+          queryStr += ` AND l.id < $${queryParams.length}`;
+        }
+        // Fetch one extra row only to prove that another page exists.
+        queryStr += ' ORDER BY l.id DESC LIMIT 25';
         result = await pool.query(queryStr, queryParams);
-      }
-    } catch (dbError) {
-      const dbErrorMessage = dbError instanceof Error ? dbError.message : String(dbError);
-
-      // Handle missing table error
-      if (dbErrorMessage.includes('relation "listings" does not exist') || dbErrorMessage.includes('Tenant or user not found')) {
-        console.warn('Database warning:', dbErrorMessage, '- Returning empty listings.');
-        return res.json([]);
-      }
-
-      console.error('Database Query Error:', dbErrorMessage);
-      throw dbError; // Re-throw other DB errors to be caught by outer catch
+        if (result.rows.length > 24) {
+          result.rows = result.rows.slice(0, 24);
+          publicNextCursor = String(result.rows.at(-1).id);
+        }
     }
 
     let listings: any[] = [];
     const isOwnerOrAdminFeed = Boolean(userId || isAdminRequester);
 
-    for (const row of result.rows) {
+    // A single bounded-by-the-current-result relational read keeps room and
+    // approved-media identity identical to detail and numeric refresh.
+    let publicRows: Record<string, unknown>[] = [];
+    if (!isOwnerOrAdminFeed) {
+      try {
+        publicRows = await resolvePublicStayAuthorities(pool, result.rows);
+      } catch (_authorityErr) {
+        console.warn('[PUBLIC CATALOGUE STAY AUTHORITY UNAVAILABLE]');
+        return res.status(503).set('Cache-Control', 'no-store').json({
+          error: 'Verified stay information is temporarily unavailable.',
+          code: 'STAY_AUTHORITY_UNAVAILABLE'
+        });
+      }
+    }
+
+    for (const [rowIndex, row] of result.rows.entries()) {
       if (isOwnerOrAdminFeed) {
         // Authenticated owner or admin management read: preserve full administrative and relational fields
         listings.push({
@@ -14787,8 +14818,7 @@ app.get('/api/listings', async (req: Request, res: Response) => {
           seo_image_url: row.seo_image_url || null
         });
       } else {
-        // Anonymous / public catalogue explore read: strictly project through toPublicListingCardProjection
-        listings.push(toPublicListingCardProjection(row));
+        listings.push(toPublicListingCardProjection(publicRows[rowIndex]));
       }
     }
 
@@ -14847,7 +14877,7 @@ app.get('/api/listings', async (req: Request, res: Response) => {
       }
     }
 
-    if (minLat && maxLat && minLng && maxLng) {
+    if (isOwnerOrAdminFeed && minLat && maxLat && minLng && maxLng) {
         listings = listings.filter((l: any) => {
             try {
                 if (l.lat == null || l.lng == null || (l.lat === '0' && l.lng === '0') || (l.lat === 0 && l.lng === 0)) return true;
@@ -14865,7 +14895,7 @@ app.get('/api/listings', async (req: Request, res: Response) => {
         });
     }
 
-    if (redis && cacheKey && isPublicCatalogueFeed) {
+    if (redis && cacheKey && isPublicCardCacheEnabled && isPublicCatalogueFeed) {
       try {
         await redis.set(cacheKey, JSON.stringify(listings), { ex: 60 });
       } catch (e) {
@@ -14873,14 +14903,18 @@ app.get('/api/listings', async (req: Request, res: Response) => {
       }
     }
 
+    if (publicNextCursor) res.setHeader('X-Next-Cursor', publicNextCursor);
     res.json(listings);
   } catch (error) {
     if (privateRequest) {
       console.error('[LISTINGS PRIVATE FETCH ERROR]', error);
       return res.status(503).json({ error: 'Private listing read is unavailable' });
     }
-    console.warn('[LISTINGS FETCH FALLBACK] Database query error, returning empty list:', error);
-    return res.json([]);
+    console.warn('[PUBLIC LISTINGS READ UNAVAILABLE]');
+    return res.status(503).set('Cache-Control', 'no-store').json({
+      error: 'Listings are temporarily unavailable.',
+      code: 'PUBLIC_LISTINGS_UNAVAILABLE'
+    });
   }
 });
 
@@ -18849,38 +18883,48 @@ async function startServer() {
                 let result;
                 try {
                     result = await pool.query(
-                        "SELECT id, title, description, image_url, image_urls, slug FROM listings WHERE slug = $1 AND publication_status = 'published'",
+                        `SELECT ${STAY_PUBLIC_SQL_COLUMNS.join(', ')} FROM listings WHERE slug = $1 AND publication_status = 'published'`,
                         [slug]
                     );
                 } catch (_e) {
-                    result = { rows: [] };
+                    return res.status(503).set('Cache-Control', 'no-store').send('Stay preview is temporarily unavailable.');
                 }
                 if (result && result.rows.length > 0) {
                     const listing = result.rows[0];
                     const rawTitle = `${listing.title || ''} | Encho Stays`;
                     const rawDescription = listing.description?.substring(0, 160) || `Stay at ${listing.title || ''}`;
-                    const rawImage = listing.image_url || (listing.image_urls && listing.image_urls[0]) || '';
+
+                    let approvedImageUrl = '';
+                    try {
+                        approvedImageUrl = toPublicStayProjection(await resolvePublicStayAuthority(pool, listing)).imageUrl;
+                    } catch (_mErr) {
+                        console.warn('[DIRECT STAY AUTHORITY UNAVAILABLE]');
+                        return res.status(503).set('Cache-Control', 'no-store').send('Stay preview is temporarily unavailable.');
+                    }
+
                     const canonicalSlug = listing.slug || generateListingSlug(listing.title, listing.id);
                     const canonicalUrl = `https://encho.space/stay/${encodeURIComponent(canonicalSlug)}`;
 
                     const title = escapeHtml(rawTitle);
                     const description = escapeHtml(rawDescription);
-                    const image = escapeHtml(rawImage);
+                    const image = approvedImageUrl ? escapeHtml(approvedImageUrl) : '';
                     const safeCanonicalUrl = escapeHtml(canonicalUrl);
+
+                    const imageTags = image ? `
+                        <meta property="og:image" content="${image}" />
+                        <meta name="twitter:image" content="${image}" />` : '';
 
                     injectedTags = `
                         <title>${title}</title>
                         <link rel="canonical" href="${safeCanonicalUrl}" />
                         <meta name="description" content="${description}" />
                         <meta property="og:title" content="${title}" />
-                        <meta property="og:description" content="${description}" />
-                        <meta property="og:image" content="${image}" />
+                        <meta property="og:description" content="${description}" />${imageTags}
                         <meta property="og:url" content="${safeCanonicalUrl}" />
                         <meta property="og:type" content="website" />
                         <meta name="twitter:card" content="summary_large_image" />
                         <meta name="twitter:title" content="${title}" />
                         <meta name="twitter:description" content="${description}" />
-                        <meta name="twitter:image" content="${image}" />
                     `;
                 }
             }

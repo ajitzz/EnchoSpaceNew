@@ -7,6 +7,7 @@
  * - Coarsens geographical coordinates (2 decimal places ~1.1km area).
  * - Completely omits street address, house numbers, pin codes.
  * - Omits internal user_id, host contacts, access credentials, and raw database identifiers.
+ *   A canonical room reference is included only when supplied by the relational reader.
  * - Explicit typed mappers for nested objects (rooms, media, amenities, nearby, policies)
  *   stripping internal IDs, inventory counts, map URLs, contact info, access codes, and unknown fields.
  */
@@ -19,11 +20,13 @@ export interface PublicLocation {
 }
 
 export interface PublicRoomTier {
+  /** Published relational room identity; never derived from a display name or legacy JSON ID. */
+  id?: string;
   type: string;
   name: string;
   icon?: string;
   tag?: string;
-  price: number;
+  price: number | null;
   capacity: number;
   specs?: string;
   features?: string[];
@@ -40,6 +43,7 @@ export interface PublicMediaAsset {
   isHero?: boolean;
   isSleepingArea?: boolean;
   roomTier?: string;
+  room_type_id?: string | null;
 }
 
 export interface PublicNearbyAttraction {
@@ -61,7 +65,9 @@ export interface PublicStayProjection {
   title: string;
   type: string;
   rental_mode: string;
-  price: number;
+  price: number | null;
+  priceState?: 'VERIFIED_OFFER_UNAVAILABLE';
+  roomState?: 'CANONICAL' | 'NO_ROOM' | 'LEGACY_DATA_UNRECONCILED';
   currency: string;
   location: PublicLocation;
   imageUrl: string;
@@ -104,12 +110,15 @@ export interface PublicListingCardProjection {
   title: string;
   type: string;
   rental_mode: string;
-  price: number;
+  price: number | null;
+  priceState?: 'VERIFIED_OFFER_UNAVAILABLE';
+  roomState?: 'CANONICAL' | 'NO_ROOM' | 'LEGACY_DATA_UNRECONCILED';
   currency: string;
   period?: string;
   city: string;
   imageUrl: string;
   imageUrls: string[];
+  photos?: PublicMediaAsset[];
   imageCount: number;
   rooms: PublicRoomTier[];
   lat: number | null;
@@ -187,11 +196,19 @@ export function generateListingSlug(title: string | null | undefined, id: number
 }
 
 export function coarsenCoordinate(coord: number | string | null | undefined, decimals = 2): number | null {
-  if (coord === null || coord === undefined || coord === '') return null;
+  if (coord === null || coord === undefined || (typeof coord === 'string' && coord.trim() === '')) return null;
   const num = Number(coord);
-  if (isNaN(num)) return null;
+  if (!Number.isFinite(num)) return null;
   const factor = Math.pow(10, decimals);
   return Math.round(num * factor) / factor;
+}
+
+function publicCoordinatePair(lat: unknown, lng: unknown): {lat: number | null; lng: number | null} {
+  const latitude = coarsenCoordinate(lat as number | string | null | undefined, 2);
+  const longitude = coarsenCoordinate(lng as number | string | null | undefined, 2);
+  if (latitude === null || longitude === null || Math.abs(latitude) > 90 || Math.abs(longitude) > 180 ||
+      (latitude === 0 && longitude === 0)) return {lat: null, lng: null};
+  return {lat: latitude, lng: longitude};
 }
 
 /**
@@ -237,16 +254,16 @@ export function sanitizePublicText(input: unknown): string {
 }
 
 /**
- * Explicit mapper for Room Tiers.
- * Strips internal primary keys, host internal notes, inventory counts, and arbitrary unknown metadata.
- * Never derives public room type from rawRoom.id.
+ * Explicit mapper for public rooms. The room reference comes only from the
+ * relational reader's canonical_room_id, never from rawRoom.id or its label.
+ * No room base price becomes an advertised offer price here.
  */
 export function mapPublicRoomTier(rawRoom: any): PublicRoomTier {
   if (!rawRoom || typeof rawRoom !== 'object') {
     return {
       type: 'standard',
       name: 'Room',
-      price: 0,
+      price: null,
       capacity: 1
     };
   }
@@ -278,11 +295,13 @@ export function mapPublicRoomTier(rawRoom: any): PublicRoomTier {
   const cleanedName = typeof rawRoom.name === 'string' ? sanitizePublicText(rawRoom.name) : 'Room';
 
   return {
+    ...(Number.isSafeInteger(rawRoom.canonical_room_id) && rawRoom.canonical_room_id > 0
+      ? {id: String(rawRoom.canonical_room_id)} : {}),
     type: resolvedType,
     name: cleanedName || 'Room',
     icon: typeof rawRoom.icon === 'string' ? rawRoom.icon : undefined,
     tag: typeof rawRoom.tag === 'string' ? sanitizePublicText(rawRoom.tag) : undefined,
-    price: Number(rawRoom.price) || 0,
+    price: null,
     capacity: Number(rawRoom.capacity) || 1,
     specs: cleanedSpecs,
     features: safeFeatures,
@@ -310,7 +329,9 @@ export function mapPublicMediaAsset(rawMedia: any): PublicMediaAsset | null {
     description: typeof rawMedia.description === 'string' ? sanitizePublicText(rawMedia.description) : undefined,
     isHero: Boolean(rawMedia.isHero || rawMedia.is_hero),
     isSleepingArea: Boolean(rawMedia.is_sleeping_area || rawMedia.isSleepingArea),
-    roomTier: typeof rawMedia.tier === 'string' ? rawMedia.tier : undefined
+    roomTier: typeof rawMedia.tier === 'string' ? rawMedia.tier : undefined,
+    ...(rawMedia.room_type_id === null ? {room_type_id: null}
+      : /^[1-9]\d*$/.test(String(rawMedia.room_type_id)) ? {room_type_id: String(rawMedia.room_type_id)} : {})
   };
 }
 
@@ -361,8 +382,7 @@ export function toPublicStayProjection(rawListing: any): PublicStayProjection {
   const city = typeof rawListing.city === 'string' ? rawListing.city : 'India';
   const locality = typeof rawListing.locality === 'string' ? rawListing.locality : city;
 
-  const approximateLatitude = coarsenCoordinate(rawListing.lat, 2);
-  const approximateLongitude = coarsenCoordinate(rawListing.lng, 2);
+  const {lat: approximateLatitude, lng: approximateLongitude} = publicCoordinatePair(rawListing.lat, rawListing.lng);
 
   // Parse raw JSON if stringified
   const rawImageUrls = Array.isArray(rawListing.image_urls)
@@ -431,7 +451,9 @@ export function toPublicStayProjection(rawListing: any): PublicStayProjection {
     title: String(rawListing.title || ''),
     type: String(rawListing.type || 'Stay'),
     rental_mode: String(rawListing.rental_mode || 'entire_place'),
-    price: Number(rawListing.price) || 0,
+    price: null,
+    priceState: 'VERIFIED_OFFER_UNAVAILABLE',
+    ...(rawListing.room_state ? {roomState: rawListing.room_state} : {}),
     currency: String(rawListing.currency || 'INR'),
     location: {
       city,
@@ -480,8 +502,7 @@ export function toPublicListingCardProjection(rawListing: any): PublicListingCar
   const slug = rawListing.slug || generateListingSlug(rawListing.title, idStr);
   const city = typeof rawListing.city === 'string' ? sanitizePublicText(rawListing.city) : 'India';
 
-  const lat = coarsenCoordinate(rawListing.lat, 2);
-  const lng = coarsenCoordinate(rawListing.lng, 2);
+  const {lat, lng} = publicCoordinatePair(rawListing.lat, rawListing.lng);
 
   const rawImageUrls = Array.isArray(rawListing.image_urls)
     ? rawListing.image_urls
@@ -495,6 +516,11 @@ export function toPublicListingCardProjection(rawListing: any): PublicListingCar
     : (typeof rawListing.rooms === 'string' ? JSON.parse(rawListing.rooms || '[]') : []);
 
   const rooms: PublicRoomTier[] = rawRooms.map(mapPublicRoomTier);
+
+  const rawPhotos = rawListing.public_media_authority === 'APPROVED_RELATIONAL'
+    ? (Array.isArray(rawListing.photos) ? rawListing.photos : []) : null;
+  const photos = rawPhotos?.map(mapPublicMediaAsset)
+    .filter((photo: PublicMediaAsset | null): photo is PublicMediaAsset => photo !== null);
 
   const rawAmenities = Array.isArray(rawListing.amenities)
     ? rawListing.amenities
@@ -515,18 +541,21 @@ export function toPublicListingCardProjection(rawListing: any): PublicListingCar
     title: sanitizePublicText(rawListing.title || ''),
     type: sanitizePublicText(rawListing.type || 'Stay'),
     rental_mode: String(rawListing.rental_mode || 'entire_place'),
-    price: Number(rawListing.price) || 0,
-    currency: 'INR',
+    price: null,
+    priceState: 'VERIFIED_OFFER_UNAVAILABLE',
+    ...(rawListing.room_state ? {roomState: rawListing.room_state} : {}),
+    currency: String(rawListing.currency || 'INR'),
     period: 'night',
     city,
     imageUrl,
     imageUrls,
+    ...(photos ? {photos} : {}),
     imageCount: (imageUrls.length > 0) ? imageUrls.length : (imageUrl ? 1 : 0),
     rooms,
     lat,
     lng,
     isVerified: false,
-    hasOffers: Boolean(rawListing.has_offers || rawListing.hasOffers),
+    hasOffers: false,
     rating: rawListing.rating != null ? Number(rawListing.rating) : 0,
     reviewCount: rawListing.review_count != null ? Number(rawListing.review_count) : (rawListing.reviewCount != null ? Number(rawListing.reviewCount) : 0),
     amenities: amenities,

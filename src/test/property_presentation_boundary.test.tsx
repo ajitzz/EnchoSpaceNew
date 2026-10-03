@@ -38,3 +38,22 @@ it('discards a previous property refresh even if its response arrives after swit
  expect(view.container.textContent).toContain('Second property');expect(view.container.textContent).not.toContain('Late first property');
  expect(fetcher.mock.calls.find(call=>call[0]==='/api/listings/10')?.[1].signal.aborted).toBe(true);
 });
+it('keeps the selected canonical room after numeric detail refresh with duplicate display names',async()=>{
+ const rooms=[
+  {id:'101',name:'Deluxe King',type:'suite',price:null,capacity:2},
+  {id:'102',name:'Deluxe King',type:'suite',price:null,capacity:2},
+ ];
+ const source={id:'10',title:'Two real rooms',type:'Villa',price:null,priceState:'VERIFIED_OFFER_UNAVAILABLE',currency:'INR',imageUrl:'',imageUrls:[],imageCount:0,isVerified:false,rooms,selectedConfigId:'102'} as Listing;
+ const refreshed={...source,selectedConfigId:undefined};
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>url==='/api/listings/10'
+  ? {ok:true,json:async()=>refreshed} : {ok:false}));
+ const view=render(<ListingDetailsNew listing={source} onBack={()=>{}}/>);
+ await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(call=>call[0]==='/api/listings/10')).toBe(true));
+ await waitFor(()=>{
+  const buttons=screen.getAllByRole('button',{name:'Deluxe King'});
+  expect(buttons[0].getAttribute('aria-pressed')).toBe('false');
+  expect(buttons[1].getAttribute('aria-pressed')).toBe('true');
+ });
+ expect(view.container.textContent).toContain('Price available after dates are selected');
+ expect(view.container.textContent).not.toContain('From ₹0');
+});

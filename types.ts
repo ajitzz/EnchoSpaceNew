@@ -19,7 +19,7 @@ export interface Room {
   type?: string;            // Tier/classification key for gallery routing (free-form)
   icon?: string;            // Emoji icon e.g. "👑"
   tag?: string;             // Marketing tag e.g. "Most Popular"
-  price: number;            // Authoritative nightly price (ADR-003)
+  price: number | null;     // Public null means no accepted, verified offer price.
   capacity?: number;
   bedrooms?: number;
   beds?: number;
@@ -66,7 +66,7 @@ export interface CalendarDay {
  * Backward-compatible: 'common'|'suites'|'deluxe'|'executive' still valid.
  */
 export interface SpatialPhoto {
-  id: string;
+  id?: string; // Public approved media intentionally omits storage IDs.
   url: string;
   tier: string;             // Free-form: 'common','suites','deluxe','executive','triplux','honeymoon',etc.
   category: 'living_room' | 'dining' | 'bedroom' | 'bathroom' | 'garden' | 'exterior' | 'pool' | 'details' | 'balcony' | 'parking' | 'restaurant' | 'lobby' | 'spa' | 'gym' | 'activity_area' | 'view' | 'other';
@@ -116,7 +116,9 @@ export interface Listing {
   brand?: string;
   brand_font?: string;
   brand_color?: string;
-  price: number;
+  price: number | null;
+  priceState?: 'VERIFIED_OFFER_UNAVAILABLE';
+  roomState?: 'CANONICAL' | 'NO_ROOM' | 'LEGACY_DATA_UNRECONCILED';
   currency: string;
   period?: string;
   type: string;
@@ -386,4 +388,3 @@ export interface MetaPreflightDiagnosticReport {
   remediation_summary: string[];
   correlation_id?: string;
 }
-
