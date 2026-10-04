@@ -50,12 +50,16 @@ describe('Milestone 6A: Guest Presentation Truth & Luxury UX Foundation', () => 
     expect(markup).toContain('Room details are being prepared.');
   });
 
-  it('3. Authoritative sidebar pricing: displays "From ₹X per night" and tax disclosure', () => {
+  it('3. Withholds a legacy listing price when no accepted sellable offer exists', () => {
     const markup = renderListing(baseListing);
 
-    expect(markup).toContain('From ₹24,000');
-    expect(markup).toContain('/ night');
-    expect(markup).toContain('Taxes and final price will be shown before payment.');
+    // The fixture deliberately retains a legacy listing.price. W1 public
+    // authority must not convert that mutable value into a room-night offer.
+    expect(markup).toContain('Price unavailable');
+    expect(markup).not.toContain('From ₹24,000');
+    expect(markup).not.toContain('/ night');
+    expect(markup).toContain('An accepted room-night price is not available for the selected dates.');
+    expect(markup).not.toContain('This accepted room-night amount is informational.');
   });
 
   it('4. Containment of unauthorized pricing: no 15% concierge fee, no 18% GST, and no grand total', () => {

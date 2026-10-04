@@ -1248,7 +1248,9 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     <p className="text-sm text-zinc-600">
                       {isDemoMode
                         ? 'Pricing and specifications shown for illustrative presentation only.'
-                        : 'This accepted room-night amount is informational. Final booking price will be shown when online booking is available.'}
+                        : activeNightlyRate > 0
+                          ? 'This accepted room-night amount is informational. Final booking price will be shown when online booking is available.'
+                          : 'An accepted room-night price is not available for the selected dates. Final booking price will be shown when online booking is available.'}
                     </p>
                 </div>
             </div>
