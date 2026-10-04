@@ -360,6 +360,15 @@ try{
       throw error;
     }
     await page.reload({waitUntil:'domcontentloaded'});
+    // An installing service worker can briefly keep the app closed while its
+    // replay-policy probe completes. Exercise the explicit safe recovery
+    // control instead of disabling the worker in this production-shaped test.
+    await page.waitForFunction(()=>document.body.textContent?.includes('Temporarily held until') ||
+      document.body.textContent?.includes('A secure app update is required'),{timeout:15000});
+    if(await page.getByRole('heading',{name:'A secure app update is required'}).isVisible()){
+      console.error(`Browser W2 safe-worker recovery ${width}px`);
+      await page.getByRole('button',{name:'Reload Encho'}).click();
+    }
     await page.getByText(/Temporarily held until/).waitFor({state:'visible',timeout:15000});
     if(width===360){
       await page.waitForTimeout(500);
