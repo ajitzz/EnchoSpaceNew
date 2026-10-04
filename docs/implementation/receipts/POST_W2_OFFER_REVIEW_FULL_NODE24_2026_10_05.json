@@ -1,0 +1,2047 @@
+{
+  "schemaVersion": 1,
+  "filesPassed": 291,
+  "filesFailed": 0,
+  "passed": 3259,
+  "failed": 0,
+  "pending": 0,
+  "files": [
+    {
+      "file": "src/test/admin_draft_property_editor_ui.test.tsx",
+      "status": "passed",
+      "passed": 10,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/admin_media_review_desk_ui.test.tsx",
+      "status": "passed",
+      "passed": 10,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/admin_media_review_desk.test.ts",
+      "status": "passed",
+      "passed": 10,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/admin_room_editor_ui_contract.test.tsx",
+      "status": "passed",
+      "passed": 23,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/api.test.ts",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/app.test.tsx",
+      "status": "passed",
+      "passed": 1,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/auth_otp_modal.test.tsx",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/auth_otp_unconfigured.test.ts",
+      "status": "passed",
+      "passed": 1,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/auth_public_response.test.ts",
+      "status": "passed",
+      "passed": 13,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/campaign_reactor_core.test.ts",
+      "status": "passed",
+      "passed": 13,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/consumer_auth_deployment_boundary.test.ts",
+      "status": "passed",
+      "passed": 3,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_actor_scoped_sync.test.ts",
+      "status": "passed",
+      "passed": 42,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_conversation_api.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_conversation_assistance_ui.test.tsx",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_conversation_containment.test.ts",
+      "status": "passed",
+      "passed": 3,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_database_tls.test.ts",
+      "status": "passed",
+      "passed": 43,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_error_contract.test.ts",
+      "status": "passed",
+      "passed": 9,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_google_workforce_identity.test.ts",
+      "status": "passed",
+      "passed": 19,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_guest_presentation.test.tsx",
+      "status": "passed",
+      "passed": 10,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_http_execution_context_server.test.ts",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_http_execution_context.test.ts",
+      "status": "passed",
+      "passed": 3,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_iam_contracts.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_inbox_ui.test.tsx",
+      "status": "passed",
+      "passed": 13,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_inquiry_projection.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_inquiry_read_receipts.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_legacy_boundary.test.ts",
+      "status": "passed",
+      "passed": 12,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_legacy_commerce_dev_containment.test.ts",
+      "status": "passed",
+      "passed": 1,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_legacy_fsm_audit_failclosed.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_legacy_marketing_schema_target_binding.test.ts",
+      "status": "passed",
+      "passed": 1,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_legacy_meta_reconciliation_target_binding.test.ts",
+      "status": "passed",
+      "passed": 1,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_listing_assistance_containment.test.ts",
+      "status": "passed",
+      "passed": 8,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_notification_api.test.ts",
+      "status": "passed",
+      "passed": 8,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_notification_config.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_notification_limiter_boundary.test.ts",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_notification_live_mount.test.ts",
+      "status": "passed",
+      "passed": 1,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_notification_panel.test.tsx",
+      "status": "passed",
+      "passed": 16,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_operations_api.test.ts",
+      "status": "passed",
+      "passed": 9,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_operations_shell.test.tsx",
+      "status": "passed",
+      "passed": 24,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_p0_route_containment.test.ts",
+      "status": "passed",
+      "passed": 19,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_passkey_assertion.test.ts",
+      "status": "passed",
+      "passed": 19,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_principal_authorization_port.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_remote_image_proxy.test.ts",
+      "status": "passed",
+      "passed": 6,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_reservation_commands.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_reservation_truth.test.tsx",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_service_case_api.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_service_desk.test.tsx",
+      "status": "passed",
+      "passed": 11,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_unread_navigation.test.tsx",
+      "status": "passed",
+      "passed": 9,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_workforce_review_ui.test.tsx",
+      "status": "passed",
+      "passed": 10,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_workforce_session_api.test.ts",
+      "status": "passed",
+      "passed": 8,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_workforce_signin_ui.test.tsx",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cr1_workforce_workspace.test.tsx",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/cross_provider_financial.test.ts",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/double_entry_ledger.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/dynamic_pricing_sync.test.ts",
+      "status": "passed",
+      "passed": 9,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/fsm.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/google_auth.test.ts",
+      "status": "passed",
+      "passed": 8,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/google_budget.test.ts",
+      "status": "passed",
+      "passed": 11,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/google_dco.test.ts",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/google_hierarchy.test.ts",
+      "status": "passed",
+      "passed": 1,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/google_oauth_origin_forensics.test.ts",
+      "status": "passed",
+      "passed": 11,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/google_reconciliation.test.ts",
+      "status": "passed",
+      "passed": 3,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/google_truth_reducer.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/google_unknown_outcome.test.ts",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/admin_draft_property_service_pg.test.ts",
+      "status": "passed",
+      "passed": 9,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/admin_media_moderation_service_pg.test.ts",
+      "status": "passed",
+      "passed": 17,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/adtech_bindings.test.ts",
+      "status": "passed",
+      "passed": 6,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/adtech_contracts.test.ts",
+      "status": "passed",
+      "passed": 26,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/adtech_controls.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/adtech_geography.test.ts",
+      "status": "passed",
+      "passed": 8,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/adtech_host_ui.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/adtech_inference_ui.test.ts",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/adtech_inference.test.ts",
+      "status": "passed",
+      "passed": 10,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/adtech_readiness.test.ts",
+      "status": "passed",
+      "passed": 12,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/adtech_registry.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/adtech_ui.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/adtech_workflow_atomicity.test.ts",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/assets_deadline.test.ts",
+      "status": "passed",
+      "passed": 3,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/attribution_links.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/calendar_boundary.test.ts",
+      "status": "passed",
+      "passed": 13,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/campaign_draft_guidance.test.ts",
+      "status": "passed",
+      "passed": 39,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/campaign_guidance_ui.test.ts",
+      "status": "passed",
+      "passed": 9,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/ci_evidence.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/client_chunk_boundaries.test.ts",
+      "status": "passed",
+      "passed": 19,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/consumer_auth_readiness_pg.test.ts",
+      "status": "passed",
+      "passed": 3,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/conversation_delivery.test.ts",
+      "status": "passed",
+      "passed": 25,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/conversation_notification_worker.test.ts",
+      "status": "passed",
+      "passed": 27,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/conversion_consumer_scheduling.test.ts",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/conversion_delivery.test.ts",
+      "status": "passed",
+      "passed": 47,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_admin_workforce_command.test.ts",
+      "status": "passed",
+      "passed": 8,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_adversarial_gateway.test.ts",
+      "status": "passed",
+      "passed": 3,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_commerce_pipeline.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_conversation_service.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_cross_domain_golden_path.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_evidence_quarantine.test.ts",
+      "status": "passed",
+      "passed": 11,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_iam_assignment.test.ts",
+      "status": "passed",
+      "passed": 12,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_iam_migration.test.ts",
+      "status": "passed",
+      "passed": 17,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_legacy_commerce_sandbox.test.ts",
+      "status": "passed",
+      "passed": 8,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_legacy_schema_bootstrap_gate.test.ts",
+      "status": "passed",
+      "passed": 14,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_legacy_server_worker_gate.test.ts",
+      "status": "passed",
+      "passed": 16,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_migration_runner.test.ts",
+      "status": "passed",
+      "passed": 10,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_notification_preference_authority.test.ts",
+      "status": "passed",
+      "passed": 15,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_notification_preference_limiter.test.ts",
+      "status": "passed",
+      "passed": 12,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_notification_preferences.test.ts",
+      "status": "passed",
+      "passed": 24,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_offer_authority.test.ts",
+      "status": "passed",
+      "passed": 15,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_offline_worker_lifecycle.test.ts",
+      "status": "passed",
+      "passed": 22,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_owner_bootstrap.test.ts",
+      "status": "passed",
+      "passed": 11,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_p0_5_staging_hardening.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_p0_bootstrap_engine.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_p1_containment_propagation.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_p2_workforce_engine.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_p3_conversation_adversarial.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_p4_3_tax_hardening.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_p4_offer_adversarial.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_p5_creative_engine.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_p6_1_provider_hardening.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_p6_4_settlement_hardening.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_p6_provider_engine.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_p7_portfolio_engine.test.ts",
+      "status": "passed",
+      "passed": 6,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_p8_3_canary_hardening.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_p8_4_pilot_hardening.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_p8_operational_drills.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_privileged_actions.test.ts",
+      "status": "passed",
+      "passed": 12,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_reacceptance_register.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_release_candidate_certification.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_release_evidence.test.ts",
+      "status": "passed",
+      "passed": 31,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_runtime_database_authority.test.ts",
+      "status": "passed",
+      "passed": 25,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_schema_preflight_owner_review.test.ts",
+      "status": "passed",
+      "passed": 1,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_schema_preflight.test.ts",
+      "status": "passed",
+      "passed": 23,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_service_case_readiness_authority.test.ts",
+      "status": "passed",
+      "passed": 11,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_service_cases.test.ts",
+      "status": "passed",
+      "passed": 33,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_staff_session_issuer.test.ts",
+      "status": "passed",
+      "passed": 24,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_workforce_commands_http.test.ts",
+      "status": "passed",
+      "passed": 6,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_workforce_factor_runtime.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_workforce_invitations.test.ts",
+      "status": "passed",
+      "passed": 24,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_workforce_lifecycle.test.ts",
+      "status": "passed",
+      "passed": 13,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_workforce_review.test.ts",
+      "status": "passed",
+      "passed": 10,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_workforce_runtime_config.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_workforce_step_up.test.ts",
+      "status": "passed",
+      "passed": 24,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/cr1_workforce_tls.test.ts",
+      "status": "passed",
+      "passed": 1,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/creative_campaign_binding.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/creative_pipeline.test.ts",
+      "status": "passed",
+      "passed": 33,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/delivery_evidence.test.ts",
+      "status": "passed",
+      "passed": 47,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/deployment_runtime.test.ts",
+      "status": "passed",
+      "passed": 26,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/destination_pools.test.ts",
+      "status": "passed",
+      "passed": 11,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/durable_outbox.test.ts",
+      "status": "passed",
+      "passed": 10,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/engine_acceptance.test.ts",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/execution_context.test.ts",
+      "status": "passed",
+      "passed": 11,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/finance_quote.test.ts",
+      "status": "passed",
+      "passed": 17,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/finance_refunds.test.ts",
+      "status": "passed",
+      "passed": 16,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/finance_service.test.ts",
+      "status": "passed",
+      "passed": 25,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/flight_preflight.test.ts",
+      "status": "passed",
+      "passed": 8,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/gap_restore.test.ts",
+      "status": "passed",
+      "passed": 1,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/google_client.test.ts",
+      "status": "passed",
+      "passed": 49,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/google_invoice_import.test.ts",
+      "status": "passed",
+      "passed": 25,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/google_provider.test.ts",
+      "status": "passed",
+      "passed": 29,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/google_search_plan.test.ts",
+      "status": "passed",
+      "passed": 87,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/google_store.test.ts",
+      "status": "passed",
+      "passed": 39,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/inquiry_outcomes.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/inventory_benchmark.test.ts",
+      "status": "passed",
+      "passed": 1,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/keyword_research_ui.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/keyword_research.test.ts",
+      "status": "passed",
+      "passed": 14,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/legacy_calendar_containment.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/legacy_telemetry_migration.test.ts",
+      "status": "passed",
+      "passed": 1,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/marketing_measurement.test.ts",
+      "status": "passed",
+      "passed": 49,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/measurement_touchpoints.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/meta_client.test.ts",
+      "status": "passed",
+      "passed": 13,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/meta_provider.test.ts",
+      "status": "passed",
+      "passed": 24,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/monitoring_ui.test.ts",
+      "status": "passed",
+      "passed": 40,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/operational_isolation.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/operations_boundary.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/ops_security.test.ts",
+      "status": "passed",
+      "passed": 14,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/pause_recovery.test.ts",
+      "status": "passed",
+      "passed": 27,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/payment_gateway.test.ts",
+      "status": "passed",
+      "passed": 45,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/phone_otp_schema_readiness.test.ts",
+      "status": "passed",
+      "passed": 1,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/pilot_tranche.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/pool_isolation.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/portfolio_facts.test.ts",
+      "status": "passed",
+      "passed": 13,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/portfolio_readiness.test.ts",
+      "status": "passed",
+      "passed": 20,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/portfolio_shadow_ui.test.ts",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/portfolio_shadow.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/provider_canary.test.ts",
+      "status": "passed",
+      "passed": 17,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/provider_controls.test.ts",
+      "status": "passed",
+      "passed": 13,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/r3_01_publication_toctou_repro.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/realtime_boundary.test.ts",
+      "status": "passed",
+      "passed": 9,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/recovery_readiness.test.ts",
+      "status": "passed",
+      "passed": 16,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/restricted_web_runtime_role_plan.test.ts",
+      "status": "passed",
+      "passed": 6,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/rollout_preparation.test.ts",
+      "status": "passed",
+      "passed": 15,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/router_contract.test.ts",
+      "status": "passed",
+      "passed": 31,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/runtime_authority.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/s3_upload_contract.test.ts",
+      "status": "passed",
+      "passed": 24,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/safety_observation.test.ts",
+      "status": "passed",
+      "passed": 15,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/security_and_guidance.test.ts",
+      "status": "passed",
+      "passed": 48,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/settlement_provider_read.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/settlement_service.test.ts",
+      "status": "passed",
+      "passed": 24,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/settlement_ui_helpers.test.ts",
+      "status": "passed",
+      "passed": 9,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/spatial_stories.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/spatial_transport.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/staging_preflight.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/staging_runbook.test.ts",
+      "status": "passed",
+      "passed": 6,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/targeting.test.ts",
+      "status": "passed",
+      "passed": 13,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/test_isolation.test.ts",
+      "status": "passed",
+      "passed": 6,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/track2_tax_clearance.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/track4_pilot_simulation.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/users_active_migration_pg.test.ts",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/w1_accepted_offers_pg.test.ts",
+      "status": "passed",
+      "passed": 10,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/w1_mounted_offer_public_pg.test.ts",
+      "status": "passed",
+      "passed": 1,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/w1_offer_idempotency_pg.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/w1_public_offer_projection_pg.test.ts",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/w1_review_fingerprint_pg.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/workflow_cancel.test.ts",
+      "status": "passed",
+      "passed": 16,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/workflow_engine.test.ts",
+      "status": "passed",
+      "passed": 14,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/workflow_service.test.ts",
+      "status": "passed",
+      "passed": 40,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/workspace_navigation.test.ts",
+      "status": "passed",
+      "passed": 12,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/harvo/workspace_session_ui.test.ts",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/investor_demo_telemetry.test.tsx",
+      "status": "passed",
+      "passed": 1,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/investor_demo_telemetry.test.tsx",
+      "status": "passed",
+      "passed": 1,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/investor_showcase.test.ts",
+      "status": "passed",
+      "passed": 1,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/luxury_ui_and_lead_audit.test.ts",
+      "status": "passed",
+      "passed": 10,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/m2_privacy_and_routes.test.ts",
+      "status": "passed",
+      "passed": 32,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/m3_room_media_authority.test.ts",
+      "status": "passed",
+      "passed": 28,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/m4_inventory_holds.test.ts",
+      "status": "passed",
+      "passed": 21,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/m6a_guest_presentation_truth.test.tsx",
+      "status": "passed",
+      "passed": 24,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/m6a_interactive_gallery.test.tsx",
+      "status": "passed",
+      "passed": 1,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/media_url_safety.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/meta_auto_activation.test.ts",
+      "status": "passed",
+      "passed": 9,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/milestone15_dco_and_localizer.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/multi_provider_isolation.test.ts",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/p0_1_rollback_semantics.test.ts",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/p0_2_unknown_outcome.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/p0_3_reconciliation.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/p0_4_fsm_bypass.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/p0_4_public_catalogue_truth.test.tsx",
+      "status": "passed",
+      "passed": 15,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/p0_6_escrow_remediation.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/p0_canary_blocker.test.ts",
+      "status": "passed",
+      "passed": 3,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/p0_canary_safety_blocker_adversarial.test.ts",
+      "status": "passed",
+      "passed": 8,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/p0_containment_remediation.test.tsx",
+      "status": "passed",
+      "passed": 14,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/p0_production_db_remediation.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/p2_6_m1_analytics_rollup.test.ts",
+      "status": "passed",
+      "passed": 12,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_5_delivery_hardening.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_6_activation_timestamp.test.ts",
+      "status": "passed",
+      "passed": 8,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_6_step2_multivariant.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_6_step3_insights.test.ts",
+      "status": "passed",
+      "passed": 10,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_6_step4_dco_evaluator.test.ts",
+      "status": "passed",
+      "passed": 23,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_6_step4b_dco_external_actions.test.ts",
+      "status": "passed",
+      "passed": 16,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_7_activation_audit.test.ts",
+      "status": "passed",
+      "passed": 6,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_7_financial_boundary_adversarial.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_7_m2_truth_projection.test.ts",
+      "status": "passed",
+      "passed": 16,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_7_m3_failure_intelligence.test.ts",
+      "status": "passed",
+      "passed": 18,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_7_m4_external_sync.test.ts",
+      "status": "passed",
+      "passed": 18,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_7_m5_performance_engagement.test.ts",
+      "status": "passed",
+      "passed": 31,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_7_m6_admin_command_center.test.ts",
+      "status": "passed",
+      "passed": 3,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_7_m7_host_transparency.test.ts",
+      "status": "passed",
+      "passed": 9,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_7_m8_control_plane.test.ts",
+      "status": "passed",
+      "passed": 6,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_7_m9_financial_boundary.test.ts",
+      "status": "passed",
+      "passed": 11,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_7_m9_target_integrity.test.ts",
+      "status": "passed",
+      "passed": 12,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_8_2_certification.test.ts",
+      "status": "passed",
+      "passed": 6,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_8_4_canonical_truth_consumption.test.ts",
+      "status": "passed",
+      "passed": 1,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_8_delivery_reducer.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_9_10_production_certification.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_9_7_worker_runtime.test.ts",
+      "status": "passed",
+      "passed": 12,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_9_8_shadow_parity.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase2_9_9_cutover.test.ts",
+      "status": "passed",
+      "passed": 10,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase3_1_host_control_center.test.ts",
+      "status": "passed",
+      "passed": 6,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase3_2_admin_command_center.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase3_3_dco_engine.test.ts",
+      "status": "passed",
+      "passed": 15,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase3_4_control_plane_and_calendar.test.ts",
+      "status": "passed",
+      "passed": 20,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase3_5_analytics_reporting.test.ts",
+      "status": "passed",
+      "passed": 20,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase3_6_2_p0_remediation.test.ts",
+      "status": "passed",
+      "passed": 9,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase3_6_lead_alerting_crm.test.ts",
+      "status": "passed",
+      "passed": 20,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase3_8b_google_sandbox_certification.test.ts",
+      "status": "passed",
+      "passed": 14,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase3_m3_distributed_worker_coordination.test.ts",
+      "status": "passed",
+      "passed": 6,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase3_m4_1_case_b_golden_failure.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase3_m4_external_side_effect_idempotency.test.ts",
+      "status": "passed",
+      "passed": 6,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase3_m5_observability_provider_contracts.test.ts",
+      "status": "passed",
+      "passed": 9,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phase4_adversarial_security_audit.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/phone_otp_challenge.test.ts",
+      "status": "passed",
+      "passed": 8,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/property_presentation_boundary.test.tsx",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/provider_contract_google.test.ts",
+      "status": "passed",
+      "passed": 10,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/provider_contract_meta.test.ts",
+      "status": "passed",
+      "passed": 12,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/public_catalogue_client.test.ts",
+      "status": "passed",
+      "passed": 6,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/public_listing_price_currency.test.tsx",
+      "status": "passed",
+      "passed": 9,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/razorpay_instant_checkout.test.ts",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/retargeting_pixel.test.ts",
+      "status": "passed",
+      "passed": 7,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/sanctuary_gallery.test.ts",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/w0_real_route_truth.test.ts",
+      "status": "passed",
+      "passed": 19,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/w1_offer_operations_access.test.ts",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/w1_offer_router_boundary.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/w1_offer_routes.test.ts",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/w1_offer_runtime_config.test.ts",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "src/test/w1_offer_ui.test.tsx",
+      "status": "passed",
+      "passed": 5,
+      "failed": 0,
+      "pending": 0
+    },
+    {
+      "file": "test_phase_2_7_5.test.ts",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "pending": 0
+    }
+  ]
+}

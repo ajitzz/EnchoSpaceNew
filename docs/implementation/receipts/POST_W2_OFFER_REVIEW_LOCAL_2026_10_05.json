@@ -1,0 +1,60 @@
+{
+  "evidenceLayer": "local-disposable-postgres-and-built-artifact",
+  "date": "2026-10-05",
+  "canonicalBase": "b2d2c4645dfe2ddc3d0c2016c12c9ac0b354aca0",
+  "worker": "Codex direct; one Antigravity dispatch failed before delivery",
+  "workerStatus": "WORKER_UNAVAILABLE_BEFORE_DELIVERY",
+  "reviewedCodeSubject": "1b98d4e7ad05a8969731188bea81df38d9814850",
+  "canonicalCodeSubject": "5a87caad2226f37645fede4a3693b13709ae7be9",
+  "testOnlyCorrection": "5a87caad2226f37645fede4a3693b13709ae7be9",
+  "migration": {
+    "file": "051_versioned_offer_review_fingerprint.sql",
+    "sha256": "28be2f601bc750cd6090eaf8f262fd68ae3819eebce347cfbd00278cf9b3eb82",
+    "appliedTo": "disposable PostgreSQL only",
+    "historical049Changed": false
+  },
+  "contract": {
+    "v1": "Pre-051 SUBMITTED evidence retains inventoryHash and database inventorySqlHash, including occupancy and calendar blocks; it is never rehashed as V2. Occupancy drift requires explicit successor submission.",
+    "v2": "New SUBMITTED events are stamped by PostgreSQL with reviewFingerprintVersion=2 and commercialSqlHash over canonical listing/room identity, stay scope and configured inventory_days.total_units. The existing immutable source hash covers reviewed property, room, occupancy/restriction configuration and approved facts/media. Held/booked/blocked occupancy and mapped operational calendar blocks are excluded from review identity.",
+    "liveSellability": "Public offer visibility and W2 quote/hold still read current available inventory; V2 acceptance may occur at zero current availability without exposing a sellable public offer."
+  },
+  "targeted": {
+    "realPostgresFingerprint": { "filesPassed": 1, "testsPassed": 4, "exitCode": 0 },
+    "canonicalW1Public": { "filesPassed": 3, "testsPassed": 16, "exitCode": 0 },
+    "canonicalM4W1Adjacent": { "filesPassed": 3, "testsPassed": 27, "exitCode": 0 },
+    "actorScopedReplayAfterTestCorrection": { "filesPassed": 1, "testsPassed": 42, "exitCode": 0 }
+  },
+  "builtW2": {
+    "exitCode": 0,
+    "unquotedHold": { "httpStatus": 400, "holds": 0, "heldNights": 0 },
+    "quoteHold": { "reviewWhileHeld": "ACCEPTED", "holdRemainedActive": true, "heldUnitsRemained": 1, "viewports": [1280, 360] },
+    "summarySha256": "03dd7b6ea29eb25e0571d548f42d5367399e5d41e54d037f3d1317f08a06220d"
+  },
+  "independentReview": {
+    "codeDisposition": "PASS; no confirmed P0/P1 finding",
+    "decisiveRerun": "4/4 disposable-PostgreSQL fingerprint cases passed, exit 0",
+    "builtW2InspectedButNotRerunByReviewer": true,
+    "testOnlyCorrectionDisposition": "PASS; source diff inspected, no test rerun by reviewer"
+  },
+  "fullRegression": {
+    "initial": { "filesFailed": 1, "testsPassed": 3258, "testsFailed": 1, "exitCode": 1,
+      "finding": "Stale actor-scoped replay test expected a plain header object after the accepted Headers normalization change.",
+      "sanitizedSummary": "POST_W2_OFFER_REVIEW_FULL_INITIAL_FAIL_2026_10_05.json",
+      "summarySha256": "d1e512a7cf79ab9a419185711ce3de545c0fda334770d8c07d79dfe5f7cbc44a" },
+    "corrected": { "filesPassed": 291, "testsPassed": 3259, "testsFailed": 0, "pending": 0, "exitCode": 0,
+      "sanitizedSummary": "POST_W2_OFFER_REVIEW_FULL_NODE24_2026_10_05.json",
+      "summarySha256": "5c0ac5c47cc1ad19e3dc4f418d7cead0ae2f660fef2cae8d90aaae2ec270586b" }
+  },
+  "otherChecks": {
+    "clientAndServerTypeScript": "PASS",
+    "repositoryLint": "PASS",
+    "gitDiffCheck": "PASS",
+    "sanitizedOfflineBuild": "PASS"
+  },
+  "notEstablished": [
+    "Migration 051 applied to Neon or any hosted target",
+    "Hosted CI or deployed behavior",
+    "STAAH compatibility or certification",
+    "Payment, reservation confirmation, tax or legal clearance"
+  ]
+}
