@@ -5,7 +5,7 @@ import { useAuth } from './AuthContext';
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform, useMotionTemplate, useMotionValueEvent } from 'framer-motion';
 import { SEO } from './SEO';
-import { Listing } from '../types';
+import { Listing, Room } from '../types';
 import { ListingErrorBoundary } from './ListingErrorBoundary';
 
 export const getBrandTypography = (fontId?: string) => {
@@ -142,7 +142,12 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
     if (!isPreview && !isDemoMode && /^[1-9]\d*$/.test(String(initialListing.id))) {
       fetch(`/api/listings/${encodeURIComponent(initialListing.id)}`, {signal:controller.signal})
         .then(res => res.ok ? res.json() : null)
-        .then(data => {if (!controller.signal.aborted && data && String(data.id) === String(initialListing.id)) setListing(data);})
+        .then(data => {
+          if (controller.signal.aborted || !data || String(data.id) !== String(initialListing.id)) return;
+          const selectedConfigId = initialListing.selectedConfigId;
+          setListing(selectedConfigId && data.rooms?.some((room: Room) => room.id === selectedConfigId)
+            ? {...data, selectedConfigId} : data);
+        })
         .catch(() => { /* Keep the supplied projection if its refresh is unavailable. */ });
     }
     return () => controller.abort();
@@ -344,7 +349,11 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
     setOpenAccordion(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const [requestedRoomKey, setSelectedRoomTier] = useState<string>(() => presentedRooms[0]?.key || '');
+  const [requestedRoomKey, setSelectedRoomTier] = useState<string>(() =>
+    presentedRooms.find(entry => entry.room.id === listing.selectedConfigId)?.key || presentedRooms[0]?.key || '');
+  useEffect(() => {
+    setSelectedRoomTier(presentedRooms.find(entry => entry.room.id === listing.selectedConfigId)?.key || presentedRooms[0]?.key || '');
+  }, [listing.id, listing.selectedConfigId]);
   const selectedRoomTier = presentedRooms.some(entry => entry.key === requestedRoomKey) ? requestedRoomKey : presentedRooms[0]?.key || '';
 
   // Booking Form State
@@ -373,15 +382,15 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   const availabilityUnknown = remainingRooms === null;
   const isDateRangeBlocked = remainingRooms === null || remainingRooms === 0;
 
-  // Display the selected supplied base rate; this is not a quote or ledger calculation.
+  // Display an amount only when the public projection has a verified offer.
   const activeTierObj = getRoomConfig(selectedRoomTier);
-// ADR-003: Price authority is listing.rooms[].price, not hardcoded multipliers
   const activeNightlyRate = useMemo(() => {
+    if (listing.priceState === 'VERIFIED_OFFER_UNAVAILABLE') return 0;
     if (liveRoomConfigs && liveRoomConfigs[selectedRoomTier]) {
       return liveRoomConfigs[selectedRoomTier].price;
     }
     return Number.isFinite(listing.price) && listing.price > 0 ? listing.price : 0;
-  }, [selectedRoomTier, liveRoomConfigs, listing.price, listing.currency]);
+  }, [selectedRoomTier, liveRoomConfigs, listing.price, listing.currency, listing.priceState]);
 
   const nights = useMemo(() => {
     const start = new Date(checkIn).getTime();
@@ -941,7 +950,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 <div className="sticky top-28 bg-white border border-zinc-200/80 shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-3xl p-6 flex flex-col">
                     <div className="flex items-end justify-between mb-4">
                         <div>
-                            <span className="text-3xl font-extrabold tracking-tight text-zinc-900 font-display tabular-nums">{activeNightlyRate > 0 ? `From ${listing.currency === 'USD' ? '$' : '₹'}${activeNightlyRate.toLocaleString('en-IN')}` : 'Price is being prepared'}</span>
+                            <span className="text-3xl font-extrabold tracking-tight text-zinc-900 font-display tabular-nums">{activeNightlyRate > 0 ? `From ${listing.currency === 'USD' ? '$' : '₹'}${activeNightlyRate.toLocaleString('en-IN')}` : 'Price available after dates are selected'}</span>
                             <span className="text-zinc-500 font-medium ml-1 text-sm">/ night</span>
                         </div>
                         <span className="bg-amber-50 text-amber-800 border border-amber-200/80 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full flex items-center gap-1">
@@ -985,7 +994,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                               <span className="text-xs">{t.icon}</span>
                               <span className="text-[11px] font-bold tracking-tight mt-0.5">{(t as any).shortName || t.name.substring(0, 10)}</span>
                               <span className="text-[9px] font-mono text-zinc-400">
-                                {tRate > 0 ? `${listing.currency === 'USD' ? '$' : '₹'}${tRate.toLocaleString('en-IN', {maximumFractionDigits: 2})}` : 'Price pending'}
+                                {tRate > 0 && listing.priceState !== 'VERIFIED_OFFER_UNAVAILABLE' ? `${listing.currency === 'USD' ? '$' : '₹'}${tRate.toLocaleString('en-IN', {maximumFractionDigits: 2})}` : 'Price after dates'}
                               </span>
                             </button>
                           );
@@ -1417,7 +1426,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   <div className="flex flex-col">
                     <div className="flex items-baseline gap-1">
                       <span className="text-lg font-extrabold text-white font-display tabular-nums">
-                        {activeNightlyRate > 0 ? `From ${listing.currency === 'USD' ? '$' : '₹'}${activeNightlyRate.toLocaleString('en-IN')}` : 'Price is being prepared'}
+                        {activeNightlyRate > 0 ? `From ${listing.currency === 'USD' ? '$' : '₹'}${activeNightlyRate.toLocaleString('en-IN')}` : 'Price available after dates are selected'}
                       </span>
                       <span className="text-xs text-zinc-400 font-medium">/ night</span>
                     </div>
@@ -1466,7 +1475,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
               <div className="flex flex-col">
                 <div className="flex items-baseline gap-1">
                   <span className={`text-lg sm:text-xl font-black font-display tabular-nums ${showMobileStickyBar ? "text-zinc-900" : "text-white"}`}>
-                    {activeNightlyRate > 0 ? `From ${listing.currency === 'USD' ? '$' : '₹'}${activeNightlyRate.toLocaleString('en-IN')}` : 'Price is being prepared'}
+                    {activeNightlyRate > 0 ? `From ${listing.currency === 'USD' ? '$' : '₹'}${activeNightlyRate.toLocaleString('en-IN')}` : 'Price available after dates are selected'}
                   </span>
                   <span className={`text-[10px] font-bold uppercase font-mono ${showMobileStickyBar ? "text-zinc-400" : "text-zinc-300"}`}>
                     / nt

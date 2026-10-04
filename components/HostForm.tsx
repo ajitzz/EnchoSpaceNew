@@ -781,8 +781,9 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         });
       }
 
-      const primaryImageUrl = uploadedImageUrls[0] || 'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1600&q=80';
+      const primaryImageUrl = uploadedImageUrls[0] || '';
       const basePrice = processedRooms.length > 0 ? processedRooms[0].price : parseFloat(formData.price);
+      const finalImageUrls = uploadedImageUrls;
 
       const payload = {
         title: formData.title,
@@ -795,7 +796,7 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
         address: formData.address,
         city: formData.city,
         imageUrl: primaryImageUrl,
-        imageUrls: uploadedImageUrls.length > 0 ? uploadedImageUrls : [primaryImageUrl],
+        imageUrls: finalImageUrls,
         photos: uploadedPhotos,
         videoUrl: formData.videoUrl,
         rentalMode: formData.rentalMode,

@@ -295,17 +295,20 @@ describe('Phase 3 Milestone 3 — Canonical Relational Room & Media Authority', 
     // Must show authoritative relational suite, not legacy suite
     expect(res.body.rooms.length).toBe(1);
     expect(res.body.rooms[0].name).toBe('Authoritative Relational Suite');
-    expect(res.body.rooms[0].price).toBe(22000);
+    expect(res.body.rooms[0].id).toBe(String(roomId));
+    expect(res.body.rooms[0].price).toBeNull();
+    expect(res.body.priceState).toBe('VERIFIED_OFFER_UNAVAILABLE');
     expect(res.body.photos.length).toBe(1);
     expect(res.body.photos[0].url).toBe('https://images.encho.space/relational-bedroom.jpg');
+    expect(res.body.photos[0].room_type_id).toBe(String(roomId));
 
     const jsonString = JSON.stringify(res.body);
     expect(jsonString).not.toContain('Legacy Old Suite');
     expect(jsonString).not.toContain('https://images.encho.space/legacy.jpg');
   });
 
-  // Test 7: Fallback to legacy JSON only when relational tables have 0 rows
-  it('Test 7: Fallback to legacy JSON only when relational tables have 0 rows', async () => {
+  // Test 7: Legacy room JSON may be reconciliation input, never public offer truth.
+  it('Test 7: Published public media is empty without approved relational assets', async () => {
     const legacyRoomsJson = JSON.stringify([
       { id: 'fallback_1', name: 'Legacy Fallback Bedroom', type: 'fallback', price: 9000, capacity: 2 }
     ]);
@@ -324,12 +327,14 @@ describe('Phase 3 Milestone 3 — Canonical Relational Room & Media Authority', 
       .get('/api/v2/stays/fallback-307')
       .expect(200);
 
-    // Graceful fallback to legacy JSON
-    expect(res.body.rooms.length).toBe(1);
-    expect(res.body.rooms[0].name).toBe('Legacy Fallback Bedroom');
-    expect(res.body.rooms[0].price).toBe(9000);
-    expect(res.body.photos.length).toBe(1);
-    expect(res.body.photos[0].url).toBe('https://images.encho.space/fallback.jpg');
+    expect(res.body.rooms).toEqual([]);
+    expect(res.body.roomState).toBe('LEGACY_DATA_UNRECONCILED');
+    expect(res.body.price).toBeNull();
+    expect(res.body.photos).toEqual([]);
+    expect(res.body.imageUrls).toEqual([]);
+    expect(res.body.imageUrl).toBe('');
+    expect(JSON.stringify(res.body)).not.toContain('https://images.encho.space/fallback.jpg');
+    expect(JSON.stringify(res.body)).not.toContain('Legacy Fallback Bedroom');
   });
 
   // Test 8: Non-destructive room updates preserve existing room IDs

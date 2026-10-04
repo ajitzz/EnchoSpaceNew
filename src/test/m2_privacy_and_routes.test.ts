@@ -124,6 +124,7 @@ describe('Phase 3 Milestone 2 — Published Projection, Canonical Routes & Addre
       expect(coarsenCoordinate(null)).toBeNull();
       expect(coarsenCoordinate(undefined)).toBeNull();
       expect(coarsenCoordinate('invalid')).toBeNull();
+      expect(coarsenCoordinate('   ')).toBeNull();
     });
 
     it('generates collision-safe, deterministic slugs', () => {
@@ -151,7 +152,7 @@ describe('Phase 3 Milestone 2 — Published Projection, Canonical Routes & Addre
 
       expect(mapped.type).toBe('suites');
       expect(mapped.name).toBe('Master Suite');
-      expect(mapped.price).toBe(25000);
+      expect(mapped.price).toBeNull(); // Base amount is not a verified public offer.
       expect(mapped.capacity).toBe(4);
       expect(mapped.features).toEqual(['Balcony', 'Jacuzzi']);
 
@@ -256,7 +257,8 @@ describe('Phase 3 Milestone 2 — Published Projection, Canonical Routes & Addre
       expect(card.city).toBe('Wayanad');
       expect(card.lat).toBe(11.54);
       expect(card.lng).toBe(76.13);
-      expect(card.price).toBe(25000);
+      expect(card.price).toBeNull();
+      expect(card.priceState).toBe('VERIFIED_OFFER_UNAVAILABLE');
       expect(card.currency).toBe('INR');
 
       const serialized = JSON.stringify(card);
@@ -420,7 +422,7 @@ describe('Phase 3 Milestone 2 — Published Projection, Canonical Routes & Addre
       expect(res.text).toContain('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;');
       expect(res.text).not.toContain('<script>alert("xss")</script>');
       expect(res.text).toContain('&quot;quotes&quot; &amp; &lt;tags&gt;');
-      expect(res.text).toContain('<link rel="canonical" href="https://encho.space/stay/hostile-xss-99" />');
+      expect(res.text).toContain('<link rel="canonical" href="https://www.encho.co.in/stay/hostile-xss-99" />');
     });
   });
 
@@ -584,11 +586,14 @@ describe('Phase 3 Milestone 2 — Published Projection, Canonical Routes & Addre
         'type',
         'rental_mode',
         'price',
+        'priceState',
+        'roomState',
         'currency',
         'period',
         'city',
         'imageUrl',
         'imageUrls',
+        'photos',
         'imageCount',
         'rooms',
         'lat',
@@ -605,6 +610,7 @@ describe('Phase 3 Milestone 2 — Published Projection, Canonical Routes & Addre
       ]);
 
       const approvedRoomKeys = new Set([
+        'id', // Canonical published room reference, not the legacy JSON ID.
         'type',
         'name',
         'icon',
@@ -624,7 +630,10 @@ describe('Phase 3 Milestone 2 — Published Projection, Canonical Routes & Addre
         expect(item.host_id).toBeUndefined();
         expect(item.raw_rules).toBeUndefined();
         expect(item.nearby).toBeUndefined();
-        expect(item.photos).toBeUndefined();
+        // Published cards may now carry approved relational room media so
+        // the card and detail use the same room/media authority. This fixture
+        // has no approved media; raw listing photos must not reappear.
+        expect(item.photos).toEqual([]);
         expect(item.curated_guidelines).toBeUndefined();
         expect(item.concierge_privileges).toBeUndefined();
         expect(item.host_philosophy).toBeUndefined();
@@ -771,49 +780,32 @@ describe('Phase 3 Milestone 2 — Published Projection, Canonical Routes & Addre
         expect(__mockRedisStore.has('listings_v2:all:/api/listings')).toBe(true);
       });
 
-      it('public cache reads and writes use only the current generation-scoped namespace', async () => {
-        // Issue fresh public request
+      it('public catalogue bypasses cache until moderation-aware invalidation is implemented', async () => {
+        // Public media moderation can change without advancing the historical
+        // cache generation. No public card may be written or read in this mode.
         const res = await request(app)
           .get('/api/listings?city=Bengaluru')
           .expect(200);
+        expect(__mockRedisStore.size).toBe(0);
 
-        // Verify that Redis was written to
-        const writtenKeys = Array.from(__mockRedisStore.keys());
-        expect(writtenKeys.length).toBeGreaterThan(0);
-
-        // The generation marker is not a public card; all stored cards use the
-        // current namespace and no private feed is cached.
-        for (const key of writtenKeys) {
-          expect(key === 'listings_v3:public_cards:generation' || key.startsWith('listings_v5:public_cards:g0:')).toBe(true);
-          expect(key).not.toContain('listings_v2');
-        }
-
-        const targetKey = 'listings_v5:public_cards:g0:bengaluru:/api/listings?city=Bengaluru';
-        expect(__mockRedisStore.has(targetKey)).toBe(true);
-
-        // Verify that the cached content is the safe public-card projection
-        const cachedRaw = __mockRedisStore.get(targetKey);
-        const cachedData = typeof cachedRaw === 'string' ? JSON.parse(cachedRaw) : cachedRaw;
-        expect(Array.isArray(cachedData)).toBe(true);
-
-        const cachedJson = JSON.stringify(cachedData);
-        expect(cachedJson).not.toContain('77 Palm Avenue');
-        expect(cachedJson).not.toContain('secret_host@villa.com');
-        expect(cachedJson).not.toContain('SuperSecretPass789');
-
-        for (const card of cachedData) {
+        const publicJson = JSON.stringify(res.body);
+        expect(publicJson).not.toContain('77 Palm Avenue');
+        expect(publicJson).not.toContain('secret_host@villa.com');
+        expect(publicJson).not.toContain('SuperSecretPass789');
+        for (const card of res.body) {
           expect(card.address).toBeUndefined();
           expect(card.user_id).toBeUndefined();
           expect(card.raw_rules).toBeUndefined();
           expect(card.nearby).toBeUndefined();
         }
 
-        // Verify subsequent request reads from the generation-scoped cache.
+        // A second request must still avoid cache. A future cache reintroduction
+        // requires its own moderation invalidation and privacy tests.
         const res2 = await request(app)
           .get('/api/listings?city=Bengaluru')
           .expect(200);
-
-        expect(res2.body).toEqual(cachedData);
+        expect(res2.body).toEqual(res.body);
+        expect(__mockRedisStore.size).toBe(0);
       });
 
       it('authenticated owner/admin responses are NEVER stored in a public cache', async () => {
