@@ -1,0 +1,22 @@
+{
+  "evidenceLayer": "local-built-browser-and-disposable-postgresql",
+  "taskBase": "9a79ba01cefad301afe5f6b522805ba38124f8ed",
+  "acceptedCodeSubject": "5f6c281b360f9eeac226e8111db1f785cb8fc94b",
+  "canonicalIntegratedCodeSubject": "5f6c281b360f9eeac226e8111db1f785cb8fc94b",
+  "worker": "WORKER_UNAVAILABLE_before_delivery; bounded direct Codex repair",
+  "finding": "Persisted lowercase content-type was spread beside Content-Type during replay, producing application/json, application/json. Express did not parse the event body and returned 422.",
+  "controlledSchedule": {
+    "lostReply": "First mounted-route POST committed, then transport-boundary fixture returned 409 OPERATION_OUTCOME_UNKNOWN. Queue retained the original event UUID.",
+    "overlap": "Two tabs invoked replay while a route-readiness barrier held the first replay; one lease-owning network attempt proceeded after release.",
+    "accountSwitch": "A second event's replay was held at route readiness, actor 17 switched to actor 22, then the response completed. The old request was not retroactively canceled or projected into actor 22's UI."
+  },
+  "fixtureEventIds": ["77777777-7777-4777-8777-777777777777", "88888888-8888-4888-8888-888888888888"],
+  "attemptsPerEventInControlledFixture": 2,
+  "durableMessagesPerEvent": 1,
+  "logicalNotificationIntentsPerEvent": 1,
+  "queue": "Definite replay completion removed the first event from the actor queue; account switch purged the second actor-17 queue and emitted no committed UI event to actor 22.",
+  "legacyFixtureQualification": "An earlier synthetic response fixture observed 2 or 3 same-event requests: direct attempt, at most one retry from the previously verified session before restored /auth/me rejection, then one retry after same-actor reauthentication. The fixture did not measure database effects; the mounted-route PostgreSQL fixture does.",
+  "focusedVerification": "Node 24 sanitized runner: offline-worker lifecycle and conversation service, 2 files/24 tests passed; client TypeScript, scoped ESLint, and git diff --check exited 0 in the canonical worktree.",
+  "independentReview": "PASS; no P0/P1 replay-scoped finding; reviewer did not independently rerun tests.",
+  "limitations": "Local fixture only. Startup safe-update screen remains a separate open lifecycle finding. Full stabilization regression, hosted CI, staging and production replay evidence are not claimed."
+}
