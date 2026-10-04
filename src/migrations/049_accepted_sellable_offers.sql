@@ -84,6 +84,46 @@ CREATE TRIGGER sellable_offer_event_immutable BEFORE UPDATE OR DELETE ON sellabl
 CREATE TRIGGER sellable_offer_draft_receipt_immutable BEFORE UPDATE OR DELETE ON sellable_offer_draft_receipts
   FOR EACH ROW EXECUTE FUNCTION sellable_offer_reject_evidence_mutation();
 
+-- A second, database-owned submission fence covers every canonical inventory
+-- row and legacy block within this revision's stay scope. A caller may submit
+-- evidence JSON, but cannot choose or change this digest. The service also
+-- retains its own inventory hash for its normal stale-review path.
+CREATE FUNCTION sellable_offer_inventory_snapshot_hash(target_listing INT,target_room INT,
+  target_start DATE,target_end DATE) RETURNS TEXT LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path=pg_catalog,public,pg_temp AS $$
+  SELECT encode(sha256(convert_to(jsonb_build_object(
+    'days',coalesce((SELECT jsonb_agg(jsonb_build_array(i.id,i.listing_id,i.room_type_id,
+      to_char(i.calendar_date,'YYYY-MM-DD'),i.total_units,i.held_units,i.booked_units,i.blocked_units)
+      ORDER BY i.calendar_date,i.id)
+      FROM public.inventory_days i WHERE i.room_type_id=target_room
+        AND i.calendar_date>=target_start AND i.calendar_date<target_end),'[]'::jsonb),
+    'blocks',coalesce((SELECT jsonb_agg(jsonb_build_array(b.id,b.listing_id,b.room_type_id,
+      b.room_tier_key,b.room_name,b.mapping_status,to_char(b.start_date,'YYYY-MM-DD'),
+      to_char(b.end_date,'YYYY-MM-DD')) ORDER BY b.start_date,b.id)
+      FROM public.room_calendar_blocks b WHERE b.listing_id=target_listing
+        AND b.start_date<target_end AND b.end_date>=target_start
+        AND (b.room_type_id IS NULL OR b.room_type_id=target_room)),'[]'::jsonb)
+  )::text,'UTF8')),'hex')
+$$;
+REVOKE ALL ON FUNCTION sellable_offer_inventory_snapshot_hash(INT,INT,DATE,DATE) FROM PUBLIC;
+CREATE FUNCTION sellable_offer_stamp_submitted_inventory() RETURNS trigger LANGUAGE plpgsql
+SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp SET row_security=on AS $$
+DECLARE scope RECORD;
+BEGIN
+  IF NEW.event_type='SUBMITTED' THEN
+    SELECT o.listing_id,o.room_type_id,r.stay_start,r.stay_end INTO scope
+      FROM public.sellable_offers o JOIN public.sellable_offer_revisions r
+        ON r.offer_id=o.id AND r.revision=NEW.revision WHERE o.id=NEW.offer_id;
+    IF NOT FOUND THEN RAISE EXCEPTION 'SELLABLE_OFFER_SUBMISSION_SCOPE_MISSING'; END IF;
+    NEW.evidence:=coalesce(NEW.evidence,'{}'::jsonb) || jsonb_build_object('inventorySqlHash',
+      public.sellable_offer_inventory_snapshot_hash(scope.listing_id,scope.room_type_id,
+        scope.stay_start,scope.stay_end));
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER sellable_offer_submission_inventory BEFORE INSERT ON sellable_offer_events
+  FOR EACH ROW EXECUTE FUNCTION sellable_offer_stamp_submitted_inventory();
+
 -- Events and the mutable parent pointer are one transaction-level transition.
 -- A restricted writer cannot commit an orphan event that would misstate review
 -- status even when it never becomes publicly sellable. The service deliberately
@@ -92,10 +132,14 @@ CREATE FUNCTION sellable_offer_guard_event_commit() RETURNS trigger LANGUAGE plp
 SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp SET row_security=on AS $$
 DECLARE authority RECORD;
 BEGIN
-  SELECT version,latest_revision,current_accepted_revision,public_disposition
+  SELECT version,latest_revision,current_accepted_revision,public_disposition,host_account_id
     INTO authority FROM public.sellable_offers WHERE id=NEW.offer_id;
   IF NOT FOUND OR authority.version<>NEW.offer_version THEN
     RAISE EXCEPTION 'SELLABLE_OFFER_EVENT_PARENT_MISMATCH';
+  END IF;
+  IF NEW.event_type IN ('ACCEPTED','SUPERSEDED','RETIRED')
+    AND NEW.actor_account_id=authority.host_account_id THEN
+    RAISE EXCEPTION 'SELLABLE_OFFER_SELF_REVIEW_FORBIDDEN';
   END IF;
   IF NEW.event_type='DRAFT_CREATED' AND authority.latest_revision<>NEW.revision THEN
     RAISE EXCEPTION 'SELLABLE_OFFER_EVENT_PARENT_MISMATCH';
@@ -134,6 +178,7 @@ CREATE CONSTRAINT TRIGGER sellable_offer_event_parent_commit
 CREATE FUNCTION sellable_offer_guard_identity() RETURNS trigger LANGUAGE plpgsql
 SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp SET row_security=on AS $$
 DECLARE incoming_scope RECORD;
+DECLARE submitted_inventory_hash TEXT;
 BEGIN
   IF NEW.id<>OLD.id OR NEW.listing_id<>OLD.listing_id OR NEW.room_type_id<>OLD.room_type_id
      OR NEW.host_account_id<>OLD.host_account_id OR NEW.created_at<>OLD.created_at
@@ -185,6 +230,14 @@ BEGIN
         WHERE offer_id=NEW.id AND revision=NEW.current_accepted_revision;
       PERFORM public.sellable_offer_lock_evidence(NEW.listing_id,NEW.room_type_id,
         incoming_scope.stay_start,incoming_scope.stay_end,NEW.id);
+      SELECT e.evidence->>'inventorySqlHash' INTO submitted_inventory_hash
+        FROM public.sellable_offer_events e WHERE e.offer_id=NEW.id
+          AND e.revision=NEW.current_accepted_revision AND e.event_type='SUBMITTED';
+      IF submitted_inventory_hash IS NULL OR submitted_inventory_hash<>
+        public.sellable_offer_inventory_snapshot_hash(NEW.listing_id,NEW.room_type_id,
+          incoming_scope.stay_start,incoming_scope.stay_end) THEN
+        RAISE EXCEPTION 'SELLABLE_OFFER_SUBMISSION_INVENTORY_CHANGED';
+      END IF;
       IF public.sellable_offer_revision_state(NEW.id,NEW.current_accepted_revision)
         NOT IN ('VERIFIED_OFFER_AVAILABLE','OFFER_NOT_YET_EFFECTIVE') THEN
         RAISE EXCEPTION 'SELLABLE_OFFER_CURRENT_AUTHORITY_INVALID';
@@ -444,6 +497,8 @@ CREATE POLICY sellable_offer_event_create ON sellable_offer_events FOR INSERT WI
   OR (event_type IN ('ACCEPTED','SUPERSEDED','RETIRED')
     AND actor_account_id::text=current_setting('app.current_user_id',true)
     AND actor_membership_id=internal_iam_current_membership_id()
+    AND EXISTS(SELECT 1 FROM sellable_offers o WHERE o.id=offer_id
+      AND o.host_account_id<>actor_account_id)
     AND internal_iam_has_permission(internal_iam_current_organization_id(),'offer.accept','OFFER',offer_id::text,NULL,
       coalesce(nullif(current_setting('app.workforce_environment',true),''),'LOCAL'),NULL))
 );
@@ -462,7 +517,8 @@ REVOKE ALL ON sellable_offers,sellable_offer_revisions,sellable_offer_events,
 REVOKE ALL ON FUNCTION sellable_offer_source_snapshot(INT,INT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION sellable_offer_lock_evidence(INT,INT,DATE,DATE,UUID) FROM PUBLIC;
 REVOKE ALL ON FUNCTION sellable_offer_reject_evidence_mutation(),sellable_offer_guard_identity(),
-  sellable_offer_reject_delete(),sellable_offer_guard_event_commit() FROM PUBLIC;
+  sellable_offer_reject_delete(),sellable_offer_guard_event_commit(),
+  sellable_offer_stamp_submitted_inventory() FROM PUBLIC;
 
 -- Extend the current scoped workforce catalog. The seeded role has no member grants.
 DO $seed$

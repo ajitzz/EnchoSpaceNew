@@ -31,6 +31,10 @@ describe('W1 accepted dated sellable offers on isolated PostgreSQL',()=>{
     expect(draft).toMatchObject({revision:1,version:1,status:'DRAFT',amountMinor:'550000'});
     const submitted=await service.submit(host,{offerId:draft.offerId,revision:1,expectedVersion:1});
     expect(submitted).toMatchObject({status:'SUBMITTED',version:2});
+    const submissionEvidence=(await fixture.owner.query(`SELECT evidence FROM sellable_offer_events
+      WHERE offer_id=$1 AND revision=1 AND event_type='SUBMITTED'`,[draft.offerId])).rows[0].evidence;
+    expect(submissionEvidence.inventoryHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(submissionEvidence.inventorySqlHash).toMatch(/^[a-f0-9]{64}$/);
     expect((await service.submit(host,{offerId:draft.offerId,revision:1,expectedVersion:1})).status).toBe('SUBMITTED');
     await fixture.grantOffer(draft.offerId);
     expect(await service.listSubmittedForStaff(staff,1)).toContainEqual(expect.objectContaining({offerId:draft.offerId,status:'SUBMITTED'}));
@@ -63,6 +67,25 @@ describe('W1 accepted dated sellable offers on isolated PostgreSQL',()=>{
     await fixture.grantOffer(acceptedOfferId,10);
     await expect(service.accept(fixture.principal(10,'STAFF'),{offerId:acceptedOfferId,revision:1,expectedVersion:3}))
       .rejects.toMatchObject({code:'OFFER_FORBIDDEN',status:403});
+    const selfDraft=await service.createDraft(fixture.principal(10),offerInput(fixture,102,'610000'));
+    await service.submit(fixture.principal(10),{offerId:selfDraft.offerId,revision:1,expectedVersion:1});
+    await fixture.grantOffer(selfDraft.offerId,10);
+    const ownStaff=fixture.principal(10,'STAFF'),raw=await fixture.staffPool.connect();
+    try{
+      await raw.query('BEGIN');
+      await raw.query(`SELECT set_config('app.current_user_id','10',true),
+        set_config('app.organization_id',$1,true),set_config('app.membership_id',$2,true),
+        set_config('app.staff_session_id',$3,true),set_config('app.workforce_environment','LOCAL',true)`,
+      [ownStaff.organizationId,ownStaff.membershipId,ownStaff.sessionId]);
+      await expect(raw.query(`INSERT INTO sellable_offer_events(offer_id,revision,event_type,
+        actor_account_id,actor_membership_id,offer_version,source_hash,evidence)
+        SELECT offer_id,revision,'ACCEPTED',10,$2::uuid,3,source_hash,'{}'::jsonb
+        FROM sellable_offer_revisions WHERE offer_id=$1 AND revision=1`,[selfDraft.offerId,ownStaff.membershipId]))
+        .rejects.toThrow(/row-level security|policy/);
+      await raw.query('ROLLBACK');
+    }finally{raw.release();}
+    expect((await fixture.owner.query('SELECT current_accepted_revision FROM sellable_offers WHERE id=$1',
+      [selfDraft.offerId])).rows[0].current_accepted_revision).toBeNull();
     await expect(service.createDraft(fixture.principal(10),{...offerInput(fixture),amountMinor:'900719925474100'}))
       .rejects.toMatchObject({code:'INPUT_INVALID',status:400});
   });
@@ -163,6 +186,30 @@ describe('W1 accepted dated sellable offers on isolated PostgreSQL',()=>{
     await expect(service.accept(staff,{offerId:draft.offerId,revision:1,expectedVersion:2}))
       .rejects.toMatchObject({code:'OFFER_STALE_REVIEW',status:409});
     await fixture.owner.query('UPDATE room_types SET description=NULL WHERE id=102');
+    await fixture.owner.query('UPDATE inventory_days SET total_units=2 WHERE room_type_id=102 AND calendar_date=$1::date',
+      [fixture.today]);
+    await expect(service.accept(staff,{offerId:draft.offerId,revision:1,expectedVersion:2}))
+      .rejects.toMatchObject({code:'OFFER_STALE_REVIEW',status:409});
+    const raw=await fixture.staffPool.connect();
+    try{
+      await raw.query('BEGIN');
+      await raw.query(`SELECT set_config('app.current_user_id','90',true),
+        set_config('app.organization_id',$1,true),set_config('app.membership_id',$2,true),
+        set_config('app.staff_session_id',$3,true),set_config('app.workforce_environment','LOCAL',true)`,
+      [staff.organizationId,staff.membershipId,staff.sessionId]);
+      await raw.query(`INSERT INTO sellable_offer_events(offer_id,revision,event_type,
+        actor_account_id,actor_membership_id,offer_version,source_hash,evidence)
+        SELECT offer_id,revision,'ACCEPTED',90,$2::uuid,3,source_hash,'{}'::jsonb
+        FROM sellable_offer_revisions WHERE offer_id=$1 AND revision=1`,[draft.offerId,staff.membershipId]);
+      await expect(raw.query(`UPDATE sellable_offers SET current_accepted_revision=1,
+        public_disposition='ACCEPTED',version=3 WHERE id=$1`,[draft.offerId]))
+        .rejects.toThrow(/SELLABLE_OFFER_SUBMISSION_INVENTORY_CHANGED/);
+      await raw.query('ROLLBACK');
+    }finally{raw.release();}
+    expect((await fixture.owner.query('SELECT current_accepted_revision FROM sellable_offers WHERE id=$1',
+      [draft.offerId])).rows[0].current_accepted_revision).toBeNull();
+    await fixture.owner.query('UPDATE inventory_days SET total_units=1 WHERE room_type_id=102 AND calendar_date=$1::date',
+      [fixture.today]);
     await fixture.owner.query('UPDATE inventory_days SET held_units=1 WHERE room_type_id=102 AND calendar_date=$1::date',
       [fixture.today]);
     await expect(service.accept(staff,{offerId:draft.offerId,revision:1,expectedVersion:2}))
