@@ -38,9 +38,12 @@ try {
       'W0 Hybrid City','hybrid','[]'::jsonb)`);
   const room=(await pool.query(`INSERT INTO room_types (listing_id,name,type,base_price,currency,max_occupancy)
     VALUES (9101,'Verified Room','suite',9999,'INR',2) RETURNING id`)).rows[0].id;
-  await pool.query(`INSERT INTO room_types (listing_id,name,type,base_price,currency,max_occupancy,amenities)
+  const hybridRooms=(await pool.query(`INSERT INTO room_types (listing_id,name,type,base_price,currency,max_occupancy,amenities)
     VALUES (9300,'AC Suite','suite',9999,'INR',2,'["Air conditioning","Ensuite"]'::jsonb),
-           (9300,'Plain Suite','suite',9999,'INR',2,'[]'::jsonb)`);
+           (9300,'Plain Suite','suite',9999,'INR',2,'[]'::jsonb) RETURNING id,name`)).rows;
+  await pool.query(`INSERT INTO media_assets (entity_type,entity_id,url,room_type_id,moderation_status,is_hero)
+    VALUES ('listing',9300,'/logo.svg',$1,'approved',true),
+           ('listing',9300,'/app-icon.svg',$2,'approved',false)`, [hybridRooms[0].id,hybridRooms[1].id]);
   await pool.query(`INSERT INTO media_assets (entity_type,entity_id,url,room_type_id,moderation_status,is_hero)
     VALUES ('listing',9101,$1,$2,'approved',true),
       ('listing',9101,'https://media.encho.test/unapproved.jpg',$2,'pending_review',false)`,
@@ -149,6 +152,11 @@ try {
   await filterPage.getByRole('button',{name:'Apply',exact:true}).click();
   await filterPage.getByRole('button',{name:'View W0 Hybrid Stay - AC Suite stay'}).waitFor({state:'visible'});
   assert.equal(await filterPage.getByRole('button',{name:'View W0 Hybrid Stay stay'}).count(),0);
+  const mapHero=filterPage.locator('div.absolute.bottom-6.left-6 img').first();
+  assert.match(await mapHero.getAttribute('src'),/logo\.svg/);
+  await filterPage.getByRole('button',{name:'Plain Suite',exact:true}).click();
+  assert.match(await mapHero.getAttribute('src'),/app-icon\.svg/,
+    'Map media must follow the selected canonical room');
   await filterPage.getByRole('button',{name:'Filters',exact:true}).click();
   await filterPage.getByRole('checkbox',{name:/Must have AC/}).check();
   await filterPage.getByRole('button',{name:'Show places'}).click();

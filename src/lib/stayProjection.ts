@@ -264,6 +264,7 @@ export function sanitizePublicText(input: unknown): string {
   });
 
   // 7. Strip physical street markers and Indian PIN codes (6-digit postal codes)
+  text = text.replace(/\b\d{1,5}\s+(?:[a-z][a-z.'-]*\s+){1,5}(?:st|rd|ave|ln|dr|blvd|street|road|lane|avenue|drive|boulevard)\b[^\n,.]*/gi, '[REDACTED]');
   text = text.replace(/\b(?:plot\s*\d+|house\s*(?:no\.?\s*)?\d+|flat\s*(?:no\.?\s*)?\d+|road|street|lane|avenue|boulevard|nagar|colony|sector\s*\d+)\b[^\n,.]*/gi, '[REDACTED]');
   text = text.replace(/\b\d{6}\b/g, '[REDACTED]');
 

@@ -417,6 +417,16 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
     return listing.rooms?.find(room => room.id === requested)?.id || listing.rooms?.[0]?.id;
   }, [selectedRoomIdForListing]);
 
+  const activeImageUrl = useCallback((listing: Listing): string => {
+    const roomId = selectedRoomId(listing);
+    if (!roomId) return listing.imageUrl || '';
+    const roomPhoto = listing.photos?.find(photo => photo.room_type_id != null &&
+      String(photo.room_type_id) === String(roomId));
+    const sharedPhoto = listing.photos?.find(photo => photo.room_type_id == null);
+    // A room without approved media must not inherit a different room's hero.
+    return roomPhoto?.url || sharedPhoto?.url || '';
+  }, [selectedRoomId]);
+
   const getActivePrice = useCallback((listing: Listing) => {
     const selRoomId = selectedRoomId(listing);
     if (selRoomId && listing.rooms) {
@@ -1078,11 +1088,11 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
             <div className="absolute bottom-6 left-6 z-30 w-[330px] bg-white rounded-[2rem] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.18)] border border-gray-100/80 flex flex-col pointer-events-auto animate-fade-in">
                {/* Main Card Media */}
                <div className="relative h-44 w-full overflow-hidden group">
-                  <img 
-                     src={activeListing.imageUrl || undefined} 
-                     alt={activeListing.title} 
-                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
-                  />
+                  {activeImageUrl(activeListing) ? <img
+                     src={activeImageUrl(activeListing)}
+                     alt={activeListing.title}
+                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  /> : <div className="flex h-full items-center justify-center bg-zinc-100 text-xs font-semibold text-zinc-600">Photos in preparation</div>}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent"></div>
                   
                   {/* Dismiss X Button */}
@@ -1224,7 +1234,8 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                      >
                          {/* Card Image */}
                          <div className="w-[110px] h-full relative">
-                             <img src={listing.imageUrl || undefined} alt={listing.title} className="w-full h-full object-cover" />
+                             {activeImageUrl(listing) ? <img src={activeImageUrl(listing)} alt={listing.title} className="w-full h-full object-cover" />
+                               : <div className="flex h-full items-center justify-center bg-zinc-100 px-2 text-center text-[10px] font-semibold text-zinc-600">Photos in preparation</div>}
                              <div className="absolute bottom-2 left-2 bg-white/90 backdrop-blur-xs px-2 py-0.5 rounded-full text-[9px] font-black text-gray-800 tracking-tight shadow-sm">
                                  {listing.type || 'Resort'}
                              </div>

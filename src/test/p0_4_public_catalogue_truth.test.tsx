@@ -226,20 +226,29 @@ describe('P0-4 truthful public catalogue repair', () => {
   });
 
   describe('MapSidebar mounted truth', () => {
-    it('opens the canonical room selected from an eligible map room list', async () => {
+    it('keeps selected canonical room, media and detail navigation together in the map', async () => {
       Object.defineProperty(window, 'innerWidth', {configurable: true, value: 1440});
       const onSelectListing = vi.fn();
       const listing = createListing({
         id: 'map-room-stay', rental_mode: 'private_rooms', lat: 11.6854, lng: 76.1320,
-        rooms: [{id: 'canonical-ac-room', name: 'AC Suite', price: null, amenities: ['Air conditioning']}]
+        rooms: [
+          {id: 'canonical-ac-room', name: 'AC Suite', price: null, amenities: ['Air conditioning']},
+          {id: 'canonical-second-room', name: 'Second Suite', price: null, amenities: ['Air conditioning']}
+        ],
+        photos: [
+          {url: '/logo.svg', tier: 'suite', category: 'bedroom', room_type_id: 'canonical-ac-room'},
+          {url: '/app-icon.svg', tier: 'suite', category: 'bedroom', room_type_id: 'canonical-second-room'}
+        ]
       });
       render(<CurrencyProvider><MapSidebar listings={[listing]} highlightedId={listing.id}
         city="Wayanad" onSelectListing={onSelectListing} /></CurrencyProvider>);
       await waitFor(() => expect(screen.getByRole('button', {name: 'View Details'})).toBeTruthy());
-      expect(screen.queryByRole('button', {name: 'Plain Suite'})).toBeNull();
+      expect(screen.getByAltText(listing.title).getAttribute('src')).toBe('/logo.svg');
+      fireEvent.click(screen.getByRole('button', {name: 'Second Suite'}));
+      expect(screen.getByAltText(listing.title).getAttribute('src')).toBe('/app-icon.svg');
       fireEvent.click(screen.getByRole('button', {name: 'View Details'}));
       expect(onSelectListing).toHaveBeenCalledWith(expect.objectContaining({
-        id: 'map-room-stay', selectedConfigId: 'canonical-ac-room'
+        id: 'map-room-stay', selectedConfigId: 'canonical-second-room'
       }));
     });
 

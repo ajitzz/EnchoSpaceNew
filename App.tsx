@@ -248,12 +248,13 @@ function App() {
           const allowedRoomIds = new Set(roomCards.map(card => String(card.selectedConfigId)));
           const wholePlaceShown = cards.some(card => !card.isChild);
           const mediaSource = wholePlaceShown ? listing : roomCards[0];
+          const eligiblePhotos = wholePlaceShown ? listing.photos : roomCards.flatMap(card => card.photos || []);
           return [{
               ...listing,
               rooms: (listing.rooms || []).filter(room => allowedRoomIds.has(String(room.id))),
               imageUrl: mediaSource.imageUrl,
               imageUrls: mediaSource.imageUrls,
-              photos: mediaSource.photos,
+              photos: eligiblePhotos,
           }];
       });
   }, [visibleListings, displayListings]);
