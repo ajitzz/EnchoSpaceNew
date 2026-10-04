@@ -763,6 +763,8 @@ The portfolio renders one flight per campaign with subject, creative, provider, 
 6. Staff assignment follows skill, availability and workload; it never transfers the guest to another stay.
 7. Escalation links to booking/payment/provider incidents without copying sensitive data into messages.
 
+**2 October 2026 evidence-led CRM elaboration:** The [guest–host conversation and scoped service companion](CR1_GUEST_HOST_SERVICE_CRM_BLUEPRINT_2026_10_02.md) specifies the unfinished first-inquiry continuity, exact-thread navigation, two-account reply proof and assigned/disclosed staff replies against R4-01/R4-02. Saving a property is not a host-visible inquiry under the recommended conservative policy; founder/privacy approval remains open. The companion remains a proposal and does not advance P3 acceptance or release authority.
+
 ### 9.7 UX system
 
 - Reuse the existing premium visual language, but centralize tokens, status vocabulary, typography scale, focus styles and motion rules.
