@@ -36,6 +36,7 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import pkg from 'pg';
+import {setStaysPrincipal,withStaysPrincipal} from '../server/stays/runtime.js';
 
 const { Pool } = pkg;
 const JWT_SECRET = process.env.JWT_SECRET || 'encho_super_secure_jwt_secret_change_in_prod';
@@ -318,6 +319,8 @@ export async function acquireHold(pool: any, params: AcquireHoldParams): Promise
   const client = await pool.connect();
 
   try {
+    await client.query('BEGIN');
+    if(params.quoteId)await setStaysPrincipal(client,principal);
     // 3. Principal-bound idempotency check
     const existingRes = await client.query(
       `SELECT id, room_type_id, holder_principal, check_in_date, check_out_date, units_held, status, request_fingerprint, expires_at, created_at${params.quoteId?', quote_id':''}
@@ -331,6 +334,7 @@ export async function acquireHold(pool: any, params: AcquireHoldParams): Promise
       // If same principal + same key + DIFFERENT fingerprint -> 409 Conflict
       if ((params.quoteId && row.quote_id !== params.quoteId) ||
           (row.request_fingerprint && row.request_fingerprint !== currentFingerprint)) {
+        await client.query('ROLLBACK');
         return {
           success: false,
           statusCode: 409,
@@ -341,6 +345,7 @@ export async function acquireHold(pool: any, params: AcquireHoldParams): Promise
 
       const checkInStr = typeof row.check_in_date === 'string' ? row.check_in_date.substring(0, 10) : formatDateOnly(new Date(row.check_in_date));
       const checkOutStr = typeof row.check_out_date === 'string' ? row.check_out_date.substring(0, 10) : formatDateOnly(new Date(row.check_out_date));
+      await client.query('COMMIT');
       return {
         success: true,
         statusCode: 200,
@@ -358,21 +363,13 @@ export async function acquireHold(pool: any, params: AcquireHoldParams): Promise
     }
 
     // 4. Begin transactional hold acquisition
-    await client.query('BEGIN');
-
     if (params.quoteId) {
       // Verify quote and accepted commercial authority on the same held
       // connection that will mutate inventory; the route's pre-read is only
       // for deriving intent and is never authoritative here.
       const quote=(await client.query(`SELECT q.*,q.check_in_date::text AS quote_check_in,
-          q.check_out_date::text AS quote_check_out,o.current_accepted_revision,o.public_disposition,
-          o.listing_id AS offer_listing_id,o.room_type_id AS offer_room_type_id,
-          r.amount_minor AS offer_nightly_minor,r.currency AS offer_currency,
-          r.price_basis AS offer_price_basis,r.max_guests AS offer_max_guests,
-          r.source_hash AS accepted_source_hash
-        FROM stays_quotes q JOIN sellable_offers o ON o.id=q.offer_id
-        JOIN sellable_offer_revisions r ON r.offer_id=q.offer_id AND r.revision=q.offer_revision
-        WHERE q.id=$1 FOR SHARE OF q,o`,[params.quoteId])).rows[0];
+          q.check_out_date::text AS quote_check_out
+        FROM stays_quotes q WHERE q.id=$1`,[params.quoteId])).rows[0];
       if(quote&&new Date(quote.expires_at).getTime()<=Date.now()){
         await client.query('ROLLBACK');
         return {success:false,statusCode:409,error:'Quote expired; request a fresh room subtotal.',code:'QUOTE_EXPIRED'};
@@ -381,25 +378,24 @@ export async function acquireHold(pool: any, params: AcquireHoldParams): Promise
       const quoteOut=String(quote?.quote_check_out);
       if (!quote||quote.quote_kind!=='ACCEPTED_OFFER'||quote.holder_principal!==principal||
           Number(quote.room_type_id)!==roomTypeId||
-          Number(quote.offer_room_type_id)!==roomTypeId||
-          Number(quote.offer_listing_id)!==Number(quote.listing_id)||
           quoteIn!==params.checkIn||quoteOut!==params.checkOut||Number(quote.nights)!==stayDates.length||
-          quantity!==1||Number(quote.guest_count)>Number(quote.offer_max_guests)||
-          String(quote.accepted_nightly_paise)!==String(quote.offer_nightly_minor)||
-          BigInt(quote.base_price_paise)!==BigInt(quote.offer_nightly_minor)*BigInt(stayDates.length)||
-          quote.currency!==quote.offer_currency||quote.price_basis!==quote.offer_price_basis||
-          quote.source_hash!==quote.accepted_source_hash||
-          quote.public_disposition!=='ACCEPTED'||
-          Number(quote.current_accepted_revision)!==Number(quote.offer_revision)) {
+          quantity!==1) {
         await client.query('ROLLBACK');
         return {success:false,statusCode:409,error:'Quote is missing, expired, stale, or does not match this hold.',code:'QUOTE_INVALID'};
       }
-      const state=(await client.query('SELECT sellable_offer_revision_state($1::uuid,$2) AS state',
-        [quote.offer_id,quote.offer_revision])).rows[0]?.state;
-      if (state!=='VERIFIED_OFFER_AVAILABLE') {
+      await client.query('SELECT stays_expire_holds_for_itinerary($1,$2::date,$3::date)',
+        [roomTypeId,params.checkIn,params.checkOut]);
+      const offer=(await client.query(`SELECT * FROM stays_current_accepted_offer($1::uuid,$2::int)`,
+        [quote.offer_id,quote.offer_revision])).rows[0];
+      if(!offer||Number(offer.room_type_id)!==roomTypeId||
+          Number(offer.listing_id)!==Number(quote.listing_id)||
+          Number(quote.guest_count)>Number(offer.max_guests)||
+          String(quote.accepted_nightly_paise)!==String(offer.amount_minor)||
+          BigInt(quote.base_price_paise)!==BigInt(offer.amount_minor)*BigInt(stayDates.length)||
+          quote.currency!==offer.currency||quote.price_basis!==offer.price_basis||
+          quote.source_hash!==offer.source_hash){
         await client.query('ROLLBACK');
-        return {success:false,statusCode:409,error:'Accepted offer or inventory is no longer available.',
-          code:state==='ROOM_UNAVAILABLE'?'INVENTORY_CONFLICT':'OFFER_STALE'};
+        return {success:false,statusCode:409,error:'Accepted offer no longer matches this quote.',code:'OFFER_STALE'};
       }
     }
 
@@ -504,6 +500,12 @@ export async function acquireHold(pool: any, params: AcquireHoldParams): Promise
           reason: 'AMBIGUOUS_PROPERTY_BLOCK'
         }
       };
+    }
+
+    if(params.quoteId&&mappedConflictingBlocks.length>0){
+      await client.query('ROLLBACK');
+      return {success:false,statusCode:409,error:'A calendar block conflicts with this itinerary.',
+        code:'CALENDAR_BLOCK_CONFLICT'};
     }
 
     // 4c. Ensure inventory_days rows exist for all requested dates
@@ -662,11 +664,14 @@ export async function acquireHold(pool: any, params: AcquireHoldParams): Promise
     await client.query('ROLLBACK');
     // If composite unique collision occurs during race
     if (err.code === '23505' || (err.message && err.message.includes('duplicate key'))) {
-      const fallbackRes = await pool.query(
+      const fallbackRes = params.quoteId ? await withStaysPrincipal(pool,principal,client=>client.query(
         `SELECT id, room_type_id, check_in_date, check_out_date, units_held, status, request_fingerprint, expires_at, created_at${params.quoteId?', quote_id':''}
          FROM booking_holds WHERE holder_principal = $1 AND idempotency_key = $2`,
         [principal, params.idempotencyKey]
-      );
+      )) : await pool.query(
+        `SELECT id, room_type_id, check_in_date, check_out_date, units_held, status, request_fingerprint, expires_at, created_at
+         FROM booking_holds WHERE holder_principal = $1 AND idempotency_key = $2`,
+        [principal,params.idempotencyKey]);
       if (fallbackRes.rows.length > 0) {
         const row = fallbackRes.rows[0];
         if ((params.quoteId && row.quote_id !== params.quoteId) ||
@@ -694,7 +699,8 @@ export async function acquireHold(pool: any, params: AcquireHoldParams): Promise
         };
       }
       if(params.quoteId){
-        const conflicting=await pool.query('SELECT id FROM booking_holds WHERE quote_id=$1',[params.quoteId]);
+        const conflicting=await withStaysPrincipal(pool,principal,client=>
+          client.query('SELECT id FROM booking_holds WHERE quote_id=$1',[params.quoteId]));
         if(conflicting.rowCount)return {success:false,statusCode:409,error:'Quote already has a hold.',code:'HOLD_ALREADY_EXISTS'};
       }
     }
@@ -827,10 +833,12 @@ export async function releaseHold(pool: any, params: ReleaseHoldParams): Promise
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    if(params.holderPrincipal?.startsWith('user:')||params.holderPrincipal?.startsWith('session:'))
+      await setStaysPrincipal(client,params.holderPrincipal);
 
     // 1. Lock hold record FOR UPDATE
     const holdRes = await client.query(
-      `SELECT id, room_type_id, holder_principal, units_held, status
+      `SELECT id, room_type_id, holder_principal, units_held, status,check_in_date,check_out_date
        FROM booking_holds
        WHERE id = $1
        FOR UPDATE`,
@@ -862,15 +870,23 @@ export async function releaseHold(pool: any, params: ReleaseHoldParams): Promise
     }
 
     // 3. Find hold nights and lock inventory_days ordered by stay_date ASC
-    const nightsRes = await client.query(
-      `SELECT bhn.inventory_day_id, bhn.units, iday.held_units, iday.calendar_date
-       FROM booking_hold_nights bhn
-       JOIN inventory_days iday ON iday.id = bhn.inventory_day_id
-       WHERE bhn.hold_id = $1
-       ORDER BY bhn.stay_date ASC
-       FOR UPDATE`,
-      [params.holdId]
-    );
+    const allocations = await client.query(
+      `SELECT inventory_day_id,units FROM booking_hold_nights
+       WHERE hold_id=$1 ORDER BY stay_date ASC`,[params.holdId]);
+    const lockedDays = await client.query(
+      `SELECT id,held_units,calendar_date FROM inventory_days
+       WHERE room_type_id=$1 AND calendar_date >= $2::date AND calendar_date < $3::date
+       ORDER BY calendar_date ASC FOR UPDATE`,
+      [hold.room_type_id,hold.check_in_date,hold.check_out_date]);
+    if(lockedDays.rows.length!==allocations.rows.length)throw new Error('HOLD_NIGHT_AUTHORITY_INCOMPLETE');
+    const unitsByDay=new Map(allocations.rows.map((row:{inventory_day_id:number;units:number})=>
+      [Number(row.inventory_day_id),Number(row.units)]));
+    const nightsRes={rows:lockedDays.rows.map((row:{id:number;held_units:number;calendar_date:Date})=>({
+      inventory_day_id:row.id,held_units:row.held_units,calendar_date:row.calendar_date,
+      units:unitsByDay.get(Number(row.id))
+    }))};
+    if(nightsRes.rows.some((row:{units:number|undefined})=>row.units===undefined))
+      throw new Error('HOLD_NIGHT_AUTHORITY_INCOMPLETE');
 
     // 4. Guarded decrement: ensure held_units >= units. NEVER clamp silently.
     for (const night of nightsRes.rows) {
@@ -910,6 +926,7 @@ export async function releaseHold(pool: any, params: ReleaseHoldParams): Promise
     };
   } catch (err: any) {
     await client.query('ROLLBACK');
+    console.error('[HOLD_RELEASE_ERROR]',{code:typeof err?.code==='string'?err.code:'UNCLASSIFIED'});
     return { success: false, statusCode: 500, error: 'Failed to release hold.', code: 'RELEASE_FAILED' };
   } finally {
     client.release();

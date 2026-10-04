@@ -5,12 +5,14 @@ import {randomUUID} from 'node:crypto';
 import {once} from 'node:events';
 import {createServer} from 'node:net';
 import {chromium} from '@playwright/test';
+import pg from 'pg';
 import jwt from 'jsonwebtoken';
 import {PostgresWorkforceAuthorization} from '../../src/lib/iam/postgresAuthorization.ts';
 import {AcceptedOfferService} from '../../src/server/offers/acceptedOfferService.ts';
 import {addDays,createW1AcceptedOfferFixture} from '../../src/test/harvo/helpers/w1AcceptedOfferFixture.ts';
 import {applyIsolatedMigration} from '../../src/test/harvo/helpers/isolatedMigration.ts';
 import {sweepExpiredHolds} from '../../src/services/inventoryHoldService.ts';
+import {withStaysPrincipal} from '../../src/server/stays/runtime.ts';
 
 const freePort=()=>new Promise((resolve,reject)=>{
   const socket=createServer();socket.once('error',reject);
@@ -23,6 +25,7 @@ const freePort=()=>new Promise((resolve,reject)=>{
 const fixture=await createW1AcceptedOfferFixture({serverCompatible:true});
 let child;
 let browser;
+let restrictedPool;
 const serverOutput=[];
 try{
   await fixture.owner.query(`UPDATE listings SET description='A real temporary-hold test stay.',
@@ -46,6 +49,8 @@ try{
   await fixture.owner.query(`CREATE TABLE bookings(id SERIAL PRIMARY KEY,listing_id INT NOT NULL,
     status TEXT NOT NULL,start_date DATE,end_date DATE)`);
   await applyIsolatedMigration(fixture.owner,'041_stays_canonical_commerce.sql');
+  await fixture.owner.query(`CREATE ROLE encho_stays_web LOGIN NOSUPERUSER NOBYPASSRLS
+    NOCREATEDB NOCREATEROLE NOREPLICATION`);
   const historicalHoldId=randomUUID();
   await fixture.owner.query(`INSERT INTO booking_holds(id,room_type_id,holder_principal,
     idempotency_key,request_fingerprint,check_in_date,check_out_date,
@@ -53,6 +58,9 @@ try{
     $3::date,$4::date,1,'ACTIVE',clock_timestamp()+interval '10 minutes')`,
     [historicalHoldId,randomUUID(),addDays(fixture.today,1),addDays(fixture.today,2)]);
   await applyIsolatedMigration(fixture.owner,'050_accepted_offer_itinerary_quotes.sql');
+  restrictedPool=new pg.Pool({...fixture.owner.options,user:'encho_stays_web'});
+  await assert.rejects(restrictedPool.query('SELECT amount_minor FROM sellable_offer_revisions'),
+    /permission denied/);
   await fixture.owner.query(`UPDATE booking_holds SET status='RELEASED',released_at=clock_timestamp()
     WHERE id=$1`,[historicalHoldId]);
 
@@ -65,6 +73,7 @@ try{
       TMPDIR:process.env.TMPDIR||'/tmp',NODE_ENV:'production',DATABASE_URL:ownerUrl,
       ACCEPTED_OFFER_DATABASE_URL:fixture.urlFor('w1_offer_host'),
       PUBLIC_OFFER_DATABASE_URL:fixture.urlFor('w1_offer_public'),
+      STAYS_DATABASE_URL:`postgresql://encho_stays_web@localhost/postgres?host=${encodeURIComponent(fixture.socketPath)}&port=${fixture.port}`,
       CR1_WORKFORCE_ENVIRONMENT:'LOCAL',JWT_SECRET:'w2-disposable-test-server-secret',
       PORT:String(port),ALLOWED_ORIGINS:base},stdio:['ignore','pipe','pipe'],
   });
@@ -98,20 +107,35 @@ try{
   assert.equal(first.body.quote.acceptedNightlyMinor,'550000');
   assert.equal(first.body.quote.roomSubtotalMinor,'1650000');
   assert.equal(first.body.quote.payableTotalMinor,null);
+  const privateQuotes=await withStaysPrincipal(restrictedPool,'session:00000000-0000-4000-8000-000000000000',
+    client=>client.query("SELECT id FROM stays_quotes WHERE quote_kind='ACCEPTED_OFFER'"));
+  assert.equal(privateQuotes.rowCount,0);
   const quoteReplay=await post('/api/v2/stays/quotes',firstRequest,first.cookie);
   assert.equal(quoteReplay.body.quote.id,first.body.quote.id);
   const quoteConflict=await post('/api/v2/stays/quotes',{
     ...firstRequest,guestCount:1},first.cookie);
   assert.equal(quoteConflict.status,409);
+  for(const column of ['request_fingerprint','source_hash']){
+    await assert.rejects(fixture.owner.query(`INSERT INTO stays_quotes(id,listing_id,room_type_id,
+      check_in_date,check_out_date,nights,base_price_paise,tax_paise,total_paise,currency,
+      guest_count,expires_at,quote_kind,offer_id,offer_revision,holder_principal,request_id,
+      request_fingerprint,accepted_nightly_paise,price_basis,source_hash)
+      SELECT $1,listing_id,room_type_id,check_in_date,check_out_date,nights,base_price_paise,
+      NULL,NULL,currency,guest_count,expires_at,quote_kind,offer_id,offer_revision,
+      holder_principal,$2,${column==='request_fingerprint'?'NULL':'request_fingerprint'},
+      accepted_nightly_paise,price_basis,${column==='source_hash'?'NULL':'source_hash'}
+      FROM stays_quotes WHERE id=$3`,[randomUUID(),randomUUID(),first.body.quote.id]),
+    /stays_quotes_authority_shape/);
+  }
   const second=await post('/api/v2/stays/quotes',{...itinerary,requestId:randomUUID()},first.cookie);
   const otherAccountToken=jwt.sign({id:11},'w2-disposable-test-server-secret');
   const foreignQuoteRead=await fetch(`${base}/api/v2/stays/quotes/${first.body.quote.id}`,{
     headers:{Authorization:`Bearer ${otherAccountToken}`}});
-  assert.equal(foreignQuoteRead.status,403);
+  assert.equal(foreignQuoteRead.status,404);
   const foreignAccountHold=await fetch(`${base}/api/v2/stays/holds`,{
     method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${otherAccountToken}`},
     body:JSON.stringify({quoteId:first.body.quote.id,idempotencyKey:randomUUID()})});
-  assert.equal(foreignAccountHold.status,403);
+  assert.equal(foreignAccountHold.status,404);
   assert.equal(second.status,201,JSON.stringify(second.body));
   const invalid=await post('/api/v2/stays/holds',{quoteId:first.body.quote.id,
     idempotencyKey:randomUUID(),roomTypeId:201},first.cookie);
@@ -139,7 +163,7 @@ try{
   assert.equal(forged.status,404);
   const foreign=await post('/api/v2/stays/holds',{
     quoteId:[first,second][winnerIndex].body.quote.id,idempotencyKey:randomUUID()});
-  assert.equal(foreign.status,403);
+  assert.equal(foreign.status,404);
   const fakeMoney=await post('/api/v2/stays/quotes',{
     ...itinerary,requestId:randomUUID(),amountMinor:'1'},first.cookie);
   assert.equal(fakeMoney.status,400);
@@ -171,8 +195,15 @@ try{
 
   await fixture.owner.query(`UPDATE booking_holds SET expires_at=clock_timestamp()-interval '1 second'
     WHERE id=$1`,[holds.rows[0].id]);
+  const quoteAfterExpiredHold=await post('/api/v2/stays/quotes',{
+    ...itinerary,requestId:randomUUID()},first.cookie);
+  assert.equal(quoteAfterExpiredHold.status,201,
+    'A delayed sweeper must not strand capacity after a hold expires');
+  const expiredByQuote=await fixture.owner.query('SELECT status FROM booking_holds WHERE id=$1',
+    [holds.rows[0].id]);
+  assert.equal(expiredByQuote.rows[0].status,'EXPIRED');
   const swept=await sweepExpiredHolds(fixture.owner);
-  assert.equal(swept.expiredHoldCount,1);
+  assert.equal(swept.expiredHoldCount,0,'Sweeper must not release on-demand expiry twice');
   const released=await fixture.owner.query(`SELECT calendar_date::text,held_units FROM inventory_days
     WHERE room_type_id=101 AND calendar_date >= $1::date AND calendar_date < $2::date
     ORDER BY calendar_date`,[itinerary.checkIn,itinerary.checkOut]);
@@ -204,7 +235,7 @@ try{
   assert.equal(newHoldAfterQuoteExpiry.status,409);
   assert.equal(newHoldAfterQuoteExpiry.body.code,'QUOTE_EXPIRED');
   const releaseShort=await post(`/api/v2/stays/holds/${shortHold.body.hold.id}/release`,{},first.cookie);
-  assert.equal(releaseShort.status,200);
+  assert.equal(releaseShort.status,200,JSON.stringify(releaseShort.body));
 
   // W1 watch: a transient hold must not be mistaken for a material change to
   // commercial-review facts when another unit remains sellable.
@@ -284,6 +315,9 @@ try{
   for(const width of [1280,360]){
     const context=await browser.newContext({viewport:{width,height:850},reducedMotion:'reduce'});
     const page=await context.newPage();
+    page.on('response',response=>{
+      if(response.url().includes('/api/v2/stays/'))console.error('Browser W2 response',response.status(),response.url());
+    });
     await page.goto(`${base}/stay/amber-house`,{waitUntil:'domcontentloaded'});
     const quoteButton=page.getByRole('button',{name:'Get verified room subtotal'});
     await quoteButton.waitFor({state:'visible',timeout:15000});
@@ -293,7 +327,11 @@ try{
     const holdButton=page.getByRole('button',{name:'Temporarily hold this room'});
     if(width===360){await holdButton.focus();await page.keyboard.press('Enter');}
     else await holdButton.click();
-    await page.getByText(/Temporarily held until/).waitFor({state:'visible',timeout:15000});
+    try{await page.getByText(/Temporarily held until/).waitFor({state:'visible',timeout:15000});}
+    catch(error){
+      console.error('Guest hold panel:',await page.getByRole('region',{name:'Room quote and temporary hold'}).innerText());
+      throw error;
+    }
     await page.reload({waitUntil:'domcontentloaded'});
     await page.getByText(/Temporarily held until/).waitFor({state:'visible',timeout:15000});
     if(width===360){
@@ -322,13 +360,18 @@ try{
     quoteSubtotalMinor:first.body.quote.roomSubtotalMinor,holdStatuses:results.map(result=>result.status),
     replayStatus:replay.status,holdCount:holds.rowCount,heldNights:inventory.rows.length,
     forgedStatus:forged.status,foreignStatus:foreign.status,quoteReplay:quoteReplay.status,
-    quoteConflict:quoteConflict.status,expiredQuote:expired.status,expiredHoldReleased:swept.expiredHoldCount,
+    quoteConflict:quoteConflict.status,expiredQuote:expired.status,
+    expiredHoldReleased:expiredByQuote.rows[0].status,
     replayAfterQuoteExpiry:replayAfterQuoteExpiry.status,newHoldAfterQuoteExpiry:newHoldAfterQuoteExpiry.status,
     reviewWhileHeld,reviewAfterRelease:reviewAfterRelease.status,
     supersededQuoteHold:supersededQuoteHold.status,supersededEvents:superseded.rows[0].count,
     browserViewports:[1280,360],draftQuote:draftQuote.status,unpublishedQuote:unpublished.status}));
+}catch(error){
+  console.error('Built W2 server diagnostic:',serverOutput.join('').slice(-4000));
+  throw error;
 }finally{
   await browser?.close();
   if(child?.exitCode===null){child.kill('SIGTERM');await once(child,'exit');}
+  await restrictedPool?.end();
   await fixture.close();
 }

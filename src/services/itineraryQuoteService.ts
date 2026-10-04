@@ -2,6 +2,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import type pg from 'pg';
 import {z} from 'zod';
 import {getHoldTtlSeconds,getStayDatesRange} from './inventoryHoldService.js';
+import {setStaysPrincipal,withStaysPrincipal} from '../server/stays/runtime.js';
 
 const requestSchema=z.object({
   offerId:z.string().uuid(),revision:z.number().int().positive(),
@@ -26,7 +27,7 @@ export class ItineraryQuoteError extends Error{
   }
 }
 const reject=(code:QuoteCode,status:number):never=>{throw new ItineraryQuoteError(code,status);};
-const date=(value:unknown)=>String(value).slice(0,10);
+const date=(value:unknown)=>value instanceof Date?value.toISOString().slice(0,10):String(value).slice(0,10);
 const instant=(value:unknown)=>new Date(String(value)).toISOString();
 const fingerprint=(input:QuoteRequest)=>createHash('sha256').update(JSON.stringify(input)).digest('hex');
 const indiaToday=()=>{
@@ -56,6 +57,7 @@ export async function createItineraryQuote(pool:pg.Pool,rawInput:unknown,holderP
   let committing=false;
   try{
     await client.query('BEGIN');
+    await setStaysPrincipal(client,holderPrincipal);
     await client.query("SET LOCAL lock_timeout='5s'");
     await client.query("SET LOCAL statement_timeout='10s'");
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
@@ -70,23 +72,18 @@ export async function createItineraryQuote(pool:pg.Pool,rawInput:unknown,holderP
     // An exact replay retains its original outcome even if the date rolled
     // forward after creation; only a new quote must meet today's scope.
     if(!range.valid||input.checkIn<indiaToday())reject('ITINERARY_OUT_OF_SCOPE',422);
-    const row=(await client.query(`SELECT o.id,o.listing_id,o.room_type_id,o.current_accepted_revision,
-      o.public_disposition,r.revision,r.amount_minor,r.currency,r.price_basis,
-      r.stay_start::text AS stay_start,r.stay_end::text AS stay_end,
-      r.effective_until,r.min_nights,r.max_guests,r.source_hash
-      FROM sellable_offers o JOIN sellable_offer_revisions r ON r.offer_id=o.id AND r.revision=$2
-      WHERE o.id=$1 FOR SHARE OF o`,[input.offerId,input.revision])).rows[0];
-    if(!row||row.public_disposition!=='ACCEPTED'||Number(row.current_accepted_revision)!==input.revision)
-      reject('OFFER_UNAVAILABLE',409);
+    const room=(await client.query('SELECT stays_current_offer_room($1::uuid,$2::int) AS id',
+      [input.offerId,input.revision])).rows[0]?.id;
+    if(!room)reject('OFFER_UNAVAILABLE',409);
+    await client.query('SELECT stays_expire_holds_for_itinerary($1,$2::date,$3::date)',
+      [room,input.checkIn,input.checkOut]);
+    const row=(await client.query(`SELECT * FROM stays_current_accepted_offer($1::uuid,$2::int)`,
+      [input.offerId,input.revision])).rows[0];
+    if(!row)reject('OFFER_UNAVAILABLE',409);
     if(row.currency!=='INR'||row.price_basis!=='PER_ROOM_NIGHT')reject('OFFER_STALE',409);
     if(input.checkIn<date(row.stay_start)||input.checkOut>date(row.stay_end)||
       range.dates.length<Number(row.min_nights))reject('ITINERARY_OUT_OF_SCOPE',422);
     if(input.guestCount>Number(row.max_guests))reject('OCCUPANCY_EXCEEDED',422);
-    const state=(await client.query('SELECT sellable_offer_revision_state($1::uuid,$2) AS state',
-      [input.offerId,input.revision])).rows[0]?.state;
-    if(state==='ROOM_UNAVAILABLE')reject('ROOM_UNAVAILABLE',409);
-    if(state==='LEGACY_DATA_UNRECONCILED')reject('LEGACY_DATA_UNRECONCILED',409);
-    if(state!=='VERIFIED_OFFER_AVAILABLE')reject('OFFER_STALE',409);
     const blocks=await client.query(`SELECT id,room_type_id,room_tier_key,mapping_status FROM room_calendar_blocks
       WHERE listing_id=$1 AND start_date<$3::date AND end_date>=$2::date
       AND (room_type_id IS NULL OR room_type_id=$4)`,
@@ -134,11 +131,11 @@ export async function getQuoteForHold(pool:pg.Pool,rawId:unknown,holderPrincipal
   const id=z.string().uuid().safeParse(rawId);
   if(!id.success)reject('INPUT_INVALID',400);
   try{
-    const row=(await pool.query(`SELECT *,check_in_date::text AS check_in_text,
-      check_out_date::text AS check_out_text FROM stays_quotes WHERE id=$1
-      AND quote_kind='ACCEPTED_OFFER'`,[id.data])).rows[0];
+    const row=await withStaysPrincipal(pool,holderPrincipal,async client=>
+      (await client.query(`SELECT *,check_in_date::text AS check_in_text,
+        check_out_date::text AS check_out_text FROM stays_quotes WHERE id=$1
+        AND quote_kind='ACCEPTED_OFFER'`,[id.data])).rows[0]);
     if(!row)reject('QUOTE_NOT_FOUND',404);
-    if(row.holder_principal!==holderPrincipal)reject('QUOTE_FORBIDDEN',403);
     // The hold route may read an expired quote only to derive a prior request's
     // identity. acquireHold first replays an existing hold and rejects any new
     // acquisition after expiry inside its inventory transaction.

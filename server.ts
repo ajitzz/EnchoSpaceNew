@@ -239,6 +239,7 @@ import {
   createHostCalendarBlock
 } from './src/services/inventoryHoldService.js';
 import {createItineraryQuote,getQuoteForHold,ItineraryQuoteError} from './src/services/itineraryQuoteService.js';
+import {assertStaysRole,staysConnectionConfig,withStaysPrincipal} from './src/server/stays/runtime.js';
 
 // import pinoHttp from 'pino-http'; // Removed as per JS version
 // import { logger } from './src/lib/logger/index.js'; // Removed as per JS version
@@ -473,6 +474,14 @@ const pool: pg.Pool = resolvedPrimaryConfig
 pool.on('error', (err: any) => {
   console.error('[DATABASE POOL ERROR] Unexpected error on idle client:', err?.message || err);
 });
+
+// Guest quote/hold writes never borrow the owner-backed legacy web pool.
+let staysPool:pg.Pool;
+try{
+  const config=staysConnectionConfig(process.env);
+  staysPool=config?new Pool(config):createFailClosedPool('STAYS_DATABASE_URL_NOT_CONFIGURED');
+}catch(error){staysPool=createFailClosedPool((error as Error).message);}
+staysPool.on('error',(error:Error)=>console.error('[STAYS POOL ERROR]',error.message));
 
 // Consumer Google sign-in uses a dedicated least-privilege login until the
 // whole web role has passed mounted Host/Admin authorization tests. No ambient
@@ -14333,7 +14342,8 @@ app.post('/api/v2/stays/quotes',optionalAuthenticateToken,holdsRateLimiter,async
   if(!isDbConfigured)return res.status(503).json({code:'AUTHORITY_UNAVAILABLE'});
   const principal=resolveItineraryPrincipal(req,res);
   try{
-    const quote=await createItineraryQuote(pool,req.body,principal.holderPrincipal);
+    await assertStaysRole(staysPool);
+    const quote=await createItineraryQuote(staysPool,req.body,principal.holderPrincipal);
     return res.status(201).json({quote});
   }catch(error){
     if(error instanceof ItineraryQuoteError)return res.status(error.status).json({code:error.code,error:error.message});
@@ -14346,7 +14356,10 @@ app.get('/api/v2/stays/quotes/:id',optionalAuthenticateToken,async(req:Request,r
   res.setHeader('Cache-Control','no-store');
   if(!isDbConfigured)return res.status(503).json({code:'AUTHORITY_UNAVAILABLE'});
   const principal=resolveItineraryPrincipal(req,res);
-  try{return res.json({quote:await getQuoteForHold(pool,req.params.id,principal.holderPrincipal)});}
+  try{
+    await assertStaysRole(staysPool);
+    return res.json({quote:await getQuoteForHold(staysPool,req.params.id,principal.holderPrincipal)});
+  }
   catch(error){
     if(error instanceof ItineraryQuoteError)return res.status(error.status).json({code:error.code,error:error.message});
     return res.status(503).json({code:'AUTHORITY_UNAVAILABLE'});
@@ -14361,14 +14374,17 @@ app.post('/api/v2/stays/holds', optionalAuthenticateToken,holdsRateLimiter, asyn
   if(!body.success)return res.status(400).json({code:'QUOTE_REQUIRED',error:'A valid server quote and request identity are required.'});
   const principal=resolveItineraryPrincipal(req,res);
   let quote;
-  try{quote=await getQuoteForHold(pool,body.data.quoteId,principal.holderPrincipal,true);}
+  try{
+    await assertStaysRole(staysPool);
+    quote=await getQuoteForHold(staysPool,body.data.quoteId,principal.holderPrincipal,true);
+  }
   catch(error){
     if(error instanceof ItineraryQuoteError)return res.status(error.status).json({code:error.code,error:error.message});
     return res.status(503).json({code:'AUTHORITY_UNAVAILABLE'});
   }
   let result;
   try{
-    result=await acquireHold(pool,{
+    result=await acquireHold(staysPool,{
       roomTypeId:quote.roomTypeId,checkIn:quote.checkIn,checkOut:quote.checkOut,
       quantity:1,idempotencyKey:body.data.idempotencyKey,quoteId:quote.id,
       holderPrincipal:principal.holderPrincipal,userId:principal.userId,
@@ -14399,8 +14415,10 @@ app.get('/api/v2/stays/holds/:id',optionalAuthenticateToken,async(req:Request,re
   if(!id.success)return res.status(400).json({code:'INPUT_INVALID'});
   const principal=resolveItineraryPrincipal(req,res);
   try{
-    const row=(await pool.query(`SELECT id,quote_id,status,expires_at FROM booking_holds
-      WHERE id=$1 AND holder_principal=$2`,[id.data,principal.holderPrincipal])).rows[0];
+    await assertStaysRole(staysPool);
+    const row=await withStaysPrincipal(staysPool,principal.holderPrincipal,async client=>
+      (await client.query(`SELECT id,quote_id,status,expires_at FROM booking_holds
+        WHERE id=$1 AND holder_principal=$2`,[id.data,principal.holderPrincipal])).rows[0]);
     if(!row||!row.quote_id)return res.status(404).json({code:'HOLD_NOT_FOUND'});
     const expired=row.status==='ACTIVE'&&new Date(row.expires_at).getTime()<=Date.now();
     return res.json({hold:{id:String(row.id),quoteId:String(row.quote_id),
@@ -14413,14 +14431,14 @@ app.get('/api/v2/stays/holds/:id',optionalAuthenticateToken,async(req:Request,re
 // POST /api/v2/stays/holds/:id/release
 app.post('/api/v2/stays/holds/:id/release',optionalAuthenticateToken, async (req: Request, res: Response) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-  const verified=(req as AuthRequest).user;
   const {holderPrincipal}=resolveItineraryPrincipal(req,res);
 
   const body = req.body || {};
-  const result = await releaseHold(pool, {
+  try{await assertStaysRole(staysPool);}catch{return res.status(503).json({code:'AUTHORITY_UNAVAILABLE'});}
+  const result = await releaseHold(staysPool, {
     holdId: String(req.params.id),
     holderPrincipal,
-    isServerAdmin:verified?.role==='admin',
+    isServerAdmin:false,
     reason: body.reason || 'GUEST_EXPLICIT_RELEASE'
   });
 
