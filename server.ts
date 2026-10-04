@@ -14419,9 +14419,9 @@ app.get('/api/v2/stays/holds/:id',optionalAuthenticateToken,async(req:Request,re
     const row=await withStaysPrincipal(staysPool,principal.holderPrincipal,async client=>
       (await client.query(`SELECT id,quote_id,status,expires_at FROM booking_holds
         WHERE id=$1 AND holder_principal=$2`,[id.data,principal.holderPrincipal])).rows[0]);
-    if(!row||!row.quote_id)return res.status(404).json({code:'HOLD_NOT_FOUND'});
+    if(!row)return res.status(404).json({code:'HOLD_NOT_FOUND'});
     const expired=row.status==='ACTIVE'&&new Date(row.expires_at).getTime()<=Date.now();
-    return res.json({hold:{id:String(row.id),quoteId:String(row.quote_id),
+    return res.json({hold:{id:String(row.id),quoteId:row.quote_id?String(row.quote_id):null,
       status:expired?'EXPIRED':row.status,expiresAt:new Date(row.expires_at).toISOString()}});
   }catch{
     return res.status(503).json({code:'AUTHORITY_UNAVAILABLE'});

@@ -12,12 +12,26 @@ export async function assertStaysRole(pool:pg.Pool):Promise<void>{
     r.rolcreaterole,r.rolreplication,r.rolcanlogin,
     has_schema_privilege(current_user,'public','CREATE') AS schema_create,
     has_database_privilege(current_user,current_database(),'CREATE') AS database_create,
-    pg_has_role(r.oid,c.relowner,'MEMBER') AS owns_quotes
-    FROM pg_roles r JOIN pg_class c ON c.oid='public.stays_quotes'::regclass
+    EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname='public' AND c.relname IN ('stays_quotes','booking_holds',
+        'booking_hold_nights','inventory_days','sellable_offers','sellable_offer_revisions')
+        AND pg_has_role(r.oid,c.relowner,'MEMBER')) AS protected_owner_member,
+    has_table_privilege(current_user,'public.sellable_offers','SELECT,INSERT,UPDATE,DELETE')
+      AS raw_offers_privilege,
+    has_table_privilege(current_user,'public.sellable_offer_revisions','SELECT,INSERT,UPDATE,DELETE')
+      AS raw_revisions_privilege,
+    pg_has_role(r.oid,'pg_read_all_data'::regrole,'MEMBER') AS read_all_data,
+    pg_has_role(r.oid,'pg_write_all_data'::regrole,'MEMBER') AS write_all_data,
+    has_table_privilege(current_user,'public.stays_quotes','SELECT,INSERT') AS quote_access,
+    has_function_privilege(current_user,'public.stays_current_accepted_offer(uuid,int)','EXECUTE')
+      AS offer_capability
+    FROM pg_roles r
     WHERE r.rolname=current_user`);
   const r=rows[0];
   if(!r||!r.rolcanlogin||r.rolsuper||r.rolbypassrls||r.rolcreatedb||
-    r.rolcreaterole||r.rolreplication||r.schema_create||r.database_create||r.owns_quotes)
+    r.rolcreaterole||r.rolreplication||r.schema_create||r.database_create||
+    r.protected_owner_member||r.raw_offers_privilege||r.raw_revisions_privilege||
+    r.read_all_data||r.write_all_data||!r.quote_access||!r.offer_capability)
     throw new Error('STAYS_ROLE_NOT_RESTRICTED');
 }
 

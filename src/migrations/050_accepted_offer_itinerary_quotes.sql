@@ -190,12 +190,12 @@ CREATE POLICY stays_quote_maintenance ON stays_quotes FOR ALL TO current_user
 ALTER TABLE booking_holds ENABLE ROW LEVEL SECURITY;
 ALTER TABLE booking_holds FORCE ROW LEVEL SECURITY;
 CREATE POLICY booking_hold_guest_read ON booking_holds FOR SELECT USING
-  (quote_id IS NOT NULL AND holder_principal=current_setting('app.stays_principal',true));
+  (holder_principal=current_setting('app.stays_principal',true));
 CREATE POLICY booking_hold_guest_insert ON booking_holds FOR INSERT WITH CHECK
   (quote_id IS NOT NULL AND holder_principal=current_setting('app.stays_principal',true));
 CREATE POLICY booking_hold_guest_update ON booking_holds FOR UPDATE
-  USING(quote_id IS NOT NULL AND holder_principal=current_setting('app.stays_principal',true))
-  WITH CHECK(quote_id IS NOT NULL AND holder_principal=current_setting('app.stays_principal',true));
+  USING(holder_principal=current_setting('app.stays_principal',true))
+  WITH CHECK(holder_principal=current_setting('app.stays_principal',true));
 CREATE POLICY booking_hold_maintenance ON booking_holds FOR ALL TO current_user
   USING(true) WITH CHECK(true);
 ALTER TABLE booking_hold_nights ENABLE ROW LEVEL SECURITY;
@@ -212,28 +212,38 @@ CREATE POLICY booking_hold_night_maintenance ON booking_hold_nights FOR ALL TO c
 REVOKE ALL ON stays_quotes,booking_holds,booking_hold_nights FROM PUBLIC;
 REVOKE ALL ON FUNCTION booking_hold_verify_quote_binding(),
   booking_hold_guard_quoted_identity(),stays_quote_reject_accepted_mutation() FROM PUBLIC;
--- Grants are conditional on a separately provisioned, non-owner restricted
--- LOGIN. Migration never creates a credential or silently falls back to one.
+-- A separately provisioned restricted LOGIN is a hard prerequisite. Fail the
+-- entire migration if it is absent or unsafe; never record a half-granted 050.
 DO $grants$
 DECLARE role_name TEXT := 'encho_stays_web';
 BEGIN
-  IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname=role_name AND rolcanlogin AND NOT rolsuper
-    AND NOT rolbypassrls AND NOT rolcreatedb AND NOT rolcreaterole AND NOT rolreplication)
-    AND NOT has_schema_privilege(role_name,'public','CREATE')
-    AND NOT has_database_privilege(role_name,current_database(),'CREATE')
-    AND NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
-      WHERE n.nspname='public' AND c.relname='stays_quotes'
-      AND pg_has_role((SELECT oid FROM pg_roles WHERE rolname=role_name),c.relowner,'MEMBER')) THEN
+  IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=role_name AND rolcanlogin AND NOT rolsuper
+    AND NOT rolbypassrls AND NOT rolcreatedb AND NOT rolcreaterole AND NOT rolreplication) THEN
+      RAISE EXCEPTION 'STAYS_RESTRICTED_ROLE_NOT_READY';
+  END IF;
+  IF has_schema_privilege(role_name,'public','CREATE')
+    OR has_database_privilege(role_name,current_database(),'CREATE')
+    OR EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname='public' AND c.relname IN ('stays_quotes','booking_holds',
+        'booking_hold_nights','inventory_days','sellable_offers','sellable_offer_revisions')
+      AND pg_has_role((SELECT oid FROM pg_roles WHERE rolname=role_name),c.relowner,'MEMBER'))
+    OR has_table_privilege(role_name,'public.sellable_offers','SELECT,INSERT,UPDATE,DELETE')
+    OR has_table_privilege(role_name,'public.sellable_offer_revisions','SELECT,INSERT,UPDATE,DELETE')
+    OR pg_has_role((SELECT oid FROM pg_roles WHERE rolname=role_name),
+      'pg_read_all_data'::regrole,'MEMBER')
+    OR pg_has_role((SELECT oid FROM pg_roles WHERE rolname=role_name),
+      'pg_write_all_data'::regrole,'MEMBER') THEN
+      RAISE EXCEPTION 'STAYS_RESTRICTED_ROLE_NOT_READY';
+  END IF;
     EXECUTE format('GRANT USAGE ON SCHEMA public TO %I',role_name);
     EXECUTE format('GRANT EXECUTE ON FUNCTION stays_current_accepted_offer(UUID,INT) TO %I',role_name);
     EXECUTE format('GRANT EXECUTE ON FUNCTION stays_current_offer_room(UUID,INT) TO %I',role_name);
     EXECUTE format('GRANT EXECUTE ON FUNCTION stays_expire_holds_for_itinerary(INT,DATE,DATE) TO %I',role_name);
     EXECUTE format('GRANT SELECT,INSERT ON stays_quotes TO %I',role_name);
-    EXECUTE format('GRANT SELECT,INSERT,UPDATE ON booking_holds TO %I',role_name);
+    EXECUTE format('GRANT SELECT,INSERT,UPDATE(status,released_at,release_reason) ON booking_holds TO %I',role_name);
     EXECUTE format('GRANT SELECT,INSERT ON booking_hold_nights TO %I',role_name);
     EXECUTE format('GRANT SELECT,UPDATE(held_units,updated_at) ON inventory_days TO %I',role_name);
     EXECUTE format('GRANT SELECT ON room_types,room_calendar_blocks TO %I',role_name);
     EXECUTE format('GRANT INSERT ON legacy_block_conflict_ledger TO %I',role_name);
     EXECUTE format('GRANT USAGE ON SEQUENCE booking_hold_nights_id_seq,legacy_block_conflict_ledger_id_seq TO %I',role_name);
-  END IF;
 END $grants$;

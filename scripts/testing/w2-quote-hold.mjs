@@ -12,7 +12,7 @@ import {AcceptedOfferService} from '../../src/server/offers/acceptedOfferService
 import {addDays,createW1AcceptedOfferFixture} from '../../src/test/harvo/helpers/w1AcceptedOfferFixture.ts';
 import {applyIsolatedMigration} from '../../src/test/harvo/helpers/isolatedMigration.ts';
 import {sweepExpiredHolds} from '../../src/services/inventoryHoldService.ts';
-import {withStaysPrincipal} from '../../src/server/stays/runtime.ts';
+import {assertStaysRole,withStaysPrincipal} from '../../src/server/stays/runtime.ts';
 
 const freePort=()=>new Promise((resolve,reject)=>{
   const socket=createServer();socket.once('error',reject);
@@ -49,20 +49,35 @@ try{
   await fixture.owner.query(`CREATE TABLE bookings(id SERIAL PRIMARY KEY,listing_id INT NOT NULL,
     status TEXT NOT NULL,start_date DATE,end_date DATE)`);
   await applyIsolatedMigration(fixture.owner,'041_stays_canonical_commerce.sql');
-  await fixture.owner.query(`CREATE ROLE encho_stays_web LOGIN NOSUPERUSER NOBYPASSRLS
-    NOCREATEDB NOCREATEROLE NOREPLICATION`);
   const historicalHoldId=randomUUID();
-  await fixture.owner.query(`INSERT INTO booking_holds(id,room_type_id,holder_principal,
+  await fixture.owner.query(`INSERT INTO booking_holds(id,room_type_id,user_id,holder_principal,
     idempotency_key,request_fingerprint,check_in_date,check_out_date,
-    units_held,status,expires_at) VALUES($1,201,'session:historical',$2,repeat('b',64),
+    units_held,status,expires_at) VALUES($1,201,10,'user:10',$2,repeat('b',64),
     $3::date,$4::date,1,'ACTIVE',clock_timestamp()+interval '10 minutes')`,
     [historicalHoldId,randomUUID(),addDays(fixture.today,1),addDays(fixture.today,2)]);
+  await fixture.owner.query(`UPDATE inventory_days SET held_units=held_units+1
+    WHERE room_type_id=201 AND calendar_date=$1::date`,[addDays(fixture.today,1)]);
+  await fixture.owner.query(`INSERT INTO booking_hold_nights(hold_id,inventory_day_id,stay_date,units)
+    SELECT $1,id,calendar_date,1 FROM inventory_days WHERE room_type_id=201
+    AND calendar_date=$2::date`,[historicalHoldId,addDays(fixture.today,1)]);
+  await assert.rejects(applyIsolatedMigration(fixture.owner,'050_accepted_offer_itinerary_quotes.sql'),
+    /STAYS_RESTRICTED_ROLE_NOT_READY/);
+  const rolledBack=await fixture.owner.query("SELECT to_regclass('public.stays_quotes') AS quote_table");
+  assert.ok(rolledBack.rows[0].quote_table,'Migration 041 quote table must survive rejected 050');
+  await fixture.owner.query(`CREATE ROLE encho_stays_web LOGIN NOSUPERUSER NOBYPASSRLS
+    NOCREATEDB NOCREATEROLE NOREPLICATION`);
   await applyIsolatedMigration(fixture.owner,'050_accepted_offer_itinerary_quotes.sql');
   restrictedPool=new pg.Pool({...fixture.owner.options,user:'encho_stays_web'});
+  await assertStaysRole(restrictedPool);
+  await fixture.owner.query('GRANT w1_offer_migrator TO encho_stays_web');
+  await assert.rejects(assertStaysRole(restrictedPool),/STAYS_ROLE_NOT_RESTRICTED/);
+  await fixture.owner.query('REVOKE w1_offer_migrator FROM encho_stays_web');
+  await fixture.owner.query('GRANT SELECT ON sellable_offers TO encho_stays_web');
+  await assert.rejects(assertStaysRole(restrictedPool),/STAYS_ROLE_NOT_RESTRICTED/);
+  await fixture.owner.query('REVOKE SELECT ON sellable_offers FROM encho_stays_web');
+  await assertStaysRole(restrictedPool);
   await assert.rejects(restrictedPool.query('SELECT amount_minor FROM sellable_offer_revisions'),
     /permission denied/);
-  await fixture.owner.query(`UPDATE booking_holds SET status='RELEASED',released_at=clock_timestamp()
-    WHERE id=$1`,[historicalHoldId]);
 
   const port=await freePort();
   const base=`http://127.0.0.1:${port}`;
@@ -87,6 +102,18 @@ try{
     await new Promise(resolve=>setTimeout(resolve,250));
   }
   assert.ok(ready,`Built server did not start: ${serverOutput.join('').slice(-1400)}`);
+  const ownerToken=jwt.sign({id:10},'w2-disposable-test-server-secret');
+  const historicRead=await fetch(`${base}/api/v2/stays/holds/${historicalHoldId}`,
+    {headers:{Authorization:`Bearer ${ownerToken}`}});
+  assert.equal(historicRead.status,200);
+  assert.equal((await historicRead.json()).hold.quoteId,null);
+  const historicRelease=await fetch(`${base}/api/v2/stays/holds/${historicalHoldId}/release`,
+    {method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${ownerToken}`},
+      body:'{}'});
+  assert.equal(historicRelease.status,200,await historicRelease.text());
+  const historicCapacity=await fixture.owner.query(`SELECT held_units FROM inventory_days
+    WHERE room_type_id=201 AND calendar_date=$1::date`,[addDays(fixture.today,1)]);
+  assert.equal(historicCapacity.rows[0].held_units,0);
   const post=async(path,body,cookie)=>{
     const response=await fetch(`${base}${path}`,{method:'POST',headers:{'Content-Type':'application/json',
       ...(cookie?{Cookie:cookie}:{})},body:JSON.stringify(body)});
