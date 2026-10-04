@@ -174,7 +174,7 @@ import { AcceptedOfferService } from './src/server/offers/acceptedOfferService.j
 import { PostgresWorkforceAuthorization } from './src/lib/iam/postgresAuthorization.js';
 import { StaffSessionReader } from './src/lib/iam/staffSessions.js';
 import { createHostOfferRouter, createStaffOfferRouter } from './src/server/offers/offerRouter.js';
-import { acceptedOfferConnectionConfig } from './src/server/offers/runtime.js';
+import { acceptedOfferConnectionConfig, publicOfferConnectionConfig } from './src/server/offers/runtime.js';
 import { createWorkforceSessionRouter } from './src/server/operations/sessionRouter.js';
 import { createWorkforceSessionRuntime } from './src/server/operations/sessionRuntime.js';
 import { createWorkforceCommandRouter } from './src/server/operations/workforceCommandRouter.js';
@@ -1119,9 +1119,10 @@ app.get('/api/explore/:destination', rateLimit({windowMs:60000,limit:30,standard
 app.use('/api/operations/v1', createOperationsRouter(createOperationsRuntime(process.env, () => {
   StructuredLogger.error('[WORKFORCE] Restricted operations runtime unavailable', {errorCode: 'WORKFORCE_UNAVAILABLE'});
 }),{origin:workforceOrigin(process.env)}));
-// Public offer reads and Host commands share one explicitly configured restricted
-// connection. An absent connection leaves public offer authority unavailable.
+// Guest reads use a projection-only role; Host commands use a different role.
+// After migration 049, an absent public connection fails closed at the resolver.
 let offerAuthorityPool: InstanceType<typeof Pool> | null = null;
+let publicOfferPool: InstanceType<typeof Pool> | null = null;
 let acceptedOfferService: AcceptedOfferService | null = null;
 let acceptedOfferStaffReader: StaffSessionReader | null = null;
 try {
@@ -1134,13 +1135,22 @@ try {
   StructuredLogger.error('[OFFERS] Restricted offer runtime unavailable',{errorCode:'OFFER_AUTHORITY_UNAVAILABLE'});
 }
 try {
+  const publicConfig = publicOfferConnectionConfig(process.env);
+  if (publicConfig) {
+    publicOfferPool = new Pool(publicConfig);
+    publicOfferPool.on('error', () => StructuredLogger.error('[OFFERS] Public projection connection unavailable', {errorCode:'OFFER_AUTHORITY_UNAVAILABLE'}));
+  }
+} catch {
+  StructuredLogger.error('[OFFERS] Restricted public offer runtime unavailable',{errorCode:'OFFER_AUTHORITY_UNAVAILABLE'});
+}
+try {
   const staffConfig = workforceConnectionConfig(process.env);
   if (staffConfig && offerAuthorityPool) {
     const staffPool = new Pool(staffConfig);
     staffPool.on('error', () => StructuredLogger.error('[OFFERS] Workforce connection unavailable', {errorCode:'WORKFORCE_UNAVAILABLE'}));
     const environment = workforceEnvironment(process.env);
     acceptedOfferStaffReader = new StaffSessionReader(staffPool,environment);
-    acceptedOfferService = new AcceptedOfferService(offerAuthorityPool,new PostgresWorkforceAuthorization(staffPool,environment),environment);
+    acceptedOfferService = new AcceptedOfferService(offerAuthorityPool,new PostgresWorkforceAuthorization(staffPool,environment),environment,staffPool);
   }
 } catch {
   StructuredLogger.error('[OFFERS] Isolated workforce offer runtime unavailable',{errorCode:'WORKFORCE_UNAVAILABLE'});
@@ -3483,7 +3493,7 @@ app.get('/api/seo', async (req, res) => {
           if (slug !== canonicalSlug) return res.redirect(301, `/stay/${encodeURIComponent(canonicalSlug)}`);
           let publicStay;
           try {
-            publicStay = toPublicStayProjection(await resolvePublicStayAuthority(pool, listing, offerAuthorityPool));
+            publicStay = toPublicStayProjection(await resolvePublicStayAuthority(pool, listing, publicOfferPool));
           } catch (_mErr) {
             console.warn('[PUBLIC SEO STAY AUTHORITY UNAVAILABLE]');
             return res.status(503).set('Cache-Control', 'no-store').send('Stay preview is temporarily unavailable.');
@@ -14262,7 +14272,7 @@ app.get('/api/v2/stays/:propertySlug', async (req, res) => {
     if (propertySlug !== canonicalSlug)
       return res.redirect(301, `/api/v2/stays/${encodeURIComponent(canonicalSlug)}`);
 
-    const rawListing = await resolvePublicStayAuthority(pool, listing, offerAuthorityPool);
+    const rawListing = await resolvePublicStayAuthority(pool, listing, publicOfferPool);
 
     // Apply strict privacy transformation and nested safe mappers
     const publicProjection = toPublicStayProjection(rawListing);
@@ -14573,7 +14583,7 @@ app.get('/api/listings/:id', async (req: Request, res: Response) => {
     }
 
     // Return sanitized public stay projection — address, user_id, raw coords stripped
-    const safeProjection = toPublicStayProjection(await resolvePublicStayAuthority(pool, listing, offerAuthorityPool));
+    const safeProjection = toPublicStayProjection(await resolvePublicStayAuthority(pool, listing, publicOfferPool));
     return res.json(safeProjection);
   } catch (error) {
     if (error instanceof PublicStayAuthorityError) return res.status(503).set('Cache-Control', 'no-store').json({error: error.message, code: error.code});
@@ -14800,7 +14810,7 @@ app.get('/api/listings', async (req: Request, res: Response) => {
     let publicRows: Record<string, unknown>[] = [];
     if (!isOwnerOrAdminFeed) {
       try {
-        publicRows = await resolvePublicStayAuthorities(pool, result.rows, offerAuthorityPool);
+        publicRows = await resolvePublicStayAuthorities(pool, result.rows, publicOfferPool);
       } catch (_authorityErr) {
         console.warn('[PUBLIC CATALOGUE STAY AUTHORITY UNAVAILABLE]');
         return res.status(503).set('Cache-Control', 'no-store').json({
@@ -18935,7 +18945,7 @@ async function startServer() {
                     if (slug !== canonicalSlug) return res.redirect(301, `/stay/${encodeURIComponent(canonicalSlug)}`);
                     let publicStay;
                     try {
-                        publicStay = toPublicStayProjection(await resolvePublicStayAuthority(pool, listing, offerAuthorityPool));
+                        publicStay = toPublicStayProjection(await resolvePublicStayAuthority(pool, listing, publicOfferPool));
                     } catch (_mErr) {
                         console.warn('[DIRECT STAY AUTHORITY UNAVAILABLE]');
                         return res.status(503).set('Cache-Control', 'no-store').send('Stay preview is temporarily unavailable.');

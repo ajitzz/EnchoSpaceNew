@@ -1,4 +1,5 @@
-import React,{useCallback,useEffect,useState} from 'react';
+import React,{useCallback,useEffect,useRef,useState} from 'react';
+import {MAX_PUBLIC_OFFER_AMOUNT_MINOR} from '../../src/shared/offers/publicPrice';
 
 type Room={id:number;name:string;capacity:number;min_stay_nights:number};
 type Offer={offerId:string;listingId:number;roomTypeId:number;revision:number;version:number;status:string;
@@ -9,7 +10,7 @@ function minorFromRupees(value:string):string|null{
   const match=/^(\d+)(?:\.(\d{1,2}))?$/.exec(value.trim());
   if(!match)return null;
   const minor=BigInt(match[1])*100n+BigInt((match[2]??'').padEnd(2,'0'));
-  return minor>0n&&minor<=9223372036854775807n?minor.toString():null;
+  return minor>0n&&minor<=MAX_PUBLIC_OFFER_AMOUNT_MINOR?minor.toString():null;
 }
 function rupeesFromMinor(value:string):string{
   try{const amount=BigInt(value);return `₹${amount/100n}${amount%100n===0n?'':'.'+String(amount%100n).padStart(2,'0')}`;}
@@ -31,7 +32,9 @@ function message(code:unknown):string{
     case 'OFFER_PROPERTY_INELIGIBLE':return 'The property is not currently eligible for a public room offer.';
     case 'ROOM_UNAVAILABLE':return 'The room has no available inventory in the proposed stay dates.';
     case 'LEGACY_DATA_UNRECONCILED':return 'Room or calendar data still needs canonical reconciliation before this offer can be submitted.';
-    case 'OFFER_AUTHORITY_UNAVAILABLE':return 'Offer authority is temporarily unavailable. Your current offer has not changed.';
+    case 'OFFER_AUTHORITY_UNAVAILABLE':return 'Offer authority is temporarily unavailable. The draft outcome may be unknown; retry the same details to reconcile it.';
+    case 'OFFER_OUTCOME_UNKNOWN':return 'The draft outcome is unknown. Retry the same details and request ID to reconcile it.';
+    case 'OFFER_COMMAND_CONFLICT':return 'This request ID was used for different offer details. Refresh current offers before retrying.';
     case 'OFFER_NOT_FOUND':return 'This offer is no longer available to your account.';
     default:return 'The offer command was not accepted. Refresh current offers before trying again.';
   }
@@ -45,6 +48,7 @@ export function HostAcceptedOfferPanel({listingId,publicationStatus,token}:{list
   const [maxGuests,setMaxGuests]=useState(''),[minNights,setMinNights]=useState('');
   const [successor,setSuccessor]=useState<Offer|null>(null);
   const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[notice,setNotice]=useState('');
+  const pendingDraft=useRef<{payload:string;commandId:string}|null>(null);
   const headers={Authorization:`Bearer ${token}`,'Content-Type':'application/json'};
   const refresh=useCallback(async(signal?:AbortSignal)=>{
     if(!token)return;
@@ -76,17 +80,42 @@ export function HostAcceptedOfferPanel({listingId,publicationStatus,token}:{list
     if(!minor||!selected||!stayStart||!stayEnd||!effectiveFrom||!effectiveUntil||!Number.isInteger(Number(maxGuests))||Number(maxGuests)<1||!Number.isInteger(Number(minNights))||Number(minNights)<1){
       setNotice('Choose a canonical room, positive nightly amount, dates and valid guest conditions.');return;
     }
+    const draft={roomTypeId:selected.id,amountMinor:minor,stayStart,stayEnd,
+      effectiveFrom:indianMidnight(effectiveFrom),effectiveUntil:indianMidnight(effectiveUntil),
+      maxGuests:Number(maxGuests),minNights:Number(minNights),
+      ...(successor?{offerId:successor.offerId,expectedVersion:successor.version}:{})};
+    const payload=JSON.stringify(draft),storageKey=`encho:pending-offer-draft:${listingId}`;
+    if(pendingDraft.current?.payload!==payload){
+      try{
+        const saved=JSON.parse(window.sessionStorage.getItem(storageKey)??'null');
+        pendingDraft.current=saved?.payload===payload&&typeof saved.commandId==='string'&&
+          /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(saved.commandId)?saved:null;
+      }catch{pendingDraft.current=null;}
+    }
+    if(!pendingDraft.current){
+      if(typeof globalThis.crypto?.randomUUID!=='function'){
+        setNotice('A secure request ID is unavailable in this browser. Draft saving is paused.');return;
+      }
+      pendingDraft.current={payload,commandId:globalThis.crypto.randomUUID()};
+      try{window.sessionStorage.setItem(storageKey,JSON.stringify(pendingDraft.current));}catch{/* In-memory retry still works in this tab. */}
+    }
+    const commandId=pendingDraft.current.commandId;
     setBusy(true);setNotice('');
     try{
       const response=await fetch(`/api/offers/v1/listings/${listingId}/drafts`,{method:'POST',headers,
-        body:JSON.stringify({roomTypeId:selected.id,amountMinor:minor,stayStart,stayEnd,
-          effectiveFrom:indianMidnight(effectiveFrom),effectiveUntil:indianMidnight(effectiveUntil),
-          maxGuests:Number(maxGuests),minNights:Number(minNights),...(successor?{offerId:successor.offerId,expectedVersion:successor.version}:{})})});
+        body:JSON.stringify({...draft,commandId})});
       const data=await response.json();
-      if(!response.ok){setNotice(message(data.code));return;}
-      await refresh();setSuccessor(null);setAmount('');
+      if(!response.ok){
+        if(response.status!==503){pendingDraft.current=null;
+          try{window.sessionStorage.removeItem(storageKey);}catch{/* Storage may be disabled. */}}
+        setNotice(message(data.code));return;
+      }
+      pendingDraft.current=null;
+      try{window.sessionStorage.removeItem(storageKey);}catch{/* Storage may be disabled. */}
+      setSuccessor(null);setAmount('');
       setNotice(`Revision ${data.revision} was saved as a draft. Submit that exact revision when ready for staff review.`);
-    }catch{setNotice('The draft outcome is unknown. Refresh current offers before trying again.');}
+      await refresh().catch(()=>setNotice('Draft saved, but the offer list could not refresh. Refresh offers to see the committed revision.'));
+    }catch{setNotice('The draft outcome is unknown. Retry the same details to reconcile the request.');}
     finally{setBusy(false);}
   };
   const submit=async(offer:Offer)=>{

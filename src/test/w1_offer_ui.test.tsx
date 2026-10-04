@@ -42,6 +42,38 @@ describe('W1 Host and staff offer controls',()=>{
     expect(JSON.parse(String(draftCall[1]?.body))).not.toHaveProperty('hostAccountId');
   });
 
+  it('reuses the same draft command ID after an unknown network outcome',async()=>{
+    let draftAttempts=0;
+    const fetch=vi.fn(async(input:RequestInfo|URL,_init?:RequestInit)=>{
+      const url=String(input);
+      if(url.includes('/rooms'))return json({rooms:[{id:101,name:'Royal Suite',capacity:2,min_stay_nights:1}]});
+      if(url.includes('/drafts')){
+        draftAttempts++;
+        if(draftAttempts===1)throw new Error('Connection lost after possible commit');
+        return json({offerId:'22222222-2222-4222-8222-222222222222',revision:1,version:1,status:'DRAFT'});
+      }
+      return json([]);
+    });
+    vi.stubGlobal('fetch',fetch);
+    render(<HostAcceptedOfferPanel listingId={8} publicationStatus="published" token="host-session"/>);
+    await screen.findByRole('option',{name:'Royal Suite · #101'});
+    fireEvent.change(screen.getByLabelText('Canonical room'),{target:{value:'101'}});
+    fireEvent.change(screen.getByLabelText('Proposed room-night price (INR)'),{target:{value:'5500'}});
+    fireEvent.change(screen.getByLabelText('Stay start'),{target:{value:'2099-01-01'}});
+    fireEvent.change(screen.getByLabelText('Stay end (exclusive)'),{target:{value:'2099-01-04'}});
+    fireEvent.change(screen.getByLabelText('Effective from'),{target:{value:'2098-12-01'}});
+    fireEvent.change(screen.getByLabelText('Effective until (exclusive)'),{target:{value:'2099-01-03'}});
+    const save=screen.getByRole('button',{name:'Save draft revision'});
+    fireEvent.click(save);
+    await screen.findByText(/draft outcome is unknown/i);
+    fireEvent.click(save);
+    await waitFor(()=>expect(draftAttempts).toBe(2));
+    const calls=fetch.mock.calls.filter(call=>String(call[0]).includes('/drafts'));
+    const first=JSON.parse(String(calls[0][1]?.body)),second=JSON.parse(String(calls[1][1]?.body));
+    expect(first.commandId).toMatch(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i);
+    expect(second.commandId).toBe(first.commandId);
+  });
+
   it('accepts a displayed exact revision through the staff cookie command boundary',async()=>{
     const offer={offerId:'11111111-1111-4111-8111-111111111111',listingId:7,roomTypeId:101,revision:7,
       version:3,status:'SUBMITTED',amountMinor:'550000',currency:'INR',priceBasis:'ROOM_NIGHT',

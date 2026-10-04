@@ -51,7 +51,9 @@ export function AdminAcceptedOfferReview({listings}:{listings:Listing[]}){
         method:'POST',credentials:'include',headers:{'Content-Type':'application/json','X-Encho-Workforce-Command':'1'},
         body:JSON.stringify({expectedVersion:offer.version})});
       const data=await response.json();
-      if(!response.ok){setNotice(data.code==='OFFER_STALE_REVIEW'||data.code==='OFFER_PROPERTY_INELIGIBLE'||data.code==='ROOM_UNAVAILABLE'
+      if(!response.ok){setNotice(response.status===503
+        ?'Acceptance outcome is unknown. Refresh the queue and currently accepted authority before another action.'
+        :data.code==='OFFER_STALE_REVIEW'||data.code==='OFFER_PROPERTY_INELIGIBLE'||data.code==='ROOM_UNAVAILABLE'
         ?'Submitted facts changed. The Host must create and submit a fresh revision.'
         :data.code==='OFFER_VERSION_CONFLICT'||data.code==='OFFER_STATE_CONFLICT'
         ?'Offer version or state changed. Refresh current authority before deciding.'
@@ -68,7 +70,9 @@ export function AdminAcceptedOfferReview({listings}:{listings:Listing[]}){
         method:'POST',credentials:'include',headers:{'Content-Type':'application/json','X-Encho-Workforce-Command':'1'},
         body:JSON.stringify({expectedVersion:offer.version})});
       const data=await response.json();
-      if(!response.ok){setNotice(data.code==='OFFER_VERSION_CONFLICT'||data.code==='OFFER_STATE_CONFLICT'
+      if(!response.ok){setNotice(response.status===503
+        ?'Retirement outcome is unknown. Refresh current accepted authority before another action.'
+        :data.code==='OFFER_VERSION_CONFLICT'||data.code==='OFFER_STATE_CONFLICT'
         ?'Accepted authority changed. Refresh before requesting retirement again.'
         :'Retirement was not committed. Refresh current authority before trying again.');return;}
       await refresh();setNotice(`Offer ${offer.offerId} revision ${offer.revision} retired.`);
