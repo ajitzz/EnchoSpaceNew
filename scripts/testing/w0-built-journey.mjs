@@ -29,9 +29,18 @@ try {
     (9102,10,'W0 Missing Media','No approved photograph.','w0-missing-media-9102','published',9999,'INR','Villa',
       'W0 Built City','Private road 20','','[]','[]',null,null),
     (9103,11,'Other Host Draft','Private draft.','other-host-draft-9103','draft',9999,'INR','Villa',
-      'W0 Built City','Private road 21','https://media.encho.test/private.jpg','[]','[]',12,77)`);
+      'W0 Built City','Private road 21','https://media.encho.test/private.jpg','[]','[]',12,77),
+    (9104,10,'Call +91 9876543210','Private contact.','call-91-9876543210-9104','published',9999,'INR','Villa',
+      'W0 Private City','','','[]','[]',null,null)`);
+  await pool.query(`INSERT INTO listings
+    (id,user_id,title,slug,publication_status,price,currency,type,city,rental_mode,amenities)
+    VALUES (9300,10,'W0 Hybrid Stay','w0-hybrid-stay-9300','published',9999,'INR','Villa',
+      'W0 Hybrid City','hybrid','[]'::jsonb)`);
   const room=(await pool.query(`INSERT INTO room_types (listing_id,name,type,base_price,currency,max_occupancy)
     VALUES (9101,'Verified Room','suite',9999,'INR',2) RETURNING id`)).rows[0].id;
+  await pool.query(`INSERT INTO room_types (listing_id,name,type,base_price,currency,max_occupancy,amenities)
+    VALUES (9300,'AC Suite','suite',9999,'INR',2,'["Air conditioning","Ensuite"]'::jsonb),
+           (9300,'Plain Suite','suite',9999,'INR',2,'[]'::jsonb)`);
   await pool.query(`INSERT INTO media_assets (entity_type,entity_id,url,room_type_id,moderation_status,is_hero)
     VALUES ('listing',9101,$1,$2,'approved',true),
       ('listing',9101,'https://media.encho.test/unapproved.jpg',$2,'pending_review',false)`,
@@ -73,6 +82,10 @@ try {
   assert.match(directHtml,/W0 Built Stay/);
   assert.doesNotMatch(directHtml,/unapproved\.jpg|Private road 19|9876543210|product:price:amount/);
   assert.doesNotMatch(await (await get('/api/seo?type=stay&slug=w0-built-stay-9101',200)).text(),/9876543210/);
+  assert.equal((await get('/stay/call-91-9876543210-9104',301)).headers.get('location'),'/stay/_s-9104');
+  const safeAliasHtml=await (await get('/stay/_s-9104',200)).text();
+  assert.doesNotMatch(safeAliasHtml,/9876543210/);
+  assert.match(safeAliasHtml,/https:\/\/www\.encho\.co\.in\/stay\/_s-9104/);
   const catalogue=await (await get('/api/listings?city=W0%20Built%20City',200)).json();
   assert.deepEqual(catalogue.map(row=>row.id),['9102','9101']);
   assert.equal(catalogue[1].price,null);
@@ -129,6 +142,24 @@ try {
       'Missing-media detail must not inject stock or unapproved imagery');
     await context.close();
   }
+  const filterPage=await browser.newPage({viewport:{width:1280,height:800},serviceWorkers:'block'});
+  await filterPage.goto(base+'/',{waitUntil:'domcontentloaded'});
+  await filterPage.getByRole('button',{name:'Space Mode',exact:true}).click();
+  await filterPage.getByRole('button',{name:'Private Room',exact:true}).click();
+  await filterPage.getByRole('button',{name:'Apply',exact:true}).click();
+  await filterPage.getByRole('button',{name:'View W0 Hybrid Stay - AC Suite stay'}).waitFor({state:'visible'});
+  assert.equal(await filterPage.getByRole('button',{name:'View W0 Hybrid Stay stay'}).count(),0);
+  await filterPage.getByRole('button',{name:'Filters',exact:true}).click();
+  await filterPage.getByRole('checkbox',{name:/Must have AC/}).check();
+  await filterPage.getByRole('button',{name:'Show places'}).click();
+  await filterPage.getByRole('button',{name:'View W0 Hybrid Stay - AC Suite stay'}).waitFor({state:'visible'});
+  assert.equal(await filterPage.getByRole('button',{name:'View W0 Hybrid Stay - Plain Suite stay'}).count(),0);
+  await filterPage.getByRole('button',{name:'Space Mode Active',exact:true}).click();
+  await filterPage.getByRole('button',{name:'Entire Space',exact:true}).click();
+  await filterPage.getByRole('button',{name:'Apply',exact:true}).click();
+  await filterPage.getByRole('button',{name:'View W0 Hybrid Stay stay'}).waitFor({state:'visible'});
+  assert.equal(await filterPage.getByRole('button',{name:'View W0 Hybrid Stay - AC Suite stay'}).count(),0);
+  await filterPage.close();
   for(let id=9200;id<9226;id++) await pool.query(`INSERT INTO listings
     (id,user_id,title,slug,publication_status,price,currency,type,city,address,image_urls,rooms)
     VALUES ($1,10,$2,$3,'published',9999,'INR','Villa','W0 Built City','','[]','[]')`,
@@ -154,6 +185,7 @@ try {
   } finally {await pool.query('ALTER TABLE room_types_w0_outage RENAME TO room_types');}
   console.log(JSON.stringify({receipt:'W0_BUILT_JOURNEY_PASS',source:'production-shaped local artifact',
     database:'fresh disposable PostgreSQL',viewports:[1280,360],directHttp:true,keyboard:true,pagination:true,
+    filteredCardPresentation:true,safePublicSlug:true,
     publicationNegative:true,authorityFailure:true}));
 } catch(error){
   console.error(error);

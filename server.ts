@@ -165,7 +165,7 @@ import { z } from 'zod';
 import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import {resolvePublicStayAuthority, resolvePublicStayAuthorities, PublicStayAuthorityError} from './src/server/guest/publicStayAuthority.js';
-import { toPublicStayProjection, toPublicListingCardProjection, generateListingSlug, escapeHtml, STAY_PUBLIC_SQL_COLUMNS, coarsenCoordinate } from './src/lib/stayProjection.js';
+import { toPublicStayProjection, toPublicListingCardProjection, publicListingSlug, escapeHtml, STAY_PUBLIC_SQL_COLUMNS, coarsenCoordinate } from './src/lib/stayProjection.js';
 import { assertPublicImageOrigin, isAllowedImageSource, parseImageTransformQuery, readBoundedImageResponse, REMOTE_IMAGE_LIMITS } from './src/server/media/remoteImageProxy.js';
 import { createLegacyListingAssistanceBoundary } from './src/server/assistance/legacyListingAiBoundary.js';
 import { createOperationsRouter } from './src/server/operations/router.js';
@@ -3415,6 +3415,19 @@ function readIndexHtml(): string {
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>EnchoSpace</title></head><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>`;
 }
 
+async function readPublishedListingByPublicSlug(slug: string): Promise<any | null> {
+  const columns = STAY_PUBLIC_SQL_COLUMNS.join(', ');
+  const direct = await pool.query(
+    `SELECT ${columns} FROM listings WHERE slug = $1 AND publication_status = 'published'`, [slug]);
+  if (direct.rows.length > 0) return direct.rows[0];
+  const candidateId = slug.match(/-([1-9]\d*)$/)?.[1];
+  if (!candidateId || !Number.isSafeInteger(Number(candidateId))) return null;
+  const byId = await pool.query(
+    `SELECT ${columns} FROM listings WHERE id = $1 AND publication_status = 'published'`, [candidateId]);
+  const row = byId.rows[0];
+  return row && publicListingSlug(row) === slug ? row : null;
+}
+
 // SEO routing fallback for Vercel direct reloads on listing and experience pages
 app.get('/api/seo', async (req, res) => {
   const { type, id, slug } = req.query;
@@ -3425,18 +3438,16 @@ app.get('/api/seo', async (req, res) => {
 
     if (type === 'stay' && slug) {
       if (isDbConfigured) {
-        let result;
+        let listing;
         try {
-          result = await pool.query(
-            `SELECT ${STAY_PUBLIC_SQL_COLUMNS.join(', ')} FROM listings WHERE slug = $1 AND publication_status = 'published'`,
-            [slug]
-          );
+          listing = await readPublishedListingByPublicSlug(String(slug));
         } catch (_e) {
           console.warn('[PUBLIC SEO STAY READ UNAVAILABLE]');
           return res.status(503).set('Cache-Control', 'no-store').send('Stay preview is temporarily unavailable.');
         }
-        if (result && result.rows.length > 0) {
-          const listing = result.rows[0];
+        if (listing) {
+          const canonicalSlug = publicListingSlug(listing);
+          if (slug !== canonicalSlug) return res.redirect(301, `/stay/${encodeURIComponent(canonicalSlug)}`);
           let publicStay;
           try {
             publicStay = toPublicStayProjection(await resolvePublicStayAuthority(pool, listing));
@@ -3445,7 +3456,6 @@ app.get('/api/seo', async (req, res) => {
             return res.status(503).set('Cache-Control', 'no-store').send('Stay preview is temporarily unavailable.');
           }
 
-          const canonicalSlug = listing.slug || generateListingSlug(listing.title, listing.id);
           const canonicalUrl = `https://www.encho.co.in/stay/${encodeURIComponent(canonicalSlug)}`;
 
           const title = escapeHtml(`${publicStay.title} | Encho Stays`);
@@ -3480,7 +3490,7 @@ app.get('/api/seo', async (req, res) => {
           );
           if (result.rows.length > 0) {
             const listing = result.rows[0];
-            const canonicalSlug = listing.slug || generateListingSlug(listing.title, listing.id);
+            const canonicalSlug = publicListingSlug(listing);
             return res.redirect(301, `/stay/${encodeURIComponent(canonicalSlug)}`);
           }
         } catch (_e) { /* continue to 404/render */ }
@@ -14211,47 +14221,15 @@ app.get('/api/v2/stays/:propertySlug', async (req, res) => {
   }
 
   try {
-    // Explicit SQL Column Allowlist: Prevents SELECT * from pulling private address, lat, lng, user_id, host contacts, access credentials
-    const allowlistedCols = STAY_PUBLIC_SQL_COLUMNS.join(', ');
-
-    let result;
-    try {
-      // Primary: Query by slug and enforce publication boundary (publication_status = 'published')
-      result = await pool.query(
-        `SELECT ${allowlistedCols} FROM listings WHERE slug = $1 AND publication_status = 'published'`,
-        [propertySlug]
-      );
-    } catch (_colErr) {
-      // Return null result if column or query fails — fail closed
-      result = { rows: [] };
-    }
-
-    if (!result || result.rows.length === 0) {
-      // If direct slug match wasn't found, attempt candidate ID match with expected slug verification
-      const parts = propertySlug.split('-');
-      const candidateId = parts[parts.length - 1];
-      if (candidateId && !isNaN(Number(candidateId))) {
-        try {
-          const fallbackResult = await pool.query(
-            `SELECT ${allowlistedCols} FROM listings WHERE id = $1 AND publication_status = 'published'`,
-            [candidateId]
-          );
-          if (fallbackResult.rows.length > 0) {
-            const row = fallbackResult.rows[0];
-            const expectedSlug = row.slug || generateListingSlug(row.title, row.id);
-            if (expectedSlug === propertySlug) {
-              result = fallbackResult;
-            }
-          }
-        } catch (_e) { /* non-blocking */ }
-      }
-    }
-
-    if (!result || result.rows.length === 0) {
+    const listing = await readPublishedListingByPublicSlug(propertySlug);
+    if (!listing) {
       return res.status(404).json({ error: 'Stay not found' });
     }
+    const canonicalSlug = publicListingSlug(listing);
+    if (propertySlug !== canonicalSlug)
+      return res.redirect(301, `/api/v2/stays/${encodeURIComponent(canonicalSlug)}`);
 
-    const rawListing = await resolvePublicStayAuthority(pool, result.rows[0]);
+    const rawListing = await resolvePublicStayAuthority(pool, listing);
 
     // Apply strict privacy transformation and nested safe mappers
     const publicProjection = toPublicStayProjection(rawListing);
@@ -14450,7 +14428,7 @@ app.get(['/listing/:id', '/listings/:id'], async (req, res) => {
     }
 
     const listing = result.rows[0];
-    const canonicalSlug = listing.slug || generateListingSlug(listing.title, listing.id);
+    const canonicalSlug = publicListingSlug(listing);
     return res.redirect(301, `/stay/${encodeURIComponent(canonicalSlug)}`);
   } catch (err) {
     console.error('[LEGACY REDIRECT ERROR]', err);
@@ -14719,6 +14697,7 @@ app.get('/api/listings', async (req: Request, res: Response) => {
             queryParams.push(rentalMode);
             queryStr += ` AND COALESCE(l.rental_mode, 'entire_place') IN ($${queryParams.length}, 'hybrid')`;
         }
+        const requestedAmenities: number[] = [];
         for (const [parameter, values] of [
           ['mustHaveAc', ['air conditioning', 'aircon', 'ac']],
           ['mustHaveAttachedBathroom', ['private bathroom', 'attached bathroom', 'ensuite']]
@@ -14727,14 +14706,24 @@ app.get('/api/listings', async (req: Request, res: Response) => {
           if (requested === undefined) continue;
           if (requested !== 'true') return res.status(400).json({code: 'INVALID_AMENITY_FILTER'});
           queryParams.push([...values]);
-          const aliases = `$${queryParams.length}::text[]`;
-          queryStr += ` AND (
-            EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(l.amenities::jsonb, '[]'::jsonb)) AS a(value)
-              WHERE lower(trim(a.value)) = ANY(${aliases}))
-            OR EXISTS (SELECT 1 FROM room_types rt,
-              LATERAL jsonb_array_elements_text(COALESCE(rt.amenities, '[]'::jsonb)) AS a(value)
-              WHERE rt.listing_id = l.id AND lower(trim(a.value)) = ANY(${aliases}))
-          )`;
+          requestedAmenities.push(queryParams.length);
+        }
+        if (requestedAmenities.length) {
+          const hasAmenity = (alias: 'l' | 'rt', index: number) => `EXISTS (
+            SELECT 1 FROM jsonb_array_elements_text(COALESCE(${alias}.amenities::jsonb, '[]'::jsonb)) AS a(value)
+            WHERE lower(trim(a.value)) = ANY($${index}::text[]))`;
+          // A private-room card must satisfy every requested feature in the
+          // same canonical room. An entire-place card may satisfy them across
+          // the property and its rooms. Filtering precedes the page limit.
+          const oneRoomMatches = `EXISTS (SELECT 1 FROM room_types rt WHERE rt.listing_id = l.id AND ${
+            requestedAmenities.map(index => hasAmenity('rt', index)).join(' AND ')})`;
+          const wholePlaceMatches = requestedAmenities.map(index => `(${hasAmenity('l', index)} OR
+            EXISTS (SELECT 1 FROM room_types rt WHERE rt.listing_id = l.id AND ${hasAmenity('rt', index)}))`).join(' AND ');
+          const matches = rentalMode === 'private_rooms' ? oneRoomMatches
+            : rentalMode === 'entire_place' ? wholePlaceMatches
+              : `(CASE WHEN COALESCE(l.rental_mode, 'entire_place') = 'private_rooms'
+                  THEN ${oneRoomMatches} ELSE ${wholePlaceMatches} END)`;
+          queryStr += ` AND (${matches})`;
         }
         if (req.query.amenities) {
             const amenitiesList = (req.query.amenities as string).split(',');
@@ -18902,17 +18891,15 @@ async function startServer() {
         if (urlPath.startsWith('/stay/')) {
             const slug = urlPath.split('/')[2];
             if (slug && isDbConfigured) {
-                let result;
+                let listing;
                 try {
-                    result = await pool.query(
-                        `SELECT ${STAY_PUBLIC_SQL_COLUMNS.join(', ')} FROM listings WHERE slug = $1 AND publication_status = 'published'`,
-                        [slug]
-                    );
+                    listing = await readPublishedListingByPublicSlug(slug);
                 } catch (_e) {
                     return res.status(503).set('Cache-Control', 'no-store').send('Stay preview is temporarily unavailable.');
                 }
-                if (result && result.rows.length > 0) {
-                    const listing = result.rows[0];
+                if (listing) {
+                    const canonicalSlug = publicListingSlug(listing);
+                    if (slug !== canonicalSlug) return res.redirect(301, `/stay/${encodeURIComponent(canonicalSlug)}`);
                     let publicStay;
                     try {
                         publicStay = toPublicStayProjection(await resolvePublicStayAuthority(pool, listing));
@@ -18921,7 +18908,6 @@ async function startServer() {
                         return res.status(503).set('Cache-Control', 'no-store').send('Stay preview is temporarily unavailable.');
                     }
 
-                    const canonicalSlug = listing.slug || generateListingSlug(listing.title, listing.id);
                     const canonicalUrl = `https://www.encho.co.in/stay/${encodeURIComponent(canonicalSlug)}`;
 
                     const title = escapeHtml(`${publicStay.title} | Encho Stays`);
@@ -18957,7 +18943,7 @@ async function startServer() {
                     );
                     if (result.rows.length > 0) {
                         const listing = result.rows[0];
-                        const canonicalSlug = listing.slug || generateListingSlug(listing.title, listing.id);
+                        const canonicalSlug = publicListingSlug(listing);
                         return res.redirect(301, `/stay/${encodeURIComponent(canonicalSlug)}`);
                     }
                 } catch (_e) { /* continue */ }

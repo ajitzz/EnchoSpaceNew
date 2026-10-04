@@ -181,13 +181,26 @@ function App() {
 
   const displayListings = React.useMemo(() => {
       const arr: Listing[] = [];
+      const hasAmenity = (amenities: string[] | undefined, aliases: string[]) =>
+          amenities?.some(value => aliases.includes(value.trim().toLowerCase())) || false;
+      const matchesRoom = (amenities: string[] | undefined) =>
+          (!filters.mustHaveAc || hasAmenity(amenities, ['air conditioning', 'aircon', 'ac'])) &&
+          (!filters.mustHaveAttachedBathroom || hasAmenity(amenities, ['private bathroom', 'attached bathroom', 'ensuite']));
+      const matchesWhole = (listing: Listing) => {
+          const hasAcrossProperty = (aliases: string[]) => hasAmenity(listing.amenities, aliases) ||
+              (listing.rooms || []).some(room => hasAmenity(room.amenities, aliases));
+          return (!filters.mustHaveAc || hasAcrossProperty(['air conditioning', 'aircon', 'ac'])) &&
+              (!filters.mustHaveAttachedBathroom || hasAcrossProperty(['private bathroom', 'attached bathroom', 'ensuite']));
+      };
       visibleListings.forEach(listing => {
           const mode = listing.rental_mode || 'entire_place';
-          if (mode === 'entire_place' || mode === 'hybrid') {
+          if ((mode === 'entire_place' || mode === 'hybrid') &&
+              filters.rentalMode !== 'private_rooms' && matchesWhole(listing)) {
               arr.push(listing);
           }
-          if (mode === 'hybrid' || mode === 'private_rooms') {
+          if ((mode === 'hybrid' || mode === 'private_rooms') && filters.rentalMode !== 'entire_place') {
               (listing.rooms || []).forEach(room => {
+                  if (!matchesRoom(room.amenities)) return;
                   // A property hero may belong to another room. Room cards use
                   // only media linked by canonical room ID, then shared media.
                   const roomMedia = (listing.photos || []).filter(photo =>
@@ -211,14 +224,14 @@ function App() {
                       imageCount: cardUrls.length,
                       photos: cardMedia,
                       selectedConfigId: room.id,
-                      amenities: room.amenities && room.amenities.length > 0 ? room.amenities : listing.amenities,
+                      amenities: room.amenities || [],
                       type: room.name, // Will display as "Master Bedroom" etc.
                   });
               });
           }
       });
       return arr;
-  }, [visibleListings]);
+  }, [visibleListings, filters.rentalMode, filters.mustHaveAc, filters.mustHaveAttachedBathroom]);
 
   const [loading, setLoading] = useState(false);
   const [searchError, setSearchError] = useState(false);

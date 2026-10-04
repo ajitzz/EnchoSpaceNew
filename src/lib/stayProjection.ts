@@ -195,6 +195,22 @@ export function generateListingSlug(title: string | null | undefined, id: number
   return `${base}-${id}`;
 }
 
+/** A stored slug containing private text must not be copied into cards or SEO URLs.
+ * Its stable public alias is keyed by the already-public property ID, not mutable title.
+ */
+export function publicListingSlug(rawListing: {id: number | string; slug?: string | null; title?: string | null}): string {
+  const stored = typeof rawListing.slug === 'string' ? rawListing.slug.trim() : '';
+  if (stored) {
+    // Slugs separate words with hyphens, while privacy patterns are defined
+    // for normal prose. Inspect both spellings before retaining an old slug.
+    const spaced = stored.replace(/-/g, ' ');
+    return stored === sanitizePublicText(stored) && spaced === sanitizePublicText(spaced) &&
+      /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(stored)
+      ? stored : `_s-${rawListing.id}`;
+  }
+  return generateListingSlug(sanitizePublicText(rawListing.title), rawListing.id);
+}
+
 export function coarsenCoordinate(coord: number | string | null | undefined, decimals = 2): number | null {
   if (coord === null || coord === undefined || (typeof coord === 'string' && coord.trim() === '')) return null;
   const num = Number(coord);
@@ -378,7 +394,7 @@ export function mapPublicPolicies(rawGuidelines: any): PublicStayPolicies {
  */
 export function toPublicStayProjection(rawListing: any): PublicStayProjection {
   const idStr = String(rawListing.id);
-  const slug = rawListing.slug || generateListingSlug(rawListing.title, idStr);
+  const slug = publicListingSlug(rawListing);
   const city = typeof rawListing.city === 'string' ? sanitizePublicText(rawListing.city) : 'India';
   const locality = typeof rawListing.locality === 'string' ? sanitizePublicText(rawListing.locality) : city;
 
@@ -507,7 +523,7 @@ export function toPublicStayProjection(rawListing: any): PublicStayProjection {
  */
 export function toPublicListingCardProjection(rawListing: any): PublicListingCardProjection {
   const idStr = String(rawListing.id);
-  const slug = rawListing.slug || generateListingSlug(rawListing.title, idStr);
+  const slug = publicListingSlug(rawListing);
   const city = typeof rawListing.city === 'string' ? sanitizePublicText(rawListing.city) : 'India';
 
   const {lat, lng} = publicCoordinatePair(rawListing.lat, rawListing.lng);
