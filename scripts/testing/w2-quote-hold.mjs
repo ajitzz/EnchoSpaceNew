@@ -266,6 +266,8 @@ try{
 
   // W1 watch: a transient hold must not be mistaken for a material change to
   // commercial-review facts when another unit remains sellable.
+  await fixture.owner.query('UPDATE room_types SET inventory_count=2 WHERE id=102');
+  await fixture.owner.query('UPDATE inventory_days SET total_units=2 WHERE room_type_id=102');
   const otherDraft=await service.createDraft(fixture.principal(10),{
     commandId:randomUUID(),listingId:1,roomTypeId:102,amountMinor:'620000',
     stayStart:fixture.today,stayEnd:addDays(fixture.today,30),
@@ -279,7 +281,6 @@ try{
   const otherAccepted=await service.accept(fixture.principal(90,'STAFF'),{
     offerId:otherDraft.offerId,revision:1,expectedVersion:otherSubmitted.version,
   });
-  await fixture.owner.query('UPDATE inventory_days SET total_units=2 WHERE room_type_id=102');
   const successor=await service.createDraft(fixture.principal(10),{
     commandId:randomUUID(),offerId:otherDraft.offerId,expectedVersion:otherAccepted.version,
     listingId:1,roomTypeId:102,amountMinor:'650000',stayStart:fixture.today,
@@ -296,10 +297,15 @@ try{
   const otherHold=await post('/api/v2/stays/holds',{
     quoteId:otherQuote.body.quote.id,idempotencyKey:randomUUID()},first.cookie);
   assert.equal(otherHold.status,201,JSON.stringify(otherHold.body));
-  let reviewWhileHeld='ACCEPTED';
-  try{await service.accept(fixture.principal(90,'STAFF'),{
-    offerId:otherDraft.offerId,revision:2,expectedVersion:successorSubmitted.version});}
-  catch(error){reviewWhileHeld=error.code??'UNKNOWN';}
+  const reviewWhileHeld=(await service.accept(fixture.principal(90,'STAFF'),{
+    offerId:otherDraft.offerId,revision:2,expectedVersion:successorSubmitted.version})).status;
+  assert.equal(reviewWhileHeld,'ACCEPTED');
+  const holdDuringReview=await fixture.owner.query('SELECT status FROM booking_holds WHERE id=$1',
+    [otherHold.body.hold.id]);
+  assert.equal(holdDuringReview.rows[0].status,'ACTIVE','Offer review cannot consume or release a Guest hold');
+  const heldDuringReview=await fixture.owner.query(`SELECT held_units FROM inventory_days
+    WHERE room_type_id=102 AND calendar_date=$1::date`,[itinerary.checkIn]);
+  assert.equal(heldDuringReview.rows[0].held_units,1,'Acceptance cannot decrement live held inventory');
   const release=await post(`/api/v2/stays/holds/${otherHold.body.hold.id}/release`,{},first.cookie);
   assert.equal(release.status,200,JSON.stringify(release.body));
   const reviewAfterRelease=await service.accept(fixture.principal(90,'STAFF'),{

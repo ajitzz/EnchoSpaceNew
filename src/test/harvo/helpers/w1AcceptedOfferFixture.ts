@@ -23,7 +23,7 @@ const indiaDate=(instant:Date)=>{
 export const addDays=(day:string,count:number)=>new Date(Date.parse(`${day}T00:00:00Z`)+count*86400000).toISOString().slice(0,10);
 
 /** Isolated, real PostgreSQL W1 schema. No external DATABASE_URL is read. */
-export async function createW1AcceptedOfferFixture(options:{serverCompatible?:boolean}={}){
+export async function createW1AcceptedOfferFixture(options:{serverCompatible?:boolean;reviewFingerprintV2?:boolean}={}){
   const local=await createLocalPostgresFixture({schema:'empty'});
   let migratorPool:pg.Pool|undefined,hostPool:pg.Pool|undefined,staffPool:pg.Pool|undefined,publicPool:pg.Pool|undefined;
   try{
@@ -51,6 +51,8 @@ export async function createW1AcceptedOfferFixture(options:{serverCompatible?:bo
     migratorPool=new pg.Pool({...local.pool.options,user:'w1_offer_migrator'});
     await applyIsolatedMigration(migratorPool,'036_internal_organization_iam.sql');
     await applyIsolatedMigration(migratorPool,'049_accepted_sellable_offers.sql');
+    if(options.reviewFingerprintV2!==false)
+      await applyIsolatedMigration(migratorPool,'051_versioned_offer_review_fingerprint.sql');
     if(options.serverCompatible)await local.pool.query(`
       ALTER TABLE users ADD COLUMN name TEXT NOT NULL DEFAULT 'Fixture user';
       ALTER TABLE users ADD COLUMN password_hash TEXT;
@@ -135,6 +137,10 @@ export async function createW1AcceptedOfferFixture(options:{serverCompatible?:bo
         internal_iam_has_permission(UUID,TEXT,TEXT,TEXT,TEXT,TEXT,BIGINT)
         TO w1_offer_host,w1_offer_staff;
     `);
+    if(options.reviewFingerprintV2!==false)await local.pool.query(`
+      GRANT EXECUTE ON FUNCTION sellable_offer_review_fingerprint_v2(INT,INT,DATE,DATE)
+        TO w1_offer_host,w1_offer_staff;
+    `);
     for(const statement of iamRolloutGrants('w1_offer_staff'))await local.pool.query(statement);
     await local.pool.query(`
       INSERT INTO internal_organization_memberships(id,organization_id,user_id,status,accepted_at,changed_by,change_reason)
@@ -173,10 +179,16 @@ export async function createW1AcceptedOfferFixture(options:{serverCompatible?:bo
         [organizationId,membershipId,version,offerId,randomUUID().replaceAll('-','').padEnd(64,'a'),]);
     };
     const close=async()=>{await Promise.all([migratorPool?.end(),hostPool?.end(),staffPool?.end(),publicPool?.end()]);await local.close();};
+    const applyReviewMigration=async()=>{
+      if(!migratorPool)throw new Error('Fixture migrator unavailable');
+      await applyIsolatedMigration(migratorPool,'051_versioned_offer_review_fingerprint.sql');
+      await local.pool.query(`GRANT EXECUTE ON FUNCTION sellable_offer_review_fingerprint_v2(INT,INT,DATE,DATE)
+        TO w1_offer_host,w1_offer_staff`);
+    };
     const socketPath=String(local.pool.options.host),port=Number(local.pool.options.port);
     const urlFor=(role:'w1_offer_host'|'w1_offer_staff'|'w1_offer_public')=>
       `postgresql://${role}@localhost/postgres?host=${encodeURIComponent(socketPath)}&port=${port}`;
     return {owner:local.pool,hostPool,staffPool,publicPool,principal,grantOffer,today,
-      staffToken,foreignStaffToken,socketPath,port,urlFor,mediaUrl,close};
+      staffToken,foreignStaffToken,socketPath,port,urlFor,mediaUrl,applyReviewMigration,close};
   }catch(error){await Promise.all([migratorPool?.end(),hostPool?.end(),staffPool?.end(),publicPool?.end()]);await local.close();throw error;}
 }

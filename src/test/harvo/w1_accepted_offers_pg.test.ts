@@ -33,8 +33,13 @@ describe('W1 accepted dated sellable offers on isolated PostgreSQL',()=>{
     expect(submitted).toMatchObject({status:'SUBMITTED',version:2});
     const submissionEvidence=(await fixture.owner.query(`SELECT evidence FROM sellable_offer_events
       WHERE offer_id=$1 AND revision=1 AND event_type='SUBMITTED'`,[draft.offerId])).rows[0].evidence;
-    expect(submissionEvidence.inventoryHash).toMatch(/^[a-f0-9]{64}$/);
-    expect(submissionEvidence.inventorySqlHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(submissionEvidence.reviewFingerprintVersion).toBe(2);
+    expect(submissionEvidence.commercialSqlHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(submissionEvidence.inventoryHash).toBeUndefined();
+    expect(submissionEvidence.inventorySqlHash).toBeUndefined();
+    expect(submissionEvidence.commercialSqlHash).toBe((await fixture.owner.query(
+      `SELECT sellable_offer_review_fingerprint_v2(1,101,$1::date,$2::date) AS hash`,
+      [fixture.today,addDays(fixture.today,30)])).rows[0].hash);
     expect((await service.submit(host,{offerId:draft.offerId,revision:1,expectedVersion:1})).status).toBe('SUBMITTED');
     await fixture.grantOffer(draft.offerId);
     expect(await service.listSubmittedForStaff(staff,1)).toContainEqual(expect.objectContaining({offerId:draft.offerId,status:'SUBMITTED'}));
@@ -210,14 +215,16 @@ describe('W1 accepted dated sellable offers on isolated PostgreSQL',()=>{
       [draft.offerId])).rows[0].current_accepted_revision).toBeNull();
     await fixture.owner.query('UPDATE inventory_days SET total_units=1 WHERE room_type_id=102 AND calendar_date=$1::date',
       [fixture.today]);
-    await fixture.owner.query('UPDATE inventory_days SET held_units=1 WHERE room_type_id=102 AND calendar_date=$1::date',
-      [fixture.today]);
-    await expect(service.accept(staff,{offerId:draft.offerId,revision:1,expectedVersion:2}))
-      .rejects.toMatchObject({code:'OFFER_STALE_REVIEW',status:409});
-    await fixture.owner.query('UPDATE inventory_days SET held_units=0 WHERE room_type_id=102 AND calendar_date=$1::date',
-      [fixture.today]);
+    await fixture.owner.query(`UPDATE inventory_days SET held_units=1 WHERE room_type_id=102
+      AND calendar_date >= $1::date AND calendar_date < $2::date`,
+      [fixture.today,addDays(fixture.today,30)]);
     const accepted=await service.accept(staff,{offerId:draft.offerId,revision:1,expectedVersion:2});
     expect(accepted.status).toBe('ACCEPTED');
+    expect((await readPublicOfferAuthority(fixture.publicPool,[1],new Date())).states)
+      .toContainEqual(expect.objectContaining({roomTypeId:102,state:'ROOM_UNAVAILABLE'}));
+    await fixture.owner.query(`UPDATE inventory_days SET held_units=0 WHERE room_type_id=102
+      AND calendar_date >= $1::date AND calendar_date < $2::date`,
+      [fixture.today,addDays(fixture.today,30)]);
     expect((await readPublicOfferAuthority(fixture.publicPool,[1],new Date())).eligibleOffers)
       .toContainEqual(expect.objectContaining({roomTypeId:102,amountMinor:'620000'}));
   });

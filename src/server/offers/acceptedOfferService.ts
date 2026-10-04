@@ -113,6 +113,15 @@ async function readInventory(client:pg.PoolClient,listingId:number,roomTypeId:nu
   return {...(lower>=end?{date:null,legacy:false}:
     firstAvailableStart(nights.rows,blocks.rows,listingId,roomTypeId,lower,end,minNights)),fingerprint};
 }
+async function readCommercialReviewFingerprintV2(client:pg.PoolClient,listingId:number,roomTypeId:number,
+  start:string,end:string):Promise<string>{
+  const row=(await client.query<{fingerprint:string}>(
+    'SELECT public.sellable_offer_review_fingerprint_v2($1,$2,$3::date,$4::date) AS fingerprint',
+    [listingId,roomTypeId,start,end])).rows[0];
+  if(!row?.fingerprint||!/^[a-f0-9]{64}$/.test(row.fingerprint))
+    throw new OfferAuthorityError('OFFER_AUTHORITY_UNAVAILABLE');
+  return row.fingerprint;
+}
 
 const viewQuery=`SELECT o.id AS offer_id,o.listing_id,o.room_type_id,o.host_account_id,o.version,
   r.revision,r.amount_minor::text,r.currency,r.price_basis,r.stay_start::text,r.stay_end::text,
@@ -272,10 +281,13 @@ export class AcceptedOfferService{
         view.stayStart,view.stayEnd,view.minNights,new Date());
       if(available.legacy)throw new OfferAuthorityError('LEGACY_DATA_UNRECONCILED');
       if(!available.date)throw new OfferAuthorityError('ROOM_UNAVAILABLE');
+      const reviewFingerprint=await readCommercialReviewFingerprintV2(client,number(listing.id),
+        number(offer.room_type_id),view.stayStart,view.stayEnd);
       await client.query(`INSERT INTO sellable_offer_events(offer_id,revision,event_type,actor_account_id,offer_version,source_hash,evidence)
         VALUES($1,$2,'SUBMITTED',$3,$4,$5,$6::jsonb)`,
         [input.offerId,input.revision,principal.accountId,input.expectedVersion+1,source.sourceHash,
-          JSON.stringify({operationId:principal.operationId,inventoryHash:available.fingerprint})]);
+          JSON.stringify({operationId:principal.operationId,reviewFingerprintVersion:2,
+            commercialSqlHash:reviewFingerprint})]);
       await client.query('UPDATE sellable_offers SET version=version+1 WHERE id=$1',[input.offerId]);
       return oneView(client,input.offerId,input.revision);
     },true);
@@ -341,11 +353,23 @@ export class AcceptedOfferService{
           const available=await readInventory(client,number(listing.id),number(offer.room_type_id),
             view.stayStart,view.stayEnd,view.minNights,new Date());
           if(available.legacy)throw new OfferAuthorityError('LEGACY_DATA_UNRECONCILED');
-          if(!available.date)throw new OfferAuthorityError('ROOM_UNAVAILABLE');
-          const submitted=(await client.query<{evidence:{inventoryHash?:string}}>(`SELECT evidence FROM sellable_offer_events
+          const submitted=(await client.query<{evidence:{reviewFingerprintVersion?:number;commercialSqlHash?:string;
+            inventoryHash?:string}}>(`SELECT evidence FROM sellable_offer_events
             WHERE offer_id=$1 AND revision=$2 AND event_type='SUBMITTED'`,[input.offerId,input.revision])).rows[0];
-          if(!submitted||submitted.evidence.inventoryHash!==available.fingerprint)
+          if(!submitted)throw new OfferAuthorityError('OFFER_STALE_REVIEW');
+          const evidence=submitted.evidence;
+          const reviewVersion=evidence.reviewFingerprintVersion===undefined?1:evidence.reviewFingerprintVersion;
+          if(reviewVersion===1){
+            if(!available.date||evidence.inventoryHash!==available.fingerprint)
+              throw new OfferAuthorityError('OFFER_STALE_REVIEW');
+          }else if(reviewVersion===2){
+            const reviewFingerprint=await readCommercialReviewFingerprintV2(client,number(listing.id),
+              number(offer.room_type_id),view.stayStart,view.stayEnd);
+            if(evidence.commercialSqlHash!==reviewFingerprint)
+              throw new OfferAuthorityError('OFFER_STALE_REVIEW');
+          }else{
             throw new OfferAuthorityError('OFFER_STALE_REVIEW');
+          }
           const conflict=await client.query(`SELECT 1 FROM sellable_offers other
             JOIN sellable_offer_revisions prior ON prior.offer_id=other.id
               AND prior.revision=other.current_accepted_revision
