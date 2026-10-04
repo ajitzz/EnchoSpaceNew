@@ -1,3 +1,4 @@
+import {randomUUID} from 'node:crypto';
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
 import {PostgresWorkforceAuthorization} from '../../lib/iam/postgresAuthorization.js';
 import {verifyIamCatalog} from '../../server/deployment/iamReadiness.js';
@@ -19,7 +20,7 @@ describe('W1 accepted dated sellable offers on isolated PostgreSQL',()=>{
   afterAll(async()=>{await fixture?.close();});
 
   const offerInput=(fixture:Awaited<ReturnType<typeof createW1AcceptedOfferFixture>>,roomTypeId=101,amountMinor='550000')=>({
-    listingId:roomTypeId===201?2:1,roomTypeId,amountMinor,stayStart:fixture.today,
+    commandId:randomUUID(),listingId:roomTypeId===201?2:1,roomTypeId,amountMinor,stayStart:fixture.today,
     stayEnd:addDays(fixture.today,30),effectiveFrom:new Date(Date.now()-3600000).toISOString(),
     effectiveUntil:new Date(Date.now()+30*86400000).toISOString(),maxGuests:2,minNights:1,
   });
@@ -223,8 +224,38 @@ describe('W1 accepted dated sellable offers on isolated PostgreSQL',()=>{
     await fixture.owner.query("UPDATE room_types SET description='Changed after Host submission' WHERE id=201");
     await attemptRawAccept();
     await fixture.owner.query('UPDATE room_types SET description=NULL WHERE id=201');
+    const orphan=await fixture.staffPool.connect();
+    try{
+      await orphan.query('BEGIN');
+      await orphan.query(`SELECT set_config('app.current_user_id','90',true),
+        set_config('app.organization_id',$1,true),set_config('app.membership_id',$2,true),
+        set_config('app.staff_session_id',$3,true),set_config('app.workforce_environment','LOCAL',true)`,
+      [staff.organizationId,staff.membershipId,staff.sessionId]);
+      await orphan.query(`INSERT INTO sellable_offer_events(offer_id,revision,event_type,actor_account_id,
+        actor_membership_id,offer_version,source_hash,evidence)
+        SELECT offer_id,revision,'ACCEPTED',90,$2::uuid,3,source_hash,'{}'::jsonb
+        FROM sellable_offer_revisions WHERE offer_id=$1 AND revision=1`,[draft.offerId,staff.membershipId]);
+      await expect(orphan.query('COMMIT')).rejects.toThrow(/SELLABLE_OFFER_EVENT_PARENT_MISMATCH/);
+      await orphan.query('ROLLBACK');
+    }finally{orphan.release();}
     expect((await fixture.owner.query(`SELECT current_accepted_revision FROM sellable_offers
       WHERE id=$1`,[draft.offerId])).rows[0].current_accepted_revision).toBeNull();
+    expect((await fixture.owner.query(`SELECT count(*)::int AS count FROM sellable_offer_events
+      WHERE offer_id=$1 AND event_type='ACCEPTED'`,[draft.offerId])).rows[0].count).toBe(0);
+
+    const orphanHostDraft=await service.createDraft(host,offerInput(fixture,201,'720000'));
+    const rawHost=await fixture.hostPool.connect();
+    try{
+      await rawHost.query('BEGIN');
+      await rawHost.query("SELECT set_config('app.current_user_id','11',true)");
+      await rawHost.query(`INSERT INTO sellable_offer_events(offer_id,revision,event_type,
+        actor_account_id,offer_version,source_hash,evidence)
+        SELECT offer_id,revision,'SUBMITTED',11,2,source_hash,'{}'::jsonb
+        FROM sellable_offer_revisions WHERE offer_id=$1 AND revision=1`,[orphanHostDraft.offerId]);
+      await expect(rawHost.query('COMMIT')).rejects.toThrow(/SELLABLE_OFFER_EVENT_PARENT_MISMATCH/);
+      await rawHost.query('ROLLBACK');
+    }finally{rawHost.release();}
+    expect((await service.readForHost(host,orphanHostDraft.offerId))[0].status).toBe('DRAFT');
   });
 
   it('keeps accepted revision 1 public until immutable successor revision 2 is accepted',async()=>{

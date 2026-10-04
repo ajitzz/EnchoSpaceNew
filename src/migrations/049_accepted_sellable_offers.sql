@@ -84,6 +84,53 @@ CREATE TRIGGER sellable_offer_event_immutable BEFORE UPDATE OR DELETE ON sellabl
 CREATE TRIGGER sellable_offer_draft_receipt_immutable BEFORE UPDATE OR DELETE ON sellable_offer_draft_receipts
   FOR EACH ROW EXECUTE FUNCTION sellable_offer_reject_evidence_mutation();
 
+-- Events and the mutable parent pointer are one transaction-level transition.
+-- A restricted writer cannot commit an orphan event that would misstate review
+-- status even when it never becomes publicly sellable. The service deliberately
+-- inserts the event before updating the parent, so this guard is deferred.
+CREATE FUNCTION sellable_offer_guard_event_commit() RETURNS trigger LANGUAGE plpgsql
+SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp SET row_security=on AS $$
+DECLARE authority RECORD;
+BEGIN
+  SELECT version,latest_revision,current_accepted_revision,public_disposition
+    INTO authority FROM public.sellable_offers WHERE id=NEW.offer_id;
+  IF NOT FOUND OR authority.version<>NEW.offer_version THEN
+    RAISE EXCEPTION 'SELLABLE_OFFER_EVENT_PARENT_MISMATCH';
+  END IF;
+  IF NEW.event_type='DRAFT_CREATED' AND authority.latest_revision<>NEW.revision THEN
+    RAISE EXCEPTION 'SELLABLE_OFFER_EVENT_PARENT_MISMATCH';
+  ELSIF NEW.event_type='SUBMITTED' AND (
+    authority.latest_revision<>NEW.revision OR NOT EXISTS(
+      SELECT 1 FROM public.sellable_offer_events created WHERE created.offer_id=NEW.offer_id
+        AND created.revision=NEW.revision AND created.event_type='DRAFT_CREATED'
+        AND created.offer_version=NEW.offer_version-1)) THEN
+    RAISE EXCEPTION 'SELLABLE_OFFER_EVENT_PARENT_MISMATCH';
+  ELSIF NEW.event_type='ACCEPTED' AND (
+    authority.latest_revision<>NEW.revision OR authority.current_accepted_revision IS DISTINCT FROM NEW.revision
+    OR authority.public_disposition<>'ACCEPTED' OR NOT EXISTS(
+      SELECT 1 FROM public.sellable_offer_events submitted WHERE submitted.offer_id=NEW.offer_id
+        AND submitted.revision=NEW.revision AND submitted.event_type='SUBMITTED'
+        AND submitted.offer_version=NEW.offer_version-1)) THEN
+    RAISE EXCEPTION 'SELLABLE_OFFER_EVENT_PARENT_MISMATCH';
+  ELSIF NEW.event_type='SUPERSEDED' AND (
+    authority.current_accepted_revision IS NULL OR authority.current_accepted_revision=NEW.revision
+    OR authority.public_disposition<>'ACCEPTED' OR NOT EXISTS(
+      SELECT 1 FROM public.sellable_offer_events accepted WHERE accepted.offer_id=NEW.offer_id
+        AND accepted.revision=authority.current_accepted_revision AND accepted.event_type='ACCEPTED'
+        AND accepted.offer_version=NEW.offer_version)) THEN
+    RAISE EXCEPTION 'SELLABLE_OFFER_EVENT_PARENT_MISMATCH';
+  ELSIF NEW.event_type='RETIRED' AND (
+    authority.current_accepted_revision IS NOT NULL OR authority.public_disposition<>'RETIRED'
+    OR NOT EXISTS(SELECT 1 FROM public.sellable_offer_events accepted WHERE accepted.offer_id=NEW.offer_id
+      AND accepted.revision=NEW.revision AND accepted.event_type='ACCEPTED')) THEN
+    RAISE EXCEPTION 'SELLABLE_OFFER_EVENT_PARENT_MISMATCH';
+  END IF;
+  RETURN NULL;
+END $$;
+CREATE CONSTRAINT TRIGGER sellable_offer_event_parent_commit
+  AFTER INSERT ON sellable_offer_events DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION sellable_offer_guard_event_commit();
+
 CREATE FUNCTION sellable_offer_guard_identity() RETURNS trigger LANGUAGE plpgsql
 SECURITY DEFINER SET search_path=pg_catalog,public,pg_temp SET row_security=on AS $$
 DECLARE incoming_scope RECORD;
@@ -414,7 +461,8 @@ REVOKE ALL ON sellable_offers,sellable_offer_revisions,sellable_offer_events,
   sellable_offer_draft_receipts FROM PUBLIC;
 REVOKE ALL ON FUNCTION sellable_offer_source_snapshot(INT,INT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION sellable_offer_lock_evidence(INT,INT,DATE,DATE,UUID) FROM PUBLIC;
-REVOKE ALL ON FUNCTION sellable_offer_reject_evidence_mutation(),sellable_offer_guard_identity(),sellable_offer_reject_delete() FROM PUBLIC;
+REVOKE ALL ON FUNCTION sellable_offer_reject_evidence_mutation(),sellable_offer_guard_identity(),
+  sellable_offer_reject_delete(),sellable_offer_guard_event_commit() FROM PUBLIC;
 
 -- Extend the current scoped workforce catalog. The seeded role has no member grants.
 DO $seed$
