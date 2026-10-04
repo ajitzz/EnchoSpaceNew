@@ -70,6 +70,18 @@ jobs:
     - name: Build Application
       run: npm run build:offline
 
+    - name: Verify built W2 quote and temporary-hold boundaries
+      run: npm run test:w2-built
+
+    - name: Preserve built W2 test summary
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: isolated-w2-built-evidence
+        path: test-results/w2-built-summary.json
+        if-no-files-found: ignore
+        retention-days: 7
+
   docker-build-test:
     name: Docker Build Check
     runs-on: ubuntu-latest
