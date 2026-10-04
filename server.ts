@@ -169,7 +169,12 @@ import { toPublicStayProjection, toPublicListingCardProjection, publicListingSlu
 import { assertPublicImageOrigin, isAllowedImageSource, parseImageTransformQuery, readBoundedImageResponse, REMOTE_IMAGE_LIMITS } from './src/server/media/remoteImageProxy.js';
 import { createLegacyListingAssistanceBoundary } from './src/server/assistance/legacyListingAiBoundary.js';
 import { createOperationsRouter } from './src/server/operations/router.js';
-import { createOperationsRuntime, workforceOrigin } from './src/server/operations/runtime.js';
+import { createOperationsRuntime, workforceConnectionConfig, workforceEnvironment, workforceOrigin } from './src/server/operations/runtime.js';
+import { AcceptedOfferService } from './src/server/offers/acceptedOfferService.js';
+import { PostgresWorkforceAuthorization } from './src/lib/iam/postgresAuthorization.js';
+import { StaffSessionReader } from './src/lib/iam/staffSessions.js';
+import { createHostOfferRouter, createStaffOfferRouter } from './src/server/offers/offerRouter.js';
+import { acceptedOfferConnectionConfig } from './src/server/offers/runtime.js';
 import { createWorkforceSessionRouter } from './src/server/operations/sessionRouter.js';
 import { createWorkforceSessionRuntime } from './src/server/operations/sessionRuntime.js';
 import { createWorkforceCommandRouter } from './src/server/operations/workforceCommandRouter.js';
@@ -1114,6 +1119,34 @@ app.get('/api/explore/:destination', rateLimit({windowMs:60000,limit:30,standard
 app.use('/api/operations/v1', createOperationsRouter(createOperationsRuntime(process.env, () => {
   StructuredLogger.error('[WORKFORCE] Restricted operations runtime unavailable', {errorCode: 'WORKFORCE_UNAVAILABLE'});
 }),{origin:workforceOrigin(process.env)}));
+// Public offer reads and Host commands share one explicitly configured restricted
+// connection. An absent connection leaves public offer authority unavailable.
+let offerAuthorityPool: InstanceType<typeof Pool> | null = null;
+let acceptedOfferService: AcceptedOfferService | null = null;
+let acceptedOfferStaffReader: StaffSessionReader | null = null;
+try {
+  const offerConfig = acceptedOfferConnectionConfig(process.env);
+  if (offerConfig) {
+    offerAuthorityPool = new Pool(offerConfig);
+    offerAuthorityPool.on('error', () => StructuredLogger.error('[OFFERS] Offer connection unavailable', {errorCode:'OFFER_AUTHORITY_UNAVAILABLE'}));
+  }
+} catch {
+  StructuredLogger.error('[OFFERS] Restricted offer runtime unavailable',{errorCode:'OFFER_AUTHORITY_UNAVAILABLE'});
+}
+try {
+  const staffConfig = workforceConnectionConfig(process.env);
+  if (staffConfig && offerAuthorityPool) {
+    const staffPool = new Pool(staffConfig);
+    staffPool.on('error', () => StructuredLogger.error('[OFFERS] Workforce connection unavailable', {errorCode:'WORKFORCE_UNAVAILABLE'}));
+    const environment = workforceEnvironment(process.env);
+    acceptedOfferStaffReader = new StaffSessionReader(staffPool,environment);
+    acceptedOfferService = new AcceptedOfferService(offerAuthorityPool,new PostgresWorkforceAuthorization(staffPool,environment),environment);
+  }
+} catch {
+  StructuredLogger.error('[OFFERS] Isolated workforce offer runtime unavailable',{errorCode:'WORKFORCE_UNAVAILABLE'});
+}
+app.use('/api/offers/v1',createHostOfferRouter(acceptedOfferService,authenticateToken));
+app.use('/api/operations/v1/offers',createStaffOfferRouter(acceptedOfferService,acceptedOfferStaffReader,workforceOrigin(process.env)));
 app.use('/api/marketing/measurement',createMeasurementRouter(harvoMarketing.config.origin,harvoMarketing.touchpoints),marketingErrorHandler);
 app.use('/api/admin/workforce', authenticateToken, requireAdmin, createAdminWorkforceRouter(pool));
 app.use('/api/marketing/v2', createMarketingRouter(pool, harvoMarketing.workflow, harvoMarketing.finance, authenticateToken, harvoMarketing.targeting, {corridorInference:harvoMarketing.corridorInference,outcomes:harvoMarketing.outcomes,stories:harvoMarketing.stories,pools:harvoMarketing.pools,preflight:harvoMarketing.preflight,settlement:harvoMarketing.settlement,conversions:harvoMarketing.conversions,guidance:harvoMarketing.guidance,creative:harvoMarketing.creative,pauseRecovery:harvoMarketing.pauseRecovery,facts:harvoMarketing.facts,keywordResearch:harvoMarketing.keywordResearch,portfolio:harvoMarketing.portfolio}));
@@ -3450,7 +3483,7 @@ app.get('/api/seo', async (req, res) => {
           if (slug !== canonicalSlug) return res.redirect(301, `/stay/${encodeURIComponent(canonicalSlug)}`);
           let publicStay;
           try {
-            publicStay = toPublicStayProjection(await resolvePublicStayAuthority(pool, listing));
+            publicStay = toPublicStayProjection(await resolvePublicStayAuthority(pool, listing, offerAuthorityPool));
           } catch (_mErr) {
             console.warn('[PUBLIC SEO STAY AUTHORITY UNAVAILABLE]');
             return res.status(503).set('Cache-Control', 'no-store').send('Stay preview is temporarily unavailable.');
@@ -14229,7 +14262,7 @@ app.get('/api/v2/stays/:propertySlug', async (req, res) => {
     if (propertySlug !== canonicalSlug)
       return res.redirect(301, `/api/v2/stays/${encodeURIComponent(canonicalSlug)}`);
 
-    const rawListing = await resolvePublicStayAuthority(pool, listing);
+    const rawListing = await resolvePublicStayAuthority(pool, listing, offerAuthorityPool);
 
     // Apply strict privacy transformation and nested safe mappers
     const publicProjection = toPublicStayProjection(rawListing);
@@ -14540,7 +14573,7 @@ app.get('/api/listings/:id', async (req: Request, res: Response) => {
     }
 
     // Return sanitized public stay projection — address, user_id, raw coords stripped
-    const safeProjection = toPublicStayProjection(await resolvePublicStayAuthority(pool, listing));
+    const safeProjection = toPublicStayProjection(await resolvePublicStayAuthority(pool, listing, offerAuthorityPool));
     return res.json(safeProjection);
   } catch (error) {
     if (error instanceof PublicStayAuthorityError) return res.status(503).set('Cache-Control', 'no-store').json({error: error.message, code: error.code});
@@ -14767,7 +14800,7 @@ app.get('/api/listings', async (req: Request, res: Response) => {
     let publicRows: Record<string, unknown>[] = [];
     if (!isOwnerOrAdminFeed) {
       try {
-        publicRows = await resolvePublicStayAuthorities(pool, result.rows);
+        publicRows = await resolvePublicStayAuthorities(pool, result.rows, offerAuthorityPool);
       } catch (_authorityErr) {
         console.warn('[PUBLIC CATALOGUE STAY AUTHORITY UNAVAILABLE]');
         return res.status(503).set('Cache-Control', 'no-store').json({
@@ -18902,7 +18935,7 @@ async function startServer() {
                     if (slug !== canonicalSlug) return res.redirect(301, `/stay/${encodeURIComponent(canonicalSlug)}`);
                     let publicStay;
                     try {
-                        publicStay = toPublicStayProjection(await resolvePublicStayAuthority(pool, listing));
+                        publicStay = toPublicStayProjection(await resolvePublicStayAuthority(pool, listing, offerAuthorityPool));
                     } catch (_mErr) {
                         console.warn('[DIRECT STAY AUTHORITY UNAVAILABLE]');
                         return res.status(503).set('Cache-Control', 'no-store').send('Stay preview is temporarily unavailable.');

@@ -160,7 +160,8 @@ function ReadyShell({ workspace, activeDeskId = 'my-work', onNavigate, onRefresh
       <a className="ops-brand" href="/operations" onClick={onNavigate ? event => { event.preventDefault(); onNavigate('my-work'); } : undefined} aria-label="Encho operations home"><span aria-hidden="true">E</span><div>Encho<small>Operations</small></div></a>
       <nav aria-label="Operations desks">{workspace.desks.map(allowedDesk => <a key={allowedDesk.id} href={operationsDeskPath(allowedDesk.id)} aria-current={selectedDesk.id === allowedDesk.id ? 'page' : undefined} onClick={onNavigate ? event => { event.preventDefault(); onNavigate(allowedDesk.id); } : undefined}>
         <span aria-hidden="true">{deskPresentation[allowedDesk.id].mark}</span>{deskPresentation[allowedDesk.id].name}
-      </a>)}</nav>
+      </a>)}{workspace.desks.some(allowedDesk=>allowedDesk.permittedActions.includes('offer.read')||allowedDesk.permittedActions.includes('offer.accept'))&&
+        <a href="/operations/offers"><span aria-hidden="true">11</span>Room offers</a>}</nav>
       <div className="ops-identity"><strong>{workspace.member.displayName ?? 'Team member'}</strong><span>{workspace.organization.displayName}</span><span className="ops-session-dot">Workforce session active</span></div>
     </aside>
     <main id={mainId} className="ops-main" tabIndex={-1}>

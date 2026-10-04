@@ -19,6 +19,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { io } from 'socket.io-client';
 import { AdminStaffCommandCenter } from './admin/AdminStaffCommandCenter';
 import { AdminDraftPropertyEditor } from './admin/AdminDraftPropertyEditor';
+import { AdminAcceptedOfferReview } from './offers/AdminAcceptedOfferReview';
 
 export interface MediaDeskAsset {
   id: number;
@@ -2141,9 +2142,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                  </div>
                 </div>
               ) : activeTab === 'offers' ? (
-                 <div className="p-6 max-w-3xl">
+                 <div className="p-6 max-w-5xl">
+                    <AdminAcceptedOfferReview listings={listings} />
                     <div className="flex justify-between items-center mb-8 border-b border-gray-100 pb-4">
-                       <h2 className="text-xl font-bold text-gray-900">Platform Offers</h2>
+                       <h2 className="text-xl font-bold text-gray-900">Legacy discount promotions</h2>
                        <button onClick={handleCreateOffer} className="bg-gray-900 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-gray-800 transition-colors">
                           + Create Offer
                        </button>

@@ -6,6 +6,8 @@ import {diagnosticIdSchema} from '../../src/shared/platform/apiError.js';
 import WorkforceSignIn from './WorkforceSignIn.js';
 import ServiceDesk from './ServiceDesk.js';
 import WorkforceWorkspace from './WorkforceWorkspace.js';
+import {AdminAcceptedOfferReview} from '../offers/AdminAcceptedOfferReview.js';
+import {currentOfferReviewWorkspace} from './offerReviewAccess.js';
 
 /** Staff identity uses a separate HttpOnly cookie; consumer tokens/caches are never read. */
 export default function OperationsPage() {
@@ -99,6 +101,8 @@ export default function OperationsPage() {
     }
   });
 
+  const offerReview=desk==='offers';
+  const offerWorkspace=offerReview&&state.status==='READY'?currentOfferReviewWorkspace(state.workspace):null;
   return <><Helmet><title>Encho Operations</title><meta name="robots" content="noindex,nofollow"/></Helmet>
     {signingIn ? (
       <WorkforceSignIn autoStart={true} onComplete={() => { setSigningIn(false); void load(); }} onCancel={() => setSigningIn(false)} />
@@ -118,8 +122,18 @@ export default function OperationsPage() {
         </div>
         <p className="ops-secondary">Staff access is strictly isolated from guest and host accounts. All actions are logged and auditable.</p>
       </main>
+    ) : offerReview&&offerWorkspace ? (
+      <div className="ops-shell min-h-screen"><a className="ops-skip" href="#offer-review-work">Skip to offer review</a>
+        <main id="offer-review-work" className="ops-main" tabIndex={-1}>
+          <header className="ops-header"><div><span className="ops-eyebrow">Encho / {offerWorkspace.organization.displayName}</span>
+            <h1>Room offer review</h1><p>Current workforce authority is checked again for every offer and command.</p></div>
+            <div className="ops-actions"><a className="ops-button" href="/operations">Operations workspace</a>
+              <button type="button" className="ops-button" onClick={()=>void load()}>Refresh workforce session</button>
+              <button type="button" className="ops-button" onClick={()=>void logout()}>Sign out</button></div></header>
+          <AdminAcceptedOfferReview listings={[]}/>
+        </main></div>
     ) : (
-      <OperationsShell state={state} activeDeskId={desk} onNavigate={navigate} onAssignmentAction={assignment} onRefresh={() => {void load();}} onSignIn={()=>setSigningIn(true)} onSignOut={()=>void logout()}
+      <OperationsShell state={offerReview&&state.status==='READY'?{status:'ACCESS_DENIED'}:state} activeDeskId={offerReview?'my-work':desk} onNavigate={navigate} onAssignmentAction={assignment} onRefresh={() => {void load();}} onSignIn={()=>setSigningIn(true)} onSignOut={()=>void logout()}
         renderDesk={(selected,workspace)=>selected==='service'?<ServiceDesk workspace={workspace} onRefresh={()=>void load(true)}/>:selected==='workforce'?<WorkforceWorkspace workspace={workspace} onRefreshWorkspace={()=>void load(true)}/>:null}/>
     )}
   </>;

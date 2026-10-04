@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Listing, Room, SpatialPhoto } from '../types';
+import { HostAcceptedOfferPanel } from './offers/HostAcceptedOfferPanel';
 import { PhotoUpload, PhotoData } from './PhotoUpload';
 import { AmenitiesPicker } from './AmenitiesPicker';
 import { LocationPicker } from './LocationPicker';
@@ -2452,6 +2453,9 @@ export const HostForm: React.FC<HostFormProps> = ({ onBack, onSuccess, existingL
           })}
         </div>
       </div>
+
+      {existingListing?.id&&<HostAcceptedOfferPanel listingId={Number(existingListing.id)}
+        publicationStatus={existingListing.publication_status??'draft'} token={token||localStorage.getItem('token')||''}/>}
 
       {/* ── WORKSPACE CANVAS (SPLIT OR CENTERED) ── */}
       <div className={`w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8 flex-1 min-w-0 ${
