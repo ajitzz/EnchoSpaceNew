@@ -14,7 +14,7 @@
     "historical049Changed": false
   },
   "contract": {
-    "v1": "Pre-051 SUBMITTED evidence retains inventoryHash and database inventorySqlHash, including occupancy and calendar blocks; it is never rehashed as V2. Occupancy drift requires explicit successor submission.",
+    "v1": "Pre-051 SUBMITTED evidence retains inventoryHash and database inventorySqlHash, including occupancy and calendar blocks; it is never rehashed as V2. A V1 mismatch fails review until the original inventory state returns or the Host creates and submits a successor revision.",
     "v2": "New SUBMITTED events are stamped by PostgreSQL with reviewFingerprintVersion=2 and commercialSqlHash over canonical listing/room identity, stay scope and configured inventory_days.total_units. The existing immutable source hash covers reviewed property, room, occupancy/restriction configuration and approved facts/media. Held/booked/blocked occupancy and mapped operational calendar blocks are excluded from review identity.",
     "liveSellability": "Public offer visibility and W2 quote/hold still read current available inventory; V2 acceptance may occur at zero current availability without exposing a sellable public offer."
   },
