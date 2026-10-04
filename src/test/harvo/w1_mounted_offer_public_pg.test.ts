@@ -1,3 +1,4 @@
+import {randomUUID} from 'node:crypto';
 import express from 'express';
 import request from 'supertest';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
@@ -21,7 +22,7 @@ describe('W1 mounted command to public projection on disposable PostgreSQL', () 
   beforeAll(async () => {
     fixture = await createW1AcceptedOfferFixture();
     const authorization = new PostgresWorkforceAuthorization(fixture.staffPool, 'LOCAL');
-    const service = new AcceptedOfferService(fixture.hostPool, authorization, 'LOCAL');
+    const service = new AcceptedOfferService(fixture.hostPool, authorization, 'LOCAL', fixture.staffPool);
     const staffReader = new StaffSessionReader(fixture.staffPool, 'LOCAL');
     app = express();
     app.use(express.json(), createHttpExecutionContextMiddleware());
@@ -54,9 +55,10 @@ describe('W1 mounted command to public projection on disposable PostgreSQL', () 
     const endStay = addDays(fixture.today, 8);
     const effectiveFrom = new Date(Date.now() - 86_400_000).toISOString();
     const effectiveUntil = new Date(Date.now() + 30 * 86_400_000).toISOString();
-    const draft = async (roomTypeId: number, amountMinor: string, offerId?: string, expectedVersion?: number) =>
+    const draft = async (roomTypeId: number, amountMinor: string, offerId?: string,
+      expectedVersion?: number, commandId = randomUUID()) =>
       request(app).post('/host/listings/1/drafts').set('Authorization', 'Bearer fixture-host-10')
-        .send({roomTypeId, amountMinor, stayStart: firstStay, stayEnd: endStay,
+        .send({commandId, roomTypeId, amountMinor, stayStart: firstStay, stayEnd: endStay,
           effectiveFrom, effectiveUntil, maxGuests: 2, minNights: 1,
           ...(offerId ? {offerId, expectedVersion} : {})});
 
@@ -64,7 +66,8 @@ describe('W1 mounted command to public projection on disposable PostgreSQL', () 
     expect(before.card.price).toBeNull();
     expect(before.detail.priceState).toBe('VERIFIED_OFFER_UNAVAILABLE');
 
-    const firstDraft = await draft(101, '550000');
+    const firstCommandId = randomUUID();
+    const firstDraft = await draft(101, '550000', undefined, undefined, firstCommandId);
     expect(firstDraft.status).toBe(201);
     expect(firstDraft.body).toMatchObject({roomTypeId: 101, revision: 1, status: 'DRAFT'});
     const offerId = firstDraft.body.offerId as string;
@@ -80,12 +83,30 @@ describe('W1 mounted command to public projection on disposable PostgreSQL', () 
       .set('Authorization', 'Bearer fixture-host-10').send({expectedVersion: firstDraft.body.version});
     expect(submitted.status).toBe(200);
     expect(submitted.body.status).toBe('SUBMITTED');
+    const replay = await draft(101, '550000', undefined, undefined, firstCommandId);
+    expect(replay.status).toBe(201);
+    expect(replay.body).toEqual(firstDraft.body);
+    const conflictingReplay = await draft(101, '560000', undefined, undefined, firstCommandId);
+    expect(conflictingReplay.status).toBe(409);
+    expect(conflictingReplay.body.code).toBe('OFFER_COMMAND_CONFLICT');
     expect((await publicProjection()).card.price).toBeNull();
+    const reviewQueue = await request(app).get('/staff/listings/1/submitted')
+      .set('Authorization', `Bearer ${fixture.staffToken}`);
+    expect(reviewQueue.status).toBe(200);
+    expect(reviewQueue.body).toEqual(expect.arrayContaining([
+      expect.objectContaining({offerId, revision: 1, status: 'SUBMITTED'}),
+    ]));
 
     const accepted = await staffPost(`/staff/${offerId}/revisions/1/accept`, submitted.body.version,
       fixture.staffToken);
     expect(accepted.status).toBe(200);
     expect(accepted.body).toMatchObject({status: 'ACCEPTED', revision: 1});
+    const acceptedQueue = await request(app).get('/staff/listings/1/accepted')
+      .set('Authorization', `Bearer ${fixture.staffToken}`);
+    expect(acceptedQueue.status).toBe(200);
+    expect(acceptedQueue.body).toEqual(expect.arrayContaining([
+      expect.objectContaining({offerId, revision: 1, status: 'ACCEPTED'}),
+    ]));
     const afterAccept = await publicProjection();
     for (const view of [afterAccept.card, afterAccept.detail]) {
       expect(view.priceState).toBe('VERIFIED_OFFER_AVAILABLE');

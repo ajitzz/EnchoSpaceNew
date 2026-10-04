@@ -1,3 +1,4 @@
+import {randomUUID} from 'node:crypto';
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
 import {PostgresWorkforceAuthorization} from '../../lib/iam/postgresAuthorization.js';
 import {AcceptedOfferService,readPublicOfferAuthority} from '../../server/offers/acceptedOfferService.js';
@@ -18,7 +19,7 @@ describe('W1 accepted offer public projection on disposable PostgreSQL',()=>{
   afterAll(async()=>{await fixture?.close();});
 
   const input=(roomTypeId:number,amountMinor:string,effectiveFrom?:string,effectiveUntil?:string)=>({
-    listingId:roomTypeId===201?2:1,roomTypeId,amountMinor,
+    commandId:randomUUID(),listingId:roomTypeId===201?2:1,roomTypeId,amountMinor,
     stayStart:fixture.today,stayEnd:addDays(fixture.today,30),
     effectiveFrom:effectiveFrom||new Date(Date.now()-3600000).toISOString(),
     effectiveUntil:effectiveUntil||new Date(Date.now()+30*86400000).toISOString(),
@@ -81,9 +82,14 @@ describe('W1 accepted offer public projection on disposable PostgreSQL',()=>{
     expect(foreignCard).toMatchObject({price:700,fromOffer:{offerId:foreign.offerId,roomTypeId:'201'}});
     expect(card.price).not.toBe(foreignCard.price);
     const authority=await readPublicOfferAuthority(fixture.publicPool,[1,2],new Date());
-    expect(authority.states).toContainEqual(expect.objectContaining({offerId:draft.offerId,state:'NO_ACCEPTED_OFFER'}));
-    expect(authority.states).toContainEqual(expect.objectContaining({offerId:expired.offerId,state:'OFFER_EXPIRED'}));
-    expect(authority.states).toContainEqual(expect.objectContaining({offerId:retired.offerId,state:'OFFER_RETIRED'}));
+    expect(authority.states).toContainEqual(expect.objectContaining({listingId:1,roomTypeId:101,
+      offerId:acceptedA.offerId,state:'VERIFIED_OFFER_AVAILABLE'}));
+    expect(authority.states).toContainEqual(expect.objectContaining({listingId:1,roomTypeId:102,
+      offerId:acceptedB.offerId,state:'VERIFIED_OFFER_AVAILABLE'}));
+    // Public state exposes current accepted authority, not draft or historical
+    // offer identities that cannot be sold to a Guest.
+    expect(authority.states.some(state=>[draft.offerId,expired.offerId,retired.offerId]
+      .includes(state.offerId||''))).toBe(false);
     expect(authority.eligibleOffers.map(offer=>offer.offerId).sort()).toEqual(
       [acceptedA.offerId,acceptedB.offerId,foreign.offerId].sort());
     await expect(resolvePublicStayAuthority(fixture.owner,await listing(1)))
@@ -101,6 +107,8 @@ describe('W1 accepted offer public projection on disposable PostgreSQL',()=>{
       fixture.owner,await listing(1),fixture.publicPool));
     expect(after).toMatchObject({price:null,priceState:'VERIFIED_OFFER_UNAVAILABLE',fromOffer:null});
     expect(after.rooms.every(room=>room.price===null&&room.offer===null)).toBe(true);
+    // An older accepted revision for this room still exists, but its effective
+    // window has elapsed; the current public absence is therefore expiry.
     expect(after.offerState).toBe('OFFER_EXPIRED');
 
     await fixture.owner.query("UPDATE listings SET publication_status='draft' WHERE id=1");

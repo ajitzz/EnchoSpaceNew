@@ -1,5 +1,5 @@
 import type {PublicAcceptedOffer, PublicOfferState} from '../../types';
-import {acceptedOfferAmountMinor, acceptedOfferPriceRupees} from '../shared/offers/publicPrice';
+import {acceptedOfferAmountMinor, acceptedOfferPriceRupees} from '../shared/offers/publicPrice.js';
 
 /**
  * Stay Projection & Address Privacy Engine

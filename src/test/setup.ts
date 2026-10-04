@@ -27,6 +27,11 @@ vi.mock('pg', async (importOriginal) => {
 
   // Fix pg-mem DECIMAL(10,2), set_config and DO $$ procedural blocks AST bug by intercepting queries
   (db.public as any).interceptQueries((queryText: string) => {
+    if (queryText.includes("to_regclass('public.sellable_offers') AS offer_table")) {
+      // This legacy in-memory fixture models the pre-049 schema. The W1
+      // authority and role checks are exercised separately on real PostgreSQL.
+      return [{offer_table: null, history_table: 'schema_migrations'}];
+    }
     if (queryText.includes('cr1-phone-otp-schema-readiness')) {
       // pg-mem currently reports every information_schema column as NOT NULL.
       // Read its actual column constraint so the mounted HTTP test can exercise
@@ -54,6 +59,10 @@ vi.mock('pg', async (importOriginal) => {
   // ensureListingsTable/ensureMarketingSchema in server.ts. This is not RLS,
   // foreign-key, migration, or transaction acceptance; those use real Postgres.
   const baselineSql = `
+    CREATE TABLE schema_migrations (
+      version VARCHAR(255) PRIMARY KEY,
+      checksum TEXT NOT NULL
+    );
     CREATE TABLE users (
       id SERIAL PRIMARY KEY,
       email VARCHAR(255) UNIQUE,

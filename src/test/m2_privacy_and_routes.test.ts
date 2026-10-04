@@ -587,6 +587,8 @@ describe('Phase 3 Milestone 2 — Published Projection, Canonical Routes & Addre
         'rental_mode',
         'price',
         'priceState',
+        'offerState',
+        'fromOffer',
         'roomState',
         'currency',
         'period',
@@ -616,6 +618,8 @@ describe('Phase 3 Milestone 2 — Published Projection, Canonical Routes & Addre
         'icon',
         'tag',
         'price',
+        'offer',
+        'offerState',
         'capacity',
         'specs',
         'features',
@@ -638,6 +642,12 @@ describe('Phase 3 Milestone 2 — Published Projection, Canonical Routes & Addre
         expect(item.concierge_privileges).toBeUndefined();
         expect(item.host_philosophy).toBeUndefined();
         expect(item.dynamicPricing).toBeUndefined();
+        // This pre-049 fixture has no accepted offer authority. The newly
+        // allowlisted fields must not revive its raw listing or room price.
+        expect(item.price).toBeNull();
+        expect(item.fromOffer).toBeNull();
+        expect(item.offerState).toBe(item.roomState === 'LEGACY_DATA_UNRECONCILED'
+          ? 'LEGACY_DATA_UNRECONCILED' : 'NO_ACCEPTED_OFFER');
 
         // Check top-level keys against approved whitelist (no unknown keys)
         for (const key of Object.keys(item)) {
