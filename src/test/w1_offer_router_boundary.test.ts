@@ -12,7 +12,9 @@ const offerA='11111111-1111-4111-8111-111111111111';
 const offerB='22222222-2222-4222-8222-222222222222';
 const credential=`wfs_${randomBytes(32).toString('base64url')}`;
 const origin='https://ops.encho.test';
-const body=(roomTypeId:number)=>({roomTypeId,amountMinor:'550000',stayStart:'2099-01-01',stayEnd:'2099-01-05',
+const body=(roomTypeId:number)=>({commandId:roomTypeId===101
+  ?'33333333-3333-4333-8333-333333333333':'44444444-4444-4444-8444-444444444444',
+  roomTypeId,amountMinor:'550000',stayStart:'2099-01-01',stayEnd:'2099-01-05',
   effectiveFrom:'2098-12-01T00:00:00+05:30',effectiveUntil:'2099-01-04T00:00:00+05:30',maxGuests:2,minNights:1});
 
 function mounted(service:Record<string,unknown>){
