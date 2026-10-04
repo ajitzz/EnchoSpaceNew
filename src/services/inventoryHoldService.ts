@@ -50,6 +50,9 @@ export interface AcquireHoldParams {
   holderPrincipal: string; // e.g. 'user:123' or 'session:signed_session_uuid'
   userId?: number | null;
   guestSessionId?: string | null;
+  /** W2 canonical quote identity. Legacy M4 service fixtures omit this only
+   * before migration 050; the mounted route always requires it. */
+  quoteId?: string;
 }
 
 export interface HoldResult {
@@ -309,13 +312,15 @@ export async function acquireHold(pool: any, params: AcquireHoldParams): Promise
   }
 
   const stayDates = rangeCheck.dates;
-  const currentFingerprint = computeRequestFingerprint(roomTypeId, params.checkIn, params.checkOut, quantity);
+  const currentFingerprint = params.quoteId
+    ? crypto.createHash('sha256').update(`${params.quoteId}|${computeRequestFingerprint(roomTypeId, params.checkIn, params.checkOut, quantity)}`).digest('hex')
+    : computeRequestFingerprint(roomTypeId, params.checkIn, params.checkOut, quantity);
   const client = await pool.connect();
 
   try {
     // 3. Principal-bound idempotency check
     const existingRes = await client.query(
-      `SELECT id, room_type_id, holder_principal, check_in_date, check_out_date, units_held, status, request_fingerprint, expires_at, created_at
+      `SELECT id, room_type_id, holder_principal, check_in_date, check_out_date, units_held, status, request_fingerprint, expires_at, created_at${params.quoteId?', quote_id':''}
        FROM booking_holds
        WHERE holder_principal = $1 AND idempotency_key = $2`,
       [principal, params.idempotencyKey]
@@ -324,7 +329,8 @@ export async function acquireHold(pool: any, params: AcquireHoldParams): Promise
     if (existingRes.rows.length > 0) {
       const row = existingRes.rows[0];
       // If same principal + same key + DIFFERENT fingerprint -> 409 Conflict
-      if (row.request_fingerprint && row.request_fingerprint !== currentFingerprint) {
+      if ((params.quoteId && row.quote_id !== params.quoteId) ||
+          (row.request_fingerprint && row.request_fingerprint !== currentFingerprint)) {
         return {
           success: false,
           statusCode: 409,
@@ -353,6 +359,49 @@ export async function acquireHold(pool: any, params: AcquireHoldParams): Promise
 
     // 4. Begin transactional hold acquisition
     await client.query('BEGIN');
+
+    if (params.quoteId) {
+      // Verify quote and accepted commercial authority on the same held
+      // connection that will mutate inventory; the route's pre-read is only
+      // for deriving intent and is never authoritative here.
+      const quote=(await client.query(`SELECT q.*,q.check_in_date::text AS quote_check_in,
+          q.check_out_date::text AS quote_check_out,o.current_accepted_revision,o.public_disposition,
+          o.listing_id AS offer_listing_id,o.room_type_id AS offer_room_type_id,
+          r.amount_minor AS offer_nightly_minor,r.currency AS offer_currency,
+          r.price_basis AS offer_price_basis,r.max_guests AS offer_max_guests,
+          r.source_hash AS accepted_source_hash
+        FROM stays_quotes q JOIN sellable_offers o ON o.id=q.offer_id
+        JOIN sellable_offer_revisions r ON r.offer_id=q.offer_id AND r.revision=q.offer_revision
+        WHERE q.id=$1 FOR SHARE OF q,o`,[params.quoteId])).rows[0];
+      if(quote&&new Date(quote.expires_at).getTime()<=Date.now()){
+        await client.query('ROLLBACK');
+        return {success:false,statusCode:409,error:'Quote expired; request a fresh room subtotal.',code:'QUOTE_EXPIRED'};
+      }
+      const quoteIn=String(quote?.quote_check_in);
+      const quoteOut=String(quote?.quote_check_out);
+      if (!quote||quote.quote_kind!=='ACCEPTED_OFFER'||quote.holder_principal!==principal||
+          Number(quote.room_type_id)!==roomTypeId||
+          Number(quote.offer_room_type_id)!==roomTypeId||
+          Number(quote.offer_listing_id)!==Number(quote.listing_id)||
+          quoteIn!==params.checkIn||quoteOut!==params.checkOut||Number(quote.nights)!==stayDates.length||
+          quantity!==1||Number(quote.guest_count)>Number(quote.offer_max_guests)||
+          String(quote.accepted_nightly_paise)!==String(quote.offer_nightly_minor)||
+          BigInt(quote.base_price_paise)!==BigInt(quote.offer_nightly_minor)*BigInt(stayDates.length)||
+          quote.currency!==quote.offer_currency||quote.price_basis!==quote.offer_price_basis||
+          quote.source_hash!==quote.accepted_source_hash||
+          quote.public_disposition!=='ACCEPTED'||
+          Number(quote.current_accepted_revision)!==Number(quote.offer_revision)) {
+        await client.query('ROLLBACK');
+        return {success:false,statusCode:409,error:'Quote is missing, expired, stale, or does not match this hold.',code:'QUOTE_INVALID'};
+      }
+      const state=(await client.query('SELECT sellable_offer_revision_state($1::uuid,$2) AS state',
+        [quote.offer_id,quote.offer_revision])).rows[0]?.state;
+      if (state!=='VERIFIED_OFFER_AVAILABLE') {
+        await client.query('ROLLBACK');
+        return {success:false,statusCode:409,error:'Accepted offer or inventory is no longer available.',
+          code:state==='ROOM_UNAVAILABLE'?'INVENTORY_CONFLICT':'OFFER_STALE'};
+      }
+    }
 
     // 4a. Verify room_type exists and retrieve parent listing_id & inventory_count
     const roomRes = await client.query(
@@ -458,13 +507,15 @@ export async function acquireHold(pool: any, params: AcquireHoldParams): Promise
     }
 
     // 4c. Ensure inventory_days rows exist for all requested dates
-    for (const date of stayDates) {
-      await client.query(
-        `INSERT INTO inventory_days (listing_id, room_type_id, calendar_date, total_units, held_units, booked_units, blocked_units)
-         VALUES ($1, $2, $3, $4, 0, 0, 0)
-         ON CONFLICT (room_type_id, calendar_date) DO NOTHING`,
-        [listingId, roomTypeId, date, defaultTotalUnits]
-      );
+    if(!params.quoteId){
+      for (const date of stayDates) {
+        await client.query(
+          `INSERT INTO inventory_days (listing_id, room_type_id, calendar_date, total_units, held_units, booked_units, blocked_units)
+           VALUES ($1, $2, $3, $4, 0, 0, 0)
+           ON CONFLICT (room_type_id, calendar_date) DO NOTHING`,
+          [listingId, roomTypeId, date, defaultTotalUnits]
+        );
+      }
     }
 
     // 4d. Reconcile pre-existing mapped calendar blocks into inventory_days.blocked_units atomically
@@ -492,7 +543,8 @@ export async function acquireHold(pool: any, params: AcquireHoldParams): Promise
     // 4e. SELECT ... FOR UPDATE locked strictly in calendar_date ASC order
     const lockStartTime = Date.now();
     const lockedDaysRes = await client.query(
-      `SELECT id, calendar_date, total_units, held_units, booked_units, blocked_units
+      `SELECT id, listing_id, calendar_date${params.quoteId?', calendar_date::text AS calendar_day':''},
+         total_units, held_units, booked_units, blocked_units
        FROM inventory_days
        WHERE room_type_id = $1 AND calendar_date = ANY($2::date[])
        ORDER BY calendar_date ASC
@@ -500,6 +552,13 @@ export async function acquireHold(pool: any, params: AcquireHoldParams): Promise
       [roomTypeId, stayDates]
     );
     const lockLatencyMs = Date.now() - lockStartTime;
+
+    if(params.quoteId&&(lockedDaysRes.rows.length!==stayDates.length||
+      lockedDaysRes.rows.some((row:{listing_id:number;calendar_day:string},index:number)=>Number(row.listing_id)!==Number(listingId)||
+        row.calendar_day!==stayDates[index]))){
+      await client.query('ROLLBACK');
+      return {success:false,statusCode:409,error:'Inventory authority is incomplete for the quoted itinerary.',code:'INVENTORY_CONFLICT'};
+    }
 
     // 4e. Capacity verification across EVERY date
     let conflictFound = false;
@@ -550,8 +609,8 @@ export async function acquireHold(pool: any, params: AcquireHoldParams): Promise
     const insertHoldRes = await client.query(
       `INSERT INTO booking_holds (
          id, room_type_id, user_id, guest_session_id, holder_principal, idempotency_key,
-         request_fingerprint, check_in_date, check_out_date, units_held, status, expires_at
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'ACTIVE', $11)
+         request_fingerprint, check_in_date, check_out_date, units_held, status, expires_at${params.quoteId?', quote_id':''}
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'ACTIVE', $11${params.quoteId?', $12':''})
        RETURNING id, room_type_id, check_in_date, check_out_date, units_held, status, expires_at, created_at`,
       [
         holdUuid,
@@ -564,7 +623,8 @@ export async function acquireHold(pool: any, params: AcquireHoldParams): Promise
         params.checkIn,
         params.checkOut,
         quantity,
-        expiresAt
+        expiresAt,
+        ...(params.quoteId?[params.quoteId]:[])
       ]
     );
 
@@ -603,13 +663,14 @@ export async function acquireHold(pool: any, params: AcquireHoldParams): Promise
     // If composite unique collision occurs during race
     if (err.code === '23505' || (err.message && err.message.includes('duplicate key'))) {
       const fallbackRes = await pool.query(
-        `SELECT id, room_type_id, check_in_date, check_out_date, units_held, status, request_fingerprint, expires_at, created_at
+        `SELECT id, room_type_id, check_in_date, check_out_date, units_held, status, request_fingerprint, expires_at, created_at${params.quoteId?', quote_id':''}
          FROM booking_holds WHERE holder_principal = $1 AND idempotency_key = $2`,
         [principal, params.idempotencyKey]
       );
       if (fallbackRes.rows.length > 0) {
         const row = fallbackRes.rows[0];
-        if (row.request_fingerprint && row.request_fingerprint !== currentFingerprint) {
+        if ((params.quoteId && row.quote_id !== params.quoteId) ||
+            (row.request_fingerprint && row.request_fingerprint !== currentFingerprint)) {
           return {
             success: false,
             statusCode: 409,
@@ -631,6 +692,10 @@ export async function acquireHold(pool: any, params: AcquireHoldParams): Promise
             createdAt: new Date(row.created_at).toISOString()
           }
         };
+      }
+      if(params.quoteId){
+        const conflicting=await pool.query('SELECT id FROM booking_holds WHERE quote_id=$1',[params.quoteId]);
+        if(conflicting.rowCount)return {success:false,statusCode:409,error:'Quote already has a hold.',code:'HOLD_ALREADY_EXISTS'};
       }
     }
 

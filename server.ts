@@ -238,6 +238,7 @@ import {
   verifyGuestSession,
   createHostCalendarBlock
 } from './src/services/inventoryHoldService.js';
+import {createItineraryQuote,getQuoteForHold,ItineraryQuoteError} from './src/services/itineraryQuoteService.js';
 
 // import pinoHttp from 'pino-http'; // Removed as per JS version
 // import { logger } from './src/lib/logger/index.js'; // Removed as per JS version
@@ -14310,69 +14311,72 @@ function parseCookies(req: Request): Record<string, string> {
   return list;
 }
 
+function resolveItineraryPrincipal(req:Request,res:Response){
+  // The mounted optional-auth middleware rechecks a bearer account against
+  // persisted consumer authority. Never downgrade an invalid bearer to Guest.
+  const verified=(req as AuthRequest).user;
+  if(verified)return {userId:verified.id,holderPrincipal:`user:${verified.id}`,guestSessionId:null};
+  const existing=verifyGuestSession(parseCookies(req).encho_guest_session);
+  const guestSessionId=existing||crypto.randomUUID();
+  if(!existing){
+    const attributes=[`encho_guest_session=${signGuestSession(guestSessionId)}`,
+      'Path=/','HttpOnly','SameSite=Lax','Max-Age=604800'];
+    if(process.env.NODE_ENV==='production')attributes.push('Secure');
+    res.setHeader('Set-Cookie',attributes.join('; '));
+  }
+  return {userId:null,holderPrincipal:`session:${guestSessionId}`,guestSessionId};
+}
+
+// A quote is an immutable accepted-offer room subtotal, never a payable total.
+app.post('/api/v2/stays/quotes',optionalAuthenticateToken,holdsRateLimiter,async(req:Request,res:Response)=>{
+  res.setHeader('Cache-Control','no-store');
+  if(!isDbConfigured)return res.status(503).json({code:'AUTHORITY_UNAVAILABLE'});
+  const principal=resolveItineraryPrincipal(req,res);
+  try{
+    const quote=await createItineraryQuote(pool,req.body,principal.holderPrincipal);
+    return res.status(201).json({quote});
+  }catch(error){
+    if(error instanceof ItineraryQuoteError)return res.status(error.status).json({code:error.code,error:error.message});
+    console.error('[ITINERARY_QUOTE_ERROR]',{code:'AUTHORITY_UNAVAILABLE'});
+    return res.status(503).json({code:'AUTHORITY_UNAVAILABLE'});
+  }
+});
+
+app.get('/api/v2/stays/quotes/:id',optionalAuthenticateToken,async(req:Request,res:Response)=>{
+  res.setHeader('Cache-Control','no-store');
+  if(!isDbConfigured)return res.status(503).json({code:'AUTHORITY_UNAVAILABLE'});
+  const principal=resolveItineraryPrincipal(req,res);
+  try{return res.json({quote:await getQuoteForHold(pool,req.params.id,principal.holderPrincipal)});}
+  catch(error){
+    if(error instanceof ItineraryQuoteError)return res.status(error.status).json({code:error.code,error:error.message});
+    return res.status(503).json({code:'AUTHORITY_UNAVAILABLE'});
+  }
+});
+
 // POST /api/v2/stays/holds
-app.post('/api/v2/stays/holds', holdsRateLimiter, async (req: Request, res: Response) => {
+app.post('/api/v2/stays/holds', optionalAuthenticateToken,holdsRateLimiter, async (req: Request, res: Response) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-
-  // 1. Resolve holder principal:
-  // - If user has valid Authorization Bearer token -> 'user:<id>'
-  // - Else anonymous guest -> require server-issued, signed HttpOnly cookie 'encho_guest_session'.
-  //   If absent or invalid, generate a new signed session UUID and set HttpOnly cookie.
-  let userId: number | null = null;
-  let holderPrincipal = '';
-  let guestSessionId: string | null = null;
-
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET) as any;
-      if (decoded && decoded.id) {
-        userId = Number(decoded.id);
-        holderPrincipal = `user:${userId}`;
-      }
-    } catch (_err) { /* invalid token -> proceed to guest cookie */ }
+  const body=z.object({quoteId:z.string().uuid(),idempotencyKey:z.string().min(8).max(255)}).strict()
+    .safeParse(req.body);
+  if(!body.success)return res.status(400).json({code:'QUOTE_REQUIRED',error:'A valid server quote and request identity are required.'});
+  const principal=resolveItineraryPrincipal(req,res);
+  let quote;
+  try{quote=await getQuoteForHold(pool,body.data.quoteId,principal.holderPrincipal,true);}
+  catch(error){
+    if(error instanceof ItineraryQuoteError)return res.status(error.status).json({code:error.code,error:error.message});
+    return res.status(503).json({code:'AUTHORITY_UNAVAILABLE'});
   }
-
-  if (!holderPrincipal) {
-    const cookies = parseCookies(req);
-    const existingSignedCookie = cookies['encho_guest_session'];
-    let verifiedSessionUuid = verifyGuestSession(existingSignedCookie);
-
-    if (!verifiedSessionUuid) {
-      verifiedSessionUuid = crypto.randomUUID();
-      const signedToken = signGuestSession(verifiedSessionUuid);
-      // Set secure, HttpOnly, SameSite cookie with Max-Age
-      const isProduction = process.env.NODE_ENV === 'production';
-      const cookieOptions = [
-        `encho_guest_session=${signedToken}`,
-        'Path=/',
-        'HttpOnly',
-        'SameSite=Lax',
-        'Max-Age=604800'
-      ];
-      if (isProduction) {
-        cookieOptions.push('Secure');
-      }
-      res.setHeader('Set-Cookie', cookieOptions.join('; '));
-    }
-
-    guestSessionId = verifiedSessionUuid;
-    holderPrincipal = `session:${verifiedSessionUuid}`;
+  let result;
+  try{
+    result=await acquireHold(pool,{
+      roomTypeId:quote.roomTypeId,checkIn:quote.checkIn,checkOut:quote.checkOut,
+      quantity:1,idempotencyKey:body.data.idempotencyKey,quoteId:quote.id,
+      holderPrincipal:principal.holderPrincipal,userId:principal.userId,
+      guestSessionId:principal.guestSessionId,
+    });
+  }catch{
+    return res.status(503).json({code:'AUTHORITY_UNAVAILABLE'});
   }
-
-  const idempotencyKey = (req.headers['idempotency-key'] as string) || req.body.idempotency_key || req.body.idempotencyKey;
-
-  const result = await acquireHold(pool, {
-    roomTypeId: req.body.room_type_id || req.body.roomTypeId,
-    checkIn: req.body.check_in || req.body.checkIn,
-    checkOut: req.body.check_out || req.body.checkOut,
-    quantity: req.body.quantity,
-    idempotencyKey,
-    holderPrincipal,
-    userId,
-    guestSessionId
-  });
 
   if (!result.success) {
     return res.status(result.statusCode).json({
@@ -14388,42 +14392,35 @@ app.post('/api/v2/stays/holds', holdsRateLimiter, async (req: Request, res: Resp
   });
 });
 
+app.get('/api/v2/stays/holds/:id',optionalAuthenticateToken,async(req:Request,res:Response)=>{
+  res.setHeader('Cache-Control','no-store');
+  if(!isDbConfigured)return res.status(503).json({code:'AUTHORITY_UNAVAILABLE'});
+  const id=z.string().uuid().safeParse(req.params.id);
+  if(!id.success)return res.status(400).json({code:'INPUT_INVALID'});
+  const principal=resolveItineraryPrincipal(req,res);
+  try{
+    const row=(await pool.query(`SELECT id,quote_id,status,expires_at FROM booking_holds
+      WHERE id=$1 AND holder_principal=$2`,[id.data,principal.holderPrincipal])).rows[0];
+    if(!row||!row.quote_id)return res.status(404).json({code:'HOLD_NOT_FOUND'});
+    const expired=row.status==='ACTIVE'&&new Date(row.expires_at).getTime()<=Date.now();
+    return res.json({hold:{id:String(row.id),quoteId:String(row.quote_id),
+      status:expired?'EXPIRED':row.status,expiresAt:new Date(row.expires_at).toISOString()}});
+  }catch{
+    return res.status(503).json({code:'AUTHORITY_UNAVAILABLE'});
+  }
+});
+
 // POST /api/v2/stays/holds/:id/release
-app.post('/api/v2/stays/holds/:id/release', async (req: Request, res: Response) => {
+app.post('/api/v2/stays/holds/:id/release',optionalAuthenticateToken, async (req: Request, res: Response) => {
   if (!isDbConfigured) return res.status(503).json({ error: 'DB not configured' });
-
-  let userId: number | null = null;
-  let isServerAdmin = false;
-  let holderPrincipal = '';
-
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET) as any;
-      if (decoded && decoded.id) {
-        userId = Number(decoded.id);
-        isServerAdmin = decoded.role === 'admin';
-        holderPrincipal = `user:${userId}`;
-      }
-    } catch (_err) { /* anonymous caller */ }
-  }
-
-  if (!holderPrincipal) {
-    const cookies = parseCookies(req);
-    const verifiedSessionUuid = verifyGuestSession(cookies['encho_guest_session']);
-    if (verifiedSessionUuid) {
-      holderPrincipal = `session:${verifiedSessionUuid}`;
-    } else {
-      holderPrincipal = 'anon:unauthenticated';
-    }
-  }
+  const verified=(req as AuthRequest).user;
+  const {holderPrincipal}=resolveItineraryPrincipal(req,res);
 
   const body = req.body || {};
   const result = await releaseHold(pool, {
     holdId: String(req.params.id),
     holderPrincipal,
-    isServerAdmin,
+    isServerAdmin:verified?.role==='admin',
     reason: body.reason || 'GUEST_EXPLICIT_RELEASE'
   });
 

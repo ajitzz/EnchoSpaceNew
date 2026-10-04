@@ -8,6 +8,7 @@ import { SEO } from './SEO';
 import { Listing, Room, type PublicAcceptedOffer } from '../types';
 import {acceptedOfferIsCurrent,currentIndiaDate,formatAcceptedOfferPrice} from '../src/shared/offers/publicPrice';
 import {useAcceptedOfferClock} from './offers/useAcceptedOfferClock';
+import {GuestQuoteHoldPanel} from './GuestQuoteHoldPanel';
 
 export function acceptedOfferCoversSelectedStay(
   offer: PublicAcceptedOffer | null | undefined,
@@ -1255,6 +1256,13 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 </div>
             </div>
 
+        </div>
+
+        <div className="mx-auto max-w-7xl px-4 pb-8 sm:px-6 lg:px-8">
+          <GuestQuoteHoldPanel offer={selectedOffer} checkIn={checkIn} checkOut={checkOut}
+            guests={guests} eligible={activeNightlyRate>0} isDemo={isDemoMode}
+            onCheckIn={setCheckIn} onCheckOut={setCheckOut}
+            onGuestCount={value=>{if(Number.isInteger(value)&&value>=1&&value<=10){setAdultsCount(value);setChildrenCount(0);}}} />
         </div>
 
         {/* ========================================================================= */}

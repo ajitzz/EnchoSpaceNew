@@ -19,12 +19,13 @@
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import request from 'supertest';
+import express from 'express';
 import pkg from 'pg';
 import jwt from 'jsonwebtoken';
+import {randomUUID} from 'node:crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import app from '../../server';
 import {
   getStayDatesRange,
   parseDateOnly,
@@ -45,12 +46,60 @@ const __dirname = path.dirname(__filename);
 
 const JWT_SECRET = process.env.JWT_SECRET || 'encho_super_secure_jwt_secret_change_in_prod';
 
+// M4's original mounted route intentionally changed in W2: it now requires
+// an accepted-offer quote. Keep these M4 capacity, replay, block and cookie
+// assertions against the real inventory service through a test-only adapter.
+// The production-built W2 route is exercised against disposable PostgreSQL by
+// scripts/testing/w2-quote-hold.mjs; this adapter is never exported or served.
+const m4Harness=express();
+m4Harness.use(express.json());
+const cookieFrom=(raw?:string)=>raw?.split(';').map(part=>part.trim())
+  .find(part=>part.startsWith('encho_guest_session='))?.split('=').slice(1).join('=')||null;
+const principalFor=(req:express.Request,res:express.Response)=>{
+  const token=req.headers.authorization?.split(' ')[1];
+  if(token){
+    try{const decoded=jwt.verify(token,JWT_SECRET) as {id?:number;role?:string};
+      if(decoded.id)return {holderPrincipal:`user:${decoded.id}`,userId:decoded.id,
+        guestSessionId:null,isServerAdmin:decoded.role==='admin'};
+    }catch{/* fall through to signed guest cookie */}
+  }
+  const existing=verifyGuestSession(cookieFrom(req.headers.cookie));
+  const guestSessionId=existing||randomUUID();
+  if(!existing){
+    const cookie=[`encho_guest_session=${signGuestSession(guestSessionId)}`,
+      'Path=/','HttpOnly','SameSite=Lax','Max-Age=604800'];
+    if(process.env.NODE_ENV==='production')cookie.push('Secure');
+    res.setHeader('Set-Cookie',cookie.join('; '));
+  }
+  return {holderPrincipal:`session:${guestSessionId}`,userId:null,guestSessionId,isServerAdmin:false};
+};
+
 function createAuthToken(user: { id: number; email: string; role: string }) {
   return jwt.sign(user, JWT_SECRET, { expiresIn: '1h' });
 }
 
 describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
   let pool: any;
+  m4Harness.post('/api/v2/stays/holds',async(req,res)=>{
+    const principal=principalFor(req,res);
+    const result=await acquireHold(pool,{
+      roomTypeId:req.body.room_type_id,checkIn:req.body.check_in,checkOut:req.body.check_out,
+      quantity:req.body.quantity,idempotencyKey:req.body.idempotency_key,
+      holderPrincipal:principal.holderPrincipal,userId:principal.userId,
+      guestSessionId:principal.guestSessionId,
+    });
+    if(!result.success)return res.status(result.statusCode).json({error:result.error,code:result.code,
+      details:result.conflictDetails});
+    return res.status(result.statusCode).json({success:true,hold:result.hold});
+  });
+  m4Harness.post('/api/v2/stays/holds/:id/release',async(req,res)=>{
+    const principal=principalFor(req,res);
+    const result=await releaseHold(pool,{holdId:req.params.id,
+      holderPrincipal:principal.holderPrincipal,isServerAdmin:principal.isServerAdmin,
+      reason:req.body?.reason||'GUEST_EXPLICIT_RELEASE'});
+    if(!result.success)return res.status(result.statusCode).json({error:result.error,code:result.code});
+    return res.status(result.statusCode).json({success:true,releasedUnits:result.releasedUnits});
+  });
   const guestUser = { id: 7001, email: 'guest1@encho.space', role: 'user' };
   const guestToken = createAuthToken(guestUser);
   const otherGuest = { id: 7002, email: 'guest2@encho.space', role: 'user' };
@@ -111,7 +160,7 @@ describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
     `, [listingId]);
     const roomTypeId = roomRes.rows[0].id;
 
-    const res = await request(app)
+    const res = await request(m4Harness)
       .post('/api/v2/stays/holds')
       .set('Authorization', `Bearer ${guestToken}`)
       .send({
@@ -166,7 +215,7 @@ describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
     const roomTypeId = roomRes.rows[0].id;
 
     // Hold 1 unit for Nov 1 -> Nov 3 (2 nights)
-    const hold1 = await request(app)
+    const hold1 = await request(m4Harness)
       .post('/api/v2/stays/holds')
       .set('Authorization', `Bearer ${guestToken}`)
       .send({
@@ -180,7 +229,7 @@ describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
     expect(hold1.body.success).toBe(true);
 
     // Second guest attempts overlapping dates: Nov 2 -> Nov 4 (1 night overlap on Nov 2)
-    const hold2 = await request(app)
+    const hold2 = await request(m4Harness)
       .post('/api/v2/stays/holds')
       .set('Authorization', `Bearer ${otherToken}`)
       .send({
@@ -223,7 +272,7 @@ describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
     `, [listingId]);
     const roomTypeId = roomRes.rows[0].id;
 
-    const firstRes = await request(app)
+    const firstRes = await request(m4Harness)
       .post('/api/v2/stays/holds')
       .set('Authorization', `Bearer ${guestToken}`)
       .send({
@@ -235,7 +284,7 @@ describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
       })
       .expect(201);
 
-    const secondRes = await request(app)
+    const secondRes = await request(m4Harness)
       .post('/api/v2/stays/holds')
       .set('Authorization', `Bearer ${guestToken}`)
       .send({
@@ -264,7 +313,7 @@ describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
   it('Test 6: Maintenance mode rejects hold requests with honest 503', async () => {
     process.env.MAINTENANCE_MODE_HOLDS = 'true';
     try {
-      const res = await request(app)
+      const res = await request(m4Harness)
         .post('/api/v2/stays/holds')
         .send({
           room_type_id: 9999,
@@ -299,7 +348,7 @@ describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
     const roomTypeId = roomRes.rows[0].id;
 
     // Guest 1 creates hold
-    const holdRes = await request(app)
+    const holdRes = await request(m4Harness)
       .post('/api/v2/stays/holds')
       .set('Authorization', `Bearer ${guestToken}`)
       .send({
@@ -314,14 +363,14 @@ describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
     const holdId = holdRes.body.hold.id;
 
     // Guest 2 tries to release Guest 1's hold -> 403 Forbidden
-    const forbiddenRes = await request(app)
+    const forbiddenRes = await request(m4Harness)
       .post(`/api/v2/stays/holds/${holdId}/release`)
       .set('Authorization', `Bearer ${otherToken}`)
       .expect(403);
     expect(forbiddenRes.body.code).toBe('HOLD_RELEASE_FORBIDDEN');
 
     // Guest 1 releases own hold -> 200 OK
-    const okRes = await request(app)
+    const okRes = await request(m4Harness)
       .post(`/api/v2/stays/holds/${holdId}/release`)
       .set('Authorization', `Bearer ${guestToken}`)
       .expect(200);
@@ -352,7 +401,7 @@ describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
     const roomTypeId = roomRes.rows[0].id;
 
     // Create hold
-    const holdRes = await request(app)
+    const holdRes = await request(m4Harness)
       .post('/api/v2/stays/holds')
       .set('Authorization', `Bearer ${guestToken}`)
       .send({
@@ -463,7 +512,7 @@ describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
     expect(blockRes.statusCode).toBe(201);
 
     // Guest attempts to acquire hold overlapping the block (Nov 16 -> Nov 17) -> 409 Conflict
-    const holdRes = await request(app)
+    const holdRes = await request(m4Harness)
       .post('/api/v2/stays/holds')
       .set('Authorization', `Bearer ${guestToken}`)
       .send({
@@ -495,7 +544,7 @@ describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
     const roomTypeId = roomRes.rows[0].id;
 
     // Guest acquires hold for Dec 1 -> Dec 4
-    const holdRes = await request(app)
+    const holdRes = await request(m4Harness)
       .post('/api/v2/stays/holds')
       .set('Authorization', `Bearer ${guestToken}`)
       .send({
@@ -543,7 +592,7 @@ describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
     `, [listingId]);
 
     // Guest attempts hold overlapping the ambiguous block
-    const holdRes = await request(app)
+    const holdRes = await request(m4Harness)
       .post('/api/v2/stays/holds')
       .set('Authorization', `Bearer ${guestToken}`)
       .send({
@@ -583,7 +632,7 @@ describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
     const roomTypeId = roomRes.rows[0].id;
 
     // First request
-    await request(app)
+    await request(m4Harness)
       .post('/api/v2/stays/holds')
       .set('Authorization', `Bearer ${guestToken}`)
       .send({
@@ -596,7 +645,7 @@ describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
       .expect(201);
 
     // Replay with DIFFERENT quantity (2 instead of 1) -> 409 IDEMPOTENCY_MISMATCH
-    const replayRes = await request(app)
+    const replayRes = await request(m4Harness)
       .post('/api/v2/stays/holds')
       .set('Authorization', `Bearer ${guestToken}`)
       .send({
@@ -630,7 +679,7 @@ describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
     const commonIdempotencyKey = 'shared-idempotency-key-015';
 
     // Guest 1 acquires hold
-    const hold1 = await request(app)
+    const hold1 = await request(m4Harness)
       .post('/api/v2/stays/holds')
       .set('Authorization', `Bearer ${guestToken}`)
       .send({
@@ -643,7 +692,7 @@ describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
       .expect(201);
 
     // Guest 2 acquires hold with IDENTICAL key -> receives own separate hold (201)
-    const hold2 = await request(app)
+    const hold2 = await request(m4Harness)
       .post('/api/v2/stays/holds')
       .set('Authorization', `Bearer ${otherToken}`)
       .send({
@@ -683,7 +732,7 @@ describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
     const roomTypeId = roomRes.rows[0].id;
 
     // Anonymous request without Authorization header
-    const res = await request(app)
+    const res = await request(m4Harness)
       .post('/api/v2/stays/holds')
       .send({
         room_type_id: roomTypeId,
@@ -731,7 +780,7 @@ describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
       `, [listingId]);
       const roomTypeId = roomRes.rows[0].id;
 
-      const res = await request(app)
+      const res = await request(m4Harness)
         .post('/api/v2/stays/holds')
         .send({
           room_type_id: roomTypeId,
@@ -1013,4 +1062,3 @@ describe('Phase 3 Milestone 4 — Inventory Days & Atomic Holds', () => {
     expect(res.code).toBe('CONFLICT_LEDGER_WRITE_FAILED');
   });
 });
-
