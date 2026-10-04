@@ -12,20 +12,27 @@ import {offerDraftInputSchema,offerTransitionInputSchema,offerRevisionViewSchema
   type EligiblePublicOffer,type PublicOfferState} from '../../shared/offers/acceptedOfferContracts.js';
 
 export type OfferAuthorityErrorCode='INPUT_INVALID'|'HOST_REQUIRED'|'STAFF_REQUIRED'|'OFFER_NOT_FOUND'|
-  'OFFER_FORBIDDEN'|'OFFER_STATE_CONFLICT'|'OFFER_VERSION_CONFLICT'|'OFFER_STALE_REVIEW'|
+  'OFFER_FORBIDDEN'|'OFFER_COMMAND_CONFLICT'|'OFFER_OUTCOME_UNKNOWN'|'OFFER_STATE_CONFLICT'|'OFFER_VERSION_CONFLICT'|'OFFER_STALE_REVIEW'|
   'OFFER_PROPERTY_INELIGIBLE'|'OFFER_ROOM_INVALID'|'OFFER_MEDIA_INVALID'|'ROOM_UNAVAILABLE'|
   'LEGACY_DATA_UNRECONCILED'|'OFFER_AUTHORITY_UNAVAILABLE';
 export class OfferAuthorityError extends Error{
   readonly status:number;
   constructor(readonly code:OfferAuthorityErrorCode,cause?:unknown){
     super(code,{cause});this.name='OfferAuthorityError';
-    this.status=code==='OFFER_AUTHORITY_UNAVAILABLE'?503:code==='HOST_REQUIRED'||code==='STAFF_REQUIRED'||code==='OFFER_FORBIDDEN'?403:
+    this.status=code==='OFFER_AUTHORITY_UNAVAILABLE'||code==='OFFER_OUTCOME_UNKNOWN'?503:code==='HOST_REQUIRED'||code==='STAFF_REQUIRED'||code==='OFFER_FORBIDDEN'?403:
       code==='OFFER_NOT_FOUND'?404:code==='INPUT_INVALID'?400:
-      code==='OFFER_STATE_CONFLICT'||code==='OFFER_VERSION_CONFLICT'||code==='OFFER_STALE_REVIEW'?409:422;
+      code==='OFFER_COMMAND_CONFLICT'||code==='OFFER_STATE_CONFLICT'||code==='OFFER_VERSION_CONFLICT'||code==='OFFER_STALE_REVIEW'?409:422;
   }
 }
 
 const sha=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const draftPayloadHash=(input:OfferDraftInput)=>sha({
+  listingId:input.listingId,roomTypeId:input.roomTypeId,
+  offerId:input.offerId??null,expectedVersion:input.expectedVersion??null,
+  amountMinor:input.amountMinor,stayStart:input.stayStart,stayEnd:input.stayEnd,
+  effectiveFrom:input.effectiveFrom,effectiveUntil:input.effectiveUntil,
+  maxGuests:input.maxGuests,minNights:input.minNights,
+});
 const id=z.number().int().positive().max(2147483647);
 const uuid=z.string().uuid();
 const dateText=(value:unknown)=>typeof value==='string'?value:value instanceof Date?value.toISOString().slice(0,10):'';
@@ -143,7 +150,8 @@ export class AcceptedOfferService{
     private readonly workforceEnvironment:'LOCAL'|'STAGING'|'PRODUCTION'='LOCAL',
     private readonly staffReadPool?:pg.Pool){}
 
-  private async hostTransaction<T>(rawPrincipal:unknown,work:(client:pg.PoolClient,principal:PrincipalContext)=>Promise<T>):Promise<T>{
+  private async hostTransaction<T>(rawPrincipal:unknown,
+    work:(client:pg.PoolClient,principal:PrincipalContext)=>Promise<T>,mutation=false):Promise<T>{
     const parsed=principalContextSchema.safeParse(rawPrincipal);
     if(!parsed.success||parsed.data.actorKind!=='ACCOUNT')throw new OfferAuthorityError('HOST_REQUIRED');
     const client=await this.pool.connect().catch(error=>{throw new OfferAuthorityError('OFFER_AUTHORITY_UNAVAILABLE',error);});
@@ -160,7 +168,7 @@ export class AcceptedOfferService{
       committing=true;await client.query('COMMIT');return value;
     }catch(error){
       try{await client.query('ROLLBACK');}catch{discard=true;}
-      if(committing){discard=true;throw new OfferAuthorityError('OFFER_AUTHORITY_UNAVAILABLE',error);}
+      if(committing){discard=true;throw new OfferAuthorityError(mutation?'OFFER_OUTCOME_UNKNOWN':'OFFER_AUTHORITY_UNAVAILABLE',error);}
       if(error instanceof OfferAuthorityError)throw error;
       throw new OfferAuthorityError('OFFER_AUTHORITY_UNAVAILABLE',error);
     }finally{client.release(discard);}
@@ -171,6 +179,24 @@ export class AcceptedOfferService{
     if(!parsed.success)throw new OfferAuthorityError('INPUT_INVALID');
     const input:OfferDraftInput=parsed.data;
     return this.hostTransaction(rawPrincipal,async(client,principal)=>{
+      const commandId=input.commandId.toLowerCase(),payloadHash=draftPayloadHash(input);
+      // A stable Host command key must serialize before any mutable listing or
+      // source checks. A retry can then recover its committed result even after
+      // the listing changes or this exact revision advances to review.
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
+        [`offer-draft:${principal.accountId}:${commandId}`]);
+      const receipt=(await client.query<{payload_hash:string;offer_id:string;revision:number;result:unknown}>(
+        `SELECT payload_hash,offer_id,revision,result FROM sellable_offer_draft_receipts
+         WHERE host_account_id=$1 AND command_id=$2::uuid`,[principal.accountId,commandId])).rows[0];
+      if(receipt){
+        if(receipt.payload_hash!==payloadHash)throw new OfferAuthorityError('OFFER_COMMAND_CONFLICT');
+        const result=offerRevisionViewSchema.safeParse(receipt.result);
+        if(!result.success||result.data.offerId!==receipt.offer_id||result.data.revision!==receipt.revision||
+          result.data.hostAccountId!==principal.accountId||result.data.listingId!==input.listingId||
+          result.data.roomTypeId!==input.roomTypeId||result.data.status!=='DRAFT')
+          throw new OfferAuthorityError('OFFER_AUTHORITY_UNAVAILABLE');
+        return result.data;
+      }
       const listing=(await client.query('SELECT id,user_id,publication_status FROM listings WHERE id=$1 FOR UPDATE',[input.listingId])).rows[0];
       if(!listing||number(listing.user_id)!==principal.accountId)throw new OfferAuthorityError('OFFER_FORBIDDEN');
       if(listing.publication_status!=='published')throw new OfferAuthorityError('OFFER_PROPERTY_INELIGIBLE');
@@ -208,8 +234,13 @@ export class AcceptedOfferService{
         VALUES($1,$2,'DRAFT_CREATED',$3,$4,$5,$6::jsonb)`,
         [offerId,revision,principal.accountId,version,source.sourceHash,JSON.stringify({operationId:principal.operationId})]);
       await client.query('UPDATE sellable_offers SET latest_revision=$2,version=$3 WHERE id=$1',[offerId,revision,version]);
-      return oneView(client,offerId,revision);
-    });
+      const result=await oneView(client,offerId,revision);
+      await client.query(`INSERT INTO sellable_offer_draft_receipts
+        (host_account_id,command_id,payload_hash,offer_id,revision,result)
+        VALUES($1,$2::uuid,$3,$4::uuid,$5,$6::jsonb)`,
+      [principal.accountId,commandId,payloadHash,offerId,revision,JSON.stringify(result)]);
+      return result;
+    },true);
   }
 
   async submit(rawPrincipal:unknown,rawInput:unknown):Promise<OfferRevisionView>{
@@ -247,7 +278,7 @@ export class AcceptedOfferService{
           JSON.stringify({operationId:principal.operationId,inventoryHash:available.fingerprint})]);
       await client.query('UPDATE sellable_offers SET version=version+1 WHERE id=$1',[input.offerId]);
       return oneView(client,input.offerId,input.revision);
-    });
+    },true);
   }
 
   async readForHost(rawPrincipal:unknown,rawOfferId:unknown):Promise<OfferRevisionView[]>{

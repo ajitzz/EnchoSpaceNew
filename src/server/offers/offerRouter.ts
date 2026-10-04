@@ -11,6 +11,7 @@ const intId=z.string().regex(/^[1-9]\d*$/).transform(Number).pipe(z.number().int
 const uuid=z.string().uuid();
 const positive=z.number().int().positive().safe();
 const draftBody=z.object({
+  commandId:uuid,
   roomTypeId:positive,
   offerId:uuid.optional(),
   amountMinor:z.string().regex(/^[1-9]\d{0,18}$/).refine(value=>BigInt(value)<=9223372036854775807n),

@@ -10,7 +10,7 @@ const amount=z.string().regex(/^[1-9]\d{0,18}$/).refine(value=>BigInt(value)<=MA
 const instant=z.iso.datetime({offset:true});
 
 export const offerDraftInputSchema=z.object({
-  listingId:positiveId,roomTypeId:positiveId,offerId:uuid.optional(),
+  commandId:uuid,listingId:positiveId,roomTypeId:positiveId,offerId:uuid.optional(),
   amountMinor:amount,stayStart:offerDateSchema,stayEnd:offerDateSchema,
   effectiveFrom:instant,effectiveUntil:instant,maxGuests:positiveId,minNights:positiveId,
   expectedVersion:version.optional(),
