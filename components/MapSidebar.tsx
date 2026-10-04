@@ -1221,14 +1221,8 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                  return (
                      <div 
                          key={listing.id}
-                         onClick={() => {
-                             uiAudio.playClick();
-                             setActiveListingId(listing.id);
-                             scrollToCard(index);
-                             if (onSelectListing) onSelectListing({...listing, selectedConfigId: selectedRoomId(listing)});
-                         }}
                          className={`
-                             w-[290px] h-[124px] bg-white rounded-3xl overflow-hidden flex-shrink-0 snap-center shadow-[0_12px_36px_rgba(0,0,0,0.15)] flex relative border-2 transition-all duration-300 cursor-pointer
+                             w-[290px] h-[124px] bg-white rounded-3xl overflow-hidden flex-shrink-0 snap-center shadow-[0_12px_36px_rgba(0,0,0,0.15)] flex relative border-2 transition-all duration-300
                              ${isActive ? 'border-red-500 ring-4 ring-red-500/10' : 'border-transparent'}
                          `}
                      >
@@ -1256,7 +1250,17 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                                        <span>New on Encho</span>
                                     </div>
                                  )}
-                                 <h4 className="font-extrabold text-xs text-gray-900 leading-tight line-clamp-2">{listing.title}</h4>
+                                 <button
+                                   type="button"
+                                   aria-label={`View ${listing.title} stay`}
+                                   onClick={() => {
+                                     uiAudio.playClick();
+                                     setActiveListingId(listing.id);
+                                     scrollToCard(index);
+                                     onSelectListing?.({...listing, selectedConfigId: selectedRoomId(listing)});
+                                   }}
+                                   className="block min-h-8 w-full text-left font-extrabold text-xs text-gray-900 leading-tight line-clamp-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                                 >{listing.title}</button>
                                  
                                  {/* Mobile quick room selector chips */}
                                  {listing.rooms && listing.rooms.length > 0 && (
@@ -1297,6 +1301,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                          
                          {/* Favorite Circle Button */}
                          <button 
+                             aria-label={`Favorite ${listing.title}`}
                              onClick={(e) => {
                                  e.stopPropagation();
                                  uiAudio.playClick();

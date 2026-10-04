@@ -252,6 +252,28 @@ describe('P0-4 truthful public catalogue repair', () => {
       }));
     });
 
+    it('offers a keyboard-focusable mobile detail action for the selected room', async () => {
+      Object.defineProperty(window, 'innerWidth', {configurable: true, value: 360});
+      Object.defineProperty(HTMLElement.prototype, 'scrollTo', {configurable: true, value: vi.fn()});
+      const onSelectListing = vi.fn();
+      const listing = createListing({
+        id: 'mobile-map-stay', rental_mode: 'private_rooms', lat: 11.6854, lng: 76.1320,
+        rooms: [
+          {id: 'room-one', name: 'First Suite', price: null},
+          {id: 'room-two', name: 'Second Suite', price: null}
+        ]
+      });
+      render(<CurrencyProvider><MapSidebar listings={[listing]} highlightedId={listing.id}
+        city="Wayanad" onSelectListing={onSelectListing} /></CurrencyProvider>);
+      const viewAction = await screen.findByRole('button', {name: `View ${listing.title} stay`});
+      expect(viewAction.getAttribute('tabindex')).not.toBe('-1');
+      fireEvent.click(screen.getByRole('button', {name: `Select Second Suite for ${listing.title}`}));
+      fireEvent.click(viewAction);
+      expect(onSelectListing).toHaveBeenCalledWith(expect.objectContaining({
+        id: 'mobile-map-stay', selectedConfigId: 'room-two'
+      }));
+    });
+
     it('7. Does not fabricate 4.8 / 12 reviews when listing has zero or unknown reviews', () => {
       const unreviewedListing = createListing({
         rating: 0,

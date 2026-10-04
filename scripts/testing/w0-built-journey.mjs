@@ -171,6 +171,20 @@ try {
   await filterPage.getByRole('button',{name:'View W0 Hybrid Stay stay'}).waitFor({state:'visible'});
   assert.equal(await filterPage.getByRole('button',{name:'View W0 Hybrid Stay - AC Suite stay'}).count(),0);
   await filterPage.close();
+  const mobileMap=await browser.newPage({viewport:{width:360,height:800},serviceWorkers:'block'});
+  await mobileMap.goto(base+'/',{waitUntil:'domcontentloaded'});
+  await mobileMap.getByRole('button',{name:'Space Mode',exact:true}).click();
+  await mobileMap.getByRole('button',{name:'Private Room Only',exact:true}).click();
+  await mobileMap.getByRole('button',{name:'Show places',exact:true}).click();
+  await mobileMap.getByRole('button',{name:'Show map'}).click();
+  await mobileMap.getByRole('button',{name:'Select Plain Suite for W0 Hybrid Stay'}).click();
+  const mobileMapDetail=mobileMap.getByRole('button',{name:'View W0 Hybrid Stay stay'});
+  await mobileMapDetail.focus();
+  await mobileMap.keyboard.press('Enter');
+  await mobileMap.waitForURL('**/stay/w0-hybrid-stay-9300',{timeout:15000});
+  await mobileMap.getByText('Plain Suite',{exact:false}).first().waitFor({state:'visible',timeout:15000});
+  assert.match(await mobileMap.locator('body').innerText(),/Plain Suite/);
+  await mobileMap.close();
   for(let id=9200;id<9226;id++) await pool.query(`INSERT INTO listings
     (id,user_id,title,slug,publication_status,price,currency,type,city,address,image_urls,rooms)
     VALUES ($1,10,$2,$3,'published',9999,'INR','Villa','W0 Built City','','[]','[]')`,
