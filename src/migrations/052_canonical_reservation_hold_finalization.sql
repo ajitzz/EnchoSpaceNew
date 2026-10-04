@@ -76,6 +76,7 @@ DECLARE
   expected_nights INT;
   actual_nights INT := 0;
   saved_id UUID;
+  current_facts JSONB;
 BEGIN
   IF principal IS NULL OR principal !~ '^(user:[0-9]+|session:[0-9a-f-]{36})$'
     OR target_hold IS NULL OR target_quote IS NULL OR target_command IS NULL THEN
@@ -99,7 +100,9 @@ BEGIN
   IF NOT FOUND THEN RAISE EXCEPTION 'RESERVATION_HOLD_NOT_FOUND'; END IF;
   IF held.holder_principal IS DISTINCT FROM principal THEN RAISE EXCEPTION 'RESERVATION_FORBIDDEN'; END IF;
   IF held.status<>'ACTIVE' THEN RAISE EXCEPTION 'RESERVATION_HOLD_NOT_ACTIVE'; END IF;
-  IF held.expires_at<=statement_timestamp() THEN RAISE EXCEPTION 'RESERVATION_HOLD_EXPIRED'; END IF;
+  -- Recheck wall-clock expiry after the row lock is acquired. The statement
+  -- may have waited behind another transaction until this hold expired.
+  IF held.expires_at<=clock_timestamp() THEN RAISE EXCEPTION 'RESERVATION_HOLD_EXPIRED'; END IF;
   IF held.quote_id IS DISTINCT FROM target_quote THEN RAISE EXCEPTION 'RESERVATION_QUOTE_MISMATCH'; END IF;
 
   SELECT q.*,o.listing_id AS offer_listing_id,o.room_type_id AS offer_room_type_id,
@@ -137,6 +140,14 @@ BEGIN
     OR authority.guest_count<1 OR authority.guest_count>authority.offer_max_guests
     OR authority.check_in_date<authority.offer_stay_start
     OR authority.check_out_date>authority.offer_stay_end OR held.units_held<1 THEN
+    RAISE EXCEPTION 'RESERVATION_AUTHORITY_MISMATCH';
+  END IF;
+  current_facts:=public.sellable_offer_source_snapshot(authority.listing_id,authority.room_type_id);
+  IF current_facts IS NULL OR
+    encode(sha256(convert_to(current_facts::text,'UTF8')),'hex')<>authority.offer_source_hash OR
+    EXISTS(SELECT 1 FROM public.media_assets m WHERE m.entity_type='listing'
+      AND m.entity_id=authority.listing_id AND m.room_type_id=authority.room_type_id
+      AND m.moderation_status='approved' AND NOT public.sellable_offer_media_url_safe(m.url)) THEN
     RAISE EXCEPTION 'RESERVATION_AUTHORITY_MISMATCH';
   END IF;
   expected_nights:=authority.nights;

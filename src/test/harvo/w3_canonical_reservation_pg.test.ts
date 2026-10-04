@@ -135,6 +135,40 @@ describe('W3-A internal canonical reservation finalization on disposable Postgre
     await fails(released,'user:10','RESERVATION_HOLD_NOT_ACTIVE');
   });
 
+  it('uses expiry at lock acquisition, not the start of a blocked finalizer statement',async()=>{
+    const item=await held();
+    await fixture.owner.query(`UPDATE booking_holds SET expires_at=clock_timestamp()+interval '700 milliseconds'
+      WHERE id=$1`,[item.holdId]);
+    const locker=await fixture.owner.connect();
+    try{
+      await locker.query('BEGIN');
+      await locker.query('SELECT id FROM booking_holds WHERE id=$1 FOR UPDATE',[item.holdId]);
+      const pending=finalize(item).then(result=>({result,error:null}),error=>({result:null,error}));
+      let waiting=false;
+      for(let attempt=0;attempt<100;attempt++){
+        const result=await fixture.owner.query(`SELECT count(*)::int AS n FROM pg_stat_activity
+          WHERE usename='encho_reservation_worker' AND wait_event_type='Lock'
+          AND query LIKE 'SELECT * FROM canonical_finalize_direct_hold%'`);
+        if(result.rows[0].n>0){waiting=true;break;}
+        await new Promise(resolve=>setTimeout(resolve,10));
+      }
+      expect(waiting).toBe(true);
+      let expired=false;
+      for(let attempt=0;attempt<100;attempt++){
+        const result=await fixture.owner.query(`SELECT clock_timestamp()>expires_at AS expired
+          FROM booking_holds WHERE id=$1`,[item.holdId]);
+        if(result.rows[0].expired){expired=true;break;}
+        await new Promise(resolve=>setTimeout(resolve,10));
+      }
+      expect(expired).toBe(true);
+      await locker.query('COMMIT');
+      expect((await pending).error).toMatchObject({code:'RESERVATION_HOLD_EXPIRED'});
+      expect(await state(item.holdId)).toMatchObject({status:'ACTIVE',reservations:0,held:3,booked:0});
+    }finally{
+      try{await locker.query('ROLLBACK');}finally{locker.release();}
+    }
+  });
+
   it('rejects duplicate command with a different semantic hold and incomplete inventory nights',async()=>{
     const first=await held(),second=await held();
     await finalize(first);
@@ -224,6 +258,19 @@ describe('W3-A internal canonical reservation finalization on disposable Postgre
     const row=(await fixture.owner.query(`SELECT origin_kind,quote_id,hold_id,offer_id FROM canonical_reservations
       WHERE id=$1`,[id])).rows[0];
     expect(row).toEqual({origin_kind:'EXTERNAL_CHANNEL',quote_id:null,hold_id:null,offer_id:null});
+  });
+
+  it('rejects changed accepted source facts after a hold without partial inventory conversion',async()=>{
+    // This fixture changes material public facts without creating a successor
+    // offer; finalization must not promote the old accepted source snapshot.
+    const item=await held();
+    await fixture.owner.query("UPDATE listings SET title='Materially changed title' WHERE id=1");
+    try{
+      await fails(item,'user:10','RESERVATION_AUTHORITY_MISMATCH');
+      expect(await state(item.holdId)).toMatchObject({status:'ACTIVE',reservations:0,held:3,booked:0});
+    }finally{
+      await fixture.owner.query("UPDATE listings SET title='Amber House' WHERE id=1");
+    }
   });
 
   it('does not silently finalize an active hold after its W1 offer is retired',async()=>{
