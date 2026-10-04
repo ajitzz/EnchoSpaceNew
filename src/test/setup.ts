@@ -306,7 +306,9 @@ vi.mock('pg', async (importOriginal) => {
       CONSTRAINT chk_booking_hold_nights_units CHECK (units >= 1)
     );
   `;
-  const marketingSql = readFileSync(new URL('../../scripts/testing/fixtures/legacy-marketing.sql', import.meta.url), 'utf8');
+  // Vitest may transform this setup module to a data: URL in jsdom projects.
+  // The isolated runner fixes cwd at the repository root for all projects.
+  const marketingSql = readFileSync('scripts/testing/fixtures/legacy-marketing.sql', 'utf8');
   if (process.env.ENCHO_LEGACY_POSTGRES === '1') {
     const real = await importOriginal<typeof import('pg')>();
     const {createLocalPostgresFixture} = await import('./harvo/postgres.js');

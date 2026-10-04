@@ -45,6 +45,13 @@ vi.mock('@upstash/redis', () => ({
   },
 }));
 
+// This legacy pg-mem suite verifies mounted response minimization. PostgreSQL
+// role/catalog readiness has separate real-PostgreSQL coverage; pg-mem cannot
+// emulate the metadata queries used by that boundary.
+vi.mock('../server/auth/consumerAuthReadiness.js', () => ({
+  consumerAuthReadiness: vi.fn(async () => true),
+}));
+
 const pool = new pg.Pool();
 let app: Express;
 let deliveredCode = '';
