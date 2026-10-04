@@ -1,4 +1,4 @@
-/** W3-A diagnostic: intentionally red until order confirmation has canonical authority. */
+/** Historical W3-A red diagnostic, retained as a regression against promoting legacy order state. */
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
@@ -8,7 +8,7 @@ import jwt from 'jsonwebtoken';
 import {createW1AcceptedOfferFixture} from '../../src/test/harvo/helpers/w1AcceptedOfferFixture.ts';
 import {applyIsolatedMigration} from '../../src/test/harvo/helpers/isolatedMigration.ts';
 
-test('a confirmed order requires the exact accepted-offer quote and physical W2 hold', async()=>{
+test('legacy CONFIRMED order state does not create canonical reservation authority', async()=>{
   const fixture=await createW1AcceptedOfferFixture({serverCompatible:true});
   try {
     await fixture.owner.query(`CREATE TABLE bookings(id SERIAL PRIMARY KEY,listing_id INT NOT NULL,
@@ -17,6 +17,9 @@ test('a confirmed order requires the exact accepted-offer quote and physical W2 
     await fixture.owner.query(`CREATE ROLE encho_stays_web LOGIN NOSUPERUSER NOBYPASSRLS
       NOCREATEDB NOCREATEROLE NOREPLICATION`);
     await applyIsolatedMigration(fixture.owner,'050_accepted_offer_itinerary_quotes.sql');
+    await fixture.owner.query(`CREATE ROLE encho_reservation_worker LOGIN NOSUPERUSER NOBYPASSRLS
+      NOCREATEDB NOCREATEROLE NOREPLICATION`);
+    await applyIsolatedMigration(fixture.owner,'052_canonical_reservation_hold_finalization.sql');
     const orderId=randomUUID();
     await fixture.owner.query(`INSERT INTO stays_orders(id,hold_id,quote_id,user_id,total_paise,
       currency,status,idempotency_key) VALUES($1,NULL,NULL,10,12345,'INR','CONFIRMED',$2)`,
@@ -25,14 +28,18 @@ test('a confirmed order requires the exact accepted-offer quote and physical W2 
       (SELECT count(*)::int FROM booking_holds) AS physical_holds,
       (SELECT count(*)::int FROM stays_quotes) AS quotes,
       (SELECT count(*)::int FROM sellable_offer_revisions WHERE status='ACCEPTED') AS accepted_revisions,
+      (SELECT count(*)::int FROM canonical_reservations) AS canonical_reservations,
       (SELECT coalesce(sum(booked_units),0)::int FROM inventory_days) AS booked_units
       FROM stays_orders o WHERE o.id=$1`,[orderId]);
     const restricted=await fixture.owner.query(`SELECT has_table_privilege('encho_stays_web',
       'stays_orders','INSERT') AS can_insert_order`);
     console.log('W3_A_BOUNDARY_OBSERVATION',JSON.stringify({...result.rows[0],
       restrictedStaysRoleCanInsert:restricted.rows[0].can_insert_order}));
-    assert.notEqual(result.rows[0].status,'CONFIRMED',
-      'CONFIRMED order exists without accepted offer, canonical quote, W2 hold, payment evidence, or booked inventory');
+    assert.equal(result.rows[0].status,'CONFIRMED','The historical legacy observation changed');
+    assert.equal(result.rows[0].canonical_reservations,0,
+      'A legacy order must not create the W3 canonical reservation');
+    assert.equal(result.rows[0].booked_units,0,
+      'A legacy order must not consume canonical inventory');
   } finally {
     await fixture.close();
   }
