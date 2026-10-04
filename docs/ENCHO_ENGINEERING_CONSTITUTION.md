@@ -5,6 +5,8 @@
 
 Historical CR1 48/48 and generated clearance certificates are preserved claims, not current release authority. Follow the corrective blueprint and criterion-level reacceptance register linked from HARVO. Workforce identity requires explicitly configured, isolated LOGIN roles and validated remote TLS; consumer/admin or advertising OAuth credentials do not supply workforce authority. Compiling/package checks must not load `.env` or contact a database; deployment schema preflight uses an explicitly named target and a held read-only connection. Source-generated or simulated legal/provider/staging/pilot receipts cannot clear an external gate. These corrections preserve the approved domain contracts and do not approve missing legal, commercial or production policy.
 
+**Post-W2 local browser-safety qualification (5 October 2026):** The service-worker startup policy gate distinguishes a compatible current controller, an explicit incompatible receipt, and an unanswered probe. A 600 ms unanswered fast probe is not proof of incompatibility; only a policy receipt for the current worker may open the app, within a bounded deadline. Obsolete-controller replies cannot authorize the replacement. The [local built-browser receipt](implementation/receipts/POST_W2_STARTUP_LOCAL_2026_10_05.json) records recovery of the original hold without extending its expiry. No deployed-worker or production behavior is inferred from this local correction.
+
 ## 1. Executive Summary
 
 ### What ENCHO is

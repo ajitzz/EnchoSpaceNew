@@ -1,0 +1,34 @@
+{
+  "evidenceLayer": "local-production-built-service-worker-browser-and-disposable-postgresql",
+  "canonicalBase": "899e21ef2b345b1603f31c85b70a83558f6c5b14",
+  "frozenReviewedCodeSubject": "e339b3f33ff6f1dadc76105d5b302bce187eb616",
+  "canonicalIntegratedCodeSubject": "e339b3f33ff6f1dadc76105d5b302bce187eb616",
+  "worker": "Antigravity dispatch attempted once but composer did not accept input; bounded direct Codex repair in separate clean worktree",
+  "classification": "FALSE_POSITIVE_STARTUP_CLASSIFICATION under a delayed compatible policy reply; exact earlier deployed event has no preserved worker/probe trace",
+  "rootCause": "The old client closed each MessageChannel after 600 ms and converted silence to a boolean incompatibility. Repeated compatible policy replies arriving later than 600 ms could never be accepted during the 10-second update window, so the app showed the mandatory-update screen despite a compatible current controller.",
+  "appAndWorkerIdentity": {
+    "applicationSource": "frozen code subject e339b3f33ff6f1dadc76105d5b302bce187eb616; sanitized offline Vite build",
+    "currentPolicyReceipt": "version 3, retiredQueuePurged true; source src/sw.ts",
+    "legacyPolicyReceipt": "version 2 in controlled incompatibility fixture",
+    "registrationScope": "origin root / in the local built-browser fixture; the observed randomized localhost port is not a production scope"
+  },
+  "chronology": [
+    "First installation: page initially had no controller; real service worker installation did not fabricate an incompatibility and the app mounted READY.",
+    "Returning compatible controller: an explicit transport boundary delayed every policy dispatch by 750 ms. Red-before: old 600 ms probes repeatedly timed out and the gate ended UPGRADE_REQUIRED after the bounded update window. Green-after: an activated /sw.js controller replied through its retained MessageChannel after 752 ms in canonical rerun; gate became READY without mandatory reload.",
+    "Unanswered current-controller probe: no receipt arrived; bounded update attempt did not authorize the app and gate became POLICY_UNVERIFIED, with actor UI unmounted.",
+    "Explicit incompatible receipt: injected version 2 policy for the current probe; after the bounded update window gate became UPGRADE_REQUIRED, with actor UI unmounted.",
+    "Two-tab controller replacement: the old worker's probe was held, controllerchange occurred, then the old probe port received a late synthetic version 3 receipt. The current controller was not authorized by that obsolete port; gate remained POLICY_UNVERIFIED and actor UI remained unmounted.",
+    "Built 360px itinerary: the page created one server hold, retained its POST response hold ID and server expiresAt, and compared both to the booking_holds row. A test-only fault withheld policy replies and rejected registration.update; the update attempt was observed and the unverified safety screen appeared. The original database hold ID, ACTIVE state and expiresAt were unchanged. Removing the fault and pressing Reload Encho restored the same hold with the same expiry and one hold for the quote.",
+    "The disposable database then moved that same hold's expires_at into the past. Browser refresh displayed Hold expired; the hold ID and quote ID were unchanged and no replacement hold was created. The 1280px built journey also passed."
+  ],
+  "probeCorrelation": "Each probe is keyed by exact ServiceWorker object identity and owns one MessageChannel. The gate checks that the probed worker is still the current controller/active worker before accepting its result; a response on the previous controller's port cannot authorize the replacement. No credential, guest content or real hold identifier was persisted in this receipt.",
+  "repair": "Keep the 600 ms probe as a soft fast path, retain unanswered probes until the bounded 10-second overall deadline, distinguish COMPATIBLE/INCOMPATIBLE/UNANSWERED, probe a waiting worker before requesting takeover, and present a separate unverified recovery state. The safety gate, actor fencing, replay header correction, server idempotency and hold TTL are unchanged.",
+  "verification": {
+    "redBefore": "Production-built service-worker browser test of a 750 ms compatible policy delay failed with UPGRADE_REQUIRED on the old code.",
+    "taskWorktree": "Lifecycle plus conversation service: 2 files/29 tests passed. Mandatory W2 built gate passed after its current source was built; unquoted hold returned HTTP 400 with zero holds/held nights, and quote/hold desktop/360px checks passed. Node 24 client/server TypeScript, scoped ESLint, git diff --check and sanitized offline build exited 0.",
+    "independentSourceReview": "PASS on frozen 899e21e..e339b3f; no P0/P1 startup finding.",
+    "independentRuntimeRerun": "Node 24 focused built-worker lifecycle: 4 passed, 18 skipped; delayed, unanswered, incompatible and stale-controller cases rerun. Mandatory built W2 gate: both scripts exited 0 on frozen code.",
+    "canonicalAfterIntegration": "Lifecycle plus conversation service: 2 files/29 tests passed. Initial W2 built gate used an older ignored dist artifact and failed the new screen expectation; a sanitized offline rebuild of the canonical source exited 0, after which the mandatory W2 built gate exited 0. Node 24 client/server TypeScript, scoped ESLint and git diff --check exited 0."
+  },
+  "limitations": "Local/browser/disposable-PostgreSQL classification only. The exact earlier deployed incident lacks a preserved policy trace, and no remote main, Vercel, Neon or production worker was changed. Full stabilization regression and deployed-worker evidence remain separate."
+}
