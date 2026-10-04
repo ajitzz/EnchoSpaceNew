@@ -394,4 +394,34 @@ describe('W1 accepted dated sellable offers on isolated PostgreSQL',()=>{
     await expect(fixture.publicPool.query('SELECT * FROM sellable_offer_revisions')).rejects.toThrow(/permission denied/);
     await expect(fixture.publicPool.query('SELECT * FROM sellable_offer_events')).rejects.toThrow(/permission denied/);
   });
+
+  it('rejects the catalog post-049 when an offer permission is missing', async () => {
+    await fixture.owner.query('ALTER TABLE internal_role_permissions DISABLE TRIGGER internal_iam_immutable');
+    await fixture.owner.query('ALTER TABLE internal_permission_catalog DISABLE TRIGGER internal_iam_immutable');
+    try {
+      await fixture.owner.query("DELETE FROM internal_role_permissions WHERE permission_code='offer.accept'");
+      await fixture.owner.query("DELETE FROM internal_permission_catalog WHERE permission_code='offer.accept'");
+      const staff = await fixture.staffPool.connect();
+      try {
+        const readiness = await verifyIamCatalog(staff);
+        expect(readiness.permissionCatalogValid).toBe(false);
+        expect(readiness.ready).toBe(false);
+      } finally {
+        staff.release();
+      }
+    } finally {
+      await fixture.owner.query(`
+        INSERT INTO internal_permission_catalog(permission_code,resource_type,risk_class,step_up_required,checker_policy,description)
+        VALUES ('offer.accept','OFFER','SENSITIVE',false,'NONE','Accept or retire an exact submitted sellable offer revision.')
+      `);
+      await fixture.owner.query(`
+        INSERT INTO internal_role_permissions(role_version_id,permission_code)
+        SELECT v.id,'offer.accept' FROM internal_role_versions v
+        JOIN internal_role_definitions r ON r.id=v.role_id
+        WHERE r.role_key='offer_reviewer' AND v.version=1
+      `);
+      await fixture.owner.query('ALTER TABLE internal_permission_catalog ENABLE TRIGGER internal_iam_immutable');
+      await fixture.owner.query('ALTER TABLE internal_role_permissions ENABLE TRIGGER internal_iam_immutable');
+    }
+  });
 });
