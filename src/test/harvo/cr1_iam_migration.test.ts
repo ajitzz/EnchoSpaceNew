@@ -144,15 +144,15 @@ describe('CR1 migration 036 workforce IAM authority', () => {
     expect(secondRun.find(result => result.file === expected.version)?.status).toBe('skipped');
   });
 
-  it('keeps isolated 036 structurally sound but requires 049 for the current offer permission catalog', async () => {
+  it('keeps isolated 036 structurally sound and accepts the exact pre-049 permission catalog', async () => {
     const readinessClient = await runtime.connect();
     const result = await verifyIamCatalog(readinessClient);
     readinessClient.release();
     expect(result).toEqual({
-      ready: false,
+      ready: true,
       privilegeValid: true,
       policyValid: true,
-      permissionCatalogValid: false,
+      permissionCatalogValid: true,
       safeDefaults: true,
       operationalPolicyApproved: false,
       runtimeRoleSafe: true,
@@ -168,6 +168,27 @@ describe('CR1 migration 036 workforce IAM authority', () => {
       FROM pg_roles WHERE rolname='cr1_iam_runtime'
     `)).rows[0];
     expect(role).toEqual({ rolsuper: false, rolbypassrls: false, rolcreatedb: false, rolcreaterole: false });
+  });
+
+  it('rejects a partial permission catalog when expected permissions are missing', async () => {
+    await fixture.pool.query('ALTER TABLE internal_permission_catalog DISABLE TRIGGER internal_iam_immutable');
+    try {
+      await fixture.pool.query("DELETE FROM internal_permission_catalog WHERE permission_code='service.assign'");
+      const readinessClient = await runtime.connect();
+      try {
+        const result = await verifyIamCatalog(readinessClient);
+        expect(result.permissionCatalogValid).toBe(false);
+        expect(result.ready).toBe(false);
+      } finally {
+        readinessClient.release();
+      }
+    } finally {
+      await fixture.pool.query(`
+        INSERT INTO internal_permission_catalog(permission_code,resource_type,risk_class,step_up_required,checker_policy,description)
+        VALUES ('service.assign','SERVICE_CASE','SENSITIVE',true,'NONE','Assign or reassign a support case.')
+      `);
+      await fixture.pool.query('ALTER TABLE internal_permission_catalog ENABLE TRIGGER internal_iam_immutable');
+    }
   });
 
   it('denies absent and malformed staff context while honoring an active scoped grant', async () => {

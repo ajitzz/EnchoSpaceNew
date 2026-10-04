@@ -6,6 +6,56 @@ import { z } from 'zod';
  * readiness check must reject catalog drift between these identifiers and the
  * seeded database catalog before staff routes are enabled.
  */
+export const baseWorkforcePermissionCodes = [
+  'workforce.member.read',
+  'workforce.invite',
+  'workforce.grant',
+  'workforce.suspend',
+  'workforce.access_review',
+  'work.assignment.read',
+  'work.assignment.claim',
+  'work.assignment.reassign',
+  'listing.review',
+  'listing.publish',
+  'strategy.read',
+  'strategy.draft',
+  'strategy.publish',
+  'strategy.rollback',
+  'corridor.read',
+  'corridor.draft',
+  'corridor.publish',
+  'creative.read',
+  'creative.review',
+  'campaign.read',
+  'campaign.prepare',
+  'campaign.approve',
+  'provider.read',
+  'provider.create_paused',
+  'provider.readback',
+  'provider.activate',
+  'provider.pause',
+  'provider.resume',
+  'provider.recover',
+  'finance.read',
+  'finance.review',
+  'finance.refund',
+  'finance.settle',
+  'service.read',
+  'service.respond',
+  'service.assign',
+  'service.note',
+  'audit.read',
+  'incident.read',
+  'incident.declare',
+  'incident.pause_global',
+  'incident.recover',
+] as const;
+
+export const offerWorkforcePermissionCodes = [
+  'offer.read',
+  'offer.accept',
+] as const;
+
 export const workforcePermissionCodes = [
   'workforce.member.read',
   'workforce.invite',
