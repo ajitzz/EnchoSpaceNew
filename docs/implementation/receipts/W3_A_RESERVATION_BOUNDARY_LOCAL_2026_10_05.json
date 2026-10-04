@@ -1,0 +1,44 @@
+{
+  "subject": "W3-A first reservation boundary, failing before implementation",
+  "canonicalBase": "293252d13af2cae1befe7c7d3f8cccdc152b90fd",
+  "evidenceLevel": "local built application and disposable PostgreSQL",
+  "date": "2026-10-05",
+  "workerDispatch": "WORKER_UNAVAILABLE_BEFORE_DELIVERY; clean Antigravity worktree preserved at exact base",
+  "testSource": "scripts/testing/w3-reservation-boundary-red.mjs",
+  "command": "env -i HOME=/Users/ajit PATH=/Users/ajit/.nvm/versions/node/v24.12.0/bin:/usr/bin:/bin NODE_ENV=test ENCHO_TEST_SANDBOX=1 TZ=UTC /Users/ajit/.nvm/versions/node/v24.12.0/bin/node --import tsx --test --test-reporter=spec scripts/testing/w3-reservation-boundary-red.mjs",
+  "expectedDiagnosticExitCode": 1,
+  "results": [
+    {
+      "case": "old stays_orders database boundary",
+      "result": "RED",
+      "observation": {
+        "orderStatus": "CONFIRMED",
+        "orderHoldId": null,
+        "orderQuoteId": null,
+        "physicalHolds": 0,
+        "quotes": 0,
+        "acceptedOfferRevisions": 0,
+        "bookedUnits": 0,
+        "restrictedStaysRoleCanInsertOrder": false
+      },
+      "scope": "owner-level direct SQL against isolated migrations 041 and 050; structural dormant path, not proof that the mounted Guest API exposes this insert"
+    },
+    {
+      "case": "mounted built legacy routes",
+      "result": "PASS_CONTAINED",
+      "observation": {
+        "marketingLeadConversionHttp": 410,
+        "marketingLeadConversionCode": "HARVO_V2_REQUIRED",
+        "legacyBookingHttp": 503,
+        "legacyCheckoutHttp": 503,
+        "confirmedBookings": 0,
+        "physicalHolds": 0,
+        "acceptedOfferRevisions": 0
+      },
+      "scope": "actual built server with disposable database; legacy marketing middleware retires lead conversion before its obsolete booking handler executes"
+    }
+  ],
+  "build": "npm run build:offline exited 0 before built-route case",
+  "conclusion": "The physical W2 hold and accepted quote have no canonical hold-to-booked reservation finalizer. The old stays_orders row can claim CONFIRMED independently if written by its owner, but the tested mounted legacy routes remain closed. The old order schema must not be promoted as reservation authority.",
+  "limitations": "No payment, capture, provider, remote Neon, or production traffic was tested. This is intentionally red diagnostic evidence, not an accepted W3 implementation."
+}
