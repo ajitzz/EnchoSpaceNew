@@ -144,15 +144,15 @@ describe('CR1 migration 036 workforce IAM authority', () => {
     expect(secondRun.find(result => result.file === expected.version)?.status).toBe('skipped');
   });
 
-  it('passes exact readiness checks under a non-owner, non-BYPASSRLS role', async () => {
+  it('keeps isolated 036 structurally sound but requires 049 for the current offer permission catalog', async () => {
     const readinessClient = await runtime.connect();
     const result = await verifyIamCatalog(readinessClient);
     readinessClient.release();
     expect(result).toEqual({
-      ready: true,
+      ready: false,
       privilegeValid: true,
       policyValid: true,
-      permissionCatalogValid: true,
+      permissionCatalogValid: false,
       safeDefaults: true,
       operationalPolicyApproved: false,
       runtimeRoleSafe: true,

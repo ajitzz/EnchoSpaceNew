@@ -17,6 +17,8 @@ export const workforcePermissionCodes = [
   'work.assignment.reassign',
   'listing.review',
   'listing.publish',
+  'offer.read',
+  'offer.accept',
   'strategy.read',
   'strategy.draft',
   'strategy.publish',
@@ -199,4 +201,3 @@ export const workforceAuthorizationDecisionSchema = z.object({
   }
 });
 export type WorkforceAuthorizationDecision = z.infer<typeof workforceAuthorizationDecisionSchema>;
-
