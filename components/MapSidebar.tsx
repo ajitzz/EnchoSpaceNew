@@ -2,10 +2,10 @@
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { uiAudio } from './audio';
-import { Listing } from '../types';
+import { Listing, type PublicAcceptedOffer } from '../types';
 import { APIProvider, Map, AdvancedMarker, InfoWindow, useAdvancedMarkerRef, useMap, useMapsLibrary } from '@vis.gl/react-google-maps';
 import { MarkerClusterer } from '@googlemaps/markerclusterer';
-import { useCurrency } from './CurrencyContext';
+import {acceptedOfferIsCurrent,formatAcceptedOfferPrice,nextAcceptedOfferRefreshDelay} from '../src/shared/offers/publicPrice';
 import { formatRating } from '../lib/ratingUtils';
 import { 
   MapPin, 
@@ -71,10 +71,11 @@ const getListingCoords = (listing: any, _index: number, _city: string): { x: num
   return { x: 200 + latNorm, y: 200 + lngNorm };
 };
 
-const markerPrices = new WeakMap<google.maps.marker.AdvancedMarkerElement, { amount: number; currency: string }>();
-const visiblePrice = (listing: Listing, amount: number | null | undefined, format: (value: number, currency?: string) => string) =>
-  listing.priceState === 'VERIFIED_OFFER_UNAVAILABLE' || amount == null || !Number.isFinite(amount) || amount <= 0
-    ? 'Price after dates' : format(amount, listing.currency);
+const offerDateScope = (offer: PublicAcceptedOffer | null | undefined) => offer
+  ? `Accepted room-night offer for stays from ${offer.stayStart} to ${offer.stayEnd} checkout; select dates to confirm availability.` : '';
+const visiblePrice = (listing: Listing, offer: PublicAcceptedOffer | null | undefined) =>
+  listing.priceState !== 'VERIFIED_OFFER_AVAILABLE' || !offer
+    ? 'Price unavailable' : formatAcceptedOfferPrice(offer);
 
 const MarkerWithInfoWindow = ({ 
   listing, 
@@ -83,7 +84,7 @@ const MarkerWithInfoWindow = ({
   setMarkerRef,
   isMobile,
   onMarkerClick,
-  activePrice
+  activeOffer,
 }: { 
   key?: string | number,
   listing: Listing, 
@@ -92,23 +93,18 @@ const MarkerWithInfoWindow = ({
   setMarkerRef?: (key: string, marker: google.maps.marker.AdvancedMarkerElement | null) => void,
   isMobile?: boolean,
   onMarkerClick?: (listing: Listing) => void,
-  activePrice?: number | null
+  activeOffer?: PublicAcceptedOffer | null
 }) => {
   const [markerRef, marker] = useAdvancedMarkerRef();
-  const { formatPrice } = useCurrency();
-  const currentPrice = activePrice !== undefined ? activePrice : listing.price;
 
   useEffect(() => {
     if (marker && setMarkerRef) {
-        if (listing.priceState !== 'VERIFIED_OFFER_UNAVAILABLE' && currentPrice != null && Number.isFinite(currentPrice) && currentPrice > 0)
-          markerPrices.set(marker, { amount: currentPrice, currency: listing.currency });
-        else markerPrices.delete(marker);
         setMarkerRef(listing.id, marker);
     }
     return () => {
         if (setMarkerRef) setMarkerRef(listing.id, null);
     };
-  }, [marker, listing.id, currentPrice, setMarkerRef]);
+  }, [marker, listing.id, setMarkerRef]);
 
   // Authentic coordinates check: never invent fallback lat/lng or hash pins
   const position = useMemo(() => {
@@ -144,7 +140,8 @@ const MarkerWithInfoWindow = ({
             ) : (
                 // Inactive custom white/gray badge with price
                 <div className="bg-white text-gray-900 border border-gray-150 rounded-full px-2.5 py-1 text-[11px] font-black shadow-[0_4px_10px_rgba(0,0,0,0.12)] hover:scale-110 active:scale-95 transition-all">
-                    {visiblePrice(listing, currentPrice, formatPrice)}
+                    {visiblePrice(listing, activeOffer)}
+                    {activeOffer && <span className="sr-only">{offerDateScope(activeOffer)}</span>}
                 </div>
             )
         ) : (
@@ -164,8 +161,9 @@ const MarkerWithInfoWindow = ({
               `}
             >
                 <span className={`font-bold whitespace-nowrap ${isActive ? 'text-sm' : 'text-xs'}`}>
-                    {visiblePrice(listing, currentPrice, formatPrice)}
+                    {visiblePrice(listing, activeOffer)}
                 </span>
+                {activeOffer && <span className="sr-only">{offerDateScope(activeOffer)}</span>}
             </div>
         )}
       </AdvancedMarker>
@@ -181,17 +179,10 @@ const MapInner = ({
   activeMarkerId,
   isMobile,
   onMarkerClick,
-  getActivePrice
+  getActiveOffer
 }: any) => {
     const map = useMap();
     const markerLibrary = useMapsLibrary('marker');
-    const { formatPrice } = useCurrency();
-    const formatPriceRef = useRef(formatPrice);
-    
-    useEffect(() => {
-        formatPriceRef.current = formatPrice;
-    }, [formatPrice]);
-
     const [searchAsIMove, setSearchAsIMove] = useState(true);
     const [markers, setMarkers] = useState<{[key: string]: google.maps.marker.AdvancedMarkerElement}>({});
     const clusterer = useRef<MarkerClusterer | null>(null);
@@ -213,32 +204,15 @@ const MapInner = ({
             clusterer.current = new MarkerClusterer({ 
                 map,
                 renderer: {
-                    render: ({ count, position, markers }: any) => {
-                        let sum = 0;
-                        let pricedCount = 0;
-                        const currencies = new Set<string>();
-                        
-                        markers.forEach((marker: any) => {
-                            const price = markerPrices.get(marker);
-                            if (price) {
-                                sum += price.amount;
-                                pricedCount++;
-                                currencies.add(price.currency);
-                            }
-                        });
-                        
-                        const average = pricedCount > 0 ? Math.round(sum / pricedCount) : 0;
-                        // Never average unlike currencies into one misleading price badge.
-                        const formattedPrice = pricedCount === 0 ? 'Price after dates' : currencies.size === 1
-                            ? formatPriceRef.current(average, [...currencies][0])
-                            : 'Multiple stays';
-                        
+                    render: ({ count, position }: any) => {
+                        // A marker cluster combines different dated room offers;
+                        // averaging them would invent a price for no actual stay.
                         const div = document.createElement('div');
                         div.className = 'flex items-center justify-center rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.2)] bg-[#0284C7] text-white px-4 py-2 ring-2 ring-white z-50 transition-transform duration-300 hover:scale-110 cursor-pointer';
                         
                         div.innerHTML = `
                            <div class="flex items-center gap-1.5">
-                              <span class="font-bold whitespace-nowrap text-sm">${formattedPrice}</span>
+                              <span class="font-bold whitespace-nowrap text-sm">Stays</span>
                               <span class="text-[10px] font-bold bg-white/25 px-1.5 py-0.5 rounded-full">${count}</span>
                            </div>
                         `;
@@ -257,7 +231,7 @@ const MapInner = ({
         if (!clusterer.current) return;
         clusterer.current.clearMarkers();
         clusterer.current.addMarkers(Object.values(markers));
-    }, [markers, formatPrice]);
+    }, [markers]);
     
     useEffect(() => {
         if (!map) return;
@@ -373,7 +347,7 @@ const MapInner = ({
                        setMarkerRef={setMarkerRef}
                        isMobile={isMobile}
                        onMarkerClick={onMarkerClick}
-                       activePrice={getActivePrice ? getActivePrice(listing) : listing.price}
+                       activeOffer={getActiveOffer ? getActiveOffer(listing) : listing.fromOffer}
                    />
                );
            })}
@@ -398,6 +372,15 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
   const [activeListingId, setActiveListingId] = useState<string | null>(
     () => highlightedId || (listings && listings.length > 0 ? listings[0].id : null)
   );
+  const [offerClock, setOfferClock] = useState(() => Date.now());
+  useEffect(() => {
+    const offers = listings.flatMap(listing => [listing.fromOffer,
+      ...(listing.rooms || []).map(room => room.offer)]);
+    const delay = nextAcceptedOfferRefreshDelay(offers, Date.now());
+    if (delay === null) return;
+    const timeout = window.setTimeout(() => setOfferClock(Date.now()), delay);
+    return () => window.clearTimeout(timeout);
+  }, [listings, offerClock]);
   const activeListing = useMemo(() => {
     return listings.find((l: any) => l.id === activeListingId) || null;
   }, [listings, activeListingId]);
@@ -407,14 +390,15 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
   const [localMinPrice, setLocalMinPrice] = useState<string>('');
   const [localMaxPrice, setLocalMaxPrice] = useState<string>('');
   const [localType, setLocalType] = useState<string>('');
-  const { formatPrice } = useCurrency();
 
   const [selectedRoomIdForListing, setSelectedRoomIdForListing] = useState<{[listingId: string]: string}>({});
   const [isSearchingArea, setIsSearchingArea] = useState(false);
 
   const selectedRoomId = useCallback((listing: Listing): string | undefined => {
     const requested = selectedRoomIdForListing[listing.id];
-    return listing.rooms?.find(room => room.id === requested)?.id || listing.rooms?.[0]?.id;
+    return listing.rooms?.find(room => room.id === requested)?.id ||
+      listing.rooms?.find(room => room.id === listing.fromOffer?.roomTypeId)?.id ||
+      listing.rooms?.find(room => room.priceState === 'VERIFIED_OFFER_AVAILABLE')?.id || listing.rooms?.[0]?.id;
   }, [selectedRoomIdForListing]);
 
   const activeImageUrl = useCallback((listing: Listing): string => {
@@ -427,14 +411,12 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
     return roomPhoto?.url || sharedPhoto?.url || '';
   }, [selectedRoomId]);
 
-  const getActivePrice = useCallback((listing: Listing) => {
-    const selRoomId = selectedRoomId(listing);
-    if (selRoomId && listing.rooms) {
-      const room = listing.rooms.find(r => r.id === selRoomId);
-      if (room) return room.price;
-    }
-    return listing.price;
-  }, [selectedRoomId]);
+  const getActiveOffer = useCallback((listing: Listing): PublicAcceptedOffer | null => {
+    const roomId = selectedRoomId(listing);
+    const offer = roomId && listing.rooms
+      ? listing.rooms.find(room => room.id === roomId)?.offer : listing.fromOffer;
+    return acceptedOfferIsCurrent(offer, Math.max(offerClock, Date.now())) ? offer! : null;
+  }, [selectedRoomId, offerClock]);
 
   // Handle live indicator when listings filter updates
   useEffect(() => {
@@ -924,7 +906,8 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                            ) : (
                              // Cozy, premium badge with price text
                              <div className="bg-white text-gray-900 border border-gray-150 rounded-full px-2.5 py-1.5 text-[11px] font-black shadow-md hover:scale-110 active:scale-95 transition-all select-none whitespace-nowrap">
-                               {visiblePrice(listing, getActivePrice(listing), formatPrice)}
+                               {visiblePrice(listing, getActiveOffer(listing))}
+                               {getActiveOffer(listing) && <span className="sr-only">{offerDateScope(getActiveOffer(listing))}</span>}
                              </div>
                            )}
                         </div>
@@ -977,7 +960,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                    activeMarkerId={activeListingId} 
                    isMobile={isMobile}
                    onMarkerClick={handleMarkerClick}
-                   getActivePrice={getActivePrice}
+                   getActiveOffer={getActiveOffer}
                 />
             </Map>
           )}
@@ -1171,11 +1154,12 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                   {/* Pricing & CTA Row */}
                   <div className="flex items-center justify-between gap-3 pt-1">
                      <div className="flex flex-col">
-                        <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Price / stay</span>
+                        <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">{getActiveOffer(activeListing) ? 'Accepted room-night offer' : 'Room price'}</span>
                         <div className="flex items-baseline gap-1 mt-0.5">
-                           <span className="text-base font-black text-gray-900">{visiblePrice(activeListing, getActivePrice(activeListing), formatPrice)}</span>
-                           <span className="text-[10px] font-bold text-gray-500">/ night</span>
+                           <span className="text-base font-black text-gray-900">{visiblePrice(activeListing, getActiveOffer(activeListing))}</span>
+                           {getActiveOffer(activeListing) && <span className="text-[10px] font-bold text-gray-500">/ night</span>}
                         </div>
+                        {getActiveOffer(activeListing) && <span className="text-[9px] text-gray-500">{offerDateScope(getActiveOffer(activeListing))}</span>}
                      </div>
 
                      <div className="flex items-center gap-1.5">
@@ -1293,9 +1277,10 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                              
                              <div className="flex items-baseline justify-between mt-0.5">
                                  <div>
-                                     <span className="text-sm font-black text-gray-900">{visiblePrice(listing, getActivePrice(listing), formatPrice)}</span>
-                                     <span className="text-[9px] text-gray-400 font-bold"> / night</span>
+                                     <span className="text-sm font-black text-gray-900">{visiblePrice(listing, getActiveOffer(listing))}</span>
+                                     {getActiveOffer(listing) && <span className="text-[9px] text-gray-400 font-bold"> / night</span>}
                                  </div>
+                                 {getActiveOffer(listing) && <div className="text-[9px] text-gray-500">{offerDateScope(getActiveOffer(listing))}</div>}
                              </div>
                          </div>
                          

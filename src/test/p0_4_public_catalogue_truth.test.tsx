@@ -137,11 +137,22 @@ describe('P0-4 truthful public catalogue repair', () => {
       expect(view.container.textContent).not.toContain('100% Privacy');
     });
 
-    it('5. ListingCard React.memo re-renders when same-ID title, price, or media change', () => {
+    it('5. ListingCard re-renders title, accepted successor price, and media on the same ID', () => {
+      const acceptedOffer = {offerId: '00000000-0000-4000-8000-000000000101', revision: 1,
+        roomTypeId: '101', priceBasis: 'PER_ROOM_NIGHT' as const, amountMinor: '1000000',
+        currency: 'INR' as const, maxGuests: 2, minNights: 1, stayStart: '2027-01-01',
+        stayEnd: '2027-02-01', effectiveFrom: '2026-10-01T00:00:00.000Z',
+        effectiveUntil: '2027-02-01T00:00:00.000Z', availableStartDate: '2027-01-01',
+        observedAt: '2026-10-04T00:00:00.000Z'};
       const initialListing = createListing({
         id: 'stay-memo-1',
         title: 'Initial Title',
         price: 10000,
+        priceState: 'VERIFIED_OFFER_AVAILABLE', offerState: 'VERIFIED_OFFER_AVAILABLE',
+        fromOffer: acceptedOffer,
+        rooms: [{id: '101', name: 'Royal Suite', type: 'suite', price: 10000,
+          priceState: 'VERIFIED_OFFER_AVAILABLE', offerState: 'VERIFIED_OFFER_AVAILABLE',
+          offer: acceptedOffer}],
         imageUrl: 'https://encho.test/cdn/img1.jpg'
       });
 
@@ -162,10 +173,13 @@ describe('P0-4 truthful public catalogue repair', () => {
       );
       expect(container.textContent).toContain('Updated Luxury Estate');
 
-      // Update price on same ID
+      // A new accepted revision changes the price while preserving the old revision's identity.
+      const successorOffer = {...acceptedOffer, revision: 2, amountMinor: '2500000'};
       rerender(
         <CurrencyProvider>
-          <ListingCard listing={{ ...initialListing, title: 'Updated Luxury Estate', price: 25000 }} />
+          <ListingCard listing={{ ...initialListing, title: 'Updated Luxury Estate', price: 25000,
+            fromOffer: successorOffer, rooms: [{...initialListing.rooms![0], price: 25000,
+              offer: successorOffer}] }} />
         </CurrencyProvider>
       );
       expect(container.textContent).toContain('25,000');
@@ -197,14 +211,17 @@ describe('P0-4 truthful public catalogue repair', () => {
       expect(dotsContainer).not.toBeNull();
       expect(dotsContainer?.querySelectorAll('.h-1\\.5.rounded-full').length).toBe(2);
 
-      // Update room tiers on same ID
+      // A new room label cannot lower the accepted property price by supplying
+      // an unverified room amount.
       rerender(
         <CurrencyProvider>
-          <ListingCard listing={{ ...initialListing, title: 'Updated Luxury Estate', rooms: [{ id: 'room-1', name: 'Deluxe Suite', price: 8000, type: 'deluxe' }] }} />
+          <ListingCard listing={{ ...initialListing, title: 'Updated Luxury Estate', rooms: [
+            ...initialListing.rooms!, {id: '102', name: 'Deluxe Suite', price: 8000, type: 'deluxe'}] }} />
         </CurrencyProvider>
       );
-      expect(container.textContent).toContain('Starts from');
-      expect(container.textContent).toContain('8,000');
+      expect(container.textContent).toContain('Rooms from');
+      expect(container.textContent).toContain('10,000');
+      expect(container.textContent).not.toContain('8,000');
     });
 
     it('6. Zero Unsplash stock fallbacks: displays photos in preparation placeholder when images are empty', () => {

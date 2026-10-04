@@ -1,3 +1,6 @@
+import type {PublicAcceptedOffer, PublicOfferState} from '../../types';
+import {acceptedOfferAmountMinor, acceptedOfferPriceRupees} from '../shared/offers/publicPrice';
+
 /**
  * Stay Projection & Address Privacy Engine
  * Milestone: Phase 3 Milestone 2 (Published Projection, Canonical Routes & Address Privacy)
@@ -27,6 +30,9 @@ export interface PublicRoomTier {
   icon?: string;
   tag?: string;
   price: number | null;
+  priceState: 'VERIFIED_OFFER_UNAVAILABLE' | 'VERIFIED_OFFER_AVAILABLE';
+  offerState: PublicOfferState;
+  offer: PublicAcceptedOffer | null;
   capacity: number;
   specs?: string;
   features?: string[];
@@ -66,7 +72,9 @@ export interface PublicStayProjection {
   type: string;
   rental_mode: string;
   price: number | null;
-  priceState?: 'VERIFIED_OFFER_UNAVAILABLE';
+  priceState: 'VERIFIED_OFFER_UNAVAILABLE' | 'VERIFIED_OFFER_AVAILABLE';
+  offerState: PublicOfferState;
+  fromOffer: PublicAcceptedOffer | null;
   roomState?: 'CANONICAL' | 'NO_ROOM' | 'LEGACY_DATA_UNRECONCILED';
   currency: string;
   location: PublicLocation;
@@ -111,7 +119,9 @@ export interface PublicListingCardProjection {
   type: string;
   rental_mode: string;
   price: number | null;
-  priceState?: 'VERIFIED_OFFER_UNAVAILABLE';
+  priceState: 'VERIFIED_OFFER_UNAVAILABLE' | 'VERIFIED_OFFER_AVAILABLE';
+  offerState: PublicOfferState;
+  fromOffer: PublicAcceptedOffer | null;
   roomState?: 'CANONICAL' | 'NO_ROOM' | 'LEGACY_DATA_UNRECONCILED';
   currency: string;
   period?: string;
@@ -271,17 +281,59 @@ export function sanitizePublicText(input: unknown): string {
   return text.trim();
 }
 
+/** Set only by the relational public reader after checking accepted offer evidence. */
+export const ACCEPTED_PUBLIC_OFFER_EVIDENCE = Symbol('ACCEPTED_PUBLIC_OFFER_EVIDENCE');
+
+const publicOfferStates: readonly PublicOfferState[] = [
+  'VERIFIED_OFFER_AVAILABLE', 'NO_ACCEPTED_OFFER', 'OFFER_NOT_YET_EFFECTIVE', 'OFFER_EXPIRED', 'OFFER_RETIRED',
+  'OFFER_STALE_REVIEW', 'ROOM_UNAVAILABLE', 'OFFER_AUTHORITY_UNAVAILABLE',
+  'LEGACY_DATA_UNRECONCILED',
+];
+
+function publicOfferState(raw: unknown): PublicOfferState {
+  return publicOfferStates.includes(raw as PublicOfferState) ? raw as PublicOfferState : 'NO_ACCEPTED_OFFER';
+}
+
+function acceptedPublicOffer(raw: unknown, roomId?: string): PublicAcceptedOffer | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw !== 'object') throw new Error('Invalid accepted public offer');
+  const row = raw as Record<string, unknown>;
+  const fields = ['offerId', 'roomTypeId', 'amountMinor', 'stayStart', 'stayEnd',
+    'effectiveFrom', 'effectiveUntil', 'availableStartDate', 'observedAt'] as const;
+  if (fields.some(field => typeof row[field] !== 'string') ||
+    typeof row.revision !== 'number' || !Number.isSafeInteger(row.revision) || row.revision < 1 ||
+    typeof row.maxGuests !== 'number' || !Number.isSafeInteger(row.maxGuests) || row.maxGuests < 1 ||
+    typeof row.minNights !== 'number' || !Number.isSafeInteger(row.minNights) || row.minNights < 1 ||
+    row.currency !== 'INR' || row.priceBasis !== 'PER_ROOM_NIGHT' ||
+    !/^[1-9]\d*$/.test(String(row.roomTypeId)) ||
+    (roomId !== undefined && row.roomTypeId !== roomId) ||
+    !/^[1-9]\d*$/.test(String(row.amountMinor))) {
+    throw new Error('Invalid accepted public offer');
+  }
+  acceptedOfferAmountMinor(String(row.amountMinor));
+  return Object.fromEntries([...fields.map(field => [field, row[field]]),
+    ['revision', row.revision], ['maxGuests', row.maxGuests], ['minNights', row.minNights],
+    ['currency', 'INR'], ['priceBasis', 'PER_ROOM_NIGHT']]) as unknown as PublicAcceptedOffer;
+}
+
+function publicOfferPrice(offer: PublicAcceptedOffer | null): number | null {
+  return acceptedOfferPriceRupees(offer);
+}
+
 /**
  * Explicit mapper for public rooms. The room reference comes only from the
  * relational reader's canonical_room_id, never from rawRoom.id or its label.
  * No room base price becomes an advertised offer price here.
  */
-export function mapPublicRoomTier(rawRoom: any): PublicRoomTier {
+export function mapPublicRoomTier(rawRoom: any, acceptedOfferEvidence = false): PublicRoomTier {
   if (!rawRoom || typeof rawRoom !== 'object') {
     return {
       type: 'standard',
       name: 'Room',
       price: null,
+      priceState: 'VERIFIED_OFFER_UNAVAILABLE',
+      offerState: 'NO_ACCEPTED_OFFER',
+      offer: null,
       capacity: 1
     };
   }
@@ -311,15 +363,21 @@ export function mapPublicRoomTier(rawRoom: any): PublicRoomTier {
   const cleanedDescription = typeof rawRoom.description === 'string' ? sanitizePublicText(rawRoom.description) : undefined;
   const cleanedSpecs = typeof rawRoom.specs === 'string' ? sanitizePublicText(rawRoom.specs) : undefined;
   const cleanedName = typeof rawRoom.name === 'string' ? sanitizePublicText(rawRoom.name) : 'Room';
+  const canonicalId = Number.isSafeInteger(rawRoom.canonical_room_id) && rawRoom.canonical_room_id > 0
+    ? String(rawRoom.canonical_room_id) : undefined;
+  const offer = acceptedOfferEvidence ? acceptedPublicOffer(rawRoom.public_offer, canonicalId) : null;
 
   return {
-    ...(Number.isSafeInteger(rawRoom.canonical_room_id) && rawRoom.canonical_room_id > 0
-      ? {id: String(rawRoom.canonical_room_id)} : {}),
+    ...(canonicalId ? {id: canonicalId} : {}),
     type: resolvedType,
     name: cleanedName || 'Room',
     icon: typeof rawRoom.icon === 'string' ? rawRoom.icon : undefined,
     tag: typeof rawRoom.tag === 'string' ? sanitizePublicText(rawRoom.tag) : undefined,
-    price: null,
+    price: publicOfferPrice(offer),
+    priceState: offer ? 'VERIFIED_OFFER_AVAILABLE' : 'VERIFIED_OFFER_UNAVAILABLE',
+    offerState: offer ? 'VERIFIED_OFFER_AVAILABLE' : acceptedOfferEvidence
+      ? publicOfferState(rawRoom.public_offer_state) : 'NO_ACCEPTED_OFFER',
+    offer,
     capacity: Number(rawRoom.capacity) || 1,
     specs: cleanedSpecs,
     features: safeFeatures,
@@ -422,7 +480,13 @@ export function toPublicStayProjection(rawListing: any): PublicStayProjection {
     ? rawListing.rooms
     : (typeof rawListing.rooms === 'string' ? JSON.parse(rawListing.rooms || '[]') : []);
 
-  const rooms: PublicRoomTier[] = rawRooms.map(mapPublicRoomTier);
+  const acceptedOfferEvidence = rawListing[ACCEPTED_PUBLIC_OFFER_EVIDENCE] === true;
+  const rooms: PublicRoomTier[] = rawRooms.map((room: unknown) => mapPublicRoomTier(room, acceptedOfferEvidence));
+  const fromOffer = acceptedOfferEvidence ? acceptedPublicOffer(rawListing.public_from_offer) : null;
+  if (fromOffer && !rooms.some(room => room.id === fromOffer.roomTypeId &&
+    room.offer?.offerId === fromOffer.offerId && room.offer.revision === fromOffer.revision)) {
+    throw new Error('Property price is not bound to a canonical room offer');
+  }
 
   const rawAmenities = Array.isArray(rawListing.amenities)
     ? rawListing.amenities
@@ -476,10 +540,14 @@ export function toPublicStayProjection(rawListing: any): PublicStayProjection {
     title: sanitizePublicText(rawListing.title || ''),
     type: sanitizePublicText(rawListing.type || 'Stay'),
     rental_mode: String(rawListing.rental_mode || 'entire_place'),
-    price: null,
-    priceState: 'VERIFIED_OFFER_UNAVAILABLE',
+    price: publicOfferPrice(fromOffer),
+    priceState: fromOffer ? 'VERIFIED_OFFER_AVAILABLE' : 'VERIFIED_OFFER_UNAVAILABLE',
+    offerState: fromOffer ? 'VERIFIED_OFFER_AVAILABLE' : acceptedOfferEvidence
+      ? publicOfferState(rawListing.public_offer_state) : rawListing.room_state === 'LEGACY_DATA_UNRECONCILED'
+        ? 'LEGACY_DATA_UNRECONCILED' : 'NO_ACCEPTED_OFFER',
+    fromOffer,
     ...(rawListing.room_state ? {roomState: rawListing.room_state} : {}),
-    currency: String(rawListing.currency || 'INR'),
+    currency: fromOffer?.currency || String(rawListing.currency || 'INR'),
     location: {
       city,
       locality,
@@ -541,7 +609,13 @@ export function toPublicListingCardProjection(rawListing: any): PublicListingCar
     ? rawListing.rooms
     : (typeof rawListing.rooms === 'string' ? JSON.parse(rawListing.rooms || '[]') : []);
 
-  const rooms: PublicRoomTier[] = rawRooms.map(mapPublicRoomTier);
+  const acceptedOfferEvidence = rawListing[ACCEPTED_PUBLIC_OFFER_EVIDENCE] === true;
+  const rooms: PublicRoomTier[] = rawRooms.map((room: unknown) => mapPublicRoomTier(room, acceptedOfferEvidence));
+  const fromOffer = acceptedOfferEvidence ? acceptedPublicOffer(rawListing.public_from_offer) : null;
+  if (fromOffer && !rooms.some(room => room.id === fromOffer.roomTypeId &&
+    room.offer?.offerId === fromOffer.offerId && room.offer.revision === fromOffer.revision)) {
+    throw new Error('Property price is not bound to a canonical room offer');
+  }
 
   const rawPhotos = rawListing.public_media_authority === 'APPROVED_RELATIONAL'
     ? (Array.isArray(rawListing.photos) ? rawListing.photos : []) : null;
@@ -567,10 +641,14 @@ export function toPublicListingCardProjection(rawListing: any): PublicListingCar
     title: sanitizePublicText(rawListing.title || ''),
     type: sanitizePublicText(rawListing.type || 'Stay'),
     rental_mode: String(rawListing.rental_mode || 'entire_place'),
-    price: null,
-    priceState: 'VERIFIED_OFFER_UNAVAILABLE',
+    price: publicOfferPrice(fromOffer),
+    priceState: fromOffer ? 'VERIFIED_OFFER_AVAILABLE' : 'VERIFIED_OFFER_UNAVAILABLE',
+    offerState: fromOffer ? 'VERIFIED_OFFER_AVAILABLE' : acceptedOfferEvidence
+      ? publicOfferState(rawListing.public_offer_state) : rawListing.room_state === 'LEGACY_DATA_UNRECONCILED'
+        ? 'LEGACY_DATA_UNRECONCILED' : 'NO_ACCEPTED_OFFER',
+    fromOffer,
     ...(rawListing.room_state ? {roomState: rawListing.room_state} : {}),
-    currency: String(rawListing.currency || 'INR'),
+    currency: fromOffer?.currency || String(rawListing.currency || 'INR'),
     period: 'night',
     city,
     imageUrl,
@@ -581,7 +659,7 @@ export function toPublicListingCardProjection(rawListing: any): PublicListingCar
     lat,
     lng,
     isVerified: false,
-    hasOffers: false,
+    hasOffers: Boolean(fromOffer),
     rating: rawListing.rating != null ? Number(rawListing.rating) : 0,
     reviewCount: rawListing.review_count != null ? Number(rawListing.review_count) : (rawListing.reviewCount != null ? Number(rawListing.reviewCount) : 0),
     amenities: amenities,

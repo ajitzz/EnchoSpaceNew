@@ -1,10 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { uiAudio } from './audio';
 import { Listing } from '../types';
 import { ChevronRight, ChevronLeft, ShieldCheck, StarIcon, HeartIcon, InfoIcon, MapIcon, EyeIcon } from './Icons';
 import { OptimizedImage } from './OptimizedImage';
-import { useCurrency } from './CurrencyContext';
+import {acceptedOfferIsCurrent,formatAcceptedOfferPrice,nextAcceptedOfferRefreshDelay} from '../src/shared/offers/publicPrice';
 import { getRatingWord, formatRating } from '../lib/ratingUtils';
 import { Home, Layers, Users, HelpCircle, ShieldAlert, Check, Share2 } from 'lucide-react';
 
@@ -124,10 +124,17 @@ interface ListingCardProps {
 }
 
 const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, isFavorite = false, onToggleFavorite, priority = false }) => {
-  const { formatPrice } = useCurrency();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [offerClock, setOfferClock] = useState(() => Date.now());
+  const visibleOffer = acceptedOfferIsCurrent(listing.fromOffer, Math.max(offerClock, Date.now())) ? listing.fromOffer : null;
+  useEffect(() => {
+    const delay = nextAcceptedOfferRefreshDelay([listing.fromOffer], Date.now());
+    if (delay === null) return;
+    const timeout = window.setTimeout(() => setOfferClock(Date.now()), delay);
+    return () => window.clearTimeout(timeout);
+  }, [listing.fromOffer, offerClock]);
 
   const handleShare = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -395,34 +402,39 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
             </p>
         </div>
 
-        <div className="mt-auto pt-1.5 flex items-baseline gap-1.5 w-full">
-            {listing.priceState === 'VERIFIED_OFFER_UNAVAILABLE' || listing.price === null ? (
+        <div className="mt-auto pt-1.5 flex flex-col gap-1.5 w-full">
+            {listing.priceState !== 'VERIFIED_OFFER_AVAILABLE' || listing.price === null || !visibleOffer ? (
                 <div className="w-full rounded-2xl border border-blue-100/60 bg-blue-50/30 px-3.5 py-2.5 text-sm font-semibold text-[#003B95]">
-                    Price available after dates are selected
+                    Price unavailable
                 </div>
-            ) : listing.rooms && listing.rooms.length > 0 ? (
+            ) : !listing.isChild && listing.rooms && listing.rooms.length > 0 ? (
                 <div className="flex items-center gap-1.5 bg-blue-50/30 px-3.5 py-2.5 rounded-2xl border border-blue-100/30 w-full justify-between">
                     <div className="flex flex-col">
-                        <span className="text-[#003B95] text-[10px] font-extrabold uppercase tracking-widest">Starts from</span>
-                        <span className="text-[10px] text-zinc-400 font-medium">Multiple Rooms</span>
+                        <span className="text-[#003B95] text-[10px] font-extrabold uppercase tracking-widest">Rooms from</span>
+                        <span className="text-[10px] text-zinc-400 font-medium">Eligible stays</span>
                     </div>
                     <div className="flex items-baseline gap-0.5">
                         <span className="font-extrabold font-display tabular-nums text-[#003B95] text-[18px] sm:text-[19px] tracking-tight">
-                            {formatPrice(listing.displayPrice ?? Math.min(...listing.rooms.map(r => r.price ?? Infinity)), listing.currency)}
+                            {formatAcceptedOfferPrice(visibleOffer)}
                         </span>
                         <span className="text-[#0369A1]/70 text-xs font-semibold">/{listing.period}</span>
                     </div>
                 </div>
             ) : (
                 <div className="flex items-center justify-between w-full bg-zinc-50/40 px-3.5 py-2.5 rounded-2xl border border-zinc-100/40">
-                    <span className="text-zinc-500 text-[10px] font-extrabold uppercase tracking-widest">Total Price</span>
+                    <span className="text-zinc-500 text-[10px] font-extrabold uppercase tracking-widest">Accepted room-night</span>
                     <div className="flex items-baseline gap-0.5">
                         <span className="font-extrabold font-display tabular-nums text-zinc-900 text-[18px] tracking-tight">
-                            {formatPrice(listing.displayPrice ?? listing.price ?? 0, listing.currency)}
+                            {formatAcceptedOfferPrice(visibleOffer)}
                         </span>
                         <span className="text-zinc-500 text-xs font-semibold">/{listing.period}</span>
                     </div>
                 </div>
+            )}
+            {listing.priceState === 'VERIFIED_OFFER_AVAILABLE' && visibleOffer && (
+                <p className="text-[10px] text-zinc-500 leading-snug">
+                    Stay window {visibleOffer.stayStart} to {visibleOffer.stayEnd} checkout · Select dates to confirm availability
+                </p>
             )}
         </div>
 

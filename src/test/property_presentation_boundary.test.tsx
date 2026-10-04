@@ -54,6 +54,6 @@ it('keeps the selected canonical room after numeric detail refresh with duplicat
   expect(buttons[0].getAttribute('aria-pressed')).toBe('false');
   expect(buttons[1].getAttribute('aria-pressed')).toBe('true');
  });
- expect(view.container.textContent).toContain('Price available after dates are selected');
+ expect(view.container.textContent).toContain('Price unavailable');
  expect(view.container.textContent).not.toContain('From ₹0');
 });

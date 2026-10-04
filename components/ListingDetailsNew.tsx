@@ -5,7 +5,25 @@ import { useAuth } from './AuthContext';
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform, useMotionTemplate, useMotionValueEvent } from 'framer-motion';
 import { SEO } from './SEO';
-import { Listing, Room } from '../types';
+import { Listing, Room, type PublicAcceptedOffer } from '../types';
+import {acceptedOfferIsCurrent,currentIndiaDate,formatAcceptedOfferPrice,nextAcceptedOfferRefreshDelay} from '../src/shared/offers/publicPrice';
+
+export function acceptedOfferCoversSelectedStay(
+  offer: PublicAcceptedOffer | null | undefined,
+  checkIn: string,
+  checkOut: string,
+  guests: number,
+  availableRooms: number | null,
+  now: number,
+): boolean {
+  if (!offer || !/^\d{4}-\d{2}-\d{2}$/.test(checkIn) || !/^\d{4}-\d{2}-\d{2}$/.test(checkOut)) return false;
+  const nights = (Date.parse(`${checkOut}T00:00:00Z`) - Date.parse(`${checkIn}T00:00:00Z`)) / 86400000;
+  return Number.isInteger(nights) && nights >= offer.minNights &&
+    checkIn >= currentIndiaDate(now) && checkIn >= offer.stayStart &&
+    checkIn >= offer.availableStartDate && checkOut <= offer.stayEnd &&
+    guests > 0 && guests <= offer.maxGuests && availableRooms !== null && availableRooms > 0 &&
+    now >= Date.parse(offer.effectiveFrom) && now < Date.parse(offer.effectiveUntil);
+}
 import { ListingErrorBoundary } from './ListingErrorBoundary';
 
 export const getBrandTypography = (fontId?: string) => {
@@ -136,19 +154,31 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
   const isDemoMode = demoMode;
   const [listing, setListing] = useState<Listing>(initialListing);
 
+  const withoutStaleOfferPrice = (value: Listing): Listing => ({
+    ...value, price: null, priceState: 'VERIFIED_OFFER_UNAVAILABLE',
+    offerState: 'OFFER_AUTHORITY_UNAVAILABLE', fromOffer: null, hasOffers: false,
+    rooms: value.rooms?.map(room => ({...room, price: null,
+      priceState: 'VERIFIED_OFFER_UNAVAILABLE', offerState: 'OFFER_AUTHORITY_UNAVAILABLE', offer: null})),
+  });
+
   useEffect(() => {
     setListing(initialListing);
     const controller = new AbortController();
     if (!isPreview && !isDemoMode && /^[1-9]\d*$/.test(String(initialListing.id))) {
       fetch(`/api/listings/${encodeURIComponent(initialListing.id)}`, {signal:controller.signal})
-        .then(res => res.ok ? res.json() : null)
+        .then(res => {
+          if (!res.ok) throw new Error('Public stay refresh unavailable');
+          return res.json();
+        })
         .then(data => {
           if (controller.signal.aborted || !data || String(data.id) !== String(initialListing.id)) return;
           const selectedConfigId = initialListing.selectedConfigId;
           setListing(selectedConfigId && data.rooms?.some((room: Room) => room.id === selectedConfigId)
             ? {...data, selectedConfigId} : data);
         })
-        .catch(() => { /* Keep the supplied projection if its refresh is unavailable. */ });
+        .catch(() => {
+          if (!controller.signal.aborted) setListing(previous => withoutStaleOfferPrice(previous));
+        });
     }
     return () => controller.abort();
   }, [initialListing, isPreview, isDemoMode]);
@@ -381,16 +411,28 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
     : availability?.rooms.find(room => room.id === selectedCanonicalRoom?.canonicalId)?.available ?? null;
   const availabilityUnknown = remainingRooms === null;
   const isDateRangeBlocked = remainingRooms === null || remainingRooms === 0;
+  const [offerClock, setOfferClock] = useState(() => Date.now());
+  const selectedOfferCandidate = selectedCanonicalRoom?.room.offer;
+  const selectedOffer = acceptedOfferIsCurrent(selectedOfferCandidate, Math.max(offerClock, Date.now())) ? selectedOfferCandidate : null;
+  useEffect(() => {
+    if (!selectedOffer) return;
+    const delay = nextAcceptedOfferRefreshDelay([selectedOffer],Date.now());
+    if(delay===null)return;
+    const timeout = window.setTimeout(() => setOfferClock(Date.now()), delay);
+    return () => window.clearTimeout(timeout);
+  }, [selectedOffer, offerClock]);
 
-  // Display an amount only when the public projection has a verified offer.
+  // The selected canonical room carries its own accepted offer. No property
+  // summary or historical room base rate may replace a missing room offer.
   const activeTierObj = getRoomConfig(selectedRoomTier);
   const activeNightlyRate = useMemo(() => {
-    if (listing.priceState === 'VERIFIED_OFFER_UNAVAILABLE') return 0;
-    if (liveRoomConfigs && liveRoomConfigs[selectedRoomTier]) {
-      return liveRoomConfigs[selectedRoomTier].price;
-    }
-    return Number.isFinite(listing.price) && listing.price > 0 ? listing.price : 0;
-  }, [selectedRoomTier, liveRoomConfigs, listing.price, listing.currency, listing.priceState]);
+    if (selectedCanonicalRoom?.room.priceState !== 'VERIFIED_OFFER_AVAILABLE' ||
+      !acceptedOfferCoversSelectedStay(selectedOffer, checkIn, checkOut, guests, remainingRooms, offerClock)) return 0;
+    return selectedCanonicalRoom.room.price || 0;
+  }, [selectedCanonicalRoom, selectedOffer, checkIn, checkOut, guests, remainingRooms, offerClock]);
+  const selectedOfferPriceLabel = activeNightlyRate > 0 && selectedOffer
+    ? `From ${formatAcceptedOfferPrice(selectedOffer)}`
+    : selectedOffer ? 'Offer not applicable to selected dates' : 'Price unavailable';
 
   const nights = useMemo(() => {
     const start = new Date(checkIn).getTime();
@@ -950,8 +992,11 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                 <div className="sticky top-28 bg-white border border-zinc-200/80 shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-3xl p-6 flex flex-col">
                     <div className="flex items-end justify-between mb-4">
                         <div>
-                            <span className="text-3xl font-extrabold tracking-tight text-zinc-900 font-display tabular-nums">{activeNightlyRate > 0 ? `From ${listing.currency === 'USD' ? '$' : '₹'}${activeNightlyRate.toLocaleString('en-IN')}` : 'Price available after dates are selected'}</span>
-                            <span className="text-zinc-500 font-medium ml-1 text-sm">/ night</span>
+                            <span className="text-3xl font-extrabold tracking-tight text-zinc-900 font-display tabular-nums">{selectedOfferPriceLabel}</span>
+                            {activeNightlyRate > 0 && <span className="text-zinc-500 font-medium ml-1 text-sm">/ night</span>}
+                            {selectedOffer && <p className="text-[11px] text-zinc-500 mt-1">
+                              Accepted per room night for stays from {selectedOffer.stayStart} to {selectedOffer.stayEnd} checkout. Select dates to confirm availability.
+                            </p>}
                         </div>
                         <span className="bg-amber-50 text-amber-800 border border-amber-200/80 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full flex items-center gap-1">
                           <span>{activeTierObj.icon}</span>
@@ -974,12 +1019,17 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                           const t = getRoomConfig(tierKey);
                           const isSelected = selectedRoomTier === tierKey;
                           const tRate = listing.currency === 'USD' ? ((t as any).priceUsd || t.price) : t.price;
+                          const presented = presentedRooms.find(entry => entry.key === tierKey);
+                          const available = availability?.rooms.find(room => room.id === presented?.canonicalId)?.available ?? null;
+                          const offerApplies = acceptedOfferCoversSelectedStay(
+                            presented?.room.offer, checkIn, checkOut, guests, available, offerClock);
                           return (
                             <button
                               key={tierKey}
                               type="button"
                               aria-label={t.name}
                               aria-pressed={isSelected}
+                              data-offer-id={acceptedOfferIsCurrent(presented?.room.offer, offerClock) ? presented?.room.offer?.offerId : undefined}
                               onClick={() => {
                                 uiAudio.playClick();
                                 setSelectedRoomTier(tierKey);
@@ -994,7 +1044,8 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                               <span className="text-xs">{t.icon}</span>
                               <span className="text-[11px] font-bold tracking-tight mt-0.5">{(t as any).shortName || t.name.substring(0, 10)}</span>
                               <span className="text-[9px] font-mono text-zinc-400">
-                                {tRate > 0 && listing.priceState !== 'VERIFIED_OFFER_UNAVAILABLE' ? `${listing.currency === 'USD' ? '$' : '₹'}${tRate.toLocaleString('en-IN', {maximumFractionDigits: 2})}` : 'Price after dates'}
+                                {tRate > 0 && offerApplies && presented?.room.offer
+                                  ? formatAcceptedOfferPrice(presented.room.offer) : 'Price unavailable for dates'}
                               </span>
                             </button>
                           );
@@ -1203,7 +1254,7 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                     <p className="text-sm text-zinc-600">
                       {isDemoMode
                         ? 'Pricing and specifications shown for illustrative presentation only.'
-                        : 'Taxes and final price will be shown before payment.'}
+                        : 'This accepted room-night amount is informational. Final booking price will be shown when online booking is available.'}
                     </p>
                 </div>
             </div>
@@ -1426,10 +1477,13 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
                   <div className="flex flex-col">
                     <div className="flex items-baseline gap-1">
                       <span className="text-lg font-extrabold text-white font-display tabular-nums">
-                        {activeNightlyRate > 0 ? `From ${listing.currency === 'USD' ? '$' : '₹'}${activeNightlyRate.toLocaleString('en-IN')}` : 'Price available after dates are selected'}
+                        {selectedOfferPriceLabel}
                       </span>
-                      <span className="text-xs text-zinc-400 font-medium">/ night</span>
+                      {activeNightlyRate > 0 && <span className="text-xs text-zinc-400 font-medium">/ night</span>}
                     </div>
+                    {selectedOffer && <span className="text-[9px] text-zinc-400">
+                      Stay window {selectedOffer.stayStart} to {selectedOffer.stayEnd} checkout
+                    </span>}
                     <span className="text-[11px] text-zinc-400 font-semibold uppercase tracking-wider flex items-center gap-1.5 font-display">
                       <span>{new Date(checkIn).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {new Date(checkOut).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                       <span>·</span>
@@ -1475,12 +1529,15 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
               <div className="flex flex-col">
                 <div className="flex items-baseline gap-1">
                   <span className={`text-lg sm:text-xl font-black font-display tabular-nums ${showMobileStickyBar ? "text-zinc-900" : "text-white"}`}>
-                    {activeNightlyRate > 0 ? `From ${listing.currency === 'USD' ? '$' : '₹'}${activeNightlyRate.toLocaleString('en-IN')}` : 'Price available after dates are selected'}
+                    {selectedOfferPriceLabel}
                   </span>
-                  <span className={`text-[10px] font-bold uppercase font-mono ${showMobileStickyBar ? "text-zinc-400" : "text-zinc-300"}`}>
+                  {activeNightlyRate > 0 && <span className={`text-[10px] font-bold uppercase font-mono ${showMobileStickyBar ? "text-zinc-400" : "text-zinc-300"}`}>
                     / nt
-                  </span>
+                  </span>}
                 </div>
+                {selectedOffer && <span className={`text-[9px] ${showMobileStickyBar ? 'text-zinc-500' : 'text-zinc-300'}`}>
+                  Stay window {selectedOffer.stayStart} to {selectedOffer.stayEnd} checkout
+                </span>}
                 {isDemoMode ? (
                   <span className="text-[9px] font-semibold text-amber-400 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-500/30 mt-0.5 truncate max-w-[150px]">
                     Demo Content

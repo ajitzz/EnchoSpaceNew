@@ -20,6 +20,9 @@ export interface Room {
   icon?: string;            // Emoji icon e.g. "👑"
   tag?: string;             // Marketing tag e.g. "Most Popular"
   price: number | null;     // Public null means no accepted, verified offer price.
+  priceState?: 'VERIFIED_OFFER_UNAVAILABLE' | 'VERIFIED_OFFER_AVAILABLE';
+  offerState?: PublicOfferState;
+  offer?: PublicAcceptedOffer | null;
   capacity?: number;
   bedrooms?: number;
   beds?: number;
@@ -40,6 +43,28 @@ export interface Room {
   min_stay_nights?: number;
   check_in_time?: string;
   check_out_time?: string;
+}
+
+export type PublicOfferState = 'VERIFIED_OFFER_AVAILABLE' | 'NO_ACCEPTED_OFFER' |
+  'OFFER_EXPIRED' | 'OFFER_NOT_YET_EFFECTIVE' | 'OFFER_RETIRED' | 'OFFER_STALE_REVIEW' | 'ROOM_UNAVAILABLE' |
+  'OFFER_AUTHORITY_UNAVAILABLE' | 'LEGACY_DATA_UNRECONCILED';
+
+/** Accepted room-night authority; never a booking total, tax or availability guarantee. */
+export interface PublicAcceptedOffer {
+  offerId: string;
+  revision: number;
+  roomTypeId: string;
+  priceBasis: 'PER_ROOM_NIGHT';
+  amountMinor: string;
+  currency: 'INR';
+  maxGuests: number;
+  minNights: number;
+  stayStart: string;
+  stayEnd: string;
+  effectiveFrom: string;
+  effectiveUntil: string;
+  availableStartDate: string;
+  observedAt: string;
 }
 
 export interface Offer {
@@ -117,7 +142,9 @@ export interface Listing {
   brand_font?: string;
   brand_color?: string;
   price: number | null;
-  priceState?: 'VERIFIED_OFFER_UNAVAILABLE';
+  priceState?: 'VERIFIED_OFFER_UNAVAILABLE' | 'VERIFIED_OFFER_AVAILABLE';
+  offerState?: PublicOfferState;
+  fromOffer?: PublicAcceptedOffer | null;
   roomState?: 'CANONICAL' | 'NO_ROOM' | 'LEGACY_DATA_UNRECONCILED';
   currency: string;
   period?: string;
