@@ -1,11 +1,16 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { createServer, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { build, loadConfigFromFile, mergeConfig, type Plugin } from 'vite';
 import { generateSW } from 'workbox-build';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import express from 'express';
+import { createConversationFixture } from './helpers/conversationFixture.js';
+import { InquiryInbox } from '../../lib/marketing/inquiryInbox.js';
+import { createConversationRouter } from '../../server/conversations/router.js';
+import { createInboundExecutionContext, runWithExecutionContext } from '../../lib/observability/executionContext.js';
 
 interface AuditFixture {
     state: string;
@@ -35,6 +40,7 @@ let malformedAuthCheck = false;
 let heldAuthCheck: Promise<void> | null = null;
 let authCheckStarted = false;
 const requests: RecordedRequest[] = [];
+let realConversationHandler: ((request: IncomingMessage, response: ServerResponse) => void) | null = null;
 
 async function legacyEntries(page: Page): Promise<Array<{ queueName: string; requestData: { headers: Record<string, string> } }>> {
     return page.evaluate(async () => new Promise((resolveEntries, reject) => {
@@ -111,6 +117,10 @@ beforeAll(async () => {
     server = createServer((request, response) => {
         void (async () => {
             const url = request.url?.split('?')[0] ?? '/';
+            if (realConversationHandler && url.startsWith('/api/threads/') && url.endsWith('/messages')) {
+                realConversationHandler(request, response);
+                return;
+            }
             if (url.startsWith('/api/')) {
                 let body = ''; for await (const chunk of request) body += String(chunk);
                 if (request.method !== 'GET') requests.push({ url, body, authorization: request.headers.authorization });
@@ -160,7 +170,7 @@ afterAll(async () => {
     if (server) await new Promise<void>(resolveClosed => server.close(() => resolveClosed()));
     if (directory) await rm(directory, { recursive: true, force: true });
 });
-beforeEach(() => { serveLegacy = false; serveWaiting = false; uncertainMessages = false; denyExpiredMessages = false; denyExpiredAuth = false; malformedAuthCheck = false; heldAuthCheck = null; authCheckStarted = false; requests.length = 0; });
+beforeEach(() => { serveLegacy = false; serveWaiting = false; uncertainMessages = false; denyExpiredMessages = false; denyExpiredAuth = false; malformedAuthCheck = false; heldAuthCheck = null; authCheckStarted = false; realConversationHandler = null; requests.length = 0; });
 
 describe('R1-03 production-built service worker with actual browser persistence', () => {
     it('upgrades the real legacy Workbox queue, purges credentials and claims both tabs', async () => {
@@ -303,17 +313,126 @@ describe('R1-03 production-built service worker with actual browser persistence'
             await page.evaluate(() => window.offlineAudit.login(17, 'fixture-17-expired'));
             uncertainMessages = true;
             expect(await page.evaluate(() => window.offlineAudit.queueMutationWithReceipt('/api/threads/3/messages', 'POST', { content: 'Local question', clientEventId: '11111111-1111-4111-8111-111111111111' }))).toMatchObject({ status: 'QUEUED' });
+            const beforeReload = requests.filter(request => request.url.includes('/messages')).length;
             denyExpiredAuth = true;
             await page.reload(); await page.getByTestId('actor').filter({ hasText: 'signed-out' }).waitFor();
+            const afterReload = requests.filter(request => request.url.includes('/messages')).length;
+            // The initial verified session may already have dispatched a replay
+            // before /auth/me rejects the expired credential. Signed-out state
+            // must not dispatch another; fresh login reconciles the same event.
+            await page.evaluate(() => window.offlineAudit.processOfflineQueue());
+            expect(requests.filter(request => request.url.includes('/messages'))).toHaveLength(afterReload);
             uncertainMessages = false;
             await page.evaluate(() => window.offlineAudit.login(17, 'fixture-17-fresh'));
             await expect.poll(() => page.evaluate(() => window.offlineAudit.get(window.offlineAudit.actorQueueKey(17)))).toEqual([]);
             const messages = requests.filter(request => request.url.includes('/messages'));
-            expect(messages).toHaveLength(2);
-            expect(messages.map(request => JSON.parse(request.body).clientEventId)).toEqual(Array(2).fill('11111111-1111-4111-8111-111111111111'));
-            expect(messages[1].authorization).toBe('Bearer fixture-17-fresh');
+            expect(afterReload).toBeGreaterThanOrEqual(beforeReload);
+            expect(afterReload).toBeLessThanOrEqual(beforeReload + 1);
+            expect(messages).toHaveLength(afterReload + 1);
+            expect(messages.map(request => JSON.parse(request.body).clientEventId)).toEqual(Array(messages.length).fill('11111111-1111-4111-8111-111111111111'));
+            expect(messages.slice(0, -1).every(request => request.authorization === 'Bearer fixture-17-expired')).toBe(true);
+            expect(messages.at(-1)?.authorization).toBe('Bearer fixture-17-fresh');
         } finally { await context.close(); }
     });
+
+    it('reconciles a committed lost reply through the mounted route without duplicating durable effects', async () => {
+        const fixture = await createConversationFixture();
+        const inbox = new InquiryInbox(fixture.runtime, content => ({ sanitized: content, wasSanitized: false }), undefined, { deliveryRequired: true });
+        const attempts: Array<{ actor: number; eventId: string; status: number; messageId: number | null; contentType: string | undefined; bodyKind: string }> = [];
+        let loseFirstResponse = true;
+        let releaseReplay: (() => void) | undefined;
+        let replayGate: Promise<void> | undefined;
+        const app = express();
+        app.use(express.json());
+        app.use((req, res, next) => runWithExecutionContext(createInboundExecutionContext(req.headers), next));
+        app.use('/api', (req, res, next) => {
+            const actor = Number(req.headers.authorization?.match(/^Bearer fixture-(17|22)/)?.[1]);
+            const eventId = String(req.body?.clientEventId ?? 'missing');
+            const attempt = { actor, eventId, status: 0, messageId: null as number | null, contentType: req.headers['content-type'], bodyKind: typeof req.body };
+            attempts.push(attempt);
+            const original = res.json.bind(res);
+            res.json = ((body: { id?: number }) => {
+                if (body?.id) attempt.messageId = body.id;
+                if (loseFirstResponse && body?.id) {
+                    loseFirstResponse = false;
+                    res.status(409);
+                    return original({ code: 'OPERATION_OUTCOME_UNKNOWN' });
+                }
+                return original(body);
+            }) as typeof res.json;
+            res.on('finish', () => { attempt.status = res.statusCode; });
+            next();
+        });
+        app.use('/api', createConversationRouter({
+            inbox,
+            authenticate: (_req, _res, next) => next(),
+            mutationLimiter: (_req, _res, next) => next(),
+            accountId: req => Number(req.headers.authorization?.match(/^Bearer fixture-(17|22)/)?.[1]) === 17 ? 10 : 30,
+            visitor: () => undefined,
+            ready: async () => { if (replayGate) await replayGate; return true; },
+        }));
+        realConversationHandler = app;
+        const context = await contextFixture();
+        try {
+            const page = context.pages()[0]; await openApplication(page);
+            await page.evaluate(() => window.offlineAudit.login(17, 'fixture-17'));
+            const eventId = '77777777-7777-4777-8777-777777777777';
+            const queued = await page.evaluate(id => window.offlineAudit.queueMutationWithReceipt('/api/threads/1/messages', 'POST', {
+                content: 'Local question', clientEventId: id,
+            }), eventId);
+            expect(queued.status).toBe('QUEUED');
+            expect(await page.evaluate(() => window.offlineAudit.get(window.offlineAudit.actorQueueKey(17)))).toEqual([
+                expect.objectContaining({ body: expect.objectContaining({ clientEventId: eventId }) }),
+            ]);
+            expect(attempts).toHaveLength(1);
+            expect(attempts[0]).toMatchObject({ actor: 17, eventId, status: 409 });
+            expect((await fixture.pool.query('SELECT count(*)::int AS count FROM messages WHERE client_event_id=$1', [eventId])).rows[0].count).toBe(1);
+            expect((await fixture.pool.query('SELECT count(*)::int AS count FROM notification_intents ni JOIN messages m ON ni.message_id=m.id WHERE m.client_event_id=$1', [eventId])).rows[0].count).toBe(1);
+
+            replayGate = new Promise<void>(resolveGate => { releaseReplay = resolveGate; });
+            const second = await context.newPage(); await openApplication(second);
+            const firstReplay = page.evaluate(() => window.offlineAudit.processOfflineQueue());
+            const secondReplay = second.evaluate(() => window.offlineAudit.processOfflineQueue());
+            await expect.poll(() => attempts.length).toBeGreaterThanOrEqual(2);
+            releaseReplay?.(); replayGate = undefined;
+            await Promise.all([firstReplay, secondReplay]);
+            await expect.poll(() => page.evaluate(() => window.offlineAudit.get(window.offlineAudit.actorQueueKey(17)))).toEqual([]);
+            expect(attempts.every(attempt => attempt.eventId === eventId && attempt.actor === 17), JSON.stringify(attempts)).toBe(true);
+            expect(attempts.slice(1).every(attempt => attempt.status === 200 && attempt.messageId === attempts[0].messageId)).toBe(true);
+            expect((await fixture.pool.query('SELECT count(*)::int AS count FROM messages WHERE client_event_id=$1', [eventId])).rows[0].count).toBe(1);
+            expect((await fixture.pool.query('SELECT count(*)::int AS count FROM notification_intents ni JOIN messages m ON ni.message_id=m.id WHERE m.client_event_id=$1', [eventId])).rows[0].count).toBe(1);
+
+            // A second committed-but-unacknowledged event begins replay under
+            // actor 17, then actor 22 takes over before the response completes.
+            loseFirstResponse = true;
+            const switchedEventId = '88888888-8888-4888-8888-888888888888';
+            await page.evaluate(() => {
+                (window as Window & { replayEvents?: unknown[] }).replayEvents = [];
+                window.addEventListener('encho:offline-mutation-committed', event => {
+                    (window as Window & { replayEvents?: unknown[] }).replayEvents?.push((event as CustomEvent).detail);
+                });
+            });
+            expect((await page.evaluate(id => window.offlineAudit.queueMutationWithReceipt('/api/threads/1/messages', 'POST', {
+                content: 'Second local question', clientEventId: id,
+            }), switchedEventId)).status).toBe('QUEUED');
+            const priorAttempts = attempts.length;
+            replayGate = new Promise<void>(resolveGate => { releaseReplay = resolveGate; });
+            const inFlight = page.evaluate(() => window.offlineAudit.processOfflineQueue());
+            await expect.poll(() => attempts.length).toBe(priorAttempts + 1);
+            await page.evaluate(() => window.offlineAudit.login(22, 'fixture-22'));
+            await page.getByTestId('actor').filter({ hasText: '22' }).waitFor();
+            releaseReplay?.(); replayGate = undefined;
+            await inFlight;
+            await expect.poll(() => page.evaluate(() => window.offlineAudit.get(window.offlineAudit.actorQueueKey(17)))).toBeUndefined();
+            expect(await page.evaluate(() => (window as Window & { replayEvents?: unknown[] }).replayEvents)).toEqual([]);
+            expect(attempts.filter(attempt => attempt.eventId === switchedEventId).map(attempt => attempt.actor)).toEqual([17, 17]);
+            expect((await fixture.pool.query('SELECT count(*)::int AS count FROM messages WHERE client_event_id=$1', [switchedEventId])).rows[0].count).toBe(1);
+            expect((await fixture.pool.query('SELECT count(*)::int AS count FROM notification_intents ni JOIN messages m ON ni.message_id=m.id WHERE m.client_event_id=$1', [switchedEventId])).rows[0].count).toBe(1);
+        } finally {
+            releaseReplay?.(); realConversationHandler = null;
+            await context.close(); await fixture.close();
+        }
+    }, 30_000);
 
     it('retains an explicitly unauthorized inquiry until its actor obtains fresh authentication', async () => {
         const context = await contextFixture();

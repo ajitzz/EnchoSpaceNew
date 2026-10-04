@@ -598,13 +598,15 @@ export async function processOfflineQueue(): Promise<void> {
                 }
                 let response: Response;
                 try {
+                    // Persisted header names are lowercase. Build a Headers object
+                    // before adding session credentials: spreading alongside
+                    // `Content-Type` would send two values and break JSON parsing.
+                    const replayHeaders = new Headers(sanitizePersistedHeaders(item.headers));
+                    replayHeaders.set('Content-Type', 'application/json');
+                    replayHeaders.set('Authorization', `Bearer ${session.token}`);
                     response = await fetch(item.url, {
                         method: item.method,
-                        headers: {
-                            'Content-Type': 'application/json',
-                            ...sanitizePersistedHeaders(item.headers),
-                            Authorization: `Bearer ${session.token}`,
-                        },
+                        headers: replayHeaders,
                         body: item.body !== undefined ? JSON.stringify(item.body) : undefined,
                         signal:AbortSignal.timeout(15_000),
                     });
