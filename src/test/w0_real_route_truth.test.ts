@@ -199,7 +199,15 @@ describe('W0 real-route catalogue truth discrepancy on disposable PostgreSQL', (
       .find((item: {id: string}) => item.id === String(listingId));
     expect(streetCard.slug).toBe('_s-8881');
     expect(JSON.stringify(streetCard)).not.toContain('plot-14');
+    await pool.query('UPDATE listings SET title=$1, slug=$2 WHERE id=$3',
+      ['House 14 Elm Avenue Retreat', 'house-14-elm-avenue-8881', listingId]);
+    const houseCard = (await request(app).get('/api/listings?city=Jaipur').expect(200)).body
+      .find((item: {id: string}) => item.id === String(listingId));
+    expect(houseCard.slug).toBe('_s-8881');
+    expect(JSON.stringify(houseCard)).not.toContain('House 14');
+    expect((await request(app).get('/api/v2/stays/_s-8881').expect(200)).body.title).not.toContain('House 14');
     await pool.query('UPDATE listings SET slug=NULL WHERE id=$1', [listingId]);
+    await pool.query('UPDATE listings SET title=$1 WHERE id=$2', ['Villa Call +91 9876543210', listingId]);
     const generated = (await request(app).get('/api/listings?city=Jaipur').expect(200)).body
       .find((item: {id: string}) => item.id === String(listingId));
     expect(generated.slug).toBe('villa-call-redacted-8881');

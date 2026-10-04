@@ -154,6 +154,9 @@ try {
   await filterPage.getByRole('button',{name:'Show places'}).click();
   await filterPage.getByRole('button',{name:'View W0 Hybrid Stay - AC Suite stay'}).waitFor({state:'visible'});
   assert.equal(await filterPage.getByRole('button',{name:'View W0 Hybrid Stay - Plain Suite stay'}).count(),0);
+  assert.equal(await filterPage.getByRole('button',{name:'Plain Suite',exact:true}).count(),0,
+    'Map room selector must not revive a filtered-out room');
+  await filterPage.getByRole('button',{name:'AC Suite',exact:true}).waitFor({state:'visible'});
   await filterPage.getByRole('button',{name:'Space Mode Active',exact:true}).click();
   await filterPage.getByRole('button',{name:'Entire Space',exact:true}).click();
   await filterPage.getByRole('button',{name:'Apply',exact:true}).click();

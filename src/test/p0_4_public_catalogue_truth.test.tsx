@@ -226,6 +226,23 @@ describe('P0-4 truthful public catalogue repair', () => {
   });
 
   describe('MapSidebar mounted truth', () => {
+    it('opens the canonical room selected from an eligible map room list', async () => {
+      Object.defineProperty(window, 'innerWidth', {configurable: true, value: 1440});
+      const onSelectListing = vi.fn();
+      const listing = createListing({
+        id: 'map-room-stay', rental_mode: 'private_rooms', lat: 11.6854, lng: 76.1320,
+        rooms: [{id: 'canonical-ac-room', name: 'AC Suite', price: null, amenities: ['Air conditioning']}]
+      });
+      render(<CurrencyProvider><MapSidebar listings={[listing]} highlightedId={listing.id}
+        city="Wayanad" onSelectListing={onSelectListing} /></CurrencyProvider>);
+      await waitFor(() => expect(screen.getByRole('button', {name: 'View Details'})).toBeTruthy());
+      expect(screen.queryByRole('button', {name: 'Plain Suite'})).toBeNull();
+      fireEvent.click(screen.getByRole('button', {name: 'View Details'}));
+      expect(onSelectListing).toHaveBeenCalledWith(expect.objectContaining({
+        id: 'map-room-stay', selectedConfigId: 'canonical-ac-room'
+      }));
+    });
+
     it('7. Does not fabricate 4.8 / 12 reviews when listing has zero or unknown reviews', () => {
       const unreviewedListing = createListing({
         rating: 0,

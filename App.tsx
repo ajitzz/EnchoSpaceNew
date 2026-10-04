@@ -233,6 +233,31 @@ function App() {
       return arr;
   }, [visibleListings, filters.rentalMode, filters.mustHaveAc, filters.mustHaveAttachedBathroom]);
 
+  const mapListings = React.useMemo(() => {
+      const cardsByProperty = new Map<string, Listing[]>();
+      for (const card of displayListings) {
+          const propertyId = String(card.originalId || card.id);
+          const cards = cardsByProperty.get(propertyId) || [];
+          cards.push(card);
+          cardsByProperty.set(propertyId, cards);
+      }
+      return visibleListings.flatMap(listing => {
+          const cards = cardsByProperty.get(String(listing.id)) || [];
+          if (!cards.length) return [];
+          const roomCards = cards.filter(card => card.isChild && card.selectedConfigId);
+          const allowedRoomIds = new Set(roomCards.map(card => String(card.selectedConfigId)));
+          const wholePlaceShown = cards.some(card => !card.isChild);
+          const mediaSource = wholePlaceShown ? listing : roomCards[0];
+          return [{
+              ...listing,
+              rooms: (listing.rooms || []).filter(room => allowedRoomIds.has(String(room.id))),
+              imageUrl: mediaSource.imageUrl,
+              imageUrls: mediaSource.imageUrls,
+              photos: mediaSource.photos,
+          }];
+      });
+  }, [visibleListings, displayListings]);
+
   const [loading, setLoading] = useState(false);
   const [searchError, setSearchError] = useState(false);
   const searchRequestSequence = useRef(0);
@@ -1628,7 +1653,7 @@ function App() {
 
             <div className={`xl:block xl:sticky xl:top-[160px] xl:w-[45%] xl:h-[calc(100vh-180px)] xl:rounded-2xl xl:overflow-hidden xl:z-0 xl:shadow-2xl ${showMap ? 'fixed inset-0 z-[150] block w-full h-[100dvh] bg-gray-50' : 'hidden'}`}>
                <MapSidebar 
-                 listings={visibleListings}
+                 listings={mapListings}
                  highlightedId={hoveredListingId ? hoveredListingId.split('_')[0] : null} 
                  onBoundsChanged={(bounds) => handleSearch(city, filters, bounds)} 
                  onClose={() => setShowMap(false)}

@@ -412,14 +412,19 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
   const [selectedRoomIdForListing, setSelectedRoomIdForListing] = useState<{[listingId: string]: string}>({});
   const [isSearchingArea, setIsSearchingArea] = useState(false);
 
+  const selectedRoomId = useCallback((listing: Listing): string | undefined => {
+    const requested = selectedRoomIdForListing[listing.id];
+    return listing.rooms?.find(room => room.id === requested)?.id || listing.rooms?.[0]?.id;
+  }, [selectedRoomIdForListing]);
+
   const getActivePrice = useCallback((listing: Listing) => {
-    const selRoomId = selectedRoomIdForListing[listing.id];
+    const selRoomId = selectedRoomId(listing);
     if (selRoomId && listing.rooms) {
       const room = listing.rooms.find(r => r.id === selRoomId);
       if (room) return room.price;
     }
     return listing.price;
-  }, [selectedRoomIdForListing]);
+  }, [selectedRoomId]);
 
   // Handle live indicator when listings filter updates
   useEffect(() => {
@@ -576,9 +581,8 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
 
   // Initialize active listing ID
   useEffect(() => {
-    if (listings && listings.length > 0 && !activeListingId) {
-      setActiveListingId(listings[0].id);
-    }
+    if (!listings?.some(listing => listing.id === activeListingId))
+      setActiveListingId(listings?.[0]?.id || null);
   }, [listings, activeListingId]);
 
   // Vector map auto-centering when active listing changes
@@ -1130,7 +1134,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                         <div className="text-[9px] font-black text-gray-400 uppercase tracking-wider">Accommodation Choices</div>
                         <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide py-0.5 pointer-events-auto">
                            {activeListing.rooms.map((room) => {
-                              const isSelected = selectedRoomIdForListing[activeListing.id] === room.id || (!selectedRoomIdForListing[activeListing.id] && room.id === activeListing.rooms?.[0].id);
+                              const isSelected = selectedRoomId(activeListing) === room.id;
                               return (
                                  <button 
                                     key={room.id}
@@ -1182,7 +1186,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                            type="button"
                            onClick={() => {
                               uiAudio.playClick();
-                              if (onSelectListing) onSelectListing(activeListing);
+                              if (onSelectListing) onSelectListing({...activeListing, selectedConfigId: selectedRoomId(activeListing)});
                            }}
                            className="px-4 h-10 rounded-full bg-gray-900 hover:bg-gray-800 text-white text-xs font-black tracking-wide transition-all shadow-md active:scale-95 flex items-center justify-center cursor-pointer"
                         >
@@ -1211,7 +1215,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                              uiAudio.playClick();
                              setActiveListingId(listing.id);
                              scrollToCard(index);
-                             if (onSelectListing) onSelectListing(listing);
+                             if (onSelectListing) onSelectListing({...listing, selectedConfigId: selectedRoomId(listing)});
                          }}
                          className={`
                              w-[290px] h-[124px] bg-white rounded-3xl overflow-hidden flex-shrink-0 snap-center shadow-[0_12px_36px_rgba(0,0,0,0.15)] flex relative border-2 transition-all duration-300 cursor-pointer
@@ -1247,10 +1251,12 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                                  {listing.rooms && listing.rooms.length > 0 && (
                                      <div className="flex items-center gap-1 mt-1 overflow-x-auto scrollbar-hide py-0.5 pointer-events-auto">
                                          {listing.rooms.map((room) => {
-                                             const isSelected = selectedRoomIdForListing[listing.id] === room.id || (!selectedRoomIdForListing[listing.id] && room.id === listing.rooms?.[0].id);
+                                             const isSelected = selectedRoomId(listing) === room.id;
                                              return (
-                                                 <span 
+                                                 <button
                                                      key={room.id}
+                                                     type="button"
+                                                     aria-label={`Select ${room.name} for ${listing.title}`}
                                                      onClick={(e) => {
                                                          e.stopPropagation();
                                                          uiAudio.playClick();
@@ -1263,7 +1269,7 @@ const MapSidebar: React.FC<MapSidebarProps> = ({
                                                      }`}
                                                  >
                                                      {room.name}
-                                                 </span>
+                                                 </button>
                                              );
                                          })}
                                      </div>

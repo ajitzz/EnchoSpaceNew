@@ -204,7 +204,8 @@ export function publicListingSlug(rawListing: {id: number | string; slug?: strin
     // Slugs separate words with hyphens, while privacy patterns are defined
     // for normal prose. Inspect both spellings before retaining an old slug.
     const spaced = stored.replace(/-/g, ' ');
-    return stored === sanitizePublicText(stored) && spaced === sanitizePublicText(spaced) &&
+    const addressLike = /\b(?:house|flat|plot|unit|building|block|door)\s*(?:no\.?\s*)?\d+\b|\b\d{1,5}\s+[a-z][a-z\s]{1,30}\s+(?:road|street|lane|avenue|drive|boulevard)\b/i.test(spaced);
+    return !addressLike && stored === sanitizePublicText(stored) && spaced === sanitizePublicText(spaced) &&
       /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(stored)
       ? stored : `_s-${rawListing.id}`;
   }
@@ -263,7 +264,7 @@ export function sanitizePublicText(input: unknown): string {
   });
 
   // 7. Strip physical street markers and Indian PIN codes (6-digit postal codes)
-  text = text.replace(/\b(?:plot\s*\d+|house\s*no\.?|flat\s*no\.?|road|street|lane|nagar|colony|sector\s*\d+)\b[^\n,.]*/gi, '[REDACTED]');
+  text = text.replace(/\b(?:plot\s*\d+|house\s*(?:no\.?\s*)?\d+|flat\s*(?:no\.?\s*)?\d+|road|street|lane|avenue|boulevard|nagar|colony|sector\s*\d+)\b[^\n,.]*/gi, '[REDACTED]');
   text = text.replace(/\b\d{6}\b/g, '[REDACTED]');
 
   return text.trim();
