@@ -382,11 +382,20 @@ try{
             &&localStorage.getItem('encho:test:withhold-policy')==='1')return;
           return Reflect.apply(original,this,[message,options]);
         };
+        const originalUpdate=ServiceWorkerRegistration.prototype.update;
+        ServiceWorkerRegistration.prototype.update=function(){
+          if(localStorage.getItem('encho:test:withhold-policy')==='1'){
+            localStorage.setItem('encho:test:update-attempted','1');
+            return Promise.reject(new Error('Controlled service-worker update failure'));
+          }
+          return Reflect.apply(originalUpdate,this,[]);
+        };
       });
     }
     await page.reload({waitUntil:'domcontentloaded'});
     if(width===360){
       await page.getByRole('heading',{name:'Unable to verify the secure app update'}).waitFor({timeout:15000});
+      assert.equal(await page.evaluate(()=>localStorage.getItem('encho:test:update-attempted')),'1');
       const whileBlocked=(await fixture.owner.query('SELECT id,status,expires_at FROM booking_holds WHERE id=$1',
         [createdHold.id])).rows[0];
       assert.equal(whileBlocked.id,originalHold.id);
