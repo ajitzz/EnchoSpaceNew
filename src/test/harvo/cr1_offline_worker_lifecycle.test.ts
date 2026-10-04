@@ -394,9 +394,11 @@ describe('R1-03 production-built service worker with actual browser persistence'
             const firstReplay = page.evaluate(() => window.offlineAudit.processOfflineQueue());
             const secondReplay = second.evaluate(() => window.offlineAudit.processOfflineQueue());
             await expect.poll(() => attempts.length).toBeGreaterThanOrEqual(2);
+            expect(attempts).toHaveLength(2); // One replay owns the cross-tab lease while blocked.
             releaseReplay?.(); replayGate = undefined;
             await Promise.all([firstReplay, secondReplay]);
             await expect.poll(() => page.evaluate(() => window.offlineAudit.get(window.offlineAudit.actorQueueKey(17)))).toEqual([]);
+            expect(attempts).toHaveLength(2);
             expect(attempts.every(attempt => attempt.eventId === eventId && attempt.actor === 17), JSON.stringify(attempts)).toBe(true);
             expect(attempts.slice(1).every(attempt => attempt.status === 200 && attempt.messageId === attempts[0].messageId)).toBe(true);
             expect((await fixture.pool.query('SELECT count(*)::int AS count FROM messages WHERE client_event_id=$1', [eventId])).rows[0].count).toBe(1);
