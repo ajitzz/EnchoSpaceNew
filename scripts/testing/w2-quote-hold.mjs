@@ -404,8 +404,20 @@ try{
     assert.equal((await fixture.owner.query('SELECT count(*)::int AS count FROM booking_holds WHERE quote_id=$1',
       [originalHold.quote_id])).rows[0].count,1,'Recovery must not create a replacement hold');
     if(width===360){
-      const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-window.innerWidth);
-      assert.ok(overflow<=2,`Mobile quote/hold caused ${overflow}px horizontal overflow`);
+      await page.waitForLoadState('load');
+      await page.evaluate(()=>document.fonts.ready);
+      // Wait for the responsive layout itself, rather than an arbitrary delay
+      // after React restores the held state and late content completes layout.
+      await page.waitForFunction(()=>document.documentElement.scrollWidth-window.innerWidth<=2,
+        undefined,{timeout:3000});
+      const layout=await page.evaluate(()=>({
+        overflow:document.documentElement.scrollWidth-window.innerWidth,
+        offenders:[...document.querySelectorAll('body *')].map(element=>({
+          tag:element.tagName,className:String(element.className).slice(0,100),
+          right:Math.round(element.getBoundingClientRect().right),
+        })).filter(element=>element.right>window.innerWidth+2).slice(0,8),
+      }));
+      assert.ok(layout.overflow<=2,`Mobile quote/hold overflow: ${JSON.stringify(layout)}`);
       // A server-side expiry during recovery must surface as expiry of the same hold.
       await fixture.owner.query(`UPDATE booking_holds SET expires_at=clock_timestamp()-interval '1 second'
         WHERE id=$1`,[createdHold.id]);
