@@ -292,12 +292,13 @@ describe('CR1 actor-scoped browser persistence', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
     await processOfflineQueue();
 
-    expect(fetchSpy).toHaveBeenCalledWith('/api/wishlists', expect.objectContaining({
-      headers: expect.objectContaining({
-        Authorization: 'Bearer fresh-token',
-        'x-idempotency-key': queued.id,
-      }),
-    }));
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe('/api/wishlists');
+    const headers = new Headers(init?.headers);
+    expect(headers.get('authorization')).toBe('Bearer fresh-token');
+    expect(headers.get('x-idempotency-key')).toBe(queued.id);
+    expect(headers.get('content-type')).toBe('application/json');
     expect(idb.store.get(actorQueueKey(17))).toEqual([]);
   });
 
