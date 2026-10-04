@@ -173,6 +173,139 @@ afterAll(async () => {
 beforeEach(() => { serveLegacy = false; serveWaiting = false; uncertainMessages = false; denyExpiredMessages = false; denyExpiredAuth = false; malformedAuthCheck = false; heldAuthCheck = null; authCheckStarted = false; realConversationHandler = null; requests.length = 0; });
 
 describe('R1-03 production-built service worker with actual browser persistence', () => {
+    it('mounts the first installation when no worker yet controls the page', async () => {
+        const context = await browser.newContext({ serviceWorkers: 'allow' });
+        try {
+            await context.route('**/*', route => route.request().url().startsWith(origin + '/') ? route.continue() : route.abort());
+            const page = await context.newPage();
+            await page.goto(origin + '/seed');
+            expect(await page.evaluate(() => navigator.serviceWorker.controller)).toBeNull();
+            await openApplication(page);
+            expect(await page.evaluate(() => window.offlineAudit.state)).toBe('READY');
+        } finally { await context.close(); }
+    });
+
+    it('recognizes a compatible current controller whose policy reply is delayed beyond the soft probe deadline', async () => {
+        const context = await contextFixture();
+        try {
+            const page = context.pages()[0];
+            await page.addInitScript(() => {
+                const trace: Array<{ event: string; at: number; worker: string }> = [];
+                Object.assign(window, { startupPolicyTrace: trace });
+                const original = ServiceWorker.prototype.postMessage;
+                ServiceWorker.prototype.postMessage = function(message: unknown, transferOrOptions?: Transferable[] | StructuredSerializeOptions) {
+                    if (typeof message === 'object' && message !== null && (message as { type?: string }).type === 'ENCHO_OFFLINE_POLICY') {
+                        trace.push({ event: 'policy-dispatch-held', at: performance.now(), worker: this.scriptURL });
+                        // A narrow transport fault: every policy request reaches the
+                        // same compatible worker 150 ms after the old 600 ms deadline.
+                        setTimeout(() => {
+                            trace.push({ event: 'policy-dispatch-released', at: performance.now(), worker: this.scriptURL });
+                            Reflect.apply(original, this, [message, transferOrOptions ?? []]);
+                        }, 750);
+                        return;
+                    }
+                    Reflect.apply(original, this, [message, transferOrOptions ?? []]);
+                };
+            });
+            await page.goto(origin + '/index.html');
+            await page.waitForFunction(() => ['READY', 'UPGRADE_REQUIRED'].includes(window.offlineAudit?.state), undefined, { timeout: 20_000 });
+            const observed = await page.evaluate(async () => {
+                const registration = await navigator.serviceWorker.getRegistration();
+                return {
+                    state: window.offlineAudit.state,
+                    scope: registration?.scope,
+                    controller: navigator.serviceWorker.controller?.scriptURL,
+                    controllerState: navigator.serviceWorker.controller?.state,
+                    activeState: registration?.active?.state,
+                    trace: (window as Window & { startupPolicyTrace?: Array<{ event: string; at: number }> }).startupPolicyTrace,
+                };
+            });
+            expect(observed.state, JSON.stringify(observed)).toBe('READY');
+            const dispatched = observed.trace?.find(item => item.event === 'policy-dispatch-held');
+            const released = observed.trace?.find(item => item.event === 'policy-dispatch-released');
+            expect(dispatched && released && released.at - dispatched.at).toBeGreaterThan(600);
+            expect(observed.controller).toContain('/sw.js');
+            console.log(JSON.stringify({ receipt: 'STARTUP_DELAYED_COMPATIBLE', scope: observed.scope,
+                controller: '/sw.js', controllerState: observed.controllerState, activeState: observed.activeState,
+                dispatchDelayMs: Math.round(released!.at - dispatched!.at), gate: observed.state }));
+        } finally { await context.close(); }
+    }, 30_000);
+
+    it.each([
+        { mode: 'unanswered', expected: 'POLICY_UNVERIFIED' },
+        { mode: 'incompatible', expected: 'UPGRADE_REQUIRED' },
+    ] as const)('keeps the app closed when the current policy is $mode', async ({ mode, expected }) => {
+        const context = await contextFixture();
+        try {
+            const page = context.pages()[0];
+            await page.addInitScript(({ fault }) => {
+                const original = ServiceWorker.prototype.postMessage;
+                ServiceWorker.prototype.postMessage = function(message: unknown, transferOrOptions?: Transferable[] | StructuredSerializeOptions) {
+                    const transfer = Array.isArray(transferOrOptions) ? transferOrOptions : transferOrOptions?.transfer;
+                    if (typeof message === 'object' && message !== null && (message as { type?: string }).type === 'ENCHO_OFFLINE_POLICY') {
+                        if (fault === 'incompatible') (transfer?.[0] as MessagePort | undefined)?.postMessage({ version: 2, retiredQueuePurged: true });
+                        return; // Deliberately withhold the real worker's policy receipt.
+                    }
+                    Reflect.apply(original, this, [message, transferOrOptions ?? []]);
+                };
+            }, { fault: mode });
+            await page.goto(origin + '/index.html');
+            await page.waitForFunction(() => ['POLICY_UNVERIFIED', 'UPGRADE_REQUIRED'].includes(window.offlineAudit?.state), undefined, { timeout: 20_000 });
+            expect(await page.evaluate(() => window.offlineAudit.state)).toBe(expected);
+            expect(await page.getByTestId('actor').count()).toBe(0);
+            console.log(JSON.stringify({ receipt: 'STARTUP_POLICY_FAULT', mode, gate: expected, actorMounted: false }));
+        } finally { await context.close(); }
+    }, 30_000);
+
+    it('ignores a compatible receipt from the former controller after a legacy worker claims two tabs', async () => {
+        const context = await contextFixture();
+        try {
+            const page = context.pages()[0];
+            const second = await context.newPage(); await second.goto(origin + '/seed');
+            await page.addInitScript(() => {
+                const trace: Array<{ event: string; at: number }> = [];
+                const fixture: { oldWorker: ServiceWorker | null; port: MessagePort | null; trace: typeof trace } = {
+                    oldWorker: null, port: null, trace,
+                };
+                Object.assign(window, { startupPolicyFixture: fixture });
+                navigator.serviceWorker.addEventListener('controllerchange', () => trace.push({ event: 'controllerchange', at: performance.now() }));
+                const original = ServiceWorker.prototype.postMessage;
+                ServiceWorker.prototype.postMessage = function(message: unknown, transferOrOptions?: Transferable[] | StructuredSerializeOptions) {
+                    const transfer = Array.isArray(transferOrOptions) ? transferOrOptions : transferOrOptions?.transfer;
+                    if (typeof message === 'object' && message !== null && (message as { type?: string }).type === 'ENCHO_OFFLINE_POLICY'
+                        && fixture.oldWorker === null) {
+                        fixture.oldWorker = this;
+                        fixture.port = transfer?.[0] as MessagePort | null;
+                        trace.push({ event: 'old-probe-held', at: performance.now() });
+                        return;
+                    }
+                    Reflect.apply(original, this, [message, transferOrOptions ?? []]);
+                };
+            });
+            serveLegacy = true;
+            await page.goto(origin + '/index.html');
+            await page.waitForFunction(() => {
+                const fixture = (window as Window & { startupPolicyFixture?: { oldWorker: ServiceWorker | null } }).startupPolicyFixture;
+                return fixture?.oldWorker && navigator.serviceWorker.controller !== fixture.oldWorker;
+            }, undefined, { timeout: 15_000 });
+            await second.waitForFunction(() => navigator.serviceWorker.controller?.state === 'activated');
+            await page.evaluate(() => {
+                const fixture = (window as Window & { startupPolicyFixture?: { port: MessagePort | null; trace: Array<{ event: string; at: number }> } }).startupPolicyFixture!;
+                fixture.trace.push({ event: 'obsolete-reply-released', at: performance.now() });
+                fixture.port?.postMessage({ version: 3, retiredQueuePurged: true });
+            });
+            await page.waitForFunction(() => ['POLICY_UNVERIFIED', 'UPGRADE_REQUIRED', 'READY'].includes(window.offlineAudit?.state), undefined, { timeout: 20_000 });
+            const observed = await page.evaluate(() => ({
+                state: window.offlineAudit.state,
+                trace: (window as Window & { startupPolicyFixture?: { trace: Array<{ event: string; at: number }> } }).startupPolicyFixture?.trace,
+            }));
+            expect(observed.state, JSON.stringify(observed)).toBe('POLICY_UNVERIFIED');
+            expect(await page.getByTestId('actor').count()).toBe(0);
+            console.log(JSON.stringify({ receipt: 'STARTUP_STALE_CONTROLLER', events: observed.trace?.map(item => item.event),
+                gate: observed.state, actorMounted: false }));
+        } finally { await context.close(); }
+    }, 30_000);
+
     it('upgrades the real legacy Workbox queue, purges credentials and claims both tabs', async () => {
         serveLegacy = true;
         const context = await contextFixture();
@@ -599,7 +732,7 @@ describe('R1-03 production-built service worker with actual browser persistence'
         const context = await contextFixture();
         try {
             const page = context.pages()[0]; await page.goto(origin + '/index.html');
-            await page.waitForFunction(() => window.offlineAudit?.state === 'UPGRADE_REQUIRED', undefined, { timeout: 20_000 });
+            await page.waitForFunction(() => window.offlineAudit?.state === 'POLICY_UNVERIFIED', undefined, { timeout: 20_000 });
             expect(await page.getByTestId('actor').count()).toBe(0);
             expect(requests).toEqual([]);
         } finally { await context.close(); }

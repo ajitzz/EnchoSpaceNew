@@ -31,7 +31,8 @@ function Account() {
 
 void ensureSafeOfflineWorker().then(() => {
     createRoot(document.getElementById('root')!).render(<AuthProvider><Account /></AuthProvider>);
-}).catch(() => {
-    audit.state = 'UPGRADE_REQUIRED';
+}).catch(error => {
+    audit.state = error instanceof Error && error.message === 'OFFLINE_WORKER_POLICY_UNVERIFIED'
+        ? 'POLICY_UNVERIFIED' : 'UPGRADE_REQUIRED';
     document.getElementById('root')!.textContent = 'Secure update required';
 });

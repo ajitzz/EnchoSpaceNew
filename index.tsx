@@ -81,10 +81,13 @@ const mountApplication = () => root.render(
 
 // An installed old worker can independently persist credential-bearing POSTs.
 // Do not mount privileged application flows until its retirement is confirmed.
-void ensureSafeOfflineWorker().then(mountApplication).catch(() => {
+void ensureSafeOfflineWorker().then(mountApplication).catch(error => {
+  const unanswered = error instanceof Error && error.message === 'OFFLINE_WORKER_POLICY_UNVERIFIED';
   root.render(<main role="alert" style={{ padding: '2rem', maxWidth: '42rem', margin: 'auto' }}>
-    <h1>A secure app update is required</h1>
-    <p>Reconnect to the internet and reload Encho before signing in or submitting changes. Your confirmed bookings and messages remain on the server.</p>
+    <h1>{unanswered ? 'Unable to verify the secure app update' : 'A secure app update is required'}</h1>
+    <p>{unanswered
+      ? 'Encho could not confirm that this browser is using a safe app version. Reconnect and retry before signing in or submitting changes. Existing server-held stays keep their original expiry.'
+      : 'Reconnect to the internet and reload Encho before signing in or submitting changes. Your confirmed bookings and messages remain on the server.'}</p>
     <button type="button" onClick={() => window.location.reload()}>Reload Encho</button>
   </main>);
 });

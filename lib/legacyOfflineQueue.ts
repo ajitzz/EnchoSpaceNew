@@ -55,20 +55,29 @@ export async function purgeRetiredWorkboxQueue(factory: IDBFactory | undefined =
     }
 }
 
-async function probeWorker(worker: ServiceWorker): Promise<boolean> {
-    return new Promise(resolve => {
-        const channel = new MessageChannel();
-        const finish = (value: boolean) => {
-            clearTimeout(timer);
-            channel.port1.close();
-            channel.port2.close();
-            resolve(value);
-        };
-        const timer = setTimeout(() => finish(false), 600);
-        channel.port1.onmessage = event => finish(workerReceiptSchema.safeParse(event.data).success);
-        try { worker.postMessage({ type: 'ENCHO_OFFLINE_POLICY' }, [channel.port2]); }
-        catch { finish(false); }
-    });
+type ProbeOutcome = 'COMPATIBLE' | 'INCOMPATIBLE' | 'UNANSWERED';
+
+function probeWorker(worker: ServiceWorker, deadline: number) {
+    const channel = new MessageChannel();
+    let outcome: ProbeOutcome | null = null;
+    let settle!: (value: ProbeOutcome) => void;
+    const settled = new Promise<ProbeOutcome>(resolve => { settle = resolve; });
+    const finish = (value: ProbeOutcome) => {
+        if (outcome !== null) return;
+        outcome = value;
+        clearTimeout(timer);
+        channel.port1.close();
+        channel.port2.close();
+        settle(value);
+    };
+    // One probe remains able to accept a late reply until the bounded overall
+    // deadline. The 600 ms fast path below is not a version-mismatch verdict.
+    const timer = setTimeout(() => finish('UNANSWERED'), Math.max(1, deadline - Date.now()));
+    channel.port1.onmessage = event => finish(workerReceiptSchema.safeParse(event.data).success
+        ? 'COMPATIBLE' : 'INCOMPATIBLE');
+    try { worker.postMessage({ type: 'ENCHO_OFFLINE_POLICY' }, [channel.port2]); }
+    catch { finish('UNANSWERED'); }
+    return { worker, settled, get outcome() { return outcome; }, cancel: () => finish('UNANSWERED') };
 }
 
 /** A new client must not run authenticated actions through an old POST-replaying
@@ -78,23 +87,52 @@ export async function ensureSafeOfflineWorker(): Promise<void> {
     if (typeof navigator === 'undefined' || !navigator.serviceWorker) return;
     const container = navigator.serviceWorker;
     const registration = await container.getRegistration();
-    const existingWorker = container.controller ?? registration?.active;
-    if (existingWorker && await probeWorker(existingWorker)) return;
-    if (!registration) {
-        if (container.controller) throw new Error('OFFLINE_WORKER_UPGRADE_REQUIRED');
-        return;
-    }
+    const currentWorker = () => container.controller ?? registration?.active ?? null;
+    if (!registration && !container.controller) return;
+    const deadline = Date.now() + 10_000;
+    const probes = new Map<ServiceWorker, ReturnType<typeof probeWorker>>();
+    const takeoverRequested = new Set<ServiceWorker>();
+    const getProbe = (worker: ServiceWorker) => {
+        let probe = probes.get(worker);
+        if (!probe) { probe = probeWorker(worker, deadline); probes.set(worker, probe); }
+        return probe;
+    };
     try {
-        await registration.update();
-        registration.waiting?.postMessage({ type: 'SKIP_WAITING' });
-        // The new worker purges again before claim, closing the old-worker
-        // enqueue-after-page-purge race. Polling handles interrupted updates.
-        const deadline = Date.now() + 10_000;
-        do {
-            const controller = container.controller;
-            if (controller && await probeWorker(controller)) return;
+        const existing = currentWorker();
+        if (existing) {
+            const probe = getProbe(existing);
+            let fastTimer: ReturnType<typeof setTimeout> | undefined;
+            await Promise.race([probe.settled, new Promise<void>(resolve => {
+                fastTimer = setTimeout(resolve, 600);
+            })]);
+            if (fastTimer) clearTimeout(fastTimer);
+            if (probe.outcome === 'COMPATIBLE' && currentWorker() === existing) return;
+        }
+        // An unanswered fast probe stays pending while an update is attempted.
+        // A waiting worker is asked to take over only after its own policy
+        // receipt proves compatibility; registration state alone is not proof.
+        if (registration) void registration.update().catch(() => { /* Keep probing the current controller until the deadline. */ });
+        while (Date.now() < deadline) {
+            const controller = currentWorker();
+            if (controller) {
+                const probe = getProbe(controller);
+                if (probe.outcome === 'COMPATIBLE' && currentWorker() === controller) return;
+            }
+            const waiting = registration?.waiting;
+            if (waiting && waiting !== controller && !takeoverRequested.has(waiting)) {
+                const probe = getProbe(waiting);
+                if (probe.outcome === 'COMPATIBLE') {
+                    takeoverRequested.add(waiting);
+                    try { waiting.postMessage({ type: 'SKIP_WAITING' }); }
+                    catch { /* No takeover authority follows a failed request. */ }
+                }
+            }
             await new Promise(resolve => setTimeout(resolve, 100));
-        } while (Date.now() < deadline);
-    } catch { /* Return a stable non-sensitive error; do not mount the old client. */ }
-    throw new Error('OFFLINE_WORKER_UPGRADE_REQUIRED');
+        }
+        const finalWorker = currentWorker();
+        throw new Error(finalWorker && getProbe(finalWorker).outcome === 'INCOMPATIBLE'
+            ? 'OFFLINE_WORKER_UPGRADE_REQUIRED' : 'OFFLINE_WORKER_POLICY_UNVERIFIED');
+    } finally {
+        for (const probe of probes.values()) probe.cancel();
+    }
 }

@@ -352,31 +352,76 @@ try{
     else await quoteButton.click();
     await page.getByText(/Room subtotal:/).waitFor({state:'visible',timeout:15000});
     const holdButton=page.getByRole('button',{name:'Temporarily hold this room'});
+    const holdResponse=page.waitForResponse(response=>response.url().endsWith('/api/v2/stays/holds')
+      &&response.request().method()==='POST');
     if(width===360){await holdButton.focus();await page.keyboard.press('Enter');}
     else await holdButton.click();
+    const createdHold=(await (await holdResponse).json()).hold;
+    assert.ok(createdHold?.id&&createdHold?.expiresAt,'Browser hold response needs canonical identity and expiry');
     try{await page.getByText(/Temporarily held until/).waitFor({state:'visible',timeout:15000});}
     catch(error){
       console.error('Guest hold panel:',await page.getByRole('region',{name:'Room quote and temporary hold'}).innerText());
       throw error;
     }
+    const originalHold=(await fixture.owner.query('SELECT id,quote_id,status,expires_at FROM booking_holds WHERE id=$1',
+      [createdHold.id])).rows[0];
+    assert.equal(originalHold.status,'ACTIVE');
+    assert.equal(new Date(originalHold.expires_at).toISOString(),createdHold.expiresAt);
+    if(width===360){
+      await page.evaluate(async()=>{
+        await navigator.serviceWorker.register('/sw.js');
+        await navigator.serviceWorker.ready;
+        if(!navigator.serviceWorker.controller)await new Promise(resolve=>
+          navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true}));
+        localStorage.setItem('encho:test:withhold-policy','1');
+      });
+      await page.addInitScript(()=>{
+        const original=ServiceWorker.prototype.postMessage;
+        ServiceWorker.prototype.postMessage=function(message,options){
+          if(message?.type==='ENCHO_OFFLINE_POLICY'
+            &&localStorage.getItem('encho:test:withhold-policy')==='1')return;
+          return Reflect.apply(original,this,[message,options]);
+        };
+      });
+    }
     await page.reload({waitUntil:'domcontentloaded'});
-    // An installing service worker can briefly keep the app closed while its
-    // replay-policy probe completes. Exercise the explicit safe recovery
-    // control instead of disabling the worker in this production-shaped test.
-    await page.waitForFunction(()=>document.body.textContent?.includes('Temporarily held until') ||
-      document.body.textContent?.includes('A secure app update is required'),{timeout:15000});
-    if(await page.getByRole('heading',{name:'A secure app update is required'}).isVisible()){
-      console.error(`Browser W2 safe-worker recovery ${width}px`);
+    if(width===360){
+      await page.getByRole('heading',{name:'Unable to verify the secure app update'}).waitFor({timeout:15000});
+      const whileBlocked=(await fixture.owner.query('SELECT id,status,expires_at FROM booking_holds WHERE id=$1',
+        [createdHold.id])).rows[0];
+      assert.equal(whileBlocked.id,originalHold.id);
+      assert.equal(whileBlocked.status,'ACTIVE');
+      assert.equal(new Date(whileBlocked.expires_at).toISOString(),createdHold.expiresAt);
+      await page.evaluate(()=>localStorage.removeItem('encho:test:withhold-policy'));
       await page.getByRole('button',{name:'Reload Encho'}).click();
     }
     await page.getByText(/Temporarily held until/).waitFor({state:'visible',timeout:15000});
+    const recovered=(await fixture.owner.query('SELECT id,status,expires_at FROM booking_holds WHERE id=$1',
+      [createdHold.id])).rows[0];
+    assert.equal(recovered.id,originalHold.id);
+    assert.equal(recovered.status,'ACTIVE');
+    assert.equal(new Date(recovered.expires_at).toISOString(),createdHold.expiresAt);
+    assert.equal((await fixture.owner.query('SELECT count(*)::int AS count FROM booking_holds WHERE quote_id=$1',
+      [originalHold.quote_id])).rows[0].count,1,'Recovery must not create a replacement hold');
     if(width===360){
-      await page.waitForTimeout(500);
       const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-window.innerWidth);
       assert.ok(overflow<=2,`Mobile quote/hold caused ${overflow}px horizontal overflow`);
+      // A server-side expiry during recovery must surface as expiry of the same hold.
+      await fixture.owner.query(`UPDATE booking_holds SET expires_at=clock_timestamp()-interval '1 second'
+        WHERE id=$1`,[createdHold.id]);
+      await page.reload({waitUntil:'domcontentloaded'});
+      await page.getByText(/Hold expired\. Request a fresh quote/).waitFor({state:'visible',timeout:15000});
+      const expiredOriginal=(await fixture.owner.query(
+        'SELECT id,quote_id,status,expires_at FROM booking_holds WHERE id=$1',[createdHold.id])).rows[0];
+      assert.equal(expiredOriginal.id,originalHold.id);
+      assert.equal(expiredOriginal.quote_id,originalHold.quote_id);
+      assert.ok(new Date(expiredOriginal.expires_at).getTime()<=Date.now());
+      assert.equal((await fixture.owner.query('SELECT count(*)::int AS count FROM booking_holds WHERE quote_id=$1',
+        [originalHold.quote_id])).rows[0].count,1,'Expiry recovery must not replace the original hold');
+    }else{
+      await page.getByRole('button',{name:'Release hold'}).click();
+      await page.getByText(/Hold released/).waitFor({state:'visible',timeout:15000});
     }
-    await page.getByRole('button',{name:'Release hold'}).click();
-    await page.getByText(/Hold released/).waitFor({state:'visible',timeout:15000});
     await context.close();
   }
   const foreignDraft=await service.createDraft(fixture.principal(11),{
