@@ -6,7 +6,8 @@ import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { motion, AnimatePresence, useScroll, useTransform, useMotionTemplate, useMotionValueEvent } from 'framer-motion';
 import { SEO } from './SEO';
 import { Listing, Room, type PublicAcceptedOffer } from '../types';
-import {acceptedOfferIsCurrent,currentIndiaDate,formatAcceptedOfferPrice,nextAcceptedOfferRefreshDelay} from '../src/shared/offers/publicPrice';
+import {acceptedOfferIsCurrent,currentIndiaDate,formatAcceptedOfferPrice} from '../src/shared/offers/publicPrice';
+import {useAcceptedOfferClock} from './offers/useAcceptedOfferClock';
 
 export function acceptedOfferCoversSelectedStay(
   offer: PublicAcceptedOffer | null | undefined,
@@ -411,16 +412,9 @@ const ListingDetailsNewContent: React.FC<ListingDetailsNewProps> = ({
     : availability?.rooms.find(room => room.id === selectedCanonicalRoom?.canonicalId)?.available ?? null;
   const availabilityUnknown = remainingRooms === null;
   const isDateRangeBlocked = remainingRooms === null || remainingRooms === 0;
-  const [offerClock, setOfferClock] = useState(() => Date.now());
   const selectedOfferCandidate = selectedCanonicalRoom?.room.offer;
-  const selectedOffer = acceptedOfferIsCurrent(selectedOfferCandidate, Math.max(offerClock, Date.now())) ? selectedOfferCandidate : null;
-  useEffect(() => {
-    if (!selectedOffer) return;
-    const delay = nextAcceptedOfferRefreshDelay([selectedOffer],Date.now());
-    if(delay===null)return;
-    const timeout = window.setTimeout(() => setOfferClock(Date.now()), delay);
-    return () => window.clearTimeout(timeout);
-  }, [selectedOffer, offerClock]);
+  const offerClock=useAcceptedOfferClock(selectedOfferCandidate);
+  const selectedOffer = acceptedOfferIsCurrent(selectedOfferCandidate,offerClock) ? selectedOfferCandidate : null;
 
   // The selected canonical room carries its own accepted offer. No property
   // summary or historical room base rate may replace a missing room offer.

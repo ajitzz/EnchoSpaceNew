@@ -4,7 +4,8 @@ import { uiAudio } from './audio';
 import { Listing } from '../types';
 import { ChevronRight, ChevronLeft, ShieldCheck, StarIcon, HeartIcon, InfoIcon, MapIcon, EyeIcon } from './Icons';
 import { OptimizedImage } from './OptimizedImage';
-import {acceptedOfferIsCurrent,formatAcceptedOfferPrice,nextAcceptedOfferRefreshDelay} from '../src/shared/offers/publicPrice';
+import {acceptedOfferIsCurrent,formatAcceptedOfferPrice} from '../src/shared/offers/publicPrice';
+import {useAcceptedOfferClock} from './offers/useAcceptedOfferClock';
 import { getRatingWord, formatRating } from '../lib/ratingUtils';
 import { Home, Layers, Users, HelpCircle, ShieldAlert, Check, Share2 } from 'lucide-react';
 
@@ -127,14 +128,8 @@ const ListingCard: React.FC<ListingCardProps> = ({ listing, onHover, onClick, is
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [offerClock, setOfferClock] = useState(() => Date.now());
-  const visibleOffer = acceptedOfferIsCurrent(listing.fromOffer, Math.max(offerClock, Date.now())) ? listing.fromOffer : null;
-  useEffect(() => {
-    const delay = nextAcceptedOfferRefreshDelay([listing.fromOffer], Date.now());
-    if (delay === null) return;
-    const timeout = window.setTimeout(() => setOfferClock(Date.now()), delay);
-    return () => window.clearTimeout(timeout);
-  }, [listing.fromOffer, offerClock]);
+  const offerClock=useAcceptedOfferClock(listing.fromOffer);
+  const visibleOffer = acceptedOfferIsCurrent(listing.fromOffer, offerClock) ? listing.fromOffer : null;
 
   const handleShare = async (e: React.MouseEvent) => {
     e.stopPropagation();
