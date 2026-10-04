@@ -1,0 +1,13 @@
+{
+  "evidenceLayer": "local-disposable-postgres-built-artifact",
+  "checks": [
+    {
+      "script": "scripts/testing/w2-hold-without-quote.mjs",
+      "exitCode": 0
+    },
+    {
+      "script": "scripts/testing/w2-quote-hold.mjs",
+      "exitCode": 0
+    }
+  ]
+}

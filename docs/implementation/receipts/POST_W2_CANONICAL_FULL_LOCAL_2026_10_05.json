@@ -1,0 +1,9 @@
+{
+  "evidenceLayer": "canonical-local-node24-regression",
+  "canonicalCodeSubject": "13ce07a7850e2f85b235aa472fafeacbfb034dd1",
+  "filesPassed": 290,
+  "filesFailed": 0,
+  "testsPassed": 3249,
+  "testsFailed": 0,
+  "testsPending": 0
+}
