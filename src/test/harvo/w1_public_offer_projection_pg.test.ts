@@ -130,10 +130,20 @@ describe('W1 accepted offer public projection on disposable PostgreSQL',()=>{
       `);
       const property={id:1,title:'Legacy fixture',slug:'legacy-fixture',currency:'INR',
         publication_status:'published',price:999,rooms:[]};
+      await expect(resolvePublicStayAuthority(legacy.pool,property))
+        .rejects.toBeInstanceOf(PublicStayAuthorityError);
+      await legacy.pool.query(`CREATE TABLE schema_migrations(version VARCHAR(255) PRIMARY KEY,checksum TEXT NOT NULL);
+        INSERT INTO schema_migrations(version,checksum) VALUES
+        ('048_users_active_account_authority.sql','28358f97bec3ea2a0abfeb912df0f3493060cde0bc9a17f10a09bd8714fc1c23')`);
       const before=toPublicListingCardProjection(await resolvePublicStayAuthority(legacy.pool,property));
       expect(before).toMatchObject({price:null,priceState:'VERIFIED_OFFER_UNAVAILABLE',fromOffer:null});
-      await legacy.pool.query(`CREATE TABLE schema_migrations(version VARCHAR(255) PRIMARY KEY);
-        INSERT INTO schema_migrations(version) VALUES('049_accepted_sellable_offers.sql')`);
+      await legacy.pool.query("UPDATE schema_migrations SET checksum='drifted' WHERE version='048_users_active_account_authority.sql'");
+      await expect(resolvePublicStayAuthority(legacy.pool,property))
+        .rejects.toBeInstanceOf(PublicStayAuthorityError);
+      await legacy.pool.query(`UPDATE schema_migrations SET checksum=$1 WHERE version=$2`,
+        ['28358f97bec3ea2a0abfeb912df0f3493060cde0bc9a17f10a09bd8714fc1c23',
+          '048_users_active_account_authority.sql']);
+      await legacy.pool.query("INSERT INTO schema_migrations(version,checksum) VALUES('049_accepted_sellable_offers.sql','recorded')");
       await expect(resolvePublicStayAuthority(legacy.pool,property))
         .rejects.toBeInstanceOf(PublicStayAuthorityError);
     }finally{await legacy.close();}

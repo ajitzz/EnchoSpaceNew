@@ -63,6 +63,8 @@ vi.mock('pg', async (importOriginal) => {
       version VARCHAR(255) PRIMARY KEY,
       checksum TEXT NOT NULL
     );
+    INSERT INTO schema_migrations(version,checksum) VALUES
+      ('048_users_active_account_authority.sql','28358f97bec3ea2a0abfeb912df0f3493060cde0bc9a17f10a09bd8714fc1c23');
     CREATE TABLE users (
       id SERIAL PRIMARY KEY,
       email VARCHAR(255) UNIQUE,

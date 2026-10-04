@@ -29,6 +29,11 @@ export class PublicStayAuthorityError extends Error{
 type OfferAuthorityPool=Pick<Pool,'connect'>;
 type QueryPort=Pick<Pool,'query'>;
 type OfferAuthority={eligibleOffers:EligiblePublicOffer[];states:OfferStateRow[]};
+// A pre-049 deployment is a migration state, not merely missing tables. Pin
+// the last applied pre-offer migration bytes so absent/drifted history cannot
+// masquerade as W0's legitimate null-price compatibility window.
+const preOfferBaseline={version:'048_users_active_account_authority.sql',
+  checksum:'28358f97bec3ea2a0abfeb912df0f3493060cde0bc9a17f10a09bd8714fc1c23'};
 
 const statePriority:Record<OfferStateRow['state'],number>={
   VERIFIED_OFFER_AVAILABLE:0,OFFER_STALE_REVIEW:1,LEGACY_DATA_UNRECONCILED:2,
@@ -56,10 +61,13 @@ async function isPreOfferSchema(pool:QueryPort):Promise<boolean>{
   const catalog=(await pool.query(`SELECT to_regclass('public.sellable_offers') AS offer_table,
     to_regclass('public.schema_migrations') AS history_table`)).rows[0];
   if(!catalog||catalog.offer_table!==null)return false;
-  if(catalog.history_table===null)return true;
-  const history=await pool.query('SELECT 1 FROM public.schema_migrations WHERE version=$1 LIMIT 1',
-    ['049_accepted_sellable_offers.sql']);
-  return history.rowCount===0;
+  if(catalog.history_table===null)return false;
+  const baseline=await pool.query('SELECT checksum FROM public.schema_migrations WHERE version=$1 LIMIT 1',
+    [preOfferBaseline.version]);
+  if(baseline.rowCount!==1||baseline.rows[0]?.checksum!==preOfferBaseline.checksum)return false;
+  const later=await pool.query('SELECT 1 FROM public.schema_migrations WHERE version>$1 LIMIT 1',
+    [preOfferBaseline.version]);
+  return later.rowCount===0;
 }
 
 async function readCanonical(port:QueryPort,ids:number[]){
