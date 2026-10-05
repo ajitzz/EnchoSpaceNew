@@ -289,8 +289,64 @@ describe('W4-B Task 2: Canonical Cancellation Completion and Exact Booked-Invent
     expect(decisionAuth.requestEventId).toBe(res.requestEventId);
   });
 
-  it('3. issuer cannot execute completion', async () => {
-    const res = await createCancellationRequestedReservation();
+  it('2a. request event actor_kind != GUEST is denied', async () => {
+    const res = await createCommittedReservation('user:10', 1);
+    const fakeCmd = randomUUID();
+    const {rows: [fakeEv]} = await fixture.owner.query<{event_id: string}>(
+      `INSERT INTO canonical_reservation_events (
+        reservation_id, sequence_number, event_type, actor_kind, actor_principal, origin_kind, reason_code, command_id
+      ) VALUES ($1, 1, 'CANCELLATION_REQUESTED', 'HOST', 'user:host_99', 'ENCHO_DIRECT', 'HOST_CANCEL', $2)
+      RETURNING event_id`,
+      [res.reservationId, fakeCmd]
+    );
+
+    await expect(
+      issueCancellationDecisionAuthorization(cancellationIssuer, {
+        reservationId: res.reservationId,
+        requestEventId: fakeEv.event_id,
+        commandId: randomUUID(),
+        reasonCode: 'CANCELLATION_APPROVED',
+      })
+    ).rejects.toThrow('CANCELLATION_REQUEST_ACTOR_NOT_SUPPORTED');
+  });
+
+  it('2b. request event origin_kind != ENCHO_DIRECT is denied', async () => {
+    const res = await createCommittedReservation('user:10', 1);
+    const fakeCmd = randomUUID();
+    const {rows: [fakeEv]} = await fixture.owner.query<{event_id: string}>(
+      `INSERT INTO canonical_reservation_events (
+        reservation_id, sequence_number, event_type, actor_kind, actor_principal, origin_kind, reason_code, command_id
+      ) VALUES ($1, 1, 'CANCELLATION_REQUESTED', 'GUEST', 'user:10', 'EXTERNAL_CHANNEL', 'GUEST_CANCEL', $2)
+      RETURNING event_id`,
+      [res.reservationId, fakeCmd]
+    );
+
+    await expect(
+      issueCancellationDecisionAuthorization(cancellationIssuer, {
+        reservationId: res.reservationId,
+        requestEventId: fakeEv.event_id,
+        commandId: randomUUID(),
+        reasonCode: 'CANCELLATION_APPROVED',
+      })
+    ).rejects.toThrow('CANCELLATION_ORIGIN_NOT_SUPPORTED');
+  });
+
+  it('2c. request event belongs to another reservation is denied', async () => {
+    const res1 = await createCancellationRequestedReservation('user:10');
+    const res2 = await createCancellationRequestedReservation('user:10');
+
+    await expect(
+      issueCancellationDecisionAuthorization(cancellationIssuer, {
+        reservationId: res1.reservationId,
+        requestEventId: res2.requestEventId,
+        commandId: randomUUID(),
+        reasonCode: 'CANCELLATION_APPROVED',
+      })
+    ).rejects.toThrow('CANCELLATION_EVENT_RESERVATION_MISMATCH');
+  });
+
+  it('2d. request event is not current/latest applicable request is denied', async () => {
+    const res = await createCancellationRequestedReservation('user:10');
     const completionCmd = randomUUID();
     const decisionAuth = await issueCancellationDecisionAuthorization(cancellationIssuer, {
       reservationId: res.reservationId,
@@ -299,57 +355,129 @@ describe('W4-B Task 2: Canonical Cancellation Completion and Exact Booked-Invent
       reasonCode: 'CANCELLATION_APPROVED',
     });
 
+    // Complete cancellation so latest event becomes CANCELLED (seq 2)
+    await completeReservationCancellation(cancellationExecutor, {
+      authorizationId: decisionAuth.authorizationId,
+      commandId: completionCmd,
+      reservationId: res.reservationId,
+      reasonCode: 'CANCELLATION_APPROVED',
+    });
+
+    // Now attempting to issue a new authorization for the stale CANCELLATION_REQUESTED event fails
+    await expect(
+      issueCancellationDecisionAuthorization(cancellationIssuer, {
+        reservationId: res.reservationId,
+        requestEventId: res.requestEventId,
+        commandId: randomUUID(),
+        reasonCode: 'CANCELLATION_APPROVED',
+      })
+    ).rejects.toThrow('CANCELLATION_LIFECYCLE_STATE_CONFLICT');
+  });
+
+  it('2e. random request_event_id is denied', async () => {
+    const res = await createCancellationRequestedReservation('user:10');
+
+    await expect(
+      issueCancellationDecisionAuthorization(cancellationIssuer, {
+        reservationId: res.reservationId,
+        requestEventId: randomUUID(),
+        commandId: randomUUID(),
+        reasonCode: 'CANCELLATION_APPROVED',
+      })
+    ).rejects.toThrow('CANCELLATION_REQUEST_EVENT_NOT_FOUND');
+  });
+
+  it('2f. decision authorization immutably binds request event, command, reservation, origin, and decision provenance', async () => {
+    const res = await createCancellationRequestedReservation('user:10');
+    const completionCmd = randomUUID();
+    const decisionAuth = await issueCancellationDecisionAuthorization(cancellationIssuer, {
+      reservationId: res.reservationId,
+      requestEventId: res.requestEventId,
+      commandId: completionCmd,
+      reasonCode: 'CANCELLATION_APPROVED',
+      reasonText: 'Binding verification',
+    });
+
+    const {rows: [authRow]} = await fixture.owner.query<{
+      authorization_id: string;
+      reservation_id: string;
+      request_event_id: string;
+      command_id: string;
+      command_type: string;
+      origin_kind: string;
+      decision_source_kind: string;
+      reason_code: string;
+      reason_text: string | null;
+      decision_fingerprint: string;
+      issued_at: string;
+      expires_at: string;
+      consumed_at: string | null;
+      consumed_by_event_id: string | null;
+    }>(
+      `SELECT * FROM canonical_reservation_cancellation_authorizations WHERE authorization_id = $1`,
+      [decisionAuth.authorizationId]
+    );
+
+    expect(authRow.reservation_id).toBe(res.reservationId);
+    expect(authRow.request_event_id).toBe(res.requestEventId);
+    expect(authRow.command_id).toBe(completionCmd);
+    expect(authRow.command_type).toBe('COMPLETE_CANCELLATION');
+    expect(authRow.origin_kind).toBe('ENCHO_DIRECT');
+    expect(authRow.decision_source_kind).toBe('INTERNAL_AUTHORITY_PRIMITIVE');
+    expect(authRow.reason_code).toBe('CANCELLATION_APPROVED');
+    expect(authRow.reason_text).toBe('Binding verification');
+    expect(authRow.decision_fingerprint).toBe(decisionAuth.decisionFingerprint);
+    expect(authRow.consumed_at).toBeNull();
+    expect(authRow.consumed_by_event_id).toBeNull();
+
+    // Verify immutability trigger blocks unauthorized mutations and deletions
+    await expect(
+      fixture.owner.query(
+        `UPDATE canonical_reservation_cancellation_authorizations SET reason_code = 'HACK' WHERE authorization_id = $1`,
+        [decisionAuth.authorizationId]
+      )
+    ).rejects.toThrow('CANONICAL_CANCELLATION_AUTHORIZATION_IMMUTABLE');
+
+    await expect(
+      fixture.owner.query(
+        `UPDATE canonical_reservation_cancellation_authorizations SET reservation_id = $1 WHERE authorization_id = $2`,
+        [randomUUID(), decisionAuth.authorizationId]
+      )
+    ).rejects.toThrow('CANONICAL_CANCELLATION_AUTHORIZATION_IMMUTABLE');
+
+    await expect(
+      fixture.owner.query(
+        `DELETE FROM canonical_reservation_cancellation_authorizations WHERE authorization_id = $1`,
+        [decisionAuth.authorizationId]
+      )
+    ).rejects.toThrow('CANONICAL_CANCELLATION_AUTHORIZATION_IMMUTABLE');
+  });
+
+  it('3. issuer negative privilege probes (all requested tables and functions)', async () => {
     const client = await cancellationIssuer.connect();
     try {
+      // 1. complete function EXECUTE denied
       await expect(
         client.query(
-          `SELECT * FROM canonical_complete_reservation_cancellation($1::uuid, $2::uuid, $3::uuid, 'CANCELLATION_APPROVED', NULL)`,
-          [decisionAuth.authorizationId, completionCmd, res.reservationId]
+          `SELECT * FROM canonical_complete_reservation_cancellation($1::uuid, $2::uuid, $3::uuid, 'TEST', NULL)`,
+          [randomUUID(), randomUUID(), randomUUID()]
         )
       ).rejects.toThrow(/permission denied for function canonical_complete_reservation_cancellation/);
-    } finally {
-      client.release();
-    }
-  });
 
-  it('4. executor cannot issue decision authority', async () => {
-    const res = await createCancellationRequestedReservation();
-    const completionCmd = randomUUID();
-
-    const client = await cancellationExecutor.connect();
-    try {
-      await expect(
-        client.query(
-          `SELECT * FROM canonical_issue_cancellation_decision_authorization($1::uuid, $2::uuid, $3::uuid, 'CANCELLATION_APPROVED', NULL)`,
-          [res.reservationId, res.requestEventId, completionCmd]
-        )
-      ).rejects.toThrow(/permission denied for function canonical_issue_cancellation_decision_authorization/);
-    } finally {
-      client.release();
-    }
-  });
-
-  it('5. executor cannot raw-update inventory', async () => {
-    const client = await cancellationExecutor.connect();
-    try {
+      // 2. raw UPDATE inventory_days denied
       await expect(
         client.query(`UPDATE inventory_days SET booked_units = booked_units - 1 WHERE room_type_id = 101`)
       ).rejects.toThrow(/permission denied for table inventory_days/);
-    } finally {
-      client.release();
-    }
-  });
 
-  it('6. executor cannot raw-insert lifecycle event/release evidence', async () => {
-    const client = await cancellationExecutor.connect();
-    try {
+      // 3. raw INSERT canonical_reservation_events denied
       await expect(
         client.query(`INSERT INTO canonical_reservation_events (
           reservation_id, sequence_number, event_type, actor_kind, actor_principal, origin_kind, reason_code, command_id
-        ) VALUES ($1, 2, 'CANCELLED', 'GUEST', 'user:10', 'ENCHO_DIRECT', 'TEST', $2)`,
+        ) VALUES ($1, 2, 'CANCELLED', 'INTERNAL_DECISION', 'internal:test', 'ENCHO_DIRECT', 'TEST', $2)`,
         [randomUUID(), randomUUID()])
       ).rejects.toThrow(/permission denied for table canonical_reservation_events/);
 
+      // 4. raw INSERT cancellation release fence denied
       await expect(
         client.query(`INSERT INTO canonical_reservation_cancellation_inventory_releases (
           reservation_id, event_id, command_id, authorization_id, release_fingerprint
@@ -357,12 +485,191 @@ describe('W4-B Task 2: Canonical Cancellation Completion and Exact Booked-Invent
         [randomUUID(), randomUUID(), randomUUID(), randomUUID(), 'a'.repeat(64)])
       ).rejects.toThrow(/permission denied for table canonical_reservation_cancellation_inventory_releases/);
 
+      // 5. raw UPDATE cancellation release fence denied
+      await expect(
+        client.query(`UPDATE canonical_reservation_cancellation_inventory_releases SET release_fingerprint = 'x'`)
+      ).rejects.toThrow(/permission denied for table canonical_reservation_cancellation_inventory_releases/);
+
+      // 6. raw INSERT per-night release evidence denied
       await expect(
         client.query(`INSERT INTO canonical_reservation_cancellation_release_nights (
           release_id, reservation_id, inventory_day_id, stay_date, released_units
         ) VALUES ($1, $2, 1, '2026-10-06', 1)`,
         [randomUUID(), randomUUID()])
       ).rejects.toThrow(/permission denied for table canonical_reservation_cancellation_release_nights/);
+
+      // 7. raw UPDATE per-night release evidence denied
+      await expect(
+        client.query(`UPDATE canonical_reservation_cancellation_release_nights SET released_units = 99`)
+      ).rejects.toThrow(/permission denied for table canonical_reservation_cancellation_release_nights/);
+
+      // 8. raw UPDATE canonical_reservations denied
+      await expect(
+        client.query(`UPDATE canonical_reservations SET status = 'CANCELLED' WHERE id = $1`, [randomUUID()])
+      ).rejects.toThrow(/permission denied for table canonical_reservations/);
+
+      // 9. raw UPDATE/DELETE canonical_reservation_nights denied
+      await expect(
+        client.query(`UPDATE canonical_reservation_nights SET units = 0 WHERE reservation_id = $1`, [randomUUID()])
+      ).rejects.toThrow(/permission denied for table canonical_reservation_nights/);
+      await expect(
+        client.query(`DELETE FROM canonical_reservation_nights WHERE reservation_id = $1`, [randomUUID()])
+      ).rejects.toThrow(/permission denied for table canonical_reservation_nights/);
+
+      // 10. raw mutation of canonical_payment_attempts denied
+      await expect(
+        client.query(`UPDATE canonical_payment_attempts SET payment_state = 'REFUNDED'`)
+      ).rejects.toThrow(/permission denied for table canonical_payment_attempts/);
+
+      // 11. raw mutation of canonical_payment_reconciliations denied
+      await expect(
+        client.query(`INSERT INTO canonical_payment_reconciliations (payment_attempt_id, reason) VALUES ($1, 'AMOUNT_MISMATCH')`,
+        [randomUUID()])
+      ).rejects.toThrow(/permission denied for table canonical_payment_reconciliations/);
+
+      // 12. raw mutation of canonical_provider_events denied
+      await expect(
+        client.query(`UPDATE canonical_provider_events SET status = 'QUARANTINED'`)
+      ).rejects.toThrow(/permission denied for table canonical_provider_events/);
+
+      // 13. raw mutation of canonical_payable_authorities denied
+      await expect(
+        client.query(`UPDATE canonical_payable_authorities SET status = 'REFUNDED'`)
+      ).rejects.toThrow(/permission denied for table canonical_payable_authorities/);
+
+      // 14. raw mutation of canonical_payment_reservations denied
+      await expect(
+        client.query(`UPDATE canonical_payment_reservations SET status = 'CANCELLED'`)
+      ).rejects.toThrow(/permission denied for table canonical_payment_reservations/);
+    } finally {
+      client.release();
+    }
+  });
+
+  it('4. executor negative privilege probes (all requested tables and functions)', async () => {
+    const client = await cancellationExecutor.connect();
+    try {
+      // 1. decision issuer function EXECUTE denied
+      await expect(
+        client.query(
+          `SELECT * FROM canonical_issue_cancellation_decision_authorization($1::uuid, $2::uuid, $3::uuid, 'TEST', NULL)`,
+          [randomUUID(), randomUUID(), randomUUID()]
+        )
+      ).rejects.toThrow(/permission denied for function canonical_issue_cancellation_decision_authorization/);
+
+      // 2. raw SELECT/INSERT/UPDATE/DELETE on decision authorization table denied
+      await expect(
+        client.query(`SELECT * FROM canonical_reservation_cancellation_authorizations`)
+      ).rejects.toThrow(/permission denied for table canonical_reservation_cancellation_authorizations/);
+      await expect(
+        client.query(`INSERT INTO canonical_reservation_cancellation_authorizations (
+          authorization_id, reservation_id, request_event_id, command_id, command_type, origin_kind, reason_code, decision_fingerprint, expires_at
+        ) VALUES ($1, $2, $3, $4, 'COMPLETE_CANCELLATION', 'ENCHO_DIRECT', 'TEST', $5, statement_timestamp() + interval '1 hour')`,
+        [randomUUID(), randomUUID(), randomUUID(), randomUUID(), 'a'.repeat(64)])
+      ).rejects.toThrow(/permission denied for table canonical_reservation_cancellation_authorizations/);
+      await expect(
+        client.query(`UPDATE canonical_reservation_cancellation_authorizations SET reason_code = 'HACK'`)
+      ).rejects.toThrow(/permission denied for table canonical_reservation_cancellation_authorizations/);
+      await expect(
+        client.query(`DELETE FROM canonical_reservation_cancellation_authorizations`)
+      ).rejects.toThrow(/permission denied for table canonical_reservation_cancellation_authorizations/);
+
+      // 3. raw UPDATE inventory_days denied
+      await expect(
+        client.query(`UPDATE inventory_days SET booked_units = booked_units - 1 WHERE room_type_id = 101`)
+      ).rejects.toThrow(/permission denied for table inventory_days/);
+
+      // 4. raw INSERT/UPDATE/DELETE canonical_reservation_events denied
+      await expect(
+        client.query(`INSERT INTO canonical_reservation_events (
+          reservation_id, sequence_number, event_type, actor_kind, actor_principal, origin_kind, reason_code, command_id
+        ) VALUES ($1, 2, 'CANCELLED', 'INTERNAL_DECISION', 'internal:test', 'ENCHO_DIRECT', 'TEST', $2)`,
+        [randomUUID(), randomUUID()])
+      ).rejects.toThrow(/permission denied for table canonical_reservation_events/);
+      await expect(
+        client.query(`UPDATE canonical_reservation_events SET reason_code = 'HACK'`)
+      ).rejects.toThrow(/permission denied for table canonical_reservation_events/);
+      await expect(
+        client.query(`DELETE FROM canonical_reservation_events`)
+      ).rejects.toThrow(/permission denied for table canonical_reservation_events/);
+
+      // 5. raw INSERT/UPDATE/DELETE release fence denied
+      await expect(
+        client.query(`INSERT INTO canonical_reservation_cancellation_inventory_releases (
+          reservation_id, event_id, command_id, authorization_id, release_fingerprint
+        ) VALUES ($1, $2, $3, $4, $5)`,
+        [randomUUID(), randomUUID(), randomUUID(), randomUUID(), 'a'.repeat(64)])
+      ).rejects.toThrow(/permission denied for table canonical_reservation_cancellation_inventory_releases/);
+      await expect(
+        client.query(`UPDATE canonical_reservation_cancellation_inventory_releases SET release_fingerprint = 'x'`)
+      ).rejects.toThrow(/permission denied for table canonical_reservation_cancellation_inventory_releases/);
+      await expect(
+        client.query(`DELETE FROM canonical_reservation_cancellation_inventory_releases`)
+      ).rejects.toThrow(/permission denied for table canonical_reservation_cancellation_inventory_releases/);
+
+      // 6. raw INSERT/UPDATE/DELETE release-night evidence denied
+      await expect(
+        client.query(`INSERT INTO canonical_reservation_cancellation_release_nights (
+          release_id, reservation_id, inventory_day_id, stay_date, released_units
+        ) VALUES ($1, $2, 1, '2026-10-06', 1)`,
+        [randomUUID(), randomUUID()])
+      ).rejects.toThrow(/permission denied for table canonical_reservation_cancellation_release_nights/);
+      await expect(
+        client.query(`UPDATE canonical_reservation_cancellation_release_nights SET released_units = 99`)
+      ).rejects.toThrow(/permission denied for table canonical_reservation_cancellation_release_nights/);
+      await expect(
+        client.query(`DELETE FROM canonical_reservation_cancellation_release_nights`)
+      ).rejects.toThrow(/permission denied for table canonical_reservation_cancellation_release_nights/);
+
+      // 7. raw mutation canonical_reservations denied
+      await expect(
+        client.query(`UPDATE canonical_reservations SET status = 'CANCELLED' WHERE id = $1`, [randomUUID()])
+      ).rejects.toThrow(/permission denied for table canonical_reservations/);
+      await expect(
+        client.query(`DELETE FROM canonical_reservations WHERE id = $1`, [randomUUID()])
+      ).rejects.toThrow(/permission denied for table canonical_reservations/);
+
+      // 8. raw mutation canonical_reservation_nights denied
+      await expect(
+        client.query(`UPDATE canonical_reservation_nights SET units = 0 WHERE reservation_id = $1`, [randomUUID()])
+      ).rejects.toThrow(/permission denied for table canonical_reservation_nights/);
+      await expect(
+        client.query(`DELETE FROM canonical_reservation_nights WHERE reservation_id = $1`, [randomUUID()])
+      ).rejects.toThrow(/permission denied for table canonical_reservation_nights/);
+
+      // 9. canonical_finalize_direct_hold EXECUTE denied
+      await expect(
+        client.query(`SELECT * FROM canonical_finalize_direct_hold($1::uuid, $2::uuid, $3::uuid)`,
+        [randomUUID(), randomUUID(), randomUUID()])
+      ).rejects.toThrow(/permission denied for function canonical_finalize_direct_hold/);
+
+      // 10. canonical_compose_payment_reservation EXECUTE denied
+      await expect(
+        client.query(`SELECT * FROM canonical_compose_payment_reservation($1::uuid, $2::uuid)`,
+        [randomUUID(), randomUUID()])
+      ).rejects.toThrow(/permission denied for function canonical_compose_payment_reservation/);
+
+      // 11. W4-A cancellation-request issuance/transition functions EXECUTE denied
+      await expect(
+        client.query(`SELECT * FROM canonical_issue_cancellation_authorization($1::uuid, $2::uuid, 'TEST', NULL, 'user:10')`,
+        [randomUUID(), randomUUID()])
+      ).rejects.toThrow(/permission denied for function canonical_issue_cancellation_authorization/);
+      await expect(
+        client.query(`SELECT * FROM canonical_request_reservation_cancellation($1::uuid, $2::uuid, $3::uuid, 'TEST', NULL)`,
+        [randomUUID(), randomUUID(), randomUUID()])
+      ).rejects.toThrow(/permission denied for function canonical_request_reservation_cancellation/);
+
+      // 12. payment/refund raw table mutation denied
+      await expect(
+        client.query(`UPDATE canonical_payment_attempts SET payment_state = 'REFUNDED'`)
+      ).rejects.toThrow(/permission denied for table canonical_payment_attempts/);
+      await expect(
+        client.query(`INSERT INTO canonical_payment_reconciliations (payment_attempt_id, reason) VALUES ($1, 'AMOUNT_MISMATCH')`,
+        [randomUUID()])
+      ).rejects.toThrow(/permission denied for table canonical_payment_reconciliations/);
+      await expect(
+        client.query(`UPDATE canonical_payable_authorities SET status = 'REFUNDED'`)
+      ).rejects.toThrow(/permission denied for table canonical_payable_authorities/);
     } finally {
       client.release();
     }
@@ -424,6 +731,92 @@ describe('W4-B Task 2: Canonical Cancellation Completion and Exact Booked-Invent
     const lifecycle = await getReservationLifecycle(cancellationExecutor, res.reservationId);
     expect(lifecycle?.lifecycleState).toBe('CANCELLED');
     expect(lifecycle?.currentSequence).toBe(2);
+  });
+
+  it('8b. completion event provenance is separated from Guest request actor and verifiable', async () => {
+    const res = await createCancellationRequestedReservation('user:10', 1);
+    const completionCmd = randomUUID();
+    const decisionAuth = await issueCancellationDecisionAuthorization(cancellationIssuer, {
+      reservationId: res.reservationId,
+      requestEventId: res.requestEventId,
+      commandId: completionCmd,
+      reasonCode: 'CANCELLATION_APPROVED',
+      reasonText: 'Internal decision authority primitive',
+    });
+
+    const completion = await completeReservationCancellation(cancellationExecutor, {
+      authorizationId: decisionAuth.authorizationId,
+      commandId: completionCmd,
+      reservationId: res.reservationId,
+      reasonCode: 'CANCELLATION_APPROVED',
+      reasonText: 'Internal decision authority primitive',
+    });
+
+    // Fetch the CANCELLED event row directly
+    const {rows: [cancelledEvent]} = await fixture.owner.query<{
+      event_id: string;
+      reservation_id: string;
+      sequence_number: number;
+      event_type: string;
+      actor_kind: string;
+      actor_principal: string;
+      origin_kind: string;
+      reason_code: string;
+      reason_text: string | null;
+      source_ref: string | null;
+      request_event_id: string | null;
+      decision_authorization_id: string | null;
+      decision_source_kind: string | null;
+      metadata: any;
+    }>(
+      `SELECT * FROM canonical_reservation_events WHERE event_id = $1`,
+      [completion.eventId]
+    );
+
+    // 1. Provenance separation:
+    // Event decider is NOT Guest, but INTERNAL_DECISION
+    expect(cancelledEvent.event_type).toBe('CANCELLED');
+    expect(cancelledEvent.actor_kind).toBe('INTERNAL_DECISION');
+    expect(cancelledEvent.actor_principal).toBe('internal:cancellation_authority_primitive');
+    expect(cancelledEvent.origin_kind).toBe('ENCHO_DIRECT');
+    expect(cancelledEvent.decision_source_kind).toBe('INTERNAL_AUTHORITY_PRIMITIVE');
+
+    // 2. Bound request event and decision capability are exact
+    expect(cancelledEvent.request_event_id).toBe(res.requestEventId);
+    expect(cancelledEvent.decision_authorization_id).toBe(decisionAuth.authorizationId);
+    expect(cancelledEvent.source_ref).toBe(`event:${res.requestEventId}`);
+
+    // 3. Requester evidence remains recoverable from bound request event and event metadata
+    const {rows: [requestEvent]} = await fixture.owner.query<{
+      actor_kind: string;
+      actor_principal: string;
+    }>(
+      `SELECT actor_kind, actor_principal FROM canonical_reservation_events WHERE event_id = $1`,
+      [cancelledEvent.request_event_id]
+    );
+    expect(requestEvent.actor_kind).toBe('GUEST');
+    expect(requestEvent.actor_principal).toBe('user:10');
+
+    expect(cancelledEvent.metadata.request_actor_kind).toBe('GUEST');
+    expect(cancelledEvent.metadata.request_actor_principal).toBe('user:10');
+    expect(cancelledEvent.metadata.request_event_id).toBe(res.requestEventId);
+    expect(cancelledEvent.metadata.decision_authorization_id).toBe(decisionAuth.authorizationId);
+    expect(cancelledEvent.metadata.decision_source_kind).toBe('INTERNAL_AUTHORITY_PRIMITIVE');
+
+    // 4. Immutability: mutation rejected by trigger
+    await expect(
+      fixture.owner.query(
+        `UPDATE canonical_reservation_events SET actor_kind = 'GUEST' WHERE event_id = $1`,
+        [cancelledEvent.event_id]
+      )
+    ).rejects.toThrow('CANONICAL_RESERVATION_EVENT_IMMUTABLE');
+
+    await expect(
+      fixture.owner.query(
+        `DELETE FROM canonical_reservation_events WHERE event_id = $1`,
+        [cancelledEvent.event_id]
+      )
+    ).rejects.toThrow('CANONICAL_RESERVATION_EVENT_IMMUTABLE');
   });
 
   it('9. W3 reservation.status remains INVENTORY_COMMITTED', async () => {
@@ -730,8 +1123,8 @@ describe('W4-B Task 2: Canonical Cancellation Completion and Exact Booked-Invent
     expect(inv.booked_units).toBe(0);
   });
 
-  it('18. replay after decision expiry still returns committed result', async () => {
-    const res = await createCancellationRequestedReservation();
+  it('17b. replay preserves provenance without duplicate rows', async () => {
+    const res = await createCancellationRequestedReservation('user:10', 1);
     const completionCmd = randomUUID();
     const decisionAuth = await issueCancellationDecisionAuthorization(cancellationIssuer, {
       reservationId: res.reservationId,
@@ -747,17 +1140,135 @@ describe('W4-B Task 2: Canonical Cancellation Completion and Exact Booked-Invent
       reasonCode: 'CANCELLATION_APPROVED',
     });
 
-    // Artificially expire the authorization row as owner (bypassing trigger only by mutating expires_at in a sub-update or test probe)
-    // Note: trigger rejects expires_at mutation, but we can test replay after clock expiry:
-    // We test that replay logic does NOT check expires_at on committed replay!
+    const firstAuth = (
+      await fixture.owner.query<{consumed_at: string; consumed_by_event_id: string}>(
+        `SELECT consumed_at, consumed_by_event_id FROM canonical_reservation_cancellation_authorizations WHERE authorization_id = $1`,
+        [decisionAuth.authorizationId]
+      )
+    ).rows[0];
+
+    // Replay
     const replay = await completeReservationCancellation(cancellationExecutor, {
       authorizationId: decisionAuth.authorizationId,
       commandId: completionCmd,
       reservationId: res.reservationId,
       reasonCode: 'CANCELLATION_APPROVED',
     });
+
     expect(replay.replayed).toBe(true);
     expect(replay.eventId).toBe(first.eventId);
+    expect(replay.releaseId).toBe(first.releaseId);
+
+    // Verify row counts:
+    // Exactly 1 CANCELLED event
+    const eventCounts = (
+      await fixture.owner.query<{count: number}>(
+        `SELECT count(*)::int AS count FROM canonical_reservation_events WHERE reservation_id = $1 AND event_type = 'CANCELLED'`,
+        [res.reservationId]
+      )
+    ).rows[0].count;
+    expect(eventCounts).toBe(1);
+
+    // Exactly 1 release row
+    const releaseCounts = (
+      await fixture.owner.query<{count: number}>(
+        `SELECT count(*)::int AS count FROM canonical_reservation_cancellation_inventory_releases WHERE reservation_id = $1`,
+        [res.reservationId]
+      )
+    ).rows[0].count;
+    expect(releaseCounts).toBe(1);
+
+    // Exactly 1 command receipt
+    const cmdCounts = (
+      await fixture.owner.query<{count: number}>(
+        `SELECT count(*)::int AS count FROM canonical_reservation_lifecycle_commands WHERE command_id = $1`,
+        [completionCmd]
+      )
+    ).rows[0].count;
+    expect(cmdCounts).toBe(1);
+
+    // Consumed authorization timestamps unchanged
+    const replayAuth = (
+      await fixture.owner.query<{consumed_at: string; consumed_by_event_id: string}>(
+        `SELECT consumed_at, consumed_by_event_id FROM canonical_reservation_cancellation_authorizations WHERE authorization_id = $1`,
+        [decisionAuth.authorizationId]
+      )
+    ).rows[0];
+    expect(new Date(replayAuth.consumed_at).toISOString()).toBe(new Date(firstAuth.consumed_at).toISOString());
+    expect(replayAuth.consumed_by_event_id).toBe(firstAuth.consumed_by_event_id);
+  });
+
+  it('18. replay after decision expiry still returns committed result (actual DB time > expires_at proof)', async () => {
+    const res = await createCancellationRequestedReservation();
+    const completionCmd = randomUUID();
+    const decisionAuth = await issueCancellationDecisionAuthorization(cancellationIssuer, {
+      reservationId: res.reservationId,
+      requestEventId: res.requestEventId,
+      commandId: completionCmd,
+      reasonCode: 'CANCELLATION_APPROVED',
+    });
+
+    const first = await completeReservationCancellation(cancellationExecutor, {
+      authorizationId: decisionAuth.authorizationId,
+      commandId: completionCmd,
+      reservationId: res.reservationId,
+      reasonCode: 'CANCELLATION_APPROVED',
+    });
+    expect(first.replayed).toBe(false);
+    expect(first.lifecycleState).toBe('CANCELLED');
+
+    // Verify decision is consumed
+    const authBefore = (
+      await fixture.owner.query<{consumed_at: string | null}>(
+        `SELECT consumed_at FROM canonical_reservation_cancellation_authorizations WHERE authorization_id = $1`,
+        [decisionAuth.authorizationId]
+      )
+    ).rows[0];
+    expect(authBefore.consumed_at).not.toBeNull();
+
+    // As disposable-owner fixture, advance authorization expiry boundary into the past
+    await fixture.owner.query(
+      `ALTER TABLE canonical_reservation_cancellation_authorizations DISABLE TRIGGER canonical_reservation_cancellation_authorizations_immutable`
+    );
+    await fixture.owner.query(
+      `UPDATE canonical_reservation_cancellation_authorizations
+       SET expires_at = statement_timestamp() - interval '2 hours',
+           issued_at = statement_timestamp() - interval '3 hours'
+       WHERE authorization_id = $1`,
+      [decisionAuth.authorizationId]
+    );
+    await fixture.owner.query(
+      `ALTER TABLE canonical_reservation_cancellation_authorizations ENABLE TRIGGER canonical_reservation_cancellation_authorizations_immutable`
+    );
+
+    // Prove that current database time is definitively after expires_at
+    const {rows: timeCheck} = await fixture.owner.query<{is_expired: boolean}>(
+      `SELECT statement_timestamp() > expires_at AS is_expired FROM canonical_reservation_cancellation_authorizations WHERE authorization_id = $1`,
+      [decisionAuth.authorizationId]
+    );
+    expect(timeCheck[0].is_expired).toBe(true);
+
+    // Exact retry with same authorization, same command, same reservation, same semantics
+    const replay = await completeReservationCancellation(cancellationExecutor, {
+      authorizationId: decisionAuth.authorizationId,
+      commandId: completionCmd,
+      reservationId: res.reservationId,
+      reasonCode: 'CANCELLATION_APPROVED',
+    });
+
+    expect(replay.replayed).toBe(true);
+    expect(replay.eventId).toBe(first.eventId);
+    expect(replay.releaseId).toBe(first.releaseId);
+    expect(replay.lifecycleState).toBe('CANCELLED');
+
+    // Verify zero additional booked_units decrement
+    const inv = (
+      await fixture.owner.query<{booked_units: number}>(
+        `SELECT booked_units FROM inventory_days WHERE room_type_id = 101 AND calendar_date = $1`,
+        [res.checkIn]
+      )
+    ).rows[0];
+    expect(inv.booked_units).toBe(0);
   });
 
   it('19. unused expired decision cannot execute', async () => {
@@ -769,11 +1280,19 @@ describe('W4-B Task 2: Canonical Cancellation Completion and Exact Booked-Invent
     await fixture.owner.query(
       `INSERT INTO canonical_reservation_cancellation_authorizations (
         authorization_id, reservation_id, request_event_id, command_id, command_type, origin_kind,
-        reason_code, decision_fingerprint, issued_at, expires_at
-      ) VALUES ($1, $2, $3, $4, 'COMPLETE_CANCELLATION', 'ENCHO_DIRECT', 'EXPIRED_TEST', $5,
+        decision_source_kind, reason_code, decision_fingerprint, issued_at, expires_at
+      ) VALUES ($1, $2, $3, $4, 'COMPLETE_CANCELLATION', 'ENCHO_DIRECT',
+        'INTERNAL_AUTHORITY_PRIMITIVE', 'EXPIRED_TEST', $5,
         statement_timestamp() - interval '2 hours', statement_timestamp() - interval '1 hour')`,
       [expiredAuthId, res.reservationId, res.requestEventId, completionCmd, 'a'.repeat(64)]
     );
+
+    // Prove current database time is definitively after expires_at
+    const {rows: timeCheck} = await fixture.owner.query<{is_expired: boolean}>(
+      `SELECT statement_timestamp() > expires_at AS is_expired FROM canonical_reservation_cancellation_authorizations WHERE authorization_id = $1`,
+      [expiredAuthId]
+    );
+    expect(timeCheck[0].is_expired).toBe(true);
 
     await expect(
       completeReservationCancellation(cancellationExecutor, {
@@ -980,8 +1499,11 @@ describe('W4-B Task 2: Canonical Cancellation Completion and Exact Booked-Invent
   // TESTS 26-27: UNDERFLOW ROLLBACK AND FAILURE-INJECTION ROLLBACK
   // --------------------------------------------------------------------------
 
-  it('26. underflow fixture -> full rollback', async () => {
-    const res = await createCancellationRequestedReservation();
+  it('26. multi-night later-night underflow -> whole-transaction rollback', async () => {
+    // Create 2-night reservation in CANCELLATION_REQUESTED
+    const res = await createCancellationRequestedReservation('user:10', 2);
+    expect(res.nights).toBe(2);
+
     const completionCmd = randomUUID();
     const decisionAuth = await issueCancellationDecisionAuthorization(cancellationIssuer, {
       reservationId: res.reservationId,
@@ -990,13 +1512,28 @@ describe('W4-B Task 2: Canonical Cancellation Completion and Exact Booked-Invent
       reasonCode: 'CANCELLATION_APPROVED',
     });
 
-    // Artificially corrupt inventory_days booked_units to 0 as owner to simulate inconsistent underflow condition
+    const checkInDate = res.checkIn;
+    const night2Date = addDays(checkInDate, 1);
+
+    // Before mutation: both nights have booked_units = 1
+    const invBefore = (
+      await fixture.owner.query<{calendar_date: string; booked_units: number}>(
+        `SELECT calendar_date::text, booked_units FROM inventory_days WHERE room_type_id = 101 AND calendar_date IN ($1, $2) ORDER BY calendar_date`,
+        [checkInDate, night2Date]
+      )
+    ).rows;
+    expect(invBefore).toHaveLength(2);
+    expect(invBefore[0].booked_units).toBe(1);
+    expect(invBefore[1].booked_units).toBe(1);
+
+    // Artificially corrupt night 2 only: booked_units = 0 (< canonical allocation 1)
+    // Night 1 remains booked_units = 1 (sufficient)
     await fixture.owner.query(
       `UPDATE inventory_days SET booked_units = 0 WHERE room_type_id = 101 AND calendar_date = $1`,
-      [res.checkIn]
+      [night2Date]
     );
 
-    // Attempting completion must fail closed with underflow error
+    // Attempt completion: Night 1 is processed/decremented in loop, but Night 2 discovers underflow
     await expect(
       completeReservationCancellation(cancellationExecutor, {
         authorizationId: decisionAuth.authorizationId,
@@ -1006,27 +1543,49 @@ describe('W4-B Task 2: Canonical Cancellation Completion and Exact Booked-Invent
       })
     ).rejects.toThrow('INVENTORY_RELEASE_UNDERFLOW');
 
-    // Invariants post-rollback:
+    // Verify full rollback:
+    // 1. Lifecycle remains CANCELLATION_REQUESTED
     const lifecycle = await getReservationLifecycle(cancellationExecutor, res.reservationId);
     expect(lifecycle?.lifecycleState).toBe('CANCELLATION_REQUESTED');
+    expect(lifecycle?.currentSequence).toBe(1);
 
-    const events = (
-      await fixture.owner.query(
+    // 2. Zero CANCELLED event
+    const cancelEvents = (
+      await fixture.owner.query<{count: number}>(
         `SELECT count(*)::int AS count FROM canonical_reservation_events WHERE reservation_id = $1 AND event_type = 'CANCELLED'`,
         [res.reservationId]
       )
     ).rows[0].count;
-    expect(events).toBe(0);
+    expect(cancelEvents).toBe(0);
 
+    // 3. Zero completion command receipt
+    const cmds = (
+      await fixture.owner.query<{count: number}>(
+        `SELECT count(*)::int AS count FROM canonical_reservation_lifecycle_commands WHERE command_id = $1`,
+        [completionCmd]
+      )
+    ).rows[0].count;
+    expect(cmds).toBe(0);
+
+    // 4. Zero cancellation release fence
     const releases = (
-      await fixture.owner.query(
+      await fixture.owner.query<{count: number}>(
         `SELECT count(*)::int AS count FROM canonical_reservation_cancellation_inventory_releases WHERE reservation_id = $1`,
         [res.reservationId]
       )
     ).rows[0].count;
     expect(releases).toBe(0);
 
-    // Authorization remains unconsumed
+    // 5. Zero per-night release evidence
+    const releaseNights = (
+      await fixture.owner.query<{count: number}>(
+        `SELECT count(*)::int AS count FROM canonical_reservation_cancellation_release_nights WHERE reservation_id = $1`,
+        [res.reservationId]
+      )
+    ).rows[0].count;
+    expect(releaseNights).toBe(0);
+
+    // 6. Decision authorization remains unconsumed
     const authRow = (
       await fixture.owner.query<{consumed_at: string | null}>(
         `SELECT consumed_at FROM canonical_reservation_cancellation_authorizations WHERE authorization_id = $1`,
@@ -1034,6 +1593,17 @@ describe('W4-B Task 2: Canonical Cancellation Completion and Exact Booked-Invent
       )
     ).rows[0];
     expect(authRow.consumed_at).toBeNull();
+
+    // 7. Night 1 booked_units is restored to original (1), no partial decrement survives
+    // Night 2 remains fixture state (0)
+    const invAfter = (
+      await fixture.owner.query<{calendar_date: string; booked_units: number}>(
+        `SELECT calendar_date::text, booked_units FROM inventory_days WHERE room_type_id = 101 AND calendar_date IN ($1, $2) ORDER BY calendar_date`,
+        [checkInDate, night2Date]
+      )
+    ).rows;
+    expect(invAfter[0].booked_units).toBe(1); // restored!
+    expect(invAfter[1].booked_units).toBe(0); // remains fixture state
   });
 
   it('27. injected late failure -> full rollback', async () => {
@@ -1306,16 +1876,46 @@ describe('W4-B Task 2: Canonical Cancellation Completion and Exact Booked-Invent
   });
 
   it('34. PUBLIC/web/payment/composition/W4-A lifecycle worker cannot invoke W4-B privileged functions', async () => {
+    // 1. PUBLIC checks via has_function_privilege
+    const publicChecks = await fixture.owner.query<{func: string; has_priv: boolean}>(`
+      SELECT
+        p.proname AS func,
+        has_function_privilege('public', p.oid, 'EXECUTE') AS has_priv
+      FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public'
+        AND p.proname IN (
+          'canonical_issue_cancellation_decision_authorization',
+          'canonical_complete_reservation_cancellation',
+          'canonical_get_cancellation_release'
+        )
+    `);
+    expect(publicChecks.rows.length).toBeGreaterThanOrEqual(3);
+    for (const check of publicChecks.rows) {
+      expect(check.has_priv).toBe(false);
+    }
+
+    // 2. Named worker roles checks
     const rolesToTest = [
-      stays, // encho_stays_web
-      paymentWorker, // encho_payment_worker
-      compositionWorker, // encho_composition_worker
-      reservationWorker, // encho_reservation_worker
-      lifecycleWorker, // encho_lifecycle_worker (W4-A)
-      lifecycleIssuer, // encho_lifecycle_issuer (W4-A)
+      {name: 'encho_stays_web', pool: stays},
+      {name: 'encho_payment_worker', pool: paymentWorker},
+      {name: 'encho_composition_worker', pool: compositionWorker},
+      {name: 'encho_reservation_worker', pool: reservationWorker},
+      {name: 'encho_lifecycle_worker', pool: lifecycleWorker},
+      {name: 'encho_lifecycle_issuer', pool: lifecycleIssuer},
     ];
 
-    for (const pool of rolesToTest) {
+    for (const {name, pool} of rolesToTest) {
+      // has_function_privilege verification
+      const privChecks = await fixture.owner.query<{has_issue: boolean; has_complete: boolean}>(`
+        SELECT
+          has_function_privilege($1, 'canonical_issue_cancellation_decision_authorization(UUID,UUID,UUID,TEXT,TEXT)', 'EXECUTE') AS has_issue,
+          has_function_privilege($1, 'canonical_complete_reservation_cancellation(UUID,UUID,UUID,TEXT,TEXT)', 'EXECUTE') AS has_complete
+      `, [name]);
+      expect(privChecks.rows[0].has_issue).toBe(false);
+      expect(privChecks.rows[0].has_complete).toBe(false);
+
+      // Actual query execution rejection verification
       const client = await pool.connect();
       try {
         await expect(

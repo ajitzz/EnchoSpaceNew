@@ -29,12 +29,26 @@ ALTER TABLE canonical_reservation_events
   ADD CONSTRAINT canonical_reservation_events_event_type_check
   CHECK (event_type IN ('CANCELLATION_REQUESTED', 'CANCELLED'));
 
+ALTER TABLE canonical_reservation_events
+  DROP CONSTRAINT IF EXISTS canonical_reservation_events_actor_kind_check;
+
+ALTER TABLE canonical_reservation_events
+  ADD CONSTRAINT canonical_reservation_events_actor_kind_check
+  CHECK (actor_kind IN ('GUEST', 'HOST', 'STAFF', 'EXTERNAL_CHANNEL', 'INTERNAL_DECISION'));
+
 ALTER TABLE canonical_reservation_lifecycle_commands
   DROP CONSTRAINT IF EXISTS canonical_reservation_lifecycle_commands_command_type_check;
 
 ALTER TABLE canonical_reservation_lifecycle_commands
   ADD CONSTRAINT canonical_reservation_lifecycle_commands_command_type_check
   CHECK (command_type IN ('REQUEST_CANCELLATION', 'COMPLETE_CANCELLATION'));
+
+ALTER TABLE canonical_reservation_lifecycle_commands
+  DROP CONSTRAINT IF EXISTS canonical_reservation_lifecycle_commands_actor_kind_check;
+
+ALTER TABLE canonical_reservation_lifecycle_commands
+  ADD CONSTRAINT canonical_reservation_lifecycle_commands_actor_kind_check
+  CHECK (actor_kind IN ('GUEST', 'HOST', 'STAFF', 'EXTERNAL_CHANNEL', 'INTERNAL_DECISION'));
 
 -- 2. Command-bound Cancellation Decision Authorizations Ledger (Unforgeable Capability Table)
 CREATE TABLE IF NOT EXISTS canonical_reservation_cancellation_authorizations (
@@ -44,6 +58,7 @@ CREATE TABLE IF NOT EXISTS canonical_reservation_cancellation_authorizations (
   command_id UUID NOT NULL,
   command_type TEXT NOT NULL CHECK (command_type IN ('COMPLETE_CANCELLATION')),
   origin_kind TEXT NOT NULL CHECK (origin_kind IN ('ENCHO_DIRECT')),
+  decision_source_kind TEXT NOT NULL DEFAULT 'INTERNAL_AUTHORITY_PRIMITIVE' CHECK (decision_source_kind = 'INTERNAL_AUTHORITY_PRIMITIVE'),
   reason_code TEXT NOT NULL CHECK (reason_code ~ '^[A-Z0-9_]{1,64}$'),
   reason_text TEXT CHECK (reason_text IS NULL OR length(reason_text) <= 500),
   decision_fingerprint TEXT NOT NULL CHECK (decision_fingerprint ~ '^[a-f0-9]{64}$'),
@@ -57,6 +72,37 @@ CREATE TABLE IF NOT EXISTS canonical_reservation_cancellation_authorizations (
 
 CREATE INDEX IF NOT EXISTS idx_canonical_res_cancellation_auth_res
   ON canonical_reservation_cancellation_authorizations(reservation_id);
+
+-- Add explicit decision provenance columns to canonical_reservation_events
+ALTER TABLE canonical_reservation_events
+  ADD COLUMN IF NOT EXISTS request_event_id UUID REFERENCES canonical_reservation_events(event_id) ON DELETE RESTRICT,
+  ADD COLUMN IF NOT EXISTS decision_authorization_id UUID REFERENCES canonical_reservation_cancellation_authorizations(authorization_id) ON DELETE RESTRICT,
+  ADD COLUMN IF NOT EXISTS decision_source_kind TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_canonical_res_events_req_ev
+  ON canonical_reservation_events(request_event_id) WHERE request_event_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_canonical_res_events_dec_auth
+  ON canonical_reservation_events(decision_authorization_id) WHERE decision_authorization_id IS NOT NULL;
+
+ALTER TABLE canonical_reservation_events
+  DROP CONSTRAINT IF EXISTS chk_canonical_reservation_events_cancellation_provenance;
+
+ALTER TABLE canonical_reservation_events
+  ADD CONSTRAINT chk_canonical_reservation_events_cancellation_provenance
+  CHECK (
+    (event_type = 'CANCELLATION_REQUESTED'
+      AND request_event_id IS NULL
+      AND decision_authorization_id IS NULL
+      AND decision_source_kind IS NULL)
+    OR
+    (event_type = 'CANCELLED'
+      AND request_event_id IS NOT NULL
+      AND decision_authorization_id IS NOT NULL
+      AND decision_source_kind = 'INTERNAL_AUTHORITY_PRIMITIVE'
+      AND actor_kind = 'INTERNAL_DECISION'
+      AND origin_kind = 'ENCHO_DIRECT')
+  );
 
 -- Authorization immutability trigger: rejects DELETE; only allows transition of consumed_at / consumed_by_event_id from NULL
 CREATE OR REPLACE FUNCTION canonical_cancellation_authorization_reject_mutation()
@@ -75,6 +121,7 @@ BEGIN
       OR NEW.command_id IS DISTINCT FROM OLD.command_id
       OR NEW.command_type IS DISTINCT FROM OLD.command_type
       OR NEW.origin_kind IS DISTINCT FROM OLD.origin_kind
+      OR NEW.decision_source_kind IS DISTINCT FROM OLD.decision_source_kind
       OR NEW.reason_code IS DISTINCT FROM OLD.reason_code
       OR NEW.reason_text IS DISTINCT FROM OLD.reason_text
       OR NEW.decision_fingerprint IS DISTINCT FROM OLD.decision_fingerprint
@@ -211,7 +258,15 @@ BEGIN
     RAISE EXCEPTION 'CANCELLATION_EVENT_TYPE_INVALID';
   END IF;
 
-  -- Verify current lifecycle state on reservation is CANCELLATION_REQUESTED
+  IF req_ev.actor_kind IS DISTINCT FROM 'GUEST' THEN
+    RAISE EXCEPTION 'CANCELLATION_REQUEST_ACTOR_NOT_SUPPORTED';
+  END IF;
+
+  IF req_ev.origin_kind IS DISTINCT FROM 'ENCHO_DIRECT' THEN
+    RAISE EXCEPTION 'CANCELLATION_ORIGIN_NOT_SUPPORTED';
+  END IF;
+
+  -- Verify current lifecycle state on reservation is CANCELLATION_REQUESTED matching this exact request
   SELECT ev.* INTO latest_ev FROM public.canonical_reservation_events ev
   WHERE ev.reservation_id = target_reservation_id
   ORDER BY ev.sequence_number DESC, ev.occurred_at DESC
@@ -251,6 +306,7 @@ BEGIN
     'command_id', target_completion_command,
     'command_type', 'COMPLETE_CANCELLATION',
     'origin_kind', 'ENCHO_DIRECT',
+    'decision_source_kind', 'INTERNAL_AUTHORITY_PRIMITIVE',
     'reason_code', target_reason_code,
     'reason_text', target_reason_text,
     'issued_at', new_issued_at,
@@ -265,6 +321,7 @@ BEGIN
     command_id,
     command_type,
     origin_kind,
+    decision_source_kind,
     reason_code,
     reason_text,
     decision_fingerprint,
@@ -277,6 +334,7 @@ BEGIN
     target_completion_command,
     'COMPLETE_CANCELLATION',
     'ENCHO_DIRECT',
+    'INTERNAL_AUTHORITY_PRIMITIVE',
     target_reason_code,
     target_reason_text,
     auth_fingerprint,
@@ -310,6 +368,7 @@ SET search_path=pg_catalog,public,pg_temp SET row_security=on AS $$
 DECLARE
   res_row RECORD;
   auth_row RECORD;
+  req_ev RECORD;
   existing_cmd RECORD;
   replay_row RECORD;
   latest_ev RECORD;
@@ -377,12 +436,36 @@ BEGIN
     RAISE EXCEPTION 'CANCELLATION_COMMAND_CONFLICT';
   END IF;
 
+  -- Verify bound request event exists and matches reservation
+  SELECT ev.* INTO req_ev FROM public.canonical_reservation_events ev
+  WHERE ev.event_id = auth_row.request_event_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'CANCELLATION_REQUEST_EVENT_NOT_FOUND';
+  END IF;
+
+  IF req_ev.reservation_id IS DISTINCT FROM target_reservation_id THEN
+    RAISE EXCEPTION 'CANCELLATION_EVENT_RESERVATION_MISMATCH';
+  END IF;
+
+  IF req_ev.event_type IS DISTINCT FROM 'CANCELLATION_REQUESTED' THEN
+    RAISE EXCEPTION 'CANCELLATION_EVENT_TYPE_INVALID';
+  END IF;
+
+  IF req_ev.actor_kind IS DISTINCT FROM 'GUEST' THEN
+    RAISE EXCEPTION 'CANCELLATION_REQUEST_ACTOR_NOT_SUPPORTED';
+  END IF;
+
+  IF req_ev.origin_kind IS DISTINCT FROM 'ENCHO_DIRECT' THEN
+    RAISE EXCEPTION 'CANCELLATION_ORIGIN_NOT_SUPPORTED';
+  END IF;
+
   -- 4. Inspect durable command receipt (Lock Order Step 3: Idempotent Replay Check)
   SELECT c.* INTO existing_cmd FROM public.canonical_reservation_lifecycle_commands c
   WHERE c.command_id = target_command;
   IF FOUND THEN
     IF existing_cmd.reservation_id IS DISTINCT FROM target_reservation_id
        OR existing_cmd.command_type IS DISTINCT FROM 'COMPLETE_CANCELLATION'
+       OR existing_cmd.actor_kind IS DISTINCT FROM 'INTERNAL_DECISION'
        OR existing_cmd.origin_kind IS DISTINCT FROM 'ENCHO_DIRECT'
        OR existing_cmd.reason_code IS DISTINCT FROM target_reason_code
        OR existing_cmd.reason_text IS DISTINCT FROM target_reason_text THEN
@@ -483,22 +566,33 @@ BEGIN
     reason_text,
     command_id,
     occurred_at,
+    source_ref,
+    request_event_id,
+    decision_authorization_id,
+    decision_source_kind,
     metadata
   ) VALUES (
     new_event_id,
     target_reservation_id,
     new_seq,
     'CANCELLED',
-    latest_ev.actor_kind,
-    latest_ev.actor_principal,
+    'INTERNAL_DECISION',
+    'internal:cancellation_authority_primitive',
     'ENCHO_DIRECT',
     target_reason_code,
     target_reason_text,
     target_command,
     statement_timestamp(),
+    'event:' || req_ev.event_id::text,
+    req_ev.event_id,
+    target_authorization_id,
+    'INTERNAL_AUTHORITY_PRIMITIVE',
     jsonb_build_object(
-      'authorization_id', target_authorization_id,
-      'request_event_id', latest_ev.event_id
+      'request_event_id', req_ev.event_id,
+      'request_actor_kind', req_ev.actor_kind,
+      'request_actor_principal', req_ev.actor_principal,
+      'decision_authorization_id', target_authorization_id,
+      'decision_source_kind', 'INTERNAL_AUTHORITY_PRIMITIVE'
     )
   );
 
@@ -507,12 +601,13 @@ BEGIN
     'command_id', target_command,
     'reservation_id', target_reservation_id,
     'command_type', 'COMPLETE_CANCELLATION',
-    'actor_kind', latest_ev.actor_kind,
-    'actor_principal', latest_ev.actor_principal,
+    'actor_kind', 'INTERNAL_DECISION',
+    'actor_principal', 'internal:cancellation_authority_primitive',
     'origin_kind', 'ENCHO_DIRECT',
     'reason_code', target_reason_code,
     'reason_text', target_reason_text,
-    'authorization_id', target_authorization_id
+    'authorization_id', target_authorization_id,
+    'request_event_id', req_ev.event_id
   );
   cmd_fingerprint := encode(sha256(convert_to(cmd_fingerprint_input::text, 'UTF8')), 'hex');
 
@@ -532,8 +627,8 @@ BEGIN
     target_command,
     target_reservation_id,
     'COMPLETE_CANCELLATION',
-    latest_ev.actor_kind,
-    latest_ev.actor_principal,
+    'INTERNAL_DECISION',
+    'internal:cancellation_authority_primitive',
     'ENCHO_DIRECT',
     target_reason_code,
     target_reason_text,

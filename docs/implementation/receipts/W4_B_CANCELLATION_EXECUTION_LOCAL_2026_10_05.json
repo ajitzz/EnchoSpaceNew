@@ -11,19 +11,63 @@
     "evidence": "canonical_reservation_cancellation_release_nights",
     "capability": "canonical_reservation_cancellation_authorizations",
     "command_receipt": "canonical_reservation_lifecycle_commands (COMPLETE_CANCELLATION)",
+    "request_provenance": "exact W4-A CANCELLATION_REQUESTED Guest/ENCHO_DIRECT event",
+    "decision_provenance": "internal cancellation decision authority primitive (actor_kind = 'INTERNAL_DECISION', decision_source_kind = 'INTERNAL_AUTHORITY_PRIMITIVE')",
+    "executor": "mechanical execution authority only (restricted role encho_cancellation_executor)",
     "public_cancellation": "NOT ACTIVATED",
+    "public_cancellation_policy": "NOT IMPLEMENTED",
     "authenticated_guest_ingress": "NOT IMPLEMENTED",
     "refunds": "NOT IMPLEMENTED (deferred to W4-D)"
   },
   "migration": {
     "file": "src/migrations/056_canonical_cancellation_completion_authority.sql",
-    "sha256": "21398024ab461b0290c5fd7d4e9c4de6653ceb7a48da279211e13ea7d6f112f5"
+    "sha256": "f2a3679254cd1f07044baae3a12142d5336d4fae6dc3daae4884e73ba8131f6f"
   },
   "test_suite": {
     "file": "src/test/harvo/w4b_canonical_cancellation_pg.test.ts",
-    "total_tests": 34,
-    "passed": 34,
-    "failed": 0
+    "total_tests": 40,
+    "passed": 40,
+    "failed": 0,
+    "provenance_tests": {
+      "actor_not_guest_denied": "passed",
+      "origin_not_encho_direct_denied": "passed",
+      "wrong_reservation_denied": "passed",
+      "stale_request_denied": "passed",
+      "random_request_id_denied": "passed",
+      "decision_actor_separated": "passed (actor_kind = INTERNAL_DECISION, actor_principal = internal:cancellation_authority_primitive)",
+      "replay_preserves_provenance": "passed"
+    },
+    "post_expiry_replay": {
+      "proven_with_db_timestamp": "passed (statement_timestamp() > expires_at verified in PG, returns original receipt, zero extra mutations)",
+      "unused_expired_capability_rejected": "passed (DECISION_AUTHORIZATION_EXPIRED)"
+    },
+    "later_night_underflow": {
+      "multi_night_rollback_proven": "passed (2 nights: night 1 booked_units=1, night 2 booked_units=0; fails on night 2 with INVENTORY_RELEASE_UNDERFLOW; night 1 restored, zero surviving lifecycle/release/command rows, state remains CANCELLATION_REQUESTED)"
+    },
+    "issuer_privilege_probes": {
+      "complete_execution_denied": "passed",
+      "raw_release_tables_denied": "passed",
+      "raw_events_tables_denied": "passed",
+      "raw_inventory_tables_denied": "passed",
+      "raw_reservation_tables_denied": "passed"
+    },
+    "executor_privilege_probes": {
+      "decision_issuer_function_denied": "passed",
+      "raw_authorization_table_denied": "passed",
+      "raw_inventory_days_denied": "passed",
+      "raw_events_table_denied": "passed",
+      "raw_release_fence_table_denied": "passed",
+      "w3_w4a_functions_denied": "passed",
+      "payment_tables_denied": "passed"
+    },
+    "other_role_probes": {
+      "public_revoked": "passed",
+      "encho_stays_web_denied": "passed",
+      "encho_payment_worker_denied": "passed",
+      "encho_composition_worker_denied": "passed",
+      "encho_lifecycle_worker_denied": "passed",
+      "encho_reservation_worker_denied": "passed"
+    }
   },
   "regression_suites": {
     "w4a_lifecycle": "passed (34/34)",
@@ -38,7 +82,7 @@
     "2. canonical_reservation_cancellation_authorizations FOR UPDATE",
     "3. canonical_reservation_lifecycle_commands inspection (idempotent replay)",
     "4. canonical_reservation_cancellation_inventory_releases inspection (release fence)",
-    "5. inventory_days ORDER BY calendar_date ASC, id ASC FOR UPDATE"
+    "5. inventory_days ORDER BY calendar_date ASC, id ASC FOR UPDATE (all reservation nights locked in ascending order before decrements are applied)"
   ],
   "roles": {
     "issuer": "encho_cancellation_issuer",
