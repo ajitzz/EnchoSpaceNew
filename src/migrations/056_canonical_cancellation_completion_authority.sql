@@ -18,7 +18,10 @@
 --     2. canonical_reservation_cancellation_authorizations (FOR UPDATE)
 --     3. durable command check / replay
 --     4. cancellation release fence check
---     5. inventory_days locked in deterministic order (calendar_date ASC, id ASC FOR UPDATE)
+--     5. inventory_days processed in deterministic order (calendar_date ASC, id ASC FOR UPDATE).
+--        Inventory rows are processed in deterministic calendar_date/id order. Each row is locked
+--        and validated before its decrement. The transaction provides all-or-nothing rollback if
+--        a later allocation fails.
 --   - Zero refund / payment side effects: no payment rows or provider calls.
 
 -- 1. Extend event and command constraints additively
@@ -49,6 +52,21 @@ ALTER TABLE canonical_reservation_lifecycle_commands
 ALTER TABLE canonical_reservation_lifecycle_commands
   ADD CONSTRAINT canonical_reservation_lifecycle_commands_actor_kind_check
   CHECK (actor_kind IN ('GUEST', 'HOST', 'STAFF', 'EXTERNAL_CHANNEL', 'INTERNAL_DECISION'));
+
+ALTER TABLE canonical_reservation_lifecycle_commands
+  DROP CONSTRAINT IF EXISTS chk_canonical_reservation_lifecycle_commands_cross_field;
+
+ALTER TABLE canonical_reservation_lifecycle_commands
+  ADD CONSTRAINT chk_canonical_reservation_lifecycle_commands_cross_field
+  CHECK (
+    (command_type = 'REQUEST_CANCELLATION'
+      AND actor_kind = 'GUEST'
+      AND origin_kind = 'ENCHO_DIRECT')
+    OR
+    (command_type = 'COMPLETE_CANCELLATION'
+      AND actor_kind = 'INTERNAL_DECISION'
+      AND origin_kind = 'ENCHO_DIRECT')
+  );
 
 -- 2. Command-bound Cancellation Decision Authorizations Ledger (Unforgeable Capability Table)
 CREATE TABLE IF NOT EXISTS canonical_reservation_cancellation_authorizations (
@@ -92,16 +110,18 @@ ALTER TABLE canonical_reservation_events
   ADD CONSTRAINT chk_canonical_reservation_events_cancellation_provenance
   CHECK (
     (event_type = 'CANCELLATION_REQUESTED'
+      AND actor_kind = 'GUEST'
+      AND origin_kind = 'ENCHO_DIRECT'
       AND request_event_id IS NULL
       AND decision_authorization_id IS NULL
       AND decision_source_kind IS NULL)
     OR
     (event_type = 'CANCELLED'
+      AND actor_kind = 'INTERNAL_DECISION'
+      AND origin_kind = 'ENCHO_DIRECT'
       AND request_event_id IS NOT NULL
       AND decision_authorization_id IS NOT NULL
-      AND decision_source_kind = 'INTERNAL_AUTHORITY_PRIMITIVE'
-      AND actor_kind = 'INTERNAL_DECISION'
-      AND origin_kind = 'ENCHO_DIRECT')
+      AND decision_source_kind = 'INTERNAL_AUTHORITY_PRIMITIVE')
   );
 
 -- Authorization immutability trigger: rejects DELETE; only allows transition of consumed_at / consumed_by_event_id from NULL
@@ -531,6 +551,8 @@ BEGIN
   END IF;
 
   -- 7. Deterministic lock ordering on inventory_days & underflow verification (Lock Order Step 5)
+  -- Inventory rows are processed in deterministic calendar_date/id order. Each row is locked
+  -- and validated before its decrement. The transaction provides all-or-nothing rollback.
   FOR day_rec IN
     SELECT day.id, day.calendar_date, day.booked_units, day.held_units, day.total_units,
            crn.units AS units_to_release

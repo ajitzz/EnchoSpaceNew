@@ -289,46 +289,32 @@ describe('W4-B Task 2: Canonical Cancellation Completion and Exact Booked-Invent
     expect(decisionAuth.requestEventId).toBe(res.requestEventId);
   });
 
-  it('2a. request event actor_kind != GUEST is denied', async () => {
+  it('2a. request event actor_kind != GUEST is denied at schema boundary', async () => {
     const res = await createCommittedReservation('user:10', 1);
     const fakeCmd = randomUUID();
-    const {rows: [fakeEv]} = await fixture.owner.query<{event_id: string}>(
-      `INSERT INTO canonical_reservation_events (
-        reservation_id, sequence_number, event_type, actor_kind, actor_principal, origin_kind, reason_code, command_id
-      ) VALUES ($1, 1, 'CANCELLATION_REQUESTED', 'HOST', 'user:host_99', 'ENCHO_DIRECT', 'HOST_CANCEL', $2)
-      RETURNING event_id`,
-      [res.reservationId, fakeCmd]
-    );
-
     await expect(
-      issueCancellationDecisionAuthorization(cancellationIssuer, {
-        reservationId: res.reservationId,
-        requestEventId: fakeEv.event_id,
-        commandId: randomUUID(),
-        reasonCode: 'CANCELLATION_APPROVED',
-      })
-    ).rejects.toThrow('CANCELLATION_REQUEST_ACTOR_NOT_SUPPORTED');
+      fixture.owner.query(
+        `INSERT INTO canonical_reservation_events (
+          reservation_id, sequence_number, event_type, actor_kind, actor_principal, origin_kind, reason_code, command_id
+        ) VALUES ($1, 1, 'CANCELLATION_REQUESTED', 'HOST', 'user:host_99', 'ENCHO_DIRECT', 'HOST_CANCEL', $2)
+        RETURNING event_id`,
+        [res.reservationId, fakeCmd]
+      )
+    ).rejects.toThrow('chk_canonical_reservation_events_cancellation_provenance');
   });
 
-  it('2b. request event origin_kind != ENCHO_DIRECT is denied', async () => {
+  it('2b. request event origin_kind != ENCHO_DIRECT is denied at schema boundary', async () => {
     const res = await createCommittedReservation('user:10', 1);
     const fakeCmd = randomUUID();
-    const {rows: [fakeEv]} = await fixture.owner.query<{event_id: string}>(
-      `INSERT INTO canonical_reservation_events (
-        reservation_id, sequence_number, event_type, actor_kind, actor_principal, origin_kind, reason_code, command_id
-      ) VALUES ($1, 1, 'CANCELLATION_REQUESTED', 'GUEST', 'user:10', 'EXTERNAL_CHANNEL', 'GUEST_CANCEL', $2)
-      RETURNING event_id`,
-      [res.reservationId, fakeCmd]
-    );
-
     await expect(
-      issueCancellationDecisionAuthorization(cancellationIssuer, {
-        reservationId: res.reservationId,
-        requestEventId: fakeEv.event_id,
-        commandId: randomUUID(),
-        reasonCode: 'CANCELLATION_APPROVED',
-      })
-    ).rejects.toThrow('CANCELLATION_ORIGIN_NOT_SUPPORTED');
+      fixture.owner.query(
+        `INSERT INTO canonical_reservation_events (
+          reservation_id, sequence_number, event_type, actor_kind, actor_principal, origin_kind, reason_code, command_id
+        ) VALUES ($1, 1, 'CANCELLATION_REQUESTED', 'GUEST', 'user:10', 'EXTERNAL_CHANNEL', 'GUEST_CANCEL', $2)
+        RETURNING event_id`,
+        [res.reservationId, fakeCmd]
+      )
+    ).rejects.toThrow('chk_canonical_reservation_events_cancellation_provenance');
   });
 
   it('2c. request event belongs to another reservation is denied', async () => {
@@ -1935,5 +1921,233 @@ describe('W4-B Task 2: Canonical Cancellation Completion and Exact Booked-Invent
         client.release();
       }
     }
+  });
+
+  // --------------------------------------------------------------------------
+  // TESTS 35: MALFORMED EVENT SCHEMA TESTS (chk_canonical_reservation_events_cancellation_provenance)
+  // --------------------------------------------------------------------------
+
+  it('35a. malformed event: CANCELLATION_REQUESTED + actor_kind INTERNAL_DECISION is rejected at schema boundary', async () => {
+    const res = await createCommittedReservation('user:10', 1);
+    await expect(
+      fixture.owner.query(
+        `INSERT INTO canonical_reservation_events (
+          reservation_id, sequence_number, event_type, actor_kind, actor_principal, origin_kind, reason_code, command_id
+        ) VALUES ($1, 1, 'CANCELLATION_REQUESTED', 'INTERNAL_DECISION', 'internal:test', 'ENCHO_DIRECT', 'CANCEL_REQ', $2)`,
+        [res.reservationId, randomUUID()]
+      )
+    ).rejects.toThrow('chk_canonical_reservation_events_cancellation_provenance');
+  });
+
+  it('35b. malformed event: CANCELLATION_REQUESTED + origin_kind EXTERNAL_CHANNEL is rejected at schema boundary', async () => {
+    const res = await createCommittedReservation('user:10', 1);
+    await expect(
+      fixture.owner.query(
+        `INSERT INTO canonical_reservation_events (
+          reservation_id, sequence_number, event_type, actor_kind, actor_principal, origin_kind, reason_code, command_id
+        ) VALUES ($1, 1, 'CANCELLATION_REQUESTED', 'GUEST', 'user:10', 'EXTERNAL_CHANNEL', 'CANCEL_REQ', $2)`,
+        [res.reservationId, randomUUID()]
+      )
+    ).rejects.toThrow('chk_canonical_reservation_events_cancellation_provenance');
+  });
+
+  it('35c. malformed event: CANCELLATION_REQUESTED + non-null completion provenance is rejected at schema boundary', async () => {
+    const res = await createCommittedReservation('user:10', 1);
+    // Non-null decision_source_kind
+    await expect(
+      fixture.owner.query(
+        `INSERT INTO canonical_reservation_events (
+          reservation_id, sequence_number, event_type, actor_kind, actor_principal, origin_kind, reason_code, command_id, decision_source_kind
+        ) VALUES ($1, 1, 'CANCELLATION_REQUESTED', 'GUEST', 'user:10', 'ENCHO_DIRECT', 'CANCEL_REQ', $2, 'INTERNAL_AUTHORITY_PRIMITIVE')`,
+        [res.reservationId, randomUUID()]
+      )
+    ).rejects.toThrow('chk_canonical_reservation_events_cancellation_provenance');
+
+    // Non-null request_event_id
+    await expect(
+      fixture.owner.query(
+        `INSERT INTO canonical_reservation_events (
+          reservation_id, sequence_number, event_type, actor_kind, actor_principal, origin_kind, reason_code, command_id, request_event_id
+        ) VALUES ($1, 1, 'CANCELLATION_REQUESTED', 'GUEST', 'user:10', 'ENCHO_DIRECT', 'CANCEL_REQ', $2, $3)`,
+        [res.reservationId, randomUUID(), randomUUID()]
+      )
+    ).rejects.toThrow();
+  });
+
+  it('35d. malformed event: CANCELLED + actor_kind GUEST is rejected at schema boundary', async () => {
+    const res = await createCancellationRequestedReservation();
+    const completionCmd = randomUUID();
+    const decisionAuth = await issueCancellationDecisionAuthorization(cancellationIssuer, {
+      reservationId: res.reservationId,
+      requestEventId: res.requestEventId,
+      commandId: completionCmd,
+      reasonCode: 'CANCELLATION_APPROVED',
+    });
+
+    await expect(
+      fixture.owner.query(
+        `INSERT INTO canonical_reservation_events (
+          reservation_id, sequence_number, event_type, actor_kind, actor_principal, origin_kind, reason_code, command_id,
+          request_event_id, decision_authorization_id, decision_source_kind
+        ) VALUES ($1, 2, 'CANCELLED', 'GUEST', 'user:10', 'ENCHO_DIRECT', 'CANCEL_COMPLETE', $2, $3, $4, 'INTERNAL_AUTHORITY_PRIMITIVE')`,
+        [res.reservationId, randomUUID(), res.requestEventId, decisionAuth.authorizationId]
+      )
+    ).rejects.toThrow('chk_canonical_reservation_events_cancellation_provenance');
+  });
+
+  it('35e. malformed event: CANCELLED + missing request_event_id is rejected at schema boundary', async () => {
+    const res = await createCancellationRequestedReservation();
+    const completionCmd = randomUUID();
+    const decisionAuth = await issueCancellationDecisionAuthorization(cancellationIssuer, {
+      reservationId: res.reservationId,
+      requestEventId: res.requestEventId,
+      commandId: completionCmd,
+      reasonCode: 'CANCELLATION_APPROVED',
+    });
+
+    await expect(
+      fixture.owner.query(
+        `INSERT INTO canonical_reservation_events (
+          reservation_id, sequence_number, event_type, actor_kind, actor_principal, origin_kind, reason_code, command_id,
+          request_event_id, decision_authorization_id, decision_source_kind
+        ) VALUES ($1, 2, 'CANCELLED', 'INTERNAL_DECISION', 'internal:test', 'ENCHO_DIRECT', 'CANCEL_COMPLETE', $2, NULL, $3, 'INTERNAL_AUTHORITY_PRIMITIVE')`,
+        [res.reservationId, randomUUID(), decisionAuth.authorizationId]
+      )
+    ).rejects.toThrow('chk_canonical_reservation_events_cancellation_provenance');
+  });
+
+  it('35f. malformed event: CANCELLED + missing decision_authorization_id is rejected at schema boundary', async () => {
+    const res = await createCancellationRequestedReservation();
+
+    await expect(
+      fixture.owner.query(
+        `INSERT INTO canonical_reservation_events (
+          reservation_id, sequence_number, event_type, actor_kind, actor_principal, origin_kind, reason_code, command_id,
+          request_event_id, decision_authorization_id, decision_source_kind
+        ) VALUES ($1, 2, 'CANCELLED', 'INTERNAL_DECISION', 'internal:test', 'ENCHO_DIRECT', 'CANCEL_COMPLETE', $2, $3, NULL, 'INTERNAL_AUTHORITY_PRIMITIVE')`,
+        [res.reservationId, randomUUID(), res.requestEventId]
+      )
+    ).rejects.toThrow('chk_canonical_reservation_events_cancellation_provenance');
+  });
+
+  it('35g. malformed event: CANCELLED + wrong decision_source_kind is rejected at schema boundary', async () => {
+    const res = await createCancellationRequestedReservation();
+    const completionCmd = randomUUID();
+    const decisionAuth = await issueCancellationDecisionAuthorization(cancellationIssuer, {
+      reservationId: res.reservationId,
+      requestEventId: res.requestEventId,
+      commandId: completionCmd,
+      reasonCode: 'CANCELLATION_APPROVED',
+    });
+
+    await expect(
+      fixture.owner.query(
+        `INSERT INTO canonical_reservation_events (
+          reservation_id, sequence_number, event_type, actor_kind, actor_principal, origin_kind, reason_code, command_id,
+          request_event_id, decision_authorization_id, decision_source_kind
+        ) VALUES ($1, 2, 'CANCELLED', 'INTERNAL_DECISION', 'internal:test', 'ENCHO_DIRECT', 'CANCEL_COMPLETE', $2, $3, $4, 'INVALID_KIND')`,
+        [res.reservationId, randomUUID(), res.requestEventId, decisionAuth.authorizationId]
+      )
+    ).rejects.toThrow('chk_canonical_reservation_events_cancellation_provenance');
+  });
+
+  // --------------------------------------------------------------------------
+  // TESTS 36: MALFORMED COMMAND SCHEMA TESTS (chk_canonical_reservation_lifecycle_commands_cross_field)
+  // --------------------------------------------------------------------------
+
+  it('36a. malformed command: REQUEST_CANCELLATION + actor_kind INTERNAL_DECISION is rejected at schema boundary', async () => {
+    const res = await createCancellationRequestedReservation();
+    await expect(
+      fixture.owner.query(
+        `INSERT INTO canonical_reservation_lifecycle_commands (
+          command_id, reservation_id, command_type, actor_kind, actor_principal, origin_kind,
+          reason_code, command_fingerprint, event_id
+        ) VALUES ($1, $2, 'REQUEST_CANCELLATION', 'INTERNAL_DECISION', 'internal:test', 'ENCHO_DIRECT',
+          'REASON', $3, $4)`,
+        [randomUUID(), res.reservationId, 'a'.repeat(64), res.requestEventId]
+      )
+    ).rejects.toThrow('chk_canonical_reservation_lifecycle_commands_cross_field');
+  });
+
+  it('36b. malformed command: REQUEST_CANCELLATION + origin_kind EXTERNAL_CHANNEL is rejected at schema boundary', async () => {
+    const res = await createCancellationRequestedReservation();
+    await expect(
+      fixture.owner.query(
+        `INSERT INTO canonical_reservation_lifecycle_commands (
+          command_id, reservation_id, command_type, actor_kind, actor_principal, origin_kind,
+          reason_code, command_fingerprint, event_id
+        ) VALUES ($1, $2, 'REQUEST_CANCELLATION', 'GUEST', 'user:10', 'EXTERNAL_CHANNEL',
+          'REASON', $3, $4)`,
+        [randomUUID(), res.reservationId, 'a'.repeat(64), res.requestEventId]
+      )
+    ).rejects.toThrow('chk_canonical_reservation_lifecycle_commands_cross_field');
+  });
+
+  it('36c. malformed command: COMPLETE_CANCELLATION + actor_kind GUEST is rejected at schema boundary', async () => {
+    const res = await createCancellationRequestedReservation();
+    await expect(
+      fixture.owner.query(
+        `INSERT INTO canonical_reservation_lifecycle_commands (
+          command_id, reservation_id, command_type, actor_kind, actor_principal, origin_kind,
+          reason_code, command_fingerprint, event_id
+        ) VALUES ($1, $2, 'COMPLETE_CANCELLATION', 'GUEST', 'user:10', 'ENCHO_DIRECT',
+          'REASON', $3, $4)`,
+        [randomUUID(), res.reservationId, 'a'.repeat(64), res.requestEventId]
+      )
+    ).rejects.toThrow('chk_canonical_reservation_lifecycle_commands_cross_field');
+  });
+
+  it('36d. malformed command: COMPLETE_CANCELLATION + unsupported origin is rejected at schema boundary', async () => {
+    const res = await createCancellationRequestedReservation();
+    await expect(
+      fixture.owner.query(
+        `INSERT INTO canonical_reservation_lifecycle_commands (
+          command_id, reservation_id, command_type, actor_kind, actor_principal, origin_kind,
+          reason_code, command_fingerprint, event_id
+        ) VALUES ($1, $2, 'COMPLETE_CANCELLATION', 'INTERNAL_DECISION', 'internal:test', 'EXTERNAL_CHANNEL',
+          'REASON', $3, $4)`,
+        [randomUUID(), res.reservationId, 'a'.repeat(64), res.requestEventId]
+      )
+    ).rejects.toThrow('chk_canonical_reservation_lifecycle_commands_cross_field');
+  });
+
+  it('36e. normal accepted command combinations succeed', async () => {
+    // 1. Verify W4-A REQUEST_CANCELLATION / GUEST / ENCHO_DIRECT already recorded
+    const res = await createCancellationRequestedReservation();
+    const reqCmd = await fixture.owner.query<{command_type: string; actor_kind: string; origin_kind: string}>(
+      `SELECT command_type, actor_kind, origin_kind FROM canonical_reservation_lifecycle_commands WHERE command_id = $1`,
+      [res.cancelRequestId]
+    );
+    expect(reqCmd.rows[0]).toEqual({
+      command_type: 'REQUEST_CANCELLATION',
+      actor_kind: 'GUEST',
+      origin_kind: 'ENCHO_DIRECT',
+    });
+
+    // 2. Complete cancellation and verify COMPLETE_CANCELLATION / INTERNAL_DECISION / ENCHO_DIRECT
+    const completionCmd = randomUUID();
+    const decisionAuth = await issueCancellationDecisionAuthorization(cancellationIssuer, {
+      reservationId: res.reservationId,
+      requestEventId: res.requestEventId,
+      commandId: completionCmd,
+      reasonCode: 'CANCELLATION_APPROVED',
+    });
+
+    await completeReservationCancellation(cancellationExecutor, {
+      authorizationId: decisionAuth.authorizationId,
+      commandId: completionCmd,
+      reservationId: res.reservationId,
+      reasonCode: 'CANCELLATION_APPROVED',
+    });
+
+    const compCmd = await fixture.owner.query<{command_type: string; actor_kind: string; origin_kind: string}>(
+      `SELECT command_type, actor_kind, origin_kind FROM canonical_reservation_lifecycle_commands WHERE command_id = $1`,
+      [completionCmd]
+    );
+    expect(compCmd.rows[0]).toEqual({
+      command_type: 'COMPLETE_CANCELLATION',
+      actor_kind: 'INTERNAL_DECISION',
+      origin_kind: 'ENCHO_DIRECT',
+    });
   });
 });

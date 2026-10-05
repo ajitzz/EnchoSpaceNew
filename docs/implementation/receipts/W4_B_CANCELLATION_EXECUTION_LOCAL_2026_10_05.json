@@ -14,6 +14,15 @@
     "request_provenance": "exact W4-A CANCELLATION_REQUESTED Guest/ENCHO_DIRECT event",
     "decision_provenance": "internal cancellation decision authority primitive (actor_kind = 'INTERNAL_DECISION', decision_source_kind = 'INTERNAL_AUTHORITY_PRIMITIVE')",
     "executor": "mechanical execution authority only (restricted role encho_cancellation_executor)",
+    "event_cross_field_schema": {
+      "cancellation_requested": "Guest / Encho Direct request evidence only (actor_kind = 'GUEST', origin_kind = 'ENCHO_DIRECT', request_event_id IS NULL, decision_authorization_id IS NULL, decision_source_kind IS NULL)",
+      "cancelled": "Internal Decision / Encho Direct completion evidence only (actor_kind = 'INTERNAL_DECISION', origin_kind = 'ENCHO_DIRECT', request_event_id IS NOT NULL, decision_authorization_id IS NOT NULL, decision_source_kind = 'INTERNAL_AUTHORITY_PRIMITIVE')"
+    },
+    "command_cross_field_schema": {
+      "request_cancellation": "Guest / Encho Direct (command_type = 'REQUEST_CANCELLATION', actor_kind = 'GUEST', origin_kind = 'ENCHO_DIRECT')",
+      "complete_cancellation": "Internal Decision / Encho Direct (command_type = 'COMPLETE_CANCELLATION', actor_kind = 'INTERNAL_DECISION', origin_kind = 'ENCHO_DIRECT')"
+    },
+    "inventory_execution_order": "sequential deterministic lock → validate → decrement; transaction rollback guarantees all-or-nothing behavior",
     "public_cancellation": "NOT ACTIVATED",
     "public_cancellation_policy": "NOT IMPLEMENTED",
     "authenticated_guest_ingress": "NOT IMPLEMENTED",
@@ -21,21 +30,37 @@
   },
   "migration": {
     "file": "src/migrations/056_canonical_cancellation_completion_authority.sql",
-    "sha256": "f2a3679254cd1f07044baae3a12142d5336d4fae6dc3daae4884e73ba8131f6f"
+    "sha256": "5c6c2fee6af4c45461a46e931b771ea0fc8b7c5e4e249be19cb8111ae9a01168"
   },
   "test_suite": {
     "file": "src/test/harvo/w4b_canonical_cancellation_pg.test.ts",
-    "total_tests": 40,
-    "passed": 40,
+    "total_tests": 52,
+    "passed": 52,
     "failed": 0,
     "provenance_tests": {
-      "actor_not_guest_denied": "passed",
-      "origin_not_encho_direct_denied": "passed",
+      "actor_not_guest_denied": "passed (rejected at schema boundary by chk_canonical_reservation_events_cancellation_provenance)",
+      "origin_not_encho_direct_denied": "passed (rejected at schema boundary by chk_canonical_reservation_events_cancellation_provenance)",
       "wrong_reservation_denied": "passed",
       "stale_request_denied": "passed",
       "random_request_id_denied": "passed",
       "decision_actor_separated": "passed (actor_kind = INTERNAL_DECISION, actor_principal = internal:cancellation_authority_primitive)",
       "replay_preserves_provenance": "passed"
+    },
+    "malformed_event_schema_tests": {
+      "cancellation_requested_internal_decision_rejected": "passed (35a)",
+      "cancellation_requested_external_channel_rejected": "passed (35b)",
+      "cancellation_requested_non_null_provenance_rejected": "passed (35c)",
+      "cancelled_guest_actor_rejected": "passed (35d)",
+      "cancelled_missing_request_event_id_rejected": "passed (35e)",
+      "cancelled_missing_decision_authorization_id_rejected": "passed (35f)",
+      "cancelled_wrong_decision_source_kind_rejected": "passed (35g)"
+    },
+    "malformed_command_schema_tests": {
+      "request_cancellation_internal_decision_rejected": "passed (36a)",
+      "request_cancellation_external_channel_rejected": "passed (36b)",
+      "complete_cancellation_guest_actor_rejected": "passed (36c)",
+      "complete_cancellation_unsupported_origin_rejected": "passed (36d)",
+      "normal_accepted_commands_succeed": "passed (36e: REQUEST_CANCELLATION/GUEST/ENCHO_DIRECT and COMPLETE_CANCELLATION/INTERNAL_DECISION/ENCHO_DIRECT verified)"
     },
     "post_expiry_replay": {
       "proven_with_db_timestamp": "passed (statement_timestamp() > expires_at verified in PG, returns original receipt, zero extra mutations)",
@@ -82,7 +107,7 @@
     "2. canonical_reservation_cancellation_authorizations FOR UPDATE",
     "3. canonical_reservation_lifecycle_commands inspection (idempotent replay)",
     "4. canonical_reservation_cancellation_inventory_releases inspection (release fence)",
-    "5. inventory_days ORDER BY calendar_date ASC, id ASC FOR UPDATE (all reservation nights locked in ascending order before decrements are applied)"
+    "5. inventory_days ORDER BY calendar_date ASC, id ASC FOR UPDATE (processed in deterministic calendar_date/id order; each row is locked and validated before its decrement; transaction rollback guarantees all-or-nothing behavior)"
   ],
   "roles": {
     "issuer": "encho_cancellation_issuer",
