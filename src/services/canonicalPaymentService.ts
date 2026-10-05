@@ -13,8 +13,11 @@ const knownCodes = new Set([
   'PAYMENT_COMMAND_CONFLICT',
   'PAYMENT_QUOTE_NOT_FOUND',
   'PAYMENT_HOLD_NOT_FOUND',
-  'PAYABLE_TOTAL_AUTHORITY_MISSING_IN_QUOTE',
-  'PAYMENT_AMOUNT_WITHOUT_AUTHORITY_FORBIDDEN',
+  'PAYMENT_QUOTE_HOLD_MISMATCH',
+  'PAYMENT_PRINCIPAL_MISMATCH',
+  'PAYMENT_ITINERARY_MISMATCH',
+  'PAYMENT_HOLD_NOT_ACTIVE',
+  'PAYMENT_QUOTE_KIND_INVALID',
   'PAYMENT_ATTEMPT_NOT_FOUND',
   'PROVIDER_EVENT_INPUT_INVALID',
   'PAYMENT_ROLE_NOT_RESTRICTED',
@@ -24,21 +27,17 @@ const knownCodes = new Set([
 export const createPaymentAttemptSchema = z.object({
   commandId: z.string().uuid(),
   holderPrincipal: z.string().regex(/^(user:\d+|session:[0-9a-f-]{36})$/),
-  originKind: z.enum(['RAZORPAY', 'STRIPE', 'SYNTHETIC_TEST']),
-  quoteId: z.string().uuid().optional().nullable(),
-  holdId: z.string().uuid().optional().nullable(),
-  providerOrderRef: z.string().optional().nullable(),
-  expectedAuthorityKind: z.enum(['NONE', 'ACCEPTED_OFFER_ITINERARY_QUOTE', 'SYNTHETIC_INTERNAL_TEST']),
-  expectedAmountPaise: z.number().int().positive().optional().nullable(),
-  expectedCurrency: z.string().default('INR'),
-  expectedAuthorityHash: z.string().optional().nullable(),
+  originKind: z.enum(['RAZORPAY', 'STRIPE']),
+  quoteId: z.string().uuid(),
+  holdId: z.string().uuid(),
+  providerOrderRef: z.string().min(1),
 }).strict();
 
 export type CreatePaymentAttemptCommand = z.infer<typeof createPaymentAttemptSchema>;
 
 export const ingestProviderEventSchema = z.object({
   attemptId: z.string().uuid(),
-  originKind: z.enum(['RAZORPAY', 'STRIPE', 'SYNTHETIC_TEST']),
+  originKind: z.enum(['RAZORPAY', 'STRIPE']),
   providerEventId: z.string().min(1),
   normalizedEventType: z.enum(['PAYMENT_AUTHORIZED', 'PAYMENT_CAPTURED', 'PAYMENT_FAILED', 'PAYMENT_UNKNOWN']),
   reportedAmountPaise: z.number().int().nonnegative(),
@@ -77,7 +76,7 @@ export async function assertPaymentWorkerRole(pool: pg.Pool): Promise<void> {
         AND pg_has_role(r.oid, c.relowner, 'MEMBER')) AS protected_owner_member,
     pg_has_role(r.oid, 'pg_read_all_data'::regrole, 'MEMBER') AS read_all_data,
     pg_has_role(r.oid, 'pg_write_all_data'::regrole, 'MEMBER') AS write_all_data,
-    has_function_privilege(current_user, 'public.canonical_create_payment_attempt(uuid,text,text,uuid,uuid,text,text,bigint,text,text)', 'EXECUTE') AS create_attempt_privilege,
+    has_function_privilege(current_user, 'public.canonical_create_payment_attempt(uuid,text,text,uuid,uuid,text)', 'EXECUTE') AS create_attempt_privilege,
     has_function_privilege(current_user, 'public.canonical_ingest_provider_event(uuid,text,text,text,bigint,text,text,text,jsonb,timestamptz)', 'EXECUTE') AS ingest_privilege,
     has_function_privilege(current_user, 'public.canonical_record_payment_unknown(uuid,jsonb)', 'EXECUTE') AS unknown_privilege
     FROM pg_roles r WHERE r.rolname = current_user`);
@@ -105,20 +104,15 @@ export async function createPaymentAttempt(
   try {
     const {rows} = await client.query<{ attempt_id: string; payment_state: string; replayed: boolean }>(
       `SELECT * FROM canonical_create_payment_attempt(
-        $1::uuid, $2::text, $3::text, $4::uuid, $5::uuid, $6::text,
-        $7::text, $8::bigint, $9::text, $10::text
+        $1::uuid, $2::text, $3::text, $4::uuid, $5::uuid, $6::text
       )`,
       [
         cmd.commandId,
         cmd.holderPrincipal,
         cmd.originKind,
-        cmd.quoteId ?? null,
-        cmd.holdId ?? null,
-        cmd.providerOrderRef ?? null,
-        cmd.expectedAuthorityKind,
-        cmd.expectedAmountPaise ?? null,
-        cmd.expectedCurrency,
-        cmd.expectedAuthorityHash ?? null,
+        cmd.quoteId,
+        cmd.holdId,
+        cmd.providerOrderRef,
       ]
     );
     if (rows.length !== 1) {
@@ -239,14 +233,17 @@ export async function getPaymentAttempt(
 ): Promise<{
   id: string;
   commandId: string;
+  commandFingerprint: string;
   holderPrincipal: string;
-  quoteId: string | null;
-  holdId: string | null;
+  quoteId: string;
+  holdId: string;
   originKind: string;
-  providerOrderRef: string | null;
+  providerOrderRef: string;
   expectedCurrency: string;
   expectedAmountPaise: string | null;
   expectedAuthorityKind: string;
+  expectedAuthorityRef: string;
+  expectedAuthorityHash: string | null;
   paymentState: string;
   reconciliationReason: string | null;
   matchedAt: string | null;
@@ -258,14 +255,17 @@ export async function getPaymentAttempt(
     const {rows} = await client.query<{
       id: string;
       command_id: string;
+      command_fingerprint: string;
       holder_principal: string;
-      quote_id: string | null;
-      hold_id: string | null;
+      quote_id: string;
+      hold_id: string;
       origin_kind: string;
-      provider_order_ref: string | null;
+      provider_order_ref: string;
       expected_currency: string;
       expected_amount_paise: string | null;
       expected_authority_kind: string;
+      expected_authority_ref: string;
+      expected_authority_hash: string | null;
       payment_state: string;
       reconciliation_reason: string | null;
       matched_at: string | null;
@@ -277,6 +277,7 @@ export async function getPaymentAttempt(
     return {
       id: r.id,
       commandId: r.command_id,
+      commandFingerprint: r.command_fingerprint,
       holderPrincipal: r.holder_principal,
       quoteId: r.quote_id,
       holdId: r.hold_id,
@@ -285,6 +286,8 @@ export async function getPaymentAttempt(
       expectedCurrency: r.expected_currency,
       expectedAmountPaise: r.expected_amount_paise,
       expectedAuthorityKind: r.expected_authority_kind,
+      expectedAuthorityRef: r.expected_authority_ref,
+      expectedAuthorityHash: r.expected_authority_hash,
       paymentState: r.payment_state,
       reconciliationReason: r.reconciliation_reason,
       matchedAt: r.matched_at,
