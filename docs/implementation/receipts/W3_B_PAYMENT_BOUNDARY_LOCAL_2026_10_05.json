@@ -1,7 +1,7 @@
 {
   "subject": "W3-B first payment authority boundary, failing before implementation",
   "canonicalBase": "c0eb0ce4087de0ef3a4ecffc4a6cf10d5b6909e3",
-  "evidenceLevel": "local built application, disposable PostgreSQL, synthetic provider fixtures",
+  "evidenceLevel": "local built application, disposable PostgreSQL",
   "date": "2026-10-05",
   "workerBranch": "codex/antigravity-w3b-payment-boundary",
   "testSource": "scripts/testing/w3b-payment-boundary-red.mjs",
@@ -13,11 +13,11 @@
     "case": "approved payable total authority is absent in canonical stays quote",
     "assertion": "assert.notEqual(quoteRow.total_paise, null)",
     "observation": {
-      "quoteId": "033c8ced-cdc1-4167-81d5-e35fec11b463",
+      "quoteId": "29ce1dfc-46fa-4b46-be68-fe31573c47ae",
       "roomSubtotalPaise": "1650000",
       "quoteTaxPaise": null,
       "quoteTotalPaise": null,
-      "holdId": "a13dff70-3e70-4d46-ae7e-85f01dd50631",
+      "holdId": "5957a5cb-bfa4-4433-bba5-2ef4bc66bd47",
       "holdStatus": "ACTIVE",
       "inventoryHeldUnits": 3,
       "inventoryBookedUnits": 0,
@@ -36,7 +36,7 @@
       "bookingStatus": 503,
       "bookingCode": "STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE"
     },
-    "scope": "actual built server in NODE_ENV=production against disposable PostgreSQL; tested legacy endpoints fail closed; test-sandbox sim_sig_ shortcut is unreachable on mounted production routes, confirming zero public exploit across the three tested endpoints (POST /api/checkout/razorpay/order, POST /api/payments/razorpay/verify, POST /api/bookings)."
+    "scope": "actual built server in NODE_ENV=production against disposable PostgreSQL; tested legacy endpoints fail closed; test-sandbox sim_sig_ shortcut is unreachable on mounted production routes. The three tested legacy routes returned fail-closed responses in the local production-mode build. This does not establish deployed or all-route payment safety."
   },
   "conclusion": "W2 room subtotal (base_price_paise) is not a payable total. In stays_quotes, total_paise and tax_paise are NULL by database constraint; approved payable total authority is MISSING and LEGALLY GATED pending Indian tax/legal sign-off. W3-A canonical_finalize_direct_hold has zero application callers. The three mounted production legacy routes fail closed. Provider ID must never become canonical reservation ID, and durable reconciliation is required for captures after hold expiry, finalizer failure, or amount mismatch.",
   "limitations": "No real money movement, remote Neon mutation, live Razorpay API, STAAH integration or public checkout was executed. This is intentionally red diagnostic evidence for Task 1 architecture review."

@@ -13,8 +13,8 @@
  *    - POST /api/checkout/razorpay/order returns HTTP 503 CANONICAL_CHECKOUT_REQUIRED
  *    - POST /api/payments/razorpay/verify returns HTTP 410 SIGNED_PAYMENT_WEBHOOK_REQUIRED
  *    - POST /api/bookings returns HTTP 503 STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE
- *    - Accurately labels: test-sandbox sim_sig_ shortcut is NOT accessible on these mounted production routes,
- *      confirming zero public exploit across these three mounted legacy endpoints.
+ *    - Accurately labels: test-sandbox sim_sig_ shortcut is NOT accessible on these mounted production routes.
+ *      The three tested legacy routes returned fail-closed responses in the local production-mode build. This does not establish deployed or all-route payment safety.
  */
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
