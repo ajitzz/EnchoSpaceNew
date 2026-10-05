@@ -4,17 +4,17 @@
  * Verifies:
  * 1. Missing payment authority boundary (RED):
  *    - Given an active W2 hold and quote, the quote provides roomSubtotalMinor (base_price_paise)
- *      but payableTotalMinor is NULL (stays_quotes.total_paise is NULL by DB constraint).
+ *      but payableTotalMinor is NULL (stays_quotes.total_paise is NULL by DB constraint stays_quotes_authority_shape).
  *    - W2 room subtotal is NOT payable total; tax and payable total authority are MISSING / LEGALLY GATED.
- *    - Synthetic payment capture cannot be verified against an authoritative payable total.
+ *    - Neither payment order creation nor capture verification can proceed without an approved payable total.
  *    - Zero canonical reservations exist, zero inventory units are committed to booked_units,
  *      and W3-A canonical_finalize_direct_hold has zero callers in payment flows.
- * 2. Mounted production routes fail closed (PASS_CONTAINED):
+ * 2. Mounted production routes fail closed (GREEN_CONTAINED):
  *    - POST /api/checkout/razorpay/order returns HTTP 503 CANONICAL_CHECKOUT_REQUIRED
  *    - POST /api/payments/razorpay/verify returns HTTP 410 SIGNED_PAYMENT_WEBHOOK_REQUIRED
  *    - POST /api/bookings returns HTTP 503 STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE
- *    - Accurately labels: test-sandbox sim_sig_ shortcut is NOT accessible in production;
- *      there is zero guest exploit or unauthenticated booking confirmation in production.
+ *    - Accurately labels: test-sandbox sim_sig_ shortcut is NOT accessible on these mounted production routes,
+ *      confirming zero public exploit across these three mounted legacy endpoints.
  */
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -29,7 +29,7 @@ import {acquireHold} from '../../src/services/inventoryHoldService.js';
 import {addDays,createW1AcceptedOfferFixture} from '../../src/test/harvo/helpers/w1AcceptedOfferFixture.ts';
 import {applyIsolatedMigration} from '../../src/test/harvo/helpers/isolatedMigration.ts';
 
-test('payment capture cannot verify server-authoritative payable total or finalize canonical reservation', async()=>{
+test('approved payable total authority is absent in canonical stays quote', async()=>{
   const fixture=await createW1AcceptedOfferFixture({serverCompatible:true});
   try {
     await fixture.owner.query(`CREATE TABLE bookings(id SERIAL PRIMARY KEY,listing_id INT NOT NULL,
@@ -39,7 +39,7 @@ test('payment capture cannot verify server-authoritative payable total or finali
       NOCREATEDB NOCREATEROLE NOREPLICATION`);
     await applyIsolatedMigration(fixture.owner,'050_accepted_offer_itinerary_quotes.sql');
     await fixture.owner.query(`CREATE ROLE encho_reservation_worker LOGIN NOSUPERUSER NOBYPASSRLS
-      NOCREATEDB NOCREATEROLE NOREPLICATION`);
+      NOCREATEROLE NOREPLICATION`);
     await applyIsolatedMigration(fixture.owner,'052_canonical_reservation_hold_finalization.sql');
 
     const stays=new (await import('pg')).default.Pool({...fixture.owner.options,user:'encho_stays_web'});
@@ -103,15 +103,6 @@ test('payment capture cannot verify server-authoritative payable total or finali
       [holdId]
     )).rows[0].n;
 
-    // Synthetic payment capture event arrived from provider
-    const syntheticCapture={
-      provider:'RAZORPAY',
-      orderId:'order_synth_'+randomUUID(),
-      paymentId:'pay_synth_'+randomUUID(),
-      amountPaise:1650000, // Matching room subtotal paise exactly
-      currency:'INR'
-    };
-
     console.log('W3_B_PAYMENT_AUTHORITY_OBSERVATION',JSON.stringify({
       quoteId:quoteRow.id,
       roomSubtotalPaise:quoteRow.base_price_paise,
@@ -121,26 +112,19 @@ test('payment capture cannot verify server-authoritative payable total or finali
       holdStatus:holdRow.status,
       inventoryHeldUnits:inventoryBefore.held,
       inventoryBookedUnits:inventoryBefore.booked,
-      canonicalReservationsCount:reservationsCount,
-      syntheticCapture
+      canonicalReservationsCount:reservationsCount
     }));
 
-    // FIRST RED ASSERTION:
-    // A payment capture cannot be verified without server-authoritative expected payable total.
+    // SINGLE HONEST RED ASSERTION:
+    // Neither payment order creation nor capture verification can proceed without an approved
+    // server-authoritative payable total.
     // W2 room subtotal (base_price_paise) is NOT payable total.
-    // In stays_quotes, total_paise is NULL (enforced by CHECK constraint; tax/total authority is MISSING/LEGALLY GATED).
+    // In stays_quotes, total_paise is NULL (enforced by CHECK constraint stays_quotes_authority_shape;
+    // tax and total authority are MISSING / LEGALLY GATED pending Indian CA/tax-lawyer sign-off).
     assert.notEqual(
       quoteRow.total_paise,
       null,
-      'Payment capture verification requires an approved server-authoritative payable total in stays_quotes (currently NULL / legally gated)'
-    );
-
-    // SECOND RED ASSERTION:
-    // Verified payment must finalize canonical reservation and commit inventory via W3-A.
-    assert.equal(
-      reservationsCount,
-      1,
-      'Payment verification must produce exactly one finalized canonical reservation'
+      'Payment order creation and capture verification require an approved server-authoritative payable total in stays_quotes (currently NULL / legally gated)'
     );
   } finally {
     await fixture.close();

@@ -5,47 +5,39 @@
   "date": "2026-10-05",
   "workerBranch": "codex/antigravity-w3b-payment-boundary",
   "testSource": "scripts/testing/w3b-payment-boundary-red.mjs",
-  "command": "node --import tsx --test scripts/testing/w3b-payment-boundary-red.mjs",
+  "buildCommand": "npm run build:offline",
+  "testCommand": "node --import tsx --test scripts/testing/w3b-payment-boundary-red.mjs",
   "expectedDiagnosticExitCode": 1,
-  "results": [
-    {
-      "case": "missing payable total authority and uninvoked W3-A canonical reservation finalizer",
-      "result": "RED",
-      "observation": {
-        "quoteId": "8bcf2f28-75b0-4e51-81e4-0192224e5675",
-        "roomSubtotalPaise": "1650000",
-        "quoteTaxPaise": null,
-        "quoteTotalPaise": null,
-        "holdId": "3f75317b-c2ab-41d0-ac05-7cbd881ce392",
-        "holdStatus": "ACTIVE",
-        "inventoryHeldUnits": 3,
-        "inventoryBookedUnits": 0,
-        "canonicalReservationsCount": 0,
-        "syntheticCapture": {
-          "provider": "RAZORPAY",
-          "orderId": "order_synth_6eeb7f49-b542-4ee1-97ee-70698c04edf0",
-          "paymentId": "pay_synth_ab506125-0691-406c-a5fb-84fcfd04eccc",
-          "amountPaise": 1650000,
-          "currency": "INR"
-        }
-      },
-      "scope": "disposable PostgreSQL with migrations 003-006, 036, 041, 049-052; W2 accepted quote has base_price_paise but total_paise and tax_paise are NULL by DB constraint (MISSING / LEGALLY GATED); payment capture cannot be verified against an approved payable total, and W3-A canonical reservation finalization is not invoked."
+  "redResult": {
+    "status": "RED",
+    "case": "approved payable total authority is absent in canonical stays quote",
+    "assertion": "assert.notEqual(quoteRow.total_paise, null)",
+    "observation": {
+      "quoteId": "033c8ced-cdc1-4167-81d5-e35fec11b463",
+      "roomSubtotalPaise": "1650000",
+      "quoteTaxPaise": null,
+      "quoteTotalPaise": null,
+      "holdId": "a13dff70-3e70-4d46-ae7e-85f01dd50631",
+      "holdStatus": "ACTIVE",
+      "inventoryHeldUnits": 3,
+      "inventoryBookedUnits": 0,
+      "canonicalReservationsCount": 0
     },
-    {
-      "case": "mounted production checkout and payment verification routes",
-      "result": "PASS_CONTAINED",
-      "observation": {
-        "checkoutStatus": 503,
-        "checkoutCode": "CANONICAL_CHECKOUT_REQUIRED",
-        "verifyStatus": 410,
-        "verifyCode": "SIGNED_PAYMENT_WEBHOOK_REQUIRED",
-        "bookingStatus": 503,
-        "bookingCode": "STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE"
-      },
-      "scope": "actual built server in NODE_ENV=production against disposable PostgreSQL; legacy checkout, verify and bookings routes fail closed; test-sandbox sim_sig_ shortcut is unreachable in production, proving zero public exploit."
-    }
-  ],
-  "build": "npm run build:offline exited 0 before built-route case",
-  "conclusion": "W2 room subtotal (base_price_paise) is not a payable total. In stays_quotes, total_paise and tax_paise are NULL by database constraint; approved payable total authority is MISSING and LEGALLY GATED pending Indian tax/legal sign-off. W3-A canonical_finalize_direct_hold has zero application callers. Mounted production checkout routes remain strictly contained and fail closed. Provider ID must never become canonical reservation ID, and durable reconciliation is required for captures after hold expiry, finalizer failure, or amount mismatch.",
+    "scope": "disposable PostgreSQL with migrations 003-006, 036, 041, 049-052; W2 accepted quote has base_price_paise but total_paise and tax_paise are NULL by DB constraint stays_quotes_authority_shape (MISSING / LEGALLY GATED); payment order creation and capture verification cannot proceed without an approved payable total."
+  },
+  "greenResult": {
+    "status": "GREEN",
+    "case": "mounted production checkout and payment verification routes fail closed",
+    "observation": {
+      "checkoutStatus": 503,
+      "checkoutCode": "CANONICAL_CHECKOUT_REQUIRED",
+      "verifyStatus": 410,
+      "verifyCode": "SIGNED_PAYMENT_WEBHOOK_REQUIRED",
+      "bookingStatus": 503,
+      "bookingCode": "STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE"
+    },
+    "scope": "actual built server in NODE_ENV=production against disposable PostgreSQL; tested legacy endpoints fail closed; test-sandbox sim_sig_ shortcut is unreachable on mounted production routes, confirming zero public exploit across the three tested endpoints (POST /api/checkout/razorpay/order, POST /api/payments/razorpay/verify, POST /api/bookings)."
+  },
+  "conclusion": "W2 room subtotal (base_price_paise) is not a payable total. In stays_quotes, total_paise and tax_paise are NULL by database constraint; approved payable total authority is MISSING and LEGALLY GATED pending Indian tax/legal sign-off. W3-A canonical_finalize_direct_hold has zero application callers. The three mounted production legacy routes fail closed. Provider ID must never become canonical reservation ID, and durable reconciliation is required for captures after hold expiry, finalizer failure, or amount mismatch.",
   "limitations": "No real money movement, remote Neon mutation, live Razorpay API, STAAH integration or public checkout was executed. This is intentionally red diagnostic evidence for Task 1 architecture review."
 }
