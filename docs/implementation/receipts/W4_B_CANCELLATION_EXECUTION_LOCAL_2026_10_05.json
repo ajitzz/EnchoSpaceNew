@@ -1,0 +1,48 @@
+{
+  "task": "W4-B TASK 2 — CANONICAL CANCELLATION COMPLETION + EXACT BOOKED-INVENTORY RELEASE",
+  "task_base": "67a320bc3cec0ef2edaa67a68a0d0b9dd0aeea08",
+  "worker_branch": "codex/antigravity-w4b-cancellation-execution",
+  "status": "LOCAL_VERIFICATION_COMPLETE",
+  "authority_boundary": {
+    "transition": "CANCELLATION_REQUESTED -> CANCELLED",
+    "allocation_truth": "canonical_reservations.status = 'INVENTORY_COMMITTED' remains unchanged",
+    "allocation_source": "canonical_reservation_nights (exact booked inventory decrement)",
+    "fence": "canonical_reservation_cancellation_inventory_releases (UNIQUE(reservation_id))",
+    "evidence": "canonical_reservation_cancellation_release_nights",
+    "capability": "canonical_reservation_cancellation_authorizations",
+    "command_receipt": "canonical_reservation_lifecycle_commands (COMPLETE_CANCELLATION)",
+    "public_cancellation": "NOT ACTIVATED",
+    "authenticated_guest_ingress": "NOT IMPLEMENTED",
+    "refunds": "NOT IMPLEMENTED (deferred to W4-D)"
+  },
+  "migration": {
+    "file": "src/migrations/056_canonical_cancellation_completion_authority.sql",
+    "sha256": "21398024ab461b0290c5fd7d4e9c4de6653ceb7a48da279211e13ea7d6f112f5"
+  },
+  "test_suite": {
+    "file": "src/test/harvo/w4b_canonical_cancellation_pg.test.ts",
+    "total_tests": 34,
+    "passed": 34,
+    "failed": 0
+  },
+  "regression_suites": {
+    "w4a_lifecycle": "passed (34/34)",
+    "w3_reservation": "passed (13/13)",
+    "w3b_composition": "passed (28/28)",
+    "cr1_schema": "passed (23/23)"
+  },
+  "offline_build": "passed",
+  "lint": "passed",
+  "lock_order": [
+    "1. canonical_reservations FOR UPDATE",
+    "2. canonical_reservation_cancellation_authorizations FOR UPDATE",
+    "3. canonical_reservation_lifecycle_commands inspection (idempotent replay)",
+    "4. canonical_reservation_cancellation_inventory_releases inspection (release fence)",
+    "5. inventory_days ORDER BY calendar_date ASC, id ASC FOR UPDATE"
+  ],
+  "roles": {
+    "issuer": "encho_cancellation_issuer",
+    "executor": "encho_cancellation_executor",
+    "public_access": "REVOKED"
+  }
+}
