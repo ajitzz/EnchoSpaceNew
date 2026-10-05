@@ -12,9 +12,9 @@
  *    - In the predecessor W3 PostgreSQL schema:
  *      - No append-only lifecycle event table exists (`canonical_reservation_events` is NULL).
  *      - No idempotent lifecycle command table exists (`canonical_reservation_lifecycle_commands` is NULL).
- *      - No canonical cancellation procedure exists (`canonical_cancel_reservation` is NULL).
- *    - The schema provides no mechanism to record or project a cancellation transition
- *      for a canonical reservation while preserving historical W3 immutability.
+ *      - No canonical cancellation request procedure exists (`canonical_request_cancellation` is NULL).
+ *    - Precise finding: canonical reservations currently have no authorized lifecycle/cancellation
+ *      authority and no authorized booked-inventory release path.
  *
  * 3. Authority Decoupling:
  *    - The legacy `bookings` table has no foreign key or trigger relationship to `canonical_reservations`
@@ -239,7 +239,7 @@ test('canonical reservation cannot record cancellation transition without W4-A l
       SELECT
         to_regclass('public.canonical_reservation_events') AS lifecycle_events_table,
         to_regclass('public.canonical_reservation_lifecycle_commands') AS lifecycle_commands_table,
-        to_regprocedure('public.canonical_cancel_reservation(uuid,uuid,text,text,text)') AS cancellation_proc
+        to_regprocedure('public.canonical_request_cancellation(uuid,uuid,text,text,text)') AS cancellation_request_proc
     `)
     ).rows[0];
 
@@ -266,7 +266,7 @@ test('canonical reservation cannot record cancellation transition without W4-A l
       canonicalHasNoBookingsFk: fkCheck.count === 0,
       lifecycleEventsTable: schemaChecks.lifecycle_events_table,
       lifecycleCommandsTable: schemaChecks.lifecycle_commands_table,
-      cancellationProcedure: schemaChecks.cancellation_proc,
+      cancellationRequestProcedure: schemaChecks.cancellation_request_proc,
     };
 
     console.log('W4_A_BOUNDARY_OBSERVATION', JSON.stringify(observation));
@@ -274,7 +274,8 @@ test('canonical reservation cannot record cancellation transition without W4-A l
     // =========================================================================
     // DELIBERATE HONEST RED ASSERTION:
     // W4-A canonical lifecycle event authority is missing.
-    // This assertion fails until W4-A implements canonical lifecycle authority.
+    // Canonical reservations currently have no authorized lifecycle/cancellation
+    // authority and no authorized booked-inventory release path.
     // =========================================================================
     assert.notEqual(
       schemaChecks.lifecycle_events_table,

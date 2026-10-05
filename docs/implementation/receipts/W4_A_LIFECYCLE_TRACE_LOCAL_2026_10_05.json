@@ -9,7 +9,7 @@
   "expectedDiagnosticExitCode": 1,
   "redResult": {
     "status": "RED",
-    "case": "canonical reservation committed under W3 is strictly immutable and cannot record a cancellation lifecycle transition because canonical lifecycle event authority (canonical_reservation_events) is absent from the schema",
+    "case": "canonical reservation committed under W3 is immutable historical truth, but canonical reservations currently have no authorized lifecycle/cancellation authority and no authorized booked-inventory release path",
     "assertion": "assert.notEqual(schemaChecks.lifecycle_events_table, null)",
     "observation": {
       "canonicalReservationStatus": "INVENTORY_COMMITTED",
@@ -19,9 +19,9 @@
       "canonicalHasNoBookingsFk": true,
       "lifecycleEventsTable": null,
       "lifecycleCommandsTable": null,
-      "cancellationProcedure": null
+      "cancellationRequestProcedure": null
     },
-    "scope": "disposable PostgreSQL with migrations 001-006, 036, 041, 049-054. Confirms that W3 canonical reservations are strictly immutable under trigger canonical_reservations_immutable; direct in-place UPDATE is rejected; and zero canonical lifecycle tables or cancellation procedures exist in PostgreSQL."
+    "scope": "disposable PostgreSQL with migrations 001-006, 036, 041, 049-054. Confirms that W3 canonical reservations are strictly immutable under trigger canonical_reservations_immutable; direct in-place UPDATE is rejected; and zero canonical lifecycle tables or cancellation request procedures exist in PostgreSQL."
   },
   "sourceTracedRouteEvidence": {
     "guestCancellationRoute": "server.ts:16165 (PUT /api/user/bookings/:id/cancel) updates legacy bookings table status='cancelled'. It has no relation to canonical_reservations or inventory_days.",
@@ -30,22 +30,53 @@
     "publicBookingGate": "server.ts:16215 (POST /api/bookings) fails closed with HTTP 503 STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE.",
     "clientCommandContainment": "lib/reservationCommands.ts:30 contains single-flight session-checked invocation of legacy endpoints."
   },
-  "smallestW4ASlice": {
-    "lifecycleEventLedger": "canonical_reservation_events append-only table recording state transitions for canonical_reservations(id).",
-    "commandReceiptLedger": "canonical_reservation_lifecycle_commands table providing idempotent replay recovery.",
-    "compactLifecycleStates": "INVENTORY_COMMITTED -> CANCELLED",
-    "separatedDimensions": {
-      "actor": "actor_principal (e.g. user:10, staff:90) and actor_role (GUEST, HOST, ADMIN, CHANNEL)",
-      "reason": "cancellation_reason (non-empty audit text)",
-      "origin": "origin_kind (ENCHO_DIRECT, EXTERNAL_CHANNEL)"
-    },
-    "deferredFromW4A": [
-      "generic reservation modification (date shifts, room changes)",
-      "inventory release execution (modifying inventory_days.booked_units)",
-      "refund calculation and payment refund movement"
-    ]
+  "w3AllocationVsW4Lifecycle": {
+    "w3AllocationState": "canonical_reservations.status = 'INVENTORY_COMMITTED' is immutable physical room allocation truth (proves reservation exists and inventory was committed). It is not a mutable lifecycle state.",
+    "w4InitialLifecycle": "ACTIVE (derived from the existence of a valid canonical reservation in W3).",
+    "projectedStateModel": {
+      "w4aStates": ["ACTIVE", "CANCELLATION_REQUESTED"],
+      "futureExtensionSpace": ["CANCELLED", "CHECKED_IN", "CHECKED_OUT", "NO_SHOW"],
+      "namingRule": "State names represent lifecycle progression only; actor identity, reason, and origin are strictly separate dimensions."
+    }
   },
-  "founderLegalCommercialDecisions": "Commercial cancellation penalty terms, refund eligibility rules, statutory tax treatment, and external-channel financial settlement rules remain marked FOUNDER / LEGAL / COMMERCIAL DECISION REQUIRED.",
-  "conclusion": "W3 canonical reservation finalization is immutable historical truth. In-place status mutation is blocked by trigger canonical_reservations_immutable. The smallest W4-A slice introduces an append-only lifecycle event ledger for cancellation with separated actor, reason, and origin dimensions, while deferring generic modification, inventory release, and refund execution.",
+  "smallestW4ASlice": {
+    "lifecycleEventLedger": "canonical_reservation_events append-only table recording lifecycle events for canonical_reservations(id).",
+    "commandReceiptLedger": "canonical_reservation_lifecycle_commands table providing idempotent replay recovery.",
+    "currentLifecycleProjection": "compact projection deriving current lifecycle state (initial: ACTIVE; transition: CANCELLATION_REQUESTED).",
+    "transitionSupported": "CANCELLATION_REQUESTED recording only; completed cancellation is deferred to W4-B.",
+    "separatedDimensions": {
+      "actor": "actor_principal (e.g. user:10, staff:90) and actor_kind (GUEST, HOST, STAFF, EXTERNAL_CHANNEL)",
+      "reason": "reason_code and reason_text",
+      "origin": "origin_kind (ENCHO_DIRECT, EXTERNAL_CHANNEL, inherited from reservation)"
+    },
+    "deferredBoundaries": {
+      "inventoryRelease": "W4-B authority: modifying inventory_days.booked_units is deferred until cancellation completion contract is defined.",
+      "genericModification": "W4-C authority: date/room/rate modifications are deferred because they alter inventory, commercial totals, and payments.",
+      "refundExecution": "W4-D authority: payment ledger adjustments and provider refund requests are deferred to separate payment/refund authority."
+    }
+  },
+  "commandIdempotencyInvariants": [
+    "A. same command_id + same semantic request -> return existing lifecycle event and receipt",
+    "B. same command_id + changed semantics -> command conflict exception",
+    "C. concurrent identical lifecycle commands -> exactly one event inserted, one replayed receipt",
+    "D. concurrent different commands attempting the same lifecycle transition -> exactly one succeeds, second detects conflict or terminal state",
+    "E. W4-A must not create inventory or refund side effects",
+    "F. future W4-B inventory release must maintain a separate durable idempotency fence to prevent double-release of booked inventory"
+  ],
+  "separationOfAuthorities": {
+    "reservationLifecycle": "Authority A: Contractual agreement state (ACTIVE -> CANCELLATION_REQUESTED).",
+    "inventoryConsequence": "Authority B: Physical capacity in inventory_days. Separate authority; lifecycle request does not release inventory.",
+    "refundConsequence": "Authority C: Payment refund tracking and execution. Separate authority; lifecycle request does not trigger or complete refund."
+  },
+  "founderLegalCommercialGates": [
+    "cancellation entitlement and notice windows",
+    "cancellation charges and penalty tiers",
+    "tax and credit-note statutory handling",
+    "refund entitlement, eligibility and payable amounts",
+    "payment-provider and gateway fee absorption",
+    "host cancellation consequences and compensation rules",
+    "no-show policy and payout forfeiture terms"
+  ],
+  "conclusion": "W3 canonical reservation finalization is immutable historical truth. Canonical reservations currently have no authorized lifecycle/cancellation authority and no authorized booked-inventory release path. The smallest W4-A slice introduces an append-only lifecycle event ledger and command idempotency ledger supporting CANCELLATION_REQUESTED with separated actor, reason, and origin dimensions, while deferring inventory release (W4-B), generic modification (W4-C), and refund execution (W4-D).",
   "limitations": "No runtime implementation, no canonical integration, no live money movement, no external APIs contacted. This is intentional red diagnostic and trace evidence for W4-A Task 1."
 }
