@@ -524,6 +524,8 @@ describe('W3-B Task 2: Provider-independent payment evidence and reconciliation 
       normalizedEventType: 'PAYMENT_CAPTURED',
       reportedAmountPaise: expectedAmount,
       reportedCurrency: 'INR',
+      providerPaymentRef: 'pay_matched',
+      providerOrderRef: 'order_match_test',
       evidencePayload: {razorpay_payment_id: 'pay_matched', amount: expectedAmount},
     });
 
@@ -556,6 +558,8 @@ describe('W3-B Task 2: Provider-independent payment evidence and reconciliation 
       normalizedEventType: 'PAYMENT_CAPTURED',
       reportedAmountPaise: expectedAmount,
       reportedCurrency: 'INR',
+      providerPaymentRef: 'pay_guard_12',
+      providerOrderRef: 'order_unknown_guard',
       evidencePayload: {amount: expectedAmount},
     });
 
@@ -590,6 +594,8 @@ describe('W3-B Task 2: Provider-independent payment evidence and reconciliation 
       normalizedEventType: 'PAYMENT_CAPTURED',
       reportedAmountPaise: expectedAmount,
       reportedCurrency: 'INR',
+      providerPaymentRef: 'pay_guard_13',
+      providerOrderRef: 'order_unknown_evt',
       evidencePayload: {amount: expectedAmount},
     });
 
@@ -601,6 +607,7 @@ describe('W3-B Task 2: Provider-independent payment evidence and reconciliation 
       normalizedEventType: 'PAYMENT_UNKNOWN',
       reportedAmountPaise: 0,
       reportedCurrency: 'INR',
+      providerOrderRef: 'order_unknown_evt',
       evidencePayload: {status: 'uncertain'},
     });
     expect(res.paymentState).toBe('MATCHED_CAPTURE');
@@ -629,6 +636,8 @@ describe('W3-B Task 2: Provider-independent payment evidence and reconciliation 
       normalizedEventType: 'PAYMENT_CAPTURED',
       reportedAmountPaise: expectedAmount,
       reportedCurrency: 'INR',
+      providerPaymentRef: 'pay_cap_14',
+      providerOrderRef: 'order_stale_auth',
       evidencePayload: {amount: expectedAmount},
     });
 
@@ -640,6 +649,7 @@ describe('W3-B Task 2: Provider-independent payment evidence and reconciliation 
       normalizedEventType: 'PAYMENT_AUTHORIZED',
       reportedAmountPaise: expectedAmount,
       reportedCurrency: 'INR',
+      providerOrderRef: 'order_stale_auth',
       evidencePayload: {status: 'authorized'},
     });
     expect(res.paymentState).toBe('MATCHED_CAPTURE');
@@ -668,6 +678,8 @@ describe('W3-B Task 2: Provider-independent payment evidence and reconciliation 
       normalizedEventType: 'PAYMENT_CAPTURED',
       reportedAmountPaise: expectedAmount,
       reportedCurrency: 'INR',
+      providerPaymentRef: 'pay_cap_15',
+      providerOrderRef: 'order_capture_then_fail',
       evidencePayload: {amount: expectedAmount},
     });
 
@@ -722,6 +734,8 @@ describe('W3-B Task 2: Provider-independent payment evidence and reconciliation 
       normalizedEventType: 'PAYMENT_CAPTURED',
       reportedAmountPaise: ctx.roomSubtotalPaise,
       reportedCurrency: 'INR',
+      providerPaymentRef: 'pay_no_auth',
+      providerOrderRef: 'order_no_auth',
       evidencePayload: {amount: ctx.roomSubtotalPaise},
     });
 
@@ -754,6 +768,8 @@ describe('W3-B Task 2: Provider-independent payment evidence and reconciliation 
       normalizedEventType: 'PAYMENT_CAPTURED',
       reportedAmountPaise: reportedAmount,
       reportedCurrency: 'INR',
+      providerPaymentRef: 'pay_mismatch_amt',
+      providerOrderRef: 'order_mismatch_amt',
       evidencePayload: {amount: reportedAmount},
     });
 
@@ -796,6 +812,8 @@ describe('W3-B Task 2: Provider-independent payment evidence and reconciliation 
       normalizedEventType: 'PAYMENT_CAPTURED',
       reportedAmountPaise: expectedAmount,
       reportedCurrency: 'INR',
+      providerPaymentRef: 'pay_expired_18',
+      providerOrderRef: 'order_expire_hold',
       evidencePayload: {amount: expectedAmount},
     });
 
@@ -1244,8 +1262,416 @@ describe('W3-B Task 2: Provider-independent payment evidence and reconciliation 
     });
   });
 
-  // 31. final check: zero canonical reservations across all Task-2 paths
-  it('31. final check: zero canonical reservations across all Task-2 paths', async () => {
+  // 31. first capture with NULL provider_payment_ref never becomes MATCHED_CAPTURE and enters RECONCILIATION_REQUIRED / CAPTURE_IDENTITY_MISSING
+  it('31. first capture with NULL provider_payment_ref never becomes MATCHED_CAPTURE and enters RECONCILIATION_REQUIRED / CAPTURE_IDENTITY_MISSING', async () => {
+    const expectedAmount = 1650000;
+    const ctx = await createTestOnlyPayableQuoteFixture(expectedAmount);
+    const orderRef = 'order_no_identity_' + randomUUID();
+
+    const attempt = await createPaymentAttempt(paymentWorker, {
+      commandId: randomUUID(),
+      holderPrincipal: 'user:10',
+      originKind: 'RAZORPAY',
+      quoteId: ctx.quoteId,
+      holdId: ctx.holdId,
+      providerOrderRef: orderRef,
+    });
+    expect(attempt.paymentState).toBe('INITIATED');
+
+    const eventId = 'evt_no_id_' + randomUUID();
+    const result = await ingestProviderEvent(paymentWorker, {
+      attemptId: attempt.attemptId,
+      originKind: 'RAZORPAY',
+      providerEventId: eventId,
+      normalizedEventType: 'PAYMENT_CAPTURED',
+      reportedAmountPaise: expectedAmount,
+      reportedCurrency: 'INR',
+      providerPaymentRef: null, // Identity missing!
+      providerOrderRef: orderRef,
+      evidencePayload: {order_id: orderRef, amount: expectedAmount},
+    });
+
+    expect(result.ingestStatus).toBe('PROCESSED');
+    expect(result.paymentState).toBe('RECONCILIATION_REQUIRED');
+    expect(result.reconciliationReason).toBe('CAPTURE_IDENTITY_MISSING');
+
+    const dbAttempt = await getPaymentAttempt(paymentWorker, attempt.attemptId);
+    expect(dbAttempt?.paymentState).toBe('RECONCILIATION_REQUIRED');
+    expect(dbAttempt?.reconciliationReason).toBe('CAPTURE_IDENTITY_MISSING');
+    expect(dbAttempt?.matchedAt).toBeNull(); // Never established matched_at
+
+    const recs = await getPaymentReconciliations(paymentWorker, attempt.attemptId);
+    expect(recs.some(r => r.reason === 'CAPTURE_IDENTITY_MISSING')).toBe(true);
+  });
+
+  // 32. already MATCHED_CAPTURE + distinct capture event with NULL payment ref is not redundant and enters reconciliation
+  it('32. already MATCHED_CAPTURE + distinct capture event with NULL payment ref is not redundant and enters reconciliation', async () => {
+    const expectedAmount = 1650000;
+    const ctx = await createTestOnlyPayableQuoteFixture(expectedAmount);
+    const orderRef = 'order_null_second_' + randomUUID();
+    const primaryPaymentRef = 'pay_valid_primary_' + randomUUID();
+
+    const attempt = await createPaymentAttempt(paymentWorker, {
+      commandId: randomUUID(),
+      holderPrincipal: 'user:10',
+      originKind: 'RAZORPAY',
+      quoteId: ctx.quoteId,
+      holdId: ctx.holdId,
+      providerOrderRef: orderRef,
+    });
+
+    // Ingest first capture with valid payment identity -> MATCHED_CAPTURE
+    const firstEventId = 'evt_null_sec_1_' + randomUUID();
+    await ingestProviderEvent(paymentWorker, {
+      attemptId: attempt.attemptId,
+      originKind: 'RAZORPAY',
+      providerEventId: firstEventId,
+      normalizedEventType: 'PAYMENT_CAPTURED',
+      reportedAmountPaise: expectedAmount,
+      reportedCurrency: 'INR',
+      providerPaymentRef: primaryPaymentRef,
+      providerOrderRef: orderRef,
+      evidencePayload: {pay_id: primaryPaymentRef, order_id: orderRef, amount: expectedAmount},
+    });
+
+    const dbAfterFirst = await getPaymentAttempt(paymentWorker, attempt.attemptId);
+    expect(dbAfterFirst?.paymentState).toBe('MATCHED_CAPTURE');
+    const originalMatchedAt = dbAfterFirst?.matchedAt;
+    expect(originalMatchedAt).not.toBeNull();
+
+    // Ingest second capture with NULL payment ref -> cannot prove redundant identity!
+    const secondEventId = 'evt_null_sec_2_' + randomUUID();
+    const secondResult = await ingestProviderEvent(paymentWorker, {
+      attemptId: attempt.attemptId,
+      originKind: 'RAZORPAY',
+      providerEventId: secondEventId,
+      normalizedEventType: 'PAYMENT_CAPTURED',
+      reportedAmountPaise: expectedAmount,
+      reportedCurrency: 'INR',
+      providerPaymentRef: null, // Identity missing on second capture!
+      providerOrderRef: orderRef,
+      evidencePayload: {order_id: orderRef, amount: expectedAmount},
+    });
+
+    expect(secondResult.ingestStatus).toBe('PROCESSED');
+    expect(secondResult.paymentState).toBe('RECONCILIATION_REQUIRED');
+    expect(secondResult.reconciliationReason).toBe('CAPTURE_CONFLICT');
+
+    const dbAfterSecond = await getPaymentAttempt(paymentWorker, attempt.attemptId);
+    expect(dbAfterSecond?.paymentState).toBe('RECONCILIATION_REQUIRED');
+    expect(dbAfterSecond?.reconciliationReason).toBe('CAPTURE_CONFLICT');
+    // matched_at preserved!
+    expect(new Date(dbAfterSecond!.matchedAt!).getTime()).toBe(new Date(originalMatchedAt!).getTime());
+  });
+
+  // 33. RECONCILIATION_REQUIRED / CAPTURE_CONFLICT + recordPaymentUnknown remains reconciliation with original reason
+  it('33. RECONCILIATION_REQUIRED / CAPTURE_CONFLICT + recordPaymentUnknown remains reconciliation with original reason', async () => {
+    const expectedAmount = 1650000;
+    const ctx = await createTestOnlyPayableQuoteFixture(expectedAmount);
+    const orderRef = 'order_sticky_conflict_' + randomUUID();
+
+    const attempt = await createPaymentAttempt(paymentWorker, {
+      commandId: randomUUID(),
+      holderPrincipal: 'user:10',
+      originKind: 'RAZORPAY',
+      quoteId: ctx.quoteId,
+      holdId: ctx.holdId,
+      providerOrderRef: orderRef,
+    });
+
+    // Establish MATCHED_CAPTURE
+    await ingestProviderEvent(paymentWorker, {
+      attemptId: attempt.attemptId,
+      originKind: 'RAZORPAY',
+      providerEventId: 'evt_stk_c1_' + randomUUID(),
+      normalizedEventType: 'PAYMENT_CAPTURED',
+      reportedAmountPaise: expectedAmount,
+      reportedCurrency: 'INR',
+      providerPaymentRef: 'pay_c1',
+      providerOrderRef: orderRef,
+      evidencePayload: {amount: expectedAmount},
+    });
+
+    // Provoke CAPTURE_CONFLICT
+    await ingestProviderEvent(paymentWorker, {
+      attemptId: attempt.attemptId,
+      originKind: 'RAZORPAY',
+      providerEventId: 'evt_stk_c2_' + randomUUID(),
+      normalizedEventType: 'PAYMENT_CAPTURED',
+      reportedAmountPaise: expectedAmount,
+      reportedCurrency: 'INR',
+      providerPaymentRef: 'pay_c2_conflicting',
+      providerOrderRef: orderRef,
+      evidencePayload: {amount: expectedAmount},
+    });
+
+    const beforeUnknown = await getPaymentAttempt(paymentWorker, attempt.attemptId);
+    expect(beforeUnknown?.paymentState).toBe('RECONCILIATION_REQUIRED');
+    expect(beforeUnknown?.reconciliationReason).toBe('CAPTURE_CONFLICT');
+    const originalMatchedAt = beforeUnknown?.matchedAt;
+
+    // Call recordPaymentUnknown
+    const res = await recordPaymentUnknown(paymentWorker, {
+      attemptId: attempt.attemptId,
+      reasonDetails: {note: 'webhook query timed out'},
+    });
+
+    expect(res.paymentState).toBe('RECONCILIATION_REQUIRED');
+    expect(res.reconciliationReason).toBe('CAPTURE_CONFLICT'); // Reason sticky!
+
+    const dbAfter = await getPaymentAttempt(paymentWorker, attempt.attemptId);
+    expect(dbAfter?.paymentState).toBe('RECONCILIATION_REQUIRED');
+    expect(dbAfter?.reconciliationReason).toBe('CAPTURE_CONFLICT');
+    expect(new Date(dbAfter!.matchedAt!).getTime()).toBe(new Date(originalMatchedAt!).getTime());
+
+    // Audit record appended
+    const recs = await getPaymentReconciliations(paymentWorker, attempt.attemptId);
+    expect(recs.some(r => r.reason === 'UNKNOWN_OUTCOME')).toBe(true);
+  });
+
+  // 34. RECONCILIATION_REQUIRED / HOLD_EXPIRED + PAYMENT_UNKNOWN remains reconciliation with HOLD_EXPIRED
+  it('34. RECONCILIATION_REQUIRED / HOLD_EXPIRED + PAYMENT_UNKNOWN remains reconciliation with HOLD_EXPIRED', async () => {
+    const expectedAmount = 1650000;
+    const ctx = await createTestOnlyPayableQuoteFixture(expectedAmount);
+    const orderRef = 'order_sticky_expired_' + randomUUID();
+
+    const attempt = await createPaymentAttempt(paymentWorker, {
+      commandId: randomUUID(),
+      holderPrincipal: 'user:10',
+      originKind: 'RAZORPAY',
+      quoteId: ctx.quoteId,
+      holdId: ctx.holdId,
+      providerOrderRef: orderRef,
+    });
+
+    // Expire the hold in the database
+    await fixture.owner.query(
+      `UPDATE booking_holds SET expires_at = clock_timestamp() - interval '10 seconds', status = 'EXPIRED' WHERE id = $1`,
+      [ctx.holdId]
+    );
+
+    // Capture arrives after hold expiry -> HOLD_EXPIRED
+    await ingestProviderEvent(paymentWorker, {
+      attemptId: attempt.attemptId,
+      originKind: 'RAZORPAY',
+      providerEventId: 'evt_stk_exp_' + randomUUID(),
+      normalizedEventType: 'PAYMENT_CAPTURED',
+      reportedAmountPaise: expectedAmount,
+      reportedCurrency: 'INR',
+      providerPaymentRef: 'pay_exp',
+      providerOrderRef: orderRef,
+      evidencePayload: {amount: expectedAmount},
+    });
+
+    const beforeUnknown = await getPaymentAttempt(paymentWorker, attempt.attemptId);
+    expect(beforeUnknown?.paymentState).toBe('RECONCILIATION_REQUIRED');
+    expect(beforeUnknown?.reconciliationReason).toBe('HOLD_EXPIRED');
+
+    // Ingest PAYMENT_UNKNOWN event
+    const res = await ingestProviderEvent(paymentWorker, {
+      attemptId: attempt.attemptId,
+      originKind: 'RAZORPAY',
+      providerEventId: 'evt_stk_unk_' + randomUUID(),
+      normalizedEventType: 'PAYMENT_UNKNOWN',
+      reportedAmountPaise: 0,
+      reportedCurrency: 'INR',
+      providerOrderRef: orderRef,
+      evidencePayload: {note: 'unknown status'},
+    });
+
+    expect(res.paymentState).toBe('RECONCILIATION_REQUIRED');
+    expect(res.reconciliationReason).toBe('HOLD_EXPIRED'); // Preserved!
+
+    const dbAfter = await getPaymentAttempt(paymentWorker, attempt.attemptId);
+    expect(dbAfter?.paymentState).toBe('RECONCILIATION_REQUIRED');
+    expect(dbAfter?.reconciliationReason).toBe('HOLD_EXPIRED');
+
+    const recs = await getPaymentReconciliations(paymentWorker, attempt.attemptId);
+    expect(recs.some(r => r.reason === 'UNKNOWN_OUTCOME')).toBe(true);
+  });
+
+  // 35. RECONCILIATION_REQUIRED / AMOUNT_MISMATCH + PAYMENT_FAILED remains reconciliation with AMOUNT_MISMATCH
+  it('35. RECONCILIATION_REQUIRED / AMOUNT_MISMATCH + PAYMENT_FAILED remains reconciliation with AMOUNT_MISMATCH', async () => {
+    const expectedAmount = 1650000;
+    const ctx = await createTestOnlyPayableQuoteFixture(expectedAmount);
+    const orderRef = 'order_sticky_amt_' + randomUUID();
+
+    const attempt = await createPaymentAttempt(paymentWorker, {
+      commandId: randomUUID(),
+      holderPrincipal: 'user:10',
+      originKind: 'RAZORPAY',
+      quoteId: ctx.quoteId,
+      holdId: ctx.holdId,
+      providerOrderRef: orderRef,
+    });
+
+    // Ingest capture with mismatched amount -> AMOUNT_MISMATCH
+    await ingestProviderEvent(paymentWorker, {
+      attemptId: attempt.attemptId,
+      originKind: 'RAZORPAY',
+      providerEventId: 'evt_stk_amt_' + randomUUID(),
+      normalizedEventType: 'PAYMENT_CAPTURED',
+      reportedAmountPaise: 1200000,
+      reportedCurrency: 'INR',
+      providerPaymentRef: 'pay_amt_diff',
+      providerOrderRef: orderRef,
+      evidencePayload: {amount: 1200000},
+    });
+
+    const beforeFailed = await getPaymentAttempt(paymentWorker, attempt.attemptId);
+    expect(beforeFailed?.paymentState).toBe('RECONCILIATION_REQUIRED');
+    expect(beforeFailed?.reconciliationReason).toBe('AMOUNT_MISMATCH');
+
+    // Ingest PAYMENT_FAILED event
+    const res = await ingestProviderEvent(paymentWorker, {
+      attemptId: attempt.attemptId,
+      originKind: 'RAZORPAY',
+      providerEventId: 'evt_stk_fail_' + randomUUID(),
+      normalizedEventType: 'PAYMENT_FAILED',
+      reportedAmountPaise: expectedAmount,
+      reportedCurrency: 'INR',
+      providerOrderRef: orderRef,
+      evidencePayload: {note: 'late failure notification'},
+    });
+
+    expect(res.paymentState).toBe('RECONCILIATION_REQUIRED');
+    expect(res.reconciliationReason).toBe('AMOUNT_MISMATCH'); // Preserved!
+
+    const dbAfter = await getPaymentAttempt(paymentWorker, attempt.attemptId);
+    expect(dbAfter?.paymentState).toBe('RECONCILIATION_REQUIRED');
+    expect(dbAfter?.reconciliationReason).toBe('AMOUNT_MISMATCH');
+
+    const recs = await getPaymentReconciliations(paymentWorker, attempt.attemptId);
+    expect(recs.some(r => r.reason === 'OUT_OF_ORDER_EVENT')).toBe(true);
+  });
+
+  // 36. matched_at and captured evidence remain intact throughout later unresolved events
+  it('36. matched_at and captured evidence remain intact throughout later unresolved events', async () => {
+    const expectedAmount = 1650000;
+    const ctx = await createTestOnlyPayableQuoteFixture(expectedAmount);
+    const orderRef = 'order_durable_truth_' + randomUUID();
+    const primaryPayRef = 'pay_truth_primary_' + randomUUID();
+
+    const attempt = await createPaymentAttempt(paymentWorker, {
+      commandId: randomUUID(),
+      holderPrincipal: 'user:10',
+      originKind: 'RAZORPAY',
+      quoteId: ctx.quoteId,
+      holdId: ctx.holdId,
+      providerOrderRef: orderRef,
+    });
+
+    // 1. First valid capture -> MATCHED_CAPTURE
+    const cap1EventId = 'evt_truth_cap1_' + randomUUID();
+    await ingestProviderEvent(paymentWorker, {
+      attemptId: attempt.attemptId,
+      originKind: 'RAZORPAY',
+      providerEventId: cap1EventId,
+      normalizedEventType: 'PAYMENT_CAPTURED',
+      reportedAmountPaise: expectedAmount,
+      reportedCurrency: 'INR',
+      providerPaymentRef: primaryPayRef,
+      providerOrderRef: orderRef,
+      evidencePayload: {pay_id: primaryPayRef, amount: expectedAmount},
+    });
+
+    const dbAfterCap1 = await getPaymentAttempt(paymentWorker, attempt.attemptId);
+    expect(dbAfterCap1?.paymentState).toBe('MATCHED_CAPTURE');
+    const durableMatchedAt = dbAfterCap1?.matchedAt;
+    expect(durableMatchedAt).not.toBeNull();
+
+    // 2. Second conflicting capture -> enters RECONCILIATION_REQUIRED / CAPTURE_CONFLICT
+    const cap2EventId = 'evt_truth_cap2_' + randomUUID();
+    await ingestProviderEvent(paymentWorker, {
+      attemptId: attempt.attemptId,
+      originKind: 'RAZORPAY',
+      providerEventId: cap2EventId,
+      normalizedEventType: 'PAYMENT_CAPTURED',
+      reportedAmountPaise: expectedAmount,
+      reportedCurrency: 'INR',
+      providerPaymentRef: 'pay_truth_conflicting_' + randomUUID(),
+      providerOrderRef: orderRef,
+      evidencePayload: {amount: expectedAmount},
+    });
+
+    const dbAfterCap2 = await getPaymentAttempt(paymentWorker, attempt.attemptId);
+    expect(dbAfterCap2?.paymentState).toBe('RECONCILIATION_REQUIRED');
+    expect(dbAfterCap2?.reconciliationReason).toBe('CAPTURE_CONFLICT');
+    expect(new Date(dbAfterCap2!.matchedAt!).getTime()).toBe(new Date(durableMatchedAt!).getTime());
+
+    // 3. PAYMENT_UNKNOWN arrives
+    await ingestProviderEvent(paymentWorker, {
+      attemptId: attempt.attemptId,
+      originKind: 'RAZORPAY',
+      providerEventId: 'evt_truth_unk_' + randomUUID(),
+      normalizedEventType: 'PAYMENT_UNKNOWN',
+      reportedAmountPaise: 0,
+      reportedCurrency: 'INR',
+      providerOrderRef: orderRef,
+      evidencePayload: {note: 'unknown'},
+    });
+
+    const dbAfterUnk = await getPaymentAttempt(paymentWorker, attempt.attemptId);
+    expect(dbAfterUnk?.paymentState).toBe('RECONCILIATION_REQUIRED');
+    expect(dbAfterUnk?.reconciliationReason).toBe('CAPTURE_CONFLICT');
+    expect(new Date(dbAfterUnk!.matchedAt!).getTime()).toBe(new Date(durableMatchedAt!).getTime());
+
+    // 4. PAYMENT_FAILED arrives
+    await ingestProviderEvent(paymentWorker, {
+      attemptId: attempt.attemptId,
+      originKind: 'RAZORPAY',
+      providerEventId: 'evt_truth_fail_' + randomUUID(),
+      normalizedEventType: 'PAYMENT_FAILED',
+      reportedAmountPaise: expectedAmount,
+      reportedCurrency: 'INR',
+      providerOrderRef: orderRef,
+      evidencePayload: {note: 'delayed failed'},
+    });
+
+    const dbAfterFail = await getPaymentAttempt(paymentWorker, attempt.attemptId);
+    expect(dbAfterFail?.paymentState).toBe('RECONCILIATION_REQUIRED');
+    expect(dbAfterFail?.reconciliationReason).toBe('CAPTURE_CONFLICT');
+    expect(new Date(dbAfterFail!.matchedAt!).getTime()).toBe(new Date(durableMatchedAt!).getTime());
+
+    // 5. recordPaymentUnknown called
+    await recordPaymentUnknown(paymentWorker, {
+      attemptId: attempt.attemptId,
+      reasonDetails: {note: 'manual poll unknown'},
+    });
+
+    const dbAfterRecUnk = await getPaymentAttempt(paymentWorker, attempt.attemptId);
+    expect(dbAfterRecUnk?.paymentState).toBe('RECONCILIATION_REQUIRED');
+    expect(dbAfterRecUnk?.reconciliationReason).toBe('CAPTURE_CONFLICT');
+    expect(new Date(dbAfterRecUnk!.matchedAt!).getTime()).toBe(new Date(durableMatchedAt!).getTime());
+
+    // 6. Delayed PAYMENT_AUTHORIZED arrives
+    await ingestProviderEvent(paymentWorker, {
+      attemptId: attempt.attemptId,
+      originKind: 'RAZORPAY',
+      providerEventId: 'evt_truth_auth_' + randomUUID(),
+      normalizedEventType: 'PAYMENT_AUTHORIZED',
+      reportedAmountPaise: expectedAmount,
+      reportedCurrency: 'INR',
+      providerOrderRef: orderRef,
+      evidencePayload: {note: 'delayed auth'},
+    });
+
+    const dbFinal = await getPaymentAttempt(paymentWorker, attempt.attemptId);
+    expect(dbFinal?.paymentState).toBe('RECONCILIATION_REQUIRED');
+    expect(dbFinal?.reconciliationReason).toBe('CAPTURE_CONFLICT');
+    expect(new Date(dbFinal!.matchedAt!).getTime()).toBe(new Date(durableMatchedAt!).getTime());
+
+    // Verify all provider events remain preserved in canonical_provider_events
+    const {rows: allEvents} = await fixture.owner.query(
+      'SELECT id, normalized_event_type, status FROM canonical_provider_events WHERE payment_attempt_id=$1',
+      [attempt.attemptId]
+    );
+    expect(allEvents.length).toBe(5);
+    expect(allEvents.every(e => e.status === 'PROCESSED')).toBe(true);
+  });
+
+  // 37. final check: zero canonical reservations across all Task-2 paths
+  it('37. final check: zero canonical reservations across all Task-2 paths', async () => {
     const {rows: resCount} = await fixture.owner.query('SELECT count(*)::int AS count FROM canonical_reservations');
     expect(resCount[0].count).toBe(0);
 

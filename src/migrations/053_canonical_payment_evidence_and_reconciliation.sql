@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS canonical_payment_attempts (
   expected_authority_ref TEXT NOT NULL,
   expected_authority_hash TEXT,
   payment_state TEXT NOT NULL CHECK (payment_state IN ('INITIATED', 'AUTHORIZED', 'EVIDENCE_CAPTURED', 'MATCHED_CAPTURE', 'FAILED', 'UNKNOWN', 'RECONCILIATION_REQUIRED')),
-  reconciliation_reason TEXT CHECK (reconciliation_reason IS NULL OR reconciliation_reason IN ('PAYABLE_AUTHORITY_MISSING', 'AMOUNT_MISMATCH', 'CURRENCY_MISMATCH', 'HOLD_EXPIRED', 'OUT_OF_ORDER_EVENT', 'UNKNOWN_OUTCOME', 'EVENT_CONFLICT_QUARANTINED', 'FINALIZER_FAILURE', 'CAPTURE_CONFLICT', 'MULTIPLE_CAPTURE_EVIDENCE')),
+  reconciliation_reason TEXT CHECK (reconciliation_reason IS NULL OR reconciliation_reason IN ('PAYABLE_AUTHORITY_MISSING', 'AMOUNT_MISMATCH', 'CURRENCY_MISMATCH', 'HOLD_EXPIRED', 'OUT_OF_ORDER_EVENT', 'UNKNOWN_OUTCOME', 'EVENT_CONFLICT_QUARANTINED', 'FINALIZER_FAILURE', 'CAPTURE_CONFLICT', 'MULTIPLE_CAPTURE_EVIDENCE', 'CAPTURE_IDENTITY_MISSING')),
   matched_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT statement_timestamp(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT statement_timestamp(),
@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS canonical_payment_reconciliations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   payment_attempt_id UUID NOT NULL REFERENCES canonical_payment_attempts(id) ON DELETE RESTRICT,
   provider_event_id TEXT,
-  reason TEXT NOT NULL CHECK (reason IN ('PAYABLE_AUTHORITY_MISSING', 'AMOUNT_MISMATCH', 'CURRENCY_MISMATCH', 'HOLD_EXPIRED', 'OUT_OF_ORDER_EVENT', 'UNKNOWN_OUTCOME', 'EVENT_CONFLICT_QUARANTINED', 'FINALIZER_FAILURE', 'CAPTURE_CONFLICT', 'MULTIPLE_CAPTURE_EVIDENCE')),
+  reason TEXT NOT NULL CHECK (reason IN ('PAYABLE_AUTHORITY_MISSING', 'AMOUNT_MISMATCH', 'CURRENCY_MISMATCH', 'HOLD_EXPIRED', 'OUT_OF_ORDER_EVENT', 'UNKNOWN_OUTCOME', 'EVENT_CONFLICT_QUARANTINED', 'FINALIZER_FAILURE', 'CAPTURE_CONFLICT', 'MULTIPLE_CAPTURE_EVIDENCE', 'CAPTURE_IDENTITY_MISSING')),
   details JSONB NOT NULL DEFAULT '{}'::jsonb,
   resolved BOOLEAN NOT NULL DEFAULT false,
   resolution_notes TEXT,
@@ -414,18 +414,20 @@ BEGIN
           AND id <> saved_event_id
         ORDER BY received_at ASC LIMIT 1;
 
-      IF FOUND AND (
-        matched_event.provider_payment_ref IS NOT DISTINCT FROM target_provider_payment_ref
+      IF FOUND
+        AND matched_event.provider_payment_ref IS NOT NULL AND matched_event.provider_payment_ref <> ''
+        AND target_provider_payment_ref IS NOT NULL AND target_provider_payment_ref <> ''
+        AND matched_event.provider_payment_ref = target_provider_payment_ref
         AND matched_event.provider_order_ref IS NOT DISTINCT FROM target_provider_order_ref
         AND matched_event.reported_amount_paise = target_reported_amount
         AND matched_event.reported_currency = target_reported_currency
-      ) THEN
+      THEN
         -- Case A: Redundant capture evidence for the SAME underlying provider payment identity
         -- Preserve MATCHED_CAPTURE, no duplicate effect, no state regression
         next_state := attempt.payment_state;
         next_reason := attempt.reconciliation_reason;
       ELSE
-        -- Case B: Conflicting / possible second capture identity
+        -- Case B: Conflicting / identity-less / possible second capture identity
         -- Preserve matched_at, enter explicit reconciliation / CAPTURE_CONFLICT
         next_state := 'RECONCILIATION_REQUIRED';
         next_reason := 'CAPTURE_CONFLICT';
@@ -448,7 +450,7 @@ BEGIN
       -- Monotonic: already in reconciliation, do not silently clear conflict or regress
       next_state := attempt.payment_state;
       next_reason := attempt.reconciliation_reason;
-      IF attempt.reconciliation_reason = 'CAPTURE_CONFLICT' THEN
+      IF attempt.reconciliation_reason IN ('CAPTURE_CONFLICT', 'CAPTURE_IDENTITY_MISSING') THEN
         INSERT INTO public.canonical_payment_reconciliations(payment_attempt_id, provider_event_id, reason, details)
           VALUES (
             attempt.id,
@@ -469,8 +471,14 @@ BEGIN
         INSERT INTO public.canonical_payment_reconciliations(payment_attempt_id, provider_event_id, reason, details)
           VALUES (attempt.id, target_event_id, 'HOLD_EXPIRED', jsonb_build_object('hold_id', attempt.hold_id, 'hold_status', coalesce(held.status, 'NOT_FOUND'), 'reported_amount', target_reported_amount));
       ELSE
+        -- Rule 1A: First capture MUST have a non-empty provider payment reference
+        IF target_provider_payment_ref IS NULL OR target_provider_payment_ref = '' THEN
+          next_state := 'RECONCILIATION_REQUIRED';
+          next_reason := 'CAPTURE_IDENTITY_MISSING';
+          INSERT INTO public.canonical_payment_reconciliations(payment_attempt_id, provider_event_id, reason, details)
+            VALUES (attempt.id, target_event_id, 'CAPTURE_IDENTITY_MISSING', jsonb_build_object('reported_amount', target_reported_amount, 'reported_currency', target_reported_currency));
         -- Evaluate expected authority
-        IF attempt.expected_amount_paise IS NULL THEN
+        ELSIF attempt.expected_amount_paise IS NULL THEN
           next_state := 'RECONCILIATION_REQUIRED';
           next_reason := 'PAYABLE_AUTHORITY_MISSING';
           INSERT INTO public.canonical_payment_reconciliations(payment_attempt_id, provider_event_id, reason, details)
@@ -486,7 +494,7 @@ BEGIN
           INSERT INTO public.canonical_payment_reconciliations(payment_attempt_id, provider_event_id, reason, details)
             VALUES (attempt.id, target_event_id, 'AMOUNT_MISMATCH', jsonb_build_object('expected_amount_paise', attempt.expected_amount_paise, 'reported_amount_paise', target_reported_amount));
         ELSE
-          -- All authoritative checks pass!
+          -- All authoritative checks pass and provider payment reference is present!
           next_state := 'MATCHED_CAPTURE';
           next_reason := NULL;
         END IF;
@@ -494,9 +502,9 @@ BEGIN
     END IF;
 
   ELSIF target_event_type = 'PAYMENT_AUTHORIZED' THEN
-    -- Older/delayed AUTHORIZED must NOT regress existing captured state
-    IF attempt.payment_state IN ('MATCHED_CAPTURE', 'EVIDENCE_CAPTURED') THEN
-      NULL; -- Preserve capture truth
+    -- Older/delayed AUTHORIZED must NOT regress existing captured state or reconciliation state
+    IF attempt.payment_state IN ('MATCHED_CAPTURE', 'EVIDENCE_CAPTURED', 'RECONCILIATION_REQUIRED') THEN
+      NULL; -- Preserve capture truth and reconciliation state
     ELSIF attempt.payment_state = 'INITIATED' THEN
       next_state := 'AUTHORIZED';
       next_reason := NULL;
@@ -509,15 +517,23 @@ BEGIN
       next_reason := 'OUT_OF_ORDER_EVENT';
       INSERT INTO public.canonical_payment_reconciliations(payment_attempt_id, provider_event_id, reason, details)
         VALUES (attempt.id, target_event_id, 'OUT_OF_ORDER_EVENT', jsonb_build_object('event_type', 'PAYMENT_FAILED', 'prior_state', attempt.payment_state));
+    ELSIF attempt.payment_state = 'RECONCILIATION_REQUIRED' THEN
+      -- Sticky reconciliation: preserve RECONCILIATION_REQUIRED and primary reason, append failure evidence
+      INSERT INTO public.canonical_payment_reconciliations(payment_attempt_id, provider_event_id, reason, details)
+        VALUES (attempt.id, target_event_id, 'OUT_OF_ORDER_EVENT', jsonb_build_object('event_type', 'PAYMENT_FAILED', 'prior_reason', attempt.reconciliation_reason));
     ELSE
       next_state := 'FAILED';
       next_reason := NULL;
     END IF;
 
   ELSIF target_event_type = 'PAYMENT_UNKNOWN' THEN
-    -- UNKNOWN event must NEVER downgrade existing capture truth
+    -- UNKNOWN event must NEVER downgrade existing capture truth or reconciliation state
     IF attempt.payment_state IN ('MATCHED_CAPTURE', 'EVIDENCE_CAPTURED') THEN
       NULL; -- Preserve capture truth
+    ELSIF attempt.payment_state = 'RECONCILIATION_REQUIRED' THEN
+      -- Sticky reconciliation: preserve RECONCILIATION_REQUIRED and primary reason, append unknown evidence
+      INSERT INTO public.canonical_payment_reconciliations(payment_attempt_id, provider_event_id, reason, details)
+        VALUES (attempt.id, target_event_id, 'UNKNOWN_OUTCOME', jsonb_build_object('reported_amount', target_reported_amount));
     ELSIF attempt.payment_state IN ('INITIATED', 'AUTHORIZED') THEN
       next_state := 'UNKNOWN';
       next_reason := 'UNKNOWN_OUTCOME';
@@ -536,7 +552,7 @@ BEGIN
   RETURN QUERY SELECT saved_event_id, attempt.id, 'PROCESSED'::TEXT, next_state, next_reason, FALSE;
 END $$;
 
--- 3. Record payment unknown (never downgrades captured truth)
+-- 3. Record payment unknown (never downgrades captured truth or sticky reconciliation)
 CREATE OR REPLACE FUNCTION canonical_record_payment_unknown(
   target_attempt_id UUID,
   target_reason_details JSONB
@@ -550,8 +566,15 @@ BEGIN
   SELECT * INTO attempt FROM public.canonical_payment_attempts WHERE id = target_attempt_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'PAYMENT_ATTEMPT_NOT_FOUND'; END IF;
 
-  -- Monotonic rule: UNKNOWN outcome must never erase stronger known capture evidence
-  IF attempt.payment_state IN ('MATCHED_CAPTURE', 'EVIDENCE_CAPTURED') THEN
+  -- Monotonic rule: UNKNOWN outcome must never erase stronger known capture evidence or existing reconciliation requirement
+  IF attempt.payment_state IN ('MATCHED_CAPTURE', 'EVIDENCE_CAPTURED', 'RECONCILIATION_REQUIRED') THEN
+    IF attempt.payment_state = 'RECONCILIATION_REQUIRED' THEN
+      INSERT INTO public.canonical_payment_reconciliations(
+        payment_attempt_id, provider_event_id, reason, details
+      ) VALUES (
+        target_attempt_id, NULL, 'UNKNOWN_OUTCOME', coalesce(target_reason_details, '{}'::jsonb)
+      );
+    END IF;
     RETURN QUERY SELECT attempt.id, attempt.payment_state, attempt.reconciliation_reason;
     RETURN;
   END IF;
