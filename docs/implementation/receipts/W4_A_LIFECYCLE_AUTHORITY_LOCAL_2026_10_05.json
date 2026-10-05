@@ -1,0 +1,86 @@
+{
+  "subject": "W4-A Task 2 Canonical Reservation Lifecycle Authority",
+  "base": "b203b65df668d326ef9926c7ebb3cd9cf51b921d",
+  "workerBranch": "codex/antigravity-w4a-lifecycle-authority",
+  "evidenceLevel": "local built application, disposable PostgreSQL",
+  "date": "2026-10-05",
+  "migration": {
+    "file": "055_canonical_reservation_lifecycle_authority.sql",
+    "appliedTo": "disposable PostgreSQL only",
+    "historicalMigrationsChanged": false,
+    "migration052Modified": false,
+    "migration053Modified": false,
+    "migration054Modified": false
+  },
+  "service": "src/services/canonicalLifecycleService.ts",
+  "testSuite": "src/test/harvo/w4a_canonical_lifecycle_pg.test.ts",
+  "testCommand": "node scripts/testing/run.mjs src/test/harvo/w4a_canonical_lifecycle_pg.test.ts",
+  "results": {
+    "suite": "W4-A Task 2: Canonical Reservation Lifecycle Authority",
+    "testsPassed": 17,
+    "testsFailed": 0,
+    "invariantsVerified": [
+      "Canonical reservation with zero events projects initial derived state ACTIVE (current_sequence = 0, latest_event_id = NULL)",
+      "Authorized CANCELLATION_REQUESTED command inserts exactly one event into canonical_reservation_events and transitions projection to CANCELLATION_REQUESTED (current_sequence = 1)",
+      "W3 canonical_reservations row remains immutable: status = 'INVENTORY_COMMITTED' is untouched allocation truth",
+      "inventory_days.booked_units and held_units remain completely unchanged after CANCELLATION_REQUESTED",
+      "Zero payment rows, ledger updates, gateway calls, or refund obligations are created (refunds deferred to W4-D)",
+      "Exact command replay recovers identical lifecycle event with replayed = true and zero duplicate events or mutations",
+      "Command ID reuse against a different reservation fails closed with LIFECYCLE_COMMAND_CONFLICT",
+      "Command ID reuse with changed actor, reason, or text semantics fails closed with LIFECYCLE_COMMAND_CONFLICT",
+      "Concurrent identical command submissions serialize safely on database locks: exactly one event created, one result marked original and one marked replayed = true",
+      "Concurrent different command IDs for the same transition serialize safely: one succeeds into CANCELLATION_REQUESTED, the second fails closed with LIFECYCLE_STATE_CONFLICT",
+      "Foreign guest principal cannot transition another guest's reservation: ownership check holder_principal == actorPrincipal enforced fail-closed with LIFECYCLE_FORBIDDEN",
+      "Raw Guest/web role (encho_stays_web) cannot INSERT or UPDATE lifecycle events or lifecycle command tables (permission denied via RLS and explicit revokes)",
+      "Direct UPDATE or DELETE on canonical_reservation_events is rejected by trigger with CANONICAL_RESERVATION_EVENT_IMMUTABLE",
+      "Direct UPDATE or DELETE on canonical_reservation_lifecycle_commands is rejected by trigger with CANONICAL_LIFECYCLE_COMMAND_IMMUTABLE",
+      "Legacy bookings.status mutations (e.g. cancelled/completed) have zero effect on canonical reservation lifecycle projection",
+      "No public completed-cancellation API or CANCELLED status transition is added; inventory release deferred to W4-B",
+      "Role boundary enforcement: web, payment, and composition roles cannot execute lifecycle transitions (permission denied); lifecycle worker cannot execute W3-A direct hold finalizer or W3-B composition finalizer",
+      "assertLifecycleWorkerRole rejects broadened, superuser, or non-restricted roles with LIFECYCLE_ROLE_NOT_RESTRICTED"
+    ]
+  },
+  "eventModel": {
+    "table": "canonical_reservation_events",
+    "supportedTypes": ["CANCELLATION_REQUESTED"],
+    "fields": [
+      "event_id",
+      "reservation_id",
+      "sequence_number",
+      "event_type",
+      "actor_kind",
+      "actor_principal",
+      "origin_kind",
+      "reason_code",
+      "reason_text",
+      "command_id",
+      "occurred_at",
+      "source_ref",
+      "metadata"
+    ],
+    "immutability": "Append-only; trigger raises CANONICAL_RESERVATION_EVENT_IMMUTABLE on UPDATE or DELETE"
+  },
+  "commandAuthority": {
+    "table": "canonical_reservation_lifecycle_commands",
+    "idempotencyKey": "command_id",
+    "fingerprintAlgorithm": "sha256(jsonb_build_object(command_id, reservation_id, command_type, actor_kind, actor_principal, origin_kind, reason_code, reason_text))",
+    "immutability": "Committed receipts reject UPDATE or DELETE with CANONICAL_LIFECYCLE_COMMAND_IMMUTABLE"
+  },
+  "concurrency": "Row-level lock on canonical_reservations (FOR UPDATE) serializes transitions per reservation; unique constraint on command_id catches cross-reservation collisions",
+  "actorScopeImplemented": {
+    "guest": "Enforced: exact match reservation.holder_principal == actorPrincipal",
+    "host": "Reserved enum value; fails closed with LIFECYCLE_ACTOR_NOT_SUPPORTED pending host ownership authority",
+    "staff": "Reserved enum value; fails closed with LIFECYCLE_ACTOR_NOT_SUPPORTED pending workforce IAM authority",
+    "externalChannel": "Reserved enum value; fails closed with LIFECYCLE_ACTOR_NOT_SUPPORTED pending external ingress authority"
+  },
+  "lifecycleProjection": {
+    "view": "canonical_reservation_lifecycle_current",
+    "function": "canonical_get_reservation_lifecycle(target_reservation_id UUID)",
+    "initialDerivedState": "ACTIVE when count(events) == 0",
+    "requestedState": "CANCELLATION_REQUESTED when latest event is CANCELLATION_REQUESTED"
+  },
+  "zeroInventorySideEffect": "inventory_days.booked_units is not decremented; booking_holds is untouched; canonical_reservation_nights is untouched; physical allocation remains intact",
+  "zeroRefundSideEffect": "canonical_payment_attempts, canonical_payment_reconciliations, and gateway balances are untouched; zero refund rows created",
+  "security": "Restricted encho_lifecycle_worker role with NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION; RLS forced on events and command tables; public and web roles have zero table DML; narrow SECURITY DEFINER procedures execute verified lifecycle commands",
+  "limitations": "No completed cancellation (CANCELLED) is implemented; no inventory is released (deferred to W4-B); no reservation modification is implemented (deferred to W4-C); no refund or payment ledger updates are implemented (deferred to W4-D); public checkout remains disabled; production payable authority issuer remains legally gated."
+}
