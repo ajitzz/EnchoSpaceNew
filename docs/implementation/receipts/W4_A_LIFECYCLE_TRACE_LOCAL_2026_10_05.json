@@ -1,0 +1,32 @@
+{
+  "subject": "W4-A Task 1 canonical reservation lifecycle trace and first failing boundary",
+  "canonicalBase": "4a7236000b9013b68000400f8a57ee9ae02e565c",
+  "evidenceLevel": "focused repository trace, disposable PostgreSQL",
+  "date": "2026-10-05",
+  "workerBranch": "codex/antigravity-w4a-lifecycle-trace",
+  "testSource": "scripts/testing/w4a-lifecycle-boundary-red.mjs",
+  "testCommand": "./node_modules/.bin/tsx --test scripts/testing/w4a-lifecycle-boundary-red.mjs",
+  "expectedDiagnosticExitCode": 1,
+  "redResult": {
+    "status": "RED",
+    "case": "canonical reservation committed with booked inventory cannot be cancelled or modified, and inventory cannot be released because canonical lifecycle event authority and release procedures do not exist",
+    "assertion": "assert.notEqual(schemaChecks.lifecycle_events_table, null)",
+    "observation": {
+      "canonicalReservationStatus": "INVENTORY_COMMITTED",
+      "inventoryBookedUnits": 1,
+      "directMutationBlocked": true,
+      "directMutationError": "CANONICAL_RESERVATION_IMMUTABLE",
+      "legacyCancellationBookingStatus": "cancelled",
+      "canonicalUntouchedByLegacy": true,
+      "inventoryTrappedInBookedUnits": true,
+      "lifecycleEventsTable": null,
+      "lifecycleCommandsTable": null,
+      "staysRefundsTable": null,
+      "cancellationProc": null,
+      "inventoryReleaseProc": null
+    },
+    "scope": "disposable PostgreSQL with migrations 001-006, 036, 041, 049-054. Confirms that W3 canonical reservations are strictly immutable under trigger canonical_reservations_immutable; legacy cancellation routes (/api/user/bookings/:id/cancel) mutate unallocated legacy bookings rows without releasing canonical inventory_days.booked_units; and zero canonical lifecycle tables, procedures, or refund authorities exist in PostgreSQL."
+  },
+  "conclusion": "W3 canonical reservation finalization is strictly immutable historical truth. Once created, a reservation cannot be cancelled, modified, or checked-in, and booked inventory cannot be released back to availability. W4 requires a distinct immutable lifecycle event ledger (canonical_reservation_events), an idempotent command receipt table (canonical_reservation_lifecycle_commands), a current lifecycle projection view, and atomic, audited inventory release procedures that strictly separate lifecycle state from inventory effects and refund tracking.",
+  "limitations": "No real money moved, no remote Neon migration applied, no external channel manager or live payment provider contacted, no public routes activated. This is focused trace and diagnostic evidence proving the first failing boundary of W4-A."
+}
