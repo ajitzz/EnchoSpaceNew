@@ -1,5 +1,6 @@
 import type pg from 'pg';
 import {z} from 'zod';
+import {setStaysPrincipal} from '../server/stays/runtime.js';
 
 export class LifecycleAuthorityError extends Error {
   constructor(readonly code: string, readonly cause?: unknown) {
@@ -10,10 +11,12 @@ export class LifecycleAuthorityError extends Error {
 
 const knownCodes = new Set([
   'LIFECYCLE_INPUT_INVALID',
+  'LIFECYCLE_PRINCIPAL_REQUIRED',
+  'LIFECYCLE_FORBIDDEN',
+  'LIFECYCLE_ORIGIN_NOT_SUPPORTED',
+  'LIFECYCLE_ACTOR_NOT_SUPPORTED',
   'LIFECYCLE_COMMAND_CONFLICT',
   'LIFECYCLE_RESERVATION_NOT_FOUND',
-  'LIFECYCLE_FORBIDDEN',
-  'LIFECYCLE_ACTOR_NOT_SUPPORTED',
   'LIFECYCLE_STATE_CONFLICT',
   'LIFECYCLE_ROLE_NOT_RESTRICTED',
   'LIFECYCLE_AUTHORITY_UNAVAILABLE',
@@ -24,11 +27,27 @@ const knownCodes = new Set([
 export const requestCancellationSchema = z.object({
   commandId: z.string().uuid(),
   reservationId: z.string().uuid(),
-  actorKind: z.enum(['GUEST', 'HOST', 'STAFF', 'EXTERNAL_CHANNEL']).default('GUEST'),
-  actorPrincipal: z.string().regex(/^(user:[0-9]+|session:[0-9a-f-]{36})$/),
   reasonCode: z.string().regex(/^[A-Z0-9_]{1,64}$/),
   reasonText: z.string().max(500).nullable().optional(),
-}).strict();
+  actorPrincipal: z.string().regex(/^(user:[0-9]+|session:[0-9a-f-]{36})$/).optional(),
+  actorKind: z.enum(['GUEST', 'HOST', 'STAFF', 'EXTERNAL_CHANNEL']).optional(),
+  originKind: z.string().optional(),
+}).strict().superRefine((data, ctx) => {
+  if (data.originKind && data.originKind !== 'ENCHO_DIRECT') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'LIFECYCLE_ORIGIN_NOT_SUPPORTED',
+      path: ['originKind'],
+    });
+  }
+  if (data.actorKind && data.actorKind !== 'GUEST') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'LIFECYCLE_ACTOR_NOT_SUPPORTED',
+      path: ['actorKind'],
+    });
+  }
+});
 
 export type RequestCancellationCommand = z.infer<typeof requestCancellationSchema>;
 
@@ -104,16 +123,27 @@ export async function assertLifecycleWorkerRole(pool: pg.Pool): Promise<void> {
 
 export async function requestReservationCancellation(
   pool: pg.Pool,
-  input: unknown
+  input: unknown,
+  authenticatedPrincipal?: string
 ): Promise<LifecycleEventResult> {
   const parsed = requestCancellationSchema.safeParse(input);
   if (!parsed.success) {
+    const customIssue = parsed.error.issues.find(i =>
+      i.message === 'LIFECYCLE_ORIGIN_NOT_SUPPORTED' || i.message === 'LIFECYCLE_ACTOR_NOT_SUPPORTED'
+    );
+    if (customIssue) {
+      throw new LifecycleAuthorityError(customIssue.message);
+    }
     throw new LifecycleAuthorityError('LIFECYCLE_INPUT_INVALID', parsed.error);
   }
-  const {commandId, reservationId, actorKind, actorPrincipal, reasonCode, reasonText} = parsed.data;
+  const {commandId, reservationId, reasonCode, reasonText, actorPrincipal, actorKind} = parsed.data;
 
   const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+    if (authenticatedPrincipal) {
+      await setStaysPrincipal(client, authenticatedPrincipal);
+    }
     const {rows} = await client.query<{
       event_id: string;
       reservation_id: string;
@@ -127,12 +157,13 @@ export async function requestReservationCancellation(
       [
         commandId,
         reservationId,
-        actorKind,
-        actorPrincipal,
+        actorKind ?? 'GUEST',
+        actorPrincipal ?? null,
         reasonCode,
         reasonText ?? null,
       ]
     );
+    await client.query('COMMIT');
 
     if (rows.length === 0) {
       throw new LifecycleAuthorityError('LIFECYCLE_AUTHORITY_UNAVAILABLE');
@@ -147,6 +178,11 @@ export async function requestReservationCancellation(
       replayed: r.replayed,
     };
   } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      // ignore rollback error
+    }
     if (error instanceof LifecycleAuthorityError) throw error;
     const message = error instanceof Error ? error.message : '';
     throw new LifecycleAuthorityError(

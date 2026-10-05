@@ -17,21 +17,26 @@
   "testCommand": "node scripts/testing/run.mjs src/test/harvo/w4a_canonical_lifecycle_pg.test.ts",
   "results": {
     "suite": "W4-A Task 2: Canonical Reservation Lifecycle Authority",
-    "testsPassed": 17,
+    "testsPassed": 22,
     "testsFailed": 0,
     "invariantsVerified": [
+      "No trusted transaction/session principal + caller declares reservation holder -> fails closed with LIFECYCLE_PRINCIPAL_REQUIRED (GPT-6 reproduced bypass resolved)",
+      "Trusted principal = reservation holder + own ENCHO_DIRECT reservation -> CANCELLATION_REQUESTED accepted (current_sequence = 1, replayed = false)",
+      "Trusted principal = foreign Guest -> denied fail-closed with LIFECYCLE_FORBIDDEN",
+      "Trusted principal = reservation holder but caller attempts different actor_principal text -> denied with LIFECYCLE_FORBIDDEN",
+      "Guest attempts lifecycle request for EXTERNAL_CHANNEL reservation -> denied fail-closed with LIFECYCLE_ORIGIN_NOT_SUPPORTED (GPT-6 reproduced bypass resolved)",
+      "Guest tries to submit origin_kind = EXTERNAL_CHANNEL -> denied by schema with LIFECYCLE_ORIGIN_NOT_SUPPORTED",
+      "Exact committed request with lost response replayed by same authenticated principal -> same event ID returned with replayed = true",
+      "Exact command replay attempted by foreign authenticated principal -> denied fail-closed with LIFECYCLE_FORBIDDEN before inspecting replay payload",
+      "Same command ID with changed reason semantics -> fails closed with LIFECYCLE_COMMAND_CONFLICT",
+      "Concurrent identical authenticated Guest requests serialize safely on locks -> exactly one lifecycle event inserted, one original and one replayed",
+      "Concurrent different commands for same ACTIVE -> CANCELLATION_REQUESTED transition serialize safely -> one succeeds, one conflicts with LIFECYCLE_STATE_CONFLICT",
       "Canonical reservation with zero events projects initial derived state ACTIVE (current_sequence = 0, latest_event_id = NULL)",
-      "Authorized CANCELLATION_REQUESTED command inserts exactly one event into canonical_reservation_events and transitions projection to CANCELLATION_REQUESTED (current_sequence = 1)",
       "W3 canonical_reservations row remains immutable: status = 'INVENTORY_COMMITTED' is untouched allocation truth",
-      "inventory_days.booked_units and held_units remain completely unchanged after CANCELLATION_REQUESTED",
-      "Zero payment rows, ledger updates, gateway calls, or refund obligations are created (refunds deferred to W4-D)",
-      "Exact command replay recovers identical lifecycle event with replayed = true and zero duplicate events or mutations",
+      "inventory_days.booked_units and held_units remain completely unchanged after CANCELLATION_REQUESTED (zero inventory side effects)",
+      "Zero payment rows, ledger updates, gateway calls, or refund obligations are created (zero refund side effects; refunds deferred to W4-D)",
       "Command ID reuse against a different reservation fails closed with LIFECYCLE_COMMAND_CONFLICT",
-      "Command ID reuse with changed actor, reason, or text semantics fails closed with LIFECYCLE_COMMAND_CONFLICT",
-      "Concurrent identical command submissions serialize safely on database locks: exactly one event created, one result marked original and one marked replayed = true",
-      "Concurrent different command IDs for the same transition serialize safely: one succeeds into CANCELLATION_REQUESTED, the second fails closed with LIFECYCLE_STATE_CONFLICT",
-      "Foreign guest principal cannot transition another guest's reservation: ownership check holder_principal == actorPrincipal enforced fail-closed with LIFECYCLE_FORBIDDEN",
-      "Raw Guest/web role (encho_stays_web) cannot INSERT or UPDATE lifecycle events or lifecycle command tables (permission denied via RLS and explicit revokes)",
+      "Raw Guest/web role (encho_stays_web) cannot INSERT or UPDATE lifecycle events or command tables (permission denied via RLS and explicit revokes)",
       "Direct UPDATE or DELETE on canonical_reservation_events is rejected by trigger with CANONICAL_RESERVATION_EVENT_IMMUTABLE",
       "Direct UPDATE or DELETE on canonical_reservation_lifecycle_commands is rejected by trigger with CANONICAL_LIFECYCLE_COMMAND_IMMUTABLE",
       "Legacy bookings.status mutations (e.g. cancelled/completed) have zero effect on canonical reservation lifecycle projection",
@@ -39,6 +44,20 @@
       "Role boundary enforcement: web, payment, and composition roles cannot execute lifecycle transitions (permission denied); lifecycle worker cannot execute W3-A direct hold finalizer or W3-B composition finalizer",
       "assertLifecycleWorkerRole rejects broadened, superuser, or non-restricted roles with LIFECYCLE_ROLE_NOT_RESTRICTED"
     ]
+  },
+  "trustedPrincipalAuthority": {
+    "mechanism": "current_setting('app.stays_principal', true)",
+    "enforcement": "Fail closed at database level with LIFECYCLE_PRINCIPAL_REQUIRED if missing or malformed; caller-supplied actor_principal cannot manufacture authority and must match trusted principal",
+    "serviceContext": "setStaysPrincipal(client, authenticatedPrincipal) inside transaction block"
+  },
+  "guestCommandScope": {
+    "originRestriction": "Strictly ENCHO_DIRECT; EXTERNAL_CHANNEL rejected fail-closed with LIFECYCLE_ORIGIN_NOT_SUPPORTED",
+    "eventOrigin": "Fixed to ENCHO_DIRECT",
+    "actorKind": "Fixed to GUEST; non-GUEST rejected with LIFECYCLE_ACTOR_NOT_SUPPORTED"
+  },
+  "authorityBeforeReplay": {
+    "rule": "Validate trusted principal, reservation ownership (holder_principal == trusted_principal), and origin (ENCHO_DIRECT) BEFORE inspecting command replay receipt",
+    "crossPrincipalDefense": "Existing command receipts verify existing_cmd.actor_principal == trusted_principal; foreign caller presenting valid command ID receives LIFECYCLE_FORBIDDEN without reading receipt"
   },
   "eventModel": {
     "table": "canonical_reservation_events",
@@ -68,7 +87,7 @@
   },
   "concurrency": "Row-level lock on canonical_reservations (FOR UPDATE) serializes transitions per reservation; unique constraint on command_id catches cross-reservation collisions",
   "actorScopeImplemented": {
-    "guest": "Enforced: exact match reservation.holder_principal == actorPrincipal",
+    "guest": "Enforced: exact match reservation.holder_principal == trusted_principal and origin_kind == 'ENCHO_DIRECT'",
     "host": "Reserved enum value; fails closed with LIFECYCLE_ACTOR_NOT_SUPPORTED pending host ownership authority",
     "staff": "Reserved enum value; fails closed with LIFECYCLE_ACTOR_NOT_SUPPORTED pending workforce IAM authority",
     "externalChannel": "Reserved enum value; fails closed with LIFECYCLE_ACTOR_NOT_SUPPORTED pending external ingress authority"

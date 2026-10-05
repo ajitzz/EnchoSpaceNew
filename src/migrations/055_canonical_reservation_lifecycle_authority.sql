@@ -5,9 +5,12 @@
 --   - W4 reservation lifecycle is a separate append-only event authority and derived projection.
 --   - Initial derived lifecycle state for a canonical reservation with zero events is ACTIVE.
 --   - Only CANCELLATION_REQUESTED lifecycle transition is supported in W4-A.
---   - Actor authority: GUEST requires exact ownership (holder_principal == principal).
---   - Command authority: durable idempotency with semantic fingerprint; replay returns replayed=true.
---   - Command conflict: same command ID with changed parameters raises LIFECYCLE_COMMAND_CONFLICT.
+--   - Actor authority: GUEST requires trusted transaction-local stays principal (app.stays_principal).
+--   - Caller-supplied actor_principal string is not authority; must match trusted principal if provided.
+--   - Scope restriction: ENCHO_DIRECT only. EXTERNAL_CHANNEL reservations reject Guest cancellation requests.
+--   - Authority checked before replay: caller must prove ownership and ENCHO_DIRECT authority before command inspection.
+--   - Command authority: durable idempotency with semantic fingerprint; replay returns replayed=true for same principal.
+--   - Command conflict: foreign principal or changed parameters raises LIFECYCLE_FORBIDDEN / LIFECYCLE_COMMAND_CONFLICT.
 --   - Concurrency: row-level lock on canonical_reservations serializes concurrent transitions per reservation.
 --   - Immutability: canonical_reservation_events and canonical_reservation_lifecycle_commands reject UPDATE and DELETE.
 --   - Zero inventory side effect: inventory_days.booked_units is untouched.
@@ -162,27 +165,29 @@ RETURNS TABLE (
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER
 SET search_path=pg_catalog,public,pg_temp SET row_security=on AS $$
 DECLARE
+  trusted_principal TEXT;
   existing_cmd RECORD;
   res_row RECORD;
+  ev_row RECORD;
   latest_event RECORD;
   new_event_id UUID;
   new_seq INT;
   fingerprint_input JSONB;
   fingerprint TEXT;
 BEGIN
-  -- 1. Input validations
-  IF target_command IS NULL OR target_reservation_id IS NULL
-    OR target_actor_kind IS NULL OR target_actor_principal IS NULL
-    OR target_reason_code IS NULL THEN
+  -- 1. Establish trusted authenticated principal from transaction context (app.stays_principal)
+  trusted_principal := current_setting('app.stays_principal', true);
+  IF trusted_principal IS NULL OR trusted_principal !~ '^(user:[0-9]+|session:[0-9a-f-]{36})$' THEN
+    RAISE EXCEPTION 'LIFECYCLE_PRINCIPAL_REQUIRED';
+  END IF;
+
+  -- 2. Validate input parameters
+  IF target_command IS NULL OR target_reservation_id IS NULL OR target_reason_code IS NULL THEN
     RAISE EXCEPTION 'LIFECYCLE_INPUT_INVALID';
   END IF;
 
-  IF target_actor_kind NOT IN ('GUEST', 'HOST', 'STAFF', 'EXTERNAL_CHANNEL') THEN
-    RAISE EXCEPTION 'LIFECYCLE_INPUT_INVALID';
-  END IF;
-
-  IF target_actor_principal !~ '^(user:[0-9]+|session:[0-9a-f-]{36})$' THEN
-    RAISE EXCEPTION 'LIFECYCLE_INPUT_INVALID';
+  IF target_actor_kind IS NOT NULL AND target_actor_kind <> 'GUEST' THEN
+    RAISE EXCEPTION 'LIFECYCLE_ACTOR_NOT_SUPPORTED';
   END IF;
 
   IF target_reason_code !~ '^[A-Z0-9_]{1,64}$' THEN
@@ -193,67 +198,57 @@ BEGIN
     RAISE EXCEPTION 'LIFECYCLE_INPUT_INVALID';
   END IF;
 
-  -- 2. Fast replay check on command before row lock
-  SELECT * INTO existing_cmd FROM public.canonical_reservation_lifecycle_commands
-  WHERE command_id = target_command;
-  IF FOUND THEN
-    IF existing_cmd.reservation_id IS DISTINCT FROM target_reservation_id
-      OR existing_cmd.command_type IS DISTINCT FROM 'REQUEST_CANCELLATION'
-      OR existing_cmd.actor_kind IS DISTINCT FROM target_actor_kind
-      OR existing_cmd.actor_principal IS DISTINCT FROM target_actor_principal
-      OR existing_cmd.reason_code IS DISTINCT FROM target_reason_code
-      OR existing_cmd.reason_text IS DISTINCT FROM target_reason_text THEN
-      RAISE EXCEPTION 'LIFECYCLE_COMMAND_CONFLICT';
-    END IF;
-
-    SELECT ev.event_id, ev.reservation_id, ev.event_type, ev.sequence_number
-    INTO latest_event
-    FROM public.canonical_reservation_events ev
-    WHERE ev.event_id = existing_cmd.event_id;
-
-    RETURN QUERY SELECT latest_event.event_id, latest_event.reservation_id, latest_event.event_type, latest_event.sequence_number, TRUE;
-    RETURN;
+  -- Caller-supplied actor_principal cannot manufacture authority; if supplied, must match trusted principal
+  IF target_actor_principal IS NOT NULL AND target_actor_principal IS DISTINCT FROM trusted_principal THEN
+    RAISE EXCEPTION 'LIFECYCLE_FORBIDDEN';
   END IF;
 
-  -- 3. Lock target reservation row FOR UPDATE to serialize transitions on this reservation
+  -- 3. Validate authority boundary against target reservation BEFORE inspecting replay
   SELECT * INTO res_row FROM public.canonical_reservations
   WHERE id = target_reservation_id FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'LIFECYCLE_RESERVATION_NOT_FOUND';
   END IF;
 
-  -- 4. Re-check command inside reservation lock (concurrent identical command committed while waiting)
+  -- Guest commands are strictly ENCHO_DIRECT only: EXTERNAL_CHANNEL cannot be cancelled by Guest
+  IF res_row.origin_kind IS DISTINCT FROM 'ENCHO_DIRECT' THEN
+    RAISE EXCEPTION 'LIFECYCLE_ORIGIN_NOT_SUPPORTED';
+  END IF;
+
+  -- Ownership boundary: trusted principal must equal reservation holder
+  IF res_row.holder_principal IS DISTINCT FROM trusted_principal THEN
+    RAISE EXCEPTION 'LIFECYCLE_FORBIDDEN';
+  END IF;
+
+  -- 4. Inspect durable command receipt
   SELECT * INTO existing_cmd FROM public.canonical_reservation_lifecycle_commands
   WHERE command_id = target_command;
   IF FOUND THEN
+    -- Verify stored command belongs to this authenticated caller
+    IF existing_cmd.actor_principal IS DISTINCT FROM trusted_principal THEN
+      RAISE EXCEPTION 'LIFECYCLE_FORBIDDEN';
+    END IF;
+
+    -- Verify exact semantic identity
     IF existing_cmd.reservation_id IS DISTINCT FROM target_reservation_id
       OR existing_cmd.command_type IS DISTINCT FROM 'REQUEST_CANCELLATION'
-      OR existing_cmd.actor_kind IS DISTINCT FROM target_actor_kind
-      OR existing_cmd.actor_principal IS DISTINCT FROM target_actor_principal
+      OR existing_cmd.actor_kind IS DISTINCT FROM 'GUEST'
+      OR existing_cmd.origin_kind IS DISTINCT FROM 'ENCHO_DIRECT'
       OR existing_cmd.reason_code IS DISTINCT FROM target_reason_code
       OR existing_cmd.reason_text IS DISTINCT FROM target_reason_text THEN
       RAISE EXCEPTION 'LIFECYCLE_COMMAND_CONFLICT';
     END IF;
 
     SELECT ev.event_id, ev.reservation_id, ev.event_type, ev.sequence_number
-    INTO latest_event
+    INTO ev_row
     FROM public.canonical_reservation_events ev
     WHERE ev.event_id = existing_cmd.event_id;
 
-    RETURN QUERY SELECT latest_event.event_id, latest_event.reservation_id, latest_event.event_type, latest_event.sequence_number, TRUE;
+    RETURN QUERY SELECT ev_row.event_id, ev_row.reservation_id, ev_row.event_type, ev_row.sequence_number, TRUE;
     RETURN;
   END IF;
 
-  -- 5. Actor authority validation
-  IF target_actor_kind = 'GUEST' THEN
-    IF res_row.holder_principal IS DISTINCT FROM target_actor_principal THEN
-      RAISE EXCEPTION 'LIFECYCLE_FORBIDDEN';
-    END IF;
-  ELSE
-    RAISE EXCEPTION 'LIFECYCLE_ACTOR_NOT_SUPPORTED';
-  END IF;
-
-  -- 6. Current lifecycle state check
+  -- 5. Only for a NEW command: evaluate current lifecycle state ACTIVE and transition eligibility
   SELECT ev.event_type, ev.sequence_number INTO latest_event
   FROM public.canonical_reservation_events ev
   WHERE ev.reservation_id = target_reservation_id
@@ -268,20 +263,20 @@ BEGIN
   new_seq := 1;
   new_event_id := gen_random_uuid();
 
-  -- 7. Compute deterministic command fingerprint
+  -- 6. Compute deterministic command fingerprint
   fingerprint_input := jsonb_build_object(
     'command_id', target_command,
     'reservation_id', target_reservation_id,
     'command_type', 'REQUEST_CANCELLATION',
-    'actor_kind', target_actor_kind,
-    'actor_principal', target_actor_principal,
-    'origin_kind', res_row.origin_kind,
+    'actor_kind', 'GUEST',
+    'actor_principal', trusted_principal,
+    'origin_kind', 'ENCHO_DIRECT',
     'reason_code', target_reason_code,
     'reason_text', target_reason_text
   );
   fingerprint := encode(sha256(convert_to(fingerprint_input::text, 'UTF8')), 'hex');
 
-  -- 8. Insert immutable event
+  -- 7. Insert immutable event
   INSERT INTO public.canonical_reservation_events (
     event_id,
     reservation_id,
@@ -299,16 +294,16 @@ BEGIN
     target_reservation_id,
     new_seq,
     'CANCELLATION_REQUESTED',
-    target_actor_kind,
-    target_actor_principal,
-    res_row.origin_kind,
+    'GUEST',
+    trusted_principal,
+    'ENCHO_DIRECT',
     target_reason_code,
     target_reason_text,
     target_command,
     statement_timestamp()
   );
 
-  -- 9. Insert durable lifecycle command receipt
+  -- 8. Insert durable lifecycle command receipt
   BEGIN
     INSERT INTO public.canonical_reservation_lifecycle_commands (
       command_id,
@@ -326,9 +321,9 @@ BEGIN
       target_command,
       target_reservation_id,
       'REQUEST_CANCELLATION',
-      target_actor_kind,
-      target_actor_principal,
-      res_row.origin_kind,
+      'GUEST',
+      trusted_principal,
+      'ENCHO_DIRECT',
       target_reason_code,
       target_reason_text,
       fingerprint,
@@ -339,10 +334,13 @@ BEGIN
     SELECT * INTO existing_cmd FROM public.canonical_reservation_lifecycle_commands
     WHERE command_id = target_command;
     IF FOUND THEN
+      IF existing_cmd.actor_principal IS DISTINCT FROM trusted_principal THEN
+        RAISE EXCEPTION 'LIFECYCLE_FORBIDDEN';
+      END IF;
       IF existing_cmd.reservation_id IS DISTINCT FROM target_reservation_id
         OR existing_cmd.command_type IS DISTINCT FROM 'REQUEST_CANCELLATION'
-        OR existing_cmd.actor_kind IS DISTINCT FROM target_actor_kind
-        OR existing_cmd.actor_principal IS DISTINCT FROM target_actor_principal
+        OR existing_cmd.actor_kind IS DISTINCT FROM 'GUEST'
+        OR existing_cmd.origin_kind IS DISTINCT FROM 'ENCHO_DIRECT'
         OR existing_cmd.reason_code IS DISTINCT FROM target_reason_code
         OR existing_cmd.reason_text IS DISTINCT FROM target_reason_text THEN
         RAISE EXCEPTION 'LIFECYCLE_COMMAND_CONFLICT';
