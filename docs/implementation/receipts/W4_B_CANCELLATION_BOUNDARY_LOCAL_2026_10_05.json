@@ -1,0 +1,93 @@
+{
+  "subject": "W4-B Task 1 cancellation completion and booked inventory release boundary trace",
+  "canonicalBase": "5b4fd512d04cba00dd7d9e7c8422ef62ebb88b94",
+  "evidenceLevel": "source code analysis and disposable PostgreSQL schema trace",
+  "date": "2026-10-05",
+  "workerBranch": "codex/antigravity-w4b-cancellation-boundary",
+  "testSource": "scripts/testing/w4b-cancellation-boundary-red.mjs",
+  "testCommand": "node --import tsx --test scripts/testing/w4b-cancellation-boundary-red.mjs",
+  "expectedDiagnosticExitCode": 1,
+  "redResult": {
+    "status": "RED",
+    "case": "canonical reservation transitions to CANCELLATION_REQUESTED under W4-A, but canonical reservations currently have no authorized cancellation completion authority, no CANCELLED event type, and no atomic booked-inventory release fence",
+    "assertion": "assert.notEqual(schemaChecks.inventory_release_fence_table, null)",
+    "observation": {
+      "canonicalReservationId": "aa9c4db3-44bc-4d73-aaca-0efd5990cdd4",
+      "canonicalReservationStatus": "INVENTORY_COMMITTED",
+      "w4aLifecycleState": "CANCELLATION_REQUESTED",
+      "inventoryBookedUnits": 1,
+      "inventoryHeldUnits": 0,
+      "directResMutationBlocked": true,
+      "directNightMutationBlocked": true,
+      "directEventInsertBlocked": true,
+      "workerInventoryUpdateBlocked": true,
+      "workerEventInsertBlocked": true,
+      "inventoryReleaseFenceTable": null,
+      "completeCancellationProcedure": null,
+      "matchingReleaseProcsCount": 0
+    },
+    "scope": "disposable PostgreSQL with migrations 001-006, 036, 041, 049-055. Proves that W4-A supports CANCELLATION_REQUESTED with zero inventory consequence; direct UPDATE on canonical_reservations or canonical_reservation_nights is rejected by immutability triggers; direct INSERT of CANCELLED event is rejected by check constraint; restricted worker has zero raw DML privileges on inventory_days or canonical_reservation_events; and zero cancellation completion or inventory release procedures exist in PostgreSQL."
+  },
+  "w4aCurrentLifecycle": {
+    "allocationState": "canonical_reservations.status = 'INVENTORY_COMMITTED' remains immutable W3 allocation truth.",
+    "derivedLifecycleState": "ACTIVE -> CANCELLATION_REQUESTED (projected via canonical_reservation_lifecycle_current view).",
+    "eventLedger": "canonical_reservation_events append-only table strictly constrained to event_type IN ('CANCELLATION_REQUESTED').",
+    "commandLedger": "canonical_reservation_lifecycle_commands strictly constrained to command_type IN ('REQUEST_CANCELLATION').",
+    "authorizationLedger": "canonical_reservation_lifecycle_authorizations unforgeable command-bound capabilities issued by encho_lifecycle_issuer.",
+    "workerContainment": "encho_lifecycle_worker only consumes verified authorizations and cannot issue capabilities or directly mutate tables.",
+    "inventoryConsequence": "Zero inventory consequence: booked_units remains 1 and held_units remains 0 upon CANCELLATION_REQUESTED."
+  },
+  "currentInventoryAllocationModel": {
+    "finalizationMechanism": "052_canonical_reservation_hold_finalization.sql atomically increments inventory_days.booked_units (+night.units) and decrements held_units (-night.units) per stay night.",
+    "allocationTruth": "canonical_reservation_nights holds immutable (reservation_id, inventory_day_id, stay_date, units). Protected by ON DELETE RESTRICT foreign keys and canonical_reservation_nights_immutable trigger.",
+    "quantityModel": "Explicitly stored per night as units INT CHECK(units > 0). While current direct holds allocate 1 unit, the schema supports multi-unit allocations.",
+    "underflowInvariants": "inventory_days enforces chk_inventory_days_booked_positive (booked_units >= 0) and chk_inventory_days_capacity (held_units + booked_units + blocked_units <= total_units).",
+    "capacityDriftSafety": "Decreasing booked_units reduces total utilized capacity, therefore inventory release can never violate chk_inventory_days_capacity even if total_units changed after booking."
+  },
+  "existingInventoryDecrementPaths": {
+    "CANONICAL_REUSABLE": "NONE (MISSING)",
+    "LEGACY_CONTAINED": "server.ts:16165 (PUT /api/user/bookings/:id/cancel) updates legacy bookings table status='cancelled'. Has zero foreign keys or connection to canonical_reservations or inventory_days.",
+    "TEST_ONLY": "Direct SQL queries in tests (cr1_offer_authority.test.ts, destination_pools.test.ts, safety_observation.test.ts, workflow_engine.test.ts) mutate inventory_days.booked_units without canonical authority.",
+    "CONFLICTING_AUTHORITY": "NONE",
+    "MISSING": "Zero canonical functions or procedures exist across PostgreSQL or application services that decrement booked_units."
+  },
+  "cancellationDecisionVsExecution": {
+    "cancellationDecisionAuthority": "MISSING. Policy authority ('is this reservation allowed/required to become cancelled?') is not implemented; notice windows, cancellation eligibility, host consent, and staff resolution are absent.",
+    "cancellationExecutionAuthority": "MISSING. Atomic execution authority ('given an authorized cancellation decision, atomically record CANCELLED and release booked inventory') is absent.",
+    "separationPrinciple": "W4-B owns execution authority and must not hardcode commercial policy (e.g. days before check-in, refund percentage, host penalty tiers). W4-B accepts an unforgeable decision capability and executes the atomic lifecycle state change and inventory release."
+  },
+  "proposedW4BSlice": {
+    "decisionAuthorizationCapability": "canonical_reservation_cancellation_authorizations (or extended lifecycle authorizations) recording immutable decision approval with actor, origin, reason, and expiry.",
+    "completedLifecycleEvent": "Append-only CANCELLED event in canonical_reservation_events with actor_kind, actor_principal, origin_kind, reason_code, and decision_authorization_id.",
+    "inventoryReleaseFence": "canonical_reservation_inventory_releases table with UNIQUE(reservation_id), UNIQUE(command_id), UNIQUE(event_id) ensuring exactly-once release.",
+    "perNightReleaseModel": "Iterates immutable canonical_reservation_nights and decrements inventory_days.booked_units by night.units with procedural underflow checks (booked_units >= night.units).",
+    "atomicExecutionProcedure": "canonical_complete_reservation_cancellation function combining event creation, command receipt, release fence, and inventory decrement in a single transaction.",
+    "lockOrdering": "1. canonical_reservations FOR UPDATE, 2. decision authorization FOR UPDATE, 3. commands check, 4. release fence check, 5. inventory_days ordered by calendar_date ASC, id ASC FOR UPDATE.",
+    "replayModel": "Durable command receipts and release fence ensure replayed commands return the committed completion result without double-decrementing inventory.",
+    "deferredBoundaries": {
+      "publicGuestApi": "Deferred until session ingress and policy engines are mounted.",
+      "refundExecution": "Deferred to W4-D payment/refund authority.",
+      "reservationModification": "Deferred to W4-C modification authority.",
+      "channelManagerSync": "Deferred to external provider ingress."
+    }
+  },
+  "refundSeparation": {
+    "principle": "Inventory release must not wait for or depend on financial refund completion.",
+    "status": "Deferred to W4-D. Reservation may transition to CANCELLED and release inventory while payment state is CAPTURED, REFUND_PENDING, or NOT_APPLICABLE. W4-B does not touch payment tables or payment providers."
+  },
+  "externalChannelCompatibility": {
+    "status": "CM-W4B COMPATIBLE",
+    "mechanism": "External provider cancellation evidence can be ingested as an authoritative cancellation decision that feeds into the same atomic cancellation completion and inventory release fence, bypassing Encho direct payment/refund authority."
+  },
+  "policyGates": [
+    "cancellation notice windows and entitlement criteria",
+    "cancellation penalty schedules and non-refundable rates",
+    "host approval / resolution requirements",
+    "host cancellation consequences and compensation",
+    "statutory GST credit note and invoice rules",
+    "refund payout timelines and payment gateway fee absorption",
+    "post-check-in cancellation and no-show policies (FUTURE LIFECYCLE POLICY GATE)"
+  ],
+  "conclusion": "W4-A canonical reservation lifecycle authority establishes an append-only event ledger and command capability for CANCELLATION_REQUESTED, but explicitly leaves booked inventory allocated (booked_units = 1). Zero canonical mechanisms exist in PostgreSQL or the application to complete cancellation or release booked inventory. The smallest W4-B slice introduces an unforgeable cancellation decision capability, a CANCELLED lifecycle event, an immutable release fence table (canonical_reservation_inventory_releases), and an atomic completion procedure that decrements booked_units exactly once while strictly separating commercial policy and refund execution (W4-D).",
+  "limitations": "No runtime implementation, no migration 056, no money movement, no external APIs contacted. This is intentional red diagnostic and trace evidence for W4-B Task 1."
+}
