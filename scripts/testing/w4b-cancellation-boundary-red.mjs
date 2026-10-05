@@ -16,11 +16,11 @@
  *      CHECK constraint on canonical_reservation_events (only 'CANCELLATION_REQUESTED' allowed).
  *
  * 3. Missing W4-B Cancellation Completion & Release Authority (RED):
- *    - No inventory release fence table exists (`canonical_reservation_inventory_releases` is NULL).
- *    - No cancellation completion procedure exists (`canonical_complete_reservation_cancellation` is NULL).
+ *    - Current accepted lifecycle model cannot represent or produce a completed CANCELLED canonical transition.
+ *    - canonical_reservation_events check constraint only permits 'CANCELLATION_REQUESTED'.
+ *    - Zero canonical completed-cancellation procedures or release mechanisms exist in PostgreSQL.
  *    - Restricted worker (`encho_lifecycle_worker`) has zero DML privilege on `inventory_days` (42501).
  *    - Restricted worker has zero direct INSERT privilege on `canonical_reservation_events` (42501).
- *    - Zero canonical functions exist anywhere in PostgreSQL that can decrement `inventory_days.booked_units`.
  */
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -356,22 +356,34 @@ test('W4-B cancellation completion and booked inventory release boundary diagnos
     assert.equal(workerEventInsertCode, '42501'); // insufficient_privilege
 
     // =========================================================================
-    // BOUNDARY CHECK 6: Schema inspection for missing W4-B authorities
+    // BOUNDARY CHECK 6: Actual schema inspection of event authority and procedures
     // =========================================================================
     const schemaChecks = (
       await fixture.owner.query(`
         SELECT
-          to_regclass('public.canonical_reservation_inventory_releases') AS inventory_release_fence_table,
-          to_regprocedure('public.canonical_complete_reservation_cancellation(uuid,uuid,uuid,text,text)') AS complete_cancellation_proc,
+          (
+            SELECT pg_get_constraintdef(c.oid)
+            FROM pg_constraint c
+            JOIN pg_class t ON c.conrelid = t.oid
+            JOIN pg_namespace n ON n.oid = t.relnamespace
+            WHERE n.nspname = 'public'
+              AND t.relname = 'canonical_reservation_events'
+              AND c.contype = 'c'
+              AND pg_get_constraintdef(c.oid) LIKE '%event_type%'
+            LIMIT 1
+          ) AS event_type_constraint,
           (
             SELECT count(*)::int
             FROM pg_proc p
             JOIN pg_namespace n ON n.oid = p.pronamespace
             WHERE n.nspname = 'public'
               AND (p.proname LIKE '%release%inventory%' OR p.proname LIKE '%complete%cancellation%')
-          ) AS matching_release_procs_count
+          ) AS matching_completed_cancellation_procs_count
       `)
     ).rows[0];
+
+    const allowsCancelledEvent =
+      schemaChecks.event_type_constraint?.includes('CANCELLED') ?? false;
 
     const observation = {
       canonicalReservationId: reservationId,
@@ -384,23 +396,24 @@ test('W4-B cancellation completion and booked inventory release boundary diagnos
       directEventInsertBlocked,
       workerInventoryUpdateBlocked,
       workerEventInsertBlocked,
-      inventoryReleaseFenceTable: schemaChecks.inventory_release_fence_table,
-      completeCancellationProcedure: schemaChecks.complete_cancellation_proc,
-      matchingReleaseProcsCount: schemaChecks.matching_release_procs_count,
+      eventTypeConstraint: schemaChecks.event_type_constraint,
+      cancelledEventTypeAllowed: allowsCancelledEvent,
+      matchingCompletedCancellationProcsCount: schemaChecks.matching_completed_cancellation_procs_count,
     };
 
     console.log('W4_B_BOUNDARY_OBSERVATION', JSON.stringify(observation));
 
     // =========================================================================
     // DELIBERATE HONEST RED ASSERTION:
-    // W4-B inventory release fence authority is missing.
-    // An authorized cancellation request currently has zero mechanism to
-    // atomically complete cancellation and release booked inventory.
+    // The current accepted lifecycle model cannot represent or produce a completed
+    // CANCELLED canonical transition.
+    // canonical_reservation_events currently only supports CANCELLATION_REQUESTED,
+    // and zero canonical completed-cancellation execution authorities exist.
     // =========================================================================
-    assert.notEqual(
-      schemaChecks.inventory_release_fence_table,
-      null,
-      'Canonical inventory release fence authority (canonical_reservation_inventory_releases) is missing in W4-A baseline'
+    assert.equal(
+      allowsCancelledEvent,
+      true,
+      'Current accepted lifecycle model cannot represent or produce a completed CANCELLED canonical transition'
     );
   } finally {
     await Promise.all([
