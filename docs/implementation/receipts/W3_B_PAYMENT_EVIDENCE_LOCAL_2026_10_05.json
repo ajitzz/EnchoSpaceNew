@@ -1,0 +1,36 @@
+{
+  "subject": "W3-B Task 2 provider-independent payment evidence and reconciliation authority",
+  "canonicalBase": "19231cb6e8ee206e1e31d08c62df7d697d5d9a46",
+  "evidenceLevel": "local built application, disposable PostgreSQL",
+  "date": "2026-10-05",
+  "workerBranch": "codex/antigravity-w3b-payment-boundary",
+  "migration": {
+    "file": "053_canonical_payment_evidence_and_reconciliation.sql",
+    "appliedTo": "disposable PostgreSQL only",
+    "historicalMigrationsChanged": false
+  },
+  "service": "src/services/canonicalPaymentService.ts",
+  "testSuite": "src/test/harvo/w3b_canonical_payment_pg.test.ts",
+  "buildCommand": "npm run build:offline",
+  "testCommand": "node scripts/testing/run.mjs src/test/harvo/w3b_canonical_payment_pg.test.ts",
+  "results": {
+    "suite": "W3-B Task 2: Provider-independent payment evidence and reconciliation authority on real PostgreSQL",
+    "testsPassed": 10,
+    "testsFailed": 0,
+    "invariantsVerified": [
+      "Duplicate identical provider event produces exactly one logical evidence effect",
+      "Same provider event ID with mutated payload conflicts and quarantines in canonical_quarantined_events",
+      "CAPTURED followed by delayed older AUTHORIZED event preserves monotonic capture and does not regress state",
+      "Missing expected payable authority records evidence into RECONCILIATION_REQUIRED / PAYABLE_AUTHORITY_MISSING and produces zero canonical reservations",
+      "Expected amount mismatch flags RECONCILIATION_REQUIRED / AMOUNT_MISMATCH with expected and reported amounts preserved for audit",
+      "Matching synthetic test authority normalizes to MATCHED_CAPTURE with zero reservation finalization and hold remains unconsumed",
+      "Unknown outcome persists durable recoverable UNKNOWN state distinct from failure",
+      "Capture after hold expiry records HOLD_EXPIRED without resurrecting hold or creating reservation",
+      "Foreign/unauthorized runtime cannot call payment procedures without restricted worker privileges",
+      "Raw Guest/browser role (encho_stays_web) has zero DML access to canonical payment tables"
+    ]
+  },
+  "security": "Dedicated encho_payment_worker role with NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION; RLS forced on all canonical payment tables; web and guest roles have zero raw DML permissions; narrow SECURITY DEFINER procedures execute verified mutations.",
+  "conclusion": "Provider-independent payment evidence and reconciliation authority is established. Payment events normalize monotonically, duplicate events are ignored idempotently, mutated payloads are quarantined, missing payable authority and amount mismatches flag reconciliation, and captures after hold expiry are preserved without resurrecting holds or creating reservations.",
+  "limitations": "No real money movement, remote Neon mutation, live Razorpay API, STAAH integration or public checkout was executed. W3-A reservation finalization was not invoked in this task."
+}

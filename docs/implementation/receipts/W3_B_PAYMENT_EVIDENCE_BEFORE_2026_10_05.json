@@ -1,0 +1,28 @@
+{
+  "subject": "W3-B Task 2 provider-independent payment evidence and reconciliation authority, failing before implementation",
+  "canonicalBase": "19231cb6e8ee206e1e31d08c62df7d697d5d9a46",
+  "evidenceLevel": "local built application, disposable PostgreSQL",
+  "date": "2026-10-05",
+  "workerBranch": "codex/antigravity-w3b-payment-boundary",
+  "testSource": "scripts/testing/w3b-payment-evidence-red.mjs",
+  "buildCommand": "npm run build:offline",
+  "testCommand": "node --import tsx --test scripts/testing/w3b-payment-evidence-red.mjs",
+  "expectedDiagnosticExitCode": 1,
+  "redResult": {
+    "status": "RED",
+    "case": "provider capture evidence exists while approved payable-total authority is missing and canonical payment authority table is absent",
+    "assertion": "assert.notEqual(tableCheck.payment_table, null)",
+    "observation": {
+      "quoteId": "c3cf0a8b-5c6d-4148-966f-38f9b06451fa",
+      "roomSubtotalPaise": "1650000",
+      "quoteTotalPaise": null,
+      "holdId": "ef5cdc3b-c278-40df-b6be-d5655ecc4611",
+      "providerEventId": "evt_test_capture_b34ce973-94db-46da-8201-f2489cc59813",
+      "legacyStatusCheckFailed": true,
+      "canonicalPaymentAttemptsTable": null
+    },
+    "scope": "disposable PostgreSQL with predecessor migrations 003-006, 036, 041, 049-052; owner-level SQL reveals that legacy stays_orders rejects RECONCILIATION_REQUIRED via chk_stays_orders_status, and canonical payment authority tables (canonical_payment_attempts) are absent. Provider capture evidence cannot be safely reconciled without either fabricating success or dropping evidence."
+  },
+  "conclusion": "Predecessor schema lacks provider-independent payment evidence and reconciliation authority. Without additive canonical payment tables and restricted worker procedures, inbound provider evidence cannot be idempotently normalized or reconciled against missing payable total authority.",
+  "limitations": "No real money movement, remote Neon mutation, live Razorpay API, STAAH integration or public checkout was executed. This is intentionally red diagnostic evidence for Task 2 before implementation."
+}
