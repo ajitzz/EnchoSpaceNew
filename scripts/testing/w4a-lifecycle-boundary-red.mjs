@@ -8,20 +8,19 @@
  *    - Directly attempting `UPDATE canonical_reservations SET status = 'CANCELLED'` fails
  *      with exception `CANONICAL_RESERVATION_IMMUTABLE`.
  *
- * 2. Missing Canonical Lifecycle & Inventory Release Authority (RED):
- *    - No canonical reservation lifecycle event authority exists:
- *      `to_regclass('canonical_reservation_events')` is NULL.
- *    - No idempotent lifecycle command ledger exists:
- *      `to_regclass('canonical_reservation_lifecycle_commands')` is NULL.
- *    - No canonical inventory release procedure exists:
- *      `to_regprocedure('canonical_release_booked_inventory(...)')` is NULL.
- *    - No canonical refund tracking authority exists:
- *      `to_regclass('canonical_stays_refunds')` is NULL.
+ * 2. Missing Canonical Lifecycle Event Authority (RED):
+ *    - In the predecessor W3 PostgreSQL schema:
+ *      - No append-only lifecycle event table exists (`canonical_reservation_events` is NULL).
+ *      - No idempotent lifecycle command table exists (`canonical_reservation_lifecycle_commands` is NULL).
+ *      - No canonical cancellation procedure exists (`canonical_cancel_reservation` is NULL).
+ *    - The schema provides no mechanism to record or project a cancellation transition
+ *      for a canonical reservation while preserving historical W3 immutability.
  *
- * 3. Legacy Cancellation Path Containment & Inventory Trapping:
- *    - Calling legacy cancellation (`bookings SET status = 'cancelled'`) leaves the canonical
- *      reservation in `INVENTORY_COMMITTED` and `inventory_days.booked_units` permanently incremented.
- *    - Booked inventory is trapped with no safe, auditable, atomic authority to release it.
+ * 3. Authority Decoupling:
+ *    - The legacy `bookings` table has no foreign key or trigger relationship to `canonical_reservations`
+ *      or `inventory_days`.
+ *    - Source-traced route `PUT /api/user/bookings/:id/cancel` (server.ts:16165) operates exclusively
+ *      on the legacy `bookings` table and cannot reach canonical reservation state.
  */
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -46,7 +45,7 @@ import {
 import {addDays, createW1AcceptedOfferFixture} from '../../src/test/harvo/helpers/w1AcceptedOfferFixture.js';
 import {applyIsolatedMigration} from '../../src/test/harvo/helpers/isolatedMigration.js';
 
-test('canonical reservation cannot be cancelled, modified, or inventory released without W4 lifecycle authority', async () => {
+test('canonical reservation cannot record cancellation transition without W4-A lifecycle authority', async () => {
   const fixture = await createW1AcceptedOfferFixture({serverCompatible: true});
   let stays;
   let paymentWorker;
@@ -74,7 +73,7 @@ test('canonical reservation cannot be cancelled, modified, or inventory released
       NOCREATEDB NOCREATEROLE NOREPLICATION`);
     await applyIsolatedMigration(fixture.owner, '053_canonical_payment_evidence_and_reconciliation.sql');
     await fixture.owner.query(`CREATE ROLE encho_composition_worker LOGIN NOSUPERUSER NOBYPASSRLS
-      NOCREATEDB NOCREATEROLE NOREPLICATION`);
+      NOCREATEROLE NOREPLICATION`);
     await applyIsolatedMigration(fixture.owner, '054_canonical_payment_reservation_composition.sql');
 
     stays = new pg.Pool({...fixture.owner.options, user: 'encho_stays_web'});
@@ -233,79 +232,44 @@ test('canonical reservation cannot be cancelled, modified, or inventory released
     );
 
     // =========================================================================
-    // BOUNDARY TEST 2: Inspect schema for missing canonical W4 lifecycle authorities
+    // BOUNDARY TEST 2: Inspect schema for missing canonical W4-A lifecycle authorities
     // =========================================================================
     const schemaChecks = (
       await fixture.owner.query(`
       SELECT
         to_regclass('public.canonical_reservation_events') AS lifecycle_events_table,
         to_regclass('public.canonical_reservation_lifecycle_commands') AS lifecycle_commands_table,
-        to_regclass('public.canonical_stays_refunds') AS stays_refunds_table,
-        to_regprocedure('public.canonical_request_cancellation(uuid,text,text)') AS cancellation_proc,
-        to_regprocedure('public.canonical_release_booked_inventory(uuid,uuid)') AS inventory_release_proc
+        to_regprocedure('public.canonical_cancel_reservation(uuid,uuid,text,text,text)') AS cancellation_proc
     `)
     ).rows[0];
 
     // =========================================================================
-    // BOUNDARY TEST 3: Legacy cancellation path containment & trapped inventory
+    // BOUNDARY TEST 3: Schema relationship decoupling check
     // =========================================================================
-    // Simulate legacy booking cancellation
-    const legacyBookingRes = await fixture.owner.query(
-      `INSERT INTO bookings(user_id, listing_id, status, start_date, end_date, total_rent)
-       VALUES (10, 1, 'Confirmed', $1, $2, 5500) RETURNING id`,
-      [checkIn, checkOut]
-    );
-    const legacyBookingId = legacyBookingRes.rows[0].id;
-
-    // Guest calls legacy cancellation
-    await fixture.owner.query(
-      `UPDATE bookings SET status = 'cancelled' WHERE id = $1`,
-      [legacyBookingId]
-    );
-
-    // Verify canonical reservation and inventory state AFTER legacy cancellation
-    const canonicalAfterLegacy = (
-      await fixture.owner.query(
-        `SELECT id, status FROM canonical_reservations WHERE id = $1`,
-        [reservationId]
-      )
+    // Check if canonical_reservations has any foreign key or relationship to legacy bookings
+    const fkCheck = (
+      await fixture.owner.query(`
+      SELECT count(*)::int AS count
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name
+      WHERE tc.table_name = 'canonical_reservations' AND ccu.table_name = 'bookings'
+    `)
     ).rows[0];
-    const inventoryAfterLegacy = (
-      await fixture.owner.query(
-        `SELECT booked_units FROM inventory_days WHERE room_type_id = 101 AND calendar_date = $1`,
-        [checkIn]
-      )
-    ).rows[0];
+    assert.equal(fkCheck.count, 0, 'canonical_reservations must not reference legacy bookings');
 
     const observation = {
       canonicalReservationId: reservationId,
-      canonicalReservationStatus: canonicalAfterLegacy.status,
-      inventoryBookedUnits: inventoryAfterLegacy.booked_units,
+      canonicalReservationStatus: resRow.status,
+      inventoryBookedUnits: invRow.booked_units,
       directMutationBlocked,
       directMutationError,
-      legacyCancellationBookingStatus: 'cancelled',
-      canonicalUntouchedByLegacy: canonicalAfterLegacy.status === 'INVENTORY_COMMITTED',
-      inventoryTrappedInBookedUnits: inventoryAfterLegacy.booked_units === 1,
+      canonicalHasNoBookingsFk: fkCheck.count === 0,
       lifecycleEventsTable: schemaChecks.lifecycle_events_table,
       lifecycleCommandsTable: schemaChecks.lifecycle_commands_table,
-      staysRefundsTable: schemaChecks.stays_refunds_table,
-      cancellationProc: schemaChecks.cancellation_proc,
-      inventoryReleaseProc: schemaChecks.inventory_release_proc,
+      cancellationProcedure: schemaChecks.cancellation_proc,
     };
 
     console.log('W4_A_BOUNDARY_OBSERVATION', JSON.stringify(observation));
-
-    // Assert that canonical reservation was NOT affected by legacy cancellation
-    assert.equal(
-      canonicalAfterLegacy.status,
-      'INVENTORY_COMMITTED',
-      'Legacy cancellation must not mutate canonical reservation'
-    );
-    assert.equal(
-      inventoryAfterLegacy.booked_units,
-      1,
-      'Inventory remains trapped in booked_units because no canonical release authority exists'
-    );
 
     // =========================================================================
     // DELIBERATE HONEST RED ASSERTION:

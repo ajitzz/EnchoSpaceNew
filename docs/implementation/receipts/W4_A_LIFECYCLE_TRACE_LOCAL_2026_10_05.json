@@ -1,7 +1,7 @@
 {
   "subject": "W4-A Task 1 canonical reservation lifecycle trace and first failing boundary",
   "canonicalBase": "4a7236000b9013b68000400f8a57ee9ae02e565c",
-  "evidenceLevel": "focused repository trace, disposable PostgreSQL",
+  "evidenceLevel": "source code analysis and disposable PostgreSQL schema trace",
   "date": "2026-10-05",
   "workerBranch": "codex/antigravity-w4a-lifecycle-trace",
   "testSource": "scripts/testing/w4a-lifecycle-boundary-red.mjs",
@@ -9,24 +9,43 @@
   "expectedDiagnosticExitCode": 1,
   "redResult": {
     "status": "RED",
-    "case": "canonical reservation committed with booked inventory cannot be cancelled or modified, and inventory cannot be released because canonical lifecycle event authority and release procedures do not exist",
+    "case": "canonical reservation committed under W3 is strictly immutable and cannot record a cancellation lifecycle transition because canonical lifecycle event authority (canonical_reservation_events) is absent from the schema",
     "assertion": "assert.notEqual(schemaChecks.lifecycle_events_table, null)",
     "observation": {
       "canonicalReservationStatus": "INVENTORY_COMMITTED",
       "inventoryBookedUnits": 1,
       "directMutationBlocked": true,
       "directMutationError": "CANONICAL_RESERVATION_IMMUTABLE",
-      "legacyCancellationBookingStatus": "cancelled",
-      "canonicalUntouchedByLegacy": true,
-      "inventoryTrappedInBookedUnits": true,
+      "canonicalHasNoBookingsFk": true,
       "lifecycleEventsTable": null,
       "lifecycleCommandsTable": null,
-      "staysRefundsTable": null,
-      "cancellationProc": null,
-      "inventoryReleaseProc": null
+      "cancellationProcedure": null
     },
-    "scope": "disposable PostgreSQL with migrations 001-006, 036, 041, 049-054. Confirms that W3 canonical reservations are strictly immutable under trigger canonical_reservations_immutable; legacy cancellation routes (/api/user/bookings/:id/cancel) mutate unallocated legacy bookings rows without releasing canonical inventory_days.booked_units; and zero canonical lifecycle tables, procedures, or refund authorities exist in PostgreSQL."
+    "scope": "disposable PostgreSQL with migrations 001-006, 036, 041, 049-054. Confirms that W3 canonical reservations are strictly immutable under trigger canonical_reservations_immutable; direct in-place UPDATE is rejected; and zero canonical lifecycle tables or cancellation procedures exist in PostgreSQL."
   },
-  "conclusion": "W3 canonical reservation finalization is strictly immutable historical truth. Once created, a reservation cannot be cancelled, modified, or checked-in, and booked inventory cannot be released back to availability. W4 requires a distinct immutable lifecycle event ledger (canonical_reservation_events), an idempotent command receipt table (canonical_reservation_lifecycle_commands), a current lifecycle projection view, and atomic, audited inventory release procedures that strictly separate lifecycle state from inventory effects and refund tracking.",
-  "limitations": "No real money moved, no remote Neon migration applied, no external channel manager or live payment provider contacted, no public routes activated. This is focused trace and diagnostic evidence proving the first failing boundary of W4-A."
+  "sourceTracedRouteEvidence": {
+    "guestCancellationRoute": "server.ts:16165 (PUT /api/user/bookings/:id/cancel) updates legacy bookings table status='cancelled'. It has no relation to canonical_reservations or inventory_days.",
+    "hostStatusRoute": "server.ts:15074 (PUT /api/host/reservations/:id/status) updates legacy bookings status without reaching canonical reservation state.",
+    "guestBookingsView": "server.ts:16097 (GET /api/user/bookings) queries unallocated legacy bookings table; canonical reservations remain unprojected to guests.",
+    "publicBookingGate": "server.ts:16215 (POST /api/bookings) fails closed with HTTP 503 STAYS_CHECKOUT_UNAVAILABLE_COMPLIANCE_GATE.",
+    "clientCommandContainment": "lib/reservationCommands.ts:30 contains single-flight session-checked invocation of legacy endpoints."
+  },
+  "smallestW4ASlice": {
+    "lifecycleEventLedger": "canonical_reservation_events append-only table recording state transitions for canonical_reservations(id).",
+    "commandReceiptLedger": "canonical_reservation_lifecycle_commands table providing idempotent replay recovery.",
+    "compactLifecycleStates": "INVENTORY_COMMITTED -> CANCELLED",
+    "separatedDimensions": {
+      "actor": "actor_principal (e.g. user:10, staff:90) and actor_role (GUEST, HOST, ADMIN, CHANNEL)",
+      "reason": "cancellation_reason (non-empty audit text)",
+      "origin": "origin_kind (ENCHO_DIRECT, EXTERNAL_CHANNEL)"
+    },
+    "deferredFromW4A": [
+      "generic reservation modification (date shifts, room changes)",
+      "inventory release execution (modifying inventory_days.booked_units)",
+      "refund calculation and payment refund movement"
+    ]
+  },
+  "founderLegalCommercialDecisions": "Commercial cancellation penalty terms, refund eligibility rules, statutory tax treatment, and external-channel financial settlement rules remain marked FOUNDER / LEGAL / COMMERCIAL DECISION REQUIRED.",
+  "conclusion": "W3 canonical reservation finalization is immutable historical truth. In-place status mutation is blocked by trigger canonical_reservations_immutable. The smallest W4-A slice introduces an append-only lifecycle event ledger for cancellation with separated actor, reason, and origin dimensions, while deferring generic modification, inventory release, and refund execution.",
+  "limitations": "No runtime implementation, no canonical integration, no live money movement, no external APIs contacted. This is intentional red diagnostic and trace evidence for W4-A Task 1."
 }
